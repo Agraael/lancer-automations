@@ -14,6 +14,7 @@
         <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Activations</a>
         <a class="item" data-tab="defaults"><i class="fas fa-book"></i> Defaults</a>
         <a class="item" data-tab="startup"><i class="fas fa-play"></i> Startup</a>
+        <a class="item" data-tab="workshop"><i class="fas fa-globe"></i> Workshop</a>
     </nav>
 
     <div class="content">
@@ -86,7 +87,7 @@
                                     <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
                                     <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                                     <span class="col-name">
-                                        <strong>{{this.name}}</strong>
+                                        <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                         {{#if this.comments}}<span
                                             style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                         <span
@@ -111,7 +112,7 @@
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
                                         <span class="col-name">
-                                            <strong>{{this.name}}</strong>
+                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                             {{#if this.comments}}<span
                                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
@@ -139,11 +140,11 @@
                                 </span>
                                 <span class="col-name">
                                     {{#if this.isGeneral}}
-                                    <strong>{{this.name}}</strong>
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
-                                    <strong>{{this.name}}</strong>
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span
@@ -187,7 +188,7 @@
                             <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
                             <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                             <span class="col-name">
-                                <strong>{{this.name}}</strong> <span
+                                <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}} <span
                                     style="font-size: 0.8em; color: var(--la-ink-dim); margin-left: 5px;">({{this.reactions.length}})</span>
                                 <br><span
                                     style="font-size:0.8em; color: var(--la-ink-dim); font-family: monospace;">{{this.subname}}</span>
@@ -209,7 +210,7 @@
                                         title="Item-Based"></i>{{/if}}
                                 </span>
                                 <span class="col-name">
-                                    <strong>{{this.name}}</strong>
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{#if this.reactionPath}}<br><span
@@ -236,11 +237,11 @@
                         </span>
                         <span class="col-name">
                             {{#if this.isGeneral}}
-                            <strong>{{this.name}}</strong>
+                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                             {{#if this.comments}}<span
                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                             {{else}}
-                            <strong>{{this.name}}</strong>
+                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                             {{#if this.comments}}<span
                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                             <br><span
@@ -317,7 +318,7 @@
                                     <span class="col-enabled"><i class="fas fa-caret-right expand-icon"></i></span>
                                     <span class="col-type"><i class="fas fa-layer-group" title="Group"></i></span>
                                     <span class="col-name">
-                                        <strong>{{this.name}}</strong>
+                                        <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                         {{#if this.comments}}<span
                                             style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                         <span
@@ -342,7 +343,7 @@
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
                                         <span class="col-name">
-                                            <strong>{{this.name}}</strong>
+                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                             {{#if this.comments}}<span
                                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
@@ -368,11 +369,11 @@
                                 </span>
                                 <span class="col-name">
                                     {{#if this.isGeneral}}
-                                    <strong>{{this.name}}</strong>
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
-                                    <strong>{{this.name}}</strong>
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span
@@ -426,7 +427,7 @@
                             {{/if}}
                         </span>
                         <span class="col-name">
-                            <strong>{{this.name}}</strong>
+                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
                             {{#if this.builtin}}<span class="script-builtin-badge">built-in</span>{{/if}}
                             {{#if this.description}}<span
                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.description}})</span>{{/if}}
@@ -444,6 +445,13 @@
                     </p>
                     {{/each}}
                 </div>
+            </div>
+        </div>
+
+        <!-- WORKSHOP TAB -->
+        <div class="tab" data-tab="workshop">
+            <div class="la-workshop-root" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
+                <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">Loading the workshop...</p>
             </div>
         </div>
     </div>
@@ -629,5 +637,96 @@
     /* ===== Notes ===== */
     .notes {
         color: var(--la-ink-dim);
+    }
+
+    /* ===== Tab / view transitions (same feel as the settings menu) ===== */
+    #reaction-manager-config .content .tab.active {
+        animation: la-tab-fade 0.18s ease;
+    }
+
+    #reaction-manager-config .la-workshop-root > * {
+        animation: la-tab-fade 0.18s ease;
+    }
+
+    /* ===== Workshop tab ===== */
+    .la-ws-listmd {
+        padding: 8px 10px;
+        border: 1px solid var(--la-edge);
+        border-radius: 4px;
+        margin-bottom: 8px;
+        color: var(--la-ink);
+    }
+
+    .la-ws-listmd h1,
+    .la-ws-listmd h2,
+    .la-ws-listmd h3 {
+        color: var(--primary-color);
+        border-bottom: 1px solid var(--la-edge);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 8px 0 4px;
+    }
+
+    .la-ws-listmd h1 { font-size: 1.15em; }
+    .la-ws-listmd h2 { font-size: 1em; }
+    .la-ws-listmd h3 { font-size: 0.9em; }
+
+    .la-ws-listmd table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 6px 0;
+    }
+
+    .la-ws-listmd th {
+        background: var(--primary-color);
+        color: #fff;
+        text-transform: uppercase;
+        font-size: 0.75em;
+        letter-spacing: 0.5px;
+        padding: 4px 8px;
+        text-align: left;
+        border: none;
+    }
+
+    .la-ws-listmd td {
+        padding: 4px 8px;
+        border: none;
+        border-bottom: 1px solid color-mix(in srgb, var(--la-edge), transparent 50%);
+        vertical-align: middle;
+        font-size: 0.9em;
+    }
+
+    .la-ws-listmd tbody tr:nth-child(even) td {
+        background: color-mix(in srgb, var(--la-ink), transparent 96%);
+    }
+
+    .la-ws-listmd code {
+        background: color-mix(in srgb, var(--primary-color), transparent 92%);
+        color: var(--primary-color);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+
+    .la-ws-file {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+    }
+
+    .la-ws-file .la-ws-check {
+        accent-color: var(--primary-color);
+        margin: 0;
+    }
+
+    .la-ws-file .la-ws-open {
+        cursor: pointer;
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .la-ws-file .la-ws-open:hover {
+        text-decoration: underline;
     }
 </style>

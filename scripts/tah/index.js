@@ -17,6 +17,8 @@ function enabled()
 /** True if actor is any bound token's actor OR its linked pilot. */
 function isRelevantActor(actorId)
 {
+    if (hud._actor?.id === actorId)
+        return true;
     return (hud._tokens ?? []).some(token =>
         token.actor?.id === actorId ||
         token.actor?.system?.pilot?.value?.id === actorId
@@ -124,8 +126,6 @@ Hooks.on('init', () =>
         default: false,
     });
     game.settings.register(MODULE, 'tah.narrativeMode', {
-        name: 'Narrative TAH',
-        hint: 'When no token is selected, show a narrative HUD that can be linked to a pilot.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -151,8 +151,6 @@ Hooks.on('init', () =>
         default: '',
     });
     game.settings.register(MODULE, 'tah.areaElevationAware', {
-        name: 'Area Elevation Aware (default)',
-        hint: 'Default for the `elevationAware` option of chooseToken area pickers (blast, cone, line, ...). When on, areas become 3D volumes that clip to terrain.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -186,7 +184,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.preventWasdMovement', {
         name: 'Block WASD / QE Movement',
-        hint: 'Stop bare W/A/S/D/Q/E from moving the token, to avoid keyboard-nav mis-inputs.',
+        hint: 'Stop bare W/A/S/D/Q/E from moving the token.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -194,7 +192,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.maxColumnItems', {
         name: 'Max items per column',
-        hint: 'Cap category and sub-columns to this many rows; columns with more items become scrollable. 0 disables the cap. The top menu is never capped.',
+        hint: 'Rows per column before it scrolls (0 = no cap, top menu never capped).',
         scope: 'client',
         config: false,
         type: Number,
@@ -243,7 +241,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.uiSoundVolume', {
         name: 'UI Sound Volume',
-        hint: 'Volume of TAH hover/click sounds. Set to 0 to disable.',
+        hint: 'Volume of TAH hover/click sounds.',
         scope: 'client',
         config: false,
         type: Number,
@@ -252,7 +250,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.tokenFeedbackVolume', {
         name: 'Token Feedback Volume',
-        hint: 'Volume of canvas token feedback sounds (hover, select, target, drag, move, elevation key). Set to 0 to disable.',
+        hint: 'Volume of token feedback sounds (hover, select, target, drag, move, elevation key).',
         scope: 'client',
         config: false,
         type: Number,
@@ -261,7 +259,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.damageSoundVolume', {
         name: 'Damage / Stat Sound Volume',
-        hint: 'Volume of damage, HP/heat/burn/overshield/infection feedback sounds. Set to 0 to disable.',
+        hint: 'Volume of damage, HP/heat/burn/overshield/infection sounds.',
         scope: 'client',
         config: false,
         type: Number,
@@ -270,7 +268,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.actionFxVolume', {
         name: 'Action FX Volume',
-        hint: 'Master multiplier for all action FX audio (skirmish, barrage, ram, ...). 0 = silent, 1 = full.',
+        hint: 'Volume of action FX sounds (skirmish, barrage, ram).',
         scope: 'client',
         config: false,
         type: Number,
@@ -278,8 +276,6 @@ Hooks.on('init', () =>
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE, 'battleLogEnabled', {
-        name: 'Battle Log',
-        hint: 'Record combat telemetry and show the recap when a combat ends.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -287,7 +283,7 @@ Hooks.on('init', () =>
     });
     game.settings.register(MODULE, 'tah.battleLogVolume', {
         name: 'Battle Log Sound Volume',
-        hint: 'Volume of the Battle Log intro sounds (fade-in, typing loop, result impact, ...). Set to 0 to disable.',
+        hint: 'Volume of the Battle Log intro sounds (fade-in, typing loop, result impact).',
         scope: 'client',
         config: false,
         type: Number,
@@ -307,24 +303,18 @@ Hooks.on('init', () =>
         });
     }
     game.settings.register(MODULE, 'tah.telemetryFriendlyMechAsSquad', {
-        name: 'Friendly mechs count as squad',
-        hint: 'Include FRIENDLY-disposition mechs (not owned by players) in the squad. Off: they render as friendlies.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE, 'tah.disableAwards', {
-        name: 'Disable awards',
-        hint: 'No awards computed. No MVP auto-pick. GM can still pick MVP manually.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE, 'tah.telemetryDebug', {
-        name: 'Debug: log every telemetry event',
-        hint: 'Console-log every event written to the combat telemetry flag. Turn off for normal play.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -351,7 +341,7 @@ Hooks.on('init', () =>
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const statKey of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'])
+    for (const statKey of ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'xp_gain', 'xp_loss', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'])
     {
         game.settings.register(MODULE, `tah.statSound.${statKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,
@@ -369,15 +359,13 @@ Hooks.on('init', () =>
         'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
         'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
         'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-        'defaultThrow', 'targetFail', 'reload', 'fight'])
+        'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation'])
     {
         game.settings.register(MODULE, `tah.actionFxSound.${actionKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
     game.settings.register(MODULE, 'tah.showDisposition', {
-        name: 'Show Team / Disposition Indicator',
-        hint: 'Colored stripe on the title bar. Shows team name if Token Factions advanced teams is active, otherwise shows disposition.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -479,8 +467,8 @@ Hooks.once('ready', () =>
             return;
         if (!WASD_QE.has(ev.code))
             return;
-        // Let Q/E through mid-drag so elevation adjustments still work.
-        if (_activeTokenDrags > 0 && ELEVATION_KEYS.has(ev.code))
+        // Let Q/E through mid-drag (token or template preview) so elevation adjustments still work.
+        if (ELEVATION_KEYS.has(ev.code) && (_activeTokenDrags > 0 || (canvas.templates?.preview?.children?.length ?? 0) > 0))
             return;
         const tag = /** @type {any} */ (ev.target)?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || /** @type {any} */ (ev.target)?.isContentEditable)

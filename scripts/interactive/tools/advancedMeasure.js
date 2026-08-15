@@ -4,7 +4,7 @@
 
 import { createShapePlacement, createPlacedShapeStore } from "../shape-placement-engine.js";
 import {
-    pointerToWorld, makeSafe, suppressTokenLayerClick, addGraphicsBelowTokens, addGraphicsAboveTokens,
+    pointerToWorld, makeSafe, suppressTokenInteraction, addGraphicsBelowTokens, addGraphicsAboveTokens,
     destroyGraphics, paintSingleMarkCursor, gridLineWidth, TG, createMergedRangeHighlight, RANGE_GLOW,
     createCtrlMarkIndicator, paintDashedFootprint,
     suppressEvent,
@@ -252,6 +252,25 @@ function getControlled()
 }
 
 let _hoverToken = null;
+let _lastClientX = -1;
+let _lastClientY = -1;
+
+// geometric check; mouseenter/mouseleave state can go stale when DOM under the cursor is replaced
+function pointerOverToolbar()
+{
+    if (!_toolbarEl || !_toolbarEl.isConnected || _lastClientX < 0)
+        return false;
+    const el = document.elementFromPoint(_lastClientX, _lastClientY);
+    return !!el && _toolbarEl.contains(el);
+}
+
+function onClientPointerMove(event)
+{
+    _lastClientX = event.clientX;
+    _lastClientY = event.clientY;
+    if (_overToolbar || _hoverToken)
+        _overToolbar = pointerOverToolbar();
+}
 
 // Referenceable = actor exists and token not destroyed.
 function isValidRef(token)
@@ -284,6 +303,21 @@ function markedTokens()
     return out;
 }
 
+let _dbgMoveCount = 0;
+let _dbgLastMoveAt = 0;
+let _dbgLastHealSkip = '';
+globalThis.laMeasureRef = () => ({
+    hover: _hoverToken ? `${_hoverToken.name} (destroyed:${_hoverToken.destroyed}, hover:${_hoverToken.hover})` : null,
+    controlled: getControlled().map(token => token.name),
+    whiteMarks: markedTokens().map(token => token.name),
+    references: getReferenceTokens().map(token => token.name),
+    overToolbar: _overToolbar,
+    pointerOverToolbar: pointerOverToolbar(),
+    pointerMoves: _dbgMoveCount,
+    msSinceLastMove: _dbgLastMoveAt ? Math.round(performance.now() - _dbgLastMoveAt) : null,
+    lastHealSkip: _dbgLastHealSkip,
+});
+
 function getReferenceTokens()
 {
     const primary = (_hoverToken && isValidRef(_hoverToken))
@@ -295,27 +329,27 @@ function getReferenceTokens()
     return Array.from(byId.values());
 }
 
-function computeRadiusForToken(token)
+function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId = _saved.weaponItemId)
 {
-    if (_saved.rangeSource === 'none')
+    if (source === 'none')
         return 0;
-    if (_saved.rangeSource === 'manual')
+    if (source === 'manual')
         return _saved.manualRadius;
     if (!isKnownToken(token))
         return null;
     const actor = token?.actor;
     if (!actor)
         return _saved.manualRadius;
-    if (_saved.rangeSource === 'threat')
+    if (source === 'threat')
         return getActorMaxThreat(actor);
-    if (_saved.rangeSource === 'sensor')
+    if (source === 'sensor')
         return actor.type === 'pilot' ? 5 : (actor.system?.sensor_range ?? 10);
     // weapon is owner-only (loadout is yours to know); a scanned enemy falls back to max reach
-    if (_saved.rangeSource === 'reach' || (_saved.rangeSource === 'weapon' && !token.isOwner))
+    if (source === 'reach' || (source === 'weapon' && !token.isOwner))
         return getActorMaxReach_WithBonus(actor);
-    if (_saved.rangeSource === 'weapon')
+    if (source === 'weapon')
     {
-        const weapon = actor.items.get(_saved.weaponItemId) ?? getWeapons(token)[0];
+        const weapon = actor.items.get(weaponItemId) ?? getWeapons(token)[0];
         return weapon ? weaponMaxRange(weapon, actor) : _saved.manualRadius;
     }
     return _saved.manualRadius;
@@ -335,6 +369,154 @@ function weaponMaxRange(weapon, actor)
 {
     return weaponPulseRange(weaponRangeMap(weapon, actor));
 }
+
+// Pinned marker auras: static outline, session-lived, several at once, tool-independent.
+const _rangePins = new Map();
+
+function _pinKey(tokenId, source, weaponItemId)
+{
+    return `${tokenId}|${source}|${weaponItemId ?? ''}`;
+}
+
+function _tokenHasPin(tokenId)
+{
+    for (const pin of _rangePins.values())
+    {
+        if (pin.tokenId === tokenId)
+            return true;
+    }
+    return false;
+}
+
+let _pinGroups = new Map();
+let _pinBreathTick = null;
+
+function _syncPinBreath()
+{
+    if (_pinGroups.size && !_pinBreathTick)
+    {
+        _pinBreathTick = () =>
+        {
+            const alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+            for (const destroy of _pinGroups.values())
+            {
+                for (const graphic of destroy.graphics ?? [])
+                {
+                    if (!graphic.destroyed)
+                        graphic.alpha = alpha;
+                }
+            }
+        };
+        canvas.app.ticker.add(_pinBreathTick);
+    }
+    else if (!_pinGroups.size && _pinBreathTick)
+    {
+        canvas?.app?.ticker?.remove(_pinBreathTick);
+        _pinBreathTick = null;
+    }
+}
+
+function _hidePins()
+{
+    for (const destroy of _pinGroups.values())
+        destroy();
+    _pinGroups = new Map();
+    _syncPinBreath();
+}
+
+// Pins of the same source merge into one union region, pulse-style minus the wave.
+function _rebuildPinVisuals()
+{
+    _hidePins();
+    if (!_open)
+        return;
+    const bySource = new Map();
+    for (const pin of _rangePins.values())
+    {
+        const token = canvas.tokens.get(pin.tokenId);
+        if (!token || token.destroyed)
+            continue;
+        if (!bySource.has(pin.source))
+            bySource.set(pin.source, []);
+        bySource.get(pin.source).push({ token, range: pin.range });
+    }
+    for (const [source, entries] of bySource)
+    {
+        _pinGroups.set(source, createMergedRangeHighlight(entries, {
+            includeSelf: true,
+            glowColor: RANGE_GLOW[source] ?? RANGE_GLOW.manual,
+            wave: false,
+            perimeterAlpha: 0.6,
+            fadeInMs: 0,
+        }));
+    }
+    _syncPinBreath();
+}
+
+function _destroyPin(key)
+{
+    _rangePins.delete(key);
+}
+
+function _showPins()
+{
+    _rebuildPinVisuals();
+}
+
+export function hasRangePin(token, source, weaponItemId = null)
+{
+    if (source === 'weapon' && weaponItemId === null)
+    {
+        for (const pin of _rangePins.values())
+        {
+            if (pin.tokenId === token?.id && pin.source === 'weapon')
+                return true;
+        }
+        return false;
+    }
+    return _rangePins.has(_pinKey(token?.id, source, weaponItemId));
+}
+
+export function toggleRangePin(token, source, { weaponItemId = null, range = null } = {})
+{
+    if (!token || !source || source === 'none')
+        return;
+    const key = _pinKey(token.id, source, weaponItemId);
+    if (_rangePins.has(key))
+        _destroyPin(key);
+    else
+    {
+        const radius = range ?? computeRadiusForToken(token, source, weaponItemId);
+        if (!radius || radius <= 0)
+            return;
+        _rangePins.set(key, { tokenId: token.id, source, range: radius });
+    }
+    _rebuildPinVisuals();
+    Hooks.callAll('lancer-automations.advancedMeasureStateChange');
+}
+
+export function clearRangePins(tokenId = null)
+{
+    for (const key of [..._rangePins.keys()])
+    {
+        if (tokenId === null || _rangePins.get(key)?.tokenId === tokenId)
+            _destroyPin(key);
+    }
+    _rebuildPinVisuals();
+    Hooks.callAll('lancer-automations.advancedMeasureStateChange');
+}
+
+Hooks.on('canvasTearDown', () =>
+{
+    _rangePins.clear();
+    _hidePins();
+});
+
+Hooks.on('deleteToken', (doc) =>
+{
+    if (_tokenHasPin(doc.id))
+        clearRangePins(doc.id);
+});
 
 const RANGE_TYPE_CCI = { range: 'cci-range', threat: 'cci-threat', thrown: 'cci-thrown', line: 'cci-line', cone: 'cci-cone', blast: 'cci-blast', burst: 'cci-burst' };
 const RANGE_TYPE_ORDER = Object.keys(RANGE_TYPE_CCI);
@@ -497,6 +679,22 @@ function applyMark(mark, token, adding, sound)
 function onCtrlMarkMove(event)
 {
     _ctrlCursorWorld = pointerToWorld(event);
+    _dbgMoveCount++;
+    _dbgLastMoveAt = performance.now();
+    // drop the hover reference once the cursor leaves the token, even without a hover-out event
+    if (_hoverToken)
+    {
+        if (pointerOverToolbar())
+            _dbgLastHealSkip = 'overToolbar';
+        else if (!_hoverToken.destroyed && _hoverToken.bounds.contains(_ctrlCursorWorld.x, _ctrlCursorWorld.y))
+            _dbgLastHealSkip = 'insideBounds';
+        else
+        {
+            _dbgLastHealSkip = 'healed';
+            _hoverToken = null;
+            onSelectionChange();
+        }
+    }
     _ctrlIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     _areaIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     _targetIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
@@ -682,8 +880,6 @@ Hooks.once('init', () =>
         onChange: (value) => _toolbarEl?.style.setProperty('--la-mt-scale', String(Number(value) || 1)),
     });
     game.settings.register('lancer-automations', CTRL_RULER_KEY, {
-        name: 'Advanced Measure: Ctrl ruler',
-        hint: 'Hold Ctrl to switch to the Measure Distance ruler.',
         scope: 'client',
         config: false,
         type: String,
@@ -692,8 +888,6 @@ Hooks.once('init', () =>
         onChange: () => refreshGlobalRulerDecoration(),
     });
     game.settings.register('lancer-automations', RULER_CURSOR_KEY, {
-        name: 'Measure Distance: cursor',
-        hint: 'Replace the cursor with the ruler icon and play a sound while the Measure Distance tool is active.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -701,8 +895,6 @@ Hooks.once('init', () =>
         onChange: () => refreshGlobalRulerDecoration(),
     });
     game.settings.register('lancer-automations', TARGET_CURSOR_KEY, {
-        name: 'Select Target: cursor',
-        hint: 'Replace the cursor with the target icon and play a sound while the Select Target tool is active.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -744,8 +936,44 @@ function rulerCursorOn()
     }
 }
 
+function cycleRangeSource()
+{
+    const refs = getReferenceTokens();
+    const weaponOk = refs.length === 1 && refs[0]?.isOwner && getWeapons(refs[0]).length > 0;
+    const values = RANGE_SOURCES.map(src => src.value).filter(value => value !== 'weapon' || weaponOk);
+    const idx = values.indexOf(_saved.rangeSource);
+    applyRangeSource(values[(idx + 1) % values.length]);
+    playUiSound('toggle');
+}
+
+function _isTypingTarget(target)
+{
+    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !!target?.isContentEditable;
+}
+
 function onDistanceKey(event)
 {
+    if (event.type === 'keydown' && _open && !_suppressed && !event.repeat
+        && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+        && !_isTypingTarget(event.target))
+    {
+        const key = String(event.key ?? '').toLowerCase();
+        if (key === 't')
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            cycleRangeSource();
+            return;
+        }
+        if (key === 'g')
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            playUiSound('toggle');
+            clearPlacements();
+            return;
+        }
+    }
     if (event.key !== 'Control' || _suppressed)
         return;
     // 'always' mode is handled by the global layer (works with the tool closed too).
@@ -894,7 +1122,7 @@ function onHoverToken(token, hovered)
     {
         if (_hoverToken !== token || token.hover)
             return;
-        if (_overToolbar || _toolbarEl?.matches(':hover'))
+        if (pointerOverToolbar())
             return;
         _hoverToken = null;
         onSelectionChange();
@@ -1016,9 +1244,7 @@ function startSingleMode()
     if (_singleActive)
         return;
     _singleActive = true;
-    const prevInteractive = canvas.tokens.interactiveChildren;
-    canvas.tokens.interactiveChildren = false;
-    const restoreLayerClick = suppressTokenLayerClick();
+    const restoreTokenInteraction = suppressTokenInteraction();
     const cursorGfx = new PIXI.Graphics();
     canvas.stage.addChild(cursorGfx).eventMode = 'none';
     const safe = makeSafe('advancedMeasureSingle', () => closeAdvancedMeasure());
@@ -1067,7 +1293,7 @@ function startSingleMode()
     canvas.stage.on('click', onClick);
     canvas.stage.on('rightdown', onRight);
     document.addEventListener('keydown', onKey, true);
-    _singleCursor = { gfx: cursorGfx, restoreLayerClick, prevInteractive };
+    _singleCursor = { gfx: cursorGfx, restoreTokenInteraction };
     _singleHandlers = { onMove, onClick, onRight, onKey };
     _targetIndicator = createCtrlMarkIndicator({ queryMarked: targetRemoveQuery, alwaysOn: true });
 }
@@ -1088,8 +1314,7 @@ function stopSingleMode()
     if (_singleCursor)
     {
         destroyGraphics(_singleCursor.gfx);
-        canvas.tokens.interactiveChildren = _singleCursor.prevInteractive;
-        _singleCursor.restoreLayerClick();
+        _singleCursor.restoreTokenInteraction();
         _singleCursor = null;
     }
     _targetIndicator?.dispose();
@@ -1147,7 +1372,13 @@ function clearPlacements()
     _saved.store?.destroy();
     _saved.marks?.clear();
     _saved.whiteMarks?.clear();
+    clearRangePins();
+    _saved.rangeSource = 'none';
+    _saved.pulseEnabled = false;
+    _saved.movementReachEnabled = false;
+    _saved.tacticalLabels = false;
     _controller?.redraw();
+    _emitStateChange();
     onSelectionChange();
 }
 
@@ -1205,7 +1436,7 @@ function injectStyles()
         #la-measure-toolbar button.la-mt-active .la-mt-svg-icon { background-color: var(--light-text, #fff) !important; }
         #la-measure-toolbar .la-mt-dd { position: relative; display: inline-flex; }
         #la-measure-toolbar .la-mt-dd-trigger { display: inline-flex; align-items: center; gap: 6px; }
-        #la-measure-toolbar .la-mt-dd-trigger span { font-family: var(--la-mono, ui-monospace, monospace); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+        #la-measure-toolbar .la-mt-dd-trigger span { font-family: var(--la-mono, ui-monospace, monospace); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #la-measure-toolbar .la-mt-dd-caret { font-size: 10px !important; opacity: 0.7; margin-left: 1px; }
         #la-measure-toolbar button.la-mt-active i, #la-measure-toolbar button.la-mt-active svg { color: var(--light-text, #fff) !important; fill: var(--light-text, #fff) !important; }
         #la-measure-toolbar .la-mt-hidden { display: none !important; }
@@ -1307,8 +1538,14 @@ const SHAPE_BUTTONS = [
     { pattern: 'line', label: 'Line', icon: 'cci cci-line' },
 ];
 
-function makeIconDropdown(current, items, onSelect)
+function makeIconDropdown(current, items, onSelect, onContext = null, isPinned = null)
 {
+    const starFor = new Map();
+    const refreshStars = () =>
+    {
+        for (const [value, star] of starFor)
+            star.style.display = isPinned?.(value) ? '' : 'none';
+    };
     const wrap = document.createElement('div');
     wrap.className = 'la-mt-dd';
     const currentItem = items.find(item => item.value === current) ?? items[0];
@@ -1334,6 +1571,11 @@ function makeIconDropdown(current, items, onSelect)
     };
     function onOutside(event)
     {
+        if (!wrap.isConnected)
+        {
+            document.removeEventListener('mousedown', onOutside, true);
+            return;
+        }
         if (!wrap.contains(event.target))
             close();
     }
@@ -1349,6 +1591,16 @@ function makeIconDropdown(current, items, onSelect)
         const itemLabel = document.createElement('span');
         itemLabel.textContent = item.label;
         row.append(makeIcon(item.icon), itemLabel);
+        if (isPinned)
+        {
+            const star = document.createElement('span');
+            star.className = 'la-hud-fav-mark';
+            star.textContent = '★';
+            star.style.display = isPinned(item.value) ? '' : 'none';
+            row.style.position = 'relative';
+            starFor.set(item.value, star);
+            row.appendChild(star);
+        }
         row.addEventListener('mouseenter', () =>
         {
             if (!item.disabled)
@@ -1362,6 +1614,18 @@ function makeIconDropdown(current, items, onSelect)
             close();
             onSelect(item.value);
         });
+        if (onContext)
+        {
+            row.addEventListener('contextmenu', (event) =>
+            {
+                suppressEvent(event);
+                if (item.disabled)
+                    return;
+                playUiSound('toggle');
+                onContext(item.value);
+                refreshStars();
+            });
+        }
         panel.appendChild(row);
     }
     trigger.addEventListener('mouseenter', () => playUiSound('statusHover'));
@@ -1426,7 +1690,9 @@ const HELP_LINES = [
     '[[W/S]]: tilt line',
     '[[Right-click]] also removes a target',
     'Reference: hover or select an owned/scanned token',
-    'Range: pick a source (None = off)',
+    'Range: pick a source (None = off, re-click = off)',
+    '[[T]]: next range source   [[G]]: clear all',
+    '[[Right-click]] a range source or a weapon: pin its outline (★, no pulse)',
     'Move: movement reach in ruler speed tiers',
     '[[Escape]]: stop placing   [[Shift+R]]: close',
 ];
@@ -1678,7 +1944,27 @@ function renderRangeControls()
         label: src.value === 'weapon' && refToken && !hasWeapon ? 'Weapon (none)' : src.label,
         disabled: !canResolve(src.value),
     }));
-    const dropdown = makeIconDropdown(_saved.rangeSource, items, (value) => applyRangeSource(value));
+    const dropdown = makeIconDropdown(_saved.rangeSource, items, (value) => applyRangeSource(value === _saved.rangeSource && value !== 'none' ? 'none' : value), (value) =>
+    {
+        if (value === 'weapon')
+        {
+            applyRangeSource('weapon');
+            return;
+        }
+        const tokens = getReferenceTokens();
+        if (!tokens.length)
+            return;
+        const allPinned = tokens.every(pinToken => hasRangePin(pinToken, value));
+        for (const pinToken of tokens)
+        {
+            if (allPinned || !hasRangePin(pinToken, value))
+                toggleRangePin(pinToken, value);
+        }
+    }, (value) =>
+    {
+        const tokens = getReferenceTokens();
+        return tokens.length > 0 && tokens.every(pinToken => hasRangePin(pinToken, value));
+    });
     group.appendChild(dropdown);
 
     const statSource = _saved.rangeSource !== 'manual' && _saved.rangeSource !== 'none';
@@ -1744,7 +2030,12 @@ function renderWeaponPopover(refToken)
         const rng = document.createElement('span');
         rng.className = 'la-mt-weap-r';
         rng.innerHTML = weaponRangeHtml(weaponRangeMap(weapon, actor)) || `R ${weaponMaxRange(weapon, actor)}`;
-        row.append(name, rng);
+        const star = document.createElement('span');
+        star.className = 'la-hud-fav-mark';
+        star.textContent = '★';
+        star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
+        row.style.position = 'relative';
+        row.append(name, rng, star);
         if (_saved.weaponItemId === weapon.id)
             row.classList.add('active');
         row.addEventListener('mouseenter', () => playUiSound('statusHover'));
@@ -1754,6 +2045,13 @@ function renderWeaponPopover(refToken)
             _saved.weaponItemId = weapon.id;
             rebuildPulse();
             renderToolbar();
+        });
+        row.addEventListener('contextmenu', (event) =>
+        {
+            suppressEvent(event);
+            playUiSound('toggle');
+            toggleRangePin(refToken, 'weapon', { weaponItemId: weapon.id });
+            star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
         });
         pop.appendChild(row);
     }
@@ -1807,6 +2105,7 @@ function renderToolbar()
     _toolbarEl.appendChild(makeSep());
     _toolbarEl.appendChild(makeButton('Clear', clearPlacements));
     _toolbarEl.appendChild(makeButton('✕', () => closeAdvancedMeasure()));
+    _overToolbar = pointerOverToolbar();
 }
 
 // Sit just above the Foundry macro hotbar, tracking its collapse/expand/hide.
@@ -2014,6 +2313,9 @@ export function openAdvancedMeasure(options)
     if (!isMeasureControlAllowed())
         return;
     _open = true;
+    _overToolbar = false;
+    document.addEventListener('pointermove', onClientPointerMove, { capture: true, passive: true });
+    _showPins();
     if (!_togglesSeeded)
     {
         try
@@ -2090,6 +2392,9 @@ export function closeAdvancedMeasure()
     if (!_open)
         return;
     _open = false;
+    _overToolbar = false;
+    document.removeEventListener('pointermove', onClientPointerMove, { capture: true });
+    _hidePins();
     playUiSound('details');
     document.removeEventListener('keydown', onFreeEsc, true);
     document.removeEventListener('wheel', onFreeWheel, { capture: true });

@@ -49,7 +49,7 @@ export const RANGE_GLOW = {
     mark: 0xffffff,
 };
 
-// temporary: show only the boundary outline (no fill, no per-cell grid, no wave). Set false to restore.
+// debug: outline-only range pulse, no fill/grid/wave.
 const _OUTLINE_ONLY = false;
 
 // Shared range-pulse styling. Tune here; used by every range-pulse builder + the picker.
@@ -59,7 +59,7 @@ export const RANGE_PULSE_STYLE = {
     staticFillAlpha: 0.0125,
     staticLineAlpha: 0.0125,
     perimeterAlpha: 0.3,
-    pulseSpeed: 1.25,
+    pulseSpeed: 1,
 };
 
 // Client color settings backing the palettes above. [settingKey, object, prop, menuLabel]
@@ -84,8 +84,7 @@ const _PALETTE_DEFS = [
     ['color.glowMark', RANGE_GLOW, 'mark', 'Mark'],
 ];
 
-// Ruler speed-tier colors (registered in speed-provider.js). Listed here only so the
-// Colors-tab reset button restores them alongside the palette above.
+// Ruler speed-tier color keys; listed here so Colors-tab reset covers them too.
 const RULER_COLOR_KEYS = [
     'speedProvider.colorStandard',
     'speedProvider.colorBoost',
@@ -180,6 +179,19 @@ export function suppressTokenLayerClick()
     };
 }
 
+/** Disable token interactivity + layer left-click for a canvas tool; returns the restore fn. */
+export function suppressTokenInteraction()
+{
+    const prevInteractive = canvas.tokens.interactiveChildren;
+    canvas.tokens.interactiveChildren = false;
+    const restoreLayerClick = suppressTokenLayerClick();
+    return () =>
+    {
+        canvas.tokens.interactiveChildren = prevInteractive;
+        restoreLayerClick();
+    };
+}
+
 // Scene change wipes any orphan picker stub left behind by a crashed handler.
 Hooks.on('canvasTearDown', () =>
 {
@@ -191,13 +203,22 @@ Hooks.on('canvasTearDown', () =>
 /** Unparent + destroy a PIXI display object (containers destroy their children too). Safe with null/undefined. */
 export function destroyGraphics(graphic)
 {
-    if (!graphic)
+    if (!graphic || graphic.destroyed)
         return;
     if (graphic.labelLayer)
         destroyGraphics(graphic.labelLayer);
     if (graphic.parent)
         graphic.parent.removeChild(graphic);
     graphic.destroy({ children: true });
+}
+
+/** Standard range-pulse teardown: drop the wave ticker, destroy the highlight + pulse graphics. */
+export function teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic)
+{
+    if (wavePulse)
+        canvas.app.ticker.remove(wavePulse);
+    destroyGraphics(rangeHighlight);
+    destroyGraphics(pulseGraphic);
 }
 
 /** Insert a graphic below the tokens layer (so tokens overlay it), or fall back to canvas.stage. */
@@ -238,6 +259,46 @@ export function makeSafe(label, onError)
             catch
             { /* */ }
         }
+    };
+}
+
+/** Shared picker-session scaffold: safe()-wrapped stage/document handlers, one-call bind, canonical-order unbind. */
+export function createPickerSession(label, onCrash)
+{
+    const safe = makeSafe(label, onCrash);
+    let handlers = null;
+    return {
+        safe,
+        // clickFirst preserves moveToken's click-before-pointermove attach order.
+        bind({ move, click, key, wheel = null, clickFirst = false })
+        {
+            handlers = { move: safe(move), click: safe(click), key: safe(key), wheel: wheel ? safe(wheel) : null };
+            if (clickFirst)
+            {
+                canvas.stage.on('click', handlers.click);
+                canvas.stage.on('pointermove', handlers.move);
+            }
+            else
+            {
+                canvas.stage.on('pointermove', handlers.move);
+                canvas.stage.on('click', handlers.click);
+            }
+            document.addEventListener('keydown', handlers.key, true);
+            // Capture phase + non-passive so wheel handlers can preventDefault before Foundry's canvas zoom listener.
+            if (handlers.wheel)
+                document.addEventListener('wheel', handlers.wheel, { capture: true, passive: false });
+        },
+        unbind()
+        {
+            if (!handlers)
+                return;
+            canvas.stage.off('click', handlers.click);
+            canvas.stage.off('pointermove', handlers.move);
+            document.removeEventListener('keydown', handlers.key, true);
+            if (handlers.wheel)
+                document.removeEventListener('wheel', handlers.wheel, { capture: true });
+            handlers = null;
+        },
     };
 }
 
@@ -400,7 +461,7 @@ export function gridLineWidth(base = 2)
     return Math.max(1, base * canvas.grid.size / 100);
 }
 
-export function drawDashedEdges(gfx, edges, dash, gap, phase)
+export function drawDashedEdges(graphic, edges, dash, gap, phase)
 {
     const step = dash + gap;
     const offset = ((phase % step) + step) % step;
@@ -415,8 +476,8 @@ export function drawDashedEdges(gfx, edges, dash, gap, phase)
             const end = Math.min(pos + dash, len);
             if (end <= start)
                 continue;
-            gfx.moveTo(from.x + ux * start, from.y + uy * start);
-            gfx.lineTo(from.x + ux * end, from.y + uy * end);
+            graphic.moveTo(from.x + ux * start, from.y + uy * start);
+            graphic.lineTo(from.x + ux * end, from.y + uy * end);
         }
     }
 }
@@ -554,6 +615,17 @@ export function hitLabelFontSize()
     return Math.max(12, canvas.grid.size * 0.18);
 }
 
+/** Hit-% text label, bottom-center anchored and non-interactive, added to the given container. */
+export function makeHitLabel(container)
+{
+    const label = makeText('', HIT_LABEL_STYLE);
+    label.style.fontSize = hitLabelFontSize();
+    label.anchor.set(0.5, 1);
+    label.eventMode = 'none';
+    container.addChild(label);
+    return label;
+}
+
 // P(hit) and P(crit) for a Lancer attack: total = d20 + bonus + accDice, hit if total >= defense, crit if total >= 20.
 // accDice = +max(|netAcc| d6) when netAcc > 0, -max(...) when < 0, 0 when netAcc is 0.
 export function rollHitCritChance(bonus, netAcc, defense)
@@ -640,7 +712,6 @@ export function _groupCellsByDistance(originOffsets, cellKeys)
     return byDist;
 }
 
-/** Wave-pulse tick for canvas.app.ticker.add(...). */
 // Client-tunable thickness multiplier for the range-pulse line + its black outline (Colors tab).
 function _rangePulseWidthMul()
 {
@@ -654,6 +725,7 @@ function _rangePulseWidthMul()
     }
 }
 
+/** Wave-pulse tick for canvas.app.ticker.add(...). */
 export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
 {
     const {
@@ -683,13 +755,58 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const lineW = Math.max(1, lineWidth * gridScale * widthMul);
     const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
     const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
-    let rings = hexesByDist;
+    // Rings prepainted once into child Graphics; per-frame work is alpha-only (no re-tessellation).
+    const ringGraphics = new Map();
+    const paintRingGraphic = (ringCells) =>
+    {
+        const ringG = new PIXI.Graphics();
+        // dark halo under the bright pulse line so the wave reads on light + dark maps
+        ringG.lineStyle(haloW, 0x000000, 1);
+        _paintCells(ringG, ringCells);
+        if (glowColor !== null)
+        {
+            ringG.lineStyle(glowW, glowColor, 1);
+            _paintCells(ringG, ringCells);
+        }
+        ringG.lineStyle(lineW, lineColor, 1);
+        ringG.beginFill(color, 1 / Math.max(1, lineAlphaMul));
+        _paintCells(ringG, ringCells);
+        ringG.endFill();
+        ringG.alpha = 0;
+        ringG.visible = false;
+        pulseGraphic.addChild(ringG);
+        return ringG;
+    };
+    const buildRings = (rings) =>
+    {
+        for (const child of pulseGraphic.removeChildren())
+            child.destroy();
+        ringGraphics.clear();
+        if (_OUTLINE_ONLY)
+            return;
+        if (range <= 1)
+        {
+            const ringCells = [];
+            for (const cells of rings.values())
+                ringCells.push(...cells);
+            ringGraphics.set(0, paintRingGraphic(ringCells));
+            return;
+        }
+        for (const [ringDist, ringCells] of rings)
+            ringGraphics.set(ringDist, paintRingGraphic(ringCells));
+    };
+    const setRingAlpha = (ringG, waveAlpha) =>
+    {
+        const alpha = Math.min(1, baseAlpha + baseLineAlpha + waveAlpha * lineAlphaMul);
+        ringG.alpha = alpha;
+        ringG.visible = alpha > 0.001;
+    };
+    buildRings(hexesByDist);
     let lastKey = _originPosKey(originToken);
     return () =>
     {
         if (pulseGraphic.destroyed)
             return;
-        pulseGraphic.clear();
         if (_OUTLINE_ONLY)
             return;
         if (lastKey !== null)
@@ -699,52 +816,32 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             {
                 lastKey = key;
                 const effectiveOrigin = _effectiveOrigin(originToken);
-                rings = _groupCellsByDistance(
+                buildRings(_groupCellsByDistance(
                     getOccupiedOffsets(effectiveOrigin),
                     getInRangeOffsets(effectiveOrigin, range, { includeSelf: true })
-                );
+                ));
             }
         }
-        const paintRing = (ringCells, waveAlpha) =>
-        {
-            const fillAlpha = Math.min(1, baseAlpha + waveAlpha);
-            const lineAlpha = Math.min(1, baseLineAlpha + waveAlpha * lineAlphaMul);
-            if (lineAlpha > 0)
-            {
-                // dark halo under the bright pulse line so the wave reads on light + dark maps
-                pulseGraphic.lineStyle(haloW, 0x000000, lineAlpha);
-                _paintCells(pulseGraphic, ringCells);
-                if (glowColor !== null)
-                {
-                    pulseGraphic.lineStyle(glowW, glowColor, lineAlpha);
-                    _paintCells(pulseGraphic, ringCells);
-                }
-            }
-            pulseGraphic.lineStyle(lineW, lineColor, lineAlpha);
-            pulseGraphic.beginFill(color, fillAlpha);
-            _paintCells(pulseGraphic, ringCells);
-            pulseGraphic.endFill();
-        };
         const now = performance.now();
         const phase = (now % periodMs) / periodMs;
         // range 1 has no distance to travel: breathe the whole adjacent ring as one heartbeat
         if (range <= 1)
         {
-            const beat = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
-            const ringCells = [];
-            for (const cells of rings.values())
-                ringCells.push(...cells);
-            paintRing(ringCells, peakAlpha * beat);
+            const ringG = ringGraphics.get(0);
+            if (ringG && !ringG.destroyed)
+            {
+                const beat = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
+                setRingAlpha(ringG, peakAlpha * beat);
+            }
             return;
         }
-        // cell-ring wave for every pulse (single + merged), same as the advanced measuring tool.
-        // equal-power cosine crossfade between rings; fade in at the origin, fade out at the edge.
-        // continuous ripple: wavefronts repeat every `wavelength`, so as one reaches the edge
-        // the next is already emerging at the origin. modulo wrap => seamless loop, no reset.
+        // continuous cosine ring wave; wavefronts repeat every wavelength so the loop is seamless
         const wavelength = range + tailWidth;
         const wavePos = phase * wavelength;
-        for (const [ringDist, ringCells] of rings)
+        for (const [ringDist, ringG] of ringGraphics)
         {
+            if (ringG.destroyed)
+                continue;
             const local = (((ringDist - wavePos) % wavelength) + wavelength) % wavelength;
             let norm;
             if (local <= leadWidth)
@@ -752,9 +849,13 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             else if (local >= wavelength - tailWidth)
                 norm = (wavelength - local) / tailWidth; // behind the front, in the tail
             else
+            {
+                ringG.alpha = 0;
+                ringG.visible = false;
                 continue;
+            }
             const falloff = 0.5 * (1 + Math.cos(norm * Math.PI));
-            paintRing(ringCells, peakAlpha * falloff);
+            setRingAlpha(ringG, peakAlpha * falloff);
         }
     };
 }
@@ -800,8 +901,7 @@ export function paintCellRegion(graphic, cells, { color = 0x00ff00, alpha = 0.2,
         graphic.endFill();
 }
 
-// Outer-boundary segments of a cell set: polygon edges belonging to exactly one cell
-// (shared edges cancel out). Grid-agnostic; follows irregular boundaries (terrain, holes).
+// Outer boundary: edges belonging to exactly one cell (shared edges cancel).
 export function _perimeterEdges(cells)
 {
     const hex = isHexGrid();
@@ -885,12 +985,11 @@ export function paintRangeHighlight(highlight, casterToken, range, color = 0x00f
     {
         // boundary from the includeSelf set so the origin never leaves an inner hole in the outline
         const boundaryCells = getInRangeOffsets(casterToken, range, { includeSelf: true });
-        paintPerimeterGlow(highlight, boundaryCells, { glowColor: opts.glowColor, lineColor: opts.lineColor ?? 0xFFFFFF });
+        paintPerimeterGlow(highlight, boundaryCells, { glowColor: opts.glowColor, lineColor: opts.lineColor ?? 0xFFFFFF, ...(opts.perimeterAlpha !== undefined ? { lineAlpha: opts.perimeterAlpha } : {}) });
     }
 }
 
-// Single-mark cursor: highlight the hovered token footprint (cyan) or the cursor cell (blue),
-// red when out of range. Returns the hovered token so callers can drive presence / hit labels.
+// Highlights hovered token (cyan/red if OOR) or cursor cell (blue); returns hovered token.
 export function paintSingleMarkCursor(graphic, worldX, worldY, { caster = null, range = null, tokens = null } = {})
 {
     graphic.clear();
@@ -968,11 +1067,21 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
     let fadeTo = 1;
     let fadeDur = Math.max(1, fadeInMs);
     let onFadeDone = null;
+    let finished = false;
+    const finish = () =>
+    {
+        if (finished)
+            return;
+        finished = true;
+        canvas.app.ticker.remove(fadeTick);
+        onFadeDone = null;
+        onDestroyed();
+    };
     const fadeTick = () =>
     {
         if (graphics.some(graphic => graphic.destroyed))
         {
-            canvas.app.ticker.remove(fadeTick);
+            finish();
             return;
         }
         const elapsed = performance.now() - fadeStart;
@@ -983,18 +1092,18 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
         if (fadeProgress >= 1)
         {
             canvas.app.ticker.remove(fadeTick);
-            const doneCallback = onFadeDone;
-            onFadeDone = null;
-            if (doneCallback)
-                doneCallback();
+            if (onFadeDone)
+                finish();
         }
     };
     canvas.app.ticker.add(fadeTick);
     return () =>
     {
+        if (finished)
+            return;
         if (fadeOutMs <= 0)
         {
-            onDestroyed();
+            finish();
             return;
         }
         fadeStart = performance.now();
@@ -1002,6 +1111,7 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
         fadeTo = 0;
         fadeDur = Math.max(1, fadeOutMs);
         onFadeDone = onDestroyed;
+        canvas.app.ticker.remove(fadeTick);
         canvas.app.ticker.add(fadeTick);
     };
 }
@@ -1018,17 +1128,12 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
     );
     const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken, glowColor });
     canvas.app.ticker.add(wavePulse);
-    return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs }, () =>
-    {
-        canvas.app.ticker.remove(wavePulse);
-        destroyGraphics(rangeHighlight);
-        destroyGraphics(pulseGraphic);
-    });
+    return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs },
+        () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic));
 }
 
-// Merged range pulse from several origin tokens: the union of their in-range cells drawn once,
-// with the wave emanating from the nearest origin. entries: [{token, range}]. Returns a destroy() fn.
-export function createMergedRangeHighlight(entries, { includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha, fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual } = {})
+// Union of all-entry in-range cells, wave from nearest origin; returns destroy().
+export function createMergedRangeHighlight(entries, { includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha, fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual, wave = true, perimeterAlpha } = {})
 {
     const waveRange = Math.max(1, ...entries.map(entry => entry.range));
     const originOffsetsFor = (entry) => entry.point
@@ -1064,8 +1169,9 @@ export function createMergedRangeHighlight(entries, { includeSelf = false, stati
 
     const rangeHighlight = new PIXI.Graphics();
     addGraphicsBelowTokens(rangeHighlight);
-    const pulseGraphic = new PIXI.Graphics();
-    addGraphicsBelowTokens(pulseGraphic);
+    const pulseGraphic = wave ? new PIXI.Graphics() : null;
+    if (pulseGraphic)
+        addGraphicsBelowTokens(pulseGraphic);
 
     let wavePulse = null;
     const rebuild = () =>
@@ -1074,7 +1180,9 @@ export function createMergedRangeHighlight(entries, { includeSelf = false, stati
         rangeHighlight.clear();
         if (!_OUTLINE_ONLY)
             paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: staticLineAlpha, lineColor: RANGE_PULSE_STYLE.lineColor });
-        paintPerimeterGlow(rangeHighlight, unionWave, { glowColor });
+        paintPerimeterGlow(rangeHighlight, unionWave, { glowColor, ...(perimeterAlpha !== undefined ? { lineAlpha: perimeterAlpha } : {}) });
+        if (!pulseGraphic)
+            return;
         const hexesByDist = _groupCellsByDistance(unionOrigins, unionWave);
         if (wavePulse)
             canvas.app.ticker.remove(wavePulse);
@@ -1101,18 +1209,17 @@ export function createMergedRangeHighlight(entries, { includeSelf = false, stati
     };
     canvas.app.ticker.add(followTick);
 
-    return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs }, () =>
+    const fadeTargets = pulseGraphic ? [rangeHighlight, pulseGraphic] : [rangeHighlight];
+    const destroy = createFadeInOut(fadeTargets, { fadeInMs, fadeOutMs }, () =>
     {
         canvas.app.ticker.remove(followTick);
-        if (wavePulse)
-            canvas.app.ticker.remove(wavePulse);
-        destroyGraphics(rangeHighlight);
-        destroyGraphics(pulseGraphic);
+        teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
     });
+    destroy.graphics = fadeTargets;
+    return destroy;
 }
 
-// Draw a move trace (start footprint, original end, optional corrected end) with connecting lines;
-// broadcasts to other clients unless suppressed.
+// Footprint + polyline trace for a move; broadcasts to other clients unless suppressed.
 let _moveTraceSeq = 0;
 export function drawMovementTrace(token, originalEndPos, newEndPos = null, { suppressBroadcast = false, path = null, newPath = null } = {})
 {
@@ -1291,7 +1398,7 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
         row.addEventListener('click', (event) =>
         {
             event.stopPropagation();
-            onPick(token);
+            onPick(token, event);
             close();
         });
         el.appendChild(row);
@@ -1419,6 +1526,9 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
             if (cancelled)
                 continue;
         }
+
+        if (token.actor?.statuses?.has?.('immovable'))
+            ui.notifications.warn(`${token.name} is IMMOVABLE and is being moved anyway.`);
 
         const dest = { x: updateData.x, y: updateData.y };
         if (!asVoluntary)

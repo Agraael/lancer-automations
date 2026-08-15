@@ -17,9 +17,10 @@ const targets = await api.chooseToken(casterToken, options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>range</kbd> | `number` | `null` | Max range for advisory highlight |
+| <kbd>range</kbd> | `number\|"sensors"` | `null` | Max range for advisory highlight. `"sensors"` = caster's sensor range |
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
-| <kbd>filter</kbd> | `Function` | `null` | `(token) => boolean` - excludes tokens when returning false |
+| <kbd>disposition</kbd> | `"friendly"\|"hostile"` | `null` | Keep only tokens with that disposition toward the caster (composes with `filter`) |
+| <kbd>filter</kbd> | `(token: Token) => boolean` | `null` | Excludes tokens when returning false |
 | <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
 | <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections. |
 | <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
@@ -31,7 +32,7 @@ const targets = await api.chooseToken(casterToken, options)
 | <kbd>urgent</kbd> | `boolean` | `false` | Show the card immediately instead of waiting in the card queue |
 | <kbd>autoConfirm</kbd> | `boolean` | `false` | Resolve as soon as `count` tokens are selected, no Confirm click |
 
-Generic range failures render as `Out of range (X > Y)`; filter failures render as `filterWarning` (or `Invalid target` if omitted).
+Generic range failures render as `Out of range (X > Y)`. Filter failures render as `filterWarning` (or `Invalid target` if omitted).
 
 </details>
 
@@ -55,7 +56,7 @@ const result = await api.openHaseContestCard(options)
 | <kbd>title</kbd> | `string` | `"HASE Contest"` | Card and chat title |
 | <kbd>sendToOwner</kbd> | `boolean` | `false` | Route each roll to its token owner |
 
-Card to set up and run a HASE contest between two tokens; returns the [`executeContestedCheck`](API_COMBAT.md) result, or `null` if cancelled. Pre-set fields stay editable, and any missing token/skill is prompted for.
+Card to set up and run a HASE contest between two tokens. Returns the [`executeContestedCheck`](API_COMBAT.md) result, or `null` if cancelled. Pre-set fields stay editable, and any missing token/skill is prompted for.
 
 </details>
 
@@ -75,7 +76,7 @@ const result = await api.openForceCheckCard(options)
 | <kbd>tokenA</kbd> | `Token` | `null` | Caster for the pickers' range pulse |
 | <kbd>skill</kbd> | `string` | `"HULL"` | Stat every target rolls: `HULL` / `AGI` / `SYS` / `ENG` |
 | <kbd>range</kbd> | `number` | `null` | Preset range on the target picker |
-| <kbd>saveVs</kbd> | `Token\|Actor` | `null` | Save target; empty = plain check |
+| <kbd>saveVs</kbd> | `Token\|Actor` | `null` | Save target. Empty = plain check |
 | <kbd>targets</kbd> | `Token[]` | `null` | Pre-picked rollers |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its token owner |
 
@@ -110,6 +111,7 @@ await api.placeZone(casterToken, options)
 | <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - Lancer Automations Ruler movement cost |
 | <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
 | <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
+| <kbd>expires</kbd> | `Object` | `null` | `{ on: 'ownerTurnStart'\|'ownerTurnEnd', originToken?, turns? }` - template auto-deletes on that combat event (default origin = caster, and `turns` > 1 survives that many occurrences) |
 
 <details>
 <summary><b>Custom Logic via <code>hooks</code></b></summary>
@@ -185,7 +187,7 @@ if (targets.length) await api.executeDamageRoll(casterToken, targets, 5, "explos
 ---
 
 <details>
-<summary><b><code>placeToken</code></b> <sup>async</sup></summary>
+<summary><b><code>placeToken</code></b> <sup>async</sup> → <code>Promise&lt;Array&lt;TokenDocument&gt;|null&gt;</code></summary>
 
 <br>
 
@@ -200,7 +202,7 @@ await api.placeToken(options)
 | <kbd>count</kbd> | `number` | `1` | Total tokens to place |
 | <kbd>extraData</kbd> | `Object` | `{}` | Default token data overrides. Flags are shallow-merged with prototype flags. |
 | <kbd>origin</kbd> | `Token\|{x: number, y: number}` | `null` | Measurement origin |
-| <kbd>onSpawn</kbd> | `Function` | `null` | `(newTokenDoc, origin) => {}` |
+| <kbd>onSpawn</kbd> | `(newTokenDoc: TokenDocument, origin: Token) => void \| Promise<void>` | `null` | `(newTokenDoc, origin) => {}` |
 | <kbd>title</kbd> | `string` | `"PLACE TOKEN"` | Card header |
 | <kbd>noCard</kbd> | `boolean` | `false` | Skip info card |
 | <kbd>disposition</kbd> | `number` | `null` | Token disposition override |
@@ -236,7 +238,7 @@ Interactive knockback tool. Shows movement traces and requires confirmation per 
 | <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
 | <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
 | <kbd>item</kbd> | `Item` | `null` | Source item |
-| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire; no `onInvoluntaryMove`). |
+| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire, no `onInvoluntaryMove`). |
 
 </details>
 
@@ -279,14 +281,14 @@ Pick an item from a list via a Choice Card.
 | <kbd>title</kbd> | `string` | `"PICK ITEM"` | Card title |
 | <kbd>description</kbd> | `string` | `"Select an item:"` | Subtitle text |
 | <kbd>icon</kbd> | `string` | `"fas fa-box"` | FontAwesome class |
-| <kbd>formatText</kbd> | `Function` | `null` | `(item) => item.name` |
+| <kbd>formatText</kbd> | `(item: Item) => string` | `null` | `(item) => item.name` |
 
 </details>
 
 ---
 
 <details>
-<summary><b><code>getWeapons</code></b> · <b><code>reloadOneWeapon</code></b> · <b><code>rechargeSystem</code></b> · <b><code>findAura</code></b> · <b><code>toggleAura</code></b> · <b><code>findItemByLid</code></b></summary>
+<summary><b><code>getWeapons</code></b> → <code>any[]</code> · <b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code> · <b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code> · <b><code>findAura</code></b> → <code>object | null</code> · <b><code>getTokensInAura</code></b> → <code>Token[] | null</code> · <b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code> · <b><code>findItemByLid</code></b> → <code>any | null</code></summary>
 
 <br>
 
@@ -295,11 +297,14 @@ api.getWeapons(entity)                                // → Array<Item> - all w
 await api.reloadOneWeapon(actorOrToken, name?)         // → Item|null - pick & reload a Loading weapon
 await api.rechargeSystem(actorOrToken, name?)          // → Item|null - pick & recharge a depleted system
 api.findAura(actorOrToken, auraName)                   // → object|null - find Grid-Aware Aura by name
+api.getTokensInAura(actorOrToken, auraName)            // → Token[]|null - who is standing in it
 await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - flip/set aura's enabled state
 api.findItemByLid(actorOrToken, lid)                   // → Item|null - find item by Lancer ID
 ```
 
-All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSystem` open a picker (`name?` is only the notification label). `toggleAura`'s `on?` sets state (omit to flip); full entry in [API_HOWTO](API_HOWTO.md).
+All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSystem` open a picker (`name?` is only the notification label). `toggleAura`'s `on?` sets state (omit to flip). Full entry in [API_HOWTO](API_HOWTO.md).
+
+`getTokensInAura` reads GAA's live occupancy, so it is elevation aware and skips drag previews. `null` means it could not be resolved (GAA off, or no such aura), unlike `[]` for an empty aura.
 
 </details>
 
@@ -332,6 +337,29 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 ```
 
 For vote modes, `userIdControl` must be a non-empty array of user IDs. The creator sees all votes and confirms the winner.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code> · <b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code> · <b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
+
+<br>
+
+```js
+const ok = await api.confirmCard({ title, description, confirmText, confirmIcon, ... })
+const ask = await api.askCard({ title, description, yesText, noText, owner, ... })
+const entry = await api.pickCard(entries, { label, entryIcon, title, description, ... })
+```
+
+Sugar over `startChoiceCard`. Extra options (`originToken`, `relatedToken`, `item`, `userIdControl`, ...) pass through.
+
+`confirmCard` shows a single button (`confirmText`, default `"Confirm"`). Resolves `true` when clicked, `false` on dismiss.
+
+`askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). `owner` (a Token) routes control to that token's owner with active-GM fallback. An explicit `userIdControl` wins. The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
+
+`pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`). `label`: property name or `(entry) => text` (default `entry.name`). `entryIcon`: fixed icon or `(entry) => icon`.
 
 </details>
 
@@ -373,11 +401,11 @@ await api.moveToken(token, options)
 | <kbd>token</kbd> | `Token` | *required* | The token to move |
 | <kbd>destination</kbd> | `{x: number, y: number}` | `null` | Center point (world coords), snapped to the grid. If omitted, interactive picker. |
 | <kbd>teleport</kbd> | `boolean` | `false` | Blink/teleport instead of a slide: plays teleport VFX and records it as a teleport in history. |
-| <kbd>action</kbd> | `string` | `null` | Movement action key (see below). Animates the move as that type; forced (ignores walls/cost). Takes precedence over `teleport`. |
+| <kbd>action</kbd> | `string` | `null` | Movement action key (see below). Animates the move as that type, forced (ignores walls/cost). Takes precedence over `teleport`. |
 | <kbd>range</kbd> | `number` | `-1` | Max range highlight (interactive mode) |
 | <kbd>cost</kbd> | `number` | `null` | Movement cost in spaces |
 | <kbd>canBeBlocked</kbd> | `boolean` | `true` | Whether engagement/overwatch can intercept |
-| <kbd>title</kbd> | `string` | `"TELEPORT"` / `"MOVE"` | Card header (interactive mode); defaults to TELEPORT when `teleport` is on |
+| <kbd>title</kbd> | `string` | `"TELEPORT"` / `"MOVE"` | Card header (interactive mode). Defaults to TELEPORT when `teleport` is on |
 
 **`action` keys** (the same actions the `M` movement-type wheel offers):
 
@@ -392,7 +420,7 @@ await api.moveToken(token, options)
 | `crawl` | Crawl | only while prone |
 | `forced` | Forced | GM only |
 
-`swim` and `burrow` are disabled by the Lancer system; `displace` is the internal fallback for unknown keys. The API forwards `action` straight to `token.document.move`, so it accepts any key in `CONFIG.Token.movement.actions`. `canSelect` only governs the wheel, not code-driven moves.
+`swim` and `burrow` are disabled by the Lancer system. `displace` is the internal fallback for unknown keys. The API forwards `action` straight to `token.document.move`, so it accepts any key in `CONFIG.Token.movement.actions`. `canSelect` only governs the wheel, not code-driven moves.
 
 </details>
 
@@ -420,7 +448,7 @@ Returns the user ID(s) that own a token. Checks active non-GM players first, fal
 ## Deployables & Thrown Weapons
 
 <details>
-<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> · <b><code>addExtraDeploymentActor</code></b> <sup>async</sup> · <b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> · <b><code>getActorDeployables</code></b> · <b><code>getLinkedDeployables</code></b></summary>
+<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>addExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getActorDeployables</code></b> → <code>string[]</code> · <b><code>getLinkedDeployables</code></b> → <code>string[]</code></summary>
 
 <br>
 
@@ -432,7 +460,7 @@ api.getActorDeployables(tokenOrActor)
 api.getLinkedDeployables(source)   // Item/Actor/Token, combined LIDs+UUIDs
 ```
 
-Item / Actor / Token target. Item stores on itself; Token/Actor stores on the actor. Both feed `getItemDeployables`; `getActorDeployables` applies the tier gate with the actor as owner.
+Item / Actor / Token target. Item stores on itself. Token/Actor stores on the actor. Both feed `getItemDeployables`, and `getActorDeployables` applies the tier gate with the actor as owner.
 
 **NPC tier:** gate each entry inline - `addExtraDeploymentLids(item, [{ lid, tier: 1 }, { lid, tier: 2 }, ...])` - or separately via `setExtraDeployableOpts(target, key, { tier })` (1-3, unset = all tiers). Legacy: with no explicit tiers, 3 LIDs on an NPC still read positionally as T1/T2/T3.
 
@@ -447,7 +475,7 @@ Item / Actor / Token target. Item stores on itself; Token/Actor stores on the ac
 ---
 
 <details>
-<summary><b><code>getExtraDeployableOpts</code></b> · <b><code>setExtraDeployableOpts</code></b> <sup>async</sup></summary>
+<summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code> · <b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -469,7 +497,7 @@ Per-deployable range / count / tier override keyed by LID or UUID. `tier` gates 
 ---
 
 <details>
-<summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> · <b><code>isPrimaryActionHidden</code></b></summary>
+<summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>isPrimaryActionHidden</code></b> → <code>boolean</code></summary>
 
 <br>
 
@@ -490,7 +518,7 @@ Hides an item's primary (base) action row in the HUD, leaving only its deployabl
 ---
 
 <details>
-<summary><b><code>promptLinkOrUnlinkActor</code></b> <sup>async</sup></summary>
+<summary><b><code>promptLinkOrUnlinkActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -517,7 +545,7 @@ Picker that toggles the deployable-owner link flag (`ownerActorUuid` + `ownerNam
 api.getItemDeployables(item, actor)
 ```
 
-Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-gated for NPC owners (explicit `tier` opts win, honoring `tier_override`; no explicit tiers = legacy 1-or-3 positional slice). `getAllItemDeployables(item)` = same list unfiltered. `linkTierGate(entry, actor, item?)` / `getOwnerTier(actor, item?)` expose the gate.
+Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-gated for NPC owners (explicit `tier` opts win, honoring `tier_override`, and no explicit tiers = legacy 1-or-3 positional slice). `getAllItemDeployables(item)` = same list unfiltered. `linkTierGate(entry, actor, item?)` / `getOwnerTier(actor, item?)` expose the gate.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -529,7 +557,7 @@ Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-
 ---
 
 <details>
-<summary><b><code>placeDeployable</code></b> <sup>async</sup></summary>
+<summary><b><code>placeDeployable</code></b> <sup>async</sup> → <code>Promise&lt;Object|null&gt;</code></summary>
 
 <br>
 
@@ -557,7 +585,7 @@ await api.placeDeployable(options)
 ---
 
 <details>
-<summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> · <b><code>deployWeaponToken</code></b> <sup>async</sup></summary>
+<summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code> · <b><code>deployWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -569,14 +597,14 @@ await api.deployWeaponToken(weapon, ownerActor, originToken, options)
 | Function | Description |
 |:---------|:------------|
 | `beginDeploymentCard` | Resolves all deployable LIDs on an item and opens a `placeDeployable` session with actor selector. |
-| `deployWeaponToken` | Deploys a weapon as a token on the map (for thrown weapons). Options: `{ range, title, description, at }` (`at` = measurement origin; `range` default 1). |
+| `deployWeaponToken` | Deploys a weapon as a token on the map (for thrown weapons). Options: `{ range, title, description, at }` (`at` = measurement origin, `range` default 1). |
 
 </details>
 
 ---
 
 <details>
-<summary><b><code>openDeployableMenu</code></b> · <b><code>recallDeployable</code></b> · <b><code>pickupWeaponToken</code></b> · <b><code>openThrowMenu</code></b> · <b><code>openItemBrowser</code></b></summary>
+<summary><b><code>openDeployableMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>recallDeployable</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>pickupWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>openThrowMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>openItemBrowser</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -588,7 +616,7 @@ await api.openThrowMenu(actor)            // open throw weapon menu
 await api.openItemBrowser(targetInput)    // open item browser
 ```
 
-`openThrowMenu(actor?)` defaults to the controlled token's actor; `recallDeployable`/`pickupWeaponToken` take the owner `Token`; `openItemBrowser(targetInput)` fills a jQuery input with the picked item and returns its LID.
+`openThrowMenu(actor?)` defaults to the controlled token's actor. `recallDeployable`/`pickupWeaponToken` take the owner `Token`. `openItemBrowser(targetInput)` fills a jQuery input with the picked item and returns its LID.
 
 </details>
 

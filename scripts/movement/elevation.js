@@ -21,32 +21,24 @@ const AUTO_MOVEMENT_TYPES = new Set(['walk', 'crawl', 'climb', 'jump', 'fly']);
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, CLIMB_WAYPOINTS_ENABLED, {
-        name: 'Lancer Ruler: Auto-insert Climb Waypoints',
-        hint: 'When the Lancer Ruler is active, split the movement path with "climb" waypoints wherever terrain elevation changes.',
         scope: 'world',
         type: Boolean,
         default: false,
         config: false
     });
     game.settings.register(MODULE_ID, SPLIT_AT_TRIGGER_BOUNDARIES, {
-        name: 'Split Movement at Trigger Boundaries',
-        hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end. Visual path unchanged.',
         scope: 'world',
         type: Boolean,
         default: false,
         config: false
     });
     game.settings.register(MODULE_ID, DISABLE_AUTO_TERRAIN_ELEVATION, {
-        name: 'Disable Auto-elevation from Terrain',
-        hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.',
         scope: 'world',
         type: Boolean,
         default: false,
         config: false
     });
     game.settings.register(MODULE_ID, 'disableAutoElevationOnMeasure', {
-        name: 'Disable Auto-elevation on Measure Distance',
-        hint: 'Stop following THT terrain elevation while the ruler measures distance. Drop-position elevation is unaffected.',
         scope: 'world',
         type: Boolean,
         default: false,

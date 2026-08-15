@@ -16,7 +16,7 @@ import {
 import {
     TG,
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    makeSafe, createCursorPreview, drawRangeHighlight, applyKnockbackMoves, gridLineWidth, makeText,
+    createPickerSession, createCursorPreview, drawRangeHighlight, applyKnockbackMoves, gridLineWidth, makeText,
     suppressEvent,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
@@ -144,7 +144,6 @@ export function knockBackToken(tokens, distance, options = {})
         };
 
         const restoreLayerClick = suppressTokenLayerClick();
-        let safeMove, safeClick, safeAbort, safeKey;
         let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
 
         const doCleanup = () =>
@@ -152,14 +151,7 @@ export function knockBackToken(tokens, distance, options = {})
             if (stopPresenceBeat)
                 stopPresenceBeat();
             clearToolPresence('knockBackToken');
-            if (safeClick)
-                canvas.stage.off('click', safeClick);
-            if (safeAbort)
-                canvas.stage.off('rightdown', safeAbort);
-            if (safeMove)
-                canvas.stage.off('pointermove', safeMove);
-            if (safeKey)
-                document.removeEventListener('keydown', safeKey, true);
+            session.unbind();
             restoreLayerClick();
             waypointCollector.dispose();
 
@@ -539,7 +531,7 @@ export function knockBackToken(tokens, distance, options = {})
         updateVisuals();
         updateCard();
 
-        const safe = makeSafe('knockBackToken', () =>
+        const session = createPickerSession('knockBackToken', () =>
         {
             try
             {
@@ -549,12 +541,7 @@ export function knockBackToken(tokens, distance, options = {})
             { /* */ }
             resolve([]);
         });
-        safeMove = safe(moveHandler);
-        safeClick = safe(clickHandler);
-        safeKey = safe(keyHandler);
-        canvas.stage.on('pointermove', safeMove);
-        canvas.stage.on('click', safeClick);
-        document.addEventListener('keydown', safeKey, true);
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
         stopPresenceBeat = startToolHeartbeat('knockBackToken', presenceData);
     }), _title);
 }

@@ -1,5 +1,53 @@
 [
   {
+    "id": "ubrg_npcf_pulverizer_charge_miner__deploys",
+    "name": "ubrg_npcf_pulverizer_charge_miner (deployables)",
+    "type": "System",
+    "sp": 0,
+    "source": "GMS",
+    "license": "NPC_DEPLOYABLES",
+    "license_level": 0,
+    "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
+    "deployables": [
+      {
+        "name": "Miner Pulverizer Charge T1 (NPC)",
+        "type": "Mine",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 10,
+        "edef": 10,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Deployed in a free space within Range 3. Invisible and untargetable, but can be revealed or disarmed via the usual rules for mines. It does not detonate by proximity: the Miner sets it off with a Quick Action.</p><p>On detonation it deals 10 AP explosive damage to any objects or terrain adjacent to it, and turns its space and any clear adjacent spaces into difficult terrain. Characters on or adjacent to the mine must pass a Hull save or be knocked Prone. Burrowing or tunnelling targets in the area are forced to the surface automatically and take 5 explosive damage.</p>"
+      },
+      {
+        "name": "Miner Pulverizer Charge T2 (NPC)",
+        "type": "Mine",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 12,
+        "edef": 12,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Deployed in a free space within Range 3. Invisible and untargetable, but can be revealed or disarmed via the usual rules for mines. It does not detonate by proximity: the Miner sets it off with a Quick Action.</p><p>On detonation it deals 10 AP explosive damage to any objects or terrain adjacent to it, and turns its space and any clear adjacent spaces into difficult terrain. Characters on or adjacent to the mine must pass a Hull save or be knocked Prone. Burrowing or tunnelling targets in the area are forced to the surface automatically and take 7 explosive damage.</p>"
+      },
+      {
+        "name": "Miner Pulverizer Charge T3 (NPC)",
+        "type": "Mine",
+        "size": 0.5,
+        "hp": 1,
+        "evasion": 14,
+        "edef": 14,
+        "armor": 0,
+        "speed": 0,
+        "activation": "Quick",
+        "detail": "<p>Deployed in a free space within Range 3. Invisible and untargetable, but can be revealed or disarmed via the usual rules for mines. It does not detonate by proximity: the Miner sets it off with a Quick Action.</p><p>On detonation it deals 10 AP explosive damage to any objects or terrain adjacent to it, and turns its space and any clear adjacent spaces into difficult terrain. Characters on or adjacent to the mine must pass a Hull save or be knocked Prone. Burrowing or tunnelling targets in the area are forced to the surface automatically and take 9 explosive damage.</p>"
+      }
+    ]
+  },
+  {
     "id": "npcf_deployable_turret_engineer__deploys",
     "name": "npcf_deployable_turret_engineer (deployables)",
     "type": "System",
@@ -10,8 +58,8 @@
     "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
     "deployables": [
       {
-        "name": "(NPC) Engineer Turret T1",
-        "type": "Drone",
+        "name": "Engineer Turret T1 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 5,
         "evasion": 10,
@@ -29,8 +77,8 @@
         ]
       },
       {
-        "name": "(NPC) Engineer Turret T2",
-        "type": "Drone",
+        "name": "Engineer Turret T2 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 8,
         "evasion": 10,
@@ -48,8 +96,8 @@
         ]
       },
       {
-        "name": "(NPC) Engineer Turret T3",
-        "type": "Drone",
+        "name": "Engineer Turret T3 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 10,
         "evasion": 10,
@@ -79,8 +127,8 @@
     "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
     "deployables": [
       {
-        "name": "(NPC) Engineer Rebake Turret T1",
-        "type": "Drone",
+        "name": "Engineer Rebake Turret T1 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 1,
         "evasion": 10,
@@ -98,8 +146,8 @@
         ]
       },
       {
-        "name": "(NPC) Engineer Rebake Turret T2",
-        "type": "Drone",
+        "name": "Engineer Rebake Turret T2 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 1,
         "evasion": 10,
@@ -117,8 +165,8 @@
         ]
       },
       {
-        "name": "(NPC) Engineer c Turret T3",
-        "type": "Drone",
+        "name": "Engineer Rebake Turret T3 (NPC)",
+        "type": "Deployable",
         "size": 0.5,
         "hp": 1,
         "evasion": 10,
@@ -148,7 +196,7 @@
     "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
     "deployables": [
       {
-        "name": "(NPC) Support Restock Drone T1",
+        "name": "Support Restock Drone T1 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 5,
@@ -160,7 +208,7 @@
         "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them regain 5 HP.</p>"
       },
       {
-        "name": "(NPC) Support Restock Drone T2",
+        "name": "Support Restock Drone T2 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 8,
@@ -172,7 +220,7 @@
         "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them regain 10 HP.</p>"
       },
       {
-        "name": "(NPC) Support Restock Drone T3",
+        "name": "Support Restock Drone T3 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 10,
@@ -196,7 +244,7 @@
     "effect": "This system exists only to generate NPC deployables. Do not equip on mechs.",
     "deployables": [
       {
-        "name": "(NPC) Support Rebake Restock Drone T1",
+        "name": "Support Rebake Restock Drone T1 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 5,
@@ -208,7 +256,7 @@
         "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them either regain 5 HP or reload one Loading weapon.</p>"
       },
       {
-        "name": "(NPC) Support Rebake Restock Drone T2",
+        "name": "Support Rebake Restock Drone T2 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 8,
@@ -220,7 +268,7 @@
         "detail": "<p>This drone can be deployed hovering in a space within Range 5. The next time an allied character moves through or next to the drone, it clamps on and discharges its reserves, letting them either regain 8 HP or reload one Loading weapon.</p>"
       },
       {
-        "name": "(NPC) Support Rebake Restock Drone T3",
+        "name": "Support Rebake Restock Drone T3 (NPC)",
         "type": "Drone",
         "size": 0.5,
         "hp": 10,

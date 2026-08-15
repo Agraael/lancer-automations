@@ -2,11 +2,11 @@
 // live-syncs its target cards with game.user.targets, so the pickers need no extra wiring.
 
 import {
-    isSingleTargetPickerActive, cancelSingleTargetPicker, clearSingleTargetShape,
-    isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape,
+    isSingleTargetPickerActive, cancelSingleTargetPicker,
+    isAreaPickerActive, cancelAreaPicker,
     beginTargetSession, isTargetSessionActive, createTokenMark,
 } from '../interactive/canvas.js';
-import { buildTargetingUI, aoeRanges, clearAttackShapePreview, targetInfoAllowed } from './targeting-ui.js';
+import { buildTargetingUI, aoeRanges, clearAllAttackShapes, pollForForm, targetInfoAllowed } from './targeting-ui.js';
 
 const _formulaBounds = new Map();
 function formulaBounds(formula)
@@ -78,21 +78,8 @@ function damageForm()
 
 function injectWhenReady(state)
 {
-    let elapsed = 0;
-    const tick = () =>
-    {
-        const $form = damageForm();
-        if ($form)
-        {
-            injectButton(state, $form).catch(err => console.warn('lancer-automations | damage targeting inject failed', err));
-            return;
-        }
-        elapsed += 50;
-        if (elapsed > 2000)
-            return;
-        setTimeout(tick, 50);
-    };
-    tick();
+    pollForForm(damageForm,
+        $form => injectButton(state, $form).catch(err => console.warn('lancer-automations | damage targeting inject failed', err)));
 }
 
 async function injectButton(state, $form)
@@ -196,9 +183,7 @@ export function registerDamageTargetButton()
                             cancelAreaPicker();
                         if (isSingleTargetPickerActive())
                             cancelSingleTargetPicker();
-                        clearSingleTargetShape(); // end session first so the area clear's resync is a no-op
-                        clearAreaTargetShape();
-                        clearAttackShapePreview();
+                        clearAllAttackShapes();
                     }
                     catch
                     {

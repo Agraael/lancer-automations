@@ -12,6 +12,7 @@ import {
     setExtraDeployableOpts,
     openDeployablePicker,
 } from './deployables.js';
+import { getActionOverlays, getActionOverlay, setActionOverlay, removeActionOverlay } from './action-overlays.js';
 import { addExtraBar, removeExtraBar, getExtraBars } from '../tah/tokenStatBar.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
 import { tierGateControl, bindTierGate, tierGateApplies, readTierGate } from './tier-gate.js';
@@ -35,21 +36,21 @@ function iconHtml(img, size = 22)
 const DAMAGE_TYPES = ['Kinetic', 'Energy', 'Explosive', 'Heat', 'Burn', 'Infection'];
 const RANGE_TYPES = ['Range', 'Threat', 'Line', 'Cone', 'Blast', 'Burst', 'Thrown'];
 
-function dmgRowHtml(val = '', type = 'Kinetic')
+function dmgRowHtml(dmgAmount = '', type = 'Kinetic')
 {
     const opts = DAMAGE_TYPES.map(dt => `<option${dt === type ? ' selected' : ''}>${dt}</option>`).join('');
     return `<div class="la-extras-dmg-row" style="display:flex;align-items:center;gap:6px;">
-        <input type="text" class="la-extras-act-dmgval" value="${escAttr(val)}" placeholder="1d6" style="width:60px;height:22px;">
+        <input type="text" class="la-extras-act-dmgval" value="${escAttr(dmgAmount)}" placeholder="1d6" style="width:60px;height:22px;">
         <select class="la-extras-act-dmgtype" style="height:22px;">${opts}</select>
         <span class="la-extras-dmg-del" title="Remove" style="cursor:pointer;color:#a33;padding:0 4px;"><i class="fas fa-times"></i></span>
     </div>`;
 }
 
-function rangeRowHtml(val = '', type = 'Range')
+function rangeRowHtml(rangeValue = '', type = 'Range')
 {
     const opts = RANGE_TYPES.map(rt => `<option${rt === type ? ' selected' : ''}>${rt}</option>`).join('');
     return `<div class="la-extras-range-row" style="display:flex;align-items:center;gap:6px;">
-        <input type="number" class="la-extras-act-rangeval" value="${escAttr(val)}" placeholder="&mdash;" style="width:44px;height:22px;">
+        <input type="number" class="la-extras-act-rangeval" value="${escAttr(rangeValue)}" placeholder="&mdash;" style="width:44px;height:22px;">
         <select class="la-extras-act-rangetype" style="height:22px;">${opts}</select>
         <span class="la-extras-range-del" title="Remove" style="cursor:pointer;color:#a33;padding:0 4px;"><i class="fas fa-times"></i></span>
     </div>`;
@@ -150,6 +151,7 @@ function renderExtraBarsSection(target)
     `;
 }
 
+/** @returns {void} */
 export function openExtrasDialog(target)
 {
     if (!target)
@@ -160,6 +162,8 @@ export function openExtrasDialog(target)
     const isItem = target.documentName === 'Item';
     let actIcon = 'icons/svg/dice-target.svg';
     let editingName = null;
+    // Set while the action editor is in combat-only mode for a native action.
+    let overlayEditing = null;
 
     const renderContent = () =>
     {
@@ -171,7 +175,7 @@ export function openExtrasDialog(target)
         const allDepLids = new Set(target.getFlag('lancer-automations', 'extraDeployables') || []);
         const uiMarkerLids = (target.getFlag('lancer-automations', 'extraDeployableLidsViaUI') || [])
             .map((/** @type {any} */ entry) => (typeof entry === 'string' ? { lid: entry, name: entry, img: null } : entry))
-            .filter((/** @type {any} */ e) => e?.lid && allDepLids.has(e.lid));
+            .filter((/** @type {any} */ lidEntry) => lidEntry?.lid && allDepLids.has(lidEntry.lid));
 
         const stateBadge = (/** @type {any} */ a) =>
         {
@@ -192,15 +196,15 @@ export function openExtrasDialog(target)
             }
             if (tags.some((/** @type {any} */ t) => t.lid === 'tg_turn'))
             {
-                const v = a.usesPerTurn?.value ?? 0;
-                const m = a.usesPerTurn?.max ?? 0;
-                parts.push(`<span style="color:${v <= 0 ? '#c33' : '#3a9e6e'};" title="Per turn">↻${v}/${m}T</span>`);
+                const perTurnValue = a.usesPerTurn?.value ?? 0;
+                const perTurnMax = a.usesPerTurn?.max ?? 0;
+                parts.push(`<span style="color:${perTurnValue <= 0 ? '#c33' : '#3a9e6e'};" title="Per turn">↻${perTurnValue}/${perTurnMax}T</span>`);
             }
             if (tags.some((/** @type {any} */ t) => t.lid === 'tg_round'))
             {
-                const v = a.usesPerRound?.value ?? 0;
-                const m = a.usesPerRound?.max ?? 0;
-                parts.push(`<span style="color:${v <= 0 ? '#c33' : '#3a9e6e'};" title="Per round">↻${v}/${m}R</span>`);
+                const perRoundValue = a.usesPerRound?.value ?? 0;
+                const perRoundMax = a.usesPerRound?.max ?? 0;
+                parts.push(`<span style="color:${perRoundValue <= 0 ? '#c33' : '#3a9e6e'};" title="Per round">↻${perRoundValue}/${perRoundMax}R</span>`);
             }
             return parts.length ? `<span style="font-size:0.82em;margin-right:4px;">${parts.join(' ')}</span>` : '';
         };
@@ -238,22 +242,51 @@ export function openExtrasDialog(target)
                     <span class="la-extras-remove-dep" data-uuid="${escAttr(uuid)}" title="Remove" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>
                 </div>`;
         }).join('');
-        const depRowsLid = uiMarkerLids.map((/** @type {any} */ e) =>
+        const depRowsLid = uiMarkerLids.map((/** @type {any} */ lidEntry) =>
         {
-            const opts = getExtraDeployableOpts(target, e.lid) || {};
-            const img = e.img || 'icons/svg/hazard.svg';
+            const opts = getExtraDeployableOpts(target, lidEntry.lid) || {};
+            const img = lidEntry.img || 'icons/svg/hazard.svg';
             return `
-                <div class="la-tah-pick" style="padding:4px 8px;display:flex;align-items:center;gap:8px;background:var(--la-plate);border-left:3px solid var(--primary-color);" title="${escAttr(e.lid)}">
+                <div class="la-tah-pick" style="padding:4px 8px;display:flex;align-items:center;gap:8px;background:var(--la-plate);border-left:3px solid var(--primary-color);" title="${escAttr(lidEntry.lid)}">
                     ${iconHtml(img, 22)}
-                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.name}</span>
-                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Range override">R<input type="number" class="la-extras-dep-lid-range" data-lid="${escAttr(e.lid)}" value="${opts.range ?? ''}" min="0" max="99" style="width:42px;height:22px;font-size:0.85em;"></label>
-                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Count override">C<input type="number" class="la-extras-dep-lid-count" data-lid="${escAttr(e.lid)}" value="${opts.count ?? ''}" min="1" max="20" style="width:42px;height:22px;font-size:0.85em;"></label>
-                    ${showTier ? tierGateControl(opts.tier, `data-lid="${escAttr(e.lid)}"`) : ''}
-                    <span class="la-extras-remove-dep-lid" data-lid="${escAttr(e.lid)}" title="Remove" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>
+                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${lidEntry.name}</span>
+                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Range override">R<input type="number" class="la-extras-dep-lid-range" data-lid="${escAttr(lidEntry.lid)}" value="${opts.range ?? ''}" min="0" max="99" style="width:42px;height:22px;font-size:0.85em;"></label>
+                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Count override">C<input type="number" class="la-extras-dep-lid-count" data-lid="${escAttr(lidEntry.lid)}" value="${opts.count ?? ''}" min="1" max="20" style="width:42px;height:22px;font-size:0.85em;"></label>
+                    ${showTier ? tierGateControl(opts.tier, `data-lid="${escAttr(lidEntry.lid)}"`) : ''}
+                    <span class="la-extras-remove-dep-lid" data-lid="${escAttr(lidEntry.lid)}" title="Remove" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>
                 </div>`;
         }).join('');
         const depRows = (depRowsUuid + depRowsLid)
             || '<div style="padding:8px;text-align:center;color:var(--la-ink-dim);font-size:0.82em;font-style:italic;">No deployables added via this dialog.</div>';
+
+        const overlayHosts = isItem
+            ? [target]
+            : [
+                ...((target.system?.actions ?? []).length ? [target] : []),
+                ...[...(target.items ?? [])].filter((/** @type {any} */ ownedItem) => (ownedItem.system?.actions ?? []).length),
+            ];
+        const nativeActionRows = overlayHosts.flatMap((/** @type {any} */ hostItem) =>
+        {
+            const overlays = getActionOverlays(hostItem);
+            // A deployable's own activation behaves like an action and is named after the actor.
+            const ownActivation = (!isItem && hostItem === target && target.system?.activation)
+                ? [{ name: target.name, activation: target.system.activation }]
+                : [];
+            return [...ownActivation, ...(hostItem.system?.actions ?? [])].map((/** @type {any} */ action) =>
+            {
+                const overlay = overlays[action.name];
+                const mark = overlay
+                    ? `<span style="font-size:0.78em;color:var(--primary-color);text-transform:uppercase;">${overlay.laCombat}</span>`
+                    : '';
+                return `
+                <div class="la-tah-pick" style="padding:4px 8px;display:flex;align-items:center;gap:8px;background:var(--la-plate);border-left:3px solid ${overlay ? 'var(--primary-color)' : 'transparent'};">
+                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${action.name}${isItem ? '' : ` <span style="color:var(--la-ink-dim);font-size:0.85em;">${hostItem.name}</span>`}</span>
+                    ${mark}
+                    <span class="la-extras-edit-overlay" data-item-id="${escAttr(hostItem.id)}" data-name="${escAttr(action.name)}" title="Attack / damage" style="cursor:pointer;color:var(--la-ink-dim);padding:2px 6px;"><i class="fas fa-pen"></i></span>
+                    ${overlay ? `<span class="la-extras-remove-overlay" data-item-id="${escAttr(hostItem.id)}" data-name="${escAttr(action.name)}" title="Remove combat" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>` : ''}
+                </div>`;
+            });
+        }).join('');
 
         const actOptions = ACTIVATIONS.map(activation => `<option value="${activation}">${activation}</option>`).join('');
         const depPickActors = (game.actors?.contents ?? [])
@@ -280,6 +313,11 @@ export function openExtrasDialog(target)
                     </div>
                     <div class="lancer-scroll" style="margin-top:4px;max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${actionRows}</div>
                 </div>
+                ${nativeActionRows ? `
+                <div>
+                    <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Action Combat</div>
+                    <div class="lancer-scroll" style="margin-top:4px;max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${nativeActionRows}</div>
+                </div>` : ''}
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;">
                         <div style="font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Extra Deployment Actors</div>
@@ -303,6 +341,7 @@ export function openExtrasDialog(target)
                 </div>
                 <div class="la-extras-editor-action" style="flex:1 1 auto;min-height:0;flex-direction:column;">
                     <div class="la-extras-action-fields" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;">
+                    <div class="la-extras-act-basics">
                     <div style="display:grid;grid-template-columns:34px 1fr 1fr;gap:6px;align-items:center;">
                         <span class="la-extras-act-icon" title="Click to change icon" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${iconHtml(actIcon, 22)}</span>
                         <input type="text" class="la-extras-act-name" placeholder="Name" style="height:26px;padding:2px 6px;font-size:0.9em;">
@@ -317,6 +356,8 @@ export function openExtrasDialog(target)
                         <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Per Round <input type="number" class="la-extras-act-perround" placeholder="—" min="1" max="9" style="width:42px;height:22px;font-size:0.85em;"></label>
                         ${showTier ? tierGateControl(null, 'data-role="act-add"') : ''}
                     </div>
+                    </div>
+                    <div class="la-extras-overlay-note" style="display:none;margin-top:2px;padding:6px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 4%);font-size:0.8em;color:var(--la-ink-dim);">Attack or damage attached to this action. The action itself is untouched.</div>
                     <div class="la-extras-combat" style="margin-top:6px;padding:6px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 4%);font-size:0.8em;">
                         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
                             <span style="color:var(--la-ink-dim);text-transform:uppercase;letter-spacing:0.5px;">Combat</span>
@@ -400,6 +441,7 @@ export function openExtrasDialog(target)
     };
 
     let floatingDrawer = null;
+    let drawerFollow = null;
     /** @type {any} */
     const dialogOpts = { width: 480, height: 'auto', top: 450, left: 150, classes: ['lancer-dialog-base', 'lancer-no-title'] };
     const dlg = new Dialog({
@@ -417,8 +459,8 @@ export function openExtrasDialog(target)
             const wire = () =>
             {
                 const drawer = html.find('.la-extras-drawer');
-                const dq = (/** @type {string} */ sel) => drawer.find(sel);
-                dq('.la-extras-act-icon').on('click', () =>
+                const drawerFind = (/** @type {string} */ sel) => drawer.find(sel);
+                drawerFind('.la-extras-act-icon').on('click', () =>
                 {
                     new FilePicker({
                         type: 'image',
@@ -426,119 +468,171 @@ export function openExtrasDialog(target)
                         callback: (path) =>
                         {
                             actIcon = path;
-                            dq('.la-extras-act-icon').html(iconHtml(path, 22));
+                            drawerFind('.la-extras-act-icon').html(iconHtml(path, 22));
                         },
                     }).render(true);
                 });
                 const fillActionForm = (/** @type {any} */ src) =>
                 {
-                    dq('.la-extras-act-name').val(src.name ?? '');
-                    dq('.la-extras-act-act').val(src.activation ?? 'Quick');
-                    dq('.la-extras-act-detail').val(src.detail ?? '');
+                    drawerFind('.la-extras-act-name').val(src.name ?? '');
+                    drawerFind('.la-extras-act-act').val(src.activation ?? 'Quick');
+                    drawerFind('.la-extras-act-detail').val(src.detail ?? '');
                     actIcon = src.icon || 'icons/svg/dice-target.svg';
-                    dq('.la-extras-act-icon').html(iconHtml(actIcon, 22));
+                    drawerFind('.la-extras-act-icon').html(iconHtml(actIcon, 22));
                     const tags = src.tags ?? [];
                     const hasLid = (/** @type {string} */ lid) => tags.some((/** @type {any} */ tag) => tag.lid === lid);
-                    /** @type {any} */ (dq('.la-extras-act-loading')[0]).checked = hasLid('tg_loading');
-                    dq('.la-extras-act-uses').val(src.uses?.max ?? '');
-                    dq('.la-extras-act-recharge').val(src.recharge ?? '');
-                    dq('.la-extras-act-perturn').val(src.usesPerTurn?.max ?? '');
-                    dq('.la-extras-act-perround').val(src.usesPerRound?.max ?? '');
-                    dq(`input[name="la-extras-combat-mode"][value="${src.laCombat ?? ''}"]`).prop('checked', true);
-                    /** @type {any} */ (dq('.la-extras-act-melee')[0]).checked = src.attack_type === 'Melee';
-                    dq('.la-extras-act-acc').val(src.accuracy ?? 0);
-                    dq('.la-extras-act-diff').val(src.difficulty ?? 0);
-                    dq('.la-extras-act-atkbonus').val(src.attack_bonus ?? 0);
-                    dq('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+                    /** @type {any} */ (drawerFind('.la-extras-act-loading')[0]).checked = hasLid('tg_loading');
+                    drawerFind('.la-extras-act-uses').val(src.uses?.max ?? '');
+                    drawerFind('.la-extras-act-recharge').val(src.recharge ?? '');
+                    drawerFind('.la-extras-act-perturn').val(src.usesPerTurn?.max ?? '');
+                    drawerFind('.la-extras-act-perround').val(src.usesPerRound?.max ?? '');
+                    drawerFind(`input[name="la-extras-combat-mode"][value="${src.laCombat ?? ''}"]`).prop('checked', true);
+                    /** @type {any} */ (drawerFind('.la-extras-act-melee')[0]).checked = src.attack_type === 'Melee';
+                    drawerFind('.la-extras-act-acc').val(src.accuracy ?? 0);
+                    drawerFind('.la-extras-act-diff').val(src.difficulty ?? 0);
+                    drawerFind('.la-extras-act-atkbonus').val(src.attack_bonus ?? 0);
+                    drawerFind('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
                     {
                         el.checked = tags.some((/** @type {any} */ tag) => tag.lid === el.value);
                     });
                     const dmgList = src.damage ?? [];
-                    dq('.la-extras-dmg-rows').html(dmgList.length
+                    drawerFind('.la-extras-dmg-rows').html(dmgList.length
                         ? dmgList.map((/** @type {any} */ dmgEntry) => dmgRowHtml(dmgEntry.val, dmgEntry.type)).join('')
                         : dmgRowHtml());
                     const rangeList = src.range ?? [];
-                    dq('.la-extras-range-rows').html(rangeList.length
+                    drawerFind('.la-extras-range-rows').html(rangeList.length
                         ? rangeList.map((/** @type {any} */ rangeEntry) => rangeRowHtml(rangeEntry.val, rangeEntry.type)).join('')
                         : rangeRowHtml());
                     editingName = src.name;
-                    dq('.la-extras-act-add').text('Save Changes');
+                    drawerFind('.la-extras-act-add').text('Save Changes');
                 };
                 const clearActionForm = () =>
                 {
                     editingName = null;
-                    dq('.la-extras-act-name').val('');
-                    dq('.la-extras-act-act').val('Quick');
-                    dq('.la-extras-act-detail').val('');
+                    drawerFind('.la-extras-act-name').val('');
+                    drawerFind('.la-extras-act-act').val('Quick');
+                    drawerFind('.la-extras-act-detail').val('');
                     actIcon = 'icons/svg/dice-target.svg';
-                    dq('.la-extras-act-icon').html(iconHtml(actIcon, 22));
-                    /** @type {any} */ (dq('.la-extras-act-loading')[0]).checked = false;
-                    dq('.la-extras-act-uses, .la-extras-act-recharge, .la-extras-act-perturn, .la-extras-act-perround').val('');
-                    dq('input[name="la-extras-combat-mode"][value=""]').prop('checked', true);
-                    /** @type {any} */ (dq('.la-extras-act-melee')[0]).checked = false;
-                    dq('.la-extras-act-acc, .la-extras-act-diff, .la-extras-act-atkbonus').val(0);
-                    dq('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+                    drawerFind('.la-extras-act-icon').html(iconHtml(actIcon, 22));
+                    /** @type {any} */ (drawerFind('.la-extras-act-loading')[0]).checked = false;
+                    drawerFind('.la-extras-act-uses, .la-extras-act-recharge, .la-extras-act-perturn, .la-extras-act-perround').val('');
+                    drawerFind('input[name="la-extras-combat-mode"][value=""]').prop('checked', true);
+                    /** @type {any} */ (drawerFind('.la-extras-act-melee')[0]).checked = false;
+                    drawerFind('.la-extras-act-acc, .la-extras-act-diff, .la-extras-act-atkbonus').val(0);
+                    drawerFind('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
                     {
                         el.checked = false;
                     });
-                    dq('.la-extras-dmg-rows').html(dmgRowHtml());
-                    dq('.la-extras-range-rows').html(rangeRowHtml());
-                    dq('.la-extras-act-add').text('Add Action');
+                    drawerFind('.la-extras-dmg-rows').html(dmgRowHtml());
+                    drawerFind('.la-extras-range-rows').html(rangeRowHtml());
+                    drawerFind('.la-extras-act-add').text('Add Action');
                 };
                 const openDrawer = (/** @type {string} */ type, /** @type {string} */ title) =>
                 {
                     if (drawer[0] && drawer[0].parentElement !== document.body)
                         document.body.appendChild(/** @type {any} */ (drawer[0]));
                     floatingDrawer = drawer[0];
-                    dq('.la-extras-drawer-title').text(title);
-                    dq('.la-extras-editor-action, .la-extras-editor-dep, .la-extras-editor-bar').css('display', 'none');
-                    dq('.la-extras-editor-' + type).css('display', type === 'bar' ? 'block' : 'flex');
+                    drawerFind('.la-extras-drawer-title').text(title);
+                    drawerFind('.la-extras-editor-action, .la-extras-editor-dep, .la-extras-editor-bar').css('display', 'none');
+                    drawerFind('.la-extras-editor-' + type).css('display', type === 'bar' ? 'block' : 'flex');
                     const appEl = html.find('.la-extras-body')[0]?.closest('.app, .window-app, .application, dialog');
-                    const rect = appEl ? appEl.getBoundingClientRect() : null;
                     const drawerWidth = 300;
-                    const viewportWidth = globalThis.innerWidth || 1920;
-                    const openLeft = !!rect && (rect.right + drawerWidth + 12 > viewportWidth) && (rect.left - drawerWidth - 12 >= 0);
+                    const place = () =>
+                    {
+                        const rect = appEl ? appEl.getBoundingClientRect() : null;
+                        const viewportWidth = globalThis.innerWidth || 1920;
+                        const openLeft = !!rect && (rect.right + drawerWidth + 12 > viewportWidth) && (rect.left - drawerWidth - 12 >= 0);
+                        drawer.css({
+                            top: rect ? (rect.top + 14) + 'px' : '',
+                            left: rect ? (openLeft ? (rect.left - drawerWidth + 6) : (rect.right - 6)) + 'px' : '',
+                            height: rect ? (rect.height - 28) + 'px' : '',
+                            'box-shadow': (openLeft ? '6px' : '-6px') + ' 0 16px rgba(0,0,0,0.45)',
+                        });
+                        return openLeft;
+                    };
                     const appZ = appEl ? Number.parseInt(globalThis.getComputedStyle(appEl).zIndex, 10) : Number.NaN;
                     const behindZ = Number.isFinite(appZ) ? appZ - 1 : 90;
                     drawer.css({
                         position: 'fixed',
-                        top: rect ? (rect.top + 14) + 'px' : '',
-                        left: rect ? (openLeft ? (rect.left - drawerWidth + 6) : (rect.right - 6)) + 'px' : '',
                         width: drawerWidth + 'px',
-                        height: rect ? (rect.height - 28) + 'px' : '',
                         'margin-left': '0',
                         'z-index': String(behindZ),
-                        'box-shadow': (openLeft ? '6px' : '-6px') + ' 0 16px rgba(0,0,0,0.45)',
-                        transform: 'translateX(' + (openLeft ? '100%' : '-100%') + ')',
                         opacity: '0',
                         'pointer-events': 'none',
                     });
+                    const openLeft = place();
+                    drawer.css({ transform: 'translateX(' + (openLeft ? '100%' : '-100%') + ')' });
                     /** @type {any} */ (drawer[0]).getBoundingClientRect();
                     drawer.css({ transform: 'translateX(0)', opacity: '1', 'pointer-events': 'auto' });
+                    // Foundry drags the window by rewriting its inline style; track it so the drawer follows.
+                    drawerFollow?.disconnect();
+                    if (appEl)
+                    {
+                        drawerFollow = new MutationObserver(() => place());
+                        drawerFollow.observe(appEl, { attributes: true, attributeFilter: ['style'] });
+                    }
                 };
                 const closeDrawer = () =>
                 {
                     editingName = null;
+                    overlayEditing = null;
+                    drawerFollow?.disconnect();
+                    drawerFollow = null;
                     drawer.css({ transform: 'translateX(-100%)', opacity: '0', 'pointer-events': 'none' });
                 };
-                dq('.la-extras-drawer-close').on('click', () => closeDrawer());
+                const setOverlayMode = (/** @type {boolean} */ on) =>
+                {
+                    drawerFind('.la-extras-act-basics').css('display', on ? 'none' : '');
+                    drawerFind('.la-extras-overlay-note').css('display', on ? 'block' : 'none');
+                    drawerFind('input[name="la-extras-combat-mode"][value=""]').closest('label').css('display', on ? 'none' : '');
+                    drawerFind('.la-extras-act-add').text(on ? 'Save Combat' : 'Add Action');
+                };
+                drawerFind('.la-extras-drawer-close').on('click', () => closeDrawer());
                 html.find('.la-extras-act-new').on('click', () =>
                 {
                     clearActionForm();
+                    overlayEditing = null;
+                    setOverlayMode(false);
                     openDrawer('action', 'New Action');
+                });
+                html.find('.la-extras-edit-overlay').on('click', (ev) =>
+                {
+                    const itemId = $(ev.currentTarget).data('item-id');
+                    const name = String($(ev.currentTarget).data('name') ?? '');
+                    const hostItem = (isItem || itemId === target.id) ? target : target.items?.get(itemId);
+                    if (!hostItem || !name)
+                        return;
+                    clearActionForm();
+                    const overlay = getActionOverlay(hostItem, name);
+                    if (overlay)
+                        fillActionForm({ ...overlay, name });
+                    drawerFind('input[name="la-extras-combat-mode"][value="' + (overlay?.laCombat ?? 'attack') + '"]').prop('checked', true);
+                    overlayEditing = { item: hostItem, name };
+                    setOverlayMode(true);
+                    openDrawer('action', name);
+                });
+                html.find('.la-extras-remove-overlay').on('click', async (ev) =>
+                {
+                    const itemId = $(ev.currentTarget).data('item-id');
+                    const name = String($(ev.currentTarget).data('name') ?? '');
+                    const hostItem = (isItem || itemId === target.id) ? target : target.items?.get(itemId);
+                    if (!hostItem || !name)
+                        return;
+                    await removeActionOverlay(hostItem, name);
+                    rerender();
                 });
                 html.find('.la-extras-dep-new').on('click', () => openDrawer('dep', 'Add Deployable'));
                 html.find('.la-extras-bar-new').on('click', () => openDrawer('bar', 'Add Bar'));
-                dq('.la-extras-dep-search').on('input', (/** @type {any} */ ev) =>
+                drawerFind('.la-extras-dep-search').on('input', (/** @type {any} */ ev) =>
                 {
                     const query = String($(ev.currentTarget).val() ?? '').toLowerCase().trim();
-                    dq('.la-extras-dep-pick-row').each((/** @type {any} */ _i, /** @type {any} */ el) =>
+                    drawerFind('.la-extras-dep-pick-row').each((/** @type {any} */ _i, /** @type {any} */ el) =>
                     {
                         const name = String($(el).data('name') ?? '').toLowerCase();
                         $(el).toggle(!query || name.includes(query));
                     });
                 });
-                dq('.la-extras-dep-pick-row').on('click', async (/** @type {any} */ ev) =>
+                drawerFind('.la-extras-dep-pick-row').on('click', async (/** @type {any} */ ev) =>
                 {
                     const uuid = $(ev.currentTarget).data('uuid');
                     const doc = /** @type {any} */ (await fromUuid(uuid));
@@ -550,19 +644,19 @@ export function openExtrasDialog(target)
                         await target.setFlag('lancer-automations', 'extraDeployableActorsViaUI', [...cur, doc.uuid]);
                     rerender();
                 });
-                dq('.la-extras-dmg-add').on('click', () => dq('.la-extras-dmg-rows').append(dmgRowHtml()));
-                dq('.la-extras-range-add').on('click', () => dq('.la-extras-range-rows').append(rangeRowHtml()));
-                dq('.la-extras-dmg-rows').on('click', '.la-extras-dmg-del', (/** @type {any} */ ev) =>
+                drawerFind('.la-extras-dmg-add').on('click', () => drawerFind('.la-extras-dmg-rows').append(dmgRowHtml()));
+                drawerFind('.la-extras-range-add').on('click', () => drawerFind('.la-extras-range-rows').append(rangeRowHtml()));
+                drawerFind('.la-extras-dmg-rows').on('click', '.la-extras-dmg-del', (/** @type {any} */ ev) =>
                 {
-                    const rows = dq('.la-extras-dmg-row');
+                    const rows = drawerFind('.la-extras-dmg-row');
                     if (rows.length > 1)
                         $(ev.currentTarget).closest('.la-extras-dmg-row').remove();
                     else
                         rows.find('.la-extras-act-dmgval').val('');
                 });
-                dq('.la-extras-range-rows').on('click', '.la-extras-range-del', (/** @type {any} */ ev) =>
+                drawerFind('.la-extras-range-rows').on('click', '.la-extras-range-del', (/** @type {any} */ ev) =>
                 {
-                    const rows = dq('.la-extras-range-row');
+                    const rows = drawerFind('.la-extras-range-row');
                     if (rows.length > 1)
                         $(ev.currentTarget).closest('.la-extras-range-row').remove();
                     else
@@ -571,7 +665,7 @@ export function openExtrasDialog(target)
                 html.find('.la-extras-modify-action').on('click', (/** @type {any} */ ev) =>
                 {
                     const name = $(ev.currentTarget).data('name');
-                    const src = (getActorActions(target) || []).find((/** @type {any} */ item) => item.name === name && item._addedViaExtrasUI === true);
+                    const src = (getActorActions(target) || []).find((/** @type {any} */ action) => action.name === name && action._addedViaExtrasUI === true);
                     if (src)
                     {
                         fillActionForm(src);
@@ -580,26 +674,26 @@ export function openExtrasDialog(target)
                 });
                 html.find('.la-extras-act-add').on('click', async () =>
                 {
-                    const name = String(dq('.la-extras-act-name').val() ?? '').trim();
+                    const name = overlayEditing ? overlayEditing.name : String(drawerFind('.la-extras-act-name').val() ?? '').trim();
                     if (!name)
                     {
                         ui.notifications.warn('Action needs a name.');
                         return;
                     }
-                    const activation = String(dq('.la-extras-act-act').val() ?? 'Quick');
-                    const detail = String(dq('.la-extras-act-detail').val() ?? '');
-                    const loading = /** @type {HTMLInputElement} */ (dq('.la-extras-act-loading')[0])?.checked === true;
-                    const usesRaw = dq('.la-extras-act-uses').val();
+                    const activation = String(drawerFind('.la-extras-act-act').val() ?? 'Quick');
+                    const detail = String(drawerFind('.la-extras-act-detail').val() ?? '');
+                    const loading = /** @type {HTMLInputElement} */ (drawerFind('.la-extras-act-loading')[0])?.checked === true;
+                    const usesRaw = drawerFind('.la-extras-act-uses').val();
                     const usesMax = usesRaw ? Math.max(1, Number(usesRaw)) : 0;
-                    const rechargeRaw = dq('.la-extras-act-recharge').val();
+                    const rechargeRaw = drawerFind('.la-extras-act-recharge').val();
                     const recharge = rechargeRaw ? Math.min(6, Math.max(2, Number(rechargeRaw))) : 0;
-                    const perTurnRaw = dq('.la-extras-act-perturn').val();
+                    const perTurnRaw = drawerFind('.la-extras-act-perturn').val();
                     const perTurn = perTurnRaw ? Math.max(1, Number(perTurnRaw)) : 0;
-                    const perRoundRaw = dq('.la-extras-act-perround').val();
+                    const perRoundRaw = drawerFind('.la-extras-act-perround').val();
                     const perRound = perRoundRaw ? Math.max(1, Number(perRoundRaw)) : 0;
                     /** @type {any} */
                     const entry = { name, activation, detail, icon: actIcon, _addedViaExtrasUI: true };
-                    const addGate = dq('.la-tier-gate[data-role="act-add"]')[0];
+                    const addGate = drawerFind('.la-tier-gate[data-role="act-add"]')[0];
                     const addTier = addGate ? readTierGate(addGate) : null;
                     if (addTier)
                         entry.tier = addTier;
@@ -630,27 +724,27 @@ export function openExtrasDialog(target)
                         tags.push({ lid: 'tg_round', name: '{VAL}/round', val: String(perRound) });
                         entry.usesPerRound = { value: perRound, max: perRound };
                     }
-                    const combatMode = String(dq('input[name="la-extras-combat-mode"]:checked').val() ?? '');
+                    const combatMode = String(drawerFind('input[name="la-extras-combat-mode"]:checked').val() ?? '');
                     if (combatMode === 'attack' || combatMode === 'damage')
                     {
                         entry.laCombat = combatMode;
-                        dq('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+                        drawerFind('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
                         {
                             if (el.checked)
                                 tags.push({ lid: String($(el).val()), val: '' });
                         });
-                        const acc = Number(dq('.la-extras-act-acc').val() ?? 0);
-                        const diff = Number(dq('.la-extras-act-diff').val() ?? 0);
-                        const atkBonus = Number(dq('.la-extras-act-atkbonus').val() ?? 0);
+                        const acc = Number(drawerFind('.la-extras-act-acc').val() ?? 0);
+                        const diff = Number(drawerFind('.la-extras-act-diff').val() ?? 0);
+                        const atkBonus = Number(drawerFind('.la-extras-act-atkbonus').val() ?? 0);
                         if (acc)
                             entry.accuracy = acc;
                         if (diff)
                             entry.difficulty = diff;
                         if (atkBonus)
                             entry.attack_bonus = atkBonus;
-                        entry.attack_type = /** @type {HTMLInputElement} */ (dq('.la-extras-act-melee')[0])?.checked ? 'Melee' : 'Ranged';
+                        entry.attack_type = /** @type {HTMLInputElement} */ (drawerFind('.la-extras-act-melee')[0])?.checked ? 'Melee' : 'Ranged';
                         const damage = [];
-                        dq('.la-extras-dmg-row').each((/** @type {number} */ _i, /** @type {any} */ rowEl) =>
+                        drawerFind('.la-extras-dmg-row').each((/** @type {number} */ _i, /** @type {any} */ rowEl) =>
                         {
                             const dmgVal = String($(rowEl).find('.la-extras-act-dmgval').val() ?? '').trim();
                             if (dmgVal)
@@ -659,7 +753,7 @@ export function openExtrasDialog(target)
                         if (damage.length)
                             entry.damage = damage;
                         const range = [];
-                        dq('.la-extras-range-row').each((/** @type {number} */ _i, /** @type {any} */ rowEl) =>
+                        drawerFind('.la-extras-range-row').each((/** @type {number} */ _i, /** @type {any} */ rowEl) =>
                         {
                             const rangeVal = String($(rowEl).find('.la-extras-act-rangeval').val() ?? '').trim();
                             if (rangeVal)
@@ -670,6 +764,23 @@ export function openExtrasDialog(target)
                     }
                     if (tags.length)
                         entry.tags = tags;
+                    if (overlayEditing)
+                    {
+                        const { laCombat, accuracy, difficulty, attack_bonus, attack_type, damage, range } = entry;
+                        await setActionOverlay(overlayEditing.item, overlayEditing.name, {
+                            laCombat: laCombat ?? 'attack',
+                            accuracy: accuracy ?? null,
+                            difficulty: difficulty ?? null,
+                            attack_bonus: attack_bonus ?? null,
+                            attack_type: attack_type ?? null,
+                            damage: damage ?? null,
+                            range: range ?? null,
+                            tags: tags.filter((/** @type {any} */ tag) => !['tg_loading', 'tg_limited', 'tg_recharge', 'tg_turn', 'tg_round'].includes(tag.lid)),
+                        });
+                        overlayEditing = null;
+                        rerender();
+                        return;
+                    }
                     if (editingName)
                     {
                         await removeExtraActions(target, (/** @type {any} */ old) => old.name === editingName && old._addedViaExtrasUI === true);
@@ -694,7 +805,7 @@ export function openExtrasDialog(target)
                     await reloadExtraAction(target, name);
                     rerender();
                 });
-                dq('.la-extras-dep-find-lid').on('click', () =>
+                drawerFind('.la-extras-dep-find-lid').on('click', () =>
                 {
                     openDeployablePicker({
                         onPick: async (entry) =>
@@ -829,10 +940,10 @@ export function openExtrasDialog(target)
                 });
                 html.find('.la-extras-bar-add').on('click', async () =>
                 {
-                    const label = String(dq('.la-extras-bar-label').val() ?? '').trim() || 'Extra';
-                    const initialValue = Number(dq('.la-extras-bar-val').val()) || 0;
-                    const max = Math.max(1, Number(dq('.la-extras-bar-max').val()) || 1);
-                    const color = String(dq('.la-extras-bar-color').val() ?? '#66cc66');
+                    const label = String(drawerFind('.la-extras-bar-label').val() ?? '').trim() || 'Extra';
+                    const initialValue = Number(drawerFind('.la-extras-bar-val').val()) || 0;
+                    const max = Math.max(1, Number(drawerFind('.la-extras-bar-max').val()) || 1);
+                    const color = String(drawerFind('.la-extras-bar-color').val() ?? '#66cc66');
                     const created = await addExtraBar(target, {
                         label,
                         valueSource: { kind: 'manual', value: initialValue },
@@ -854,6 +965,8 @@ export function openExtrasDialog(target)
             };
             const rerender = () =>
             {
+                drawerFollow?.disconnect();
+                drawerFollow = null;
                 if (floatingDrawer)
                 {
                     /** @type {any} */ (floatingDrawer).remove();
@@ -866,6 +979,8 @@ export function openExtrasDialog(target)
         },
         close: () =>
         {
+            drawerFollow?.disconnect();
+            drawerFollow = null;
             if (floatingDrawer)
             {
                 /** @type {any} */ (floatingDrawer).remove();

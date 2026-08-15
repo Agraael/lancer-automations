@@ -23,7 +23,7 @@ Shares logic between activation scripts.
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>name</kbd> | `string` | Unique name for the helper |
-| <kbd>fn</kbd> | `Function` | The function to register |
+| <kbd>fn</kbd> | `(...args: any[]) => any` | The function to register |
 
 </details>
 
@@ -32,7 +32,7 @@ Shares logic between activation scripts.
 ### Registration Functions
 
 <details>
-<summary><b><code>registerDefaultItemReactions</code></b> · <b><code>registerDefaultGeneralReactions</code></b></summary>
+<summary><b><code>registerDefaultItemReactions</code></b> → <code>void</code> · <b><code>registerDefaultGeneralReactions</code></b> → <code>void</code></summary>
 
 <br>
 
@@ -90,7 +90,7 @@ await api.applyEffectsToTokens({
 Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) module (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)).
 
 <details>
-<summary><b><code>createAura</code></b> <sup>async</sup></summary>
+<summary><b><code>createAura</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -102,8 +102,10 @@ Wrapper accepts a JS `function` in place of a macro ID.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura |
+| <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura. An Item owner ties the aura to the item's lifetime |
 | <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
+
+`ensureAura(owner, auraConfig)` <sup>async</sup> → `Promise<any|null>` creates it only if the owner has no aura by that `name`, else returns `null`. Use it in `onInit`.
 
 **`macros` Function Example:**
 ```javascript
@@ -130,7 +132,7 @@ macros: [{
 ---
 
 <details>
-<summary><b><code>deleteAuras</code></b> <sup>async</sup></summary>
+<summary><b><code>deleteAuras</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 

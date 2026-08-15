@@ -1,12 +1,12 @@
 // Attack HUD targeting: gates + accdiff row setup, then delegates to the shared targeting UI.
 
 import {
-    isSingleTargetPickerActive, cancelSingleTargetPicker, clearSingleTargetShape,
-    isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape,
+    isSingleTargetPickerActive, cancelSingleTargetPicker,
+    isAreaPickerActive, cancelAreaPicker,
     beginTargetSession, createTokenMark,
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
-import { buildTargetingUI, aoeRanges, clearAttackShapePreview, targetInfoAllowed } from './targeting-ui.js';
+import { buildTargetingUI, aoeRanges, clearAllAttackShapes, pollForForm, targetInfoAllowed } from './targeting-ui.js';
 
 function buildHitChanceFor(state)
 {
@@ -43,21 +43,8 @@ function buildHitChanceFor(state)
 
 function injectWhenReady(state)
 {
-    let elapsed = 0;
-    const tick = () =>
-    {
-        const $form = $('form[id^="accdiff"]');
-        if ($form.length)
-        {
-            injectButton(state, $form).catch(err => console.warn('lancer-automations | targeting inject failed', err));
-            return;
-        }
-        elapsed += 50;
-        if (elapsed > 2000)
-            return;
-        setTimeout(tick, 50);
-    };
-    tick();
+    pollForForm(() => $('form[id^="accdiff"]'),
+        $form => injectButton(state, $form).catch(err => console.warn('lancer-automations | targeting inject failed', err)));
 }
 
 async function injectButton(state, $form)
@@ -137,9 +124,7 @@ export function registerAccDiffTargetButton()
                     cancelAreaPicker();
                 if (isSingleTargetPickerActive())
                     cancelSingleTargetPicker();
-                clearSingleTargetShape(); // end session first so the area clear's resync is a no-op
-                clearAreaTargetShape();
-                clearAttackShapePreview();
+                clearAllAttackShapes();
             }
             catch
             {
@@ -171,9 +156,7 @@ export function registerAccDiffTargetButton()
         {
             try
             {
-                clearSingleTargetShape();
-                clearAreaTargetShape();
-                clearAttackShapePreview();
+                clearAllAttackShapes();
             }
             catch
             {

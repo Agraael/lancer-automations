@@ -14,129 +14,157 @@ const PARAMS_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, ent
 const HAS_DOC_BY_NAME = new Map(AUTO_API_MANIFEST.map((entry) => [entry.name, !!entry.hasDoc]));
 
 
+// Mirrors the real emit-site payloads. `doc` names the shared type to link to.
 const TRIGGER_MANIFEST = [
-    { name: 'triggeringToken' },
-    { name: 'distanceToTrigger' },
-    { name: 'canTriggerReaction' },
-    { name: 'flowState' },
-    { name: 'actionData' },
-    { name: 'extraData' },
-    { name: 'startRelatedFlow', args: '()' },
-    { name: 'startRelatedFlowToReactor', args: '(userId, extraData, opts)' },
-    { name: 'sendMessageToReactor', args: '(data, userId, opts)' },
-    { name: 'debugActivation', args: '(label)' },
-    { name: 'cancel', args: '(reason)' },
-    { name: 'cancelAttack', args: '(reason)' },
-    { name: 'cancelTechAttack', args: '(reason)' },
-    { name: 'cancelCheck', args: '(reason)' },
-    { name: 'cancelAction', args: '(reason)' },
-    { name: 'cancelTriggeredMove', args: '(reason)' },
-    { name: 'cancelChange', args: '(reason)' },
-    { name: 'cancelStructure', args: '(reason)' },
-    { name: 'cancelStress', args: '(reason)' },
-    { name: 'cancelHpChange', args: '(reason)' },
-    { name: 'cancelHeatChange', args: '(reason)' },
-    { name: 'changeTriggeredMove', args: '(newPos, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)' },
-    { name: 'modifyHpChange', args: '(newValue, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)' },
-    { name: 'modifyHeatChange', args: '(newValue, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)' },
-    { name: 'reroll', args: '(reason)' },
-    { name: 'changeRoll', args: '(newTotal)' },
-    { name: 'targets' },
-    { name: 'weapon' },
-    { name: 'damages' },
-    { name: 'item' },
-    { name: 'roll' },
-    { name: 'total' },
-    { name: 'success' },
-    { name: 'rollType' },
-    { name: 'isCrit' },
-    { name: 'isHit' },
-    { name: 'previousHP' },
-    { name: 'newHP' },
-    { name: 'previousHeat' },
-    { name: 'newHeat' },
-    { name: 'delta' },
-    { name: 'remainingStructure' },
-    { name: 'remainingStress' },
-    { name: 'rollResult' },
-    { name: 'statusId' },
-    { name: 'effect' },
-    { name: 'startPos' },
-    { name: 'endPos' },
-    { name: 'distance' },
-    { name: 'elevation' },
-    { name: 'isDrag' },
-    { name: 'moveInfo' },
-    { name: 'token' },
-    { name: 'actionName' },
-    { name: 'destination' },
-    { name: 'combat' },
-    { name: 'combatant' },
-    { name: 'changes' },
-    { name: 'isHidden' },
-    { name: 'deployable' },
-    { name: 'deployedTokens' },
-    { name: 'target' },
-    { name: 'hpDelta' },
-    { name: 'currentHeat' },
-    { name: 'heatDelta' },
-    { name: 'actor' },
-    { name: 'checkType' },
-    { name: 'checkResult' },
-    { name: 'endActivation' },
-    { name: 'isReroll' },
-    { name: 'rerollCount' },
+    { name: 'triggeringToken', returns: 'Token', summary: 'Token that caused the trigger.' },
+    { name: 'distanceToTrigger', returns: 'number | null', summary: 'Reactor to triggering token, in spaces.' },
+    { name: 'canTriggerReaction', returns: 'boolean', summary: 'False when the trigger cannot provoke (disengage, hidden, ...).' },
+    { name: 'startRelatedFlow', args: '()', returns: 'Promise<void>', summary: "Run the reacting item's own flow on this client." },
+    { name: 'startRelatedFlowToReactor', args: '(userId, extraData, opts)', returns: 'Promise<any>', summary: "Same, on the reactor owner's client. opts.wait blocks for the result." },
+    { name: 'sendMessageToReactor', args: '(data, userId, opts)', returns: 'Promise<any>', summary: "Call this activation's onMessage on another client." },
+    { name: 'debugActivation', args: '(label)', returns: 'void', summary: 'Console-dump the reactor, trigger and payload.' },
+
+    { name: 'cancel', args: '(reason)', returns: 'Promise<void>', summary: 'onInvoluntaryMove takes a reason; the onPreMove one takes none.' },
+    { name: 'cancelAttack', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelTechAttack', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelCheck', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelDamage', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction', summary: 'Aborts the whole damage roll, not one target.' },
+    { name: 'cancelAction', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelChange', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelStructure', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelStress', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelStructureOutcome', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction', summary: 'Blocks the structure result, not the roll.' },
+    { name: 'cancelStressOutcome', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction', summary: 'Blocks the stress result, not the roll.' },
+    { name: 'cancelHpChange', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelHeatChange', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
+    { name: 'cancelTriggeredMove', args: '(reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelMoveFunction', summary: 'No title param, unlike the other cancels.' },
+    { name: 'changeTriggeredMove', args: '(position, extraData, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelMoveFunction', summary: 'Reroute to position. A rerouted move is a new move.' },
+    { name: 'modifyHpChange', args: '(newValue, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'ModifyValueFunction' },
+    { name: 'modifyHeatChange', args: '(newValue, reason, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'ModifyValueFunction' },
+    { name: 'modifyRoll', args: '(newTotal)', returns: 'void', doc: 'ModifyValueFunction', summary: 'Structure/stress only. Sets the total, leaves title and text stale.' },
+    { name: 'reroll', args: '(reason, subtype, title, allowConfirm, userIdControl, opts)', returns: 'Promise<void>', doc: 'ModifyValueFunction', summary: "subtype: 'retry' | 'highest' | 'lowest' | 'choose'." },
+    { name: 'changeRoll', args: '(newTotal, reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'ModifyValueFunction' },
+    { name: 'endActivation', args: '()', returns: 'Promise<void>', summary: 'End the item activation this trigger came from.' },
+
+    { name: 'actionData', returns: 'ActionData', doc: 'actionData' },
+    { name: 'flowState', returns: 'FlowState', doc: 'actionData' },
+    { name: 'extraData', returns: 'object', summary: 'Injected by startRelatedFlowToReactor.' },
+    { name: 'hitTokens', returns: 'Token[]', summary: 'Targets flattened to plain Tokens.' },
+    { name: 'targets', returns: 'Token[] | Array<{ target, roll, crit? }>' },
+    { name: 'target', returns: 'Token' },
+    { name: 'weapon', returns: 'Item' },
+    { name: 'techItem', returns: 'Item' },
+    { name: 'item', returns: 'Item' },
+    { name: 'damages', returns: 'Array<{ type, val }>' },
+    { name: 'types', returns: 'string[]' },
+    { name: 'isCrit', returns: 'boolean' },
+    { name: 'isHit', returns: 'boolean' },
+    { name: 'isInvade', returns: 'boolean' },
+    { name: 'attackType', returns: 'string' },
+    { name: 'actionName', returns: 'string' },
+    { name: 'actionType', returns: 'string' },
+    { name: 'tags', returns: 'Array<{ lid, val? }>' },
+    { name: 'deployable', returns: '{ actor, lid }' },
+    { name: 'reactionJustConsumed', returns: 'boolean' },
+    { name: 'roll', returns: 'Roll' },
+    { name: 'total', returns: 'number' },
+    { name: 'success', returns: 'boolean' },
+    { name: 'rollType', returns: "'attackRoll' | 'techAttackRoll' | 'damageRoll' | 'skillRoll' | 'structureRoll' | 'stressRoll'" },
+    { name: 'isReroll', returns: 'boolean' },
+    { name: 'rerollCount', returns: 'number' },
+    { name: 'statName', returns: 'string' },
+    { name: 'checkAgainstToken', returns: 'Token | null' },
+    { name: 'targetVal', returns: 'number | null' },
+    { name: 'previousHP', returns: 'number' },
+    { name: 'newHP', returns: 'number' },
+    { name: 'currentHP', returns: 'number' },
+    { name: 'maxHP', returns: 'number' },
+    { name: 'hpChange', returns: 'number' },
+    { name: 'hpLost', returns: 'number' },
+    { name: 'previousHeat', returns: 'number' },
+    { name: 'newHeat', returns: 'number' },
+    { name: 'currentHeat', returns: 'number' },
+    { name: 'heatChange', returns: 'number' },
+    { name: 'heatCleared', returns: 'number' },
+    { name: 'inDangerZone', returns: 'boolean' },
+    { name: 'delta', returns: 'number' },
+    { name: 'remainingStructure', returns: 'number' },
+    { name: 'remainingStress', returns: 'number' },
+    { name: 'rollResult', returns: 'object' },
+    { name: 'rollDice', returns: 'number[]' },
+    { name: 'statusId', returns: 'string' },
+    { name: 'effect', returns: 'ActiveEffect' },
+    { name: 'token', returns: 'Token' },
+    { name: 'startPos', returns: '{ x, y, elevation }' },
+    { name: 'endPos', returns: '{ x, y, elevation }' },
+    { name: 'distanceToMove', returns: 'number' },
+    { name: 'elevationToMove', returns: 'number' },
+    { name: 'distanceMoved', returns: 'number' },
+    { name: 'elevationMoved', returns: 'number' },
+    { name: 'distance', returns: 'number' },
+    { name: 'destination', returns: '{ x, y }' },
+    { name: 'isDrag', returns: 'boolean' },
+    { name: 'moveInfo', returns: '{ isInvoluntary, isTeleport, isUndo, isModified, pathHexes, isBoost?, boostSet?, extraData? }' },
+    { name: 'combat', returns: 'Combat' },
+    { name: 'round', returns: 'number' },
+    { name: 'isHidden', returns: 'boolean' },
+    { name: 'deployedTokens', returns: 'Token[]' },
+    { name: 'deployType', returns: "'deployable' | 'throw'" },
+    { name: 'document', returns: 'Document' },
+    { name: 'change', returns: 'object' },
+    { name: 'options', returns: 'object' },
 ];
 
 const COMMON_TRIGGER_FIELDS = new Set([
     'triggeringToken', 'distanceToTrigger', 'canTriggerReaction',
-    'flowState', 'actionData', 'extraData',
     'startRelatedFlow', 'startRelatedFlowToReactor', 'sendMessageToReactor',
     'debugActivation',
 ]);
 
 const TRIGGER_FIELDS_BY_TRIGGER = {
-    onPreMove:           ['token', 'moveInfo', 'startPos', 'endPos', 'cancelTriggeredMove', 'changeTriggeredMove'],
-    onMove:              ['distance', 'elevation', 'startPos', 'endPos', 'isDrag', 'moveInfo'],
+    onPreMove:           ['distanceToMove', 'elevationToMove', 'startPos', 'endPos', 'isDrag', 'moveInfo', 'cancel', 'cancelTriggeredMove', 'changeTriggeredMove'],
+    onMove:              ['distanceMoved', 'elevationMoved', 'startPos', 'endPos', 'isDrag', 'moveInfo'],
     onInvoluntaryMove:   ['token', 'distance', 'actionName', 'item', 'destination', 'cancel'],
-    onAttack:            ['targets', 'weapon'],
-    onInitAttack:        ['targets', 'weapon', 'cancelAttack'],
-    onHit:               ['targets', 'weapon'],
-    onMiss:              ['targets', 'weapon'],
-    onTechAttack:        ['targets'],
-    onInitTechAttack:    ['targets', 'cancelTechAttack'],
-    onTechHit:           ['targets'],
-    onTechMiss:          ['targets'],
-    onPreDamage:         ['targets', 'weapon', 'flowState'],
-    onDamage:            ['target', 'damages', 'weapon', 'isCrit', 'isHit'],
-    onPreStructure:      ['remainingStructure', 'cancelStructure'],
-    onStructure:         ['remainingStructure', 'rollResult'],
-    onPreStress:         ['remainingStress', 'cancelStress'],
-    onStress:            ['remainingStress', 'rollResult'],
+    onAttack:            ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
+    onInitAttack:        ['weapon', 'targets', 'hitTokens', 'actionName', 'tags', 'actionData', 'cancelAttack', 'flowState'],
+    onHit:               ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
+    onMiss:              ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
+    onPreDamage:         ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'cancelDamage', 'flowState'],
+    onDamage:            ['weapon', 'target', 'hitTokens', 'damages', 'types', 'isCrit', 'isHit', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
+    onTechAttack:        ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
+    onInitTechAttack:    ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'cancelTechAttack', 'flowState'],
+    onTechHit:           ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
+    onTechMiss:          ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
+    onCheck:             ['statName', 'roll', 'total', 'success', 'checkAgainstToken', 'targetVal', 'flowState'],
+    onInitCheck:         ['statName', 'checkAgainstToken', 'targetVal', 'cancelCheck', 'flowState'],
+    onActivation:        ['actionType', 'actionName', 'item', 'actionData', 'deployable', 'reactionJustConsumed', 'endActivation', 'extraData', 'flowState'],
+    onInitActivation:    ['actionType', 'actionName', 'item', 'actionData', 'deployable', 'cancelAction', 'flowState'],
+    onPreStructure:      ['remainingStructure', 'cancelStructure', 'flowState'],
+    onStructure:         ['remainingStructure', 'rollResult', 'rollDice', 'cancelStructureOutcome', 'modifyRoll', 'flowState'],
+    onPreStress:         ['remainingStress', 'cancelStress', 'flowState'],
+    onStress:            ['remainingStress', 'rollResult', 'rollDice', 'cancelStressOutcome', 'modifyRoll', 'flowState'],
     onPreHpChange:       ['previousHP', 'newHP', 'delta', 'cancelHpChange', 'modifyHpChange'],
-    onHpLoss:            ['hpDelta', 'actor'],
+    onHpGain:            ['hpChange', 'currentHP', 'maxHP'],
+    onHpLoss:            ['hpLost', 'currentHP'],
     onPreHeatChange:     ['previousHeat', 'newHeat', 'delta', 'cancelHeatChange', 'modifyHeatChange'],
-    onHeatGain:          ['currentHeat', 'heatDelta'],
-    onRoll:              ['rollType', 'roll', 'total', 'success', 'targets', 'item', 'isReroll', 'rerollCount', 'reroll', 'changeRoll'],
+    onHeatGain:          ['heatChange', 'currentHeat', 'inDangerZone'],
+    onHeatLoss:          ['heatCleared', 'currentHeat'],
+    onRoll:              ['rollType', 'roll', 'total', 'success', 'targets', 'hitTokens', 'item', 'isReroll', 'rerollCount', 'reroll', 'changeRoll', 'flowState'],
     onPreStatusApplied:  ['statusId', 'effect', 'cancelChange'],
     onPreStatusRemoved:  ['statusId', 'effect', 'cancelChange'],
     onStatusApplied:     ['statusId', 'effect'],
     onStatusRemoved:     ['statusId', 'effect'],
-    onTurnStart:         ['combat', 'combatant'],
-    onTurnEnd:           ['combat', 'combatant'],
+    onTurnStart:         [],
+    onTurnEnd:           [],
     onRoundStart:        ['combat', 'round'],
-    onEnterCombat:       ['combat'],
-    onExitCombat:        ['combat'],
-    onInitActivation:    ['actionName', 'item', 'cancelAction'],
-    onActivation:        ['actionName', 'item', 'endActivation'],
-    onInitCheck:         ['cancelCheck'],
-    onCheck:             ['success', 'checkType', 'checkResult'],
-    onDestroyed:         ['token'],
-    onTokenCreated:      ['token'],
-    onTokenRemoved:      ['token'],
-    onTokenVisibility:   ['token', 'isHidden'],
-    onDeploy:            ['deployedTokens', 'deployable'],
-    onUpdate:            ['changes'],
+    onEnterCombat:       [],
+    onExitCombat:        [],
+    onDestroyed:         [],
+    onTokenCreated:      [],
+    onTokenRemoved:      [],
+    onTokenVisibility:   ['isHidden'],
+    onDeploy:            ['item', 'deployedTokens', 'deployType'],
+    onUpdate:            ['document', 'change', 'options'],
 };
 
 const HAND_OPTION_SCHEMAS = {
@@ -281,7 +309,7 @@ const HAND_OPTION_SCHEMAS = {
         ['bonus_damage', 'object[]'],
     ],
     'addGlobalBonus.options': [
-        ['duration', '"end" | "start" | "unlimited" | "indefinite" | "permanent" | "1 Round"'],
+        ['duration', '"end" | "start" | "indefinite" | "permanent" | "1 Round"'],
         ['durationTurns', 'number'],
         ['origin', 'Token | string'],
         ['icon', 'string'],
@@ -317,7 +345,7 @@ const HAND_OPTION_SCHEMAS = {
     ],
 };
 
-// Union hand + auto per key so a partial hand entry supplements the generated one instead of shadowing it (hand leads and wins on type; `...rest` keys dropped).
+// Union per key so a partial hand entry supplements the generated one instead of shadowing it. Hand wins on type; `...rest` dropped.
 function _mergeOptionSchemas(auto, hand)
 {
     const out = {};
@@ -700,18 +728,47 @@ function _escapeHtml(str)
     return String(str ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-function _openDocPopup(name)
+export function apiDocUrl(name)
 {
     const entry = AUTO_DOC_INDEX[name];
     const ref = AUTO_DOC_REF[name];
     if (!entry && !ref)
+        return null;
+    const file = entry?.file ?? ref.file;
+    const line = entry?.line ?? ref.line;
+    return `https://github.com/Agraael/lancer-automations/blob/main/doc/${file}#L${line}`;
+}
+
+// Live api surface (spread-composed names included), enriched from the generated manifest.
+export function getApiEntries()
+{
+    return _getApiList();
+}
+
+// Callable triggerData.* helpers, for the reference panel.
+export function getTriggerHelperEntries()
+{
+    return TRIGGER_MANIFEST
+        .filter((entry) => entry.args)
+        .map((entry) => ({
+            name: `triggerData.${entry.name}`,
+            args: entry.args,
+            returns: entry.returns ?? '',
+            summary: entry.summary ?? '',
+            params: [],
+            docName: entry.doc ?? null,
+            hasDoc: !!(entry.doc && apiDocUrl(entry.doc)),
+        }));
+}
+
+function _openDocPopup(name)
+{
+    const url = apiDocUrl(name);
+    if (!url)
     {
         ui?.notifications?.warn?.(`No doc reference for ${name}`);
         return;
     }
-    const file = entry?.file ?? ref.file;
-    const line = entry?.line ?? ref.line;
-    const url = `https://github.com/Agraael/lancer-automations/blob/main/doc/${file}#L${line}`;
     window.open(url, '_blank', 'noopener');
 }
 

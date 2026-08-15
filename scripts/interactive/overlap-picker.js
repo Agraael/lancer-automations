@@ -10,7 +10,7 @@ function overlappingTokens(token)
     const y = token.document.y;
     const width = token.document.width;
     const height = token.document.height;
-    const out = [];
+    const overlapping = [];
     for (const tok of canvas.tokens.placeables)
     {
         if (!tok.document)
@@ -21,9 +21,9 @@ function overlappingTokens(token)
             continue;
         if (!tok.visible)
             continue;
-        out.push(tok);
+        overlapping.push(tok);
     }
-    return out;
+    return overlapping;
 }
 
 Hooks.once('init', () =>

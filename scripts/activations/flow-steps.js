@@ -6,10 +6,41 @@ import { applyDamageImmunities, convertHeatToEnergyIfHeatless, hasCritImmunity, 
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
-import { hasReactionAvailable } from '../tools/misc-tools.js';
+import { hasReactionAvailable, executeExtraActionCombat } from '../tools/misc-tools.js';
+import { getActionOverlay } from '../interactive/action-overlays.js';
 import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
+
+function attackActionData(state, weapon)
+{
+    return {
+        type: state.data?.type || "attack",
+        title: state.data?.title || weapon?.name || "Attack",
+        action: {
+            name: state.data?.title || weapon?.name || "Attack"
+        },
+        detail: state.data?.effect || weapon?.system?.effect || "",
+        attack_type: state.data?.attack_type || "Ranged",
+        tags: state.data?.tags || weapon?.system?.tags || [],
+        flowState: state
+    };
+}
+
+function techActionData(state, techItem)
+{
+    return {
+        type: state.data?.type || "tech",
+        title: state.data?.title || techItem?.name || "Tech Attack",
+        action: {
+            name: state.data?.title || techItem?.name || "Tech Attack"
+        },
+        detail: state.data?.effect || techItem?.system?.effect || "",
+        isInvade: state.data?.invade || false,
+        tags: state.data?.tags || techItem?.system?.tags || [],
+        flowState: state
+    };
+}
 
 export async function onAttackStep(state)
 {
@@ -21,17 +52,7 @@ export async function onAttackStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
 
-    const actionData = {
-        type: state.data?.type || "attack",
-        title: state.data?.title || weapon?.name || "Attack",
-        action: {
-            name: state.data?.title || weapon?.name || "Attack"
-        },
-        detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = attackActionData(state, weapon);
 
     await handleTrigger('onAttack', {
         triggeringToken: token,
@@ -56,17 +77,7 @@ export async function onHitMissStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const hitResults = state.data?.hit_results || [];
 
-    const actionData = {
-        type: state.data?.type || "attack",
-        title: state.data?.title || weapon?.name || "Attack",
-        action: {
-            name: state.data?.title || weapon?.name || "Attack"
-        },
-        detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = attackActionData(state, weapon);
 
     const hitTargets = [];
     const missTargets = [];
@@ -178,28 +189,24 @@ export async function onPreDamageStep(state)
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
 
-    const actionData = {
-        type: state.data?.type || "attack",
-        title: state.data?.title || weapon?.name || "Attack",
-        action: { name: state.data?.title || weapon?.name || "Attack" },
-        detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = attackActionData(state, weapon);
 
-    await handleTrigger('onPreDamage', {
-        triggeringToken: token,
-        weapon,
-        targets: (state.data?.hit_results ?? []).map(hitResult => hitResult.target).filter(Boolean),
-        attackType: actionData.attack_type,
-        actionName: actionData.title,
-        tags: actionData.tags,
-        actionData,
-        flowState: state
+    return runCancellableStep(state, {
+        trigger: 'onPreDamage',
+        cancelKey: 'cancelDamage',
+        reason: "This damage roll has been prevented.",
+        title: "DAMAGE PREVENTED",
+        token,
+        data: {
+            weapon,
+            targets: (state.data?.hit_results ?? []).map(hitResult => hitResult.target).filter(Boolean),
+            attackType: actionData.attack_type,
+            // The damage flow titles itself "<weapon> DAMAGE"; onlyOnSourceMatch compares against the item name.
+            actionName: weapon?.name ?? actionData.title,
+            tags: actionData.tags,
+            actionData
+        }
     });
-
-    return true;
 }
 
 export async function onDamageStep(state)
@@ -213,17 +220,7 @@ export async function onDamageStep(state)
     const damageResults = state.data?.damage_results || [];
     const targets = state.data?.targets || [];
 
-    const actionData = {
-        type: state.data?.type || "attack",
-        title: state.data?.title || weapon?.name || "Attack",
-        action: {
-            name: state.data?.title || weapon?.name || "Attack"
-        },
-        detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = attackActionData(state, weapon);
 
     for (const targetInfo of targets)
     {
@@ -274,39 +271,14 @@ export async function onPreStructureStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const remainingStructure = actor?.system?.structure?.value ?? 0;
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    let cancelStructureTriggered = false;
-    const cancelStructure = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelStructureTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "Structure damage has been prevented.",
-        defaultTitle: "STRUCTURE PREVENTED",
+    return runCancellableStep(state, {
+        trigger: 'onPreStructure',
+        cancelKey: 'cancelStructure',
+        reason: "Structure damage has been prevented.",
+        title: "STRUCTURE PREVENTED",
+        token,
+        data: { remainingStructure: actor?.system?.structure?.value ?? 0 }
     });
-
-    await handleTrigger('onPreStructure', {
-        triggeringToken: token,
-        remainingStructure,
-        cancelStructure,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state
-    });
-
-    if (cancelStructureTriggered)
-    {
-        await cancelStructure.wait();
-        return false;
-    }
-    return true;
 }
 
 export async function onStructureStep(state)
@@ -314,51 +286,28 @@ export async function onStructureStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const remainingStructure = actor?.system?.structure?.value ?? 0;
     const roll = state.data?.result?.roll;
-    const rollResult = roll?.total;
-    const rollDice = roll?.dice?.[0]?.results?.map(die => die.result) ?? [];
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    let cancelTriggered = false;
-    const cancelStructureOutcome = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "Structure outcome has been overridden.",
-        defaultTitle: "STRUCTURE OUTCOME OVERRIDDEN",
-    });
-
     const modifyRoll = (newTotal) =>
     {
         if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
     };
-
-    await handleTrigger('onStructure', {
-        triggeringToken: token,
-        remainingStructure,
-        rollResult,
-        rollDice,
-        cancelStructureOutcome,
-        modifyRoll,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state,
+    return runCancellableStep(state, {
+        trigger: 'onStructure',
+        cancelKey: 'cancelStructureOutcome',
+        reason: "Structure outcome has been overridden.",
+        title: "STRUCTURE OUTCOME OVERRIDDEN",
+        token,
+        data: {
+            remainingStructure: actor?.system?.structure?.value ?? 0,
+            rollResult: roll?.total,
+            rollDice: roll?.dice?.[0]?.results?.map(die => die.result) ?? []
+        },
+        postData: { modifyRoll },
+        getIgnoreCallback: () => async () =>
+        {},
+        choice2Text: null
     });
-
-    if (cancelTriggered)
-    {
-        await cancelStructureOutcome.wait?.();
-        return false;
-    }
-    return true;
 }
 
 export async function onPreStressStep(state)
@@ -366,39 +315,14 @@ export async function onPreStressStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const remainingStress = actor?.system?.stress?.value ?? 0;
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    let cancelStressTriggered = false;
-    const cancelStress = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelStressTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "Stress damage has been prevented.",
-        defaultTitle: "STRESS PREVENTED",
+    return runCancellableStep(state, {
+        trigger: 'onPreStress',
+        cancelKey: 'cancelStress',
+        reason: "Stress damage has been prevented.",
+        title: "STRESS PREVENTED",
+        token,
+        data: { remainingStress: actor?.system?.stress?.value ?? 0 }
     });
-
-    await handleTrigger('onPreStress', {
-        triggeringToken: token,
-        remainingStress,
-        cancelStress,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state
-    });
-
-    if (cancelStressTriggered)
-    {
-        await cancelStress.wait();
-        return false;
-    }
-    return true;
 }
 
 export async function onStressStep(state)
@@ -406,51 +330,28 @@ export async function onStressStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const remainingStress = actor?.system?.stress?.value ?? 0;
     const roll = state.data?.result?.roll;
-    const rollResult = roll?.total;
-    const rollDice = roll?.dice?.[0]?.results?.map(die => die.result) ?? [];
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    let cancelTriggered = false;
-    const cancelStressOutcome = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "Stress outcome has been overridden.",
-        defaultTitle: "STRESS OUTCOME OVERRIDDEN",
-    });
-
     const modifyRoll = (newTotal) =>
     {
         if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
     };
-
-    await handleTrigger('onStress', {
-        triggeringToken: token,
-        remainingStress,
-        rollResult,
-        rollDice,
-        cancelStressOutcome,
-        modifyRoll,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state,
+    return runCancellableStep(state, {
+        trigger: 'onStress',
+        cancelKey: 'cancelStressOutcome',
+        reason: "Stress outcome has been overridden.",
+        title: "STRESS OUTCOME OVERRIDDEN",
+        token,
+        data: {
+            remainingStress: actor?.system?.stress?.value ?? 0,
+            rollResult: roll?.total,
+            rollDice: roll?.dice?.[0]?.results?.map(die => die.result) ?? []
+        },
+        postData: { modifyRoll },
+        getIgnoreCallback: () => async () =>
+        {},
+        choice2Text: null
     });
-
-    if (cancelTriggered)
-    {
-        await cancelStressOutcome.wait?.();
-        return false;
-    }
-    return true;
 }
 
 export async function onTechAttackStep(state)
@@ -463,17 +364,7 @@ export async function onTechAttackStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
 
-    const actionData = {
-        type: state.data?.type || "tech",
-        title: state.data?.title || techItem?.name || "Tech Attack",
-        action: {
-            name: state.data?.title || techItem?.name || "Tech Attack"
-        },
-        detail: state.data?.effect || techItem?.system?.effect || "",
-        isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = techActionData(state, techItem);
 
     await handleTrigger('onTechAttack', {
         triggeringToken: token,
@@ -498,17 +389,7 @@ export async function onTechHitMissStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const hitResults = state.data?.hit_results || [];
 
-    const actionData = {
-        type: state.data?.type || "tech",
-        title: state.data?.title || techItem?.name || "Tech Attack",
-        action: {
-            name: state.data?.title || techItem?.name || "Tech Attack"
-        },
-        detail: state.data?.effect || techItem?.system?.effect || "",
-        isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || [],
-        flowState: state
-    };
+    const actionData = techActionData(state, techItem);
 
     const hitTargets = [];
     const missTargets = [];
@@ -598,6 +479,33 @@ export async function onCheckStep(state)
     return true;
 }
 
+// Flow constructors whitelist data keys, so _cancelledBy and la_extraData are re-attached after construction.
+function _relaunchIgnore(state)
+{
+    return async () =>
+    {
+        const flowClass = game.lancer?.flows?.get?.(state.name);
+        if (!flowClass)
+        {
+            ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+            return;
+        }
+        try
+        {
+            const newFlow = new flowClass(state.item ?? state.actor, { ...state.data });
+            if (newFlow.state?.data)
+                newFlow.state.data._cancelledBy = state.data._cancelledBy;
+            if (state.la_extraData)
+                newFlow.state.la_extraData = foundry.utils.mergeObject(newFlow.state.la_extraData || {}, state.la_extraData);
+            await newFlow.begin();
+        }
+        catch (error)
+        {
+            console.error(`lancer-automations | Re-launch of "${state.name}" failed:`, error);
+        }
+    };
+}
+
 /**
  * Builds a cancel handler with shared boilerplate: reason collection, preConfirm gating, choice card.
  * @param {Object} opts
@@ -607,10 +515,11 @@ export async function onCheckStep(state)
  * @param {string} opts.defaultReason
  * @param {string} opts.defaultTitle
  * @param {string} [opts.choice1Text]
- * @param {string} [opts.choice2Text]
+ * @param {string} [opts.choice2Text] - null drops the second button.
  * @param {((uc: string|null) => Object)|null} [opts.getExtraCardOptions]
  * @param {(() => Promise<void>)|null} [opts.onBefore] - Called before card, after preConfirms.
  * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
+ * @returns {((reasonText?: string, title?: string, allowConfirm?: boolean, userIdControl?: any, preConfirm?: any, postChoice?: any, opts?: Object) => Promise<void>) & { wait: () => Promise<void> }}
  */
 export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null })
 {
@@ -684,7 +593,7 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
                             await postChoice?.(true);
                         }
                     },
-                    {
+                    ...(choice2Text ? [{
                         text: choice2Text,
                         icon: "fas fa-times",
                         callback: async () =>
@@ -692,7 +601,7 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
                             await postChoice?.(false);
                             await ignoreCallback();
                         }
-                    }
+                    }] : [])
                 ]
             });
             if (onAfter)
@@ -702,6 +611,44 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
     };
     cancelFn.wait = () => _promise;
     return cancelFn;
+}
+
+// cancelKey must stay the exact name reaction code reads from trigger data (e.g. triggerData.cancelAttack)
+async function runCancellableStep(state, { trigger, cancelKey, reason, title, token, data = {}, postData = {}, getIgnoreCallback = null, choice2Text = undefined })
+{
+    if (!state.data)
+        state.data = {};
+    if (!state.data._cancelledBy)
+        state.data._cancelledBy = [];
+
+    let cancelTriggered = false;
+    const cancelFn = _buildCancelFn({
+        setFlag: () =>
+        {
+            cancelTriggered = true;
+        },
+        cancelledBy: state.data._cancelledBy,
+        getIgnoreCallback: getIgnoreCallback ?? (() => _relaunchIgnore(state)),
+        defaultReason: reason,
+        defaultTitle: title,
+        choice2Text
+    });
+
+    await handleTrigger(trigger, {
+        triggeringToken: token,
+        ...data,
+        [cancelKey]: cancelFn,
+        ...postData,
+        _cancelledBy: state.data._cancelledBy,
+        flowState: state
+    });
+
+    if (cancelTriggered)
+    {
+        await cancelFn.wait();
+        return false;
+    }
+    return true;
 }
 
 export async function stunnedAutoFailStep(state)
@@ -740,41 +687,20 @@ export async function onInitCheckStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const statName = state.data?.title || 'Unknown';
-    const targetVal = state.la_extraData?.targetVal ?? 10;
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    let cancelCheckTriggered = false;
-    const cancelCheck = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelCheckTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "This check has been canceled.",
-        defaultTitle: "CHECK CANCELED",
+    const proceed = await runCancellableStep(state, {
+        trigger: 'onInitCheck',
+        cancelKey: 'cancelCheck',
+        reason: "This check has been canceled.",
+        title: "CHECK CANCELED",
+        token,
+        data: {
+            statName: state.data?.title || 'Unknown',
+            checkAgainstToken: state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null,
+            targetVal: state.la_extraData?.targetVal ?? 10
+        }
     });
-
-    await handleTrigger('onInitCheck', {
-        triggeringToken: token,
-        statName,
-        checkAgainstToken: state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null,
-        targetVal: targetVal,
-        cancelCheck,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state
-    });
-
-    if (cancelCheckTriggered)
-    {
-        await cancelCheck.wait();
+    if (!proceed)
         return false;
-    }
 
     if (token)
         state.actor = token.actor;
@@ -788,53 +714,23 @@ export async function onInitAttackStep(state)
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
     const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    const actionData = {
-        type: state.data?.type || "attack",
-        title: state.data?.title || weapon?.name || "Attack",
-        action: {
-            name: state.data?.title || weapon?.name || "Attack"
-        },
-        detail: state.data?.effect || weapon?.system?.effect || "",
-        attack_type: state.data?.attack_type || "Ranged",
-        tags: state.data?.tags || weapon?.system?.tags || [],
-        flowState: state
-    };
-
-    let cancelAttackTriggered = false;
-    const cancelAttack = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelAttackTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "This attack has been canceled.",
-        defaultTitle: "ATTACK CANCELED",
+    const actionData = attackActionData(state, weapon);
+    const proceed = await runCancellableStep(state, {
+        trigger: 'onInitAttack',
+        cancelKey: 'cancelAttack',
+        reason: "This attack has been canceled.",
+        title: "ATTACK CANCELED",
+        token,
+        data: {
+            weapon,
+            targets,
+            actionName: actionData.title,
+            tags: actionData.tags,
+            actionData
+        }
     });
-
-    await handleTrigger('onInitAttack', {
-        triggeringToken: token,
-        weapon,
-        targets,
-        actionName: actionData.title,
-        tags: actionData.tags,
-        actionData,
-        cancelAttack,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state
-    });
-
-    if (cancelAttackTriggered)
-    {
-        await cancelAttack.wait();
+    if (!proceed)
         return false;
-    }
 
     if (token)
         state.actor = token.actor;
@@ -848,54 +744,24 @@ export async function onInitTechAttackStep(state)
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const techItem = item;
     const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
-    if (!state.data)
-        state.data = {};
-    if (!state.data._cancelledBy)
-        state.data._cancelledBy = [];
-
-    const actionData = {
-        type: state.data?.type || "tech",
-        title: state.data?.title || techItem?.name || "Tech Attack",
-        action: {
-            name: state.data?.title || techItem?.name || "Tech Attack"
-        },
-        detail: state.data?.effect || techItem?.system?.effect || "",
-        isInvade: state.data?.invade || false,
-        tags: state.data?.tags || techItem?.system?.tags || [],
-        flowState: state
-    };
-
-    let cancelTechAttackTriggered = false;
-    const cancelTechAttack = _buildCancelFn({
-        setFlag: () =>
-        {
-            cancelTechAttackTriggered = true;
-        },
-        cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {},
-        defaultReason: "This tech attack has been canceled.",
-        defaultTitle: "TECH ATTACK CANCELED",
+    const actionData = techActionData(state, techItem);
+    const proceed = await runCancellableStep(state, {
+        trigger: 'onInitTechAttack',
+        cancelKey: 'cancelTechAttack',
+        reason: "This tech attack has been canceled.",
+        title: "TECH ATTACK CANCELED",
+        token,
+        data: {
+            techItem,
+            targets,
+            actionName: actionData.title,
+            isInvade: actionData.isInvade,
+            tags: actionData.tags,
+            actionData
+        }
     });
-
-    await handleTrigger('onInitTechAttack', {
-        triggeringToken: token,
-        techItem,
-        targets,
-        actionName: actionData.title,
-        isInvade: actionData.isInvade,
-        tags: actionData.tags,
-        actionData,
-        cancelTechAttack,
-        _cancelledBy: state.data._cancelledBy,
-        flowState: state
-    });
-
-    if (cancelTechAttackTriggered)
-    {
-        await cancelTechAttack.wait();
+    if (!proceed)
         return false;
-    }
 
     if (token)
         state.actor = token.actor;
@@ -947,6 +813,13 @@ export async function onActivationStep(state)
         actionType = 'Full';
         actionName = 'Stabilize';
     }
+    else if (flowClass === 'TalentFlow' && state.data?.rank?.name)
+        actionName = state.data.rank.name;
+    else if (flowClass === 'BondPowerFlow')
+        actionName = state.item?.system?.powers?.[state.data?.powerIndex]?.name ?? actionName;
+
+    if (state.la_extraData?.endActivation && item?.name)
+        actionName = item.name;
 
     const tags = state.data?.tags || item?.system?.tags || [];
     if (!state.data?.action?.activation && Array.isArray(tags))
@@ -1007,6 +880,13 @@ export async function onActivationStep(state)
         extraData: state.la_extraData ?? {},
         flowState: state
     });
+
+    // Gated on the overlay flag, not action.laCombat, so extras don't double-roll. Deployables
+    // keep their actions on the actor, hence the second lookup.
+    const overlayActor = token?.actor ?? actor;
+    const overlay = (item ? getActionOverlay(item, actionName) : null) ?? getActionOverlay(overlayActor, actionName);
+    if (overlay?.laCombat)
+        await executeExtraActionCombat(overlayActor, { ...actionData.action, ...overlay, name: actionName }, item);
 
     if (token)
     {
@@ -1132,24 +1012,7 @@ export async function onInitActivationStep(state)
             cancelActivation = true;
         },
         cancelledBy: state.data._cancelledBy,
-        getIgnoreCallback: () => async () =>
-        {
-            const flowClass = game.lancer?.flows?.get?.(state.name);
-            if (flowClass)
-            {
-                let newFlow;
-                if (state.name === "SimpleActivationFlow")
-                    newFlow = new flowClass(state.actor.uuid, { ...state.data });
-                else if (["SystemFlow", "TalentFlow", "ActivationFlow", "CoreActiveFlow"].includes(state.name))
-                    newFlow = new flowClass(state.item, { ...state.data });
-                else
-                {
-                    ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
-                    return;
-                }
-                await newFlow.begin();
-            }
-        },
+        getIgnoreCallback: () => _relaunchIgnore(state),
         defaultReason: "This activation has been canceled.",
         defaultTitle: "ACTIVATION CANCELED",
     });

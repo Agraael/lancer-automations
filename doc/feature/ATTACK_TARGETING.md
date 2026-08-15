@@ -10,7 +10,7 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 ## Settings
 
-**Combat & Movement → Combat Flows** (**`enableAttackTargeting`**; add **`autoStartTargetPicking`** to open the picker the moment an attack starts with no target set). **`enableDamageTargeting`** puts the same picker on the damage HUD, hold Shift for multiple.
+**Combat & Movement → Combat Flows** (**`enableAttackTargeting`**, plus **`autoStartTargetPicking`** to open the picker the moment an attack starts with no target set). **`enableDamageTargeting`** puts the same picker on the damage HUD, hold Shift for multiple.
 
 **`targetToolCursor`** and **`rulerToolCursor`** swap the cursor and play a sound while the Select Target and Measure Distance tools are active.
 
@@ -58,7 +58,7 @@ Each targeted token gets a live **hit chance** and **damage range** label. **`ta
 
 <img align="right" src="../img/at-throw.png" width="45%"/>
 
-Tick a throwable weapon's **Thrown** box in the HUD and the button becomes **Throw N**, previewing the throw distance in place of the melee reach; clear it to go back to the weapon's normal range. A weapon whose box is ticked but carries no Thrown tag keeps its normal range.
+Tick a throwable weapon's **Thrown** box in the HUD and the button becomes **Throw N**, previewing the throw distance in place of the melee reach. Clear it to go back to the weapon's normal range. A weapon whose box is ticked but carries no Thrown tag keeps its normal range.
 
 <br clear="right"/>
 
@@ -84,7 +84,7 @@ Placing a template catches every token inside it as a target. **Blast** drops a 
 
 <img align="right" src="../img/at-elevation.png" width="45%"/>
 
-The toggle row controls the 3-D side. **Elevation aware** catches tokens by vertical overlap and lets tall terrain block the shape; **Auto elevation** sits the area on the Terrain Height Tools ground beneath it; **Propagation** floods the area out from its origin so it can't reach over terrain into a pocket behind. With all three off, the area is flat.
+The toggle row controls the 3-D side. **Elevation aware** catches tokens by vertical overlap and lets tall terrain block the shape. **Auto elevation** sits the area on the Terrain Height Tools ground beneath it. **Propagation** floods the area out from its origin so it can't reach over terrain into a pocket behind. With all three off, the area is flat.
 
 <br clear="right"/>
 
@@ -107,12 +107,14 @@ Closing the HUD stops the picker and clears its shapes, and once the attack reso
 Press **Shift+R** to toggle a standalone measure toolbar, docked above the macro hotbar. It's per-client and works outside any attack or flow. Pick a mode from the toolbar:
 
 - **Free** - move and drag tokens as usual.
-- **Shapes** - place a **Blast / Burst / Cone / Line** at a chosen size; click to drop, click (or right-click) again to remove.
-- **Mark** - drop single markers on the grid; click or right-click one to remove it.
+- **Shapes** - place a **Blast / Burst / Cone / Line** at a chosen size. Click to drop, click (or right-click) again to remove.
+- **Mark** - drop single markers on the grid. Click or right-click one to remove it.
 - **Range** - pulse the reference token's range on the canvas: threat, sensors, reach, weapon, or a manual radius. The reference is whatever you have selected.
 - **Move** - the reference token's movement reach, in the ruler's speed tiers.
 
-**Clear** wipes the current placements; the **✕** (or Shift+R again) closes the toolbar. Closing hides the marks and toolbar but keeps them, so reopening picks up where you left off.
+The **ruler** button toggles distance labels from the reference token, with a [line-of-sight](./VISION.md#lancer-line-of-sight) eye when Lancer LOS is on.
+
+**Clear** wipes the current placements. The **✕** (or Shift+R again) closes the toolbar. Closing hides the marks and toolbar but keeps them, so reopening picks up where you left off.
 
 Hover the **?** for the keybinds: Ctrl+wheel rotates, Shift+wheel resizes, Q/E shifts elevation, W/S tilts a line, and Escape stops placing.
 

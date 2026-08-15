@@ -50,6 +50,51 @@ export function getItemActionLocks(actor, actionName = null)
     return out;
 }
 
+function typeLockApplies(lock, activation, actionName)
+{
+    const types = (lock?.types ?? []).map(type => String(type).toLowerCase());
+    if (!types.includes('*') && !types.includes(String(activation ?? '').toLowerCase()))
+        return false;
+    return !(actionName && (lock.except ?? []).some(name => String(name) === String(actionName)));
+}
+
+// Item-held type locks (actionTypeLocks item flag), live only while the item is owned and active.
+export function getItemActionTypeLocks(actor, actionName = null, activation = null)
+{
+    if (!activation)
+        return [];
+    const out = [];
+    for (const item of actor?.items ?? [])
+    {
+        if (item.system?.destroyed || item.system?.disabled)
+            continue;
+        for (const lock of (item.getFlag?.('lancer-automations', 'actionTypeLocks') ?? []))
+        {
+            if (typeLockApplies(lock, activation, actionName))
+                out.push({ item, actionName, activation, reason: lock.reason ?? null });
+        }
+    }
+    return out;
+}
+
+// Actor-held type locks (lockedActionTypes actor flag), keyed by activation type.
+export function getActorActionTypeLocks(actor, actionName = null, activation = null)
+{
+    if (!activation)
+        return [];
+    const byType = /** @type {Record<string,any[]>} */ (actor?.getFlag?.('lancer-automations', 'lockedActionTypes')) ?? {};
+    const out = [];
+    for (const [type, entries] of Object.entries(byType))
+    {
+        for (const entry of (entries ?? []))
+        {
+            if (typeLockApplies({ types: [type], except: entry?.except }, activation, actionName))
+                out.push(entry);
+        }
+    }
+    return out;
+}
+
 export function getFieldLockingStatuses(actor, field)
 {
     if (!field || !actor?.statuses)
@@ -75,12 +120,15 @@ const STATUS_DISABLING_ACTION = (() =>
     return actionToStatuses;
 })();
 
-export function getActionLockInfo(actor, actionName)
+export function getActionLockInfo(actor, actionName, activation = null)
 {
     const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(statusId => actor?.statuses?.has?.(statusId));
     const tracker = /** @type {any[]} */ ((actor?.getFlag?.('lancer-automations', 'lockedActions') ?? {})[actionName] ?? []);
-    const sources = tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry)));
-    const itemLocks = getItemActionLocks(actor, actionName);
+    const sources = [
+        ...tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry))),
+        ...getActorActionTypeLocks(actor, actionName, activation)
+    ];
+    const itemLocks = [...getItemActionLocks(actor, actionName), ...getItemActionTypeLocks(actor, actionName, activation)];
     return { statuses, sources, itemLocks };
 }
 

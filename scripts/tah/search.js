@@ -6,8 +6,7 @@ import { tahScale } from './item-helpers.js';
 
 /**
  * Collect search results across all categories.
- * Deduplicates by normalised label; same action appearing under multiple
- * categories gets a merged `_catLabel` like "Actions · Weapons".
+ * Deduplicates by label; same action across categories gets a merged `_catLabel` like "Actions · Weapons".
  *
  * @param {string}   query      Already lowercased, trimmed query string.
  * @param {any[]}    categories Array of category objects from `_buildCategories()`.
@@ -26,18 +25,18 @@ export function collectSearchResults(query, categories)
                 continue;
             if (item.onClick)
             {
-                const text = item.label.replace(/<[^>]+>/g, '').toLowerCase();
-                if (text.includes(query))
+                const plainLabel = item.label.replace(/<[^>]+>/g, '').toLowerCase();
+                if (plainLabel.includes(query))
                 {
-                    if (seen.has(text))
+                    if (seen.has(plainLabel))
                     {
-                        const idx = seen.get(text);
+                        const idx = seen.get(plainLabel);
                         if (!results[idx]._catLabel.split(' · ').includes(catLabel))
                             results[idx]._catLabel += ' · ' + catLabel;
                     }
                     else
                     {
-                        seen.set(text, results.length);
+                        seen.set(plainLabel, results.length);
                         results.push({ ...item, _catLabel: catLabel });
                     }
                 }

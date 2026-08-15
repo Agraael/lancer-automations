@@ -161,11 +161,6 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
     return { labelPrefix: '', badge, badgeColor, unavailable, destroyed };
 }
 
-/**
- * HTML for a small HUD-row icon. `icon` is a web-relative SVG path or an MDI class string.
- * @param {string|null} icon
- * @returns {string}
- */
 export function isWhiteIcon(icon)
 {
     return typeof icon === 'string'
@@ -622,6 +617,42 @@ export function appendItemPips(item, popup, depthCallbacks)
         };
         rebuildExtraAction();
     }
+}
+
+// Uses pips for a bond power; calendar icons regardless of the per-X frequency text.
+export function appendBondPowerPips(bond, powerIdx, popup)
+{
+    const power = /** @type {any} */ (bond)?.system?.powers?.[powerIdx];
+    if (!power?.uses || !(power.uses.max > 0))
+        return;
+    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
+    const S_PIP = 'cursor:pointer;font-size:1.15em;line-height:1;padding:0 2px;';
+    const wrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
+    popup.children().last().prepend(wrap);
+    const pipHolder = $(`<div></div>`);
+    wrap.append(pipHolder);
+    const max = power.uses.max;
+    const rebuild = (/** @type {number} */ value) =>
+    {
+        pipHolder.empty();
+        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">${power.frequency || 'Uses'}</span>`));
+        for (let slot = 1; slot <= max; slot++)
+        {
+            const filled = slot <= value;
+            const pip = $(`<span style="${S_PIP}color:${filled ? '#3a9e6e' : '#444'};"><i class="mdi ${filled ? 'mdi-calendar-today' : 'mdi-calendar-blank'}"></i></span>`);
+            const pipIdx = slot;
+            pip.on('click', async () =>
+            {
+                playUiSound('toggle');
+                const target = Math.max(0, Math.min(max, pipIdx === value ? pipIdx - 1 : pipIdx));
+                await bond.update({ [`system.powers.${powerIdx}.uses.value`]: target });
+                rebuild(target);
+            });
+            row.append(pip);
+        }
+        pipHolder.append(row);
+    };
+    rebuild(power.uses.value ?? 0);
 }
 
 // Consume pips for a merged reserve group (each copy is a binary system.used); clicking pip N sets N available.

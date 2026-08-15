@@ -84,7 +84,7 @@ export function registerDisabledFlowSteps(flowSteps, flows)
 {
     flowSteps.set('lancer-automations:checkItemDisabled', checkItemDisabled);
 
-    // Insert right after checkItemDestroyed in every flow that has it
+    // insertStepAfter double-inserts when the anchor is missing, so list only flows that really have checkItemDestroyed
     const targets = [
         'WeaponAttackFlow',
         'BasicAttackFlow',
@@ -324,6 +324,17 @@ function _injectPilotStressBar(jHtml, actor)
     }
     if (jHtml.find('.la-pilot-stress-bar, .la-pilot-stress-stat').length)
         return;
+
+    // Newer alt sheets ship their own bond stress bar; injecting a second same-named input breaks the form.
+    const $altStress = jHtml.find('input[name="system.bond_state.stress.value"]').first();
+    if ($altStress.length)
+    {
+        $altStress.closest('.la-statusbar').find('.la-bar-h-current.la-bckg-bar-heat').each(function ()
+        {
+            this.style.setProperty('background', '#d9b800', 'important');
+        });
+        return;
+    }
 
     const stressValue = stress.value ?? 0;
     const max = stress.max ?? 8;
@@ -697,7 +708,7 @@ function _ammoActivationIcon(activation)
 function _buildTypeSizeTags(allowedTypes, allowedSizes)
 {
     const tags = [];
-    const _collect = (checklist, label) =>
+    const _collect = (checklist) =>
     {
         if (!checklist)
             return;
@@ -708,8 +719,8 @@ function _buildTypeSizeTags(allowedTypes, allowedSizes)
         for (const name of enabled)
             tags.push(`<span class="lancer-tag compact-tag">${name}</span>`);
     };
-    _collect(allowedSizes, 'Size');
-    _collect(allowedTypes, 'Type');
+    _collect(allowedSizes);
+    _collect(allowedTypes);
     return tags.join(' ');
 }
 
@@ -1006,7 +1017,6 @@ export function initCustomFlowDispatch()
             new customFlow(actor.uuid).begin();
         else if (customFlow.steps)
         {
-            // Step-based object: create a generic Flow dynamically
             const Flow = game.lancer?.flows?.get('StatRollFlow')?.__proto__;
             if (!Flow)
             {
@@ -1078,7 +1088,6 @@ export async function repairLCPData()
         ui.notifications.info('Reading LCP source data...');
         const allData = await getOfficialData(null);
 
-        // Build maps of raw LCP data by LID
         const rawAmmoByLid = new Map();
         const rawWeaponByLid = new Map();
         const rawActionsByLid = new Map();
@@ -1388,11 +1397,7 @@ export function wrapInitTechAttackData(flowSteps)
     });
 }
 
-/**
- * Preserve caller-supplied title/action/effect through BasicAttackFlow's initAttackData,
- * so downstream steps and hooks (LancerFX, chat templates, etc.) see the action's identity
- * instead of the generic "BASIC ATTACK".
- */
+/** Preserve caller title/action/effect through initAttackData so downstream hooks see the real action identity, not "BASIC ATTACK". */
 export function wrapInitAttackData(flowSteps)
 {
     const orig = flowSteps.get('initAttackData');

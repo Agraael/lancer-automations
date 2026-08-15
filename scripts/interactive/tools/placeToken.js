@@ -16,10 +16,11 @@ import {
 
 import {
     TG,
-    pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    makeSafe, createCursorPreview, drawRangeHighlight,
+    pointerToWorld, addGraphicsBelowTokens, suppressTokenInteraction, destroyGraphics,
+    createPickerSession, createCursorPreview, drawRangeHighlight,
     _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
     suppressEvent,
+    teardownRangePulse,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
@@ -65,7 +66,6 @@ export function placeToken(options = {})
         let range = /** @type {any} */ (options).range ?? null;
         let count = /** @type {any} */ (options).count ?? 1;
 
-        // Normalize actor input into actorEntries
         // Each entry: { actor, extraData, prototypeToken, texture }
         const actorEntries = [];
         if (Array.isArray(actorInput))
@@ -207,12 +207,7 @@ export function placeToken(options = {})
                     const hexesByDist = _groupCellsByDistance(originOffsetsForPulse, inRangeSet);
                     const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: originToken ?? null });
                     canvas.app.ticker.add(wavePulse);
-                    return () =>
-                    {
-                        canvas.app.ticker.remove(wavePulse);
-                        destroyGraphics(rangeHighlight);
-                        destroyGraphics(pulseGraphic);
-                    };
+                    return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                 },
             });
         };
@@ -252,9 +247,7 @@ export function placeToken(options = {})
         }
         canvas.stage.addChild(cursorElevLabel).eventMode = 'none';
 
-        const prevInteractive = canvas.tokens.interactiveChildren;
-        canvas.tokens.interactiveChildren = false;
-        const restoreLayerClick = suppressTokenLayerClick();
+        const restoreTokenInteraction = suppressTokenInteraction();
 
         const getProtoOffsets = (centerCol, centerRow) =>
         {
@@ -313,7 +306,6 @@ export function placeToken(options = {})
             }
         };
 
-        let safeMove, safeClick, safeRight, safeKey;
         let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
         const doCleanup = () =>
         {
@@ -323,20 +315,12 @@ export function placeToken(options = {})
             disposeCursorPreview();
             destroyGraphics(cursorElevLabel);
             rangePulse.clear('interactive:placeToken');
-            if (safeClick)
-                canvas.stage.off('click', safeClick);
-            if (safeRight)
-                canvas.stage.off('rightdown', safeRight);
-            if (safeMove)
-                canvas.stage.off('pointermove', safeMove);
-            if (safeKey)
-                document.removeEventListener('keydown', safeKey, true);
+            session.unbind();
 
             for (const placement of placements)
                 destroyGraphics(placement.graphics);
 
-            canvas.tokens.interactiveChildren = prevInteractive;
-            restoreLayerClick();
+            restoreTokenInteraction();
             if (cardEl)
                 _removeInfoCard(cardEl);
         };
@@ -413,7 +397,7 @@ export function placeToken(options = {})
             if (game.user.isGM)
             {
                 const created = await canvas.scene.createEmbeddedDocuments("Token", allTokenData);
-                createdIds = created.map(d => d.id);
+                createdIds = created.map(doc => doc.id);
             }
             else
             {
@@ -590,9 +574,9 @@ export function placeToken(options = {})
 
         const clickHandler = (event) =>
         {
-            const { x: tx, y: ty } = pointerToWorld(event);
+            const { x: worldX, y: worldY } = pointerToWorld(event);
 
-            const cursorOffset = snapCursor(tx, ty);
+            const cursorOffset = snapCursor(worldX, worldY);
 
             // Re-placing on the same cell is a no-op; at the count cap, recycle the oldest marker (FIFO).
             if (placements.some(placement => placement.col === cursorOffset.col && placement.row === cursorOffset.row))
@@ -651,7 +635,7 @@ export function placeToken(options = {})
 
         refreshCard();
 
-        const safe = makeSafe('placeToken', () =>
+        const session = createPickerSession('placeToken', () =>
         {
             try
             {
@@ -661,12 +645,7 @@ export function placeToken(options = {})
             { /* */ }
             resolve(null);
         });
-        safeMove = safe(moveHandler);
-        safeClick = safe(clickHandler);
-        safeKey = safe(keyHandler);
-        canvas.stage.on('pointermove', safeMove);
-        canvas.stage.on('click', safeClick);
-        document.addEventListener('keydown', safeKey, true);
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
         stopPresenceBeat = startToolHeartbeat('placeToken', presenceData);
     }), _title);
 }

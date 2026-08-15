@@ -14,7 +14,7 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
         const macroName = source?.activationMacro;
         if (macroName)
         {
-            const macro = game.macros.find(m => m.name === macroName);
+            const macro = game.macros.find(entry => entry.name === macroName);
             if (macro)
                 return macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
             else
@@ -82,7 +82,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                 await item.beginActivationFlow(activationPath);
             else if (item.system?.actions?.length > 0)
             {
-                const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
+                const actionIndex = item.system.actions.findIndex(action => action.activation === 'Reaction');
                 const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
                 await item.beginActivationFlow(path);
             }
@@ -333,7 +333,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         {
             triggerText = resolvedData.trigger || resolvedData.description || "";
 
-            // Fallback chain: specific effect -> specific on_hit -> specific detail -> root effect -> root on_hit
             effectText = resolvedData.effect || resolvedData.on_hit || resolvedData.on_crit || resolvedData.detail || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
 
             activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;

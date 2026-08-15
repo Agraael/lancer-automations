@@ -6,10 +6,10 @@
 
 ## Extra Actions
 
-Inject actions onto items or actors, drive their charge / limited state, and lock native actions. Everything here shows up in the TAH action menu.
+Inject actions onto items or actors, drive their charge / limited state, lock native actions, and overlay combat data onto native actions. Everything here shows up in the TAH action menu.
 
 <details>
-<summary><b><code>addExtraActions</code></b> <sup>async</sup> · <b><code>getItemActions</code></b> · <b><code>getActorActions</code></b> · <b><code>getLinkedActions</code></b> · <b><code>removeExtraActions</code></b> <sup>async</sup></summary>
+<summary><b><code>addExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getItemActions</code></b> → <code>object[]</code> · <b><code>getActorActions</code></b> → <code>object[]</code> · <b><code>getLinkedActions</code></b> → <code>any[]</code> · <b><code>removeExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -23,7 +23,7 @@ await api.removeExtraActions(target, filter?)     // string name, predicate, or 
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>target</kbd> | `Item\|Token\|Actor` | Item stores on itself; Token/Actor stores on the actor |
+| <kbd>target</kbd> | `Item\|Token\|Actor` | Item stores on itself. Token/Actor stores on the actor |
 | <kbd>actions</kbd> | `ExtraAction\|ExtraAction[]` | One action or an array |
 | <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null (clear all) |
 
@@ -42,14 +42,14 @@ await api.removeExtraActions(target, filter?)     // string name, predicate, or 
 | `icon` | `string` | TAH icon override (path or FontAwesome class) |
 | `recharge`, `charged` | `number`, `boolean` | Charge state for `tg_recharge` actions |
 | `uses` | `{value,max}` | Charge state for `tg_limited` actions |
-| `tier` | `1\|2\|3` | Gate to an NPC owner tier; unset = any tier. Non-NPC owners ignore it |
+| `tier` | `1\|2\|3` | Gate to an NPC owner tier. Unset = any tier. Non-NPC owners ignore it |
 | `laCombat` | `'attack'\|'damage'` | Turn the action into an attack or damage roll (see below). Absent = plain card |
 | `accuracy`, `difficulty`, `attack_bonus` | `number` | Combat attack: flat accuracy/difficulty dice + flat to-hit bonus |
 | `attack_type` | `'Melee'\|'Ranged'` | Combat attack: melee vs ranged |
 
 Item-held actions appear under their item in the TAH menu, actor-held actions in the actor's action list. No refresh needed.
 
-**`laCombat` mode:** stays in its activation column; clicking prints the card then fires [`executeExtraActionCombat`](API_COMBAT.md). `'attack'` rolls a to-hit (weapon tags apply; `tg_smart` = E-DEF; `Invade`/`Quick Tech`/`Full Tech` = tech attack at Sensors). `'damage'` rolls `damage` with no to-hit.
+**`laCombat` mode:** stays in its activation column. Clicking prints the card then fires [`executeExtraActionCombat`](API_COMBAT.md). `'attack'` rolls a to-hit (weapon tags apply, `tg_smart` = E-DEF, `Invade`/`Quick Tech`/`Full Tech` = tech attack at Sensors). `'damage'` rolls `damage` with no to-hit.
 
 **Auto-behaviors when target is an Item:**
 - `_sourceItemId` is stamped onto every added action so [`onlyOnSourceMatch`](AUTOMATION_SYSTEM.md) reactions can resolve the parent item.
@@ -69,7 +69,7 @@ await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", la
 ---
 
 <details>
-<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> · <b><code>reloadExtraAction</code></b> <sup>async</sup> · <b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup></summary>
+<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code> · <b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -92,7 +92,7 @@ Charge plumbing for extras with `tg_loading` / `tg_recharge` / `tg_limited` tags
 ---
 
 <details>
-<summary><b><code>lockActorAction</code></b> <sup>async</sup> · <b><code>unlockActorAction</code></b> <sup>async</sup> · <b><code>isActionLocked</code></b> · <b><code>getLockedActions</code></b></summary>
+<summary><b><code>lockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>unlockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>isActionLocked</code></b> → <code>boolean</code> · <b><code>getLockedActions</code></b> → <code>string[]</code></summary>
 
 <br>
 
@@ -107,11 +107,11 @@ api.getLockedActions(actor)                  // → string[]
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Item\|Actor\|Token` | Item: lock lives on the item - off while destroyed/disabled, gone when removed, back on repair. Actor: source-tracked manual lock. |
-| <kbd>actionName</kbd> | `string` | Standard action display name (`"Boost"`, `"Grapple"`, ...) |
+| <kbd>actionName</kbd> | `string` | Standard action display name (`"Boost"`, `"Grapple"`, ...), or a weapon's name to grey that weapon's rows |
 | <kbd>sourceId</kbd> | `string` | Actor locks only. Stays locked until every source is removed. |
 | <kbd>reason</kbd> | `string` | Optional. Shown in the popup's "Locked by:" line (item locks default to the item name). |
 
-Locked actions are grayed in TAH; the action popup names the locker (status, item, or reason).
+Locked actions are grayed in TAH. The action popup names the locker (status, item, or reason). Locking a weapon (item target, `actionName` = the weapon's name) grays the weapon row and its FIGHT / SKIRMISH / BARRAGE / ATTACK entries, with the reason in the weapon popup.
 
 ```js
 onInit: async function (token, item, api) {
@@ -125,7 +125,49 @@ onInit: async function (token, item, api) {
 ---
 
 <details>
-<summary><b><code>openExtrasDialog</code></b></summary>
+<summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getActionOverlay</code></b> → <code>object | null</code> · <b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code> · <b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>applyActionOverlays</code></b> → <code>object[]</code> · <b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
+
+<br>
+
+```js
+await api.setActionOverlay(target, actionName, overlay)   // attach / patch; null removes
+api.getActionOverlay(target, actionName)                  // → overlay | null
+api.getActionOverlays(target)                             // → { [actionName]: overlay }
+await api.removeActionOverlay(target, actionName)
+api.applyActionOverlays(target, actions)                  // → actions with overlays folded in
+api.resolveGrantedActionRange(actor, actionName, base?)   // → number | null
+```
+
+Combat data on an item's **native** actions (`system.actions`), stored in a flag so re-imports don't wipe it. The overlay merges onto the action at read time. Name / activation / detail are never touched. Activating the action anywhere (TAH, sheet, macro) prints the normal card, then rolls via [`executeExtraActionCombat`](API_COMBAT.md).
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>target</kbd> | `Item\|Token\|Actor` | Item that owns the action. Token/Actor for a deployable's own actions |
+| <kbd>actionName</kbd> | `string` | Name as it appears in `system.actions`. Dots are safe |
+| <kbd>overlay</kbd> | `Object\|null` | Combat fields below. Patch-merge. An empty value clears a field, `null` removes the overlay |
+
+**Overlay fields:** `laCombat` (`'attack'\|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range` - same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
+
+**Range grants:** `resolveGrantedActionRange` folds every non-destroyed item's overlay `range` entries for that action onto `base`. Per-entry `mode` works like AE changes: `upgrade` (default, greater wins), `add` (sums, negatives allowed), `override` (hard set). Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
+
+**Example:**
+```js
+// tier-scaled turret attack, stamped on deploy
+await api.setActionOverlay(deployableActor, "Turret Attack (Auto)", {
+  laCombat: "attack", attack_bonus: 2, attack_type: "Ranged",
+  damage: [{ val: "5", type: "Kinetic" }] });
+// Lock On at range 10 instead of Sensors
+await api.setActionOverlay(item, "Lock On", { range: [{ type: "Range", val: 10 }] });
+```
+
+Managed from the UI via Add Extra > Action Combat.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>openExtrasDialog</code></b> → <code>void</code></summary>
 
 <br>
 

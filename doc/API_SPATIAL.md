@@ -46,14 +46,14 @@ api.getMinGridDistance(token1, token2, overridePos1, includeElevation)
 
 Minimum cell-to-cell grid distance across all occupied cell pairs.
 
-With `includeElevation`, the grid-space elevation difference is added to the planar distance (1 horizontal + 2 vertical = 3); default ignores it.
+With `includeElevation`, the grid-space elevation difference is added to the planar distance (1 horizontal + 2 vertical = 3). Default ignores it.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token1</kbd> | `Token` | *required* | First token |
 | <kbd>token2</kbd> | `Token` | *required* | Second token |
 | <kbd>overridePos1</kbd> | `{ x: number; y: number }` | `null` | Evaluate as if token1 were at this world position |
-| <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `|elevation1 − elevation2|` (in grid spaces) to the planar result |
+| <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `\|elevation1 − elevation2\|` (in grid spaces) to the planar result |
 
 </details>
 
@@ -108,7 +108,7 @@ Square + hex. "Center" points drop straight into `moveToken({ destination })`.
 api.hasLineOfSight(refA, refB)
 ```
 
-True if `refA` has a clear Lancer line of sight to `refB`. Reciprocal: if A sees B, B sees A. Each argument is a `Token`, `TokenDocument`, or token id; returns `false` if either can't be resolved.
+True if `refA` has a clear Lancer line of sight to `refB`. Reciprocal: if A sees B, B sees A. Each argument is a `Token`, `TokenDocument`, or token id. Returns `false` if either can't be resolved.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -243,7 +243,7 @@ await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token,
 | <kbd>damageType</kbd> | `string` | `"kinetic"`, `"energy"`, `"explosive"`, `"burn"`, `"heat"`, `"variable"`. Defaults to `"kinetic"` |
 | <kbd>damageValue</kbd> | `number \| string` | Damage amount or dice expression. Defaults to `5` |
 
-> Designed for Pilot/Mech actors; NPCs do not have a direct `system.eng` and the flow returns silently.
+> Designed for Pilot/Mech actors. NPCs do not have a direct `system.eng` and the flow returns silently.
 
 </details>
 

@@ -58,9 +58,9 @@ A heads-up: not all of it is built to be fully customizable, a lot is just how I
 
 > **First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
 >
-> This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well; if you're new to Foundry, get comfortable there first or you risk losing a lot of time.
+> This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well. If you're new to Foundry, get comfortable there first or you risk losing a lot of time.
 >
-> **The default setup is more than enough for most Lancer GMs.** Writing your own activations and effects takes real coding know-how; if you go there and get stuck, ask me on Discord.
+> **The default setup is more than enough for most Lancer GMs.** If you write your own activations and get stuck, ask me on Discord.
 >
 > **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal activation set is my own automations for my own games, shared as-is, not part of the core module.
 >
@@ -72,7 +72,11 @@ A heads-up: not all of it is built to be fully customizable, a lot is just how I
 
 ## Where to reach me
 
-The most common spot is [my channel on the Lancer Discord](https://discord.com/channels/426286410496999425/1436087781666455642).
+The most common spot is [my channel](https://discord.com/channels/426286410496999425/1436087781666455642) on the [Pilot NET Discord](https://discord.com/invite/lancer).
+
+## Workshop
+
+[Lancer Automations Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share the automations they made, and grab other people's. You get a folder named after your GitHub account, and a bot merges the pull request as long as you only changed your own folder. Talk about it in the [workshop channel](https://discord.com/channels/426286410496999425/1537081666483527690).
 
 ## Community guides
 
@@ -96,7 +100,7 @@ This README is the hub. The detailed guides live under `doc/`.
 
 <br>
 
-**Feature guides** (what each system does and how to use it). These are being written; links go live as each lands:
+**Feature guides** (what each system does and how to use it):
 
 | Guide | Covers |
 |-------|--------|
@@ -157,7 +161,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 | [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required for API hooks |
 | [Socketlib](https://foundryvtt.com/packages/socketlib) | Required for API hooks |
-| [Tokenmagic](https://foundryvtt.com/packages/tokenmagic) | Required for API hooks |
+| [Token Magic FX](https://foundryvtt.com/packages/tokenmagic) | Required for API hooks |
 | [Sequencer](https://foundryvtt.com/packages/sequencer) | Required for API hooks |
 | [JB2A - Patreon](https://www.patreon.com/JB2A) **or** [JB2A - Free](https://foundryvtt.com/packages/JB2A_DnD5e) | Source of most action FX visuals. Patreon is preferred since it has the full library. The free pack works too: missing assets are auto-swapped to free equivalents, sometimes recolored, so a few effects look a bit rougher. |
 
@@ -195,7 +199,7 @@ Every feature has its toggles here, and a handful of buttons open dedicated tool
 There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting has an inline hint.
 
 > [!TIP]
-> Go through the settings before your first session and set a baseline; the module is largely opt-in. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
+> Go through the settings before your first session and set a baseline. The module is largely opt-in. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
 
 ### Export & Import
 
@@ -211,7 +215,7 @@ A full reset is here too.
 
 ## Feature guides
 
-Short pitches below. Each links to its full guide (being written).
+Short pitches below. Each links to its full guide.
 
 ### Automation Engine
 
@@ -456,13 +460,7 @@ Lancer Automations works on its own, but a few features need or improve with the
 
 **Personal deployables LCP.** Some of my personal activations spawn deployables that aren't in any official LCP. Import [`extra/LaSossis_Npc_Deployables.lcp`](extra/LaSossis_Npc_Deployables.lcp) if one won't resolve. See [the personal activation set](doc/feature/AUTOMATION_ENGINE.md#the-personal-activation-set).
 
-**Foundry movement patch (self-hosted).** On hex grids the trigger-boundary movement split can drift the resolved path from the preview. The clean fix is two source hooks; code and locations in [Split movement at trigger boundaries](doc/feature/MOVEMENT_ADVANCED.md#split-movement-at-trigger-boundaries).
-
----
-
-## Support
-
-For help or questions, drop by the [Pilot NET Discord](https://discord.com/invite/lancer).
+**Foundry movement patch (self-hosted).** On hex grids the trigger-boundary movement split can drift the resolved path from the preview. The clean fix is two source hooks. Code and locations in [Split movement at trigger boundaries](doc/feature/MOVEMENT_ADVANCED.md#split-movement-at-trigger-boundaries).
 
 ---
 

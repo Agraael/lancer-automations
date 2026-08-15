@@ -1,7 +1,7 @@
 /* global canvas, PIXI, game, Hooks, performance */
 
 import { getOccupiedOffsets } from "../combat/grid-helpers.js";
-import { gridLineWidth, makeText, gridTextResolution, applyTargetInfoLabel, HIT_LABEL_STYLE, hitLabelFontSize, TG, paintDashedFootprint } from "./canvas-helpers.js";
+import { gridLineWidth, makeHitLabel, gridTextResolution, applyTargetInfoLabel, TG, paintDashedFootprint } from "./canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
 
 let _persistG = null;              // Container above tokens (pulsing marks)
@@ -12,7 +12,8 @@ let _persistPulse = null;          // alpha ticker
 let _sessionActive = false;
 let _hitChanceFor = null;           // (token) => { hit, crit } | null
 let _presenceStop = null;           // stop fn for the ghost-broadcast heartbeat
-const _customMarks = new Map();     // markId -> { token, graphic, color } — session-independent follow-marks
+const _customMarks = new Map();     // markId -> { token, graphic, color } - session-independent follow-marks
+const _chanceLabels = new Map();    // labelId -> { token, fn, label } - session-independent live % labels
 let _nextMarkId = 1;
 let _customPresenceStop = null;
 
@@ -51,6 +52,7 @@ function ensureContainer()
             _persistShapes.clear();
             _persistLabels.clear();
             _customMarks.clear();
+            _chanceLabels.clear();
             if (_customPresenceStop)
             {
                 _customPresenceStop();
@@ -79,6 +81,11 @@ function ensureContainer()
                     updateLabel(token, label);
             }
         }
+        for (const entry of _chanceLabels.values())
+        {
+            if (entry.label && !entry.label.destroyed)
+                updateChanceLabel(entry);
+        }
     };
     canvas.app.ticker.add(_persistPulse);
 }
@@ -102,13 +109,13 @@ function drawShape(token)
 
 function updateLabel(token, label)
 {
-    const res = _hitChanceFor?.(token);
-    if (!res)
+    const hitChance = _hitChanceFor?.(token);
+    if (!hitChance)
     {
         label.visible = false;
         return;
     }
-    applyTargetInfoLabel(label, res);
+    applyTargetInfoLabel(label, hitChance);
     label.resolution = gridTextResolution();
     label.position.set(token.center.x, token.bounds.top - gridLineWidth(3));
     label.visible = true;
@@ -118,23 +125,19 @@ function addLabel(token)
 {
     if (!_hitChanceFor)
         return;
-    const label = makeText('', HIT_LABEL_STYLE);
-    label.style.fontSize = hitLabelFontSize();
-    label.anchor.set(0.5, 1);
-    label.eventMode = 'none';
-    _labelG.addChild(label);
+    const label = makeHitLabel(_labelG);
     _persistLabels.set(token.id, label);
     updateLabel(token, label);
 }
 
 function removeShape(tokenId)
 {
-    const g = _persistShapes.get(tokenId);
-    if (!g)
+    const graphic = _persistShapes.get(tokenId);
+    if (!graphic)
         return;
-    if (g.parent)
-        g.parent.removeChild(g);
-    g.destroy();
+    if (graphic.parent)
+        graphic.parent.removeChild(graphic);
+    graphic.destroy();
     _persistShapes.delete(tokenId);
 }
 
@@ -202,8 +205,7 @@ export function isTargetSessionActive()
     return _sessionActive;
 }
 
-// Start a targeting session and show shapes for the current targets.
-// hitChanceFor: optional (token) => { hit, crit } to draw a live hit-% label per target.
+// hitChanceFor: optional (token) => { hit, crit } for live hit-% labels per target.
 export function beginTargetSession(hitChanceFor = null)
 {
     _sessionActive = true;
@@ -215,7 +217,7 @@ export function beginTargetSession(hitChanceFor = null)
 
 function _maybeTeardownContainers()
 {
-    if (_persistShapes.size || _persistLabels.size || _customMarks.size)
+    if (_persistShapes.size || _persistLabels.size || _customMarks.size || _chanceLabels.size)
         return;
     if (_persistPulse)
     {
@@ -304,6 +306,53 @@ export function createTokenMark(token, color = TG.reference)
                     _customPresenceStop = null;
                 }
                 clearToolPresence('actingMark');
+            }
+            _maybeTeardownContainers();
+        }
+    };
+}
+
+function updateChanceLabel(entry)
+{
+    const token = entry.token;
+    if (!token?.document || token.destroyed)
+    {
+        entry.label.visible = false;
+        return;
+    }
+    const hitChance = entry.fn?.(token);
+    if (!hitChance)
+    {
+        entry.label.visible = false;
+        return;
+    }
+    applyTargetInfoLabel(entry.label, hitChance);
+    entry.label.resolution = gridTextResolution();
+    entry.label.position.set(token.center.x, token.bounds.top - gridLineWidth(3));
+    entry.label.visible = true;
+}
+
+// Session-independent live % label on a token; fn: (token) => { hit, crit } | null.
+export function createChanceLabel(token, fn)
+{
+    if (!token || !canvas?.stage)
+        return { destroy()
+        {} };
+    ensureContainer();
+    const label = makeHitLabel(_labelG);
+    const labelId = _nextMarkId++;
+    const entry = { token, fn, label };
+    _chanceLabels.set(labelId, entry);
+    updateChanceLabel(entry);
+    return {
+        destroy()
+        {
+            if (!_chanceLabels.delete(labelId))
+                return;
+            if (label && !label.destroyed)
+            {
+                label.parent?.removeChild(label);
+                label.destroy();
             }
             _maybeTeardownContainers();
         }

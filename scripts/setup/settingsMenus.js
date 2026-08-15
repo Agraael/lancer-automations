@@ -21,8 +21,9 @@ const ACTIVATIONS_FIELDS = [
     { key: 'treatGenericPrintAsActivation', type: 'boolean' },
 
     { type: 'section', label: 'Scan' },
-    { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System: native Lancer v3 scan journal. LA legacy: the older Lancer Automations custom journal template.' },
-    { key: 'scanPlayerOwnershipMode', type: 'select', label: 'Player Ownership', hint: 'Who gets ownership on a scan journal when a player runs the scan. GM scans always grant to all players.' },
+    { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System = native Lancer v3 scan journal, LA legacy = the older LA journal template.' },
+    { key: 'scanPlayerOwnershipMode', type: 'select', label: 'Player Ownership', hint: 'Who gets ownership when a player runs a scan; GM scans always grant to all players.' },
+    { key: 'revealStatsWithoutScan', type: 'boolean', label: 'Reveal Stats Without Scanning', hint: 'Every actor reads as scanned, so the token stat hint, scanned stat bars, and consume feedback always show full stats.' },
     { type: 'button',
         key: 'regenerateScans',
         label: 'Regenerate All Scan Journals',
@@ -37,49 +38,53 @@ const ACTIVATIONS_FIELDS = [
 ];
 
 const COMBAT_MOVEMENT_FIELDS = [
-    { type: 'section', label: 'Combat Flows' },
-
-    { type: 'section', label: 'Targeting', subsection: true },
+    { type: 'section', label: 'Targeting', collapsible: true },
     { key: 'enableAttackTargeting', type: 'boolean' },
+    { key: 'autoStartTargetPicking', type: 'boolean' , requires: 'enableAttackTargeting' },
     { key: 'enableDamageTargeting', type: 'boolean' },
-    { key: 'autoStartTargetPicking', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
-    { key: 'targetInfoDisplay', type: 'select' },
+    { key: 'haseChanceLabels', type: 'boolean', label: 'HASE Chance Labels', hint: 'Live success % over the roller during stat rolls, saves, and contests.' },
+    { key: 'targetInfoDisplay', type: 'select', requires: ['enableAttackTargeting', 'enableDamageTargeting'] },
     { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack/Damage HUD' },
     { key: 'displayToolsToOthers', type: 'boolean', label: 'Share Interactive Tools' },
 
-    { type: 'section', label: 'Attacks', subsection: true },
+    { type: 'section', label: 'Attacks', collapsible: true, collapsed: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'autoDamageRoll', type: 'boolean' },
     { key: 'autoDamageApply', type: 'boolean' },
 
-    { type: 'section', label: 'Movement & Boost', subsection: true },
+    { type: 'section', label: 'Movement & Boost', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'enableBoostOffer', type: 'boolean' },
     { key: 'experimentalBoostDetection', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
 
-    { type: 'section', label: 'Structure & Damage', subsection: true },
+    { type: 'section', label: 'Structure & Damage', collapsible: true, collapsed: true },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
     { key: 'convertHeatToEnergyOnHeatless', type: 'boolean' },
     { key: 'resistSelfHeat', type: 'boolean' },
 
-    { type: 'section', label: 'Turns & Actions', subsection: true },
+    { type: 'section', label: 'Turns & Actions', collapsible: true, collapsed: true },
     { key: 'enablePerRoundTurnTags', type: 'boolean' },
+
     { type: 'section', label: 'Lancer Automations Ruler', collapsible: true, collapsed: true },
     { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Enable Lancer Automations Ruler', hint: 'Custom token/canvas ruler with Lancer speed tiers, free/debug movement modes, and THT elevation readout. Reload after toggling.' },
-    { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' },
-    { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' },
-    { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Split a token drag into sub-movements at each cell where it crosses a THT/TemplateMacro/GAA trigger boundary, so triggers fire per-crossing instead of once at the end.' },
-    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler tier changes, so events fire per tier.' },
-    { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.' },
-    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation under tokens during ruler moves. Q/E offsets still work.' },
-    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the canvas measure ruler labels. Token drag and drop unaffected.' },
-    { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta below every other visible token.' },
-    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the elevation delta on the label to the nearest multiple of this (0.5 by default). Gridless scenes unaffected.' },
+    { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Fire THT/TemplateMacro/GAA triggers at each boundary crossing instead of once at the end of a drag.' },
+    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler speed tier changes.' },
+    { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
+    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation during ruler moves; Q/E offsets still work.' },
+    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the measure ruler labels; token drags are unaffected.' , requires: 'enableBuiltinSpeedProvider' },
+
+    { type: 'section', label: 'Tactical Distance Labels', collapsible: true, collapsed: true },
+    { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta on every other visible token.' },
+    { key: 'tacticalLabelPosition', type: 'select', label: 'Tactical Label Position' },
+    { key: 'tacticalMinZoomScale', type: 'slider', label: 'Minimum Label Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the label keeps a constant screen size. 0 = disabled.' },
+    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the label elevation delta to the nearest multiple of this; ignored on gridless scenes.' },
 
     { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
     { key: 'ctrlRulerMode', type: 'select', label: 'Ctrl Ruler', hint: 'Hold Ctrl to switch to the Measure Distance ruler.' },
@@ -91,8 +96,10 @@ const COMBAT_MOVEMENT_FIELDS = [
 const WRECKS_FIELDS = [
     { type: 'section', label: 'Wreck Generation' },
     { key: 'enableWrecks', type: 'boolean' },
-    { key: 'enableRemoveFromCombat', type: 'boolean' },
-    { key: 'squadLostOnDeath', type: 'boolean' },
+    { key: 'enableRemoveFromCombat', type: 'boolean' , requires: 'enableWrecks' },
+    { key: 'squadLostOnDeath', type: 'boolean' , requires: 'enableWrecks' },
+    { key: 'wreckAuraColor', type: 'color', requires: 'enableWrecks' },
+    { key: 'wreckAuraOpacity', type: 'slider', min: 0, max: 1, step: 0.05, requires: 'enableWrecks' },
 
     { type: 'section', label: 'Per-Category Wrecks', collapsible: true, collapsed: true },
     { key: 'wreckTerrainType',
@@ -101,7 +108,7 @@ const WRECKS_FIELDS = [
         getChoices: () =>
         {
             const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
-            const choices = [{ value: '', label: 'None (disabled)', selected: current === '' }];
+            const choices = [{ value: '', label: 'None', selected: current === '' }];
             try
             {
                 const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
@@ -111,7 +118,8 @@ const WRECKS_FIELDS = [
             catch
             { /* ignore */ }
             return choices;
-        }},
+        },
+        requires: 'enableWrecks' },
     { type: 'table',
         label: 'Per-Category Settings',
         tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
@@ -124,7 +132,7 @@ const WRECKS_FIELDS = [
                 return [
                     { value: 'token', label: 'Token', selected: cur === 'token' },
                     { value: 'tile', label: 'Tile', selected: cur === 'tile' },
-                    { value: 'none', label: 'Skip (do nothing)', selected: cur === 'none' },
+                    { value: 'none', label: 'Skip', selected: cur === 'none' },
                 ];
             };
             const terrainChoices = (key) =>
@@ -179,19 +187,20 @@ const WRECKS_FIELDS = [
                 { value: 'same', label: 'Same Team / Disposition', selected: cur === 'same' },
                 { value: 'neutral', label: 'Neutral (No Team)', selected: cur === 'neutral' },
             ];
-            const teams = game.modules.get('token-factions')?.active
+            const teams = game.settings.settings.has('token-factions.team-setup')
                 ? (game.settings.get('token-factions', 'team-setup') || [])
                 : [];
             for (const team of teams)
                 choices.push({ value: team.id, label: team.name, selected: team.id === cur });
             return choices;
-        }},
+        },
+        requires: 'enableWrecks' },
 
     { type: 'section', label: 'Assets & Audio', collapsible: true, collapsed: true },
-    { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' },
-    { key: 'enableWreckAnimation', type: 'boolean' },
-    { key: 'enableWreckAudio', type: 'boolean' },
-    { key: 'disableHumanDeathSound', type: 'boolean' },
+    { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' , requires: 'enableWrecks' },
+    { key: 'enableWreckAnimation', type: 'boolean' , requires: 'enableWrecks' },
+    { key: 'enableWreckAudio', type: 'boolean' , requires: 'enableWrecks' },
+    { key: 'disableHumanDeathSound', type: 'boolean' , requires: 'enableWrecks' },
 ];
 
 /** @param {string} key */
@@ -205,9 +214,10 @@ function _statBarVisChoices(key)
     catch
     { /* not ready */ }
     return [
-        { value: 'all',   label: 'All (default behaviour)', selected: cur === 'all' },
-        { value: 'owner', label: 'Owners only',             selected: cur === 'owner' },
-        { value: 'none',  label: 'None (hidden)',           selected: cur === 'none' },
+        { value: 'all',     label: 'All',              selected: cur === 'all' },
+        { value: 'owner',   label: 'Owners only',      selected: cur === 'owner' },
+        { value: 'scanned', label: 'Owners + scanned', selected: cur === 'scanned' },
+        { value: 'none',    label: 'None',             selected: cur === 'none' },
     ];
 }
 
@@ -230,31 +240,32 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
 
     { type: 'section', label: 'Display', subsection: true },
-    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale (Stat Bar)', min: 0.3, max: 1, step: 0.05 },
-    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'When off, HP/Heat/Stress numbers are hidden, only the bars are drawn.' },
-    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' },
+    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale (Stat Bar)', min: 0.3, max: 1, step: 0.05 , requires: 'tokenStatBar' },
+    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'Draw HP/Heat/Stress numbers on top of the bars.' , requires: 'tokenStatBar' },
+    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' , requires: 'tokenStatBar' },
 
     { type: 'section', label: 'Per-Token Defaults', subsection: true },
-    { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' },
-    { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' },
-    { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' },
-    { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Stress on Pilot Tokens' },
+    { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Pilot Stress Bar', hint: 'Bond stress on pilot tokens and sheets. When Annoying\'s sheet already shows one, it is recolored instead.' },
 
     { type: 'section', label: 'Visibility', subsection: true },
-    { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility — Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') },
-    { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility — In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') },
+    { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility: Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') , requires: 'tokenStatBar' },
+    { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility: In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') , requires: 'tokenStatBar' },
 
     { type: 'section', label: 'Auto-Injected Bars', subsection: true },
-    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent & Frame Counter Bars', hint: 'Inject an extra bar for every talent counter and frame core counter on Lancer tokens. Deleted bars are not re-added.' },
-    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Auto-Injected Bar Color', hint: 'Default color for auto-injected bars (talents, frame counters, and item/actor templates that do not set their own).' },
-    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Auto-Injected Bar Width (%)', min: 1, max: 100, step: 1, hint: 'Default width % for auto-injected bars. Each is added on its own line.' },
-    { key: 'statBarAutoInjectTalentFeedback', type: 'boolean', label: 'Auto-Injected Bar Audio/Text Feedback', hint: 'Default audio + floating text on value changes for auto-injected bars.' },
-    { key: 'statBarAutoInjectCustomFlags', type: 'boolean', label: 'Auto-add Custom Flag Bars (Alt Sheets)', hint: 'When Annoying\'s Alternative Sheets is active: fraction custom flags render as token bars, value flags as TAH counters. Adding a bar via Add Extra creates a flag.' },
+    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent & Frame Counter Bars', hint: 'Add a bar for every talent counter and frame core counter; deleted bars are not re-added.' , requires: 'tokenStatBar' },
+    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Auto-Injected Bar Color', hint: 'Default color for auto-injected bars that do not set their own.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Auto-Injected Bar Width (%)', min: 1, max: 100, step: 1, hint: 'Default width % for auto-injected bars, each on its own line.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectTalentFeedback', type: 'boolean', label: 'Auto-Injected Bar Audio/Text Feedback', hint: 'Default audio + floating text on value changes for auto-injected bars.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectCustomFlags', type: 'boolean', label: 'Auto-add Custom Flag Bars (Alt Sheets)', hint: 'With Annoying\'s Alternative Sheets: fraction flags render as token bars, value flags as TAH counters.' , requires: 'tokenStatBar' },
+    { key: 'statBarAutoInjectBondXp', type: 'boolean', label: 'Auto-add Bond XP Bar', hint: 'Cyan XP bar on bonded pilot tokens. Not listed in the hover popup resources.' , requires: 'tokenStatBar' },
     { type: 'button',
         key: 'statBarReinjectAllAutoBars',
         label: 'Reinject Auto-Bars on All Tokens',
         icon: 'fas fa-sync',
-        hint: 'Rebuild auto-injected bars on every Lancer token in every scene and on every actor prototype. Clears prior tombstones.',
+        hint: 'Rebuild auto-injected bars on every Lancer token and actor prototype, including deleted ones.',
         onClick: async () =>
         {
             const mod = await import('../tah/tokenStatBar.js');
@@ -284,11 +295,11 @@ const TOKENS_DISPLAY_FIELDS = [
     },
 
     { type: 'section', label: 'Token Stat Hint', collapsible: true, collapsed: true },
-    { key: 'tokenStatHintEnabled', type: 'boolean', label: 'Enable Token Stat Hint', hint: 'Hover popup showing stats for hovered tokens.' },
-    { key: 'tokenStatHintDelayMs', type: 'slider', label: 'Hover Delay (ms)', min: 0, max: 2000, step: 50, hint: 'Delay before the popup appears.' },
-    { key: 'tokenStatHintScale', type: 'slider', label: 'Popup Scale', min: 0.5, max: 2, step: 0.05, hint: 'Visual size of the popup. Independent of token size and zoom.' },
-    { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'Show for Controlled Token', hint: 'When off, the popup is suppressed for the token you currently control.' },
-    { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'Show Only In Combat', hint: 'When on, the popup only appears for tokens in an active combat.' },
+    { key: 'tokenStatHintEnabled', type: 'boolean', label: 'Enable Token Stat Hint', hint: 'Popup showing stats for the hovered token.' },
+    { key: 'tokenStatHintDelayMs', type: 'slider', label: 'Hover Delay (ms)', min: 0, max: 2000, step: 50, hint: 'Delay before the popup appears.' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintScale', type: 'slider', label: 'Popup Scale', min: 0.5, max: 2, step: 0.05, hint: 'Size of the popup, independent of token size and zoom.' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'Show for Controlled Token', hint: 'Show the popup for the token you control.' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'Show Only In Combat', hint: 'Popup only appears for tokens in an active combat.' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintLabelMode',
         type: 'select',
         label: 'Header Label (NPC)',
@@ -297,37 +308,36 @@ const TOKENS_DISPLAY_FIELDS = [
             { value: 'scan', label: 'Tied to scan (UNKNOWN until scanned)' },
         ],
         hint: 'How to display the NPC token name in the popup header.',
-    },
+        requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
-    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Hide the NPC class+templates subtitle (or Mech frame name) and the NPC tier badge under the UNKNOWN header until scanned.' },
+    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Also hide the class/frame subtitle and tier badge until scanned.' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'Hide current values without owner/observer access', hint: 'Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track.' , requires: 'tokenStatHintEnabled' },
 ];
 
 const TAH_FIELDS = [
-    { type: 'section', label: 'Token Action HUD' },
-
-    { type: 'section', label: 'General', subsection: true },
+    { type: 'section', label: 'General', collapsible: true },
     { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
-    { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' },
-    { key: 'tah.aboveActorSheets', type: 'boolean' },
-    { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar. Shows team if Token Factions advanced teams is active, otherwise disposition.' },
+    { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' , requires: 'tahEnabled' },
+    { key: 'tah.aboveActorSheets', type: 'boolean' , requires: 'tahEnabled' },
+    { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar: team if Token Factions advanced teams is active, otherwise disposition.' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Opening & Layout', subsection: true },
-    { key: 'tah.clickToOpen', type: 'boolean' },
-    { key: 'tah.hoverCloseDelay', type: 'number' },
-    { key: 'tah.maxColumnItems', type: 'number' },
+    { type: 'section', label: 'Opening & Layout', collapsible: true, collapsed: true },
+    { key: 'tah.clickToOpen', type: 'boolean' , requires: 'tahEnabled' },
+    { key: 'tah.hoverCloseDelay', type: 'number' , requires: 'tahEnabled' },
+    { key: 'tah.maxColumnItems', type: 'number' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Keyboard', subsection: true, collapsible: true, collapsed: true },
-    { key: 'tah.keyboardNav', type: 'boolean' },
-    { key: 'tah.keyboardNavResetDelay', type: 'number' },
+    { type: 'section', label: 'Keyboard', collapsible: true, collapsed: true },
+    { key: 'tah.keyboardNav', type: 'boolean' , requires: 'tahEnabled' },
+    { key: 'tah.keyboardNavResetDelay', type: 'number' , requires: ['tahEnabled', 'tah.keyboardNav'], requiresAll: true },
     { key: 'tah.preventWasdMovement', type: 'boolean' },
 
-    { type: 'section', label: 'Ranges & Display', subsection: true },
-    { key: 'tah.uiScale', type: 'slider', label: 'HUD Scale', min: 0.6, max: 1.6, step: 0.05 },
-    { key: 'tah.rangePreview', type: 'boolean' },
-    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware (default)', hint: 'Default for area pickers (blast etc.). When on, areas become 3D volumes that clip to terrain.' },
-    { key: 'tah.showAidHandleInteractSqueeze', type: 'boolean' },
+    { type: 'section', label: 'Ranges & Display', collapsible: true, collapsed: true },
+    { key: 'tah.uiScale', type: 'slider', label: 'HUD Scale', min: 0.6, max: 1.6, step: 0.05 , requires: 'tahEnabled' },
+    { key: 'tah.rangePreview', type: 'boolean' , requires: 'tahEnabled' },
+    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware', hint: 'Default for area pickers (blast etc.): areas become 3D volumes that clip to terrain.' },
+    { key: 'tah.showAidHandleInteractSqueeze', type: 'boolean' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Maintenance', subsection: true, collapsible: true, collapsed: true },
+    { type: 'section', label: 'Maintenance', collapsible: true, collapsed: true },
     { key: 'tah.resetPosition',
         type: 'button',
         label: 'Reset TAH Position',
@@ -361,7 +371,7 @@ const TAH_FIELDS = [
         type: 'button',
         label: 'Clear TAH Favorites',
         icon: 'fas fa-star',
-        hint: 'Remove every favorite (★) marked through the TAH. Saved per user.',
+        hint: 'Remove every favorite (Ã¢Ëœâ€¦) you marked through the TAH.',
         clientAllowed: true,
         onClick: async () =>
         {
@@ -385,14 +395,14 @@ const ACTION_FX_KEYS = [
     'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
     'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
     'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-    'defaultThrow', 'targetFail', 'reload', 'fight',
+    'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation',
 ];
 const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover', 'battleLogHover', 'battleLogClick'];
 const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'];
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
-const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
+const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'xp_gain', 'xp_loss', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
 const STATUS_SFX_EVENTS = ['bonus'];
 
 function _toLabel(str)
@@ -407,7 +417,7 @@ const SOUNDS_FIELDS = [
     { key: 'tah.tokenFeedbackVolume', type: 'slider', label: 'Token Feedback', min: 0, max: 1.5, step: 0.05 },
     { key: 'tah.damageSoundVolume', type: 'slider', label: 'Damage / Stat Feedback', min: 0, max: 1.5, step: 0.05 },
     { key: 'tah.actionFxVolume', type: 'slider', label: 'Action FX', min: 0, max: 1.5, step: 0.05 },
-    { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Explosions', min: 0, max: 1.5, step: 0.1 },
+    { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Explosions', min: 0, max: 1.5, step: 0.1 , requires: ['enableWrecks', 'enableWreckAudio'], requiresAll: true },
     { key: 'tah.battleLogVolume', type: 'slider', label: 'Battle Log', min: 0, max: 1.5, step: 0.05 },
 
     { type: 'section', label: 'UI sounds', collapsible: true, collapsed: true },
@@ -466,7 +476,7 @@ const STATUS_FX_VISUAL = [
     { sub: 'fx_corePower',   label: 'Core Power Active Bloom' },
 ];
 const STATUS_FX_AUTO = [
-    { sub: 'auto_dangerZone', label: 'Auto Danger Zone (heat ≥ 50%)' },
+    { sub: 'auto_dangerZone', label: 'Auto Danger Zone (heat Ã¢â€°Â¥ 50%)' },
     { sub: 'auto_burn',       label: 'Auto Burn icon (burn > 0)' },
     { sub: 'auto_overshield', label: 'Auto Overshield icon (OS > 0)' },
     { sub: 'auto_infection',  label: 'Auto Infection icon (infection > 0)' },
@@ -476,9 +486,10 @@ const STATUS_FX_AUTO = [
 const STATUSES_FIELDS = [
     { type: 'section', label: 'Statuses & Effects' },
     { key: 'additionalStatuses', type: 'boolean' },
-    { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Disable to suppress all visual + auto-status effects.' },
+    { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Master switch for all visual and auto-status effects.' },
     { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
+    { key: 'actionBadgeItemName', type: 'boolean', label: 'Item Name on Action Badges', hint: 'The action badge banner shows the item name instead of the action type.' },
     { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'Remove Statuses on Death' },
 
     { type: 'section', label: 'Visual effects', collapsible: true, collapsed: true },
@@ -491,7 +502,7 @@ const STATUSES_FIELDS = [
 
 const DEBUG_FIELDS = [
     { type: 'section', label: 'Debug Toggles' },
-    { key: 'debugBoostDetection', type: 'boolean' },
+    { key: 'debugBoostDetection', type: 'boolean' , requires: 'experimentalBoostDetection' },
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
     { key: 'debugForceJb2aFree', type: 'boolean' },
@@ -500,6 +511,9 @@ const DEBUG_FIELDS = [
 ];
 
 const VISION_FIELDS = [
+    { type: 'section', label: 'Basic Vision' },
+    { key: 'basicSightTo999', type: 'boolean' },
+
     { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { key: 'lancerLos', type: 'boolean' },
@@ -534,10 +548,7 @@ const VISION_FIELDS = [
         onClick: () => syncAllTokenHeights(),
     },
 
-    { type: 'section', label: 'Basic Vision' },
-    { key: 'basicSightTo999', type: 'boolean' },
-
-    { type: 'section', label: 'Vision From Edge (Lancer LOS-style) [experimental]', collapsible: true, collapsed: true, hint: 'Sample vision from the token edge so you can see past cover.' },
+    { type: 'section', label: 'Vision From Edge (experimental)', collapsible: true, collapsed: true, hint: 'Sample vision from the token edge instead of its center.' },
     { key: 'visionFromEdgeEnabled', type: 'boolean' },
     { key: 'visionFromEdgeSampleMode', type: 'select' },
     { key: 'visionFromEdgeSampleOffset', type: 'number' },
@@ -553,21 +564,21 @@ const VISION_FIELDS = [
 ];
 
 const TOOLS_FIELDS = [
-    { type: 'section', label: 'Optional content packs', hint: 'Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager (import .lcp).' },
+    { type: 'section', label: 'Optional content packs', hint: 'Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager.' },
     { key: 'enableLaSossisItems', type: 'boolean' },
     { key: 'enablePersonalStuff', type: 'boolean' },
     { type: 'button',
         key: 'getDeployablesLcp',
         label: 'Get the Deployables LCP',
         icon: 'fas fa-download',
-        hint: 'Downloads LaSossis_Npc_Deployables.lcp (bundled with the module).',
+        hint: 'Downloads LaSossis_Npc_Deployables.lcp.',
         clientAllowed: true,
         onClick: () => window.open(foundry.utils.getRoute('modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp'), '_blank'),
     },
 
-    { type: 'section', label: 'Actor ↔ Prototype Token sync' },
-    { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait (Actors directory).' },
-    { key: 'syncActorNameToToken', type: 'boolean', label: 'Sync actor name to token name', hint: 'When the prototype token name changes, also update the actor name (Actors directory).' },
+    { type: 'section', label: 'Actor Ã¢â€ â€ Prototype Token sync' },
+    { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait.' },
+    { key: 'syncActorNameToToken', type: 'boolean', label: 'Sync actor name to token name', hint: 'When the prototype token name changes, also update the actor name.' },
     { type: 'button',
         key: 'syncAllActorImgs',
         label: 'Sync All Actors Now',
@@ -581,7 +592,7 @@ const TOOLS_FIELDS = [
         key: 'openLcpRepair',
         label: 'Apply Fixes (LCP Data)',
         icon: 'fas fa-wrench',
-        hint: '(optional) Rebuild compendium and actor item data with LA patches applied: ammo metadata, weapon profile text merging, and missing/empty action names (e.g. "Auto-Cooler" actions previously named just "Action").',
+        hint: 'Rebuild compendium and actor item data with LA patches: ammo metadata, weapon profile text merging, and missing action names.',
         onClick: () => repairLCPData(),
     },
     { type: 'button',
@@ -595,14 +606,14 @@ const TOOLS_FIELDS = [
         key: 'openExport',
         label: 'Export to JSON',
         icon: 'fas fa-file-export',
-        hint: 'Export custom activations, user startup scripts, all Lancer Automations settings, and the foreign-module shortcuts shown here, to a JSON file.',
+        hint: 'Export activations, startup scripts, module settings, and the shortcuts shown here to a JSON file.',
         onClick: () => new ReactionExport().render(true),
     },
     { type: 'button',
         key: 'openImport',
         label: 'Import from JSON',
         icon: 'fas fa-file-import',
-        hint: 'Import from a JSON file. A review dialog lets you pick exactly which activations and settings to apply.',
+        hint: 'Import from a JSON file, with a review dialog to pick which activations and settings to apply.',
         onClick: () => new ReactionImport().render(true),
     },
 
@@ -622,7 +633,7 @@ const laTour = (key) => ({ type: 'tour', module: 'lancer-automations', key });
 const TUTORIALS_FIELDS = [
     { type: 'section', label: 'Setup', hint: 'First-run setup and guided walkthroughs.' },
     { type: 'button', key: 'openOnboarding', label: 'Re-run Setup Wizard', icon: 'fas fa-wand-magic-sparkles', hint: 'Answer the main settings as yes/no questions. Nothing is written until you press Apply.', onClick: () => runSettingsOnboarding() },
-    { type: 'section', label: 'Tutorials', hint: 'Guided walkthroughs of the module. Clicking a tour will close this window and start it.' },
+    { type: 'section', label: 'Tutorials', hint: 'Guided walkthroughs of the module.' },
     laTour('config-tour'),
     laTour('activation-manager-tour'),
     laTour('effect-manager-tour'),
@@ -662,14 +673,14 @@ const CONTROL_FIELDS = [
 
 const ISO_FIELDS = [
     { type: 'section', label: 'Isometric Integrations' },
-    { key: 'iso.statBar', type: 'boolean' },
+    { key: 'iso.statBar', type: 'boolean' , requires: 'tokenStatBar' },
     { key: 'iso.tacticalDistance', type: 'boolean' },
     { key: 'iso.waypointLabel', type: 'boolean' },
     { key: 'iso.elevationAnimation', type: 'boolean' },
     { key: 'iso.restoreAnchor', type: 'boolean' },
     { key: 'iso.scrollingText', type: 'boolean' },
-    { key: 'iso.targetReticle', type: 'boolean' },
-    { key: 'iso.clickZone', type: 'boolean' },
+    { key: 'iso.targetReticle', type: 'boolean' , requires: 'tokenStatBar' },
+    { key: 'iso.clickZone', type: 'boolean' , requires: 'tokenStatBar' },
     { key: 'iso.selectionMarquee', type: 'boolean' },
     { key: 'iso.moduleLabels', type: 'boolean' },
 ];
@@ -686,20 +697,20 @@ const BATTLE_LOG_FIELDS = [
         key: 'tah.telemetryFriendlyMechAsSquad',
         type: 'boolean',
         label: 'Friendly mechs count as squad',
-        hint: 'Include FRIENDLY-disposition mechs (not owned by players) in the squad. Off: they render as friendlies.',
-    },
+        hint: 'Count FRIENDLY-disposition mechs not owned by players as squad instead of friendlies.',
+        requires: 'battleLogEnabled' },
     {
         key: 'tah.disableAwards',
         type: 'boolean',
         label: 'Disable awards',
-        hint: 'No awards computed. No MVP auto-pick. GM can still pick MVP manually.',
-    },
+        hint: 'No awards or MVP auto-pick; the GM can still pick MVP manually.',
+        requires: 'battleLogEnabled' },
     {
         key: 'tah.telemetryDebug',
         type: 'boolean',
         label: 'Debug: log every telemetry event',
-        hint: 'Console-log every event written to the combat telemetry flag. Turn off for normal play.',
-    },
+        hint: 'Console-log every event written to the combat telemetry flag.',
+        requires: 'battleLogEnabled' },
 
     { type: 'button',
         key: 'openBattleLogTest',
@@ -724,7 +735,7 @@ const BATTLE_LOG_FIELDS = [
     { key: 'tah.battleLog.themeDefault',
         type: 'audio',
         label: 'Default theme',
-        hint: 'Audio file played for all outcomes unless a specific one is set below. Leave empty for no theme.' },
+        hint: 'Played for all outcomes unless a specific one is set below.' },
     { key: 'tah.battleLog.themeVictory',
         type: 'audio',
         label: 'Success theme',
@@ -740,6 +751,8 @@ const BATTLE_LOG_FIELDS = [
 ];
 
 const COLORS_FIELDS = [
+    { type: 'section', label: 'Theme' },
+    { type: 'moduleSelect', module: 'lancer-style-library', key: 'theme' },
     { type: 'section', label: 'Targeting Colors' },
     { key: 'color.inRange', type: 'color', label: 'In Range' },
     { key: 'color.target', type: 'color', label: 'Target' },
@@ -767,7 +780,7 @@ const COLORS_FIELDS = [
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
     { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
     { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Over-boost' },
-    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' },
+    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' , requires: 'enableBuiltinSpeedProvider' },
     { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Force Movement' },
     {
         key: 'color.resetDefaults',
@@ -784,9 +797,9 @@ const TAB_DEFS = [
     // Gameplay & rules
     { id: 'activations', label: 'Activations', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
     { id: 'combat', label: 'Combat & Movement', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
-    { id: 'wrecks', label: 'Wrecks', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
     { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
     { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
+    { id: 'wrecks', label: 'Wrecks', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
     // Look & feel
     { id: 'tokens', label: 'Tokens & Display', icon: 'fas fa-cubes', fields: TOKENS_DISPLAY_FIELDS },
     { id: 'tah', label: 'Token Action HUD', icon: 'fas fa-th-list', fields: TAH_FIELDS },
@@ -814,6 +827,69 @@ const TAB_DEFS = [
     { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
 ];
+
+// Field opt-in: `requires: 'key'` or `['a','b']`, plus `requiresAll` for AND.
+function _requiredKeys(field)
+{
+    if (!field?.requires)
+        return [];
+    return Array.isArray(field.requires) ? field.requires : [field.requires];
+}
+
+function _fieldByKey(key)
+{
+    return TAB_DEFS.flatMap(tab => tab.fields ?? []).find(field => field?.key === key);
+}
+
+function _requirementLabel(key)
+{
+    return _fieldByKey(key)?.label ?? game.settings.settings.get(`${MODULE_ID}.${key}`)?.name ?? key;
+}
+
+// A dependency that is itself gated counts as unmet, so chains resolve.
+function _isRequirementMet($html, key, seen = new Set())
+{
+    if (seen.has(key))
+        return true;
+    seen.add(key);
+    const input = $html.find(`[name="${key}"]`)[0];
+    let on;
+    if (input)
+        on = !!input.checked;
+    else
+    {
+        try
+        {
+            on = !!game.settings.get(MODULE_ID, key);
+        }
+        catch
+        {
+            on = false;
+        }
+    }
+    if (!on)
+        return false;
+    const parent = _fieldByKey(key);
+    if (!parent?.requires)
+        return true;
+    const parentKeys = _requiredKeys(parent);
+    return parent.requiresAll
+        ? parentKeys.every(sub => _isRequirementMet($html, sub, seen))
+        : parentKeys.some(sub => _isRequirementMet($html, sub, seen));
+}
+
+function _requirementHint(field)
+{
+    const names = _requiredKeys(field).map(_requirementLabel);
+    if (!names.length)
+        return '';
+    return `Needs ${names.join(field.requiresAll ? ' and ' : ' or ')}.`;
+}
+
+function _fieldsWithRequirements()
+{
+    return TAB_DEFS.flatMap(tab => tab.fields ?? []).filter(field => field?.key && field.requires);
+}
 
 function _visibleTabs()
 {
@@ -857,21 +933,21 @@ export function getExportableKeybindingFields()
 }
 
 const KEY_DISPLAY = {
-    ArrowLeft: '🡸',
-    ArrowRight: '🡺',
-    ArrowUp: '🡹',
-    ArrowDown: '🡻',
+    ArrowLeft: 'Ã°Å¸Â¡Â¸',
+    ArrowRight: 'Ã°Å¸Â¡Âº',
+    ArrowUp: 'Ã°Å¸Â¡Â¹',
+    ArrowDown: 'Ã°Å¸Â¡Â»',
     Backquote: '`',
     Backslash: '\\',
     BracketLeft: '[',
     BracketRight: ']',
     Comma: ',',
     Equal: '=',
-    Meta: '⊞',
-    MetaLeft: '⊞',
-    MetaRight: '⊞',
-    OsLeft: '⊞',
-    OsRight: '⊞',
+    Meta: 'Ã¢Å Å¾',
+    MetaLeft: 'Ã¢Å Å¾',
+    MetaRight: 'Ã¢Å Å¾',
+    OsLeft: 'Ã¢Å Å¾',
+    OsRight: 'Ã¢Å Å¾',
     Minus: '-',
     NumpadAdd: 'Numpad+',
     NumpadSubtract: 'Numpad-',
@@ -927,38 +1003,38 @@ function _readStatusFx(sub, fallback = true)
     }
 }
 
-/** @param {any} f */
-function _buildItem(f)
+/** @param {any} field */
+function _buildItem(field)
 {
-    if (f.type === 'section')
+    if (field.type === 'section')
     {
-        if (f.requireForkTitle)
+        if (field.requireForkTitle)
         {
-            const mod = game.modules.get(f.requireForkTitle.module);
-            if (!mod?.active || mod.title !== f.requireForkTitle.title)
+            const mod = game.modules.get(field.requireForkTitle.module);
+            if (!mod?.active || mod.title !== field.requireForkTitle.title)
                 return null;
         }
-        return { type: 'section', label: f.label, hint: f.hint ?? '', isSection: true, collapsible: f.collapsible !== false, collapsed: !!f.collapsed, isSubsection: !!f.subsection };
+        return { type: 'section', label: field.label, hint: field.hint ?? '', isSection: true, collapsible: field.collapsible !== false, collapsed: !!field.collapsed, isSubsection: !!field.subsection };
     }
-    if (f.type === 'button')
-        return { type: 'button', isButton: true, key: f.key, label: f.label, hint: f.hint ?? '', icon: f.icon ?? '', isLocked: !game.user.isGM && !f.clientAllowed };
-    if (f.type === 'table')
+    if (field.type === 'button')
+        return { type: 'button', isButton: true, key: field.key, label: field.label, hint: field.hint ?? '', icon: field.icon ?? '', isLocked: !game.user.isGM && !field.clientAllowed };
+    if (field.type === 'table')
     {
-        const table = f.getTable();
+        const table = field.getTable();
         const rows = table.rows.map(row => ({
             ...row,
             cells: row.cells.map(cell => ({ ...cell, isLocked: _isLockedForUser(cell.name) }))
         }));
-        return { type: 'table', label: f.label, isTable: true, columns: table.columns, rows };
+        return { type: 'table', label: field.label, isTable: true, columns: table.columns, rows };
     }
-    if (f.type === 'keybinding')
+    if (field.type === 'keybinding')
     {
-        const mod = game.modules.get(f.module);
+        const mod = game.modules.get(field.module);
         if (!mod?.active)
             return null;
-        if (f.requireTitle && mod.title !== f.requireTitle)
+        if (field.requireTitle && mod.title !== field.requireTitle)
             return null;
-        const fullKey = `${f.module}.${f.key}`;
+        const fullKey = `${field.module}.${field.key}`;
         const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
         if (!action)
             return null;
@@ -967,21 +1043,21 @@ function _buildItem(f)
             type: 'keybinding',
             isKeybinding: true,
             fullKey,
-            name: game.i18n.localize(action.name ?? f.key),
+            name: game.i18n.localize(action.name ?? field.key),
             hint: action.hint ? game.i18n.localize(action.hint) : '',
-            bindings: bindings.map(/** @type {any} */ b => ({ display: _formatBinding(b) }))
+            bindings: bindings.map(/** @type {any} */ binding => ({ display: _formatBinding(binding) }))
         };
     }
-    if (f.type === 'tour')
+    if (field.type === 'tour')
     {
-        const mod = game.modules.get(f.module);
+        const mod = game.modules.get(field.module);
         if (!mod?.active)
             return null;
-        const fullKey = `${f.module}.${f.key}`;
+        const fullKey = `${field.module}.${field.key}`;
         const tour = /** @type {any} */ (game.tours)?.get?.(fullKey);
         if (!tour)
             return null;
-        const rawTitle = tour.title ?? f.key;
+        const rawTitle = tour.title ?? field.key;
         const title = String(rawTitle).replace(/^Lancer Automations:\s*/i, '');
         const stepCount = tour.steps?.length ?? 0;
         return {
@@ -993,35 +1069,66 @@ function _buildItem(f)
             description: tour.description ?? '',
         };
     }
-    if (f.type === 'moduleBoolean')
+    if (field.type === 'moduleBoolean')
     {
-        const mod = game.modules.get(f.module);
+        const mod = game.modules.get(field.module);
         if (!mod?.active)
             return null;
         let value = false;
         try
         {
-            value = !!game.settings.get(f.module, f.key);
+            value = !!game.settings.get(field.module, field.key);
         }
         catch
         { /* setting not registered */ }
-        const setting = game.settings.settings.get(`${f.module}.${f.key}`) ?? {};
+        const setting = game.settings.settings.get(`${field.module}.${field.key}`) ?? {};
         return {
-            key: `__ext.${f.module}.${f.key}`,
+            key: `__ext.${field.module}.${field.key}`,
             type: 'boolean',
-            label: f.label ?? setting.name ?? f.key,
-            hint: f.hint ?? setting.hint ?? '',
+            label: field.label ?? setting.name ?? field.key,
+            hint: field.hint ?? setting.hint ?? '',
             value,
             isBoolean: true,
             isLocked: !game.user.isGM
         };
     }
-    if (f.type === 'compactBooleans')
+    if (field.type === 'moduleSelect')
+    {
+        if (!game.modules.get(field.module)?.active)
+            return null;
+        const setting = game.settings.settings.get(`${field.module}.${field.key}`);
+        if (!setting)
+            return null;
+        let value;
+        try
+        {
+            value = game.settings.get(field.module, field.key);
+        }
+        catch
+        {
+            value = setting.default;
+        }
+        return {
+            key: `__ext.${field.module}.${field.key}`,
+            type: 'select',
+            label: field.label ?? setting.name ?? field.key,
+            hint: field.hint ?? setting.hint ?? '',
+            value,
+            isSelect: true,
+            choices: Object.entries(setting.choices ?? {}).map(([choiceValue, choiceLabel]) => ({
+                value: choiceValue,
+                label: game.i18n.localize(String(choiceLabel)),
+                selected: choiceValue === value,
+            })),
+            isLocked: setting.scope === 'world' && !game.user.isGM
+        };
+    }
+    if (field.type === 'compactBooleans')
     {
         return {
             type: 'compactBooleans',
             isCompactBooleans: true,
-            items: (f.items ?? []).map((/** @type {any} */ it) =>
+            items: (field.items ?? []).map((/** @type {any} */ it) =>
             {
                 let value = true;
                 try
@@ -1046,12 +1153,12 @@ function _buildItem(f)
             }),
         };
     }
-    if (f.type === 'compactStatusFx')
+    if (field.type === 'compactStatusFx')
     {
         return {
             type: 'compactBooleans',
             isCompactBooleans: true,
-            items: (f.items ?? []).map((/** @type {any} */ it) => ({
+            items: (field.items ?? []).map((/** @type {any} */ it) => ({
                 key: `_sfx.${it.sub}`,
                 label: it.label,
                 value: _readStatusFx(it.sub) !== false,
@@ -1060,16 +1167,16 @@ function _buildItem(f)
             })),
         };
     }
-    if (f.type === 'statusFx')
+    if (field.type === 'statusFx')
     {
         // _sfx. prefix routes the value back into statusFXConfig on save.
-        const fallback = f.default ?? true;
+        const fallback = field.default ?? true;
         return {
-            key: `_sfx.${f.sub}`,
+            key: `_sfx.${field.sub}`,
             type: 'boolean',
-            label: f.label,
-            hint: f.hint ?? '',
-            value: _readStatusFx(f.sub, fallback) !== false,
+            label: field.label,
+            hint: field.hint ?? '',
+            value: _readStatusFx(field.sub, fallback) !== false,
             isBoolean: true,
             choices: [],
             isLocked: !game.user.isGM
@@ -1078,43 +1185,43 @@ function _buildItem(f)
     let value;
     try
     {
-        value = game.settings.get(MODULE_ID, f.key);
+        value = game.settings.get(MODULE_ID, field.key);
     }
     catch
     {
-        value = f.default;
+        value = field.default;
     }
-    const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`) || {};
-    if (f.type === 'color')
+    const setting = game.settings.settings.get(`${MODULE_ID}.${field.key}`) || {};
+    if (field.type === 'color')
     {
         const hexRe = /^#[0-9a-fA-F]{6}$/;
         if (typeof value !== 'string' || !hexRe.test(value))
         {
             const fromColor = (typeof value?.toString === 'function') ? value.toString() : null;
-            value = (fromColor && hexRe.test(fromColor)) ? fromColor : (setting.default ?? f.default ?? '#000000');
+            value = (fromColor && hexRe.test(fromColor)) ? fromColor : (setting.default ?? field.default ?? '#000000');
         }
     }
     return {
-        key: f.key,
-        type: f.type,
-        label: f.label ?? setting.name ?? f.key,
-        hint: f.hint ?? setting.hint ?? '',
+        key: field.key,
+        type: field.type,
+        label: field.label ?? setting.name ?? field.key,
+        hint: field.hint ?? setting.hint ?? '',
         value,
-        isBoolean: f.type === 'boolean',
-        isNumber: f.type === 'number',
-        isString: f.type === 'string',
-        isFolder: f.type === 'folder',
-        isAudio: f.type === 'audio',
-        isColor: f.type === 'color',
-        isSelect: f.type === 'select',
-        isSlider: f.type === 'slider',
-        sliderMin: f.min ?? setting.range?.min ?? 0,
-        sliderMax: f.max ?? setting.range?.max ?? 1,
-        sliderStep: f.step ?? setting.range?.step ?? 0.1,
-        isSection: f.type === 'section',
+        isBoolean: field.type === 'boolean',
+        isNumber: field.type === 'number',
+        isString: field.type === 'string',
+        isFolder: field.type === 'folder',
+        isAudio: field.type === 'audio',
+        isColor: field.type === 'color',
+        isSelect: field.type === 'select',
+        isSlider: field.type === 'slider',
+        sliderMin: field.min ?? setting.range?.min ?? 0,
+        sliderMax: field.max ?? setting.range?.max ?? 1,
+        sliderStep: field.step ?? setting.range?.step ?? 0.1,
+        isSection: field.type === 'section',
         choices: (() =>
         {
-            const raw = (typeof f.getChoices === 'function' ? f.getChoices() : f.choices);
+            const raw = (typeof field.getChoices === 'function' ? field.getChoices() : field.choices);
             if (raw)
                 return raw.map(choice => ({ ...choice, selected: choice.selected ?? (choice.value === value) }));
             if (setting.choices)
@@ -1125,11 +1232,10 @@ function _buildItem(f)
             }
             return [];
         })(),
-        isLocked: _isLockedForUser(f.key)
+        isLocked: _isLockedForUser(field.key)
     };
 }
 
-/** @param {any} html @param {any[]} fields @param {any} _app */
 /** @type {Record<string, string>} */
 const _FCS_ICONS = {
     'hard-gm': 'fa-lock',
@@ -1141,6 +1247,7 @@ const _FCS_ICONS = {
     'unlocked-client': 'fa-lock-keyhole-open',
 };
 
+/** @param {any} html @param {any[]} fields @param {any} _app */
 function _injectFCSLocks(html, fields, _app)
 {
     const fcs = getFCSData();
@@ -1222,12 +1329,7 @@ async function _previewSettingSound(key)
         fx.previewActionFxSound(key.slice('tah.actionFxSound.'.length));
 }
 
-/**
- * Reads every named input/select/textarea inside the form into a Map<name, value>.
- * Used so action buttons see edits that haven't been persisted via the Save button yet.
- * @param {HTMLFormElement|null} form
- * @returns {Map<string, any>}
- */
+/** Snapshot form values into a Map so button callbacks see unsaved edits. */
 function _readFormSettings(form)
 {
     const map = new Map();
@@ -1338,7 +1440,7 @@ export class LancerAutomationsConfig extends FormApplication
     {
         super(...args);
         this._needsReload = false;
-        /** @type {Map<string, boolean>} label → collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
+        /** @type {Map<string, boolean>} label Ã¢â€ â€™ collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
         this._sectionStates = new Map();
     }
 
@@ -1396,6 +1498,39 @@ export class LancerAutomationsConfig extends FormApplication
             ev.preventDefault();
             ev.stopImmediatePropagation();
         });
+
+        for (const field of _fieldsWithRequirements())
+        {
+            const $target = $html.find(`[name="${field.key}"]`);
+            if (!$target.length)
+                continue;
+            const keys = _requiredKeys(field);
+            const isMet = (key) => _isRequirementMet($html, key);
+            const $row = $target.closest('.form-group');
+            const $warning = $('<i class="fas fa-triangle-exclamation la-req-icon"></i>')
+                .attr('data-tooltip', _requirementHint(field))
+                .hide();
+            ($row.find('label').first().length ? $row.find('label').first() : $row).append($warning);
+            const syncRequirement = () =>
+            {
+                const met = field.requiresAll ? keys.every(isMet) : keys.some(isMet);
+                $target.prop('disabled', !met);
+                $row.toggleClass('la-req-unmet', !met);
+                $warning.toggle(!met);
+            };
+            const watched = new Set();
+            const watch = (key) =>
+            {
+                if (watched.has(key))
+                    return;
+                watched.add(key);
+                for (const sub of _requiredKeys(_fieldByKey(key)))
+                    watch(sub);
+            };
+            keys.forEach(watch);
+            $html.find([...watched].map(key => `[name="${key}"]`).join(', ')).on('change', syncRequirement);
+            syncRequirement();
+        }
         const captureKey = (onDone) =>
         {
             const km = /** @type {any} */ (globalThis).KeyboardManager;
@@ -1459,7 +1594,7 @@ export class LancerAutomationsConfig extends FormApplication
             const original = btn.outerHTML;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            placeholder.textContent = 'Press a keyÃ¢â‚¬Â¦ (Esc to cancel)';
             btn.replaceWith(placeholder);
             captureKey(async (binding) =>
             {
@@ -1508,7 +1643,7 @@ export class LancerAutomationsConfig extends FormApplication
                 return;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            placeholder.textContent = 'Press a keyÃ¢â‚¬Â¦ (Esc to cancel)';
             const resetBtn = binds.querySelector('.la-kb-reset');
             binds.insertBefore(placeholder, resetBtn);
             btn.style.display = 'none';
@@ -1678,14 +1813,14 @@ export class LancerAutomationsConfig extends FormApplication
         };
         const applyFilter = (query) =>
         {
-            const q = (query || '').trim().toLowerCase();
-            $clear.css('display', q ? 'inline' : 'none');
-            const re = q ? new RegExp(escapeRe(q), 'gi') : null;
+            const normalizedQuery = (query || '').trim().toLowerCase();
+            $clear.css('display', normalizedQuery ? 'inline' : 'none');
+            const re = normalizedQuery ? new RegExp(escapeRe(normalizedQuery), 'gi') : null;
             $html.find('.tab').each((/** @type {number} */ _i, /** @type {any} */ tab) =>
             {
                 const $tab = $(tab);
                 const groups = $tab.find('.form-group, h2.la-section, h3.la-subsection-header');
-                if (!q)
+                if (!normalizedQuery)
                 {
                     groups.css('display', '');
                     groups.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ el) => restore($(el)));
@@ -1727,7 +1862,7 @@ export class LancerAutomationsConfig extends FormApplication
                     }
                     const text = ($el.text() || '').toLowerCase();
                     const name = ($el.find('[name]').attr('name') || '').toLowerCase();
-                    const match = text.includes(q) || name.includes(q);
+                    const match = text.includes(normalizedQuery) || name.includes(normalizedQuery);
                     $el.css('display', match ? '' : 'none');
                     if (match)
                     {
@@ -1741,7 +1876,7 @@ export class LancerAutomationsConfig extends FormApplication
                 finalizeSub();
                 finalizeSection();
             });
-            if (q)
+            if (normalizedQuery)
                 $html.find('.tab').addClass('active').css('display', '');
             else
             {
@@ -1821,7 +1956,9 @@ export class LancerAutomationsConfig extends FormApplication
                 continue;
             try
             {
-                await game.settings.set(moduleId, settingKey, !!formData[formKey]);
+                const targetSetting = game.settings.settings.get(`${moduleId}.${settingKey}`);
+                const raw = formData[formKey];
+                await game.settings.set(moduleId, settingKey, targetSetting?.type === Boolean ? !!raw : raw);
             }
             catch (e)
             {
@@ -1950,18 +2087,18 @@ export class LancerAutomationsConfig extends FormApplication
                 }
                 continue;
             }
-            let val = formData[f.key];
+            let newValue = formData[f.key];
             if (f.type === 'number' || f.type === 'slider')
-                val = Number(val);
+                newValue = Number(newValue);
             if (f.type === 'boolean')
-                val = !!val;
+                newValue = !!newValue;
             try
             {
                 const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`);
                 const prev = game.settings.get(MODULE_ID, f.key);
-                if (prev !== val && setting?.requiresReload)
+                if (prev !== newValue && setting?.requiresReload)
                     this._needsReload = true;
-                await game.settings.set(MODULE_ID, f.key, val);
+                await game.settings.set(MODULE_ID, f.key, newValue);
             }
             catch (e)
             {
@@ -1990,7 +2127,7 @@ export class LancerAutomationsConfig extends FormApplication
         }
         catch
         { /* ignore */ }
-        const r = await super.close(options);
+        const closeResult = await super.close(options);
         if (this._needsReload)
         {
             this._needsReload = false;
@@ -2004,7 +2141,7 @@ export class LancerAutomationsConfig extends FormApplication
             if (reload)
                 foundry.utils.debouncedReload();
         }
-        return r;
+        return closeResult;
     }
 }
 
@@ -2013,7 +2150,7 @@ export function registerSettingsMenus()
     game.settings.registerMenu(MODULE_ID, 'lancerAutomationsConfigMenu', {
         name: 'Lancer Automations Configuration',
         label: 'Open Configuration',
-        hint: 'Unified configuration window for all module settings.',
+        hint: 'Configuration window for all module settings.',
         icon: 'fas fa-sliders-h',
         type: LancerAutomationsConfig,
         restricted: false,

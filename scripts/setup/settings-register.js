@@ -33,6 +33,13 @@ export function registerSettings()
         default: false
     });
 
+    game.settings.register('lancer-automations', 'compatWarningsShown', {
+        scope: 'world',
+        config: false,
+        type: Array,
+        default: []
+    });
+
     game.settings.register('lancer-automations', 'consumeAction', {
         name: 'Consume Action on Activation',
         hint: 'Auto-spend the token\'s Quick / Full action when an activation flow succeeds.',
@@ -188,6 +195,20 @@ export function registerSettings()
         config: false,
         type: Boolean,
         default: false
+    });
+
+    game.settings.register('lancer-automations', 'haseChanceLabels', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'actionBadgeItemName', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
     });
 
     game.settings.register('lancer-automations', 'enableAttackTargeting', {
@@ -360,6 +381,23 @@ export function registerSettings()
             },
         });
     }
+    game.settings.register('lancer-automations', 'wreckAuraColor', {
+        name: 'Wreck Aura Color',
+        hint: 'Line and fill color of the aura left on a wreck. Applies to new wrecks.',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#8B4513',
+    });
+    game.settings.register('lancer-automations', 'wreckAuraOpacity', {
+        name: 'Wreck Aura Opacity',
+        hint: 'Fill opacity of the wreck aura; the outline scales with it.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 0.2,
+        range: { min: 0, max: 1, step: 0.05 },
+    });
     game.settings.register('lancer-automations', 'wreckAssetsPath', {
         name: 'Wreck Assets Folder',
         hint: 'Custom folder for wreck images/effects/audio. Leave blank for built-in.',
@@ -415,8 +453,6 @@ export function registerSettings()
         default: '',
     });
     game.settings.register('lancer-automations', 'guardianBulwarkAuraMode', {
-        name: 'Guardian / Bulwark Aura',
-        hint: '"Only in Combat" requires the GAA Fork.',
         scope: 'world',
         config: false,
         type: String,
@@ -424,24 +460,18 @@ export function registerSettings()
         default: 'always',
     });
     game.settings.register('lancer-automations', 'syncActorImgToToken', {
-        name: 'Sync actor portrait to token image',
-        hint: 'When the prototype token image changes, also update the actor portrait (used in the Actors directory).',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register('lancer-automations', 'syncActorNameToToken', {
-        name: 'Sync actor name to token name',
-        hint: 'When the prototype token name changes, also update the actor name (Actors directory).',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register('lancer-automations', 'scanJournalSource', {
-        name: 'Scan journal source',
-        hint: 'System: native Lancer v3 scan journal. LA legacy: the older Lancer Automations custom journal template.',
         scope: 'world',
         config: false,
         type: String,
@@ -449,8 +479,6 @@ export function registerSettings()
         default: 'system',
     });
     game.settings.register('lancer-automations', 'scanPlayerOwnershipMode', {
-        name: 'Scan ownership when a player scans',
-        hint: 'Who gets owner permission on the journal entry when a non-GM scans. GM scans always grant ownership to all players.',
         scope: 'world',
         config: false,
         type: String,
@@ -460,6 +488,12 @@ export function registerSettings()
             group: 'Player\'s groups (Player Groups required)',
         },
         default: 'all',
+    });
+    game.settings.register('lancer-automations', 'revealStatsWithoutScan', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
     });
     game.settings.register('lancer-automations', 'wreckMasterVolume', {
         name: 'Wreck Master Volume',
@@ -487,16 +521,12 @@ export function registerSettings()
         default: false,
     });
     game.settings.register('lancer-automations', 'autoTokenHeight', {
-        name: 'Auto Token Height (Wall Height)',
-        hint: 'If Wall Height is active, auto-set tokenHeight to actor size + 0.1 so tokens can peek above walls of their size.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register('lancer-automations', 'autoTokenHeightVehicleSquad', {
-        name: 'Vehicle & Squad Height Adjustments',
-        hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.',
         scope: 'world',
         config: false,
         type: Boolean,

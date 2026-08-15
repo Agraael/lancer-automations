@@ -90,7 +90,9 @@ function _applyItemBonuses(item, actor, tags, range)
     }
 }
 
-/** Weapon profiles with native Lancer + LA actor range bonuses merged; falls back for pilot weapons and profileless items. */
+/** Weapon profiles with native Lancer + LA actor range bonuses merged; falls back for pilot weapons and profileless items.
+ * @returns {any[]}
+ */
 export function getWeaponProfiles_WithBonus(weapon, actor)
 {
     if (!weapon?.system)
@@ -107,7 +109,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
             const tags = (profile.all_tags ?? profile.tags ?? []).map(tag => ({ ...tag }));
             const workingDamage = (profile.all_damage ?? profile.damage ?? []).map(damageEntry => ({ ...damageEntry }));
             const base_damage = workingDamage.map(damageEntry => ({ ...damageEntry })); // snapshot for popup diff
-            const mockState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
+            const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
             const bonuses = flattenBonuses([
                 ...getGlobalBonuses(resolvedActor),
                 ...getConstantBonuses(resolvedActor)
@@ -115,10 +117,10 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
             const flowTags = new Set(["all", "attack"]);
             for (const bonus of bonuses)
             {
-                if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
-                    mutateRangeWithBonus(mockState, bonus);
-                else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, mockState))
-                    mutateDamageWithBonus(mockState, bonus);
+                if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
+                    mutateRangeWithBonus(bonusState, bonus);
+                else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, bonusState))
+                    mutateDamageWithBonus(bonusState, bonus);
             }
             return { ...profile, range: base, all_range: base, base_range, damage: workingDamage, base_damage };
         });
@@ -146,7 +148,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
     }
     const workingDamage = Array.isArray(damage) ? damage.map(damageEntry => ({ ...damageEntry })) : [];
     const base_damage = workingDamage.map(damageEntry => ({ ...damageEntry }));
-    const mockState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
+    const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(resolvedActor),
         ...getConstantBonuses(resolvedActor)
@@ -154,15 +156,17 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
     const flowTags = new Set(["all", "attack"]);
     for (const bonus of bonuses)
     {
-        if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, mockState))
-            mutateRangeWithBonus(mockState, bonus);
-        else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, mockState))
-            mutateDamageWithBonus(mockState, bonus);
+        if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
+            mutateRangeWithBonus(bonusState, bonus);
+        else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, bonusState))
+            mutateDamageWithBonus(bonusState, bonus);
     }
     return [{ ...weapon.system, damage: workingDamage.length > 0 ? workingDamage : damage, attack_bonus, accuracy, range: base, base_range, base_damage }];
 }
 
-/** Returns the effective tag list for an item with actor bonuses applied. */
+/** Returns the effective tag list for an item with actor bonuses applied.
+ * @returns {Promise<any[]>}
+ */
 export async function getItemTags_WithBonus(item, actor)
 {
     if (!item)
@@ -173,7 +177,9 @@ export async function getItemTags_WithBonus(item, actor)
     return tags;
 }
 
-/** Returns the maximum range value per range type across all weapons of the input. */
+/** Returns the maximum range value per range type across all weapons of the input.
+ * @returns {Record<string, number>}
+ */
 export function getMaxWeaponRanges_WithBonus(input)
 {
     const { weapons, actor } = _resolveWeaponsAndActor(input);
@@ -192,7 +198,9 @@ export function getMaxWeaponRanges_WithBonus(input)
     return maxPerType;
 }
 
-/** Returns the maximum threat range for an actor, accounting for active bonuses. */
+/** Returns the maximum threat range for an actor, accounting for active bonuses.
+ * @returns {number} Longest threat range on the actor
+ */
 export function getActorMaxThreat(actor)
 {
     if (!actor || actor.type === 'deployable')
@@ -204,6 +212,7 @@ export function getActorMaxThreat(actor)
 }
 
 // Effective sensor range for an actor/token, folding in any Sensor-type LA range bonuses.
+/** @returns {number} */
 export function getSensorRange_WithBonus(input)
 {
     const actor = input?.actor ?? input;
@@ -228,7 +237,9 @@ export function getSensorRange_WithBonus(input)
     return Number(range.find(entry => entry.type === "Sensor")?.val) || base;
 }
 
-/** Max reach across all weapons of the input; counts Range/Threat/Line/Burst/Cone (not Blast) plus tg_thrown. */
+/** Max reach across all weapons of the input; counts Range/Threat/Line/Burst/Cone (not Blast) plus tg_thrown.
+ * @returns {Promise<number>}
+ */
 export async function getMaxWeaponReach_WithBonus(input)
 {
     const { weapons, actor } = _resolveWeaponsAndActor(input);
@@ -257,7 +268,9 @@ export async function getMaxWeaponReach_WithBonus(input)
     return max;
 }
 
-/** Max range per type for any item: base range, per-action ranges, tg_thrown ("Thrown"), deployRange flag ("Deploy"). */
+/** Max range per type for any item: base range, per-action ranges, tg_thrown ("Thrown"), deployRange flag ("Deploy").
+ * @returns {Promise<Record<string, number>>}
+ */
 export async function getMaxItemRanges_WithBonus(item, actor)
 {
     if (!item)
@@ -340,9 +353,7 @@ export function weaponPulseRange(ranges)
     return base + shape;
 }
 
-/**
- * Actor-wide max reach across all weapons (via getWeaponReachRange per weapon).
- */
+/** Actor-wide max reach across all weapons. */
 export function getActorMaxReach_WithBonus(input)
 {
     const { weapons, actor } = _resolveWeaponsAndActor(input);

@@ -7,7 +7,7 @@ import {
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
 import {
-    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview,
+    pointerToWorld, suppressTokenLayerClick, createPickerSession, createCursorPreview,
     addGraphicsBelowTokens, addGraphicsAboveTokens, destroyGraphics, _paintCells, createMultiPlusIndicator,
     gridLineWidth, makeText, TG, paintWithHalo,
     suppressEvent,
@@ -290,7 +290,16 @@ export function createShapePlacement(options = {})
     let disposed = false;
     let prevInteractive = true;
     let restoreLayerClick = null;
-    let safeMove, safeClick, safeKey, safeWheel;
+    const session = createPickerSession('shapePlacement', () =>
+    {
+        try
+        {
+            dispose();
+        }
+        catch
+        { /* */ }
+        onCancel();
+    });
 
     const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
     const plus = createMultiPlusIndicator();
@@ -443,14 +452,7 @@ export function createShapePlacement(options = {})
         destroyGraphics(elevLabel);
         clearCellLabels();
         destroyGraphics(cellLabelLayer);
-        if (safeClick)
-            canvas.stage.off('click', safeClick);
-        if (safeMove)
-            canvas.stage.off('pointermove', safeMove);
-        if (safeKey)
-            document.removeEventListener('keydown', safeKey, true);
-        if (safeWheel)
-            document.removeEventListener('wheel', safeWheel, { capture: true });
+        session.unbind();
         canvas.tokens.interactiveChildren = prevInteractive;
         if (restoreLayerClick)
             restoreLayerClick();
@@ -602,24 +604,7 @@ export function createShapePlacement(options = {})
         prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
         restoreLayerClick = suppressTokenLayerClick();
-        const safe = makeSafe('shapePlacement', () =>
-        {
-            try
-            {
-                dispose();
-            }
-            catch
-            { /* */ }
-            onCancel();
-        });
-        safeMove = safe(moveHandler);
-        safeClick = safe(clickHandler);
-        safeKey = safe(keyHandler);
-        safeWheel = safe(wheelHandler);
-        canvas.stage.on('pointermove', safeMove);
-        canvas.stage.on('click', safeClick);
-        document.addEventListener('keydown', safeKey, true);
-        document.addEventListener('wheel', safeWheel, { capture: true, passive: false });
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, wheel: wheelHandler });
     };
 
     const setPattern = (nextPattern) =>

@@ -35,7 +35,7 @@ Every one has its own toggle under **Visual effects**, all under a single master
 
 <img align="right" src="../img/fs-lowquality.png" width="45%"/>
 
-**Low-quality mode** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions; the glow and bloom filters they normally use are GPU-hungry.
+**Low-quality mode** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions. The glow and bloom filters they normally use are GPU-hungry.
 
 **Remove statuses on death** clears a token's statuses when its structure hits 0.
 
@@ -53,7 +53,7 @@ Some statuses are applied straight from the actor's numbers: the danger-zone ove
 
 <img align="right" src="../img/fs-guardian.png" width="45%"/>
 
-A soft aura is drawn around tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off; combat-only needs the GAA fork.
+A soft aura is drawn around tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off. Combat-only needs the GAA fork.
 
 <br clear="right"/>
 
@@ -70,7 +70,7 @@ When an action runs, a matching animation plays through Sequencer:
 - an impact on ram
 - smoke on hide, and so on
 
-Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer Weapon FX installed; without either, they're skipped.
+Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer Weapon FX installed. Without either, they're skipped.
 
 <br clear="right"/>
 

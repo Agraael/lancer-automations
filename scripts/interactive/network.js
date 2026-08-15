@@ -1,4 +1,4 @@
-/* global canvas, PIXI, game, ui, $, fromUuidSync */
+﻿/* global canvas, PIXI, game, ui, $, fromUuidSync */
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -9,7 +9,7 @@ import { drawMovementTrace } from "./canvas.js";
 import { laDetailPopup, laRenderTextSection, laRenderActions, laRenderTags } from "./detail-renderers.js";
 
 // GM-controlled choice cards
-export const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
+export const _pendingGMChoices = new Map(); // cardId â†’ { resolve, cardEl, choices, mode }
 
 /**
  * Inserts a compact item chip into a choice card and binds a detail popup on click.
@@ -80,13 +80,13 @@ function _bindItemChip(cardEl, item)
 }
 
 // Broadcast cards (first-to-respond wins); stores cancel() on each target client to force-dismiss.
-export const _pendingBroadcastCards = new Map(); // cardId → cancel()
+export const _pendingBroadcastCards = new Map(); // cardId â†’ cancel()
 
 // Vote cards (creator side)
-export const _pendingVoteCards = new Map(); // cardId → { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
+export const _pendingVoteCards = new Map(); // cardId â†’ { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
 
 // Vote cards (voter side)
-export const _pendingVoterCards = new Map(); // cardId → { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
+export const _pendingVoterCards = new Map(); // cardId â†’ { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
 
 /** Returns the userId of the first active GM, or null if none online. */
 export function getActiveGMId()
@@ -106,7 +106,7 @@ export function getActiveGMId()
  * @param {Item} [options.item]
  * @returns {{ remove: () => void }}
  */
-export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for response…', originToken = null, relatedToken = null, item = null } = {})
+export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for responseâ€¦', originToken = null, relatedToken = null, item = null } = {})
 {
     const waitDesc = (description ? description + '<br>' : '') +
         `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> ${waitMessage}</em>`;
@@ -211,10 +211,10 @@ export function startChoiceCard(options = {})
             if (gmId)
                 activeTargets.push(gmId);
             const fallbackName = activeTargets.length > 0 ? (game.users.get(activeTargets[0])?.name ?? activeTargets[0]) : 'local user';
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — ${fallbackName} will handle the choice instead.`);
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline â€” ${fallbackName} will handle the choice instead.`);
         }
         else
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — removed from choice recipients.`);
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline â€” removed from choice recipients.`);
     }
 
     // If targets were specified but all gone, fall back to GM.
@@ -516,20 +516,107 @@ export function startChoiceCard(options = {})
 }
 
 /**
- * Called on the GM's client (via socket) to show a controlled choice card on behalf of a player.
- * When the GM picks or cancels, the result is sent back to the requesting user.
- * @returns {Promise<void>}
+ * Single-button choice card. Resolves true when clicked, false when dismissed.
+ * Extra options (originToken, relatedToken, item, userIdControl, ...) pass through to startChoiceCard.
+ * @param {Object} options
+ * @param {string} [options.confirmText='Confirm']
+ * @param {string} [options.confirmIcon]  Defaults to options.icon
+ * @returns {Promise<boolean>}
  */
-export async function showUserIdControlledChoiceCard({ cardId, requestingUserId, title, description, icon, headerClass, mode, choices, itemUuid = null, relatedTokenId = null, originTokenId = null })
+export async function confirmCard(options = {})
+{
+    const { confirmText = 'Confirm', confirmIcon = null, ...rest } = /** @type {any} */ (options);
+    let clicked = false;
+    await startChoiceCard({
+        ...rest,
+        choices: [{ text: confirmText, icon: confirmIcon ?? /** @type {any} */ (options).icon, callback: () => { clicked = true; } }]
+    });
+    return clicked;
+}
+
+/**
+ * Two-button ask card. Resolves { confirmed, responderIds }.
+ * `owner` (a Token) routes control to that token's owner, active GM fallback; explicit userIdControl wins.
+ * @param {Object} options
+ * @param {string} [options.yesText='Use']
+ * @param {string} [options.yesIcon='fas fa-check']
+ * @param {string} [options.noText='Skip']
+ * @param {string} [options.noIcon='fas fa-times']
+ * @param {Token} [options.owner]
+ * @returns {Promise<{ confirmed: boolean, responderIds: string[] }>}
+ */
+export async function askCard(options = {})
+{
+    const { yesText = 'Use', yesIcon = 'fas fa-check', noText = 'Skip', noIcon = 'fas fa-times', owner = null, ...rest } = /** @type {any} */ (options);
+    if (owner && rest.userIdControl === undefined)
+        rest.userIdControl = getTokenOwnerUserId(owner) ?? getActiveGMId();
+    const result = await startChoiceCard({
+        ...rest,
+        choices: [
+            { text: yesText, icon: yesIcon },
+            { text: noText, icon: noIcon }
+        ]
+    });
+    return { confirmed: result?.choiceIdx === 0, responderIds: result?.responderIds ?? [] };
+}
+
+/**
+ * Pick one entry from a list via a choice card. Resolves the picked entry, or null on dismiss.
+ * @param {any[]} entries
+ * @param {Object} options
+ * @param {Function|string} [options.label]  (entry) => text, or a property name. Defaults to String(entry)
+ * @param {Function|string} [options.entryIcon]  (entry) => icon, or a fixed icon class/path
+ * @returns {Promise<any|null>}
+ */
+export async function pickCard(entries, options = {})
+{
+    const { label = null, entryIcon = null, ...rest } = /** @type {any} */ (options);
+    let picked = null;
+    const toText = (entry) =>
+    {
+        if (typeof label === 'function')
+            return label(entry);
+        if (typeof label === 'string')
+            return String(entry?.[label] ?? entry);
+        return String(entry?.name ?? entry?.text ?? entry);
+    };
+    const toIcon = (entry) => typeof entryIcon === 'function' ? entryIcon(entry) : entryIcon;
+    await startChoiceCard({
+        ...rest,
+        choices: (entries ?? []).map(entry => ({
+            text: toText(entry),
+            icon: toIcon(entry),
+            callback: () => { picked = entry; }
+        }))
+    });
+    return picked;
+}
+
+// allTargetUserIds non-null = broadcast card: the first pick closes the other recipients' copies.
+export async function showUserIdControlledChoiceCard({ cardId, requestingUserId, allTargetUserIds = null, title, description, icon, headerClass, mode, choices, itemUuid = null, relatedTokenId = null, originTokenId = null })
 {
     const requesterName = game.users.get(requestingUserId)?.name ?? '?';
     const item = itemUuid ? fromUuidSync(itemUuid) : null;
     const relatedToken = relatedTokenId ? canvas.tokens.get(relatedTokenId) : null;
     const originToken = originTokenId ? canvas.tokens.get(originTokenId) : null;
+
+    const cancelOthers = () =>
+    {
+        const otherTargets = (allTargetUserIds ?? []).filter(id => id !== game.user.id);
+        if (otherTargets.length > 0)
+        {
+            game.socket.emit('module.lancer-automations', {
+                action: 'choiceCardBroadcastCancel',
+                payload: { cardId, otherTargetUserIds: otherTargets, responderName: game.user.name, isCancellation: false }
+            });
+        }
+    };
+
     await _queueCard(() => new Promise((resolve) =>
     {
         const chosenSet = new Set();
         let dismissed = false;
+        let firstPick = true;
 
         const doCleanup = () =>
         {
@@ -553,7 +640,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
 
         const cardEl = _createInfoCard("choiceCard", {
             title,
-            origin: `${requesterName} → You`,
+            origin: `${requesterName} â†’ You`,
             icon,
             headerClass,
             description,
@@ -586,6 +673,12 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
         {
             if (dismissed)
                 return;
+
+            if (firstPick)
+            {
+                cancelOthers();
+                firstPick = false;
+            }
 
             if (mode === "or")
             {
@@ -622,7 +715,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
         _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
         _bindItemChip(cardEl, item);
         _updatePendingBadge();
-    }), `[${requesterName}→You] ${title}`);
+    }), `[${requesterName}â†’You] ${title}`);
 }
 
 /**
@@ -637,8 +730,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
 
     if (choiceIdx === null || choiceIdx === undefined)
     {
-        // If the responder is the requester (local call) - always cancel.
-        // Otherwise check if there are other targets.
+        // local requester = always cancel; otherwise check remaining targets
         const isRequester = (responderUserId === game.user.id) || (responderName === game.user.name);
 
         if (isRequester)
@@ -806,7 +898,7 @@ export function startVoteCard(options = {})
 
         const refreshCreatorCard = () =>
         {
-            const counts = choices.map((_, i) => [...votes.values()].filter(v => v === i).length);
+            const counts = choices.map((_, i) => [...votes.values()].filter(voteIdx => voteIdx === i).length);
             const myVote = votes.has(game.user.id) ? votes.get(game.user.id) : null;
             _updateInfoCard(cardEl, "voteCard", {
                 choices,
@@ -848,7 +940,7 @@ export function startVoteCard(options = {})
                 ui.notifications.warn("No votes cast yet.");
                 return;
             }
-            const counts = choices.map((_, i) => [...votes.values()].filter(v => v === i).length);
+            const counts = choices.map((_, i) => [...votes.values()].filter(voteIdx => voteIdx === i).length);
             const maxCount = Math.max(...counts);
             const winners = counts.reduce((acc, count, i) =>
             {
@@ -1064,9 +1156,9 @@ export async function showVoteCardOnVoter({ cardId, requestingUserId, allVoterUs
             {
                 return dismissed;
             },
-            set dismissed(v)
+            set dismissed(value)
             {
-                dismissed = v;
+                dismissed = value;
             },
             cleanup: doCleanup,
             updateCounts: (newCounts, newResponded) =>
@@ -1129,7 +1221,7 @@ export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText })
         return;
     pending.dismissed = true;
     pending.cleanup();
-    ui.notifications.info(`Vote concluded — winner: ${winnerText}`);
+    ui.notifications.info(`Vote concluded â€” winner: ${winnerText}`);
     pending.resolve({ choiceIdx: winnerIdx, responderIds: [] });
 }
 
@@ -1156,127 +1248,7 @@ export function cancelVoteCardOnVoter({ cardId })
  * @param {{ cardId: string, requestingUserId: string, allTargetUserIds: string[], title: string, description: string, icon: string, headerClass: string, mode: string, choices: Array, itemUuid?: string|null, relatedTokenId?: string|null, originTokenId?: string|null }} payload
  * @returns {Promise<void>}
  */
-export async function showMultiUserControlledChoiceCard({ cardId, requestingUserId, allTargetUserIds, title, description, icon, headerClass, mode, choices, itemUuid = null, relatedTokenId = null, originTokenId = null })
+export async function showMultiUserControlledChoiceCard(payload)
 {
-    const requesterName = game.users.get(requestingUserId)?.name ?? '?';
-    const item = itemUuid ? fromUuidSync(itemUuid) : null;
-    const relatedToken = relatedTokenId ? canvas.tokens.get(relatedTokenId) : null;
-    const originToken = originTokenId ? canvas.tokens.get(originTokenId) : null;
-
-    const _cancelOthers = () =>
-    {
-        const otherTargets = allTargetUserIds.filter(id => id !== game.user.id);
-        if (otherTargets.length > 0)
-        {
-            game.socket.emit('module.lancer-automations', {
-                action: 'choiceCardBroadcastCancel',
-                payload: { cardId, otherTargetUserIds: otherTargets, responderName: game.user.name, isCancellation: false }
-            });
-        }
-    };
-
-    await _queueCard(() => new Promise((resolve) =>
-    {
-        const chosenSet = new Set();
-        let dismissed = false;
-        let firstPick = true;
-
-        const doCleanup = () =>
-        {
-            document.removeEventListener('keydown', keyHandler);
-            _removeInfoCard(cardEl);
-            _pendingBroadcastCards.delete(cardId);
-        };
-
-        const onCancel = () =>
-        {
-            if (dismissed)
-                return;
-            game.socket.emit('module.lancer-automations', {
-                action: 'choiceCardGMResponse',
-                payload: { cardId, requestingUserId, choiceIdx: null, responderName: game.user.name, responderUserId: game.user.id }
-            });
-            dismissed = true;
-            doCleanup();
-            resolve(null);
-        };
-
-        const cardEl = _createInfoCard("choiceCard", {
-            title,
-            origin: `${requesterName} → You`,
-            icon,
-            headerClass,
-            description,
-            mode,
-            relatedToken,
-            originToken,
-            onConfirm: () =>
-            {},
-            onCancel
-        });
-
-        const keyHandler = (event) =>
-        {
-            if (event.key === "Escape")
-                onCancel();
-        };
-        document.addEventListener('keydown', keyHandler);
-
-        // Register cancel hook so another user's response can dismiss this card silently.
-        _pendingBroadcastCards.set(cardId, () =>
-        {
-            if (dismissed)
-                return;
-            dismissed = true;
-            doCleanup();
-            resolve(null);
-        });
-
-        const handleChoose = (idx) =>
-        {
-            if (dismissed)
-                return;
-
-            if (firstPick)
-            {
-                _cancelOthers();
-                firstPick = false;
-            }
-
-            if (mode === "or")
-            {
-                dismissed = true;
-                game.socket.emit('module.lancer-automations', {
-                    action: 'choiceCardGMResponse',
-                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
-                });
-                doCleanup();
-                resolve(true);
-            }
-            else
-            {
-                chosenSet.add(idx);
-                game.socket.emit('module.lancer-automations', {
-                    action: 'choiceCardGMResponse',
-                    payload: { cardId, requestingUserId, choiceIdx: idx, responderName: game.user.name, responderUserId: game.user.id }
-                });
-
-                if (chosenSet.size === choices.length)
-                {
-                    dismissed = true;
-                    doCleanup();
-                    resolve(true);
-                }
-                else
-                {
-                    // Update UI without closing
-                    _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
-                }
-            }
-        };
-
-        _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
-        _bindItemChip(cardEl, item);
-        _updatePendingBadge();
-    }), `[${requesterName}→You] ${title}`);
+    return showUserIdControlledChoiceCard(payload);
 }

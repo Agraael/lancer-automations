@@ -2,10 +2,10 @@ import { _queueCard, _createInfoCard, _removeInfoCard } from "../cards.js";
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
-    beginTargetSession, clearSingleTargetShape, clearAreaTargetShape, createTokenMark,
+    beginTargetSession, createTokenMark,
     rangePulse, RANGE_PULSE_PRIORITY,
 } from "../canvas.js";
-import { buildTargetingUI, clearAttackShapePreview } from "../../activations/targeting-ui.js";
+import { buildTargetingUI, clearAllAttackShapes, targetInfoAllowed, haseSuccessChance } from "../../activations/targeting-ui.js";
 import { TG } from "../canvas-helpers.js";
 
 const PICK_PULSE_OWNER = 'la-forcecheck-pick';
@@ -28,7 +28,7 @@ function deriveSaveDc(saveVsToken)
 /**
  * Force Check card: pick a HASE skill, targets like an attack roll, optionally a save-vs
  * actor (statroll SAVE picker), then route each target's roll to its owner.
- * @param {any} [preset]
+ * @param {object} [options]
  */
 export function openForceCheckCard({ tokenA = null, skill = null, range = null, saveVs = null, targets = null, sendToOwner = true } = {})
 {
@@ -42,7 +42,24 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             sendToOwner: sendToOwner !== false,
         };
         const pickState = { actor: caster?.actor ?? null, data: { title: 'Force Check' } };
-        if (range != null && range !== '')
+        if (Array.isArray(range))
+        {
+            const shape = { pattern: 'target', size: 1, range: 0 };
+            for (const entry of range)
+            {
+                const type = String(entry?.type ?? '');
+                const amount = Math.max(0, Number(entry?.val) || 0);
+                if (type === 'Range' || type === 'Threat')
+                    shape.range = amount;
+                else if (['Blast', 'Burst', 'Cone', 'Line'].includes(type))
+                {
+                    shape.pattern = type.toLowerCase();
+                    shape.size = Math.max(1, amount);
+                }
+            }
+            pickState.__laAttackShape = shape;
+        }
+        else if (range != null && range !== '')
             pickState.__laAttackShape = { pattern: 'target', size: 1, range: Math.max(0, Number(range) || 0) };
 
         let saveMark = null;
@@ -61,6 +78,9 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         let cardEl;
         let targetHookId = null;
         const rollerTargets = () => [...(game.user.targets ?? [])].filter(token => token.id !== state.saveVs?.id);
+        const successChanceFor = () => targetInfoAllowed()
+            ? (token) => haseSuccessChance(token?.actor, state.skill, state.saveVs ? deriveSaveDc(state.saveVs) : 10)
+            : null;
 
         const teardownCanvas = () =>
         {
@@ -70,9 +90,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
                 cancelAreaPicker();
             rangePulse.clear(PICK_PULSE_OWNER);
             rangePulse.clear(SAVE_PULSE_OWNER);
-            clearSingleTargetShape();
-            clearAreaTargetShape();
-            clearAttackShapePreview();
+            clearAllAttackShapes();
             clearSaveMark();
             if (targetHookId)
             {
@@ -99,7 +117,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
 
         const updateRun = () =>
         {
-            cardEl.find('[data-action="run-forcecheck"]').prop('disabled', !(state.skill && rollerTargets().length));
+            cardEl.find('[data-action="run-forcecheck"]').prop('disabled', !state.skill);
         };
 
         const renderSaveVs = () =>
@@ -222,8 +240,14 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         cardEl.find('[data-action="run-forcecheck"]').on('click', async () =>
         {
             const rollers = rollerTargets();
-            if (!(state.skill && rollers.length))
+            if (!state.skill)
                 return;
+            if (!rollers.length)
+            {
+                cleanup();
+                resolve({ completed: false, results: [] });
+                return;
+            }
             const runSkill = state.skill;
             const runSaveVs = state.saveVs;
             const runSendToOwner = state.sendToOwner;
@@ -237,7 +261,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             for (const preTarget of targets)
                 normalizeToken(preTarget)?.setTarget?.(true, { releaseOthers: false });
         }
-        beginTargetSession();
+        beginTargetSession(successChanceFor());
         targetHookId = Hooks.on('targetToken', (user) =>
         {
             if (user?.id === game.userId)
@@ -246,8 +270,8 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         buildTargetingUI(pickState, cardEl, cardEl.find('[data-role="target-row"]'), {
             weapon: null,
             aoe: [],
-            hitChanceForFactory: () => null,
-            autoStart: 'never',
+            hitChanceForFactory: successChanceFor,
+            autoStart: (Array.isArray(targets) && targets.length) ? 'never' : 'force',
             pulseOwner: PICK_PULSE_OWNER,
         });
 

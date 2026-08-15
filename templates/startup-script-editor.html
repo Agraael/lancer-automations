@@ -1,8 +1,18 @@
 <form autocomplete="off" class="sse-form">
     <input type="hidden" name="id" value="{{id}}">
+    <input type="hidden" name="workshopId" value="{{workshopId}}">
 
     <!-- Fixed top section: Name, Description, Enabled -->
     <div class="sse-top">
+        {{#if workshopPreview}}
+        <div style="margin: 10px 0; padding: 8px 10px; border-radius: 4px; background: color-mix(in srgb, var(--la-accent), transparent 88%); border: 1px solid color-mix(in srgb, var(--la-accent), transparent 60%);">
+            <i class="fas fa-globe"></i> Workshop file preview ({{workshopId}}). Saving imports it into your startup scripts.
+        </div>
+        {{else if workshopId}}
+        <div style="margin: 10px 0; padding: 8px 10px; border-radius: 4px; background: color-mix(in srgb, #b3822d, transparent 85%); border: 1px solid color-mix(in srgb, #b3822d, transparent 55%);">
+            <i class="fas fa-exclamation-triangle"></i> Imported from the workshop ({{workshopId}}). A workshop update will overwrite local changes.
+        </div>
+        {{/if}}
         <!-- Name & Description -->
         <div class="form-group">
             <div class="form-fields flexrow" style="gap: 10px;">

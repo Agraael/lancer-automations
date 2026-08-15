@@ -2,10 +2,18 @@
 
 import { getMinGridDistance, getDistanceTokenToPoint } from '../combat/grid-helpers.js';
 import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoStateForToken } from '../setup/iso-settings.js';
+import { hasLineOfSight } from '../vision/lancerDetectionModes.js';
+import { belowBarsY } from '../tah/tokenStatBar.js';
 
 const MODULE_ID = 'lancer-automations';
 const MODE_KEY = 'enableTacticalDistance'; // values: 'off' | 'combat' | 'always' (legacy boolean migrated below)
 const LABEL_KEY = '_laTacticalLabel';
+const GHOST_KEY = '_laTacticalLabelGhost';
+// mdi eye-outline / eye-off-outline
+const EYE_ON = '\u{F06D0}';
+const EYE_OFF = '\u{F06D1}';
+const EYE_SEEN = '#4dd35f';
+const EYE_BLOCKED = '#ff5b52';
 
 function _getIsoState(token)
 {
@@ -46,7 +54,7 @@ function shouldShow()
 function makeLabel()
 {
     const style = foundry.canvas.containers.PreciseText.getTextStyle({
-        fontFamily: 'Signika',
+        fontFamily: ['Material Design Icons', 'Signika'],
         fontSize: 14,
         fill: '#ffffff',
         stroke: '#000000',
@@ -59,19 +67,84 @@ function makeLabel()
     return text;
 }
 
-function ensureLabel(token)
+// Above the stat-bar overlay (zIndex 99999) so bars never cover labels.
+let _labelOverlay = null;
+function getLabelOverlay()
 {
-    if (token[LABEL_KEY] && !token[LABEL_KEY].destroyed)
-        return token[LABEL_KEY];
+    if (_labelOverlay && !_labelOverlay.destroyed)
+        return _labelOverlay;
+    if (!canvas?.tokens)
+        return null;
+    _labelOverlay = new PIXI.Container();
+    _labelOverlay.name = 'la-tactical-label-overlay';
+    _labelOverlay.zIndex = 100000;
+    canvas.tokens.addChild(_labelOverlay);
+    return _labelOverlay;
+}
+
+function _livePlaceable(token)
+{
+    const id = token?.document?.id;
+    for (const preview of canvas.tokens?.preview?.children ?? [])
+    {
+        if (preview?.document?.id === id)
+            return preview;
+    }
+    return token;
+}
+
+let _labelRefId = null;
+
+// Overlay labels don't inherit token transforms; reposition every frame so they follow
+// moving tokens and drag previews.
+let _tickerFn = null;
+function _startTicker()
+{
+    if (_tickerFn || !canvas?.app?.ticker)
+        return;
+    _tickerFn = () =>
+    {
+        for (const token of canvas.tokens?.placeables ?? [])
+        {
+            const label = token[LABEL_KEY];
+            if (label && !label.destroyed)
+                positionLabel(token, label);
+            const ghost = token[GHOST_KEY];
+            if (ghost && !ghost.destroyed)
+            {
+                const clone = _livePlaceable(token);
+                if (clone !== token)
+                    positionLabel(clone, ghost);
+            }
+        }
+    };
+    canvas.app.ticker.add(_tickerFn);
+}
+
+function _stopTicker()
+{
+    if (_tickerFn)
+        canvas?.app?.ticker?.remove(_tickerFn);
+    _tickerFn = null;
+}
+
+function _ensureLabelAt(token, key)
+{
+    if (token[key] && !token[key].destroyed)
+        return token[key];
+    const overlay = getLabelOverlay();
+    if (!overlay)
+        return null;
     const label = makeLabel();
-    token.addChild(label);
-    token[LABEL_KEY] = label;
+    overlay.addChild(label);
+    token[key] = label;
+    _startTicker();
     return label;
 }
 
-function removeLabel(token)
+function _removeLabelAt(token, key)
 {
-    const label = token[LABEL_KEY];
+    const label = token[key];
     if (label)
     {
         try
@@ -80,32 +153,36 @@ function removeLabel(token)
         }
         catch
         { /* ignore */ }
-        delete token[LABEL_KEY];
+        delete token[key];
     }
+}
+
+const ensureLabel = (token) => _ensureLabelAt(token, LABEL_KEY);
+const ensureGhostLabel = (token) => _ensureLabelAt(token, GHOST_KEY);
+const removeGhostLabel = (token) => _removeLabelAt(token, GHOST_KEY);
+
+function removeLabel(token)
+{
+    _removeLabelAt(token, LABEL_KEY);
+    _removeLabelAt(token, GHOST_KEY);
 }
 
 function clearAll()
 {
     for (const t of canvas.tokens?.placeables ?? [])
         removeLabel(t);
+    _stopTicker();
 }
 
 // Tool-driven reference: the Advanced Measure tool shows distance labels from a selected/hovered
 // token, bypassing the drag-only path. null clears them.
 let _measureRef = null;
 
-// Follow the reference's drag preview while it's being dragged, else the reference itself.
 function _effectiveMeasureRef()
 {
     if (!_measureRef || _measureRef.destroyed)
         return null;
-    const id = _measureRef.document?.id;
-    for (const preview of canvas.tokens?.preview?.children ?? [])
-    {
-        if (preview?.document?.id === id)
-            return preview;
-    }
-    return _measureRef;
+    return _livePlaceable(_measureRef);
 }
 
 // Coalesced redraw that re-reads the CURRENT reference at fire time (never a stale captured token).
@@ -141,6 +218,35 @@ export function setMeasureDistanceReference(token)
         clearAll();
 }
 
+// The eye bakes as tofu if drawn before the webfont loads; unchanged .text never re-renders.
+let _mdiFontReady = false;
+function _ensureMdiFont()
+{
+    if (_mdiFontReady || !globalThis.document?.fonts?.load)
+        return;
+    globalThis.document.fonts.load('14px "Material Design Icons"').then(() =>
+    {
+        _mdiFontReady = true;
+        clearAll();
+        _queueRefUpdate();
+    }).catch(() =>
+    {
+        _mdiFontReady = true;
+    });
+}
+
+function losEyeEnabled()
+{
+    try
+    {
+        return game.settings.get(MODULE_ID, 'lancerLos') === true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
 // A point origin (e.g. the cursor) takes priority over the token reference while set; null reverts.
 let _measurePoint = null;
 export function setMeasureDistancePoint(point)
@@ -160,6 +266,7 @@ export function setMeasureDistancePoint(point)
 
 function updateLabelsForPoint(point)
 {
+    _labelRefId = null;
     const units = canvas.scene?.grid?.units ?? '';
     for (const target of canvas.tokens.placeables)
     {
@@ -169,9 +276,13 @@ function updateLabelsForPoint(point)
             continue;
         }
         const label = ensureLabel(target);
+        if (!label)
+            continue;
+        removeGhostLabel(target);
         const text = `↔ ${getDistanceTokenToPoint(point, target)}${units ? ` ${units}` : ''}`;
         if (label.text !== text)
             label.text = text;
+        _syncEye(label, null);
         positionLabel(target, label);
     }
 }
@@ -200,31 +311,121 @@ function buildLabelText(previewToken, targetToken)
     return line;
 }
 
+function _losState(previewToken, targetToken)
+{
+    return losEyeEnabled() ? hasLineOfSight(previewToken, targetToken) : null;
+}
+
+function _syncEye(label, seen)
+{
+    if (seen === null)
+    {
+        if (label._laEye && !label._laEye.destroyed)
+            label._laEye.destroy();
+        label._laEye = null;
+        return;
+    }
+    if (!label._laEye || label._laEye.destroyed)
+    {
+        const style = foundry.canvas.containers.PreciseText.getTextStyle({
+            fontFamily: ['Material Design Icons', 'Signika'],
+            fontSize: 14,
+            stroke: '#000000',
+            strokeThickness: 3,
+            fontWeight: '600'
+        });
+        const eye = new foundry.canvas.containers.PreciseText('', style);
+        eye.anchor.set(1, 0.5);
+        label.addChild(eye);
+        label._laEye = eye;
+    }
+    const eye = label._laEye;
+    const glyph = seen ? EYE_ON : EYE_OFF;
+    if (eye.text !== glyph)
+        eye.text = glyph;
+    const fill = seen ? EYE_SEEN : EYE_BLOCKED;
+    if (eye.style.fill !== fill)
+        eye.style.fill = fill;
+}
+
+function labelBelow()
+{
+    try
+    {
+        return game.settings.get(MODULE_ID, 'tacticalLabelPosition') === 'below';
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+// Below mode clears the stat bars and the nameplate, matching where the bars push the name.
+function belowAnchorY(target)
+{
+    let anchor = belowBarsY(target) ?? target.h + 2;
+    const nameplate = target.nameplate;
+    if (nameplate?.visible)
+        anchor = Math.max(anchor, nameplate.position.y + (nameplate.height ?? 0) + 2);
+    return anchor;
+}
+
+function zoomCounterScale()
+{
+    let minZoom = 0;
+    try
+    {
+        minZoom = Number(game.settings.get(MODULE_ID, 'tacticalMinZoomScale')) || 0;
+    }
+    catch
+    {
+        minZoom = 0;
+    }
+    if (minZoom <= 0)
+        return 1;
+    const zoom = canvas.stage?.scale?.x || 1;
+    return Math.max(1, minZoom / zoom);
+}
+
 function positionLabel(target, label)
 {
+    label.alpha = target.alpha ?? 1;
+    const below = labelBelow();
     const iso = _getIsoState(target);
+    const zoomK = zoomCounterScale();
     if (iso && target.mesh)
     {
-        label.x = target.mesh.position.x - target.position.x;
-        label.y = target.mesh.position.y - target.position.y;
+        label.anchor.set(0.5, below ? 0 : 1);
+        label.position.set(target.mesh.position.x, target.mesh.position.y);
         label.rotation = iso.reverseRotation;
         label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
-        label.scale.set(iso.counterScale, 1 / iso.counterScale);
-        label.pivot.set(0, -(target.h / 2 + 4));
+        label.scale.set(iso.counterScale * zoomK, (1 / iso.counterScale) * zoomK);
+        label.pivot.set(0, (below ? -(belowAnchorY(target) - target.h / 2) : target.h / 2 + 4) / zoomK);
     }
     else
     {
-        label.x = target.w / 2;
-        label.y = target.h + 4;
+        label.anchor.set(0.5, below ? 0 : 1);
+        label.position.set(target.x + target.w / 2, below ? target.y + belowAnchorY(target) : target.y - 4);
         label.rotation = 0;
         label.skew.set(0, 0);
-        label.scale.set(1, 1);
+        label.scale.set(zoomK, zoomK);
         label.pivot.set(0, 0);
+    }
+    const eye = label._laEye;
+    if (eye && !eye.destroyed)
+    {
+        const textW = label.texture?.orig?.width ?? 0;
+        const textH = label.texture?.orig?.height ?? 0;
+        eye.x = -textW / 2 - 4;
+        eye.y = textH * (0.5 - label.anchor.y);
     }
 }
 
 function updateLabelsFor(previewToken)
 {
+    if (losEyeEnabled())
+        _ensureMdiFont();
+    _labelRefId = previewToken.document?.id ?? null;
     const previewSourceId = previewToken.sourceId ?? previewToken.document?.id;
     for (const target of canvas.tokens.placeables)
     {
@@ -241,10 +442,29 @@ function updateLabelsFor(previewToken)
             continue;
         }
         const label = ensureLabel(target);
+        if (!label)
+            continue;
         const text = buildLabelText(previewToken, target);
         if (label.text !== text)
             label.text = text;
+        const seen = _losState(previewToken, target);
+        _syncEye(label, seen);
         positionLabel(target, label);
+        const clone = _livePlaceable(target);
+        if (clone === target)
+        {
+            removeGhostLabel(target);
+            continue;
+        }
+        const ghost = ensureGhostLabel(target);
+        if (!ghost)
+            continue;
+        const isRef = target.document?.id === _labelRefId;
+        const ghostText = isRef ? text : buildLabelText(previewToken, clone);
+        if (ghost.text !== ghostText)
+            ghost.text = ghostText;
+        _syncEye(ghost, isRef ? seen : _losState(previewToken, clone));
+        positionLabel(clone, ghost);
     }
 }
 
@@ -297,8 +517,6 @@ Hooks.on('destroyToken', (token) =>
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, MODE_KEY, {
-        name: 'Tactical Distance Labels',
-        hint: 'While dragging a token, show its distance and elevation delta below every other visible token.',
         scope: 'client',
         type: String,
         choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
@@ -306,11 +524,23 @@ Hooks.once('init', () =>
         config: false
     });
     game.settings.register(MODULE_ID, 'tacticalElevationStep', {
-        name: 'Tactical Label Elevation Step',
-        hint: 'Snap the elevation delta shown on tactical distance labels to the nearest multiple of this value. Gridless scenes are unaffected.',
         scope: 'client',
         type: Number,
         default: 0.5,
+        config: false
+    });
+    game.settings.register(MODULE_ID, 'tacticalLabelPosition', {
+        scope: 'client',
+        type: String,
+        choices: { above: 'Above the token', below: 'Below the token' },
+        default: 'below',
+        config: false
+    });
+    game.settings.register(MODULE_ID, 'tacticalMinZoomScale', {
+        scope: 'client',
+        type: Number,
+        default: 0,
+        range: { min: 0, max: 4, step: 0.1 },
         config: false
     });
 });

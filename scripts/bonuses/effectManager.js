@@ -21,7 +21,7 @@ import {
     linkEffectToItem,
     linkEffectToActor
 } from "./flagged-effects.js";
-import { createDurationMarks } from "./duration-widget.js";
+import { createDurationMarks, buildDuration } from "./duration-widget.js";
 import {
     addGlobalBonus,
     addConstantBonus,
@@ -31,7 +31,8 @@ import {
     linkBonusToActor,
     unlinkBonusFromItem,
     unlinkBonusFromActor,
-    supportsConsumeOnUsage
+    supportsConsumeOnUsage,
+    getBonusDetailString,
 } from "./genericBonuses.js";
 import { openItemBrowserDialog } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
@@ -882,7 +883,7 @@ async function pushRemoveEffect(targetID, effectID)
 async function fetchAvailableTags()
 {
     let tags = [];
-    // The Lancer core tags are typically in 'lancer-data.tags' or we can check all packs
+    // Core tags live in the lancer-data compendium.
     for (const pack of game.packs)
     {
         if (pack.metadata.type === "Item" && pack.metadata.packageName === "lancer-data")
@@ -923,6 +924,7 @@ async function fetchAvailableTags()
     return tags;
 }
 
+/** @returns {Promise<void>} */
 export async function executeEffectManager(options = {})
 {
     console.log('lancer-automations | Executing Effect Manager');
@@ -1325,7 +1327,7 @@ export async function executeEffectManager(options = {})
                     <label>Auto-consume on:</label>
                     <div class="la-multi-select" id="bonus-trigger">
                         <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel">
+                        <div class="la-multi-select-panel" id="bonus-trigger-panel">
                             ${consumptionTriggerCheckboxesHtml()}
                         </div>
                     </div>
@@ -1533,6 +1535,7 @@ export async function executeEffectManager(options = {})
                         <option value="miss">Miss</option>
                         <option value="elevation">Elevation</option>
                         <option value="terrain">Terrain</option>
+                        <option value="obstacle">Obstacle (Phasing)</option>
                         <option value="provoke">Provoke (Engagement &amp; Reactions)</option>
                     </select>
                 </div>
@@ -1582,7 +1585,7 @@ export async function executeEffectManager(options = {})
                     <label>Roll Types (empty = all):</label>
                     <div class="la-multi-select" id="bonus-reroll-rollTypes">
                         <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel">
+                        <div class="la-multi-select-panel" id="bonus-reroll-rollTypes-panel">
                             <label><input type="checkbox" value="attackRoll"> Attack Roll</label>
                             <label><input type="checkbox" value="techAttackRoll"> Tech Attack Roll</label>
                             <label><input type="checkbox" value="damageRoll"> Damage Roll</label>
@@ -1598,7 +1601,7 @@ export async function executeEffectManager(options = {})
                     <label>Roll Type:</label>
                     <div class="la-multi-select" id="bonus-rollTypes-roll">
                         <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel">
+                        <div class="la-multi-select-panel" id="bonus-rollTypes-roll-panel">
                             <label><input type="checkbox" value="all"> All Flows</label>
                             <label><input type="checkbox" value="attack"> Weapon Attacks</label>
                             <label><input type="checkbox" value="tech_attack"> Tech Attacks</label>
@@ -1622,7 +1625,7 @@ export async function executeEffectManager(options = {})
                     <label>Damage Roll Type:</label>
                     <div class="la-multi-select" id="bonus-rollTypes-damage">
                         <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel">
+                        <div class="la-multi-select-panel" id="bonus-rollTypes-damage-panel">
                             <label><input type="checkbox" value="all"> All Damage</label>
                             <label><input type="checkbox" value="melee"> Melee Damage</label>
                             <label><input type="checkbox" value="ranged"> Ranged Damage</label>
@@ -1818,7 +1821,6 @@ export async function executeEffectManager(options = {})
             });
             refreshEmHighlight();
 
-            // Duration toggle
             const toggleDurOpts = (prefix) =>
             {
                 const val = html.find(`#${prefix}-duration`).val();
@@ -1871,7 +1873,7 @@ export async function executeEffectManager(options = {})
 
             const _findStatusDesc = (id) =>
             {
-                const s = (CONFIG.statusEffects ?? []).find(x => x.id === id || x.name === id);
+                const s = (CONFIG.statusEffects ?? []).find(se => se.id === id || se.name === id);
                 if (!s)
                     return '';
                 const desc = /** @type {any} */ (s).description;
@@ -1955,13 +1957,12 @@ export async function executeEffectManager(options = {})
                 $input.val(nextValue).trigger('change');
             });
 
-            // Saved Status
             html.find('#cust-saved').change(e =>
             {
-                const val = $(e.currentTarget).val();
-                if (val)
+                const savedStatusName = $(e.currentTarget).val();
+                if (savedStatusName)
                 {
-                    html.find('#cust-name').val(val);
+                    html.find('#cust-name').val(savedStatusName);
                     const icon = $(e.currentTarget).find(':selected').data('icon');
                     if (icon)
                     {
@@ -1978,7 +1979,6 @@ export async function executeEffectManager(options = {})
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             });
 
-            // Standard Effect Grid Selection
             html.find('.std-effect-option').click(function()
             {
                 const id = $(this).data('id');
@@ -2004,7 +2004,6 @@ export async function executeEffectManager(options = {})
                 $(this).find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
             });
 
-            // Set initial state for standard grid
             const initStdGrid = () =>
             {
                 const initialId = html.find('#std-effect').val();
@@ -2029,7 +2028,6 @@ export async function executeEffectManager(options = {})
                 });
             });
 
-            // Save Status button
             html.find('.save-status-btn').click(async () =>
             {
                 const name = String(html.find('#cust-name').val() || '').trim();
@@ -2049,8 +2047,8 @@ export async function executeEffectManager(options = {})
                 const $sel = html.find('#cust-saved');
                 const prev = String($sel.val() || '');
                 $sel.find('option:not(:first)').remove();
-                for (const s of list)
-                    $sel.append(`<option value="${s.name}" data-icon="${s.icon}">${s.name}</option>`);
+                for (const savedStatus of list)
+                    $sel.append(`<option value="${savedStatus.name}" data-icon="${savedStatus.icon}">${savedStatus.name}</option>`);
                 $sel.val(prev || name);
                 ui.notifications.info(`Saved "${name}" to custom statuses.`);
             });
@@ -2060,7 +2058,7 @@ export async function executeEffectManager(options = {})
                 'bonus-applyToCondition': { title: 'Apply-to Condition',   def: '(target, state, reactorToken) => { return true; }' },
                 'std-evaluate':           { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
                 'cust-evaluate':          { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
-                'cust-changes':           { title: 'Active Effect Changes', def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": "1" }\n]' },
+                'cust-changes':           { title: 'Active Effect Changes', def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": 1 }\n]' },
             };
             const _rebuildPresetSelect = (prefix) =>
             {
@@ -2084,12 +2082,12 @@ export async function executeEffectManager(options = {})
                         title: 'Save Preset',
                         content: '<p style="padding:6px 8px;">Preset name:</p><input type="text" id="preset-name-input" style="width:100%; padding:4px;">',
                         buttons: {
-                            save: { icon: '<i class="fas fa-save"></i>', label: 'Save', callback: (h) => resolve(String(h.find('#preset-name-input').val() || '').trim()) },
+                            save: { icon: '<i class="fas fa-save"></i>', label: 'Save', callback: (dlgHtml) => resolve(String(dlgHtml.find('#preset-name-input').val() || '').trim()) },
                             cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel', callback: () => resolve('') }
                         },
                         default: 'save',
                         close: () => resolve(''),
-                        render: (h) => setTimeout(() => h.find('#preset-name-input').focus(), 50)
+                        render: (dlgHtml) => setTimeout(() => dlgHtml.find('#preset-name-input').focus(), 50)
                     }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
                 });
                 if (!name)
@@ -2182,23 +2180,7 @@ export async function executeEffectManager(options = {})
                     const turnsInputRaw = Number.parseInt(String(html.find('#std-turns').val()));
                     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
 
-                    let duration = {
-                        label: 'indefinite',
-                        turns: null,
-                        rounds: null
-                    };
-                    if (durationLabel === 'permanent')
-                        duration.label = 'permanent';
-                    else if (durationLabel !== 'indefinite')
-                    {
-                        const isOriginTurn = game.combat?.current?.tokenId === originID;
-                        let turns;
-                        if (durationLabel === 'end' && isOriginTurn)
-                            turns = turnsInput + 1;
-                        else
-                            turns = turnsInput === 0 ? 1 : turnsInput;
-                        duration = { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
-                    }
+                    const duration = buildDuration(durationLabel, originID, turnsInput);
 
                     const consumption = getTriggerConfig(html, 'std');
                     const extraOptions = {};
@@ -2259,23 +2241,7 @@ export async function executeEffectManager(options = {})
                     if (!name)
                         return ui.notifications.error("Name is required!");
 
-                    let duration = {
-                        label: 'indefinite',
-                        turns: null,
-                        rounds: null
-                    };
-                    if (durationLabel === 'permanent')
-                        duration.label = 'permanent';
-                    else if (durationLabel !== 'indefinite')
-                    {
-                        const isOriginTurn = game.combat?.current?.tokenId === originID;
-                        let turns;
-                        if (durationLabel === 'end' && isOriginTurn)
-                            turns = turnsInput + 1;
-                        else
-                            turns = turnsInput === 0 ? 1 : turnsInput;
-                        duration = { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
-                    }
+                    const duration = buildDuration(durationLabel, originID, turnsInput);
 
                     const consumption = getTriggerConfig(html, 'cust');
                     const extraOptions = {};
@@ -2344,97 +2310,6 @@ export async function executeEffectManager(options = {})
                 }
             });
 
-            // Shared bonus detail helpers
-            const getBonusDetailString = (bonus) =>
-            {
-                if (bonus.type === 'accuracy')
-                    return `Accuracy +${bonus.val}`;
-                if (bonus.type === 'difficulty')
-                    return `Difficulty +${bonus.val}`;
-                if (bonus.type === 'stat')
-                {
-                    const name = bonus.stat?.split('.').pop() || bonus.stat;
-                    if ((bonus.statMode || 'add') === 'replace')
-                        return `${name} = ${bonus.val}`;
-                    return `${name} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
-                }
-                if (bonus.type === 'damage')
-                {
-                    const mode = bonus.damageMode || 'add';
-                    const entries = bonus.damage || [];
-                    if (mode === 'change_type')
-                    {
-                        const parts = entries.map(dmg =>
-                        {
-                            const from = (dmg.from && dmg.from !== DAMAGE_CHANGE_TYPE_ALL) ? dmg.from : 'All';
-                            return `${from} → ${dmg.to}`;
-                        });
-                        return `Change Type: ${parts.join(', ')}`;
-                    }
-                    const body = entries.map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
-                    if (mode === 'replace')
-                        return `Replace: ${body}`;
-                    if (mode === 'add_base')
-                        return `Add: ${body}`;
-                    return body;
-                }
-                if (bonus.type === 'tag')
-                {
-                    if (bonus.removeTag)
-                        return `Remove Tag: ${bonus.tagName}`;
-                    const action = bonus.tagMode === 'override' ? 'Set' : 'Add';
-                    return `${action} ${bonus.tagName} ${bonus.val}`;
-                }
-                if (bonus.type === 'range')
-                {
-                    const rangeLabel = bonus.rangeMode === 'override' ? 'Set' : bonus.rangeMode === 'change' ? 'Change All →' : 'Add';
-                    return `${rangeLabel} ${bonus.rangeType} ${bonus.val}`;
-                }
-                if (bonus.type === 'immunity')
-                {
-                    if (bonus.subtype === 'effect' && bonus.effects)
-                        return `Immunity: ${bonus.effects.join(', ')}`;
-                    if ((bonus.subtype === 'damage' || bonus.subtype === 'resistance') && bonus.damageTypes)
-                        return `${bonus.subtype}: ${bonus.damageTypes.join(', ')}`;
-                    if (bonus.subtype === 'crit')
-                        return 'Immunity: Critical Hit';
-                    if (bonus.subtype === 'hit')
-                        return 'Immunity: Hit';
-                    if (bonus.subtype === 'miss')
-                        return 'Immunity: Miss';
-                    if (bonus.subtype === 'elevation')
-                        return 'Immunity: Elevation';
-                    if (bonus.subtype === 'terrain')
-                        return 'Immunity: Terrain';
-                    if (bonus.subtype === 'provoke')
-                        return 'Immunity: Provoke (Engagement & Reactions)';
-                    return bonus.subtype;
-                }
-                if (bonus.type === 'target_modifier')
-                {
-                    const labels = {
-                        invisible: 'Invisible (50% miss)',
-                        no_invisible: 'Not Invisible',
-                        no_cover: 'No Cover',
-                        soft_cover: 'Soft Cover',
-                        hard_cover: 'Hard Cover',
-                        ap: 'Armor Piercing',
-                        half_damage: 'Half Damage',
-                        paracausal: 'Cannot be Reduced',
-                        crit: 'Force Crit',
-                        hit: 'Force Hit',
-                        miss: 'Force Miss'
-                    };
-                    return `Target: ${labels[bonus.subtype] || bonus.subtype}`;
-                }
-                if (bonus.type === 'reroll')
-                {
-                    const rerollTypes = Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0 ? bonus.rollTypes.join(', ') : 'any';
-                    const subtype = String(bonus.subtype ?? 'retry');
-                    return `Reroll [${subtype}]: ${rerollTypes}`;
-                }
-                return bonus.type || 'Unknown';
-            };
             const renderBonusDetails = (bonus) =>
             {
                 if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
@@ -2557,7 +2432,6 @@ export async function executeEffectManager(options = {})
                     list.append(item);
                 });
 
-                // Bonuses section
                 const bonusList = html.find('#manage-bonus-list');
                 bonusList.empty();
                 const globalBonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
@@ -2770,7 +2644,7 @@ export async function executeEffectManager(options = {})
                 {
                     $fields.show();
                     $fields.find('.form-group').first().show();
-                    const classes = new Set(triggers.flatMap(t => bonusFilterMap[t] ?? []));
+                    const classes = new Set(triggers.flatMap(trigger => bonusFilterMap[trigger] ?? []));
                     classes.forEach(cls => $fields.find(`.${cls}`).show());
                 }
                 else
@@ -2816,7 +2690,7 @@ export async function executeEffectManager(options = {})
                         html.find(`#${targetId}`).val(selected[0].id).change();
                     else
                     {
-                        const ids = selected.map(t => t.id).join(', ');
+                        const ids = selected.map(token => token.id).join(', ');
                         html.find(`#${targetId}`).val(ids).change();
                     }
                 }
@@ -2916,7 +2790,6 @@ export async function executeEffectManager(options = {})
                 openStatusPicker(html.find(`#${targetId}`));
             });
 
-            // Add bonus handler
             const addBonusFromTab = async (type) =>
             {
                 const targetID = String(html.find('#bonus-target').val());

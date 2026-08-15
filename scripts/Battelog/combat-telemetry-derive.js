@@ -746,10 +746,10 @@ function _buildAwards(players, mvpId)
         let topValue = -Infinity;
         for (const p of players)
         {
-            const v = award.stat(p);
-            if (v > topValue)
+            const statValue = award.stat(p);
+            if (statValue > topValue)
             {
-                topValue = v;
+                topValue = statValue;
                 topPlayer = p;
             }
         }

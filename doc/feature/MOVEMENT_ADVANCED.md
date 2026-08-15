@@ -2,10 +2,10 @@
 
 [← Back to the README](../../README.md) · Main guide: [MOVEMENT.md](./MOVEMENT.md)
 
-In the **Combat & Movement** tab: boost detection, the movement cap, the boost offer, drag pathfinding, path-hex, and 3D distance under **Combat Flows**, and trigger-boundary splits under **Lancer Automations Ruler**; the debug ones are in the **Debug** tab.
+In the **Combat & Movement** tab: boost detection, the movement cap, the boost offer, drag pathfinding, path-hex, and 3D distance under **Combat Flows**, and trigger-boundary splits under **Lancer Automations Ruler**. The debug ones are in the **Debug** tab.
 
 > [!WARNING]
-> Boost detection and the movement cap are **beta**. They change how dragging a token behaves in combat, so test them before relying on them in combat.
+> Boost detection and the movement cap are **beta**. They change how dragging a token behaves in combat, so test them before relying on them.
 
 ---
 
@@ -44,22 +44,16 @@ If neither is enough, the move is rejected with a reminder to hold the free-move
 
 The triggers then fire as the token visually reaches each boundary, instead of all at once at the end of the move. The visible path is unchanged.
 
-On hex grids the sub-waypoints can occasionally drift the resolved path from the preview. Stabilization code softens it, but the clean fix is two hooks in Foundry's source (self-hosted only, in `resources/app/public/scripts/foundry.mjs`).
+Pathfinding and splits inject into the drag preview through a wrap of `Token#createTerrainMovementPath`; no core edit is needed. If a `modifyPlannedMovement` hook fires (the old source patch), LA uses it instead and the wrap stays dormant.
+
+On hex grids, native regions with movement behaviors can occasionally drift the resolved path from the preview. Stabilization code softens it; the clean fix is one hook in Foundry's source (self-hosted only, in `resources/app/public/scripts/foundry.mjs`).
 
 <details>
-<summary><b>The two source patches</b></summary>
+<summary><b>The source patch</b></summary>
 
 <br>
 
-**1. `Token#updatePlannedMovement`** (~line 144045), after the `if (!context)` return, before `getCompleteMovementPath`:
-
-```js
-Hooks.callAll("modifyPlannedMovement", this, context);
-```
-
-Without it, LA falls back to injecting waypoints at drop time (less precise preview, still works).
-
-**2. `TokenDocument#splitMovementPath`** (~line 54166, the `if (regionCheckpoint)` block). Match the token-anchored cell offset so an LA waypoint already on the hex suppresses Foundry's sub-pixel checkpoint (else: three dots, cube-line divergence). No fallback:
+**`TokenDocument#splitMovementPath`** (~line 54166, the `if (regionCheckpoint)` block). Match the token-anchored cell offset so an LA waypoint already on the hex suppresses Foundry's sub-pixel checkpoint (else: three dots, cube-line divergence). No fallback:
 
 ```js
 if ( regionCheckpoint ) {

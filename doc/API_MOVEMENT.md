@@ -7,7 +7,7 @@
 ## Movement Tracking
 
 <details>
-<summary><b><code>clearMoveData</code></b> · <b><code>getCumulativeMoveData</code></b> · <b><code>getIntentionalMoveData</code></b> · <b><code>clearMovementHistory</code></b> · <b><code>getMovementHistory</code></b> · <b><code>increaseMovementCap</code></b></summary>
+<summary><b><code>clearMoveData</code></b> → <code>void</code> · <b><code>getCumulativeMoveData</code></b> → <code>MoveSummary</code> · <b><code>getIntentionalMoveData</code></b> → <code>MoveSummary</code> · <b><code>clearMovementHistory</code></b> <sup>async</sup> → <code>void</code> · <b><code>getMovementHistory</code></b> → <code>MovementHistoryResult | { exists: false }</code> · <b><code>increaseMovementCap</code></b> → <code>void</code></summary>
 
 <br>
 
@@ -50,6 +50,6 @@ api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current t
 ```
 
 - **`intentional.regular` vs `intentional.free`**: drag movement split by whether it was free. `regular` counts against the movement cap (`regularCost` is what the boost/cap detection compares against), `free` is V-key movement that ignores the cap. `total` = `regular + free`.
-- **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on; a boost is counted each time intentional cost crosses a multiple of SPEED. See [MOVEMENT_ADVANCED.md](feature/MOVEMENT_ADVANCED.md).
+- **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on. A boost is counted each time intentional cost crosses a multiple of SPEED. See [MOVEMENT_ADVANCED.md](feature/MOVEMENT_ADVANCED.md).
 
 </details>

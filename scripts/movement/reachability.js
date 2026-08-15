@@ -2,7 +2,7 @@
 // Weighted movement reach: Dijkstra flood over grid cells using the ruler's own
 // per-cell cost core (evalCellStep), so the frontier matches what a drag would bill. style:ignore
 
-import { evalCellStep, getTerrainTypeMap, footprintShapesAt, isClimbingImmune, isTerrainImmune } from "./cost-rules.js";
+import { evalCellStep, getTerrainTypeMap, footprintShapesAt, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
 import { neighborKeys, getOccupiedOffsets, isHexGrid } from "../combat/grid-helpers.js";
 import { isHostile } from "../combat/overwatch.js";
 
@@ -171,6 +171,8 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
     const blockCells = new Set();
     const occupiedCells = occupiedOut ?? new Set();
     const moverSize = Number(token.actor?.system?.size ?? 1) || 1;
+    const moverIntangible = !!token.actor?.statuses?.has('intangible');
+    const moverPhasing = isPhasing(tokenDoc);
     for (const other of (canvas.tokens?.placeables ?? []))
     {
         try
@@ -180,7 +182,8 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
             if (!isBlockingCandidate(other))
                 continue;
             const otherSize = Number(other.actor?.system?.size ?? 1) || 1;
-            const hostileWall = otherSize >= moverSize && isHostile(other, token);
+            const otherIntangible = !!other.actor?.statuses?.has('intangible');
+            const hostileWall = !moverPhasing && otherSize >= moverSize && isHostile(other, token) && otherIntangible === moverIntangible;
             for (const off of getOccupiedOffsets(other))
             {
                 occupiedCells.add(`${off.col},${off.row}`);
@@ -352,16 +355,21 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
     };
     const blockCells = new Set();
     const moverSize = Number(token.actor?.system?.size ?? 1) || 1;
+    const moverIntangible = !!token.actor?.statuses?.has('intangible');
+    const moverPhasing = isPhasing(tokenDoc);
     for (const other of (canvas.tokens?.placeables ?? []))
     {
         try
         {
+            if (moverPhasing)
+                break;
             if (other.id === tokenDoc.id)
                 continue;
             if (!isBlockingCandidate(other))
                 continue;
             const otherSize = Number(other.actor?.system?.size ?? 1) || 1;
-            if (!(otherSize >= moverSize && isHostile(other, token)))
+            const otherIntangible = !!other.actor?.statuses?.has('intangible');
+            if (!(otherSize >= moverSize && isHostile(other, token) && otherIntangible === moverIntangible))
                 continue;
             for (const off of getOccupiedOffsets(other))
                 blockCells.add(`${off.row},${off.col}`);

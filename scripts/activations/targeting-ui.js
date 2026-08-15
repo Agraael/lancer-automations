@@ -4,9 +4,11 @@
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker,
+    clearSingleTargetShape, clearAreaTargetShape,
     rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW,
 } from '../interactive/canvas.js';
 import { firstKeyFor } from '../interactive/keybindings.js';
+import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
 import { playUiSound } from '../tah/sound.js';
 
@@ -25,6 +27,64 @@ export function targetInfoAllowed()
         mode = 'gm';
     }
     return mode === 'all' || (mode === 'gm' && !!game.user?.isGM);
+}
+
+export function chanceLabelsOn()
+{
+    try
+    {
+        return game.settings.get('lancer-automations', 'haseChanceLabels') === true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+const HASE_PATHS = { HULL: 'system.hull', AGI: 'system.agi', SYS: 'system.sys', ENG: 'system.eng', GRIT: 'system.grit' };
+
+export function haseSuccessChance(actor, skill, dc, { netAcc = 0, applyStatuses = true } = {})
+{
+    const key = String(skill ?? '').toUpperCase();
+    // npc grit rolls off tier
+    const path = (key === 'GRIT' && actor?.type === 'npc') ? 'system.tier' : HASE_PATHS[key];
+    if (!path || !actor?.system)
+        return null;
+    if (actor.statuses?.has?.('stunned') && (key === 'HULL' || key === 'AGI'))
+        return { hit: 0, crit: 0 };
+    const stat = Number(foundry.utils.getProperty(actor, path)) || 0;
+    let acc = netAcc;
+    if (applyStatuses)
+    {
+        if (actor.statuses?.has?.('impaired'))
+            acc -= 1;
+        if (actor.statuses?.has?.('bolster'))
+            acc += 2;
+    }
+    const { hit } = rollHitCritChance(stat, acc, Math.max(1, Number(dc) || 10));
+    return { hit, crit: 0 };
+}
+
+// P(A's total beats B's total), from the two CDFs; netAcc applies to A only.
+export function contestWinChance(actorA, skillA, actorB, skillB, { netAcc = 0 } = {})
+{
+    if (!haseSuccessChance(actorA, skillA, 10, { netAcc, applyStatuses: false })
+        || !haseSuccessChance(actorB, skillB, 10, { netAcc: 0, applyStatuses: false }))
+        return null;
+    const cdfA = (dc) => haseSuccessChance(actorA, skillA, dc, { netAcc, applyStatuses: false })?.hit ?? 0;
+    const cdfB = (dc) => haseSuccessChance(actorB, skillB, dc, { netAcc: 0, applyStatuses: false })?.hit ?? 0;
+    let win = 0;
+    // totals below the CDF floor (difficulty dice can push under 1) collapse into one bucket
+    const pLow = 1 - cdfB(1);
+    if (pLow > 0)
+        win += pLow * cdfA(1);
+    for (let total = 1; total <= 46; total++)
+    {
+        const pB = cdfB(total) - cdfB(total + 1);
+        if (pB > 0)
+            win += pB * cdfA(total + 1);
+    }
+    return { hit: win, crit: 0 };
 }
 
 // Returns {val,type,canSwitch}. canSwitch when both Range and Threat differ (then useThreat picks); else larger wins, Range on ties.
@@ -111,16 +171,16 @@ function injectToggleRow($form)
 {
     if ($form.find('.la-accdiff-area-toggles').length)
         return;
-    const $tg = $(`<div class="la-accdiff-area-toggles flexrow" style="gap:12px;justify-content:center;padding:4px 0 2px;font-size:11px;color:var(--dark-text, #fff);flex-wrap:wrap;">
+    const $toggleRow = $(`<div class="la-accdiff-area-toggles flexrow" style="gap:12px;justify-content:center;padding:4px 0 2px;font-size:11px;color:var(--dark-text, #fff);flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-elev" checked> Elevation aware</label>
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-autoelev" checked> Auto elevation</label>
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-prop" checked> Propagation</label>
     </div>`);
     const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
     if ($section.length)
-        $section.append($tg);
+        $section.append($toggleRow);
     else
-        $form.find('.accdiff-ranges').first().after($tg);
+        $form.find('.accdiff-ranges').first().after($toggleRow);
 }
 
 // Shortcut hint shown below the buttons only while a picker is active.
@@ -139,8 +199,7 @@ function ensureHint($form)
     return $hint;
 }
 
-// Full targeting system on a prepared row: AoE pattern buttons or the big single-target
-// button, shape strip, Range/Threat switch, pickers, auto-start.
+// AoE pattern buttons or single-target button, shape strip, Range/Threat switch, pickers, auto-start.
 export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe = [], hitChanceForFactory = () => null, hudHasTargets = null, autoStart = 'setting', pulseOwner = null } = {})
 {
     // pulseOwner: range pulse shown only while a picker from this HUD is running
@@ -203,9 +262,9 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             const isArea = !!shape.pattern && shape.pattern !== 'target';
             if (isArea)
             {
-                const lbl = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-                const tiltHint = shape.pattern === 'line' ? ` · ${lbl('lineTiltDown')}/${lbl('lineTiltUp')}: tilt` : '';
-                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${lbl('elevationDown')}/${lbl('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
+                const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
+                const tiltHint = shape.pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
+                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
             }
             else
                 $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
@@ -270,9 +329,9 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                     return;
                 }
                 const $hint = ensureHint($form);
-                const lbl = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-                const tiltHint = pattern === 'line' ? ` · ${lbl('lineTiltDown')}/${lbl('lineTiltUp')}: tilt` : '';
-                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${lbl('elevationDown')}/${lbl('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
+                const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
+                const tiltHint = pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
+                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
                 $lastActive = $aoeBtn;
                 $aoeBtn.addClass('la-targeting-active');
                 pickerRun = (async () =>
@@ -346,7 +405,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 strip.$strip.stop(true, true).slideUp(120);
         });
         injectToggleRow($form);
-        maybeAutoStart($form, { mode: autoStart, hudHasTargets });
+        maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
         return;
     }
 
@@ -409,9 +468,9 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         const isArea = !!shape.pattern && shape.pattern !== 'target';
         if (isArea)
         {
-            const lbl = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-            const tiltHint = shape.pattern === 'line' ? ` · ${lbl('lineTiltDown')}/${lbl('lineTiltUp')}: tilt` : '';
-            $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${lbl('elevationDown')}/${lbl('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
+            const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
+            const tiltHint = shape.pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
+            $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
         }
         else
             $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
@@ -529,7 +588,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         else
             strip.$strip.stop(true, true).slideUp(120);
     });
-    maybeAutoStart($form, { mode: autoStart, hudHasTargets });
+    maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
 }
 
 // Display keeps the base range; placement/pulse reach adds the area size under the hood.
@@ -632,6 +691,33 @@ export function clearAttackShapePreview()
 {
     rangePulse.clear(ATTACK_SHAPE_RANGE_OWNER);
 }
+
+export function clearAllAttackShapes()
+{
+    clearSingleTargetShape(); // end session first so the area clear's resync is a no-op
+    clearAreaTargetShape();
+    clearAttackShapePreview();
+}
+
+// Poll for a HUD form (50ms up to 2s), then hand it to the injector.
+export function pollForForm(findForm, onFound)
+{
+    let elapsed = 0;
+    const tick = () =>
+    {
+        const $form = findForm();
+        if ($form && $form.length)
+        {
+            onFound($form);
+            return;
+        }
+        elapsed += 50;
+        if (elapsed > 2000)
+            return;
+        setTimeout(tick, 50);
+    };
+    tick();
+}
 function updateAttackShapePreview(casterToken, range)
 {
     if (!casterToken || range <= 0)
@@ -648,7 +734,7 @@ function updateAttackShapePreview(casterToken, range)
 }
 
 // Auto-launch first targeting button. mode: 'setting' (opt-in world setting), 'ifEmpty' (no target set), 'force' (always), 'never'.
-function maybeAutoStart($form, { mode = 'setting', hudHasTargets = null } = {})
+function maybeAutoStart($form, $row, { mode = 'setting', hudHasTargets = null } = {})
 {
     if (mode === 'never')
         return;
@@ -673,7 +759,7 @@ function maybeAutoStart($form, { mode = 'setting', hudHasTargets = null } = {})
     }
     if (isAreaPickerActive() || isSingleTargetPickerActive())
         return;
-    const $targetBtn = $form.find('.la-accdiff-target-button').first();
+    const $targetBtn = $row.find('.la-accdiff-target-button').first();
     if ($targetBtn.length)
         setTimeout(() => $targetBtn.trigger('click'), 50);
 }

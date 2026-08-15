@@ -57,21 +57,21 @@ export async function setTokenFlag(tokenDoc, ns, key, value)
 {
     if (!tokenDoc)
         return;
-    const td = tokenDoc.document ?? tokenDoc;
-    if (game.user.isGM || td?.isOwner)
+    const resolvedDoc = tokenDoc.document ?? tokenDoc;
+    if (game.user.isGM || resolvedDoc?.isOwner)
     {
         if (value === undefined)
         {
-            await td.unsetFlag(ns, key).catch(() =>
+            await resolvedDoc.unsetFlag(ns, key).catch(() =>
             {});
         }
         else
-            await td.setFlag(ns, key, value);
+            await resolvedDoc.setFlag(ns, key, value);
         return;
     }
     await socketRequestWithAck('setTokenFlag', {
-        sceneId: td.parent?.id ?? canvas?.scene?.id,
-        tokenId: td.id,
+        sceneId: resolvedDoc.parent?.id ?? canvas?.scene?.id,
+        tokenId: resolvedDoc.id,
         ns,
         key,
         value,
@@ -176,7 +176,6 @@ export async function modifyCombatantActivationsSocket(combat, combatant, delta)
     });
 }
 
-/** Returns a Promise that resolves when an ack arrives for the given requestId. */
 export function awaitPendingAck(requestId)
 {
     return new Promise(resolve => _pendingFlowWaits.set(requestId, resolve));
@@ -206,19 +205,19 @@ const HANDLERS = {
         if (targetUserId && targetUserId !== game.userId)
             return;
         const reconstructed = [];
-        for (const r of reactions)
+        for (const reaction of reactions)
         {
-            const token = canvas.tokens.get(r.tokenId);
+            const token = canvas.tokens.get(reaction.tokenId);
             if (!token)
                 continue;
-            const item = r.itemId ? token.actor?.items.get(r.itemId) ?? null : null;
+            const item = reaction.itemId ? token.actor?.items.get(reaction.itemId) ?? null : null;
             reconstructed.push({
                 token,
                 item,
-                reactionName: r.reactionName,
-                itemName: r.itemName,
-                isGeneral: r.isGeneral,
-                triggerData: deserializeTriggerData(r.triggerData),
+                reactionName: reaction.reactionName,
+                itemName: reaction.itemName,
+                isGeneral: reaction.isGeneral,
+                triggerData: deserializeTriggerData(reaction.triggerData),
             });
         }
         if (reconstructed.length > 0)
@@ -431,10 +430,10 @@ const HANDLERS = {
         if (!game.user.isGM)
             return;
         const trigToken = payload.triggeringTokenId ? canvas.tokens.get(payload.triggeringTokenId) : null;
-        const kbItem = payload.itemId
-            ? canvas.tokens.placeables.find(t => t.actor?.items?.get(payload.itemId))?.actor?.items?.get(payload.itemId) ?? null
+        const knockbackItem = payload.itemId
+            ? canvas.tokens.placeables.find(placeable => placeable.actor?.items?.get(payload.itemId))?.actor?.items?.get(payload.itemId) ?? null
             : null;
-        applyKnockbackMoves(payload.moves, trigToken, payload.distance, payload.actionName || '', kbItem, { asVoluntary: !!payload.asVoluntary });
+        applyKnockbackMoves(payload.moves, trigToken, payload.distance, payload.actionName || '', knockbackItem, { asVoluntary: !!payload.asVoluntary });
     },
 
     createTokens: async (payload) =>
@@ -443,7 +442,7 @@ const HANDLERS = {
             return;
         const scene = game.scenes.get(payload.sceneId) || canvas.scene;
         const created = await scene.createEmbeddedDocuments('Token', payload.tokenDataArray);
-        const tokenIds = created.map(d => d.id);
+        const tokenIds = created.map(doc => doc.id);
         emitAck('createTokensResponse', payload.requestId, { tokenIds });
     },
 
@@ -733,9 +732,7 @@ const HANDLERS = {
     toolPresence: (payload) => onRemotePresence(payload),
     toolPresenceClear: (payload) => onRemotePresenceClear(payload),
 
-    // Battle Log: GM emits after clicking "Broadcast Recap"; every non-GM client
-    // plays the terminal intro. Sender doesn't get its own emit back (Foundry
-    // socket behavior), so the GM's own local playback is kicked off by gm-card.
+    // Foundry doesn't echo socket emits to sender, so GM playback is triggered locally in gm-card.
     battleLogPlayIntro: ({ outcome, battle, mvpId, extraLines }) =>
     {
         if (game.user.isGM)

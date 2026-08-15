@@ -20,7 +20,7 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 <img align="right" src="../img/mv-ruler.png" width="45%"/>
 
-Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling; disable lancer-speed-provider if you have it).
+Enable it with **`enableBuiltinSpeedProvider`** (reload after toggling, and disable lancer-speed-provider if you have it).
 
 While you drag a token, the ruler shows the **movement cost** and colors the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colors. All five colors are set in **Ruler Speed Colors**.
 
@@ -71,7 +71,7 @@ With Terrain Height Tools, the token also **auto-elevates** to sit on the terrai
 
 A token moves with a **movement type**: walk, fly, crawl (only while prone), forced, teleport, or ignore-elevation (skips auto-elevation). Gaining a **flying** or **hover** status switches the token to fly automatically, and back to walk when it's removed.
 
-Press **M** for the **movement wheel**: outside a drag it opens a radial picker; during a drag it cycles the active type without moving the token.
+Press **M** for the **movement wheel**: outside a drag it opens a radial picker. During a drag it cycles the active type without moving the token.
 
 <br clear="right"/>
 

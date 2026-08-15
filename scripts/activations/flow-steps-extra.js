@@ -59,8 +59,7 @@ export async function throwChoiceStep(state)
     return true;
 }
 
-// After v3's initAttackData builds acc_diff, mirror LA's throw choice into the native
-// thrown flag so v3's attack HUD opens with the checkbox ticked (and range/rules update).
+// Mirror LA throw choice into native thrown flag so the attack HUD checkbox opens ticked.
 export async function syncThrowToAccDiffStep(state)
 {
     const isThrow = !!state.la_extraData?.is_throw;
@@ -70,8 +69,7 @@ export async function syncThrowToAccDiffStep(state)
     return true;
 }
 
-// After v3's HUD closes, mirror the native thrown flag BACK into LA's is_throw so the user
-// can opt into throw mechanics via the HUD checkbox without going through LA's dialog.
+// Mirror native thrown flag back to la_extraData so the HUD checkbox can trigger throw mechanics.
 export async function syncAccDiffToThrowStep(state)
 {
     if (state.data?.acc_diff?.weapon?.thrown)
@@ -101,16 +99,16 @@ export async function throwDeployStep(state)
     {
         if (hitResults[i]?.hit)
         {
-            const tDoc = hitResults[i]?.target ?? accDiffTargetToken(targetInfos[i]);
-            deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
+            const tokenDoc = hitResults[i]?.target ?? accDiffTargetToken(targetInfos[i]);
+            deployTarget = tokenDoc?.object || (tokenDoc?.id ? canvas.tokens.get(tokenDoc.id) : null) || tokenDoc;
             if (deployTarget)
                 break;
         }
     }
     if (!deployTarget && targetInfos.length > 0)
     {
-        const tDoc = accDiffTargetToken(targetInfos[0]);
-        deployTarget = tDoc?.object || (tDoc?.id ? canvas.tokens.get(tDoc.id) : null) || tDoc;
+        const tokenDoc = accDiffTargetToken(targetInfos[0]);
+        deployTarget = tokenDoc?.object || (tokenDoc?.id ? canvas.tokens.get(tokenDoc.id) : null) || tokenDoc;
     }
 
     const multipleTargets = targetInfos.length > 1;
@@ -318,7 +316,7 @@ export async function playBasicRangedFXIfNeeded(state)
     return true;
 }
 
-// Damage flows spawned from a basic attack pick up tags/bonuses injected on the attack.
+// Damage flows spawned from a basic attack pick up tags/damage/bonuses injected on the attack.
 export async function pullInjectedTagsFromAttack(state)
 {
     const tags = ActiveFlowState.current?.injectedTags;
@@ -329,6 +327,16 @@ export async function pullInjectedTagsFromAttack(state)
         state.data.tags = [...(state.data.tags || []), ...tags];
         state.la_extraData = state.la_extraData || {};
         state.la_extraData.injectedTags = tags;
+    }
+
+    const damage = ActiveFlowState.current?.injectedDamage;
+    if (Array.isArray(damage) && damage.length > 0)
+    {
+        if (!state.data)
+            state.data = {};
+        state.data.damage = [...(state.data.damage || []), ...damage];
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.injectedDamage = damage;
     }
 
     const flowBonus = ActiveFlowState.current?.flow_bonus;

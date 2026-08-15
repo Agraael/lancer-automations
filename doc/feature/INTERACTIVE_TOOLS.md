@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md) · API: [API_INTERACTIVE.md](../API_INTERACTIVE.md)
 
-Cards that ask players to choose or vote, and on-canvas tools to pick, place, and move tokens and zones. Automations and macros call these; the function signatures are in [API_INTERACTIVE.md](../API_INTERACTIVE.md).
+Cards that ask players to choose or vote, and on-canvas tools to pick, place, and move tokens and zones. Automations and macros call these. The function signatures are in [API_INTERACTIVE.md](../API_INTERACTIVE.md).
 
 ---
 
@@ -13,8 +13,8 @@ Cards that ask players to choose or vote, and on-canvas tools to pick, place, an
 A choice card pauses and waits for a player to pick. `startChoiceCard` has four modes:
 
 - **OR** - pick one option, the card closes.
-- **AND** - every option must be clicked; each runs as soon as it's confirmed.
-- **Vote** and **Hidden Vote** - the card is broadcast to its recipients; you watch a live tally and click **Confirm** to resolve (hidden keeps votes secret until then, ties are broken by you).
+- **AND** - every option must be clicked. Each runs as soon as it's confirmed.
+- **Vote** and **Hidden Vote** - the card is broadcast to its recipients. You watch a live tally and click **Confirm** to resolve (hidden keeps votes secret until then, ties are broken by you).
 
 **`userIdControl`** routes a card to one player or a list (first to respond wins). A non-interactive **waiting card** (`startWaitCard`) shows "waiting for X" in the meantime.
 
@@ -72,7 +72,9 @@ For area effects it switches to **blast / cone / line / burst**: place the shape
 
 <img align="right" src="../img/it-zone.png" width="45%"/>
 
-**placeZone** drops Blast / Cone / Line zones (through TemplateMacro). A zone can apply **status effects** to anyone inside, deal damage as a **dangerous zone**, or mark **difficult terrain** for the [ruler](./MOVEMENT.md). A zone can also follow a token.
+**placeZone** drops Blast / Burst / Cone / Line zones (through TemplateMacro). A zone can apply **status effects** to anyone inside, deal damage as a **dangerous zone**, or mark **difficult terrain** for the [ruler](./MOVEMENT.md). A zone can also follow a token.
+
+For one-off effects you can skip the API: place a template by hand and attach the behaviour to it with [TemplateMacro](https://github.com/Agraael/templatemacro).
 
 <br clear="right"/>
 

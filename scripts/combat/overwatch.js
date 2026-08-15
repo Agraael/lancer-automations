@@ -44,17 +44,13 @@ export function isHostile(reactor, mover)
     const disposition = getDispositionData(reactor, mover);
     if (disposition.factionDisposition !== undefined)
     {
-        const disp = disposition.factionDisposition;
-        return disp === CONST.TOKEN_DISPOSITIONS.HOSTILE || disp === CONST.TOKEN_DISPOSITIONS.SECRET;
+        const factionDisposition = disposition.factionDisposition;
+        return factionDisposition === CONST.TOKEN_DISPOSITIONS.HOSTILE || factionDisposition === CONST.TOKEN_DISPOSITIONS.SECRET;
     }
     return (disposition.isAFriendly && disposition.isBHostile) || (disposition.isAHostile && disposition.isBFriendly);
 }
 
-/**
- * Disposition of `other` as seen from `viewer`. Only defers to token-factions
- * when its advanced-teams mode is on (its getDisposition resolves the team
- * matrix); every other mode collapses to hostile/friendly, so we fall back to
- * `other`'s own token disposition there to keep NEUTRAL and SECRET distinct.
+/** Returns `other`'s token disposition; only uses token-factions when advanced-teams mode is on (the only mode that resolves the full team matrix).
  * @returns {number|null} a CONST.TOKEN_DISPOSITIONS value, or null if unknown
  */
 export function getRelativeDisposition(viewer, other)
@@ -88,7 +84,7 @@ export function checkOverwatchCondition(reactor, mover, startPos)
     if (manager)
     {
         const auras = manager.getTokenAuras(reactor);
-        const threatAura = auras.find(a => isThreatAura(a));
+        const threatAura = auras.find(aura => isThreatAura(aura));
 
         if (threatAura)
             return manager.isInside(mover, reactor, threatAura.config.id);
@@ -141,13 +137,13 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
             const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
             const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
 
-            const isTargetBad = movedToken.document.disposition === HOSTILE || movedToken.document.disposition === SECRET;
-            const isReactorBad = t.document.disposition === HOSTILE || t.document.disposition === SECRET;
+            const isTargetHostile = movedToken.document.disposition === HOSTILE || movedToken.document.disposition === SECRET;
+            const isReactorHostile = t.document.disposition === HOSTILE || t.document.disposition === SECRET;
 
             const isTargetFriendly = movedToken.document.disposition === FRIENDLY || movedToken.document.disposition === NEUTRAL;
             const isReactorFriendly = t.document.disposition === FRIENDLY || t.document.disposition === NEUTRAL;
 
-            if (!((isReactorFriendly && isTargetBad) || (isReactorBad && isTargetFriendly)))
+            if (!((isReactorFriendly && isTargetHostile) || (isReactorHostile && isTargetFriendly)))
                 return false;
         }
         return true;
@@ -162,7 +158,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         if (manager)
         {
             const auras = manager.getTokenAuras(reactor);
-            const threatAura = auras.find(a => isThreatAura(a));
+            const threatAura = auras.find(aura => isThreatAura(aura));
 
             if (threatAura)
             {
@@ -174,7 +170,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
 
         if (!isTriggered)
         {
-            const hasGaaSupport = manager?.getTokenAuras(reactor).some(a => isThreatAura(a));
+            const hasGaaSupport = manager?.getTokenAuras(reactor).some(aura => isThreatAura(aura));
 
             if (!hasGaaSupport)
             {
@@ -481,7 +477,9 @@ export async function drawDistanceDebug()
     return distance;
 }
 
-/** False if the mover can't provoke: hidden, disengage, provoke immunity, or intangible mismatch. Self-pairs always provoke. */
+/** False if the mover can't provoke: hidden, disengage, provoke immunity, or intangible mismatch. Self-pairs always provoke.
+ * @returns {boolean}
+ */
 export function canProvokeReaction(triggering, reactor, reasonOut = null)
 {
     if (!triggering || !reactor)

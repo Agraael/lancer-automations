@@ -584,7 +584,7 @@ export function initVisionFromEdge()
 {
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
         name: 'Vision From Edge',
-        hint: 'Compute vision from the token perimeter so large tokens can peek around corners.',
+        hint: 'Compute vision from the token perimeter instead of its center.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -622,7 +622,7 @@ export function initVisionFromEdge()
 
     game.settings.register(MODULE_ID, SETTING_SAMPLE_MODE, {
         name: 'Vision From Edge: Sample Density',
-        hint: 'Vision sample points per token, one sweep each. Token shape corners follows the real outline. Adaptive uses 8 for size 3+, else 4.',
+        hint: 'Vision sample points per token, one vision sweep each. Token shape follows the real outline; Adaptive uses 8 for size 3+, else 4.',
         scope: 'world',
         config: false,
         type: String,

@@ -13,19 +13,12 @@ import {
     TG,
     addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
     drawRangeHighlight, _groupCellsByDistance, _makeRangePulseTick, pointerToWorld,
+    teardownRangePulse,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
+import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
-/**
- * Place a template zone on the map using Lancer's WeaponRangeTemplate.
- * Delegates to templatemacro's `placeZone`, which supports three specialized zone types via options:
- *
- * **Dangerous zone** (triggers ENG check on entry/turn start, deals damage on failure):
- * ```js
- * placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
- * ```
- */
 /**
  * Tokens currently inside a placed template, ready to pass to executeDamageRoll.
  * Wraps templatemacro's `findContained` (elevation/terrain-aware, handles multi-cell
@@ -47,13 +40,79 @@ export function tokensInTemplate(templateOrResult)
         .filter(token => token?.actor);
 }
 
+/**
+ * Place a template zone on the map using Lancer's WeaponRangeTemplate.
+ * Delegates to templatemacro's `placeZone`, which supports three specialized zone types via options:
+ *
+ * **Dangerous zone** (triggers ENG check on entry/turn start, deals damage on failure):
+ * ```js
+ * placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
+ * ```
+ */
 export async function placeZone(casterToken, options = {})
+{
+    const results = await _placeZoneInner(casterToken, options);
+    await _applyZoneExpiry(results, casterToken, /** @type {any} */ (options).expires);
+    return results;
+}
+
+// expires: { on: 'ownerTurnStart' | 'ownerTurnEnd', originToken?, turns? } - template auto-deletes
+// on that combat event; turns > 1 survives that many occurrences before deleting.
+async function _applyZoneExpiry(results, casterToken, expires)
+{
+    if (!expires?.on || !results?.length)
+        return;
+    const originId = expires.originToken?.id ?? expires.originToken ?? casterToken?.id ?? null;
+    const remaining = Math.max(1, Number(expires.turns) || 1);
+    for (const placed of results)
+    {
+        if (placed?.template?.setFlag)
+            await placed.template.setFlag('lancer-automations', 'zoneExpires', { on: expires.on, tokenId: originId, remaining });
+    }
+}
+
+Hooks.on('combatTurnChange', async (combat, prior, current) =>
+{
+    if (!game.users.activeGM?.isSelf)
+        return;
+    const priorTokenId = prior?.combatantId ? combat.combatants.get(prior.combatantId)?.token?.id : null;
+    const currentTokenId = current?.combatantId ? combat.combatants.get(current.combatantId)?.token?.id : null;
+    const expired = [];
+    const ticked = [];
+    for (const template of (canvas.scene?.templates ?? []))
+    {
+        const expiry = template.getFlag?.('lancer-automations', 'zoneExpires');
+        if (!expiry?.on)
+            continue;
+        const hit = (expiry.on === 'ownerTurnStart' && expiry.tokenId === currentTokenId)
+            || (expiry.on === 'ownerTurnEnd' && expiry.tokenId === priorTokenId);
+        if (!hit)
+            continue;
+        const remaining = (Number(expiry.remaining) || 1) - 1;
+        if (remaining <= 0)
+            expired.push(template);
+        else
+            ticked.push({ template, expiry: { ...expiry, remaining } });
+    }
+    for (const template of expired)
+        await template.delete().catch(() => {});
+    for (const entry of ticked)
+        await entry.template.setFlag('lancer-automations', 'zoneExpires', entry.expiry);
+});
+
+async function _placeZoneInner(casterToken, options = {})
 {
     const _opts = /** @type {any} */ (options);
 
     // Place zones in templatemacro's Advanced Mode (custom render) unless explicitly opted out.
     if (_opts.useCustomRender !== false)
         _opts.tmacGraphics = { ..._opts.tmacGraphics, useCustomRender: true };
+
+    if (_opts.elevation === undefined && casterToken)
+        _opts.elevation = Number(casterToken.document?.elevation) || 0;
+
+    // elevationGated makes templatemacro's findContained ignore tokens outside the zone's elevation band.
+    _opts.tmacGraphics = { ..._opts.tmacGraphics, elevationGated: _opts.elevationAware !== false };
 
     // Direct placement: bypass interactive card when coordinates are provided
     if (_opts.x !== undefined && _opts.y !== undefined)
@@ -108,12 +167,25 @@ export async function placeZone(casterToken, options = {})
             description = "",
             icon,
             headerClass = "",
-            rangeOrigin = null
+            rangeOrigin = null,
+            elevationAware = true,
+            autoElevation = true
         } = /** @type {any} */ (options);
 
         const placedZones = [];
         let cancelled = false;
         let confirmed = false;
+        let autoElev = autoElevation !== false;
+        const casterElev = Number(casterToken?.document?.elevation) || 0;
+        const groundAt = (x, y) =>
+        {
+            const terrainAPI = globalThis.terrainHeightTools;
+            if (!terrainAPI)
+                return 0;
+            const offset = pixelToOffset(x, y);
+            return Number(getHexGroundElevation(offset.col, offset.row, terrainAPI)) || 0;
+        };
+        const zoneElevation = (x, y) => (autoElev ? groundAt(x, y) : casterElev);
 
         // rangeOrigin can be a {x, y} point to override the default casterToken origin
         if (range !== null && (casterToken || rangeOrigin))
@@ -134,20 +206,24 @@ export async function placeZone(casterToken, options = {})
                     );
                     const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: rangeAnchor?.document ? rangeAnchor : null });
                     canvas.app.ticker.add(wavePulse);
-                    return () =>
-                    {
-                        canvas.app.ticker.remove(wavePulse);
-                        destroyGraphics(rangeHighlight);
-                        destroyGraphics(pulseGraphic);
-                    };
+                    return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                 },
             });
         }
 
         const restoreLayerClick = suppressTokenLayerClick();
 
+        const refreshElevReadout = () =>
+        {
+            const readout = cardEl?.find?.('[data-role="zone-elev-readout"]');
+            if (readout?.length)
+                readout.text(`Elevation: ${autoElev ? 'auto' : casterElev}`);
+        };
+
+        const tmDrag = game.modules.get('templatemacro')?.api;
         const doCleanup = () =>
         {
+            tmDrag?.setPreviewElevationBase?.(null);
             rangePulse.clear('interactive:placeZone');
             restoreLayerClick();
             _removeInfoCard(cardEl);
@@ -164,6 +240,7 @@ export async function placeZone(casterToken, options = {})
             count,
             zoneType: type,
             zoneSize: size,
+            elevationAware,
             relatedToken: casterToken,
             onConfirm: () =>
             {
@@ -174,6 +251,17 @@ export async function placeZone(casterToken, options = {})
                 cancelled = true;
             }
         });
+
+        cardEl.find('[data-role="zone-elev-toggle"]').on('change', function ()
+        {
+            _opts.tmacGraphics = { ..._opts.tmacGraphics, elevationGated: this.checked };
+        });
+        cardEl.find('[data-role="zone-auto-elev"]').on('change', function ()
+        {
+            autoElev = this.checked;
+            refreshElevReadout();
+        });
+        refreshElevReadout();
 
         // Lancer binds template-placement cancel to right-click (oncontextmenu) and has no Escape
         // handler. Swallow right-click; only Escape cancels the current placement.
@@ -231,11 +319,12 @@ export async function placeZone(casterToken, options = {})
         // One interactive placement; returns a { x, y, template } result, or null if cancelled.
         const placeOne = async () =>
         {
+            tmDrag?.setPreviewElevationBase?.((doc) => zoneElevation(doc.x, doc.y));
             const onMove = (e) =>
             {
                 const { x, y } = pointerToWorld(e);
-                const o = pixelToOffset(x, y);
-                playTargetingMove(o.col, o.row);
+                const offset = pixelToOffset(x, y);
+                playTargetingMove(offset.col, offset.row);
             };
             canvas.stage.on('pointermove', onMove);
             try
@@ -261,6 +350,7 @@ export async function placeZone(casterToken, options = {})
             }
             finally
             {
+                tmDrag?.setPreviewElevationBase?.(null);
                 canvas.stage.off('pointermove', onMove);
             }
         };
@@ -305,6 +395,16 @@ export async function placeZone(casterToken, options = {})
                 }
 
                 const result = await placeOne();
+
+                if (result?.template && !tmDrag?.setPreviewElevationBase)
+                {
+                    try
+                    {
+                        await result.template.update({ elevation: zoneElevation(result.template.x, result.template.y) });
+                    }
+                    catch (_)
+                    { /* ignore */ }
+                }
 
                 // Flags may have flipped while awaiting the placement.
                 if (cancelled)

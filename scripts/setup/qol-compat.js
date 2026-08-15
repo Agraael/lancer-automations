@@ -1,4 +1,4 @@
-// csm-lancer-qol's combatTracking treats every updateCombat as a turn change, so flag-only combat updates (Battle Log telemetry, reinforcements) duplicate its effects report and over-tick its timed effects. Re-register it behind the delta guard it's missing.
+// csm-lancer-qol combatTracking lacks a delta guard, so flag-only updates duplicate effects and over-tick timers.
 Hooks.once('ready', () =>
 {
     if (!game.modules.get('csm-lancer-qol')?.active)

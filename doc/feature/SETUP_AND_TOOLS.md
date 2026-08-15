@@ -18,7 +18,7 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
 ## Optional content packs
 
-**`enableLaSossisItems`** loads a shared set of item and NPC automations; **`enablePersonalStuff`** loads the author's own personal set. Both load as startup scripts, so toggling either needs a reload.
+**`enableLaSossisItems`** loads my prebuilt item activations. **`enablePersonalStuff`** loads my personal tweaks, probably not useful to anyone else. Both load as startup scripts, so toggling either needs a reload.
 
 ---
 
@@ -33,6 +33,8 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 **Apply Fixes (LCP Data)** rebuilds compendium and actor item data with the module's patches: ammo metadata, merged multi-profile weapon text, and blank action names.
 
 **Reset to Defaults** clears all module settings and automations. (Export and Import are in the [Automation Engine](./AUTOMATION_ENGINE.md) guide.)
+
+---
 
 ## News & releases
 

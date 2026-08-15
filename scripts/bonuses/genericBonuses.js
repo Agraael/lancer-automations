@@ -6,21 +6,44 @@ import { playBonusAddedFX } from "../fx/actionFX.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
 import { linkTierGate } from "../interactive/deployables.js";
 
-/**
- * Session cache for compiled lambda conditions.
- * When a bonus `condition` field starts with `@@fn:`, the remainder is the serialized function source.
- * Compiled functions are cached here (keyed on source string) to avoid recompiling on every evaluation.
- * The source itself lives in the actor flag and survives page reloads; this cache is purely a
- * performance optimization and is rebuilt on demand.
- */
+// Re-inject our row when Svelte re-renders a roll HUD. formWasSeen stops it disconnecting on mutations that land before the HUD exists.
+function observeHudReinject(formSelector, rowSelector, doInject, onStillPresent = null)
+{
+    let reinjectPending = false;
+    let formWasSeen = false;
+    const observer = new MutationObserver(() =>
+    {
+        const $form = $(formSelector);
+        if ($form.length === 0)
+        {
+            if (formWasSeen)
+                observer.disconnect();
+            return;
+        }
+        formWasSeen = true;
+        if ($form.find(rowSelector).length === 0 && !reinjectPending)
+        {
+            reinjectPending = true;
+            setTimeout(() =>
+            {
+                doInject();
+                reinjectPending = false;
+            }, 50);
+        }
+        else
+            onStillPresent?.($form);
+    });
+
+    const $hudzone = $('#hudzone');
+    observer.observe($hudzone.length > 0 ? $hudzone[0] : document.body, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 600000);
+    return observer;
+}
+
+// Caches compiled @@fn: lambda sources to avoid recompiling on every evaluation.
 const serializedConditionCache = new Map();
 
-/**
- * Session cache for compiled `applyToCondition` lambdas on target_modifier bonuses.
- * Per-target gate (vs `condition` which gates the whole bonus).
- * Lambda receives `(target, state, reactorToken)` and must return a boolean synchronously.
- * Source strings live under `@@fn:` in actor flags like regular `condition` lambdas.
- */
+// Per-target gate cache for applyToCondition lambdas; same @@fn: pattern, must be synchronous.
 const applyToConditionCache = new Map();
 
 /**
@@ -567,9 +590,7 @@ function createGenericBonusStep(flowType)
             addUsageCandidates(collected.targetedDamageBonuses, 'targetedDamage');
             state.la_extraData.bonusUsage = bonusUsage;
 
-            // For damage flows: inject target_modifier subtypes into state.data
-            // so showDamageHUD picks them up when creating damage_hud_data.
-            // Also poll for damage_hud_data to hook replaceTargets for new targets.
+            // Pre-set target_modifier subtypes in state.data so showDamageHUD sees them; hooks replaceTargets.
             let dmgLive = null;
             if (flowType === 'damage')
             {
@@ -707,7 +728,6 @@ function createGenericBonusStep(flowType)
                         return this;
                     };
                 };
-                // Poll briefly; damage_hud_data is created in the next flow step
                 // Click per-target checkboxes in the damage HUD to trigger Svelte reactivity
                 const setDmgCheckbox = (modifier, tokenIds, desired) =>
                 {
@@ -834,7 +854,6 @@ function createGenericBonusStep(flowType)
                     const globalMods = attackMods.filter(m => !Array.isArray(m.applyTo) || m.applyTo.length === 0 || !multiTarget);
                     const perTargetMods = multiTarget ? attackMods.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
 
-                    // Build toggle change handler
                     const onToggle = (modifier, isOn) =>
                     {
                         const modKey = modifier.id || modifier.subtype;
@@ -1251,6 +1270,105 @@ async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, re
 }
 
 /**
+ * One-line display string for an LA bonus struct (Effect Manager, status panel).
+ * Multi bonuses are the caller's job; this formats a single entry.
+ * @param {any} bonus
+ * @returns {string}
+ */
+export function getBonusDetailString(bonus)
+{
+    if (bonus.type === 'accuracy')
+        return `Accuracy +${bonus.val}`;
+    if (bonus.type === 'difficulty')
+        return `Difficulty +${bonus.val}`;
+    if (bonus.type === 'stat')
+    {
+        const name = bonus.stat?.split('.').pop() || bonus.stat;
+        if ((bonus.statMode || 'add') === 'replace')
+            return `${name} = ${bonus.val}`;
+        return `${name} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
+    }
+    if (bonus.type === 'damage')
+    {
+        const mode = bonus.damageMode || 'add';
+        const entries = bonus.damage || [];
+        if (mode === 'change_type')
+        {
+            const parts = entries.map(dmg =>
+            {
+                const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
+                return `${from} → ${dmg.to}`;
+            });
+            return `Change Type: ${parts.join(', ')}`;
+        }
+        const body = entries.map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
+        if (mode === 'replace')
+            return `Replace: ${body}`;
+        if (mode === 'add_base')
+            return `Add: ${body}`;
+        return body;
+    }
+    if (bonus.type === 'tag')
+    {
+        if (bonus.removeTag)
+            return `Remove Tag: ${bonus.tagName}`;
+        const action = bonus.tagMode === 'override' ? 'Set' : 'Add';
+        return `${action} ${bonus.tagName} ${bonus.val}`;
+    }
+    if (bonus.type === 'range')
+    {
+        const rangeLabel = bonus.rangeMode === 'override' ? 'Set' : bonus.rangeMode === 'change' ? 'Change All →' : 'Add';
+        return `${rangeLabel} ${bonus.rangeType} ${bonus.val}`;
+    }
+    if (bonus.type === 'immunity')
+    {
+        if (bonus.subtype === 'effect' && bonus.effects)
+            return `Immunity: ${bonus.effects.join(', ')}`;
+        if ((bonus.subtype === 'damage' || bonus.subtype === 'resistance') && bonus.damageTypes)
+            return `${bonus.subtype}: ${bonus.damageTypes.join(', ')}`;
+        if (bonus.subtype === 'crit')
+            return 'Immunity: Critical Hit';
+        if (bonus.subtype === 'hit')
+            return 'Immunity: Hit';
+        if (bonus.subtype === 'miss')
+            return 'Immunity: Miss';
+        if (bonus.subtype === 'elevation')
+            return 'Immunity: Elevation';
+        if (bonus.subtype === 'terrain')
+            return 'Immunity: Terrain';
+        if (bonus.subtype === 'obstacle')
+            return 'Immunity: Obstacle (Phasing)';
+        if (bonus.subtype === 'provoke')
+            return 'Immunity: Provoke (Engagement & Reactions)';
+        return bonus.subtype;
+    }
+    if (bonus.type === 'target_modifier')
+    {
+        const labels = {
+            invisible: 'Invisible (50% miss)',
+            no_invisible: 'Not Invisible',
+            no_cover: 'No Cover',
+            soft_cover: 'Soft Cover',
+            hard_cover: 'Hard Cover',
+            ap: 'Armor Piercing',
+            half_damage: 'Half Damage',
+            paracausal: 'Cannot be Reduced',
+            crit: 'Force Crit',
+            hit: 'Force Hit',
+            miss: 'Force Miss'
+        };
+        return `Target: ${labels[bonus.subtype] || bonus.subtype}`;
+    }
+    if (bonus.type === 'reroll')
+    {
+        const rerollTypes = Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0 ? bonus.rollTypes.join(', ') : 'any';
+        const subtype = String(bonus.subtype ?? 'retry');
+        return `Reroll [${subtype}]: ${rerollTypes}`;
+    }
+    return bonus.type || 'Unknown';
+}
+
+/**
  * Determines the appropriate icon for a bonus based on its type and value.
  * @param {object} bonus
  * @returns {string} The path to the SVG icon
@@ -1261,8 +1379,8 @@ export function getBonusIcon(bonus)
     const DIFF = "systems/lancer/assets/icons/white/difficulty.svg";
     const RANGE = "systems/lancer/assets/icons/white/range.svg";
     const MELEE = "systems/lancer/assets/icons/white/melee.svg";
-    const GENERIC = "systems/lancer/assets/icons/white/generic_item.svg";
-    const IMMUNITY = "modules/lancer-automations/icons/immunity.svg";
+    const GENERIC = "modules/lancer-automations/icons/pill.svg";
+    const IMMUNITY = "modules/lancer-automations/icons/dice-shield.svg";
 
     if (bonus.type === 'difficulty')
         return DIFF;
@@ -1590,38 +1708,7 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
 
     injectIntoCard();
 
-    // Re-inject on Svelte re-renders; only disconnect after formWasSeen or a pre-render mutation tears us down early.
-    let reinjectPending = false;
-    let formWasSeen = false;
-    const observer = new MutationObserver(() =>
-    {
-        const $form = $('form[id^="accdiff"]');
-        if ($form.length === 0)
-        {
-            if (formWasSeen)
-                observer.disconnect();
-            return;
-        }
-        formWasSeen = true;
-        if ($form.find('.csm-global-bonus-row').length === 0 && !reinjectPending)
-        {
-            reinjectPending = true;
-            setTimeout(() =>
-            {
-                injectIntoCard();
-                reinjectPending = false;
-            }, 50);
-        }
-    });
-
-    const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0)
-        observer.observe($hudzone[0], { childList: true, subtree: true });
-    else
-        observer.observe(document.body, { childList: true, subtree: true });
-
-    // Safety disconnect after 10 minutes (dialog should never live this long)
-    setTimeout(() => observer.disconnect(), 600000);
+    observeHudReinject('form[id^="accdiff"]', '.csm-global-bonus-row', injectIntoCard);
 
     // Always set up per-target injection with the same getter so it re-evaluates on each re-injection
     injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser);
@@ -1630,14 +1717,8 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     return injectIntoCard;
 }
 
-/**
- * Inject per-target accuracy/difficulty bonus checkboxes into each matching target card
- * inside the accdiff dialog. Uses a MutationObserver so it works for both the initial
- * render and for target cards added mid-dialog.
- *
- * State is already pre-set (via flow step + replaceTargets monkey-patch), so no button
- * clicking is needed at injection time, only on user toggle.
- */
+// Injects per-target acc/diff checkboxes; MutationObserver handles mid-dialog target additions.
+// State is pre-set so buttons only clicked on user toggle.
 function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser)
 {
     /**
@@ -2427,42 +2508,9 @@ export function injectKnockbackCheckbox(state)
         return true;
     };
 
-    // Try immediately
     doInject();
 
-    // MutationObserver to re-inject on Svelte re-renders. The formWasSeen flag prevents the
-    // observer from disconnecting on the first mutation BEFORE the HUD has finished rendering.
-    let reinjectPending = false;
-    let formWasSeen = false;
-    const observer = new MutationObserver(() =>
-    {
-        const $form = $('#damage-hud');
-        if ($form.length === 0)
-        {
-            if (formWasSeen)
-                observer.disconnect();
-            return;
-        }
-        formWasSeen = true;
-        if ($form.find('.csm-knockback-row').length === 0 && !reinjectPending)
-        {
-            reinjectPending = true;
-            setTimeout(() =>
-            {
-                doInject();
-                reinjectPending = false;
-            }, 50);
-        }
-    });
-
-    const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0)
-        observer.observe($hudzone[0], { childList: true, subtree: true });
-    else
-        observer.observe(document.body, { childList: true, subtree: true });
-
-    // Safety disconnect after 10 minutes
-    setTimeout(() => observer.disconnect(), 600000);
+    observeHudReinject('#damage-hud', '.csm-knockback-row', doInject);
 }
 
 /**
@@ -2548,38 +2596,11 @@ export function injectNoBonusDmgCheckbox(state)
 
     doInject();
 
-    let reinjectPending = false;
-    let formWasSeen = false;
-    const observer = new MutationObserver(() =>
+    observeHudReinject('#damage-hud', '.csm-no-bonus-dmg-row', doInject, ($form) =>
     {
-        const $form = $('#damage-hud');
-        if ($form.length === 0)
-        {
-            if (formWasSeen)
-                observer.disconnect();
-            return;
-        }
-        formWasSeen = true;
-        if ($form.find('.csm-no-bonus-dmg-row').length === 0 && !reinjectPending)
-        {
-            reinjectPending = true;
-            setTimeout(() =>
-            {
-                doInject();
-                reinjectPending = false;
-            }, 50);
-        }
-        else if (state.la_extraData._csmNoBonusDmg.enabled)
+        if (state.la_extraData._csmNoBonusDmg.enabled)
             applyStrikethrough($form);
     });
-
-    const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0)
-        observer.observe($hudzone[0], { childList: true, subtree: true });
-    else
-        observer.observe(document.body, { childList: true, subtree: true });
-
-    setTimeout(() => observer.disconnect(), 600000);
 }
 
 // Throttled checkbox in the damage HUD: drives global Half Damage; unchecking Half Damage drops it.
@@ -2658,36 +2679,7 @@ export function injectThrottledCheckbox(state)
 
     doInject();
 
-    let reinjectPending = false;
-    let formWasSeen = false;
-    const observer = new MutationObserver(() =>
-    {
-        const $form = $('#damage-hud');
-        if ($form.length === 0)
-        {
-            if (formWasSeen)
-                observer.disconnect();
-            return;
-        }
-        formWasSeen = true;
-        if ($form.find('.la-throttled-row').length === 0 && !reinjectPending)
-        {
-            reinjectPending = true;
-            setTimeout(() =>
-            {
-                doInject();
-                reinjectPending = false;
-            }, 50);
-        }
-    });
-
-    const $hudzone = $('#hudzone');
-    if ($hudzone.length > 0)
-        observer.observe($hudzone[0], { childList: true, subtree: true });
-    else
-        observer.observe(document.body, { childList: true, subtree: true });
-
-    setTimeout(() => observer.disconnect(), 600000);
+    observeHudReinject('#damage-hud', '.la-throttled-row', doInject);
 }
 
 export const genericAccuracyStepAttack = createGenericBonusStep("attack");
@@ -3000,6 +2992,7 @@ export function getGlobalBonuses(actor)
         .filter(bonus => linkTierGate(bonus, actor));
 }
 
+/** @returns {object|null} The bonus with that id, or null */
 export function getGlobalBonus(actor, bonusId)
 {
     if (!actor)
@@ -3010,8 +3003,7 @@ export function getGlobalBonus(actor, bonusId)
 
 Hooks.on("deleteActiveEffect", (effect) =>
 {
-    // Item-source AEs: statDirect/maxChanges reversal runs when the transferred copy leaves the
-    // actor (see Stage 8). removeGlobalBonus on an item still safely no-ops via the flag branch.
+    // Item-source AEs: reversal runs when the transferred copy leaves the actor; removeGlobalBonus on an item no-ops via the flag branch.
     const isItemParent = effect.parent?.documentName === 'Item';
 
     const linkedBonusId = effect.getFlag("lancer-automations", "linkedBonusId");
@@ -3084,6 +3076,7 @@ Hooks.on("deleteActiveEffect", (effect) =>
 });
 
 
+/** @returns {Promise<void>} */
 export async function injectBonusToFlowState(state, bonus)
 {
     if (!state)
@@ -3235,6 +3228,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
  * Idempotent - skips tokens whose actor already carries the runtime bonus for that template.
  * @param {any} item
  * @param {any[]} tokens
+ * @returns {Promise<void>}
  */
 export async function applyItemBonusTemplatesToTokens(item, tokens)
 {
@@ -3247,6 +3241,7 @@ export async function applyItemBonusTemplatesToTokens(item, tokens)
  * Materialize all bonus templates on prototype `actor` to the given tokens via addGlobalBonus.
  * @param {any} actor
  * @param {any[]} tokens
+ * @returns {Promise<void>}
  */
 export async function applyActorBonusTemplatesToTokens(actor, tokens)
 {
@@ -3294,6 +3289,7 @@ async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = u
     }
 }
 
+/** @returns {boolean} */
 export function supportsConsumeOnUsage(type, subtype = null)
 {
     if (['accuracy', 'difficulty', 'damage', 'target_modifier', 'reroll'].includes(type))
@@ -3321,6 +3317,7 @@ function _findStoredBonus(actor, bonusId)
 }
 
 // Burn one use of a bonus (dual-write uses + linked AE); removes it when exhausted. Auto-consume-triggered bonuses are skipped (their charges belong to the trigger engine).
+/** @returns {Promise<string|false>} The consumed bonus id, or false if nothing was spent */
 export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false } = {})
 {
     if (!actor || !bonus?.id)
@@ -3360,6 +3357,7 @@ export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false }
     return stored.id;
 }
 
+/** @returns {Promise<boolean>} True if a charge was spent */
 export async function consumeImmunityUse(actor, subtype, state = null)
 {
     if (!actor)
@@ -3460,9 +3458,9 @@ async function _cleanupBonusRuntimes(actor, predicate)
 }
 
 /**
- * Cleanup runtime bonuses on `actor` that originated from `item`.
- * @param {any} item
- * @param {any} actor
+ * Cleanup runtime bonuses on `actor` that originated from a foreign source.
+ * @param {Actor} actor
+ * @param {Function} isForeignSource
  */
 // Duplicated tokens copy runtime bonuses stamped with the ORIGINAL token's uuids; purge those.
 export async function cleanupForeignBonusRuntimes(actor, isForeignSource)
@@ -3474,6 +3472,7 @@ export async function cleanupForeignBonusRuntimes(actor, isForeignSource)
     });
 }
 
+/** @returns {Promise<void>} */
 export async function cleanupItemBonusesFromActor(item, actor)
 {
     await _cleanupBonusRuntimes(actor, bonus => bonus.sourceItemUuid === item.uuid);
@@ -3482,6 +3481,7 @@ export async function cleanupItemBonusesFromActor(item, actor)
 /**
  * Cleanup runtime bonuses on all active-token actors originating from an actor template on `actor`.
  * @param {any} actor
+ * @returns {Promise<void>}
  */
 export async function cleanupActorBonusesFromTokens(actor)
 {
@@ -3521,6 +3521,7 @@ async function _cleanupActorBonusTemplateFromTokens(actor, templateId)
  * @param {Object} options.bonusData
  * @param {Object} [options.addOptions]
  * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} Stamped { item, templateId } pairs
  */
 export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOptions = {})
 {
@@ -3545,12 +3546,35 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
 }
 
 /**
+ * linkBonusToItem, but idempotent: skips items already carrying a template with the same bonusData.id.
+ * Requires bonusData.id.
+ * @param {Object} options  Same shape as linkBonusToItem
+ * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} Stamped {item, templateId} pairs; empty when every item already had it
+ */
+export async function ensureLinkedBonus(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { items = [], bonusData } = /** @type {any} */ (options);
+    if (!bonusData?.id)
+    {
+        console.warn("lancer-automations | ensureLinkedBonus: bonusData.id is required for dedupe.");
+        return linkBonusToItem(options, extraOptions);
+    }
+    const missing = items.filter(item => item?.documentName === 'Item'
+        && !(item.getFlag?.('lancer-automations', 'bonusTemplates') || []).some(template => template.bonusData?.id === bonusData.id));
+    if (!missing.length)
+        return [];
+    return linkBonusToItem({ ...options, items: missing }, extraOptions);
+}
+
+/**
  * Stamp a bonus template on each actor (prototype) and immediately materialize on active tokens.
  * @param {Object} options
  * @param {any[]} options.actors
  * @param {Object} options.bonusData
  * @param {Object} [options.addOptions]
  * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} Stamped { actor, templateId } pairs
  */
 export async function linkBonusToActor(options = /** @type {any} */ ({}), extraOptions = {})
 {
@@ -3577,6 +3601,7 @@ export async function linkBonusToActor(options = /** @type {any} */ ({}), extraO
  * @param {Object} options
  * @param {any[]} options.items
  * @param {string} options.templateId
+ * @returns {Promise<any[]>} The removed bonus templates
  */
 export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
 {
@@ -3606,6 +3631,7 @@ export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
  * @param {Object} options
  * @param {any[]} options.actors
  * @param {string} options.templateId
+ * @returns {Promise<any[]>} The removed bonus templates
  */
 export async function unlinkBonusFromActor(options = /** @type {any} */ ({}))
 {
@@ -3704,6 +3730,7 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null, stat
     return matchedSources;
 }
 
+/** @returns {any[]} Resistance bonuses matching that damage type */
 export function checkDamageResistances(actor, damageType)
 {
     if (!actor || !damageType)
@@ -3746,15 +3773,15 @@ export function initDamageCalcWrapper()
             const alreadyHalved = _pendingApplyHalvedActorUuid !== null && _pendingApplyHalvedActorUuid === this.uuid;
             if (alreadyHalved)
                 _pendingApplyHalvedActorUuid = null;
-            const res = this.system?.resistances;
+            const resistances = this.system?.resistances;
             const bridged = [];
-            if (res && !alreadyHalved)
+            if (resistances && !alreadyHalved)
             {
                 for (const type of ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat'])
                 {
-                    if (!res[type] && checkDamageResistances(this, type).length > 0)
+                    if (!resistances[type] && checkDamageResistances(this, type).length > 0)
                     {
-                        res[type] = true;
+                        resistances[type] = true;
                         bridged.push(type);
                     }
                 }
@@ -3767,7 +3794,7 @@ export function initDamageCalcWrapper()
             finally
             {
                 for (const type of bridged)
-                    res[type] = false;
+                    resistances[type] = false;
             }
             Hooks.callAll('lancer-automations.battelog.damageApplied', this, hpLanded);
             return hpLanded;
@@ -3791,18 +3818,18 @@ export function applyDamageImmunities(actor, damages, state = null)
             b.damageTypes.forEach(t => immuneTypes.add(t.toLowerCase()));
     }
 
-    return damages.map(d =>
+    return damages.map(dmg =>
     {
-        if (immuneTypes.has(d.type.toLowerCase()))
+        if (immuneTypes.has(dmg.type.toLowerCase()))
         {
-            const newD = { ...d };
-            if (newD.val !== undefined)
-                newD.val = 0;
-            if (newD.amount !== undefined)
-                newD.amount = 0;
-            return newD;
+            const cloned = { ...dmg };
+            if (cloned.val !== undefined)
+                cloned.val = 0;
+            if (cloned.amount !== undefined)
+                cloned.amount = 0;
+            return cloned;
         }
-        return d;
+        return dmg;
     });
 }
 
@@ -3902,6 +3929,7 @@ export const BonusesAPI = {
     addGlobalBonus,
     removeGlobalBonus,
     getGlobalBonuses,
+    getGlobalBonus,
     consumeBonusUse,
     consumeImmunityUse,
     supportsConsumeOnUsage,
@@ -3909,6 +3937,7 @@ export const BonusesAPI = {
     removeConstantBonus,
     getConstantBonuses,
     linkBonusToItem,
+    ensureLinkedBonus,
     linkBonusToActor,
     unlinkBonusFromItem,
     unlinkBonusFromActor,
@@ -3921,6 +3950,7 @@ export const BonusesAPI = {
     getImmunityBonuses,
     checkEffectImmunities,
     applyDamageImmunities,
+    checkDamageResistances,
     hasCritImmunity,
     hasHitImmunity,
     hasMissImmunity,

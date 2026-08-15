@@ -4,7 +4,8 @@ import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCor
 import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { getPerSceneLimitFromSub, getPerRoundLimitFromSub, getPerTurnLimitFromSub, rankSubKey, getSubUsed } from '../combat/per-frequency-tags.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
+import { applyActionOverlays } from '../interactive/action-overlays.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { knockBackToken } from '../interactive/canvas.js';
 import { openHaseContestCard } from '../interactive/tools/haseContest.js';
@@ -12,7 +13,7 @@ import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, getActionLockInfo, getStatusLockedFields, getFieldLockingStatuses, lockEntryLabel } from '../combat/action-limits.js';
-import { laHudRenderIcon, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, rechargeIcon, tahScale } from './item-helpers.js';
+import { laHudRenderIcon, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
 import { isAutoConsumeDisabled } from '../interactive/extra-config.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
@@ -21,6 +22,8 @@ import {
     getAdvancedMeasureState,
     setAdvancedMeasureState,
     openAdvancedMeasureWithState,
+    toggleRangePin,
+    hasRangePin,
 } from '../interactive/tools/advancedMeasure.js';
 import { getActorMaxReach_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { isLancerRulerActive } from '../movement/cost-rules.js';
@@ -32,6 +35,7 @@ import { showPopupAt, toggleDetailPopup, hasAutomation } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
 import { LogPanel } from './log-panel.js';
 import { GlossaryPanel } from './glossary-panel.js';
+import { BondPanel } from './bond-panel.js';
 import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
 import { _resolveExtraBarValues, updateExtraBarValue } from './tokenStatBar.js';
@@ -57,7 +61,6 @@ async function _toggleTokenInCombat(token)
     }
 }
 
-// Lancer-style-library palette
 
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
 const HUD_TOP  = 115;   // below Foundry's top nav bar
@@ -142,6 +145,32 @@ function _ammoTagsHtml(checklist, label)
 
 const ACTIVATION_TAGS = ['tg_quick_action', 'tg_full_action', 'tg_protocol', 'tg_reaction', 'tg_free_action'];
 
+const WEAPON_ATTACK_ACTION ={ SKIRMISH: ['Skirmish', 'Quick'], BARRAGE: ['Barrage', 'Full'], FIGHT: ['Fight', 'Full'] };
+
+// "LL7" for pilots and their mechs, "T2" for NPCs. Same text the stat hint shows.
+function rankText(actor)
+{
+    if (!actor)
+        return null;
+    if (actor.type === 'npc')
+        return `T${Number(actor.system?.tier) || 1}`;
+    if (actor.type === 'pilot')
+        return `LL${Number(actor.system?.level) || 0}`;
+    if (actor.type === 'mech')
+    {
+        const pilot = actor.system?.pilot?.value;
+        return pilot ? `LL${Number(pilot.system?.level) || 0}` : null;
+    }
+    return null;
+}
+
+// Green rank suffix appended to a HUD row label.
+function rankSuffix(actor)
+{
+    const text = rankText(actor);
+    return text ? ` <span class="la-hud-rank">${text}</span>` : '';
+}
+
 // Item / Category data builders
 //
 // Category shape: { label, colLabel, icon?, getItems: () => Item[] }
@@ -163,6 +192,7 @@ export class LancerHUD
         this._pendingCol3Refresh = null;
         this._refreshTimer       = null;
         this._statusPanelInstance  = null;
+        this._bondPanelInstance    = null;
         this._suppressRefreshDepth = 0;
         this._searchActive         = false;
         this._pickerSuppress       = false;
@@ -394,13 +424,26 @@ export class LancerHUD
         });
     }
 
+    /** Repaint every rendered increment/input cell from its item's getValue(). No column rebuild. */
+    syncValueCells()
+    {
+        $('.la-value-cell').each(function()
+        {
+            const sync = $(this).data('laValueSync');
+            if (typeof sync === 'function')
+                sync();
+        });
+    }
+
     /** In-place stats bar refresh. Does not collapse sub-columns. */
     updateStatsInPlace()
     {
-        if (!this._actor || !this._el || this._narrativeMode)
+        if (!this._actor || !this._el)
             return;
+        this.syncValueCells();
         this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
-        this._updateCombatBar();
+        if (!this._narrativeMode)
+            this._updateCombatBar();
     }
 
     _updateCombatBar()
@@ -423,8 +466,8 @@ export class LancerHUD
             const statsEl = this._el.find('#la-hud-stats');
             if (statsEl.length)
             {
-                const h = 30;
-                newBar.css({ overflow: 'hidden', opacity: 0, marginTop: -h });
+                const rowHeight = 30;
+                newBar.css({ overflow: 'hidden', opacity: 0, marginTop: -rowHeight });
                 statsEl.after(newBar);
                 newBar.animate({ opacity: 1, marginTop: 0 }, 200);
             }
@@ -529,12 +572,15 @@ export class LancerHUD
             titleEl.find('.la-hud-token-name').before(combatToggle);
         }
 
+        const rank = rankText(actor);
+        if (rank)
+            titleEl.find('.la-hud-token-name').before(`<span class="la-hud-token-rank">${rank}</span>`);
+
         const statsEl = (this._narrativeMode && !actor) ? $('<div></div>') : buildStatsEl(actor, this._token);
         const combatBar = this._narrativeMode ? $('<div></div>') : buildCombatBar(actor, this._token);
 
         const c1 = this._makeCol('Menu');
         c1.css('width', '180px');
-        // Search icon + input
         const menuLabel = c1.find('.la-hud-col-label');
         menuLabel.css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
         const searchIcon = $(`<span class="la-hud-search-toggle" title="Search">⌕</span>`);
@@ -654,10 +700,10 @@ export class LancerHUD
         });
         nameSpan.on('click', () =>
         {
-            if (this._narrativeMode)
+            if (this._narrativeMode && !actor)
                 this._openNarrativeLinkDialog();
             else
-                actor.sheet?.render(true);
+                actor?.sheet?.render(true);
         });
         titleEl.on('mouseenter', () =>
         {
@@ -775,6 +821,8 @@ export class LancerHUD
                     }
                     if (this._logPanelInstance?.isVisible)
                         this._logPanelInstance.close();
+                    if (this._bondPanelInstance?.isVisible)
+                        this._bondPanelInstance.close();
                     this._setActive(c1, row, true);
                     closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
                     this._statusPanelInstance.open(row);
@@ -792,6 +840,8 @@ export class LancerHUD
                     this._statusPanelInstance.close();
                 if (this._logPanelInstance?.isVisible)
                     this._logPanelInstance.close();
+                if (this._bondPanelInstance?.isVisible)
+                    this._bondPanelInstance.close();
                 this._setActive(c1, row, true);
                 closeCol(c3, 80);
                 closeCol(c4, 80);
@@ -851,6 +901,7 @@ export class LancerHUD
                 this._statusPanelInstance?.close();
                 this._logPanelInstance?.close();
                 this._glossaryPanelInstance?.close();
+                this._bondPanelInstance?.close();
                 _clearC1Active();
                 $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function()
                 {
@@ -885,6 +936,14 @@ export class LancerHUD
             {} : _scheduleCollapse,
         });
         this._glossaryPanelInstance = new GlossaryPanel({
+            el:    hud,
+            cancelCollapse:  _cancelCollapse,
+            scheduleCollapse: clickToOpen ? () =>
+            {} : _scheduleCollapse,
+        });
+        this._bondPanelInstance = new BondPanel({
+            actor: this._actor,
+            token: this._token,
             el:    hud,
             cancelCollapse:  _cancelCollapse,
             scheduleCollapse: clickToOpen ? () =>
@@ -937,6 +996,7 @@ export class LancerHUD
                     this._statusPanelInstance?.close();
                     this._logPanelInstance?.close();
                     this._glossaryPanelInstance?.close();
+                    this._bondPanelInstance?.close();
                     _clearC1Active();
                     $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function()
                     {
@@ -965,7 +1025,6 @@ export class LancerHUD
                 _scheduleCollapse();
         });
 
-        // Search toggle + live-filter
         searchIcon.on('click', (ev) =>
         {
             ev.stopPropagation();
@@ -1176,7 +1235,7 @@ export class LancerHUD
             onClick:      () => executeSimpleActivation(this._actor, { title: action.name, action, detail }),
             broadcastFn:  (_t, a) => executeSimpleActivation(a, { title: action.name, action, detail }),
             onRightClick: this._actionPopup({ ...action, detail }),
-        }, action.name);
+        }, action.name, action.activation);
     }
 
     _lockCat(row, field)
@@ -1201,11 +1260,11 @@ export class LancerHUD
         return row;
     }
 
-    _lockable(item, actionName)
+    _lockable(item, actionName, activation = null)
     {
         const origClick = item.onClick;
         const origBroadcast = item.broadcastFn;
-        const info = getActionLockInfo(this._actor, actionName);
+        const info = getActionLockInfo(this._actor, actionName, activation);
         const byStatus = isActionDisabledByStatus(this._actor, actionName);
         if (byStatus)
             item.statusKind = 'unavailable';
@@ -1213,7 +1272,7 @@ export class LancerHUD
             item.softDisabled = true;
         item.onClick = () =>
         {
-            const now = getActionLockInfo(this._actor, actionName);
+            const now = getActionLockInfo(this._actor, actionName, activation);
             if (isActionDisabledByStatus(this._actor, actionName) || now.itemLocks.length || now.sources.length)
                 ui.notifications.warn(`${actionName} is locked on ${this._actor.name}. Firing anyway.`);
             return origClick?.();
@@ -1221,6 +1280,12 @@ export class LancerHUD
         if (origBroadcast)
             item.broadcastFn = origBroadcast;
         return item;
+    }
+
+    _lockableAttack(actionRow, weaponName)
+    {
+        const [name, activation] = WEAPON_ATTACK_ACTION[actionRow.label] ?? [];
+        return this._lockable(name ? this._lockable(actionRow, name, activation) : actionRow, weaponName);
     }
 
     // True when the mech's pilot already has a token on the current scene.
@@ -1291,9 +1356,12 @@ export class LancerHUD
                 const min     = item.min ?? (hasMax ? 0 : -Infinity);
                 const max     = item.max ?? Infinity;
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
-                const valColor = (val) => noColor ? 'var(--la-ink)' : hasMax ? (val <= 0 ? '#c33' : val < max ? '#cc7700' : '#3a9e6e') : 'var(--la-ink)';
-                const restingBg = (v) => noColor ? BG_DEFAULT : hasMax ? (v <= 0 ? '#ffcccc' : v < max ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
-                const borderColor = (v) => noColor ? 'var(--primary-color)' : hasMax ? (v <= 0 ? '#cc3333' : v < max ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
+                const invert = !!item.invertScale;
+                const atBad = (/** @type {number} */ val) => invert ? val >= max : val <= 0;
+                const atMid = (/** @type {number} */ val) => invert ? val > 0 : val < max;
+                const valColor = (/** @type {number} */ val) => noColor ? 'var(--la-ink)' : hasMax ? (atBad(val) ? '#c33' : atMid(val) ? '#cc7700' : '#3a9e6e') : 'var(--la-ink)';
+                const restingBg = (/** @type {number} */ val) => noColor ? BG_DEFAULT : hasMax ? (atBad(val) ? '#ffcccc' : atMid(val) ? '#ffe5b4' : BG_DEFAULT) : BG_DEFAULT;
+                const borderColor = (/** @type {number} */ val) => noColor ? 'var(--primary-color)' : hasMax ? (atBad(val) ? '#cc3333' : atMid(val) ? '#cc7700' : 'var(--primary-color)') : 'var(--primary-color)';
                 let cell;
                 if (item.subtype === 'increment')
                 {
@@ -1326,6 +1394,15 @@ export class LancerHUD
                     });
                     cell.data('restingBg', restingBg(cur));
                     cell.data('restingValColor', valColor(cur));
+                    cell.addClass('la-value-cell').data('laValueSync', () =>
+                    {
+                        const fresh = item.getValue();
+                        if (fresh !== cur)
+                        {
+                            cur = fresh;
+                            updateDisplay();
+                        }
+                    });
                 }
                 else if (item.subtype === 'toggle')
                 {
@@ -1372,10 +1449,25 @@ export class LancerHUD
                             item.onValueChanged(v);
                     }).on('click mousedown', (ev) => ev.stopPropagation());
                     cell.data('restingBg', BG_DEFAULT);
+                    cell.addClass('la-value-cell').data('laValueSync', () =>
+                    {
+                        const input = cell.find('.la-type-val');
+                        if (!input.is(':focus'))
+                            input.val(item.getValue());
+                    });
                 }
                 cell.on('mouseenter', () =>
                 {
                     this._cancelCollapse?.();
+                    if (!this._clickToOpen)
+                    {
+                        if (this._logPanelInstance?.isVisible)
+                            this._logPanelInstance.close();
+                        if (this._glossaryPanelInstance?.isVisible)
+                            this._glossaryPanelInstance.close();
+                        if (this._bondPanelInstance?.isVisible)
+                            this._bondPanelInstance.close();
+                    }
                     if (!this._clickToOpen && (col === this._c2 || col === this._c3))
                     {
                         col.find('.la-hud-active').each(function()
@@ -1419,7 +1511,7 @@ export class LancerHUD
                 continue;
             }
             const rawChildren = item.getChildren ? item.getChildren() : null;
-            const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel;
+            const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel || !!item.isBondPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
             const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
             if (item.onBadgeClick)
@@ -1538,7 +1630,7 @@ export class LancerHUD
 
             // Hover sound on leaf rows (and Log / Glossary) only in hover-mode. Click-to-open
             // mode plays sound on click, not on hover, matching other rows.
-            if ((!hasChildren || item.isLogPanel || item.isGlossaryPanel) && !this._clickToOpen)
+            if ((!hasChildren || item.isLogPanel || item.isGlossaryPanel || item.isBondPanel) && !this._clickToOpen)
                 row.on('mouseenter', () => playUiSound('hover'));
 
             if (col !== this._c4 && !this._clickToOpen)
@@ -1576,10 +1668,29 @@ export class LancerHUD
                         this._glossaryPanelInstance?.open(row);
                         return;
                     }
+                    if (item.isBondPanel)
+                    {
+                        if (this._statusPanelInstance?.isVisible)
+                            this._statusPanelInstance.close();
+                        if (this._logPanelInstance?.isVisible)
+                            this._logPanelInstance.close();
+                        if (this._glossaryPanelInstance?.isVisible)
+                            this._glossaryPanelInstance.close();
+                        col.find('.la-hud-active').each(function()
+                        {
+                            const rowEl = $(this); rowEl.css({ background: rowEl.data('restingBg') ?? BG_DEFAULT, color: rowEl.data('restingColor') ?? TEXT_DEFAULT }).removeClass('la-hud-active');
+                        });
+                        closeCol(this._c3, 80);
+                        closeCol(this._c4, 80);
+                        this._bondPanelInstance?.open(row);
+                        return;
+                    }
                     if (this._logPanelInstance?.isVisible)
                         this._logPanelInstance.close();
                     if (this._glossaryPanelInstance?.isVisible)
                         this._glossaryPanelInstance.close();
+                    if (this._bondPanelInstance?.isVisible)
+                        this._bondPanelInstance.close();
                     if (col === this._c2 && !hasChildren)
                     {
                         col.find('.la-hud-active').each(function()
@@ -1602,7 +1713,7 @@ export class LancerHUD
 
             // Click-to-open mode: Log / Glossary panels don't register the hover handler above,
             // so they need an explicit click binding (hover-mode rows above already handle them).
-            if (this._clickToOpen && (item.isLogPanel || item.isGlossaryPanel))
+            if (this._clickToOpen && (item.isLogPanel || item.isGlossaryPanel || item.isBondPanel))
             {
                 row.on('click', () =>
                 {
@@ -1623,12 +1734,20 @@ export class LancerHUD
                     if (item.isLogPanel)
                     {
                         this._glossaryPanelInstance?.close();
+                        this._bondPanelInstance?.close();
                         this._logPanelInstance?.open(row);
+                    }
+                    else if (item.isGlossaryPanel)
+                    {
+                        this._logPanelInstance?.close();
+                        this._bondPanelInstance?.close();
+                        this._glossaryPanelInstance?.open(row);
                     }
                     else
                     {
                         this._logPanelInstance?.close();
-                        this._glossaryPanelInstance?.open(row);
+                        this._glossaryPanelInstance?.close();
+                        this._bondPanelInstance?.open(row);
                     }
                 });
             }
@@ -1704,7 +1823,7 @@ export class LancerHUD
                 row.on('mouseenter', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: false, isLeaving: true  }));
             }
-            if (hasChildren && !item.isLogPanel && !item.isGlossaryPanel)
+            if (hasChildren && !item.isLogPanel && !item.isGlossaryPanel && !item.isBondPanel)
             {
                 const openChild = () =>
                 {
@@ -1733,10 +1852,11 @@ export class LancerHUD
                     }
                     this._setActive(col, row);
                     playUiSound();
-                    // Close any panels (log / glossary / status) before drilling into a new child column.
+                    // Close any panels (log / glossary / status / bond) before drilling into a new child column.
                     this._logPanelInstance?.close();
                     this._glossaryPanelInstance?.close();
                     this._statusPanelInstance?.close();
+                    this._bondPanelInstance?.close();
                     const freshChildren = item.getChildren ? item.getChildren() : rawChildren;
                     if (col === this._c2)
                     {
@@ -1883,11 +2003,7 @@ export class LancerHUD
                                 label,
                                 icon: getActivationIcon({ activation }),
                                 hoverData: { actor, item, action: { name: label, activation }, category: 'Actions' },
-                                onClick: () =>
-                                {
-                                    const si = /** @type {any} */ (item);
-                                    si.beginActivationFlow?.();
-                                },
+                                onClick: () => endItemActivation(item, this._token),
                                 onRightClick: this._actionPopup({ name: label, activation, detail: item.system?.effect || '' }, item),
                             };
                         })
@@ -1948,7 +2064,7 @@ export class LancerHUD
         // Main activation action (the deployable itself)
         if (sys.activation)
         {
-            const deployAction = { name: actor.name, activation: sys.activation, detail: sys.detail ?? '' };
+            const deployAction = applyActionOverlays(actor, [{ name: actor.name, activation: sys.activation, detail: sys.detail ?? '' }])[0];
             items.push({
                 label: 'Activation',
                 icon: getActivationIcon(deployAction),
@@ -1986,7 +2102,7 @@ export class LancerHUD
             });
         }
 
-        for (const action of (sys.actions ?? []))
+        for (const action of applyActionOverlays(actor, sys.actions ?? []))
         {
             items.push({
                 label: action.name,
@@ -2002,7 +2118,7 @@ export class LancerHUD
         items.push({ isSectionLabel: true, label: 'Tools' });
         items.push({
             label: 'Basic Attack',
-            icon: 'systems/lancer/assets/icons/mech_weapon.svg',
+            icon: 'mdi mdi-target',
             hoverData: { actor, item: null, action: { name: 'Basic Attack', activation: 'Tool' }, category: 'Actions' },
             onClick: () => executeBasicAttack(actor),
             onRightClick: toolPopup({ name: 'Basic Attack', activation: 'Tool', detail: 'Tool: roll a bare attack against one target.' }),
@@ -2016,7 +2132,7 @@ export class LancerHUD
         });
         items.push({
             label: 'Damage',
-            icon: 'systems/lancer/assets/icons/melee.svg',
+            icon: 'mdi mdi-flare',
             hoverData: { actor, item: null, action: { name: 'Damage', activation: 'Tool' }, category: 'Actions' },
             onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic'),
             onRightClick: toolPopup({ name: 'Damage', activation: 'Tool', detail: 'Tool: apply arbitrary damage to your target(s).' }),
@@ -2194,14 +2310,14 @@ export class LancerHUD
             colLabel: 'Attacks',
             getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish'),
-                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage'),
+                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish', 'Quick'),
+                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage', 'Full'),
                     this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'When you RAM, you make a melee attack with the aim of knocking a target down or back. \r \n To RAM, make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
                     this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'When you GRAPPLE, you grab hold of a target to overpower them. \r \n To GRAPPLE, choose an adjacent character and make a melee attack. On a hit: \r &bull; both characters become ENGAGED; \r &bull; neither can BOOST or take reactions while grappled; \r &bull; the smaller becomes IMMOBILIZED and is dragged when the larger moves. If same SIZE, contested HULL check at start of turn decides who is larger. \r \n A GRAPPLE ends when adjacency breaks, the attacker ends it as a free action, or the defender wins a contested HULL check as a quick action.'),
-                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: actionPopup({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack'),
+                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: actionPopup({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack', 'Full'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
-                    this._lockable({ label: 'Fight', icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: actionPopup({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight'),
+                    this._lockable({ label: 'Fight', icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: actionPopup({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight', 'Full'),
                 ] : []),
                 { isSectionLabel: true, label: 'Tools' },
                 { label: 'Basic Attack',  icon: 'mdi mdi-target', onClick: () => executeBasicAttack(actor), broadcastFn: (bcToken, bcActor) => executeBasicAttack(bcActor), onRightClick: actionPopup({ name: 'Basic Attack', activation: 'Tool', detail: 'Tool: roll a bare attack against one target.' }) },
@@ -2276,7 +2392,7 @@ export class LancerHUD
     _catTech()
     {
         const actor = this._actor;
-        const ap = a => this._actionPopup(a);
+        const actionPopup = action => this._actionPopup(action);
         if (actor.type === 'deployable' || actor.type === 'pilot')
         {
             return {
@@ -2300,11 +2416,11 @@ export class LancerHUD
                     icon: 'mdi mdi-hexagon-outline',
                     childColLabel: 'Quick Tech',
                     getChildren: () => this._enrichHoverData([
-                        this._lockable({ label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: ap({ name: 'Basic Tech', activation: 'Tool', tech_attack: true, detail: 'Tool: roll a bare TECH ATTACK against one target\'s E-DEFENSE. No effect applied.' }) }, 'Basic Tech'),
-                        this._lockable({ label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: ap({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) }, 'Scan'),
-                        this._lockable({ label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: ap({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) }, 'Lock On'),
-                        this._lockable({ label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: ap({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) }, 'Bolster'),
-                        this._lockable({ label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: ap({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, deal 2 heat and choose one of the available Invade options.' }) }, 'Invade'),
+                        this._lockable({ label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: actionPopup({ name: 'Basic Tech', activation: 'Tool', tech_attack: true, detail: 'Tool: roll a bare TECH ATTACK against one target\'s E-DEFENSE. No effect applied.' }) }, 'Basic Tech', 'Quick Tech'),
+                        this._lockable({ label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: actionPopup({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) }, 'Scan', 'Quick Tech'),
+                        this._lockable({ label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: actionPopup({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) }, 'Lock On', 'Quick Tech'),
+                        this._lockable({ label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: actionPopup({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) }, 'Bolster', 'Quick Tech'),
+                        this._lockable({ label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: actionPopup({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, deal 2 heat and choose one of the available Invade options.' }) }, 'Invade', 'Quick Tech'),
                     ], { actor, category: 'Tech' }),
                 },
                 { label: 'Invades',    childColLabel: 'Invades',    icon: getActivationIcon('Invade'), getChildren: () => this._catInvades().getItems() },
@@ -2320,7 +2436,7 @@ export class LancerHUD
         return {
             label: 'Invades',
             colLabel: 'Invades',
-            getItems: () => this._getInvadeOptions(actor).map(opt => ({
+            getItems: () => this._getInvadeOptions(actor).map(opt => this._lockable({
                 label: opt.destroyed ? this._destroyedLabel(opt.name) : opt.name,
                 icon: 'modules/lancer-automations/icons/cpu-shot.svg',
                 badge: opt.badge ?? null,
@@ -2329,7 +2445,7 @@ export class LancerHUD
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (row) => this._buildInvadePopup(opt, row),
-            })),
+            }, opt.name, 'Quick Tech')),
         };
     }
 
@@ -2350,7 +2466,7 @@ export class LancerHUD
                 ...(showAHIS ? [this._simpleItem('Interact',  'mdi mdi-gesture-tap',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
                 this._simpleItem('Prepare',   'mdi mdi-lightbulb-outline',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._blockIf(this._simpleItem('Eject',     'mdi mdi-parachute',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.'), this._pilotHasTokenOnScene(), 'The pilot already has a token on this scene.')] : []),
-                this._blockIf(this._lockable({ label: 'Standing Up', icon: 'mdi mdi-eject', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up'), !actor.statuses?.has('prone'), 'Standing Up requires the PRONE status.'),
+                this._blockIf(this._lockable({ label: 'Standing Up', icon: 'mdi mdi-eject', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up', 'Quick'), !actor.statuses?.has('prone'), 'Standing Up requires the PRONE status.'),
             ];
             if (actor.type === 'mech')
                 items.push({ label: 'Self Destruct', icon: 'mdi mdi-bomb', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'When you SELF DESTRUCT, you overload your reactor in a final, catastrophic play. \r \n As a quick action, initiate a reactor meltdown. The mech explodes at the end of your next turn, or at the end of one of your turns within the following two rounds (your choice): \r &bull; the mech is annihilated, killing anyone inside; \r &bull; a BURST 2 explosion deals 4d6 explosive damage; \r &bull; characters caught who succeed on an AGILITY save take half damage.' }) });
@@ -2481,7 +2597,7 @@ export class LancerHUD
             label: 'Force Check',
             icon: 'mdi mdi-alert-circle-check-outline',
             hoverData: { actor, item: null, action: { name: 'Force Check' }, category: 'Skills' },
-            onClick: () => openForceCheckCard({ tokenA: this._token }),
+            onClick: () => openForceCheckCard({ tokenA: this._token, saveVs: this._token }),
             onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: 'Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.' }),
         }));
 
@@ -2826,6 +2942,12 @@ export class LancerHUD
             return !!st.pulseEnabled;
         };
         const amSourceMatches = (source) => amIsActive() && getAdvancedMeasureState().rangeSource === source;
+        const togglePin = (source, opts) =>
+        {
+            if (!isAdvancedMeasureActive() && !hasRangePin(token, source, opts?.weaponItemId ?? null))
+                openAdvancedMeasureWithState({});
+            toggleRangePin(token, source, opts);
+        };
 
         const rangeItems = [
             {
@@ -2833,42 +2955,24 @@ export class LancerHUD
                 subtype: 'toggle',
                 name: `Threat (${threatVal})`,
                 icon: 'systems/lancer/assets/icons/white/threat.svg',
-                getValue: () => amSourceMatches('threat'),
-                onToggle: (on) =>
-                {
-                    if (on)
-                        openAdvancedMeasureWithState({ rangeSource: 'threat', weaponItemId: null, pulseEnabled: true });
-                    else
-                        setAdvancedMeasureState({ pulseEnabled: false });
-                },
+                getValue: () => hasRangePin(token, 'threat'),
+                onToggle: () => togglePin('threat'),
             },
             {
                 inputCell: true,
                 subtype: 'toggle',
                 name: `Sensors (${sensorVal})`,
                 icon: 'systems/lancer/assets/icons/white/sensor.svg',
-                getValue: () => amSourceMatches('sensor'),
-                onToggle: (on) =>
-                {
-                    if (on)
-                        openAdvancedMeasureWithState({ rangeSource: 'sensor', weaponItemId: null, pulseEnabled: true });
-                    else
-                        setAdvancedMeasureState({ pulseEnabled: false });
-                },
+                getValue: () => hasRangePin(token, 'sensor'),
+                onToggle: () => togglePin('sensor'),
             },
             {
                 inputCell: true,
                 subtype: 'toggle',
                 name: `Max Reach (${reachVal})`,
                 icon: 'modules/lancer-automations/icons/nested-hexagons.svg',
-                getValue: () => amSourceMatches('reach') && !getAdvancedMeasureState().weaponItemId,
-                onToggle: (on) =>
-                {
-                    if (on)
-                        openAdvancedMeasureWithState({ rangeSource: 'reach', weaponItemId: null, pulseEnabled: true });
-                    else
-                        setAdvancedMeasureState({ pulseEnabled: false });
-                },
+                getValue: () => hasRangePin(token, 'reach'),
+                onToggle: () => togglePin('reach'),
             },
             ...(isLancerRulerActive() ? [{
                 inputCell: true,
@@ -2899,6 +3003,11 @@ export class LancerHUD
                     await token.document?.setFlag('lancer-automations', 'customMeasureSize', newVal);
                     if (amSourceMatches('manual'))
                         setAdvancedMeasureState({ manualRadius: newVal });
+                    if (hasRangePin(token, 'manual'))
+                    {
+                        toggleRangePin(token, 'manual');
+                        toggleRangePin(token, 'manual', { range: newVal });
+                    }
                 },
             },
             {
@@ -2906,20 +3015,11 @@ export class LancerHUD
                 subtype: 'toggle',
                 name: 'Measure',
                 icon: 'systems/lancer/assets/icons/white/range.svg',
-                getValue: () =>
-                {
-                    if (!amSourceMatches('manual'))
-                        return false;
-                    const size = token.document?.getFlag('lancer-automations', 'customMeasureSize') ?? 10;
-                    return getAdvancedMeasureState().manualRadius === size;
-                },
-                onToggle: (on) =>
+                getValue: () => hasRangePin(token, 'manual'),
+                onToggle: () =>
                 {
                     const size = token.document?.getFlag('lancer-automations', 'customMeasureSize') ?? 10;
-                    if (on)
-                        openAdvancedMeasureWithState({ rangeSource: 'manual', manualRadius: size, pulseEnabled: true });
-                    else
-                        setAdvancedMeasureState({ pulseEnabled: false });
+                    togglePin('manual', { range: size });
                 },
             },
         ];
@@ -3097,7 +3197,7 @@ export class LancerHUD
         const invadeOpts = this._getInvadeOptions(actor).filter(opt => opt.item?.id === item.id && !sysActionNames.has(opt.name));
         for (const opt of invadeOpts)
         {
-            children.push({
+            children.push(this._lockable({
                 label: opt.destroyed ? this._destroyedLabel(opt.name) : opt.name,
                 icon: ICON_TECH_QUICK,
                 badge: opt.badge ?? null,
@@ -3106,7 +3206,7 @@ export class LancerHUD
                 hoverData: { actor, item: opt.item ?? null, action: opt.action ?? { name: opt.name, activation: 'Invade' }, category: 'Tech' },
                 onClick: () => executeInvade(actor, opt),
                 onRightClick: (/** @type {any} */ row) => this._buildInvadePopup(opt, row),
-            });
+            }, opt.name, 'Quick Tech'));
         }
         const lids = getItemDeployables(item, actor);
         if (lids.length)
@@ -3138,7 +3238,6 @@ export class LancerHUD
                 }));
             }
         }
-        // Ammo entries
         const ammoArr = sys.ammo ?? [];
         if (ammoArr.filter(a => a.name).length)
         {
@@ -3213,10 +3312,10 @@ export class LancerHUD
                 const statGrid5 = (/** @type {string[]} */ ...cells) => this._statGrid(5, ...cells);
                 const statGrid = statGrid5;
                 const repairs = actorSystem.repairs?.max ?? actorSystem.repcap;
-                const ss = sys.stats ?? {};
+                const frameStats = sys.stats ?? {};
                 const currentStats = statGrid5(
-                    stat('HP', actorSystem.hp?.max, ss.hp), stat('Armor', actorSystem.armor, ss.armor), stat('E-Def', actorSystem.edef, ss.edef), stat('Evasion', actorSystem.evasion, ss.evasion), stat('Heat', actorSystem.heat?.max, ss.heatcap),
-                    stat('Speed', actorSystem.speed, ss.speed), stat('Sensors', actorSystem.sensor_range, ss.sensor_range), stat('Save', actorSystem.save, ss.save), stat('Tech', actorSystem.tech_attack, ss.tech_attack), stat('Repairs', repairs, ss.repcap)
+                    stat('HP', actorSystem.hp?.max, frameStats.hp), stat('Armor', actorSystem.armor, frameStats.armor), stat('E-Def', actorSystem.edef, frameStats.edef), stat('Evasion', actorSystem.evasion, frameStats.evasion), stat('Heat', actorSystem.heat?.max, frameStats.heatcap),
+                    stat('Speed', actorSystem.speed, frameStats.speed), stat('Sensors', actorSystem.sensor_range, frameStats.sensor_range), stat('Save', actorSystem.save, frameStats.save), stat('Tech', actorSystem.tech_attack, frameStats.tech_attack), stat('Repairs', repairs, frameStats.repcap)
                 );
                 const mountCounts = (sys.mounts ?? []).reduce((/** @type {any} */ acc, /** @type {any} */ m) =>
                 {
@@ -3227,7 +3326,7 @@ export class LancerHUD
                 const baseStats = sys.stats ? `<details style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;"><summary style="font-size:0.72em;color:#555;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">▶ Base Stats</summary>${statGrid(stat('HP', sys.stats.hp), stat('Armor', sys.stats.armor), stat('E-Def', sys.stats.edef), stat('Evasion', sys.stats.evasion), stat('Heat', sys.stats.heatcap), stat('Speed', sys.stats.speed), stat('Sensors', sys.stats.sensor_range), stat('Save', sys.stats.save), stat('Tech', sys.stats.tech_attack), stat('Repairs', sys.stats.repcap))}</details>` : '';
                 const rows = /** @type {any[]} */ ([
                     {
-                        label: frame.name,
+                        label: frame.name + rankSuffix(actor),
                         icon: 'systems/lancer/assets/icons/frame.svg',
                         onClick: () => /** @type {any} */ (frame).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row }),
@@ -3389,12 +3488,12 @@ export class LancerHUD
             icon: 'mdi mdi-card-account-details-star-outline',
             getItems: () =>
             {
-                const as = actor.system ?? {};
-                const armor = (as.loadout?.armor ?? [])[0]?.value ?? null;
+                const actorSys = actor.system ?? {};
+                const armor = (actorSys.loadout?.armor ?? [])[0]?.value ?? null;
 
-                const grit = as.grit ?? Math.floor((as.level ?? 0) / 2);
+                const grit = actorSys.grit ?? Math.floor((actorSys.level ?? 0) / 2);
                 const base = { hp: 6 + grit, armor: 0, edef: 10, evasion: 10, speed: 4 };
-                const cur  = { hp: as.hp?.max, armor: as.armor, edef: as.edef, evasion: as.evasion, speed: as.speed };
+                const cur  = { hp: actorSys.hp?.max, armor: actorSys.armor, edef: actorSys.edef, evasion: actorSys.evasion, speed: actorSys.speed };
 
                 const stat = (/** @type {string} */ label, /** @type {any} */ val, /** @type {any} */ base = undefined) => this._statCell(label, val, base);
                 const grid = (/** @type {string[]} */ ...cells) => this._statGrid(5, ...cells);
@@ -3407,10 +3506,10 @@ export class LancerHUD
                     stat('Speed',   cur.speed,   base.speed),
                 );
                 const haseRow = `<div style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;">${grid(
-                    stat('HULL', as.hull),
-                    stat('AGI',  as.agi),
-                    stat('SYS',  as.sys),
-                    stat('ENG',  as.eng),
+                    stat('HULL', actorSys.hull),
+                    stat('AGI',  actorSys.agi),
+                    stat('SYS',  actorSys.sys),
+                    stat('ENG',  actorSys.eng),
                     stat('Grit', grit),
                 )}</div>`;
                 const baseStats = `<details style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;"><summary style="font-size:0.72em;color:#555;cursor:pointer;user-select:none;list-style:none;padding:2px 0;">▶ Base Stats (no armor)</summary>${grid(
@@ -3421,7 +3520,7 @@ export class LancerHUD
                     stat('Speed',   base.speed),
                 )}</details>`;
 
-                const pilotSubtitle = this._joinSubtitle(as.callsign, as.player_name, as.level != null ? `LL${as.level}` : null);
+                const pilotSubtitle = this._joinSubtitle(actorSys.callsign, actorSys.player_name, actorSys.level != null ? `LL${actorSys.level}` : null);
 
                 const armorBody = armor
                     ? (laRenderTags(armor.system?.tags ?? []) + (armor.system?.description ? `<div style="margin-bottom:8px;font-size:0.82em;line-height:1.5;color:#bbb;">${laFormatDetailHtml(armor.system.description)}</div>` : '') + (armor.system?.effect ? `<div style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;font-size:0.82em;line-height:1.5;color:#bbb;">${laFormatDetailHtml(armor.system.effect)}</div>` : '') + laRenderActions(armor.system?.actions ?? []))
@@ -3429,7 +3528,7 @@ export class LancerHUD
 
                 return [
                     {
-                        label: actor.name,
+                        label: actor.name + rankSuffix(actor),
                         icon: 'systems/lancer/assets/icons/pilot.svg',
                         onClick: () => /** @type {any} */ (actor).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'pilot-id', dataValue: actor.id, title: actor.name, subtitle: pilotSubtitle, bodyHtml: currentStats + haseRow + baseStats, theme: 'frame', item: null, row }),
@@ -3447,9 +3546,175 @@ export class LancerHUD
                             return [];
                         return [{ isSectionLabel: true, label: 'RESERVES' }, ...reserveRows];
                     })(),
+                    ...this._bondRows(actor),
                 ];
             },
         };
+    }
+
+    _bondRows(/** @type {any} */ actor)
+    {
+        const bond = actor?.system?.bond ?? actor?.items?.find((/** @type {any} */ ownedItem) => ownedItem.type === 'bond') ?? null;
+        if (!bond)
+            return [];
+        const bondState = actor.system?.bond_state ?? {};
+        return [
+            { isSectionLabel: true, label: 'BOND' },
+            {
+                label: bond.name,
+                icon: 'systems/lancer/assets/icons/bond.svg',
+                isBondPanel: true,
+                hoverData: { actor, item: bond, category: 'Bond' },
+            },
+            {
+                inputCell: true,
+                subtype: 'increment',
+                name: 'Stress',
+                icon: 'mdi mdi-brain',
+                invertScale: true,
+                step: 1,
+                min: 0,
+                max: bondState.stress?.max ?? 8,
+                getValue: () => actor.system?.bond_state?.stress?.value ?? 0,
+                onValueChanged: (/** @type {number} */ newVal) => actor.update({ 'system.bond_state.stress.value': newVal }),
+            },
+            {
+                inputCell: true,
+                subtype: 'increment',
+                name: 'XP',
+                icon: 'mdi mdi-head-cog-outline',
+                noColor: true,
+                step: 1,
+                min: 0,
+                max: bondState.xp?.max ?? 8,
+                getValue: () => actor.system?.bond_state?.xp?.value ?? 0,
+                onValueChanged: (/** @type {number} */ newVal) => actor.update({ 'system.bond_state.xp.value': newVal }),
+            },
+            {
+                label: 'Powers',
+                icon: 'modules/lancer-automations/icons/spiked-halo.svg',
+                childColLabel: 'Powers',
+                getChildren: () => this._bondPowerItems(bond),
+            },
+        ];
+    }
+
+    _bondPowerItems(/** @type {any} */ bond)
+    {
+        const rows = /** @type {any[]} */ ([]);
+        const powers = /** @type {any[]} */ (bond.system?.powers ?? []);
+        powers.forEach((power, powerIdx) =>
+        {
+            if (!power.unlocked)
+                return;
+            const uses = power.uses;
+            const hasUses = !!uses && uses.max > 0;
+            let badgeParts = null;
+            if (hasUses)
+            {
+                const pips = [];
+                for (let pip = 0; pip < uses.max; pip++)
+                    pips.push(`<i class="mdi ${pip < uses.value ? 'mdi-calendar-today' : 'mdi-calendar-blank'}"></i>`);
+                badgeParts = { badge: pips.join(' '), badgeColor: uses.value <= 0 ? '#c33' : '#3a9e6e' };
+            }
+            rows.push({
+                label: power.name,
+                icon: power.master ? 'mdi mdi-rhombus-split' : power.veteran ? 'mdi mdi-rhombus-medium' : 'modules/lancer-automations/icons/spiked-halo.svg',
+                ...(badgeParts ?? {}),
+                onClick: () =>
+                {
+                    if (hasUses && uses.value <= 0)
+                    {
+                        ui.notifications.warn(`${power.name} has no uses left.`);
+                        return;
+                    }
+                    bond.beginBondPowerFlow?.(powerIdx);
+                },
+                onRightClick: (/** @type {any} */ row) =>
+                {
+                    const rank = power.master ? 'Master' : power.veteran ? 'Veteran' : 'Power';
+                    const desc = laFormatDetailHtml(power.description ?? '');
+                    const prereq = power.prerequisite
+                        ? `<div style="margin-top:6px;border-top:1px solid #2a2a2a;padding-top:4px;font-size:0.78em;color:#888;">${laFormatDetailHtml(power.prerequisite)}</div>`
+                        : '';
+                    const bodyHtml = ((desc ? `<div style="font-size:0.82em;line-height:1.5;color:#bbb;">${desc}</div>` : '') + prereq)
+                        || '<div style="font-size:0.82em;color:#888;">No description.</div>';
+                    this._showItemPopup({
+                        cssClass: 'la-hud-popup la-hud-talent-popup',
+                        dataKey: 'bond-power',
+                        dataValue: `${bond.id}_${powerIdx}`,
+                        title: power.name,
+                        subtitle: this._joinSubtitle(rank, power.frequency || null, bond.name),
+                        bodyHtml,
+                        theme: 'talent',
+                        item: bond,
+                        skipExtras: true,
+                        pips: false,
+                        row,
+                        postRender: (/** @type {any} */ popup) => appendBondPowerPips(bond, powerIdx, popup),
+                    });
+                },
+            });
+        });
+        rows.push({
+            label: 'Unlock power',
+            icon: 'mdi mdi-lock-open-plus-outline',
+            onClick: () => this._openUnlockPowerDialog(bond),
+        });
+        return rows;
+    }
+
+    _openUnlockPowerDialog(/** @type {any} */ bond)
+    {
+        const locked = (/** @type {any[]} */ (bond.system?.powers ?? []))
+            .map((power, powerIdx) => ({ power, powerIdx }))
+            .filter(entry => !entry.power.unlocked);
+        if (!locked.length)
+        {
+            ui.notifications.info('All powers of this bond are unlocked.');
+            return;
+        }
+        const entriesHtml = locked.map(entry =>
+        {
+            const rank = entry.power.master ? ' <span style="color:#b8860b;font-size:0.8em;">[Master]</span>'
+                : entry.power.veteran ? ' <span style="color:#4682b4;font-size:0.8em;">[Veteran]</span>'
+                    : ' <span style="color:#888;font-size:0.8em;">[Power]</span>';
+            const prereq = entry.power.prerequisite
+                ? `<div style="font-size:0.8em;color:#888;margin-top:2px;">${entry.power.prerequisite}</div>`
+                : '';
+            return `<div class="lancer-item-card la-bond-unlock-entry" data-idx="${entry.powerIdx}" style="margin-bottom:6px;padding:8px;cursor:pointer;">
+                <div class="lancer-item-content" style="flex:1;min-width:0;">
+                    <div class="lancer-item-name">${entry.power.name}${rank}</div>
+                    ${prereq}
+                </div>
+            </div>`;
+        }).join('');
+        const dialog = new Dialog({
+            title: 'Unlock Power',
+            content: `
+                <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                    <div class="lancer-dialog-title">UNLOCK POWER</div>
+                    <div class="lancer-dialog-subtitle">${bond.name}</div>
+                </div>
+                <div style="max-height:400px;overflow-y:auto;">${entriesHtml}</div>`,
+            buttons: {
+                cancel: { label: '<i class="fas fa-times"></i> Cancel' },
+            },
+            render: (/** @type {any} */ html) =>
+            {
+                html.find('.la-bond-unlock-entry').on('click', async (/** @type {any} */ ev) =>
+                {
+                    const powerIdx = Number($(ev.currentTarget).data('idx'));
+                    await bond.update({ [`system.powers.${powerIdx}.unlocked`]: true });
+                    dialog.close();
+                });
+            },
+            default: 'cancel',
+        }, {
+            width: 420,
+            classes: ['lancer-dialog-base', 'lancer-no-title'],
+        });
+        dialog.render(true);
     }
 
     _catPilotGear()
@@ -3489,7 +3754,7 @@ export class LancerHUD
     {
         const sys = item.system;
         const ap = act => this._actionPopup(act, item);
-        const sysActions = sys.actions ?? [];
+        const sysActions = applyActionOverlays(item, sys.actions ?? []);
         const status = getItemStatus(item);
         const childBadge = status.badge ?? null;
         const childBadgeColor = status.badgeColor ?? null;
@@ -3590,7 +3855,7 @@ export class LancerHUD
                 const bodyHtml = currentStats + baseStats;
                 return [
                     {
-                        label: npcClass.name,
+                        label: npcClass.name + rankSuffix(actor),
                         icon: tierIcon,
                         onClick: () => /** @type {any} */ (npcClass).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({
@@ -3720,7 +3985,7 @@ export class LancerHUD
                     const origin = sys.origin?.name ? `${sys.origin.name} · ${sys.origin.type}` : '';
                     const npcSysChildren = () =>
                     {
-                        const sysActions = /** @type {any[]} */ (sys.actions ?? []);
+                        const sysActions = /** @type {any[]} */ (applyActionOverlays(item, sys.actions ?? []));
                         const extraActions = /** @type {any[]} */ (item.getFlag?.('lancer-automations', 'extraActions') || [])
                             .filter(/** @type {any} */ action => linkTierGate(action, actor, item));
                         const npcRightClick = (/** @type {any} */ row) =>
@@ -3852,22 +4117,61 @@ export class LancerHUD
 
     _corePowerItems(/** @type {any} */ frame, /** @type {any} */ actor)
     {
-        const cs = frame.system?.core_system;
-        const coreName = cs?.active_name ?? 'Core Power';
+        const coreSystem = frame.system?.core_system;
+        const coreName = coreSystem?.active_name ?? 'Core Power';
         const coreUsed = actor.system?.core_energy === 0;
-        const activeAction = cs?.active_actions?.[0];
-        const passiveName = cs?.passive_name ?? '';
-        const passiveActions = cs?.passive_actions ?? [];
-        const counters = cs?.counters ?? [];
+        const activeAction = coreSystem?.active_actions?.[0];
+        const passiveName = coreSystem?.passive_name ?? '';
+        const passiveActions = coreSystem?.passive_actions ?? [];
+        const counters = coreSystem?.counters ?? [];
 
-        const coreActivation = cs?.activation ?? activeAction?.activation ?? 'Protocol';
+        const coreActivation = coreSystem?.activation ?? activeAction?.activation ?? 'Protocol';
         const rows = /** @type {any[]} */ ([{
             label: coreName,
             icon: getActivationIcon(activeAction ?? coreActivation),
             statusKind: coreUsed ? 'unavailable' : null,
             onClick: () => /** @type {any} */ (frame.beginCoreActiveFlow('system.core_system')),
-            onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `Core Active · ${coreActivation} · ${frame.name}`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.active_effect ?? cs?.description ?? '')}</div>`, theme: 'frame', item: frame, row }),
+            onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-active', dataValue: frame.id, title: coreName, subtitle: `Core Active · ${coreActivation} · ${frame.name}`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(coreSystem?.active_effect ?? coreSystem?.description ?? '')}</div>`, theme: 'frame', item: frame, row }),
         }]);
+
+        const activeSynergies = coreSystem?.active_synergies ?? [];
+        if (activeSynergies.length)
+        {
+            const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+            rows.push({ label: 'ACTIVE', isSectionLabel: true });
+            activeSynergies.forEach((/** @type {any} */ synergy, /** @type {number} */ idx) =>
+            {
+                const detail = String(synergy?.detail ?? '');
+                const name = `${coreName} Synergy ${ROMAN[idx] ?? idx + 1}`;
+                const freqSpecs = [
+                    { max: getPerRoundLimitFromSub(synergy), used: Number(frame.system?.uses_per_round?.value ?? 0), ready: 'mdi-restart', off: 'mdi-restart-off' },
+                    { max: getPerTurnLimitFromSub(synergy), used: Number(frame.system?.uses_per_turn?.value ?? 0), ready: 'mdi-circle-slice-8', off: 'mdi-circle-outline' },
+                    { max: getPerSceneLimitFromSub(synergy), used: Number(frame.system?.uses_per_scene?.value ?? 0), ready: 'mdi-cog', off: 'mdi-cog-off' },
+                ];
+                const freqIcons = [];
+                let freqDepleted = false;
+                for (const spec of freqSpecs)
+                {
+                    if (spec.max <= 0)
+                        continue;
+                    const ready = spec.used < spec.max;
+                    if (!ready)
+                        freqDepleted = true;
+                    freqIcons.push(`<i class="mdi ${ready ? spec.ready : spec.off}"></i>`);
+                }
+                rows.push({
+                    label: name,
+                    icon: 'systems/lancer/assets/icons/core_bonus.svg',
+                    ...(freqIcons.length ? {
+                        badge: freqIcons.join(' '),
+                        badgeColor: freqDepleted ? '#c33' : '#3a9e6e',
+                    } : {}),
+                    hoverData: { actor, item: frame, action: { name, activation: 'Free' }, category: 'Actions' },
+                    onClick: () => executeSimpleActivation(actor, { title: name, action: { name, activation: 'Free' }, detail }, { item: frame }),
+                    onRightClick: this._actionPopup({ name, activation: 'Free', detail }, frame, 'frame'),
+                });
+            });
+        }
 
         rows.push({ label: 'CHARGE', isSectionLabel: true });
         const self = this;
@@ -3886,7 +4190,7 @@ export class LancerHUD
             },
         });
 
-        if ((passiveName && cs?.passive_effect) || passiveActions.length)
+        if ((passiveName && coreSystem?.passive_effect) || passiveActions.length)
         {
             rows.push({ label: 'PASSIVE', isSectionLabel: true });
             if (passiveName)
@@ -3894,13 +4198,13 @@ export class LancerHUD
                 rows.push({
                     label: passiveName,
                     icon: 'systems/lancer/assets/icons/core_bonus.svg',
-                    onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(cs?.passive_effect ?? '')}</div>${laRenderActions(cs?.passive_actions ?? [])}`, theme: 'frame', item: frame, row }),
+                    onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(coreSystem?.passive_effect ?? '')}</div>${laRenderActions(coreSystem?.passive_actions ?? [])}`, theme: 'frame', item: frame, row }),
                 });
             }
             for (const action of passiveActions)
             {
                 const theme = action.activation === 'Invade' ? 'invade' : 'frame';
-                rows.push(this._itemRow(frame, { label: action.name, icon: getActivationIcon(action), action, category: 'Tech', onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }), onRightClick: this._actionPopup(action, frame, theme) }));
+                rows.push(this._itemRow(frame, { label: action.name, icon: getActivationIcon(action), action, category: 'Tech', onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }, { item: frame }), onRightClick: this._actionPopup(action, frame, theme) }));
             }
         }
 
@@ -3949,17 +4253,17 @@ export class LancerHUD
                     badgeColor: freqDepleted ? '#c33' : '#3a9e6e',
                 } : {}),
                 hoverData: { actor, item: trait, category: 'Frame Traits' },
-                onClick: () => executeSimpleActivation(actor, { title: trait.name, action: { name: trait.name, activation: 'Passive' }, detail: trait.description ?? '' }),
+                onClick: () => executeSimpleActivation(actor, { title: trait.name, action: { name: trait.name, activation: 'Passive' }, detail: trait.description ?? '' }, { item: frame }),
                 childColLabel: trait.name,
                 getChildren: () =>
                 {
                     const children = [];
-                    for (const action of (trait.actions ?? []))
+                    for (const action of applyActionOverlays(frame, trait.actions ?? []))
                     {
                         children.push({
                             label: action.name,
                             icon: getActivationIcon(action),
-                            onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }),
+                            onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }, { item: frame }),
                             onRightClick: ap(action),
                         });
                     }
@@ -4201,7 +4505,7 @@ export class LancerHUD
 
     _talentRankActionItems(rank, talent, rankIdx)
     {
-        const actions  = rank.actions  ?? [];
+        const actions  = applyActionOverlays(talent, rank.actions ?? []);
         const counters = rank.counters ?? [];
         const items    = [];
         const hasBoth  = actions.length && counters.length;
@@ -4215,7 +4519,7 @@ export class LancerHUD
                 {
                     if (action.activation === 'Invade')
                     {
-                        const opt = this._getInvadeOptions(this._actor).find(o => o.item?.id === talent.id && o.name === action.name);
+                        const opt = this._getInvadeOptions(this._actor).find(entry => entry.item?.id === talent.id && entry.name === action.name);
                         if (opt)
                             executeInvade(this._actor, opt);
                     }
@@ -4425,7 +4729,7 @@ export class LancerHUD
         const actor = this._actor;
         const ammoItems = [];
 
-        // Collect all systems that have ammo
+        // Collect all mech systems
         const systems = actor.type === 'mech'
             ? (actor.system?.loadout?.systems ?? []).map(s => s?.value).filter(Boolean)
             : (actor.items?.filter(i => i.type === 'mech_system') ?? []);
@@ -4747,7 +5051,7 @@ export class LancerHUD
 
     _weaponItem(weapon, modItem, mount = null)
     {
-        return this._itemRow(weapon, {
+        const row = this._itemRow(weapon, {
             category: 'Weapons',
             childColLabel: weapon.name,
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
@@ -4800,9 +5104,13 @@ export class LancerHUD
                         await weapon.update({ 'system.selected_profile_index': idx });
                     });
                 };
-                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle: weaponSubtitle(), bodyHtml: `<div class="la-weapon-body">${buildBody()}</div>`, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks(), postRender: bindProfileSwitch });
+                this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle: weaponSubtitle(), bodyHtml: this._actionLockReasonHtml(weapon.name) + `<div class="la-weapon-body">${buildBody()}</div>`, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks(), postRender: bindProfileSwitch });
             },
         });
+        const lockInfo = getActionLockInfo(this._actor, weapon.name);
+        if (lockInfo.itemLocks.length || lockInfo.sources.length)
+            row.softDisabled = true;
+        return row;
     }
 
     _weaponChildren(weapon, modItem, mount)
@@ -4891,19 +5199,12 @@ export class LancerHUD
                 subtype: 'toggle',
                 name: rangeLabel,
                 icon: 'mdi mdi-ruler-square-compass',
-                getValue: () =>
+                getValue: () => hasRangePin(this._token, 'weapon', weapon.id),
+                onToggle: () =>
                 {
-                    if (!isAdvancedMeasureActive())
-                        return false;
-                    const st = getAdvancedMeasureState();
-                    return !!st.pulseEnabled && st.rangeSource === 'weapon' && st.weaponItemId === weapon.id;
-                },
-                onToggle: (/** @type {boolean} */ on) =>
-                {
-                    if (on)
-                        openAdvancedMeasureWithState({ rangeSource: 'weapon', weaponItemId: weapon.id, pulseEnabled: true });
-                    else
-                        setAdvancedMeasureState({ pulseEnabled: false });
+                    if (!isAdvancedMeasureActive() && !hasRangePin(this._token, 'weapon', weapon.id))
+                        openAdvancedMeasureWithState({});
+                    toggleRangePin(this._token, 'weapon', { weaponItemId: weapon.id });
                 },
             }];
         };
@@ -4942,7 +5243,7 @@ export class LancerHUD
                         },
                         onRightClick: this._actionPopup({ name: 'Attack', activation: 'Tool', detail: `Tool: attack with only ${weapon.name}. Prefer Skirmish or Barrage for play.` }, null, 'weapon'),
                     },
-                ],
+                ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
                 modItem,
                 showPopup: (popup, row) => this._showPopupAt(popup, row),
                 onActivate,
@@ -4981,7 +5282,7 @@ export class LancerHUD
                     },
                     onRightClick: this._actionPopup({ name: 'Attack', activation: 'Tool', detail: `Tool: attack with only ${weapon.name}. Prefer Skirmish or Barrage for play.` }, null, 'weapon'),
                 },
-            ],
+            ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
             modItem,
             showPopup: (popup, row) => this._showPopupAt(popup, row),
             onActivate,
@@ -5020,11 +5321,11 @@ export class LancerHUD
         return invades;
     }
 
-    _actionLockReasonHtml(actionName, activationField = null)
+    _actionLockReasonHtml(actionName, activationField = null, activation = null)
     {
         if (!this._actor || !actionName)
             return '';
-        const info = getActionLockInfo(this._actor, actionName);
+        const info = getActionLockInfo(this._actor, actionName, activation);
         const fieldStatuses = activationField ? getFieldLockingStatuses(this._actor, activationField) : [];
         if (!info.statuses.length && !info.sources.length && !info.itemLocks.length && !fieldStatuses.length)
             return '';
@@ -5055,7 +5356,7 @@ export class LancerHUD
             const blockHtml = blockReason
                 ? `<p class="la-hud-action-locked-reason" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(160,119,68,0.18);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Blocked:</strong> ${blockReason}</p>`
                 : '';
-            const bodyHtml = blockHtml + this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null) + laRenderActionDetail(action, { tier });
+            const bodyHtml = blockHtml + this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null, action.activation) + laRenderActionDetail(action, { tier });
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
@@ -5166,7 +5467,7 @@ export class LancerHUD
                         }
                     }
                     else
-                        executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' });
+                        executeSimpleActivation(actor, { title: action.name, action, detail: action.detail || '' }, si ? { item: si } : {});
                 },
                 broadcastFn: (t, a) =>
                 {
@@ -5219,7 +5520,10 @@ export class LancerHUD
                         }
                     }
                     else
-                        executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' });
+                    {
+                        const equiv = si ? /** @type {any} */ (a).items.find(/** @type {any} */ ownedItem => ownedItem.system?.lid === si.system?.lid) : null;
+                        executeSimpleActivation(a, { title: action.name, action, detail: action.detail || '' }, equiv ? { item: equiv } : {});
+                    }
                 },
                 onRightClick: this._actionPopup(action, sourceItem, null, talentSubKey ? { subKey: talentSubKey } : null),
                 hoverData: { actor, item: sourceItem ?? null, action, category },
@@ -5263,10 +5567,7 @@ export class LancerHUD
         return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px 4px;padding:4px 2px;">${cells.join('')}</div>`;
     }
 
-    /**
-     * Enrich HUD items with `hoverData` of the shape `{ actor, item: null, action: { name: it.label }, category }`.
-     * Leaves section labels, non-clickable rows, and rows that already carry hoverData untouched.
-     */
+    /** Add hoverData to clickable rows; skips labels, non-clickable, and already-enriched. */
     _enrichHoverData(items, { actor, category })
     {
         return items.map(/** @type {any} */ (it) =>
@@ -5296,6 +5597,7 @@ export class LancerHUD
                 ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>`
                 : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
         }
+        bodyHtml = this._actionLockReasonHtml(opt.name, 'quick', 'Quick Tech') + bodyHtml;
         const isWeapon    = opt.item?.type?.includes('weapon');
         const sourceType  = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
         const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
@@ -5467,6 +5769,7 @@ export class LancerHUD
         const row = rows.eq(clampedIdx);
         this._logPanelInstance?.close?.();
         this._glossaryPanelInstance?.close?.();
+        this._bondPanelInstance?.close?.();
         row.triggerHandler('mouseenter'); // reopens the panel if this row is its opener
         row.addClass('la-hud-kbfocus');
     }

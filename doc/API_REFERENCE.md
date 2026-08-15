@@ -12,7 +12,7 @@
 | **[API_EFFECTS.md](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
 | **[API_INTERACTIVE.md](API_INTERACTIVE.md)** | Token picker, zones, knockback, choice/vote cards, deployables, thrown weapons, hard cover |
 | **[API_ITEMS.md](API_ITEMS.md)** | Item & actor flags, tags, resource management, auto-consume config |
-| **[API_HUD.md](API_HUD.md)** | Injecting extra actions into the Token Action HUD |
+| **[API_HUD.md](API_HUD.md)** | Extra actions, action locks, and combat overlays in the Token Action HUD |
 | **[API_MOVEMENT.md](API_MOVEMENT.md)** | Movement tracking, history, movement cap |
 | **[API_TOKEN_DISPLAY.md](API_TOKEN_DISPLAY.md)** | Extra token stat bars |
 | **[API_HOWTO.md](API_HOWTO.md)** | Registration, user helpers, how-tos, Grid-Aware Auras wrapper |
@@ -35,9 +35,106 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 ## Fundamentals
 
+### Shared Types
+
+Source: [`scripts/typing/types.d.ts`](../scripts/typing/types.d.ts).
+
+<details>
+<summary><b><code>CancelFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```ts
+(reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?) => Promise<void>
+.wait(): Promise<void>
+```
+
+Used by `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `cancelChange`, `cancelStructure`, `cancelStress`, `cancelStructureOutcome`, `cancelStressOutcome`. Aborts synchronously, so call it before any `await` in your `activationCode`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>reasonText</kbd> | `string` | per-trigger | Card description |
+| <kbd>title</kbd> | `string` | per-trigger | Card header |
+| <kbd>allowConfirm</kbd> | `boolean` | `true` | `false` cancels with no card |
+| <kbd>userIdControl</kbd> | `string \| string[] \| null` | `null` | Who sees the card. `null` = active GM |
+| <kbd>preConfirm</kbd> | `(() => Promise<boolean>) \| null` | `null` | Asked first. `true` cancels, `false` takes the ignore path |
+| <kbd>postChoice</kbd> | `((chose: boolean) => Promise<void>) \| null` | `null` | `chose` is `true` if it stayed cancelled |
+| <kbd>opts</kbd> | `{ item?, originToken?, relatedToken? }` | `{}` | Documents shown on the card |
+
+The ignore path re-runs the original action. Reactors already in `_cancelledBy` are skipped on the redo, so a gate is not asked twice. `.wait()` resolves after the card and any redo.
+
+</details>
+
+<details>
+<summary><b><code>CancelMoveFunction</code></b> · <b><code>ChangeMoveFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```ts
+cancelTriggeredMove(reasonText?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
+changeTriggeredMove(position: {x: number, y: number}, extraData?, reasonText?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
+```
+
+`CancelFunction` params minus `title`. A rerouted move is a new move, so reactors may evaluate it again.
+
+</details>
+
+<details>
+<summary><b><code>ModifyValueFunction</code></b> · <b><code>RerollFunction</code></b> · <b><code>ChangeRollFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```ts
+modifyHpChange(newValue: number, reasonText?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
+modifyHeatChange(newValue: number, ...same)          // .wait() on both
+modifyRoll(newTotal: number) => void                 // structure/stress, no card
+reroll(reasonText?, subtype?, title?, allowConfirm?, userIdControl?, opts?)
+changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
+```
+
+`subtype` defaults to `'retry'`. Trailing params behave as on `CancelFunction`.
+
+</details>
+
+<details>
+<summary><b><code>ActivationCallback</code></b> - shape of <code>evaluate</code> and <code>activationCode</code></summary>
+
+<br>
+
+```ts
+(triggerType: TriggerType, triggerData: TriggerData, reactorToken: Token,
+ item: Item | null, activationName: string, api: LancerAutomationsAPI) => any
+```
+
+`item` is `null` for general activations.
+
+</details>
+
+<details>
+<summary><b><code>actionData</code></b> · <b><code>flowState</code></b> - the recurring payload objects</summary>
+
+<br>
+
+| `actionData` field | Type |
+|:------|:-----|
+| <kbd>type</kbd> | `string` (`"action"` / `"attack"` / `"tech"`) |
+| <kbd>title</kbd> | `string` |
+| <kbd>action</kbd> | `{ name: string, activation: string } \| null` |
+| <kbd>detail</kbd> | `string` |
+| <kbd>tags</kbd> | `Array<{ lid: string, val?: string }>` |
+| <kbd>flowState</kbd> | `FlowState` |
+
+`flowState` is the Lancer flow `state`: `state.data` (e.g. `data.damage`, `data.bonus_damage`), `state.la_extraData`, `state.injectFlowExtraData(obj)`, `state.getFlowExtraData()`, `state.actor`, `state.item`.
+
+</details>
+
+<br>
+
 ### Trigger Types & Data
 
-Every trigger passes a data object. All objects receive `distanceToTrigger` and `canTriggerReaction` (reactor to triggering token).
+Every trigger passes a data object. All objects receive `distanceToTrigger` and `canTriggerReaction` (reactor to triggering token), plus `_cancelledBy` on cancellable triggers.
+
+`Tag` is `{ lid: string, val?: string }`. `ActionData` and `FlowState` are defined above.
 
 #### Attack Triggers
 
@@ -49,9 +146,9 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     weapon: Item,
     targets: Array<Token>,
     actionName: string,
-    tags: Array,
-    actionData: Object,
-    cancelAttack: Function(reasonText, title, allowConfirm, userIdControl)
+    tags: Array<Tag>,
+    actionData: ActionData,
+    cancelAttack: CancelFunction
 }
 ```
 
@@ -66,8 +163,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     targets: Array<Token>,
     attackType: string,
     actionName: string,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -82,8 +179,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     targets: Array<{ target: Token, roll: Roll, crit: boolean }>,
     attackType: string,
     actionName: string,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -98,8 +195,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     targets: Array<{ target: Token, roll: Roll }>,
     attackType: string,
     actionName: string,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -114,13 +211,17 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     triggeringToken: Token,
     weapon: Item,
     targets: Array<Token>,
+    hitTokens: Array<Token>,
     attackType: string,
     actionName: string,
-    tags: Array,
-    actionData: Object,
-    flowState: Object
+    tags: Array<Tag>,
+    actionData: ActionData,
+    cancelDamage: CancelFunction,
+    flowState: FlowState
 }
 ```
+
+`cancelDamage` aborts the whole damage roll, so no damage card is printed. It is flow-wide, not per target: to spare one target of several, set that entry's `hit` to `false` in `flowState.data.hit_results` instead.
 
 </details>
 
@@ -137,8 +238,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     isHit: boolean,
     attackType: string,
     actionName: string,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -155,9 +256,9 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     targets: Array<Token>,
     actionName: string,
     isInvade: boolean,
-    tags: Array,
-    actionData: Object,
-    cancelTechAttack: Function(reasonText, title, allowConfirm, userIdControl)
+    tags: Array<Tag>,
+    actionData: ActionData,
+    cancelTechAttack: CancelFunction
 }
 ```
 
@@ -172,8 +273,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     targets: Array<Token>,
     actionName: string,
     isInvade: boolean,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -188,8 +289,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     targets: Array<{ target: Token, roll: Roll, crit: boolean }>,
     actionName: string,
     isInvade: boolean,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -204,8 +305,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     targets: Array<{ target: Token, roll: Roll }>,
     actionName: string,
     isInvade: boolean,
-    tags: Array,
-    actionData: Object
+    tags: Array<Tag>,
+    actionData: ActionData
 }
 ```
 
@@ -217,7 +318,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 ```js
 {
-    token: Token,
+    triggeringToken: Token,
     distanceToMove: number,
     elevationToMove: number,
     startPos: { x, y },
@@ -226,11 +327,13 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     moveInfo: {
         isInvoluntary: boolean,
         isTeleport: boolean,
-        pathHexes: Array<Object> // [{x, y, cx, cy, isHistory, hexes}]
+        isUndo: boolean,
+        isModified: boolean,
+        pathHexes: Array<{ x, y, cx, cy, isHistory, hexes }>
     },
-    cancel: Function(),
-    cancelTriggeredMove: Function(reason?, allowConfirm?),
-    changeTriggeredMove: Function(pos, extraData?, reason?, allowConfirm?)
+    cancel: () => void,
+    cancelTriggeredMove: CancelMoveFunction,
+    changeTriggeredMove: ChangeMoveFunction
 }
 ```
 
@@ -253,7 +356,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
         isBoost: boolean,
         boostSet: Array<number>,
         isModified: boolean,
-        extraData: Object
+        extraData: Record<string, any>
     }
 }
 ```
@@ -270,11 +373,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     actionName: string,
     item: Item,
     destination: { x: number, y: number },
-    cancel: Function(reason?)
+    cancel: (reason?: string) => void
 }
 ```
 
-- `cancel(reason?)` synchronously skips this specific token's move; other tokens in the batch still proceed.
+- `cancel(reason?)` synchronously skips this specific token's move. Other tokens in the batch still proceed.
 - Does **not** fire when `knockBackToken()` is called with `{ asVoluntary: true }` - in that mode the move goes through `onPreMove`/`onMove` like a regular drag.
 - `actionName` and `item` are passed from the caller (e.g. `"Grapple"`), used by `onlyOnSourceMatch`.
 
@@ -332,7 +435,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     triggeringToken: Token,
     statusId: string,
     effect: ActiveEffect,
-    cancelChange: Function(reasonText, title, allowConfirm, userIdControl)
+    cancelChange: CancelFunction
 }
 ```
 
@@ -345,7 +448,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     triggeringToken: Token,
     statusId: string,
     effect: ActiveEffect,
-    cancelChange: Function(reasonText, title, allowConfirm, userIdControl)
+    cancelChange: CancelFunction
 }
 ```
 
@@ -371,7 +474,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 {
     triggeringToken: Token,
     remainingStructure: number,
-    cancelStructure: Function(reasonText, title, allowConfirm, userIdControl)
+    cancelStructure: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -383,7 +487,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 {
     triggeringToken: Token,
     remainingStructure: number,
-    rollResult: number
+    rollResult: number,
+    rollDice: number[],
+    cancelStructureOutcome: CancelFunction,
+    modifyRoll: (newTotal: number) => void,
+    flowState: FlowState
 }
 ```
 
@@ -395,7 +503,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 {
     triggeringToken: Token,
     remainingStress: number,
-    cancelStress: Function(reasonText, title, allowConfirm, userIdControl)
+    cancelStress: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -407,7 +516,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 {
     triggeringToken: Token,
     remainingStress: number,
-    rollResult: number
+    rollResult: number,
+    rollDice: number[],
+    cancelStressOutcome: CancelFunction,
+    modifyRoll: (newTotal: number) => void,
+    flowState: FlowState
 }
 ```
 
@@ -428,15 +541,15 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     item: Item,
     isReroll: boolean,
     rerollCount: number,
-    reroll: Function(reason?),
-    changeRoll: Function(newTotal),
-    flowState: Object
+    reroll: RerollFunction,
+    changeRoll: ChangeRollFunction,
+    flowState: FlowState
 }
 ```
 
-- `reroll()` re-runs the Lancer flow step that produced the roll; `changeRoll(newTotal)` sets the total (and recomputes hit/crit for attack flows). Both cascade: after either call, `onRoll` re-fires so later reactions see the new state.
-- No engine-level reroll cap; reactions that reroll should gate themselves via `flowState.la_extraData._myReactionRerolled`.
-- `success` rule: attack/tech = any hit; skill = total >= 10; damage/structure/stress = undefined.
+- `reroll()` re-runs the Lancer flow step that produced the roll. `changeRoll(newTotal)` sets the total (and recomputes hit/crit for attack flows). Both cascade: after either call, `onRoll` re-fires so later reactions see the new state.
+- No engine-level reroll cap. Reactions that reroll should gate themselves via `api.setFlowFlag(triggerData, '_myReactionRerolled')` + `api.getFlowFlag` in `evaluate`.
+- `success` rule: attack/tech = any hit, skill = total >= 10, damage/structure/stress = undefined.
 - `changeRoll` on structure/stress only updates `roll._total` (title/desc stay stale, prefer `reroll()`).
 
 </details>
@@ -498,8 +611,8 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     previousHP: number,
     newHP: number,
     delta: number,
-    cancelHpChange: Function(reasonText, title, allowConfirm, userIdControl),
-    modifyHpChange: Function(newValue)
+    cancelHpChange: CancelFunction,
+    modifyHpChange: ModifyValueFunction
 }
 ```
 
@@ -538,8 +651,8 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     previousHeat: number,
     newHeat: number,
     delta: number,
-    cancelHeatChange: Function(reasonText, title, allowConfirm, userIdControl),
-    modifyHeatChange: Function(newValue)
+    cancelHeatChange: CancelFunction,
+    modifyHeatChange: ModifyValueFunction
 }
 ```
 
@@ -580,7 +693,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     statName: string,
     checkAgainstToken: Token,
     targetVal: number,
-    cancelCheck: Function(reasonText, title, allowConfirm, userIdControl)
+    cancelCheck: CancelFunction
 }
 ```
 
@@ -610,10 +723,10 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     actionType: string,
     actionName: string,
     item: Item,
-    actionData: Object,
-    deployable: Object,
-    cancelAction: Function(reasonText, title, allowConfirm, userIdControl),
-    flowState: Object
+    actionData: ActionData,
+    deployable: { actor: Actor, lid: string } | null,
+    cancelAction: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -629,11 +742,11 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     actionType: string,
     actionName: string,
     item: Item,
-    actionData: Object,
-    deployable: Object,
+    actionData: ActionData,
+    deployable: { actor: Actor, lid: string } | null,
     endActivation: boolean,
-    extraData: Object,
-    flowState: Object
+    extraData: Record<string, any>,
+    flowState: FlowState
 }
 ```
 
@@ -645,8 +758,8 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 {
     triggeringToken: Token,
     document: TokenDocument,
-    change: Object,
-    options: Object
+    change: Record<string, any>,
+    options: Record<string, any>
 }
 ```
 
@@ -654,24 +767,21 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 ---
 
-### Evaluate & Activate Signatures
+### Callback Signatures
 
-#### `evaluate(triggerType, triggerData, reactorToken, item, name, api)`
-Determines if an activation should trigger. Called for every potential reactor.
-- **Returns**: `boolean`.
+Shared params: `triggerType: TriggerType`, `triggerData: TriggerData`, `reactorToken: Token`, `item: Item | null` (null for general activations), `activationName: string`, `api: LancerAutomationsAPI`.
 
-#### `activationCode(triggerType, triggerData, reactorToken, item, name, api)`
-Code to run when activated.
-- **Returns**: `Promise<void>`.
+| Callback | Signature | Returns |
+|:---------|:----------|:--------|
+| `evaluate` | `(triggerType, triggerData, reactorToken, item, activationName, api)` | `boolean` - must be **synchronous** on cancellable triggers |
+| `activationCode` | `(triggerType, triggerData, reactorToken, item, activationName, api)` | `Promise<void>` |
+| `onInit` | `(token: Token, item: Item, api: LancerAutomationsAPI)` | `Promise<void>` - runs when a token carrying the item is created |
+| `onMessage` | `(triggerType, data: any, reactorToken, item, activationName, api)` | `Promise<void>` - runs on the client targeted by `sendMessageToReactor` |
 
-#### `onInit(token, item, api)`
-Code to run when a token is created on the scene.
-- **Returns**: `Promise<void>`.
-
-#### `triggerData.debugActivation(label?)`
-Console-logs everything the current callback received, including the helper functions that trigger provides. Available in `evaluate` and `activationCode`.
-- **Returns**: the same content as a summary `Object`.
-- Also on the api: `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`.
+#### `triggerData.debugActivation(label?: string)`
+Console-logs everything the current callback received, including the helper functions the trigger provides. Available in `evaluate` and `activationCode`.
+- **Returns**: `Object` - the same content as a summary.
+- API form: `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?: string)` → `Object`.
 
 ---
 
@@ -681,23 +791,51 @@ Console-logs everything the current callback received, including the helper func
 
 Charge-consumption config attached to an effect. Set it via `extraOptions.consumption` on `applyEffectsToTokens`, or `options.consumption` on `addGlobalBonus`.
 
-`consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0; `processEffectConsumption` matches and spends it on every trigger. `grouped` / `groupId` make several effects share one counter (deleted together).
+`consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0. `processEffectConsumption` matches and spends it on every trigger. `grouped` / `groupId` make several effects share one counter (deleted together).
 
-```javascript
-{
-    trigger: "onDamage",         // Required: trigger name(s) that consume a charge (string or array)
-    originId: "tokenId",         // Only consume if this token is involved (defaults to the bearer token)
-    stack: 1,                    // Initial charge count (each matching trigger removes 1)
-    grouped: true,               // Share one counter across all effects in this call (auto-fills groupId)
-    groupId: "customId",         // Shared counter ID across calls
-    evaluate: null,              // (type, data, token, effect) => boolean gate
-    itemLid: "weapon_lid",       // filter by item source
-    actionName: "Skirmish",      // filter by action name
-    isBoost: false,              // consume only on boost tokens
-    minDistance: 1,              // distance filter
-    checkType: "Agility",        // stat filter
-    checkAbove: 10,              // threshold
-    checkBelow: 5                // threshold
+| Field | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>trigger</kbd> | `TriggerType \| TriggerType[]` | *required* | Trigger(s) that consume a charge |
+| <kbd>originId</kbd> | `string` | bearer token id | Only consume if this token is involved |
+| <kbd>stack</kbd> | `number` | `1` | Initial charge count. Each matching trigger removes 1 |
+| <kbd>grouped</kbd> | `boolean` | `false` | Share one counter across all effects in this call (auto-fills `groupId`) |
+| <kbd>groupId</kbd> | `string` | auto | Shared counter id across calls |
+| <kbd>evaluate</kbd> | `(triggerType: TriggerType, data: TriggerData, token: Token, effect: ActiveEffect) => boolean` | `null` | Extra gate |
+| <kbd>itemLid</kbd> | `string` | - | Only consume for this item source |
+| <kbd>actionName</kbd> | `string` | - | Only consume for this action name |
+| <kbd>isBoost</kbd> | `boolean` | `false` | Consume only on boost movement |
+| <kbd>minDistance</kbd> | `number` | - | Distance filter |
+| <kbd>checkType</kbd> | `string` | - | Stat filter, e.g. `"Agility"` |
+| <kbd>checkAbove</kbd> | `number` | - | Only consume if the roll is above this |
+| <kbd>checkBelow</kbd> | `number` | - | Only consume if the roll is below this |
+
+**Resistance that lasts 3 hits** (Dispersal Shield). One counter shared by all five resistance effects, so they vanish together on the third hit:
+
+```js
+await api.applyEffectsToTokens({
+    tokens: [target],
+    effectNames: ["resistance_kinetic", "resistance_energy", "resistance_explosive"],
+    note: "Dispersal Shield"
+}, {
+    stack: 3,
+    consumption: { trigger: "onDamage", originId: target.id, grouped: true }
+});
+```
+
+**+1 accuracy on the next attack only**, spent when it hits:
+
+```js
+await api.addGlobalBonus(target.actor, { name: "Squad Leader", val: 1, type: "accuracy", rollTypes: ["attack"] },
+    { duration: "1 Round", origin: reactorToken, consumption: { trigger: "onHit" } });
+```
+
+**Only spend on a failed Agility save**, using the gate:
+
+```js
+consumption: {
+    trigger: "onCheck",
+    checkType: "Agility",
+    evaluate: (triggerType, data, token, effect) => data.success === false
 }
 ```
 
@@ -717,11 +855,11 @@ Two keys the module manages itself:
 
 ### extraData / la_extraData
 
-Ad-hoc state that round-trips through a flow. Pass it in (`startRelatedFlowToReactor(userId, extraData)`, or `flowState.injectFlowExtraData(extraData)` mid-flow); it is merged onto `state.la_extraData` and resurfaces as `triggerData.extraData` on the downstream `onActivation`. Read it back inside a flow with `flowState.getFlowExtraData()`.
+Ad-hoc state that round-trips through a flow. Pass it in (`startRelatedFlowToReactor(userId, extraData)`, or `flowState.injectFlowExtraData(extraData)` mid-flow). It is merged onto `state.la_extraData` and resurfaces as `triggerData.extraData` on the downstream `onActivation`. Read it back inside a flow with `flowState.getFlowExtraData()`.
 
 ### Immunity subtypes
 
-Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine only recognises these values; all resolve through `getImmunityBonuses(actor, subtype)`:
+Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine only recognises these values. All resolve through `getImmunityBonuses(actor, subtype)`:
 
 | Subtype | Checked by | Extra fields |
 |:--------|:-----------|:-------------|
@@ -733,13 +871,15 @@ Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine on
 | `miss` | `hasMissImmunity` | - |
 | `elevation` | `isClimbingImmune` (movement) | - |
 | `terrain` | `isTerrainImmune` (terrain / zones) | - |
+| `obstacle` | `isPhasing` (move through other characters) | - |
 | `provoke` | engagement + reaction gate | - |
 
 ### Duration labels
 
 Accepted `duration.label` values:
 - `start` / `end` / `round` - tick down at turn start, turn end, or round change. Only these expire by time, and only in combat.
-- `indefinite` / `permanent` - never expire by time.
+- `indefinite` - never expires by time. `unlimited` is a retired alias, still accepted and normalized to `indefinite`.
+- `permanent` - never expires by time and [survives a Full Repair](feature/SYSTEM_ADDITIONS.md#permanent-statuses).
 - `constant` - bonus only: passive and invisible, no token icon or counter (same as `addConstantBonus`).
 
 ### Stat codes
@@ -750,26 +890,59 @@ HASE-plus-grit keys used by stat rolls and checks: `HULL`, `AGI`, `SYS`, `ENG`, 
 
 ### Activation Object Structure
 
-```javascript
-{
-    triggers: ["onMove"],        // Array of trigger names
-    enabled: true,               // Master toggle
-    awaitActivationCompletion: false,     // Wait for resolution (required for onPreMove, onInitActivation, onInitAttack, onInitTechAttack, onInitCheck intercepts)
-    triggerDescription: "",      // Header text for the reaction card
-    effectDescription: "",       // Body text for the reaction card
-    actionType: "Reaction",      // Reaction, Free Action, Quick, Full, Protocol, Other
-    frequency: "1/Round",        // Display-only frequency text
-    triggerSelf: false,          // Can react to own actions
-    triggerOther: true,          // Can react to others
-    checkReaction: true,         // Skip if the reactor has no reaction left this round (default true)
-    outOfCombat: false,          // Works outside of combat turns
-    onlyOnSourceMatch: false,    // Match name (general) or possession (item)
-    dispositionFilter: ["hostile"], // hostile, friendly, neutral, secret
-    evaluate: "return true;",    // Code string or Function
-    activationType: "code",      // code, flow, macro, none
-    activationMode: "after",     // after (run after flow) or instead (replace flow)
-    activationCode: "",          // Code string or Function
-    activationMacro: "",         // Macro name
-    autoActivate: false          // Skip popup, run immediately
-}
+One entry in an activation group's `reactions` array. Interface: `ReactionConfig` in [`types.d.ts`](../scripts/typing/types.d.ts).
+
+| Field | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>triggers</kbd> | `TriggerType[]` | *required* | Trigger names this entry listens to |
+| <kbd>enabled</kbd> | `boolean` | `true` | Master toggle |
+| <kbd>awaitActivationCompletion</kbd> | `boolean` | `false` | Required to intercept `onPreMove`, `onInitActivation`, `onInitAttack`, `onInitTechAttack`, `onInitCheck` |
+| <kbd>triggerDescription</kbd> | `string` | `""` | Header text on the activation card |
+| <kbd>effectDescription</kbd> | `string` | `""` | Body text on the activation card |
+| <kbd>actionType</kbd> | `"Automation" \| "Reaction" \| "Free Action" \| "Quick Action" \| "Full Action" \| "Protocol" \| "Other"` | `"Automation"` | Lancer action type. `"Reaction"` is what spends a reaction |
+| <kbd>frequency</kbd> | `string` | `""` | Display-only text |
+| <kbd>triggerSelf</kbd> | `boolean` | `false` | React to own actions |
+| <kbd>triggerOther</kbd> | `boolean` | `true` | React to others' actions |
+| <kbd>checkReaction</kbd> | `boolean` | `true` | Skip if the reactor has no Reaction left this round |
+| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat |
+| <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
+| <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
+| <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print` |
+| <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Must be synchronous on cancellable triggers |
+| <kbd>activationType</kbd> | `"code" \| "macro" \| "item-use" \| "flow" \| "none"` | `"flow"` | What runs |
+| <kbd>activationMode</kbd> | `"instead" \| "after"` | `"after"` | `instead` replaces the item's own flow |
+| <kbd>activationCode</kbd> | `ActivationCallback \| string` | - | The body, for `activationType: "code"` |
+| <kbd>activationMacro</kbd> | `string` | `""` | Macro name, for `activationType: "macro"` |
+| <kbd>autoActivate</kbd> | `boolean` | `false` | Skip the popup and run immediately |
+| <kbd>onInit</kbd> | `((token, item, api) => Promise<void>) \| string` | - | Runs on token creation |
+| <kbd>onMessage</kbd> | `((triggerType, data, reactorToken, item, activationName, api) => Promise<void>) \| string` | - | Runs on the client targeted by `sendMessageToReactor` |
+
+The group wrapper (`ReactionGroup`) is `{ category?: string, itemType?: string, enabled?: boolean, reactions: ReactionConfig[] }`.
+
+A whole group, as registered by an item LID:
+
+```js
+api.registerDefaultItemReactions({
+    "npcf_suppress_archer": {
+        category: "NPC",
+        itemType: "npc_feature",
+        reactions: [{
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,     // only when THIS feature is used
+            triggerSelf: true,
+            autoActivate: true,          // no popup
+            outOfCombat: true,
+            actionType: "Quick Action",
+            activationType: "code",
+            activationMode: "instead",   // replace the item's own flow
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
+                const targets = await api.chooseToken(reactorToken, { range: 10, count: 1 });
+                if (targets?.length)
+                    await api.applyMark(reactorToken, targets, { effect: "impaired" });
+            }
+        }]
+    }
+});
 ```
+
+A setup-only entry (no trigger, runs once per token) uses `triggers: []` with `activationType: "none"` and an `onInit`.

@@ -1,6 +1,6 @@
 /*global PIXI, libWrapper */
 
-// ==== Side-effect modules (self-wire on import; order preserved) ====
+// Side-effect modules (self-wire on import; order preserved)
 import "./movement/token-ruler.js";
 import "./movement/tactical-distance.js";
 import "./movement/iso-elevation-anim.js";
@@ -20,7 +20,7 @@ import "./setup/qol-compat.js";
 import "./combat/actor-change-hooks.js";
 import "./movement/token-move-hooks.js";
 
-// ==== Movement ====
+// Movement
 import { moveTokenTo } from "./movement/move-api.js";
 import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybindings.js";
 import {
@@ -31,7 +31,7 @@ import {
 } from "./movement/move-tracking.js";
 export { _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack, _rulerMove };
 
-// ==== Combat ====
+// Combat
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
 import { refreshActionLimits, registerActionLimitsHooks } from "./combat/action-limits.js";
 import {
@@ -43,13 +43,13 @@ import { TerrainAPI } from "./combat/terrain-utils.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/reinforcement.js";
 import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerFrequencyHooks, onRenderActorSheetPerFrequency } from "./combat/per-frequency-tags.js";
 
-// ==== Vision ====
+// Vision
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
 import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
 
-// ==== Interactive ====
+// Interactive
 import { laDetailPopup } from "./interactive/detail-renderers.js";
 import { registerElevTiltKeybindings } from "./interactive/keybindings.js";
 import { cancelRulerDrag ,
@@ -70,7 +70,7 @@ import { openExtrasDialog } from "./interactive/extras-dialog.js";
 import { openExtraConfigDialog } from "./interactive/extra-config-dialog.js";
 import { getActorActions } from "./interactive/deployables.js";
 
-// ==== Activations ====
+// Activations
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
 import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
 import { ReactionsAPI } from "./activations/reactions-registry.js";
@@ -119,7 +119,7 @@ import {
 } from "./activations/flow-steps-extra.js";
 import { laStabilizePrompt, laStabilizeExtras } from "./activations/stabilize-flow.js";
 
-// ==== Bonuses ====
+// Bonuses
 import {
     EffectsAPI,
     consumeEffectCharge,
@@ -164,18 +164,18 @@ import {
 import { EffectManagerAPI } from "./bonuses/effectManager.js";
 import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionCSS, registerInfectionFlows, initInfectionHooks, applyInfection, onRenderActorSheetInfection } from "./bonuses/infection.js";
 
-// ==== Token Action HUD ====
+// Token Action HUD
 import { registerTokenStatBarSettings, initTokenStatBar, ExtraBarsAPI, reinjectAutoBarsForActor } from "./tah/tokenStatBar.js";
 import { initConsumeFeedback } from "./tah/consume-feedback.js";
 import { registerTokenStatHintSettings, initTokenStatHint } from "./tah/tokenStatHint.js";
 
-// ==== FX ====
+// FX
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
 import * as actionFX from "./fx/actionFX.js";
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 
-// ==== Tools ====
+// Tools
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
 import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, consumeAction } from "./tools/misc-tools.js";
 import { DowntimeAPI } from "./tools/downtime.js";
@@ -184,7 +184,7 @@ import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 
-// ==== Setup ====
+// Setup
 import { checkModuleUpdate } from "./setup/version-check.js";
 import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
 import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
@@ -194,11 +194,11 @@ import { registerOnboardingBootstrap } from "./setup/settings-onboarding.js";
 import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
 import { checkCompatibility } from "./setup/checkCompatibility.js";
 
-// ==== Socket ====
+// Socket
 import { initSocket, setTokenFlag, unsetTokenFlag, awaitPendingAck } from "./socket.js";
 export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js";
 
-// ==== Utils ====
+// Utils
 import {
     LANCER_ACTOR_TYPES,
     isLancerActor,
@@ -208,13 +208,14 @@ import {
     isTokenVisible,
 } from "./utils/lancer-token.js";
 
-// ==== Integrations / Alt-struct / Tests ====
+// Integrations / Alt-struct / Tests
 import { injectBarToggles } from "./integrations/alt-sheets-flags.js";
+import { reapplyIsometricTileTab } from "./integrations/isometric-tile-tab.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { CardStackTests } from "../tests/card-stack.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
 
-// ==== Eager registrations (all imports above evaluate first) ====
+// Eager registrations (all imports above evaluate first)
 registerAccDiffTargetButton();
 registerStatRollTargetButton();
 registerDamageTargetButton();
@@ -278,11 +279,11 @@ function patchHalfSizeTokens()
             {
                 const gridSize = canvas.grid.size;
                 const gridType = canvas.grid.type;
-                const HEX = 2 / Math.sqrt(3);
+                const HEX_ASPECT = 2 / Math.sqrt(3);
                 const isPointy = (gridType === 2 || gridType === 3);
                 const isFlat = (gridType === 4 || gridType === 5);
-                const bboxWidth = isFlat ? gridSize * HEX : gridSize;
-                const bboxHeight = isPointy ? gridSize * HEX : gridSize;
+                const bboxWidth = isFlat ? gridSize * HEX_ASPECT : gridSize;
+                const bboxHeight = isPointy ? gridSize * HEX_ASPECT : gridSize;
                 const cellCenter = canvas.grid.getCenterPoint
                     ? canvas.grid.getCenterPoint({ x: self.x + bboxWidth / 2, y: self.y + bboxHeight / 2 })
                     : { x: self.x + gridSize / 2, y: self.y + gridSize / 2 };
@@ -438,6 +439,7 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('CoreActiveFlow')?.insertStepAfter('printActionUseCard', 'lancer-automations:onActivation');
     flows.get('OverchargeFlow')?.insertStepAfter('printOverchargeCard', 'lancer-automations:onActivation');
     flows.get('StabilizeFlow')?.insertStepAfter('printStabilizeResult', 'lancer-automations:onActivation');
+    flows.get('BondPowerFlow')?.insertStepAfter('printPowerCard', 'lancer-automations:onActivation');
 
     // sit before applySelfHeat where it exists; Talent/SimpleActivation have no consumption step
     flows.get('ActivationFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
@@ -1082,6 +1084,7 @@ Hooks.on('ready', async () =>
 
     ReactionManager.initialize();
     LAAuras.init();
+    reapplyIsometricTileTab();
 
     game.modules.get('lancer-automations').api = /** @type {any} */ ({
         ...OverwatchAPI,
@@ -1101,6 +1104,7 @@ Hooks.on('ready', async () =>
         ...ExtraBarsAPI,
         ...ExtraConfigAPI,
         applyInfection,
+        openExtrasDialog,
         repairLCPData,
         TriggerUseAmmoFlow,
         setTokenFlag,
@@ -1577,7 +1581,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
     {
         const damageTypes = html.find('.lancer-dice-formula i.cci[class*="damage--"]')
             .map((_, el) => Array.from(el.classList)
-                .find(c => c.startsWith('damage--'))
+                .find(cls => cls.startsWith('damage--'))
                 ?.replace('damage--', '')
             ).get();
 

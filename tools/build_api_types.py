@@ -19,8 +19,13 @@ SKIP_DIRS = {'typing', 'node_modules', 'tests'}
 TYPES_FILE = MODULE_ROOT / 'scripts' / 'typing' / 'types.d.ts'
 OUTPUT = MODULE_ROOT / 'scripts' / 'typing' / 'api.generated.d.ts'
 
+MAIN_FILE = MODULE_ROOT / 'scripts' / 'main.js'
+
 API_BLOCK_RE = re.compile(r'export\s+const\s+\w+API\s*=\s*\{', re.MULTILINE)
-FN_DEF_RE_TPL = r'(?:export\s+)?(?:async\s+)?function\s+{name}\s*\(([^)]*)\)'
+# Capture the async keyword so sync members aren't declared as Promise.
+FN_DEF_RE_TPL = r'(?:export\s+)?(async\s+)?function\s+{name}\s*\(([^)]*)\)'
+ARROW_DEF_RE_TPL = r'(?:export\s+)?(?:const|let|var)\s+{name}\s*=\s*(async\s+)?\(([^)]*)\)\s*=>'
+METHOD_DEF_RE_TPL = r'(?:static\s+)?(async\s+)?{name}\s*\(([^)]*)\)\s*\{{'
 
 
 def find_close(src, open_idx, open_ch, close_ch):
@@ -51,32 +56,105 @@ def iter_js_files():
             yield path
 
 
+def resolve_import_path(from_path, spec):
+    """'./cards.js' relative to from_path -> Path, or None for bare specifiers."""
+    if not spec.startswith('.'):
+        return None
+    target = (from_path.parent / spec).resolve()
+    return target if target.exists() else None
+
+
+def module_exports(path, seen=None):
+    """Every name a module exports, following `export * from` and `export {} from` one hop at a time."""
+    if seen is None:
+        seen = set()
+    if path in seen or not path.exists():
+        return set()
+    seen.add(path)
+    src = path.read_text(encoding='utf-8', errors='replace')
+    names = set()
+    for m in re.finditer(r'export\s+(?:async\s+)?function\s+(\w+)', src):
+        names.add(m.group(1))
+    for m in re.finditer(r'export\s+(?:const|let|var)\s+(\w+)', src):
+        names.add(m.group(1))
+    for m in re.finditer(r'export\s+class\s+(\w+)', src):
+        names.add(m.group(1))
+    # export { a, b as c } [from './x.js']
+    for m in re.finditer(r'export\s*\{([^}]*)\}', src):
+        for piece in m.group(1).split(','):
+            piece = piece.strip()
+            if not piece:
+                continue
+            alias = piece.split(' as ')[-1].strip()
+            if re.match(r'^\w+$', alias):
+                names.add(alias)
+    # export * from './x.js'
+    for m in re.finditer(r'export\s*\*\s*from\s*[\'"]([^\'"]+)[\'"]', src):
+        target = resolve_import_path(path, m.group(1))
+        if target:
+            names |= module_exports(target, seen)
+    return names
+
+
+def names_from_object_body(body, path):
+    """Shorthand/renamed keys in an object literal, plus `...ns` spreads resolved to that module's exports."""
+    names = set()
+    # Split on commas as well as newlines: some API objects are written on one line.
+    for line in re.split(r'[,\n]', body):
+        stripped = line.strip().rstrip(',').rstrip(';').strip()
+        if not stripped or stripped.startswith('//') or stripped.startswith('*'):
+            continue
+        spread = re.match(r'^\.\.\.(\w+)$', stripped)
+        if spread:
+            ns = spread.group(1)
+            src = path.read_text(encoding='utf-8', errors='replace')
+            imp = re.search(r'import\s*\*\s*as\s+' + re.escape(ns) + r'\s+from\s*[\'"]([^\'"]+)[\'"]', src)
+            if imp:
+                target = resolve_import_path(path, imp.group(1))
+                if target:
+                    names |= module_exports(target)
+            continue
+        # `foo` (shorthand) or `foo: bar` (renamed)
+        m2 = re.match(r'^(\w+)(?:\s*:\s*[\w.]+)?$', stripped)
+        if m2:
+            names.add(m2.group(1))
+    return names
+
+
 def collect_api_names():
     names = set()
     for path in iter_js_files():
         src = path.read_text(encoding='utf-8', errors='replace')
         for m in API_BLOCK_RE.finditer(src):
             close = find_close(src, m.end() - 1, '{', '}')
-            body = src[m.end():close]
-            for line in body.splitlines():
-                stripped = line.strip().rstrip(',').rstrip(';').strip()
-                if not stripped or stripped.startswith('//') or stripped.startswith('*'):
-                    continue
-                # Match either `foo` (shorthand) or `foo: bar` (renamed)
-                m2 = re.match(r'^(\w+)(?:\s*:\s*\w+)?$', stripped)
-                if m2:
-                    names.add(m2.group(1))
-    return names
+            names |= names_from_object_body(src[m.end():close], path)
+    # The api object in main.js also carries ~40 literal keys that live in no *API object.
+    if MAIN_FILE.exists():
+        src = MAIN_FILE.read_text(encoding='utf-8', errors='replace')
+        m = re.search(r'\.api\s*=\s*(?:/\*\*.*?\*/\s*)?\(?', src, re.DOTALL)
+        if m:
+            brace = src.find('{', m.end())
+            if brace != -1:
+                close = find_close(src, brace, '{', '}')
+                names |= names_from_object_body(src[brace + 1:close], MAIN_FILE)
+    return {n for n in names if not n.startswith('_')}
 
 
 def find_function_signature(name):
-    pattern = re.compile(FN_DEF_RE_TPL.format(name=re.escape(name)))
+    """Return (params_str, is_async), or (None, False) when the definition can't be found."""
+    esc = re.escape(name)
+    patterns = [
+        re.compile(FN_DEF_RE_TPL.format(name=esc)),
+        re.compile(ARROW_DEF_RE_TPL.format(name=esc)),
+        re.compile(METHOD_DEF_RE_TPL.format(name=esc)),
+    ]
     for path in iter_js_files():
         src = path.read_text(encoding='utf-8', errors='replace')
-        m = pattern.search(src)
-        if m:
-            return m.group(1)
-    return None
+        for pattern in patterns:
+            m = pattern.search(src)
+            if m:
+                return m.group(2), bool(m.group(1))
+    return None, False
 
 
 def parse_params(arg_str):
@@ -116,14 +194,17 @@ def parse_params(arg_str):
     return out
 
 
-def render_signature(name, params):
+def render_signature(name, params, is_async, found):
+    ret = 'Promise<any>' if is_async else 'any'
+    if not found:
+        # Constant, class, or aliased export: declare as a property. `any` stays callable.
+        return f'    {name}: any;'
     if any(p[0].startswith('...') for p in params):
-        # Has rest param -> simplest declaration
-        return f'    {name}(...args: any[]): Promise<any>;'
+        return f'    {name}(...args: any[]): {ret};'
     pieces = []
     for n, opt in params:
         pieces.append(f'{n}{"?" if opt else ""}: any')
-    return f'    {name}({", ".join(pieces)}): Promise<any>;'
+    return f'    {name}({", ".join(pieces)}): {ret};'
 
 
 def collect_already_declared():
@@ -175,9 +256,9 @@ def main():
         'interface LancerAutomationsAPI {',
     ]
     for name in missing:
-        args = find_function_signature(name) or ''
-        params = parse_params(args)
-        lines.append(render_signature(name, params))
+        args, is_async = find_function_signature(name)
+        params = parse_params(args or '')
+        lines.append(render_signature(name, params, is_async, args is not None))
     lines.append('}')
     lines.append('')
 

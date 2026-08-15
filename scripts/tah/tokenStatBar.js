@@ -1,4 +1,4 @@
-// Custom multi-bar hub drawn under Lancer tokens + resource grid in token HUD.
+﻿// Custom multi-bar hub drawn under Lancer tokens + resource grid in token HUD.
 // Replaces vanilla bar1/bar2 for mech/npc/deployable actors. Disabled by default.
 
 import { getIsoStateForToken } from '../setup/iso-settings.js';
@@ -19,10 +19,10 @@ import {
     MODULE_ID,
     SETTING_ENABLED, SETTING_DEFAULT_HIDDEN, SETTING_DEFAULT_COMBAT_ONLY, SETTING_DEFAULT_ROW_HEIGHT,
     SETTING_VIS_OUT_OF_COMBAT, SETTING_VIS_IN_COMBAT, SETTING_EFFECT_ICON_SCALE, SETTING_MIN_ZOOM_SCALE,
-    SETTING_DEFAULT_PILOT_STRESS, SETTING_SHOW_VALUES, SETTING_AUTO_INJECT_TALENTS,
+    SETTING_DEFAULT_PILOT_STRESS, SETTING_SHOW_VALUES, SETTING_AUTO_INJECT_TALENTS, SETTING_AUTO_INJECT_BOND_XP,
     SETTING_AUTO_INJECT_TALENT_COLOR, SETTING_AUTO_INJECT_TALENT_WIDTH, SETTING_AUTO_INJECT_TALENT_FEEDBACK,
     SETTING_AUTO_INJECT_CUSTOM_FLAGS,
-    VIS_ALL, VIS_OWNER, VIS_NONE,
+    VIS_ALL, VIS_OWNER, VIS_NONE, VIS_SCANNED,
     FLASH_HOLD_MS, FLASH_SHRINK_MS, FLASH_TOTAL_MS, FLASH_LINGER_MS,
     MAX_BAR_WIDTH, REF_GRID_SIZE, REF_ROW_HEIGHT,
     ISO_SETTING_STATBAR, ISO_SETTING_RETICLE, ISO_SETTING_HITZONE,
@@ -113,7 +113,6 @@ const BAR_DEFS = [
     },
 ];
 
-// Helpers
 
 import { getModuleSetting } from "../tools/settings-utils.js";
 
@@ -218,7 +217,7 @@ function resolveVisibilityMode(tokenDoc, inCombat)
     const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
     const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
     const mode = tokenDoc?.getFlag?.(MODULE_ID, flagKey);
-    if (mode === VIS_ALL || mode === VIS_OWNER || mode === VIS_NONE)
+    if (mode === VIS_ALL || mode === VIS_OWNER || mode === VIS_NONE || mode === VIS_SCANNED)
         return mode;
     return getWorldSetting(settingKey, VIS_ALL);
 }
@@ -240,6 +239,8 @@ function shouldShowBars(token)
         return !!token.controlled;
     if (mode === VIS_OWNER && !token.actor?.isOwner)
         return false;
+    if (mode === VIS_SCANNED && !_scanRevealedToUser(token.actor))
+        return false;
     if (token.controlled || token.hover)
         return true;
     if (token.targeted?.has(game.user))
@@ -247,6 +248,15 @@ function shouldShowBars(token)
     if (isAltHeld() && isTokenVisible(token))
         return true;
     return false;
+}
+
+// Token-local y just below the bar stack, same anchor the nameplate uses; null when bars are off.
+export function belowBarsY(token)
+{
+    const entry = _overlayHubs.get(token.id);
+    if (!entry || !shouldShowBars(token))
+        return null;
+    return token.h + 10 + (entry.totalHeight ?? 0) * ((entry.wrapper?.scale?.y ?? 1) - 1);
 }
 
 function getVisibleBars(actor, tokenDoc = null)
@@ -322,8 +332,8 @@ function _parseHex(hex)
 
 // Path resolver: supports normal actor-rooted paths plus two special prefixes
 // used by auto-injected counter bars:
-//   "items.{id}.{rest}"        → walks actor.items.get(id) (e.g. frame on a mech)
-//   "pilotItems.{id}.{rest}"   → walks actor.system.pilot.value.items.get(id) when
+//   "items.{id}.{rest}"        â†’ walks actor.items.get(id) (e.g. frame on a mech)
+//   "pilotItems.{id}.{rest}"   â†’ walks actor.system.pilot.value.items.get(id) when
 //                                 the actor is a mech, otherwise falls back to actor.items
 //                                 (talents live on the pilot for mechs, on the pilot actor itself otherwise)
 function _readActorPath(actor, path)
@@ -350,7 +360,7 @@ function _readActorPath(actor, path)
     return foundry.utils.getProperty(actor, path);
 }
 
-// True if `user` has an OBSERVER-or-better scan journal entry for this actor.
+// Scanned for `user`: the scannedByAll flag, or an OBSERVER-or-better scan journal.
 function _isActorScannedByUser(actor, user)
 {
     if (!actor || !user)
@@ -364,6 +374,16 @@ function _isActorScannedByUser(actor, user)
     catch
     { /* ignore */ }
     return false;
+}
+
+// 'scanned' visibility: own-side actors reveal to everyone (no scan concept); NPC/deployable need a scan.
+function _scanRevealedToUser(actor)
+{
+    if (game.user?.isGM || actor?.isOwner)
+        return true;
+    if (actor?.type === 'pilot' || actor?.type === 'mech')
+        return true;
+    return _isActorScannedByUser(actor, game.user);
 }
 
 // Resolve visibility from the 3-mode field. Falls back to legacy ownerOnly, then 'scanned'.
@@ -403,9 +423,7 @@ export function _resolveExtraBarValues(actor, entry)
     return { value, max, ownerOk };
 }
 
-// Enumerate every talent rank counter and frame core counter on an actor.
-// Returns [{ autoKey, label, valuePath, maxPath }] using actor-rooted "items.{id}.{rest}"
-// paths that the extended resolver understands.
+// Enumerates talent rank + frame core counters; returns items.{id}.rest-style paths.
 function _enumerateAutoCounters(actor)
 {
     const out = [];
@@ -504,7 +522,32 @@ async function _autoInjectCounters(tokenDoc)
                 .filter(bar => !liveKeys.has(bar.autoKey) && !seen[bar.autoKey]);
         }
 
-        if (!toAddCounters.length && !toAddTemplates.length && !toAddFlags.length)
+        // Bond XP bar on bonded pilots (gated by world setting).
+        let toAddBondXp = [];
+        if (actor.type === 'pilot' && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_BOND_XP)
+            && actor.items.some(/** @type {any} */ ownedItem => ownedItem.type === 'bond')
+            && !liveKeys.has('bondXp') && !seen['bondXp'])
+        {
+            toAddBondXp = [{
+                ..._defaultExtraBar(),
+                id: foundry.utils.randomID(),
+                autoKey: 'bondXp',
+                label: 'XP',
+                layoutMode: 'newLine',
+                widthPct: 100,
+                color: { kind: 'solid', stops: ['#00b8d4'] },
+                icon: 'mdi mdi-head-cog-outline',
+                valueSource: { kind: 'path', path: 'system.bond_state.xp.value', value: 0 },
+                maxSource: { kind: 'path', path: 'system.bond_state.xp.max', value: 8 },
+                segmented: true,
+                showLabelInHint: false,
+                hideInHint: true,
+                visibility: 'scanned',
+                audioTextFeedback: false,
+            }];
+        }
+
+        if (!toAddCounters.length && !toAddTemplates.length && !toAddFlags.length && !toAddBondXp.length)
             return;
 
         const next = existing.slice();
@@ -520,6 +563,11 @@ async function _autoInjectCounters(tokenDoc)
             seenNext[template.autoKey] = true;
         }
         for (const bar of toAddFlags)
+        {
+            next.push(bar);
+            seenNext[bar.autoKey] = true;
+        }
+        for (const bar of toAddBondXp)
         {
             next.push(bar);
             seenNext[bar.autoKey] = true;
@@ -694,7 +742,7 @@ export function _defaultExtraBar()
     };
 }
 
-// Polymorphic target: Token / Item / Actor / uuid / id → { kind, doc } or null.
+// Polymorphic target: Token / Item / Actor / uuid / id â†’ { kind, doc } or null.
 async function _resolveTarget(target)
 {
     if (!target)
@@ -874,7 +922,8 @@ export async function removeExtraBar(target, entryId)
     return _removeExtraBarFromTemplate(resolved.doc, entryId);
 }
 
-// Token → statBarExtras entries. Item/Actor → template records [{ id, entry }].
+// Token â†’ statBarExtras entries. Item/Actor â†’ template records [{ id, entry }].
+/** @returns {Array<any>} Extra bar entries on the document */
 export function getExtraBars(target)
 {
     if (!target)
@@ -1030,10 +1079,10 @@ async function _addExtraBarToTemplate(sourceDoc, partial)
 
 async function _removeExtraBarFromToken(tokenDoc, entryId)
 {
-    const arr = foundry.utils.deepClone(/** @type {any} */ (tokenDoc).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
-    const removed = arr.find(/** @type {any} */ item => item.id === entryId);
-    const next = arr.filter(/** @type {any} */ item => item.id !== entryId);
-    if (next.length === arr.length)
+    const extras = foundry.utils.deepClone(/** @type {any} */ (tokenDoc).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const removed = extras.find(/** @type {any} */ item => item.id === entryId);
+    const next = extras.filter(/** @type {any} */ item => item.id !== entryId);
+    if (next.length === extras.length)
         return false;
     try
     {
@@ -1122,7 +1171,7 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed)
     return `
         <div class="la-extra-bar-row${collapsed ? ' collapsed' : ''}" data-idx="${idx}" data-id="${entry.id}">
             <div class="la-extra-bar-header">
-                <span class="la-extra-bar-drag" draggable="true" title="Drag to reorder">≡</span>
+                <span class="la-extra-bar-drag" draggable="true" title="Drag to reorder">â‰¡</span>
                 <button type="button" class="la-extra-bar-toggle" title="${collapsed ? 'Expand' : 'Collapse'}">
                     <i class="fas fa-chevron-${collapsed ? 'right' : 'down'}"></i>
                 </button>
@@ -1253,8 +1302,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     if (!listEl || !addBtn || !formEl)
         return;
 
-    // Adapter pattern: default (scene token) reads/writes statBarExtras; prototype config
-    // passes an override that reads/writes actor.extraBarTemplates.
+    // Default reads/writes FLAG_EXTRAS; callers pass storeOverride for prototype config.
     const store = storeOverride ?? {
         read: () => tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [],
         write: (working) => tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, working),
@@ -1262,18 +1310,18 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     };
 
     // Working copy. Persisted on form submit.
-    let arr = foundry.utils.deepClone(store.read());
+    let workingExtras = foundry.utils.deepClone(store.read());
 
     // Per-id collapsed state. Existing rows start collapsed so the list is scannable.
-    const collapsedIds = new Set(arr.map(/** @type {any} */ entry => entry?.id).filter(Boolean));
+    const collapsedIds = new Set(workingExtras.map(/** @type {any} */ entry => entry?.id).filter(Boolean));
 
     const computeOverflow = () =>
     {
-        const lines = _groupExtrasIntoLines(arr);
+        const lines = _groupExtrasIntoLines(workingExtras);
         // Mark every entry whose requested width pushed it onto a new line.
         const overflowing = new Set();
         let currentLine = null;
-        for (const extra of arr)
+        for (const extra of workingExtras)
         {
             const widthPct = Math.max(1, Math.min(100, Number(extra?.widthPct) || 100));
             const breaks = !currentLine || extra?.layoutMode === 'newLine' || (currentLine.used + widthPct) > 100;
@@ -1292,7 +1340,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     const rerender = () =>
     {
         const overflowing = computeOverflow();
-        listEl.innerHTML = arr.map((entry, i) => _renderExtraBarRowHtml(entry, i, overflowing.has(entry.id), collapsedIds.has(entry.id))).join('');
+        listEl.innerHTML = workingExtras.map((entry, i) => _renderExtraBarRowHtml(entry, i, overflowing.has(entry.id), collapsedIds.has(entry.id))).join('');
         bindRow();
         if (typeof app.setPosition === 'function')
             app.setPosition({ height: 'auto' });
@@ -1311,7 +1359,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         listEl.querySelectorAll('.la-extra-bar-row').forEach(/** @type {any} */(rowEl) =>
         {
             const idx = Number(rowEl.dataset.idx);
-            const entry = arr[idx];
+            const entry = workingExtras[idx];
             if (!entry)
                 return;
 
@@ -1353,11 +1401,11 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                         await altFlags.setBarLink(tokenDoc.actor, flagId, false);
                 }
                 collapsedIds.delete(entry.id);
-                arr.splice(idx, 1);
+                workingExtras.splice(idx, 1);
                 rerender();
             });
 
-            // Icon path → live-update the preview img on input.
+            // Icon path â†’ live-update the preview img on input.
             const iconInput = /** @type {any} */ (rowEl.querySelector('input[data-field="icon"]'));
             const iconPreview = /** @type {any} */ (rowEl.querySelector('.la-extra-bar-icon-preview'));
             iconInput?.addEventListener('input', () =>
@@ -1369,7 +1417,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 }
             });
 
-            // Icon picker button → open Foundry's FilePicker rooted in modules/lancer-automations/icons.
+            // Icon picker button â†’ open Foundry's FilePicker rooted in modules/lancer-automations/icons.
             rowEl.querySelector('.la-extra-bar-icon-pick')?.addEventListener('click', () =>
             {
                 const current = (entry.icon || DEFAULT_EXTRA_BAR_ICON);
@@ -1391,7 +1439,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 fp.browse();
             });
 
-            // Item picker → choose an Item from the actor (or any actor) to link.
+            // Item picker â†’ choose an Item from the actor (or any actor) to link.
             rowEl.querySelector('.la-extra-bar-item-pick')?.addEventListener('click', async () =>
             {
                 const actor = tokenDoc?.actor ?? tokenDoc?.parent?.actor;
@@ -1465,8 +1513,8 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 const to = idx;
                 if (Number.isFinite(from) && from !== to)
                 {
-                    const moved = arr.splice(from, 1)[0];
-                    arr.splice(to, 0, moved);
+                    const moved = workingExtras.splice(from, 1)[0];
+                    workingExtras.splice(to, 0, moved);
                     rerender();
                 }
             });
@@ -1476,13 +1524,12 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     addBtn.addEventListener('click', () =>
     {
         const entry = _defaultExtraBar();
-        arr.push(entry);
+        workingExtras.push(entry);
         collapsedIds.add(entry.id);
         rerender();
     });
 
-    // Reset auto-injected bars: re-syncs from talent / frame core counters + linked templates
-    // when the world setting is on, or wipes auto entries + tombstones when it's off.
+    // Re-syncs auto bars from talents/templates, or wipes them when the world setting is off.
     const resetBtn = root.querySelector?.('.la-extra-bars-reset');
     resetBtn?.addEventListener('click', async () =>
     {
@@ -1490,7 +1537,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         // Persist the in-memory edits first so user changes aren't blown away by races.
         try
         {
-            await store.write(arr);
+            await store.write(workingExtras);
         }
         catch (err)
         {
@@ -1499,12 +1546,12 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         const ok = await store.onReset();
         if (!ok)
         {
-            ui.notifications.warn('Reset failed — check the console.');
+            ui.notifications.warn('Reset failed, see the console.');
             return;
         }
         // Pull the fresh array back into the editor and re-render.
-        arr = foundry.utils.deepClone(store.read());
-        for (const entry of arr)
+        workingExtras = foundry.utils.deepClone(store.read());
+        for (const entry of workingExtras)
         {
             if (entry?.id && entry.autoKey)
                 collapsedIds.add(entry.id);
@@ -1523,7 +1570,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         {
             try
             {
-                store.write(arr);
+                store.write(workingExtras);
             }
             catch (err)
             {
@@ -1642,6 +1689,7 @@ function snapshotValues(actor, tokenDoc = null)
         structure: actor.system?.structure?.value ?? 0,
         stress: actor.system?.stress?.value ?? 0,
         pilotStress: actor.system?.bond_state?.stress?.value ?? 0,
+        bondXp: actor.system?.bond_state?.xp?.value ?? 0,
         overshield: actor.system?.overshield?.value ?? 0,
         burn: actor.system?.burn ?? 0,
         infection: actor.system?.infection ?? 0,
@@ -1981,9 +2029,10 @@ function fireExtraFeedback(token, entryId, oldVal, newVal)
             if (showScroll)
             {
                 const primary = canSee ? (entry.color?.stops?.[0] ?? '#ffffff') : '#888888';
+                const floatsUp = entry.autoKey === 'bondXp' ? delta > 0 : delta < 0;
                 canvas.interface.createScrollingText(token.center, text, {
                     anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
+                    direction: floatsUp ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
                     fontSize: 28,
                     fill: primary,
                     stroke: 0,
@@ -2045,7 +2094,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
         runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) =>
         {
             const remainingW = initialFlashW * (1 - eased);
-            // Damage: pips drain from the right → flash shrinks from the left.
+            // Damage: pips drain from the right â†’ flash shrinks from the left.
             const drawX = isDamage
                 ? flashStartX
                 : flashStartX + (initialFlashW - remainingW);
@@ -2056,8 +2105,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
         return;
     }
 
-    // Solid / gradient bar: rectangular flash on the changed slice.
-    // target.max is the entry's real max so the flash covers a delta portion, not the whole bar.
+    // Solid bar: flashes the changed slice; uses target.max for correct delta width.
     const hostMax = Math.max(1, Number(target.max) || 0, oldVal, newVal);
     const barX = target.x + 1;
     const barW = target.w - 2;
@@ -2085,8 +2133,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
 
 const BAKE_RESOLUTION = 4;
 
-// Replaces gfx in container with a baked sprite at the same Z-position and
-// tracks the texture for cleanup. Returns true if the swap happened.
+// Swaps gfx for a baked sprite at the same z-slot; tracks texture for cleanup.
 function bakeAndSwap(container, gfx, tokenId, { addAt } = {})
 {
     const sprite = bakeGraphicsToTexture(gfx);
@@ -2123,7 +2170,7 @@ function bakeGraphicsToTexture(gfx, resolution = BAKE_RESOLUTION)
             region,
             multisample: PIXI.MSAA_QUALITY?.HIGH ?? 4,
         });
-        // Mipmaps: GPU uses pre-filtered downsamples instead of 1-of-N nearest sampling (the moiré source).
+        // Mipmaps: GPU uses pre-filtered downsamples instead of 1-of-N nearest sampling (the moirÃ© source).
         if (tex.baseTexture)
         {
             tex.baseTexture.mipmap = PIXI.MIPMAP_MODES?.ON ?? 1;
@@ -2159,8 +2206,7 @@ function drawSegment(gfx, x, y, w, h, def, barValue, chromeScale = 1)
 
     if (def.pips)
     {
-        // Default: drains left-first (Structure/Stress convention). When def.pipsLTR
-        // is set, fills left-first (progress-bar convention), used by extras.
+        // Drains left-first (STR/Stress) unless pipsLTR is set (extras fill left-first).
         const gap = chromeScale;
         const inner = w - 2 * chromeScale;
         const segW = (inner - gap * (max - 1)) / max;
@@ -2289,8 +2335,7 @@ function _removeSyncTicker(tokenId)
     }
 }
 
-// Returns the active Token instance for an id: the drag preview if one exists in
-// canvas.tokens.preview, otherwise the source token. Both share the same id in v13.
+// Returns drag preview if available, else source token (both share id in v13).
 function _activeForId(tokenId)
 {
     const previews = canvas.tokens?.preview?.children ?? [];
@@ -2450,7 +2495,7 @@ function drawStatHub()
         wrapper.position.set(token.mesh.position.x, token.mesh.position.y);
         wrapper.rotation = iso.reverseRotation;
         wrapper.skew.set(iso.reverseSkewX, iso.reverseSkewY);
-        // K = 1/sqrt(sqrt(3)) ≈ 0.76 cancels the True Iso aspect change.
+        // K = 1/sqrt(sqrt(3)) â‰ˆ 0.76 cancels the True Iso aspect change.
         const isoScale = 0.76;
         wrapper.scale.set(isoScale, 1 / isoScale);
         container.position.set(-width / 2, (token.h / 2) + 3 - rowHeight);
@@ -2963,7 +3008,7 @@ function drawElevationBadge(token)
 
     if (isPositive)
     {
-        // ▲ arrow then dark cell
+        // â–² arrow then dark cell
         gfx.beginFill(arrowColor, 1);
         gfx.moveTo(halfW, 0);
         gfx.lineTo(cellW, arrowH);
@@ -2980,7 +3025,7 @@ function drawElevationBadge(token)
     }
     else
     {
-        // Dark cell then ▼ arrow
+        // Dark cell then â–¼ arrow
         gfx.beginFill(0x111111, 0.9);
         gfx.drawRect(0, 0, cellW, cellH);
         gfx.endFill();
@@ -3045,7 +3090,6 @@ function drawElevationBadge(token)
     token._laBadgeIso = isoActive;
 }
 
-// Token HUD injection
 
 function hex(colorInt)
 {
@@ -3197,15 +3241,15 @@ function injectLancerHud(hud, html, actor)
             const num = Number(raw);
             if (!Number.isFinite(num))
                 return;
-            const arr = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
-            const entry = arr.find(/** @type {any} */ x => x.id === entryId);
+            const extras = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+            const entry = extras.find(/** @type {any} */ x => x.id === entryId);
             if (!entry || entry.valueSource?.kind !== 'manual')
                 return;
             let next = num;
             if (raw.startsWith('+') || raw.startsWith('-'))
                 next = (Number(entry.valueSource.value) || 0) + num;
             entry.valueSource.value = next;
-            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, arr);
+            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, extras);
             hud.clear();
         };
 
@@ -3230,8 +3274,6 @@ function injectLancerHud(hud, html, actor)
 export function registerTokenStatBarSettings()
 {
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
-        name: 'Custom Token Stat Bars',
-        hint: 'Replaces default token bars with my custom token bar, very similar to Bar Brawl but with my own personal tweaks. Disabled when Bar Brawl is active.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -3253,9 +3295,10 @@ export function registerTokenStatBarSettings()
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_CUSTOM_FLAGS, {
         scope: 'world', config: false, type: Boolean, default: true,
     });
+    game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_BOND_XP, {
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
     game.settings.register(MODULE_ID, SETTING_SHOW_VALUES, {
-        name: 'Show Numeric Values on Bars',
-        hint: 'When off, HP/Heat/Stress numbers are hidden — only the bars themselves are drawn.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -3295,8 +3338,6 @@ export function registerTokenStatBarSettings()
     });
 
     game.settings.register(MODULE_ID, SETTING_MIN_ZOOM_SCALE, {
-        name: 'Minimum Bar Zoom Scale',
-        hint: 'Below this zoom level, the bar keeps a constant screen size instead of shrinking with the canvas. 0 = disabled (scales naturally). 1 = lock at 1x zoom equivalent.',
         scope: 'world',
         config: false,
         type: Number,
@@ -3304,8 +3345,6 @@ export function registerTokenStatBarSettings()
         range: { min: 0, max: 4, step: 0.1 },
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENTS, {
-        name: 'Auto-add Talent & Frame Counter Bars',
-        hint: 'Inject an extra stat bar for every talent counter and frame core counter on Lancer tokens. User-deleted bars are not re-added.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -3322,16 +3361,12 @@ export function registerTokenStatBarSettings()
         },
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR, {
-        name: 'Auto-Injected Bar Color',
-        hint: 'Default color for auto-injected bars (talents, frame counters, and item/actor templates that do not set their own).',
         scope: 'world',
         config: false,
         type: String,
         default: '#196161',
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH, {
-        name: 'Auto-Injected Bar Width (%)',
-        hint: 'Default width % for auto-injected bars (talents, frame counters, and item/actor templates that do not set their own).',
         scope: 'world',
         config: false,
         type: Number,
@@ -3339,96 +3374,12 @@ export function registerTokenStatBarSettings()
         range: { min: 1, max: 100, step: 1 },
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENT_FEEDBACK, {
-        name: 'Auto-Injected Bar Audio/Text Feedback',
-        hint: 'Default audio + floating text on value changes for auto-injected bars.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
 
-}
-
-export { TokenStatBarConfig };
-
-// Settings menu form
-
-class TokenStatBarConfig extends FormApplication
-{
-    static get defaultOptions()
-    {
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            id: 'la-token-stat-bar-config',
-            title: 'Lancer Automations — Token Stat Bars',
-            template: `modules/${MODULE_ID}/templates/token-stat-bar-config.html`,
-            width: 560,
-            closeOnSubmit: true,
-        });
-    }
-
-    getData()
-    {
-        const visChoices = [
-            { value: VIS_ALL, label: 'All (default behaviour)' },
-            { value: VIS_OWNER, label: 'Owners only' },
-            { value: VIS_NONE, label: 'None (hidden)' },
-        ];
-        return {
-            enabled: getWorldSetting(SETTING_ENABLED, false),
-            defaultHidden: getWorldSetting(SETTING_DEFAULT_HIDDEN, false),
-            defaultCombatOnly: getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false),
-            defaultRowHeight: getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0) || '',
-            defaultPilotStress: getWorldSetting(SETTING_DEFAULT_PILOT_STRESS, false),
-            visOutOfCombat: getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL),
-            visInCombat: getWorldSetting(SETTING_VIS_IN_COMBAT, VIS_ALL),
-            visChoicesOut: visChoices.map(choice => ({ ...choice, selected: choice.value === getWorldSetting(SETTING_VIS_OUT_OF_COMBAT, VIS_ALL) })),
-            visChoicesIn: visChoices.map(choice => ({ ...choice, selected: choice.value === getWorldSetting(SETTING_VIS_IN_COMBAT, VIS_ALL) })),
-        };
-    }
-
-    activateListeners(html)
-    {
-        super.activateListeners(html);
-        html.find('button.la-apply-defaults').on('click', async (ev) =>
-        {
-            ev.preventDefault();
-            await applyDefaultsToCurrentScene();
-        });
-    }
-
-    async _updateObject(_event, formData)
-    {
-        const previousEnabled = getWorldSetting(SETTING_ENABLED, false);
-        const newEnabled = !!formData.enabled;
-
-        await game.settings.set(MODULE_ID, SETTING_ENABLED, newEnabled);
-        await game.settings.set(MODULE_ID, SETTING_DEFAULT_HIDDEN, !!formData.defaultHidden);
-        await game.settings.set(MODULE_ID, SETTING_DEFAULT_COMBAT_ONLY, !!formData.defaultCombatOnly);
-        const rowH = Number(formData.defaultRowHeight);
-        await game.settings.set(MODULE_ID, SETTING_DEFAULT_ROW_HEIGHT, Number.isFinite(rowH) && rowH > 0 ? rowH : 0);
-        await game.settings.set(MODULE_ID, SETTING_DEFAULT_PILOT_STRESS, !!formData.defaultPilotStress);
-        await game.settings.set(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, formData.visOutOfCombat || VIS_ALL);
-        await game.settings.set(MODULE_ID, SETTING_VIS_IN_COMBAT, formData.visInCombat || VIS_ALL);
-
-        // Refresh visibility immediately so the new modes apply without a reload
-        // (unless the master toggle changed, in which case we need a reload).
-        refreshVisibleLancerTokens();
-
-        if (previousEnabled !== newEnabled)
-        {
-            const DialogV2 = foundry.applications?.api?.DialogV2;
-            if (DialogV2)
-            {
-                await DialogV2.confirm({
-                    window: { title: 'Reload Required' },
-                    content: '<p>The Custom Token Stat Bars master toggle was changed. Reload Foundry now?</p>',
-                    yes: { callback: () => foundry.utils.debouncedReload() },
-                });
-            }
-            else
-                foundry.utils.debouncedReload?.();
-        }
-    }
 }
 
 // Reset auto-injected bars on every scene token and every actor prototype.
@@ -3505,7 +3456,7 @@ export async function applyDefaultsToCurrentScene()
     catch (e)
     {
         console.warn(`${MODULE_ID} | apply defaults failed`, e);
-        ui.notifications?.error('Failed to apply defaults — see console.');
+        ui.notifications?.error('Failed to apply defaults, see the console.');
     }
 }
 
@@ -3551,7 +3502,7 @@ export function initTokenStatBar()
     // Skip if Bar Brawl is active.
     if (game.modules.get('barbrawl')?.active)
     {
-        console.log(`${MODULE_ID} | Bar Brawl detected — skipping custom token stat bar registration.`);
+        console.log(`${MODULE_ID} | Bar Brawl detected â€” skipping custom token stat bar registration.`);
         return;
     }
 
@@ -3651,6 +3602,33 @@ export function initTokenStatBar()
                         direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
                         fontSize: 28,
                         fill: '0xd9b800',
+                        stroke: 0,
+                        strokeThickness: 4,
+                        jitter: 0.25,
+                    });
+                }
+            }
+            // Bond XP delta; skipped when the auto-injected XP bar already emits its own feedback.
+            if (prev.bondXp !== undefined && prev.bondXp !== next.bondXp
+                && actor.type === 'pilot' && canvas?.interface?.createScrollingText)
+            {
+                let showScroll = true;
+                try
+                {
+                    showScroll = !!game.settings.get('lancer', 'floatingNumbers');
+                }
+                catch
+                { /* ignore */ }
+                const extras = tok.document?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+                const barCoversIt = extras.some(/** @type {any} */ extra => extra?.autoKey === 'bondXp' && extra.audioTextFeedback);
+                if (showScroll && !barCoversIt)
+                {
+                    const delta = next.bondXp - prev.bondXp;
+                    canvas.interface.createScrollingText(tok.center, `${delta > 0 ? '+' : ''}${delta} XP`, {
+                        anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                        direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
+                        fontSize: 28,
+                        fill: '0x00b8d4',
                         stroke: 0,
                         strokeThickness: 4,
                         jitter: 0.25,
@@ -4118,6 +4096,7 @@ export function initTokenStatBar()
                 ${visOption('', 'Use world default', current)}
                 ${visOption(VIS_ALL, 'All', current)}
                 ${visOption(VIS_OWNER, 'Owners only', current)}
+                ${visOption(VIS_SCANNED, 'Owners + scanned', current)}
                 ${visOption(VIS_NONE, 'None', current)}
             </select>
         `;
@@ -4145,12 +4124,12 @@ export function initTokenStatBar()
                 <p class="notes">Override the height of each bar row, in pixels. Leave blank for the default (scales with grid size).</p>
             </div>
             <div class="form-group">
-                <label>Visibility — Out of Combat</label>
+                <label>Visibility: Out of Combat</label>
                 ${visSelect(`flags.${MODULE_ID}.${FLAG_VIS_OUT_OF_COMBAT}`, visOut)}
                 <p class="notes">Per-token override of who sees the bars when no combat is active. Leave on "Use world default" to inherit from the module settings.</p>
             </div>
             <div class="form-group">
-                <label>Visibility — In Combat</label>
+                <label>Visibility: In Combat</label>
                 ${visSelect(`flags.${MODULE_ID}.${FLAG_VIS_IN_COMBAT}`, visIn)}
                 <p class="notes">Per-token override of who sees the bars while this token is in an active combat.</p>
             </div>
@@ -4231,7 +4210,7 @@ export function initTokenStatBar()
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
     });
 
-    // Combat lifecycle → refresh combat-only tokens.
+    // Combat lifecycle â†’ refresh combat-only tokens.
     const refreshAllForCombat = () =>
     {
         if (!isEnabled())

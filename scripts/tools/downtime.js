@@ -322,7 +322,7 @@ export async function executeDowntime()
         }
     ];
 
-    let actList = Activities.map(activity => `<option>${activity.Name}</option>`).join('');
+    let activityOptions = Activities.map(activity => `<option>${activity.Name}</option>`).join('');
 
     let pilotData = {};
 
@@ -386,7 +386,7 @@ export async function executeDowntime()
                         <div style="margin-bottom:1rem; border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem; margin-bottom:1rem;">
                             <div style="margin-bottom:1rem">
                                 <p style="text-align: right;font-style: italic">Choose a downtime activity for ${pilotData.name}</p>
-                                <select id="activity" style="width:100%; margin-bottom:.5rem;">${actList}</select>
+                                <select id="activity" style="width:100%; margin-bottom:.5rem;">${activityOptions}</select>
                                 <div id="activityDescription" style="padding: 0.75rem; margin-bottom: 1rem; background-color: rgba(95, 158, 160, 0.2); border-left: 3px solid var(--primary-color, fuschia); font-style: italic; white-space: pre-line;"></div>
                                 <h3 class="lancer-border-primary" style="text-align: right; margin-bottom:1rem; border-bottom: none;">Downtime Objective<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/deployable.svg"></h3>
                                 <p style="text-align: right; font-style:italic;">Describe what ${pilotData.name} is trying to achieve</p>
@@ -526,8 +526,8 @@ export async function executeDowntime()
                                     let rollString;
 
                                     let selectedActivity = Activities.find(candidateActivity => candidateActivity.Name === activity);
-                                    activeOutcome = selectedActivity.Rollable === true;
-                                    if (activeOutcome)
+                                    const isRollable = selectedActivity.Rollable === true;
+                                    if (isRollable)
                                     {
                                         if (manualRollEnabled && manualRollValue)
                                         {
@@ -574,11 +574,11 @@ export async function executeDowntime()
                                         }
                                     }
 
-                                    let actOutcome = Activities.find(candidateActivity => candidateActivity.Name === activity).Results;
+                                    let activityResults = Activities.find(candidateActivity => candidateActivity.Name === activity).Results;
 
                                     if (roll)
                                     {
-                                        let outcome = actOutcome.find(rangeOutcome => rangeOutcome.RollRange.includes(rollResult));
+                                        let outcome = activityResults.find(rangeOutcome => rangeOutcome.RollRange.includes(rollResult));
                                         activeOutcome = outcome;
                                         chatMessage.flavor = `<p>${activity} : ${outcome.ShortDesc}</p>`;
                                         roll.toMessage(chatMessage);
@@ -586,7 +586,7 @@ export async function executeDowntime()
                                     else
                                     {
                                         console.log('non-rollable activity');
-                                        activeOutcome = actOutcome;
+                                        activeOutcome = activityResults;
                                         chatMessage.flavor = `${activity} : Success`;
                                         chatMessage.content = `${pilotData.name} downtime activity completed`;
                                         ChatMessage.create(chatMessage);
@@ -783,7 +783,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
 
 export function showDowntimeJournalPopup(pageUuid, pageName)
 {
-    const dlg = new Dialog({
+    const dialog = new Dialog({
         title: "Downtime Filed",
         content: `<div class="lancer-dialog-header"><div class="lancer-dialog-title">DOWNTIME FILED</div></div><p style="padding:0.5rem 0.25rem;">Your downtime report has been logged.</p><p style="padding:0.25rem;"><a class="la-dt-journal-link" style="cursor:pointer;font-weight:bold;">${pageName}</a></p>`,
         buttons: { close: { label: "Close" } },
@@ -798,12 +798,12 @@ export function showDowntimeJournalPopup(pageUuid, pageName)
                 {
                     const page = await fromUuid(pageUuid);
                     page?.parent?.sheet?.render(true, { pageId: page.id });
-                    dlg.close();
+                    dialog.close();
                 });
             }
         }
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'] });
-    dlg.render(true);
+    dialog.render(true);
 }
 
 export const DowntimeAPI = {

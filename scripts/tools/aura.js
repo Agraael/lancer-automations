@@ -168,6 +168,24 @@ export class LAAuras
     }
 
     /**
+     * Create the aura only if the owner has none by that name. The onInit way to attach an aura.
+     * @param {Actor|Token|TokenDocument|Item} owner - Pass the Item to tie the aura to the item's lifetime.
+     * @param {object} auraConfig - `name` is required, it is the dedupe key.
+     * @returns {Promise<object|null>} The created aura, or null when one already existed.
+     */
+    static async ensureAura(owner, auraConfig)
+    {
+        if (!auraConfig?.name)
+        {
+            console.warn("lancer-automations | ensureAura: auraConfig.name is required for dedupe.");
+            return LAAuras.createAura(owner, auraConfig);
+        }
+        if (LAAuras.findAura(owner, auraConfig.name))
+            return null;
+        return LAAuras.createAura(owner, auraConfig);
+    }
+
+    /**
      * Passthrough wrapper for Grid-Aware Auras `deleteAuras`.
      * @returns {Promise<object[]>}
      */
@@ -176,16 +194,57 @@ export class LAAuras
         const gridAwareAuras = game.modules.get("grid-aware-auras");
         if (!gridAwareAuras?.api?.deleteAuras)
             return [];
-        return await gridAwareAuras.api.deleteAuras(owner, filter, options);
+        const opts = owner instanceof Item ? options : { includeItems: true, ...options };
+        return await gridAwareAuras.api.deleteAuras(owner, filter, opts);
     }
 
+    /** The placeable that renders a token's or actor's auras. */
+    static _auraToken(actorOrToken)
+    {
+        const candidate = /** @type {any} */ (actorOrToken);
+        if (candidate?.document?.documentName === 'Token')
+            return candidate;
+        if (candidate?.documentName === 'Token')
+            return candidate.object ?? null;
+        return candidate?.getActiveTokens?.()?.[0] ?? candidate?.actor?.getActiveTokens?.()?.[0] ?? null;
+    }
+
+    /** @returns {object|null} The aura config, or null if nothing by that name is on the token or its items */
     static findAura(actorOrToken, auraName)
     {
+        if (actorOrToken instanceof Item)
+        {
+            const own = /** @type {any} */ (actorOrToken).getFlag?.('grid-aware-auras', 'auras');
+            return own ? Object.values(own).find(aura => aura.name === auraName) ?? null : null;
+        }
+
+        const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
+        const token = LAAuras._auraToken(actorOrToken);
+        if (gridAwareAuras?.getTokenAuras && token)
+            return gridAwareAuras.getTokenAuras(token).find(entry => entry.aura?.name === auraName)?.aura ?? null;
+
         const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
         const auras = actor?.getFlag('grid-aware-auras', 'auras');
         if (!auras)
             return null;
         return Object.values(auras).find(aura => aura.name === auraName) || null;
+    }
+
+    /**
+     * Tokens currently standing in a named aura, straight from Grid-Aware Auras.
+     * Covers auras defined on the token and on its actor's items.
+     * @param {Actor|Token|TokenDocument} actorOrToken - Owner of the aura.
+     * @param {string} auraName
+     * @returns {Token[]|null} null when occupancy can't be resolved (GAA inactive, or no aura by that name).
+     */
+    static getTokensInAura(actorOrToken, auraName)
+    {
+        const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
+        const token = LAAuras._auraToken(actorOrToken);
+        const aura = LAAuras.findAura(actorOrToken, auraName);
+        if (!gridAwareAuras?.getTokensInsideAura || !aura || !token)
+            return null;
+        return gridAwareAuras.getTokensInsideAura(token, aura.id).filter(entry => !entry.isPreview);
     }
 
     /**
@@ -251,8 +310,10 @@ export function scaleAuraStroke(aura)
 
 export const AurasAPI = {
     createAura: LAAuras.createAura,
+    ensureAura: LAAuras.ensureAura,
     deleteAuras: LAAuras.deleteAuras,
     findAura: LAAuras.findAura,
+    getTokensInAura: LAAuras.getTokensInAura,
     toggleAura: LAAuras.toggleAura,
     gridScale,
     scaleAuraStroke,

@@ -87,12 +87,12 @@ const npcInsulatedBonus = {
 
 ## 3. Veterancy - a combat-lifecycle pair with a choice card
 
-**What it does.** On entering combat the NPC picks a skill (Hull / Agility / Systems / Engineering) and gains +1 accuracy on that kind of check; on leaving combat the bonus is removed.
+**What it does.** On entering combat the NPC picks a skill (Hull / Agility / Systems / Engineering) and gains +1 accuracy on that kind of check. On leaving combat the bonus is removed.
 
 **Triggers:** `onEnterCombat`, `onExitCombat`  ·  **Level:** simple
 
 ```js
-const veterancyVeteranReaction = {
+const veterancyVeteranAutomation = {
     category: "NPC",
     itemType: "npc_feature",
     reactions: [{
@@ -112,17 +112,16 @@ const veterancyVeteranReaction = {
                 { text: "Systems", icon: "cci cci-systems", tag: "systems" },
                 { text: "Engineering", icon: "cci cci-engineering", tag: "engineering" }
             ];
-            const choices = skills.map(s => ({
-                text: s.text, icon: s.icon,
-                callback: async () => {
-                    await api.addConstantBonus(reactorToken.actor, {
-                        id: `veterancy_${reactorToken.actor.id}`,
-                        name: `Veterancy (${s.text})`,
-                        val: 1, type: "accuracy", rollTypes: [s.tag]
-                    });
-                }
-            }));
-            await api.startChoiceCard({ title: "VETERANCY", description: `Choose a skill for ${reactorToken.name}:`, choices });
+            const skill = await api.pickCard(skills, {
+                label: "text", entryIcon: (entry) => entry.icon,
+                title: "VETERANCY", description: `Choose a skill for ${reactorToken.name}:`
+            });
+            if (!skill) return;
+            await api.addConstantBonus(reactorToken.actor, {
+                id: `veterancy_${reactorToken.actor.id}`,
+                name: `Veterancy (${skill.text})`,
+                val: 1, type: "accuracy", rollTypes: [skill.tag]
+            });
         }
     }, {
         triggers: ["onExitCombat"],
@@ -140,7 +139,7 @@ const veterancyVeteranReaction = {
 <img src="../img/npc-choice-card.png" width="53%"/>
 
 > [!TIP]
-> Two reactions tied to the combat lifecycle. The `evaluate` gate stops it re-firing, `startChoiceCard` shows the buttons (each with a `callback`), and pairing add-on-enter with remove-on-exit keeps the bonus from lingering.
+> Two reactions tied to the combat lifecycle. The `evaluate` gate stops it re-firing, `pickCard` shows one button per entry and returns the picked one (null on dismiss), and pairing add-on-enter with remove-on-exit keeps the bonus from lingering.
 
 ---
 
@@ -164,9 +163,9 @@ const veterancyVeteranReaction = {
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const targets = await api.chooseToken(reactorToken, {
                 count: 1,
-                range: reactorToken.actor.system.sensor_range,
+                range: 'sensors',
                 includeSelf: true,
-                filter: (t) => api.isFriendly(reactorToken, t)
+                disposition: 'friendly'
             });
             const target = targets?.[0] || reactorToken;
             const roll = await new Roll("1d3").evaluate();
@@ -179,7 +178,7 @@ const veterancyVeteranReaction = {
                 "lancer.statusIconsNames.resistance_burn",
                 "lancer.statusIconsNames.resistance_energy"
             ];
-            await api.applyFlaggedEffectToTokens({
+            await api.applyEffectsToTokens({
                 tokens: [target],
                 effectNames: resistances,
                 note: `Dispersal Shield (${charges} charges)`,
@@ -194,15 +193,15 @@ const veterancyVeteranReaction = {
 ```
 
 > [!TIP]
-> `chooseToken` highlights valid targets in `range` and runs a `filter` (here, friendlies only). The `stack` is set from a `1d3` roll, and `consumption: { trigger: "onDamage", grouped: true }` burns one charge each time the target takes damage. When the stack hits zero the effects clear themselves.
+> `chooseToken` highlights valid targets in `range` (`'sensors'` reads the caster's sensor range) and `disposition: 'friendly'` keeps allies only. The `stack` is set from a `1d3` roll, and `consumption: { trigger: "onDamage", grouped: true }` burns one charge each time the target takes damage. When the stack hits zero the effects clear themselves.
 
 ---
 
-## 5. Smoke Launchers - tracking state with actor flags
+## 5. Smoke Launchers - a zone that cleans itself up
 
-**What it does.** Places a Blast 2 smoke zone that persists until the start of the NPC's next turn, then cleans itself up.
+**What it does.** Places a Blast 2 smoke zone that persists until the start of the NPC's next turn, then deletes itself.
 
-**Triggers:** `onActivation`, `onTurnStart`  ·  **Level:** medium  ·  *(also in the [README](../../README.md))*
+**Triggers:** `onActivation`  ·  **Level:** simple  ·  *(also in the [README](../../README.md))*
 
 ```js
 "nrfaw-npc_carrier_SmokeLaunchers": {
@@ -217,38 +216,19 @@ const veterancyVeteranReaction = {
         activationType: "code",
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-            const result = await api.placeZone(reactorToken, {
+            await api.placeZone(reactorToken, {
                 range: 5, size: 2, type: "Blast",
                 fillColor: "#808080", borderColor: "#ffffff",
-                statusEffects: ["cover_soft"]
-            }, 2);
-            if (result?.template) {
-                const existing = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
-                existing.push(result.template.id);
-                await reactorToken.actor.setFlag("lancer-automations", "smokeTemplates", existing);
-            }
-        }
-    }, {
-        triggers: ["onTurnStart"],
-        triggerSelf: true,
-        autoActivate: true,
-        activationType: "code",
-        activationMode: "instead",
-        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName) {
-            const templates = reactorToken.actor.getFlag("lancer-automations", "smokeTemplates") || [];
-            if (!templates.length) return;
-            for (const id of templates) {
-                const template = canvas.scene.templates.get(id);
-                if (template) await template.delete();
-            }
-            await reactorToken.actor.unsetFlag("lancer-automations", "smokeTemplates");
+                statusEffects: ["cover_soft"],
+                expires: { on: 'ownerTurnStart' }
+            });
         }
     }]
 }
 ```
 
 > [!TIP]
-> The **place-and-clean-up** idiom: one reaction places something and stores its id in an actor flag, a second reaction reads that flag on a later trigger and tears it down. Flags are how you carry state between separate reactions and across turns.
+> `expires` stamps the template so the module deletes it on that combat event (`turns: 2` would survive one extra turn, and `ownerTurnEnd` also exists). No cleanup reaction, no flag bookkeeping. For state that is not a template, actor flags remain the way to carry data between reactions.
 
 ---
 
@@ -259,7 +239,7 @@ const veterancyVeteranReaction = {
 **Triggers:** `onPreMove`  ·  **Level:** advanced
 
 ```js
-const movingTargetSniperReaction = {
+const movingTargetSniperAutomation = {
     category: "NPC",
     itemType: "npc_feature",
     reactions: [{
@@ -284,19 +264,16 @@ const movingTargetSniperReaction = {
             const mover = triggerData.triggeringToken;
             let responderIds = [];
             const preConfirm = async () => {
-                const result = await api.startChoiceCard({
+                const ask = await api.askCard({
                     title: "INTERRUPT MOVEMENT?",
                     description: `${mover.name} is moving into ${reactorToken.name}'s sights.`,
                     item, originToken: mover, relatedToken: reactorToken,
-                    userIdControl: api.getTokenOwnerUserId(reactorToken),
-                    choices: [
-                        { text: "Interrupt", icon: "fas fa-crosshairs", callback: async () => {} },
-                        { text: "Let pass", icon: "fas fa-times", callback: async () => {} }
-                    ]
+                    owner: reactorToken,
+                    yesText: "Interrupt", yesIcon: "fas fa-crosshairs", noText: "Let pass"
                 });
-                responderIds = result?.responderIds ?? [];
-                if (result?.choiceIdx === 0) triggerData.startRelatedFlowToReactor(responderIds[0]);
-                return result?.choiceIdx === 0; // true cancels the move
+                responderIds = ask.responderIds;
+                if (ask.confirmed) triggerData.startRelatedFlowToReactor(responderIds[0]);
+                return ask.confirmed; // true cancels the move
             };
             triggerData.cancelTriggeredMove?.(
                 `${reactorToken.name} is interrupting ${mover.name}'s movement.`,
@@ -317,18 +294,18 @@ const movingTargetSniperReaction = {
 ```
 
 > [!TIP]
-> The canonical interrupt. `onPreMove` fires before the move runs, so the cancel code can't be async - hence `awaitActivationCompletion`. `cancelTriggeredMove` takes a `preConfirm` (a choice card) deciding whether to stop the move; firing the weapon is handed to the reactor's client via `onMessage`. Cancel rules: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
+> The classic interrupt. `onPreMove` fires before the move runs, so the cancel code can't be async, which is why `awaitActivationCompletion` is set. `cancelTriggeredMove` takes a `preConfirm` (a choice card) that decides whether to stop the move. Firing the weapon is handed to the reactor's client via `onMessage`. Cancel rules: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
 
 ---
 
 ## 7. Restock Drone - a deployable on an NPC
 
-**What it does.** A support feature that can deploy a Restock Drone. When the drone lands it gets a healing aura; allies that enter the aura can spend it to heal (or reload, in the rebake variant).
+**What it does.** A support feature that can deploy a Restock Drone. When the drone lands it gets a healing aura. Allies that enter the aura can spend it to heal (or reload, in the rebake variant).
 
 **Triggers:** `onDeploy` (+ `onInit` to register the deployable)  ·  **Level:** advanced
 
 ```js
-const restockDroneSupportReaction = {
+const restockDroneSupportAutomation = {
     category: "NPC",
     itemType: "npc_feature",
     reactions: [{
@@ -342,8 +319,7 @@ const restockDroneSupportReaction = {
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const deployedToken = triggerData.deployedTokens?.[0];
             if (!deployedToken) return;
-            const tier = reactorToken.actor.system.tier;
-            const healAmount = tier === 3 ? 15 : tier === 2 ? 10 : 5;
+            const healAmount = api.tierValue(reactorToken, [5, 10, 15]);
             // Build the aura on the drone itself.
             await api.createAura(deployedToken, {
                 name: "Restock Drone Zone",
@@ -404,7 +380,7 @@ const restockDroneSupportReaction = {
 **Triggers:** `onActivation`, `onStatusApplied` (+ `onHeatGain`, `onTechMiss` in the variant)  ·  **Level:** advanced
 
 ```js
-function buildDefenseNetReaction(radius, isRebake = false) {
+function buildDefenseNetAutomation(radius, isRebake = false) {
     const reactions = [
         {
             triggers: ["onActivation"],
@@ -422,7 +398,7 @@ function buildDefenseNetReaction(radius, isRebake = false) {
                 }
                 await api.setItemAsActivated(item, reactorToken, "Protocol", "Collapse the Defense Net");
                 await api.applyEffectsToTokens(
-                    { tokens: [reactorToken], effectNames: ['immobilized'], duration: { label: 'unlimited' } },
+                    { tokens: [reactorToken], effectNames: ['immobilized'], duration: { label: 'indefinite' } },
                     { defenseNetSource: reactorToken.id }
                 );
                 await api.createAura(reactorToken, {
@@ -457,12 +433,12 @@ function buildDefenseNetReaction(radius, isRebake = false) {
     return { category: "NPC", itemType: "npc_feature", reactions };
 }
 
-const defenseNetReaction       = buildDefenseNetReaction(3);
-const defenseNetRebakeReaction = buildDefenseNetReaction(2, true);
+const defenseNetAutomation       = buildDefenseNetAutomation(3);
+const defenseNetRebakeAutomation = buildDefenseNetAutomation(2, true);
 ```
 
 > [!TIP]
-> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`); a second reaction tears it down on stun/jam. The whole thing is a `buildDefenseNetReaction(radius, isRebake)` factory, so the variant *layers* extra reactions (`onHeatGain`, `onTechMiss`) onto the same base - that's how you build tiered or variant abilities without copy-pasting.
+> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`). A second reaction tears it down on stun/jam. The whole thing is a `buildDefenseNetAutomation(radius, isRebake)` factory, so the variant *layers* extra reactions (`onHeatGain`, `onTechMiss`) onto the same base - that's how you build tiered or variant abilities without copy-pasting.
 
 ---
 
@@ -481,4 +457,4 @@ These eight cover the core toolbox. Patterns they don't touch, with an example t
 - **Reroll auras** (`onRoll`) - *Nano-Repair Cloud*, *Voice of Authority*
 - **General (item-less) reactions** registered for everyone - *Guardian*, *Fall Prone*, *Break Free*
 
-My personal set has many more; browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.
+My personal set has many more. Browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.

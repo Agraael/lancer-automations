@@ -2,7 +2,7 @@
 
 [← Back to the README](../../README.md) · API: [API_EFFECTS.md](../API_EFFECTS.md)
 
-The Effect Manager applies status effects and bonuses to a token. Drive it by hand from the token HUD, or from automation code. Effects can carry a duration and consumable charges; bonuses apply to Lancer's roll flows.
+The Effect Manager applies status effects and bonuses to a token. Drive it by hand from the token HUD, or from automation code. Effects can carry a duration and consumable charges. Bonuses apply to Lancer's roll flows.
 
 ---
 
@@ -21,7 +21,7 @@ Its tabs:
 - **Bonus** - build accuracy, damage, stat, and other bonuses.
 - **Manage** - see and edit what's already on the token.
 
-Everything here can also be driven from automation code; signatures are in [API_EFFECTS.md](../API_EFFECTS.md).
+Everything here can also be driven from automation code. Signatures are in [API_EFFECTS.md](../API_EFFECTS.md).
 
 ---
 
@@ -31,7 +31,7 @@ Everything here can also be driven from automation code; signatures are in [API_
 
 Pick a status from the searchable grid and apply it with:
 
-- a **duration** - end of turn, start of turn, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn; `0` means "next matching trigger" (end/start of the current turn if it's the origin's turn, otherwise the next one).
+- a **duration** - end of turn, start of turn, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn. `0` means "next matching trigger" (end/start of the current turn if it's the origin's turn, otherwise the next one).
 - a **stack count**.
 - an optional **note** (e.g. "granted by X").
 - optional **consumption** (see below).
@@ -56,7 +56,7 @@ A **Save** button stores a custom status (name and icon) to a Saved dropdown you
 
 ## Consuming effects
 
-A stacked effect can burn a charge on its own when something happens. Pick one or more **consumption triggers** (on attack, hit, damage, move, turn start, status applied, and more); the stack drops by one each time, and the effect clears itself at zero.
+A stacked effect can burn a charge on its own when something happens. Pick one or more **consumption triggers** (on attack, hit, damage, move, turn start, status applied, and more). The stack drops by one each time, and the effect clears itself at zero.
 
 Most triggers offer **filters** so the charge only burns in the right situation (the available filters change with the trigger):
 
@@ -76,7 +76,7 @@ For anything the filters can't express, write a short **evaluate function** that
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
 - **General** - visible on the token. Give it a duration (end of turn, start of turn, or indefinite) and it shows an icon like a status, with optional charges.
-- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration; from code it's `addConstantBonus`, for baseline stats or immunities (see [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md)). It survives a reload.
+- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md)). It survives a reload.
 - **Flow** - injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from a reaction.
 
 Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](../API_EFFECTS.md).
@@ -98,7 +98,7 @@ Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](.
 | **Target Modifier** | Tactical changes to the target: cover, invisibility, armor-piercing, half-damage, paracausal, or force a hit / crit / miss. |
 | **Reroll** | Reroll a roll type (attack, tech attack, damage, skill, structure, stress). Modes: retry, highest, lowest, or choose. |
 
-Accuracy and difficulty bonuses show up in the roll HUD before you confirm; damage bonuses appear in the damage output.
+Accuracy and difficulty bonuses show up in the roll HUD before you confirm. Damage bonuses appear in the damage output.
 
 <br clear="right"/>
 
@@ -107,7 +107,7 @@ Accuracy and difficulty bonuses show up in the roll HUD before you confirm; dama
 - **Roll-type filters** - restrict to attacks (melee / ranged / tech), checks (HULL / AGI / SYS / ENG / grit), structure, overheat, or all flows.
 - **Item / token filters** - scope to a weapon by **LID** (a type), or to a specific weapon instance on the token (**item ID**, via an inventory picker), and to one or more **target tokens**.
 - **Apply to targetter** - reverse it: the target applies the bonus to the attacker, for debuffs or reactive effects.
-- **Uses** - a charge count; the bonus is removed when it hits zero.
+- **Uses** - a charge count. The bonus is removed when it hits zero.
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
 

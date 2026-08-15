@@ -90,7 +90,7 @@ export async function altRollStress(state)
     let remStress = state.data?.reroll_data?.stress ?? actor.system.stress.value;
     let stressLost = actor.system.stress.max - remStress;
     let formula = `${stressLost}d6kl1`;
-    // If it's an NPC with legendary, change the formula to roll twice and keep the best result.
+    // Legendary NPCs roll with advantage.
     if (actor.is_npc() &&
     actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
     ))

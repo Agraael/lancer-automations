@@ -147,7 +147,6 @@ export function classifyCombatant(combatant, squadRefToken = null)
     return 'exclude';
 }
 
-// name is stored at track time; the token may be gone by recap time.
 function _tokenFactionsApi()
 {
     try
@@ -160,8 +159,7 @@ function _tokenFactionsApi()
     }
 }
 
-// Token placeable for a combatant, so the token-factions team flag on the token
-// document is read (not the actor, which misses per-token assignments).
+// Reads token document, not actor, to catch per-token team assignments.
 function _combatantToken(combatant)
 {
     return combatant?.token?.object ?? canvas.tokens?.get(combatant?.tokenId ?? combatant?.token?.id) ?? null;
@@ -187,8 +185,7 @@ function _squadRefToken(combat)
     return ref ? _combatantToken(ref) : null;
 }
 
-// Disposition of the combatant as seen from the squad, resolved on tokens so
-// per-token advanced-team flags are honored; own disposition when unresolved.
+// Resolves via tokens so per-token team flags are honored; own disposition as fallback.
 function _relativeDisposition(combatant, squadRefToken)
 {
     const tok = _combatantToken(combatant);
@@ -205,8 +202,7 @@ function factionSide(combatant, squadRefToken)
     return (disp === CONST.TOKEN_DISPOSITIONS.HOSTILE || disp === CONST.TOKEN_DISPOSITIONS.SECRET) ? 'enemy' : 'player';
 }
 
-// Recompute bucket + side once all combatants exist, so faction teams and
-// tracking order don't matter.
+// Recomputes bucket + side so faction teams and tracking order don't matter.
 export function reclassifyCombat(combat)
 {
     const telemetry = _writable(combat);
@@ -273,10 +269,10 @@ export function findEntry(telemetry, entryId)
 
 function emptyTelemetry()
 {
-    const out = { startTime: Date.now(), roundCount: 0, seq: 0 };
+    const telemetry = { startTime: Date.now(), roundCount: 0, seq: 0 };
     for (const name of BUCKETS)
-        out[name] = [];
-    return out;
+        telemetry[name] = [];
+    return telemetry;
 }
 
 /**
@@ -307,8 +303,7 @@ export function initTelemetry(combat)
 }
 
 /**
- * Add a combatant to the tracked list if not already present. Called on
- * createCombatant for mid-combat joins.
+ * Track a combatant if absent; called on createCombatant for mid-combat joins.
  * @param {any} combat
  * @param {any} combatant
  */

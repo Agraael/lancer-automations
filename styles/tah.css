@@ -34,6 +34,8 @@
     flex: 0 0 auto;
     align-self: center;
     margin-left: 4px;
+    margin-right: 2px;
+    padding: 3px;
     font-size: 12px;
     color: var(--la-ink-dim, #888);
     cursor: help;
@@ -204,6 +206,28 @@
     padding: 6px 6px 5px 12px;
     display: flex;
     align-items: center;
+}
+
+/* Pilot level / NPC tier, left of the token name. */
+.la-hud-token-rank {
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    color: #ffaa55;
+    font-weight: 600;
+}
+
+.la-hud-token-rank + .la-hud-token-name {
+    padding-left: 6px;
+}
+
+/* Same rank text inline on a Pilot / Frame / Class row. */
+.la-hud-rank {
+    color: #3a9e6e;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin-left: 4px;
 }
 
 #la-hud.la-hud-unlocked .la-hud-col-label,
@@ -385,6 +409,78 @@
 .la-hud-log-panel {
     min-width: 320px;
     max-width: 400px;
+}
+
+.la-hud-bond-panel {
+    min-width: 360px;
+    max-width: 440px;
+}
+
+.la-hud-bond-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.la-bond-field__label {
+    font-size: 0.85em;
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.la-bond-select {
+    width: 100%;
+    font-size: 0.9em;
+}
+
+.la-bond-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 0.85em;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.la-bond-check input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-top: 1px;
+}
+
+.la-bond-minor {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.la-bond-minor .la-bond-select {
+    flex: 1;
+}
+
+.la-bond-buttons {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.la-bond-btn {
+    flex: 1;
+    padding: 5px 6px;
+    background: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: 2px;
+    font-size: 0.8em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+
+.la-bond-btn:hover {
+    filter: brightness(1.2);
 }
 
 .la-hud-panel-search {

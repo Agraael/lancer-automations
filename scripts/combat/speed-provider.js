@@ -152,8 +152,6 @@ export function getSpeedRanges(token)
 function registerSettings()
 {
     game.settings.register(MODULE_ID, ENABLED, {
-        name: 'Built-in Speed Provider',
-        hint: 'Color the token ruler with Lancer speed tiers (standard / boost / over-boost). Disable the standalone "lancer-speed-provider" module if active.',
         scope: 'world',
         config: false,
         type: Boolean,

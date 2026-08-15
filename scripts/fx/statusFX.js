@@ -905,9 +905,7 @@ const corePowerEffect = [
 ];
 
 // Low-quality variants
-// Used when statusFXConfig.lowQuality is on. Outline-only swaps for the
-// expensive bloom/glow presets. Filter ids kept identical so add/remove logic
-// in EFFECT_MAP keeps matching.
+// outline-only swaps for bloom/glow presets; filter IDs kept identical for EFFECT_MAP matching
 
 const dangerZoneEffectLite = [
     {
@@ -1208,8 +1206,7 @@ function _ensureFakePuppetsForCustomFilters(token)
     }
 }
 
-// Sync TMFX filters with the actor's current AE state (add missing, remove orphans).
-// Debounced per actor to coalesce bursts and avoid races on token.flags.tokenmagic.filters.
+// Sync TMFX filters with actor AE state; debounced to coalesce bursts and avoid races
 async function _doReconcileStatusFX(actor)
 {
     if (!isMasterEnabled() || typeof TokenMagic === 'undefined' || !actor)
@@ -1225,7 +1222,7 @@ async function _doReconcileStatusFX(actor)
         for (const entry of EFFECT_MAP)
         {
             const wantFilter = aeNames.has(entry.name) && isFXEnabled(entry.key);
-            const hasFilter = entry.filterIds.some(fid => TokenMagic.hasFilterId(token, fid));
+            const hasFilter = entry.filterIds.some(filterId => TokenMagic.hasFilterId(token, filterId));
             if (wantFilter && !hasFilter)
             {
                 let preset = entry.preset;
@@ -1245,8 +1242,7 @@ async function _doReconcileStatusFX(actor)
                         : LOW_QUALITY_PRESETS[entry.key];
                 }
                 await token.TMFXaddUpdateFilters(preset);
-                // TMFX duplicates each filter on this call path (same class of bug as the
-                // chains/fracture workaround above). Keep only the first of each filterId.
+                // TMFX dupes filters on this path; keep only the first of each filterId
                 const mesh = token.mesh;
                 if (mesh?.filters?.length)
                 {

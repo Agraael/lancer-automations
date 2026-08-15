@@ -1,10 +1,11 @@
 /* global game, canvas, PIXI, performance */
 
 import { _queueCard, _createInfoCard, _removeInfoCard } from "../cards.js";
-import { isSingleTargetPickerActive, cancelSingleTargetPicker } from "../canvas.js";
+import { isSingleTargetPickerActive, cancelSingleTargetPicker, createChanceLabel } from "../canvas.js";
 import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { TG, paintDashedFootprint } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
+import { targetInfoAllowed, contestWinChance, chanceLabelsOn } from "../../activations/targeting-ui.js";
 
 const STAT_DEFS = [
     { value: 'HULL', key: 'hull' },
@@ -28,9 +29,29 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
     {
         const api = game.modules.get('lancer-automations')?.api;
         const state = {
-            a: { token: tokenA ?? null, skill: skillA ? String(skillA).toUpperCase() : null, mark: null },
-            b: { token: tokenB ?? null, skill: skillB ? String(skillB).toUpperCase() : null, mark: null },
+            a: { token: tokenA ?? null, skill: skillA ? String(skillA).toUpperCase() : null, mark: null, chance: null },
+            b: { token: tokenB ?? null, skill: skillB ? String(skillB).toUpperCase() : null, mark: null, chance: null },
             sendToOwner: sendToOwner !== false,
+        };
+
+        const clearChanceLabels = () =>
+        {
+            for (const side of ['a', 'b'])
+            {
+                state[side].chance?.destroy();
+                state[side].chance = null;
+            }
+        };
+        const syncChanceLabels = () =>
+        {
+            clearChanceLabels();
+            if (!chanceLabelsOn() || !targetInfoAllowed())
+                return;
+            const { a, b } = state;
+            if (!(a.token?.actor && a.skill && b.token?.actor && b.skill))
+                return;
+            a.chance = createChanceLabel(a.token, () => contestWinChance(a.token?.actor, a.skill, b.token?.actor, b.skill, {}));
+            b.chance = createChanceLabel(b.token, () => contestWinChance(b.token?.actor, b.skill, a.token?.actor, a.skill, {}));
         };
 
         // Same gold pulsing footprint as the attack-roll smart-targeting shape (target-shapes.js).
@@ -120,6 +141,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 cancelSingleTargetPicker();
             stopHeartbeat();
             clearToolPresence('haseContest');
+            clearChanceLabels();
             destroyMarks();
             _removeInfoCard(cardEl);
         };
@@ -180,6 +202,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 s.skill = null;
             }
             select.prop('disabled', !token || !stats.length);
+            syncChanceLabels();
             updateRun();
         };
 
@@ -200,6 +223,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             colEl.find('[data-role="skill"]').on('change', function ()
             {
                 state[side].skill = /** @type {HTMLSelectElement} */ (this).value || null;
+                syncChanceLabels();
                 updateRun();
             });
         }

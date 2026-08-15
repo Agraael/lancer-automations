@@ -199,6 +199,18 @@ function getWreckTerrainMode(category)
 
 function buildWreckAuraFlag()
 {
+    let color = '#8B4513';
+    let fillOpacity = 0.2;
+    try
+    {
+        color = game.settings.get(MODULE_ID, 'wreckAuraColor') || color;
+        const raw = Number(game.settings.get(MODULE_ID, 'wreckAuraOpacity'));
+        if (Number.isFinite(raw))
+            fillOpacity = Math.min(1, Math.max(0, raw));
+    }
+    catch
+    { /* settings not ready */ }
+
     const aura = {
         _v: 3,
         id: foundry.utils.randomID(),
@@ -206,7 +218,7 @@ function buildWreckAuraFlag()
         enabled: true,
         clientDefaultHidden: false,
         unified: false,
-        onlyEnabledInCombat: true,
+        onlyEnabledInCombat: false,
         keyPressMode: 'DISABLED',
         keyToPress: 'AltLeft',
         radius: 0,
@@ -214,17 +226,17 @@ function buildWreckAuraFlag()
         position: 'CENTER',
         lineType: 0,
         lineWidth: 4,
-        lineColor: '#8B4513',
+        lineColor: color,
         lineColorAnimation: null,
-        lineOpacity: 0.8,
+        lineOpacity: Math.min(1, fillOpacity * 4),
         lineDashSize: 15,
         lineGapSize: 10,
         lineDashOffsetAnimation: 0,
         radiusOffset: 0,
         fillType: 2,
-        fillColor: '#8B4513',
+        fillColor: color,
         fillColorAnimation: null,
-        fillOpacity: 0.2,
+        fillOpacity,
         fillTexture: 'modules/terrain-height-tools/textures/hatching-skullcrossbones.png',
         fillTextureOffset: { x: 0, y: 0 },
         fillTextureOffsetAnimation: { x: 5, y: 5 },
@@ -476,24 +488,24 @@ export async function updateStructure(token)
 function resolveWreckFaction(token)
 {
     const choice = game.settings.get(MODULE_ID, 'wreckFactionOnDeath') || 'same';
-    const origDisp = token.document.disposition;
+    const origDisposition = token.document.disposition;
     const origFlag = token.document.flags?.['token-factions'] ?? null;
 
     if (choice === 'same')
-        return { disposition: origDisp, factionsFlag: origFlag };
+        return { disposition: origDisposition, factionsFlag: origFlag };
     if (choice === 'neutral')
         return { disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL, factionsFlag: null };
 
-    const teams = game.modules.get('token-factions')?.active
+    const teams = game.settings.settings.has('token-factions.team-setup')
         ? (game.settings.get('token-factions', 'team-setup') || [])
         : [];
     const target = teams.find(team => team.id === choice);
     if (target)
     {
-        const disp = (target.gmDisposition !== undefined && target.gmDisposition !== null)
+        const disposition = (target.gmDisposition !== undefined && target.gmDisposition !== null)
             ? parseInt(target.gmDisposition)
             : CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-        return { disposition: disp, factionsFlag: { ...(origFlag || {}), team: target.id } };
+        return { disposition: disposition, factionsFlag: { ...(origFlag || {}), team: target.id } };
     }
     return { disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL, factionsFlag: null };
 }
@@ -741,8 +753,8 @@ async function unWreckTile(tile)
     {
         if (actor.system.structure.value === 0)
             await actor.update({ 'system.structure.value': 1 });
-        const mechToken = await actor.getTokenDocument({ x: tile.x, y: tile.y });
-        await canvas.scene.createEmbeddedDocuments('Token', [mechToken]);
+        const restoredToken = await actor.getTokenDocument({ x: tile.x, y: tile.y });
+        await canvas.scene.createEmbeddedDocuments('Token', [restoredToken]);
     }
     else
     {
@@ -865,8 +877,8 @@ function _renderWreckTab(app, html, data)
 function _buildWreckSectionHtml(flags)
 {
     const imgPath = flags.wreckImgPath ?? '';
-    const effPath = flags.wreckEffectPath ?? '';
-    const sndPath = flags.wreckSoundPath ?? '';
+    const effectPath = flags.wreckEffectPath ?? '';
+    const soundPath = flags.wreckSoundPath ?? '';
     const scale = flags.wreckScale ?? 1;
     const spawnImg = flags.spawnWreckImage ?? true;
     const playSound = flags.playWreckSound ?? true;
@@ -908,13 +920,13 @@ function _buildWreckSectionHtml(flags)
         <div class="form-group">
             <label>Wreck Effect Path</label>
             <div class="form-fields">
-                <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effPath}"></file-picker>
+                <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effectPath}"></file-picker>
             </div>
         </div>
         <div class="form-group">
             <label>Wreck Sound Path</label>
             <div class="form-fields">
-                <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${sndPath}"></file-picker>
+                <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${soundPath}"></file-picker>
             </div>
         </div>
         <div class="form-group">

@@ -1,8 +1,9 @@
-/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, CodeMirror */
+﻿/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, CodeMirror */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { openItemBrowserDialog } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
+import { openApiRefPopup } from "./api-reference-popup.js";
 import { openDeployablePicker } from "../interactive/deployables.js";
 
 const scriptCache = new Map();
@@ -335,12 +336,31 @@ export class ReactionManager
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
     }
 
+    // Legacy export/import stays workshop-agnostic
+    static stripWorkshopIds(value)
+    {
+        if (Array.isArray(value))
+            return value.map(entry => ReactionManager.stripWorkshopIds(entry));
+        if (value && typeof value === 'object')
+        {
+            const result = {};
+            for (const [key, sub] of Object.entries(value))
+            {
+                if (key === 'workshopId')
+                    continue;
+                result[key] = ReactionManager.stripWorkshopIds(sub);
+            }
+            return result;
+        }
+        return value;
+    }
+
     static async exportReactions()
     {
-        const itemReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
-        const generalReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
-        const startupScripts = (game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
-            .filter(script => !script.builtin);
+        const itemReactions = ReactionManager.stripWorkshopIds(game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {});
+        const generalReactions = ReactionManager.stripWorkshopIds(game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {});
+        const startupScripts = ReactionManager.stripWorkshopIds((game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
+            .filter(script => !script.builtin));
 
         const skip = new Set([
             ReactionManager.SETTING_REACTIONS,
@@ -403,103 +423,9 @@ export class ReactionManager
         };
 
         const jsonStr = JSON.stringify(exportData, null, 2);
-        saveDataToFile(jsonStr, "application/json", `lancer-automations-${new Date().toISOString().slice(0, 10)}.json`);
+        globalThis.saveDataToFile(jsonStr, "application/json", `lancer-automations-${new Date().toISOString().slice(0, 10)}.json`);
 
         ui.notifications.info("Configuration exported successfully.");
-    }
-
-    static async importReactions(file, mode = "merge")
-    {
-        try
-        {
-            const text = await file.text();
-            const data = JSON.parse(text);
-
-            if (!data.itemReactions && !data.generalReactions && !data.startupScripts && !data.settings && !data.externalSettings)
-                throw new Error("Invalid configuration file format.");
-
-            if (mode === "replace")
-            {
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, data.itemReactions || {});
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, data.generalReactions || {});
-                if (Array.isArray(data.startupScripts))
-                    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, data.startupScripts);
-            }
-            else
-            {
-                const existingItem = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
-                const existingGeneral = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, { ...existingItem, ...data.itemReactions });
-                await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, { ...existingGeneral, ...data.generalReactions });
-                if (Array.isArray(data.startupScripts) && data.startupScripts.length)
-                {
-                    const existingScripts = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
-                    const seen = new Set(existingScripts.map(script => script.id ?? script.name));
-                    const merged = [...existingScripts];
-                    for (const script of data.startupScripts)
-                    {
-                        const key = script.id ?? script.name;
-                        if (key && seen.has(key))
-                            continue;
-                        merged.push(script);
-                        if (key)
-                            seen.add(key);
-                    }
-                    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, merged);
-                }
-            }
-
-            if (data.settings && typeof data.settings === 'object')
-            {
-                for (const [k, v] of Object.entries(data.settings))
-                {
-                    const setting = game.settings.settings.get(`${ReactionManager.ID}.${k}`);
-                    if (!setting)
-                        continue;
-                    try
-                    {
-                        await game.settings.set(ReactionManager.ID, k, v);
-                    }
-                    catch (e)
-                    {
-                        console.warn(`[lancer-automations] failed to restore setting ${k}:`, e);
-                    }
-                }
-            }
-
-            if (data.externalSettings && typeof data.externalSettings === 'object')
-            {
-                for (const [composite, value] of Object.entries(data.externalSettings))
-                {
-                    const dot = composite.indexOf('.');
-                    if (dot < 0)
-                        continue;
-                    const moduleId = composite.slice(0, dot);
-                    const settingKey = composite.slice(dot + 1);
-                    if (!game.modules.get(moduleId)?.active)
-                        continue;
-                    if (!game.settings.settings.get(`${moduleId}.${settingKey}`))
-                        continue;
-                    try
-                    {
-                        await game.settings.set(moduleId, settingKey, value);
-                    }
-                    catch (e)
-                    {
-                        console.warn(`[lancer-automations] failed to restore ${moduleId}.${settingKey}:`, e);
-                    }
-                }
-            }
-
-            clearScriptCache();
-            ui.notifications.info(`Configuration imported successfully (${mode} mode).`);
-            return true;
-        }
-        catch (e)
-        {
-            ui.notifications.error(`Failed to import configuration: ${e.message}`);
-            return false;
-        }
     }
 
     static async applyImportSelection(data, selection)
@@ -557,19 +483,19 @@ export class ReactionManager
 
             if (pickedSettings.size && data.settings)
             {
-                for (const k of pickedSettings)
+                for (const settingKey of pickedSettings)
                 {
-                    if (!(k in data.settings))
+                    if (!(settingKey in data.settings))
                         continue;
-                    if (!game.settings.settings.get(`${ReactionManager.ID}.${k}`))
+                    if (!game.settings.settings.get(`${ReactionManager.ID}.${settingKey}`))
                         continue;
                     try
                     {
-                        await game.settings.set(ReactionManager.ID, k, data.settings[k]);
+                        await game.settings.set(ReactionManager.ID, settingKey, data.settings[settingKey]);
                     }
                     catch (e)
                     {
-                        console.warn(`[lancer-automations] failed to restore setting ${k}:`, e);
+                        console.warn(`[lancer-automations] failed to restore setting ${settingKey}:`, e);
                     }
                 }
             }
@@ -732,7 +658,7 @@ export class ReactionConfig extends FormApplication
             }
         }
 
-        // 3. Resolve any remaining keys that look like Actor UUIDs (e.g. "Actor.abc123" or "Compendium.…Actor.…").
+        // 3. Resolve any remaining keys that look like Actor UUIDs (e.g. "Actor.abc123" or "Compendium.â€¦Actor.â€¦").
         if (midsToLookup.size > 0)
         {
             for (const key of [...midsToLookup])
@@ -796,32 +722,32 @@ export class ReactionConfig extends FormApplication
             if (savedKeys.length === 1 && savedKeys[0] === 'enabled')
                 return true;
             // Pure enable-toggle: saved has only 'enabled' and/or 'reactions' whose entries only toggle 'enabled'.
-            if (savedKeys.every(k => k === 'enabled' || k === 'reactions'))
+            if (savedKeys.every(savedKey => savedKey === 'enabled' || savedKey === 'reactions' || savedKey === 'workshopId'))
             {
                 const reacts = saved.reactions;
                 if (!reacts || (Array.isArray(reacts) && reacts.every(sub =>
                 {
                     if (!sub)
                         return true;
-                    const reactionKeys = Object.keys(sub);
-                    return reactionKeys.length === 0 || (reactionKeys.length === 1 && reactionKeys[0] === 'enabled');
+                    return Object.keys(sub).every(reactionKey => reactionKey === 'enabled' || reactionKey === 'workshopId');
                 })))
                     return true;
             }
             const savedClone = foundry.utils.deepClone(saved);
             const defaultClone = foundry.utils.deepClone(def);
             delete savedClone.enabled;
+            delete savedClone.workshopId;
             delete defaultClone.enabled;
             return foundry.utils.objectsEqual(savedClone, defaultClone);
         };
 
         // Grouping: custom items
-        for (const [rawLid, data] of Object.entries(userItemSettings))
+        for (const [rawLid, itemEntry] of Object.entries(userItemSettings))
         {
             const lid = rawLid.trim();
             const validReactions = [];
 
-            data.reactions.forEach((reaction, index) =>
+            itemEntry.reactions.forEach((reaction, index) =>
             {
                 const reactionKeys = Object.keys(reaction);
                 if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled')
@@ -856,7 +782,8 @@ export class ReactionConfig extends FormApplication
                     reactionIndex: index,
                     original: reaction,
                     enabled: reaction.enabled,
-                    comments: reaction.comments || ""
+                    comments: reaction.comments || "",
+                    workshopId: reaction.workshopId || null
                 }));
             });
 
@@ -887,10 +814,10 @@ export class ReactionConfig extends FormApplication
         }
 
         // Grouping: default items
-        for (const [lid, data] of Object.entries(defaultItemRegistry))
+        for (const [lid, itemConfig] of Object.entries(defaultItemRegistry))
         {
             const validReactions = [];
-            data.reactions.forEach((reaction, index) =>
+            itemConfig.reactions.forEach((reaction, index) =>
             {
                 const userEntry = userItemSettings[lid]?.reactions?.[index] ||
                     userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
@@ -924,7 +851,7 @@ export class ReactionConfig extends FormApplication
                     reactionIndex: index,
                     original: reaction,
                     enabled: enabledState,
-                    category: data.category || "",
+                    category: itemConfig.category || "",
                     comments: reaction.comments || ""
                 }));
             });
@@ -951,7 +878,7 @@ export class ReactionConfig extends FormApplication
                     isGroup: true,
                     reactions: validReactions,
                     enabled: validReactions.every(reaction => reaction.enabled),
-                    category: data.category || ""
+                    category: itemConfig.category || ""
                 });
             }
         }
@@ -972,7 +899,8 @@ export class ReactionConfig extends FormApplication
                 onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
                 original: reaction,
                 enabled: reaction.enabled,
-                comments: reaction.comments || ""
+                comments: reaction.comments || "",
+                workshopId: reaction.workshopId || null
             }));
         }
 
@@ -1052,7 +980,6 @@ export class ReactionConfig extends FormApplication
         allReactions.sort(sorter);
         defaultList.sort(sorter);
 
-        // Group defaults by category into folders
         const categoryMap = new Map();
         for (const item of defaultList)
         {
@@ -1080,11 +1007,9 @@ export class ReactionConfig extends FormApplication
             return a.folderName.localeCompare(b.folderName);
         });
 
-        // Build custom folders for the custom tab
         const folderSettings = ReactionManager.getFolders();
         const getActivationKey = (activation) => activation.isGeneral ? `general::${activation.name}` : `item::${activation.lid}`;
 
-        // Build folders with their items
         const assignedKeys = new Set();
         const customFolders = folderSettings.map(f =>
         {
@@ -1103,13 +1028,13 @@ export class ReactionConfig extends FormApplication
 
         // Collect all unique triggers for the filter dropdown
         const allTriggerSet = new Set();
-        for (const r of [...allReactions, ...defaultList])
+        for (const activation of [...allReactions, ...defaultList])
         {
-            const trigStr = r.triggers || "";
+            const trigStr = activation.triggers || "";
             trigStr.split(", ").filter(Boolean).forEach(trigger => allTriggerSet.add(trigger.trim()));
-            if (r.reactions)
+            if (activation.reactions)
             {
-                r.reactions.forEach(sub =>
+                activation.reactions.forEach(sub =>
                 {
                     const subTrig = sub.triggers || "";
                     subTrig.split(", ").filter(Boolean).forEach(trigger => allTriggerSet.add(trigger.trim()));
@@ -1413,6 +1338,19 @@ export class ReactionConfig extends FormApplication
             mod.openPackImport(() => self.render());
         });
 
+        const workshopRoot = html.find('.tab[data-tab="workshop"] .la-workshop-root')[0];
+        if (workshopRoot)
+        {
+            const bootWorkshop = async () =>
+            {
+                const mod = await import('./workshop-browser.js');
+                mod.renderWorkshopTab(self, workshopRoot);
+            };
+            html.find('nav.sheet-tabs a[data-tab="workshop"]').on('click', bootWorkshop);
+            if (this._tabs?.[0]?.active === 'workshop')
+                bootWorkshop();
+        }
+
         html.find('.rename-folder-btn').click(async function (ev)
         {
             ev.stopPropagation();
@@ -1488,7 +1426,6 @@ export class ReactionConfig extends FormApplication
 
             if (result === "all")
             {
-                // Delete all activations inside the folder
                 const folders = ReactionManager.getFolders();
                 const folder = folders.find(f => f.name === folderName);
                 if (folder)
@@ -1583,9 +1520,9 @@ export class ReactionConfig extends FormApplication
         event.preventDefault();
         const content = /*html*/`
         <div style="font-family: 'Roboto', sans-serif; line-height: 1.5;">
-            <p>This system got  bigger to a point  i cant explain it in a few words.</p>
-            <p>As always the maint reference  if the <a href="https://github.com/Agraael/lancer-automations/blob/main/README.md">readme.md</a> file and <a href="https://github.com/Agraael/lancer-automations/blob/main/API_REFERENCE.md">api.md</a> file.</p>
-            <p>You can ask me questions if you dont understand something on <a href="https://discord.com/channels/426286410496999425/1436087781666455642">discord</a>.</p>
+            <p>This system got bigger to a point I can't explain it in a few words.</p>
+            <p>As always the main reference is the <a href="https://github.com/Agraael/lancer-automations/blob/main/README.md">readme.md</a> file and the <a href="https://github.com/Agraael/lancer-automations/blob/main/doc/API_REFERENCE.md">API_REFERENCE.md</a> file.</p>
+            <p>You can ask me questions if you don't understand something on <a href="https://discord.com/channels/426286410496999425/1436087781666455642">discord</a>.</p>
         </div>
         `;
 
@@ -1894,7 +1831,9 @@ export class StartupScriptEditor extends FormApplication
             description: script?.description ?? "",
             enabled: script?.enabled !== false,
             code: script?.code ?? "",
-            builtin: !!script?.builtin
+            builtin: !!script?.builtin,
+            workshopId: script?.workshopId ?? "",
+            workshopPreview: this.object?.workshopPreview === true
         };
     }
 
@@ -1980,14 +1919,16 @@ export class StartupScriptEditor extends FormApplication
             enabled: !!formData.enabled,
             code: formData.code ?? ""
         };
+        if (formData.workshopId)
+            entry.workshopId = formData.workshopId;
 
         const scripts = ReactionManager.getStartupScripts();
-        const isNew = !this.object?.script;
+        const isNew = !this.object?.script && !entry.workshopId;
         if (isNew)
             scripts.push(entry);
         else
         {
-            const idx = scripts.findIndex(s => s.id === id);
+            const idx = scripts.findIndex(script => script.id === id || (entry.workshopId && script.workshopId === entry.workshopId));
             if (idx >= 0)
                 scripts[idx] = entry;
             else
@@ -2014,19 +1955,20 @@ export class ReactionEditor extends FormApplication
             template: `modules/lancer-automations/templates/reaction-editor.html`,
             width: 800,
             height: "auto",
+            closeOnSubmit: false,
             classes: ["lancer-reaction-editor", "lancer-dialog-base", "lancer-no-title"]
         });
     }
 
     async getData()
     {
-        const data = this.object;
-        const reaction = data.reaction || {};
+        const config = this.object;
+        const reaction = config.reaction || {};
 
         let foundItemName = null;
         let foundItemUuid = null;
 
-        if (!data.isGeneral && data.lid)
+        if (!config.isGeneral && config.lid)
         {
             for (const pack of game.packs)
             {
@@ -2034,7 +1976,7 @@ export class ReactionEditor extends FormApplication
                     continue;
 
                 const index = await pack.getIndex({ fields: ["system.lid"] });
-                const entry = index.find(e => e.system?.lid === data.lid);
+                const entry = index.find(idxEntry => idxEntry.system?.lid === config.lid);
                 if (entry)
                 {
                     foundItemName = entry.name;
@@ -2089,12 +2031,12 @@ export class ReactionEditor extends FormApplication
         }
 
         this._triggerHelp = {
-            onAttack: "{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], attackType, actionName, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], attackType, actionName, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onPreDamage: "{ triggeringToken, weapon, targets, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
-            onDamage: "{ triggeringToken, weapon, target, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onPreMove: "{ token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes }, cancelTriggeredMove(reasonText, allowConfirm, userIdControl), changeTriggeredMove(pos, extraData), distanceToTrigger, canTriggerReaction}",
+            onAttack: "{ triggeringToken, weapon, targets, hitTokens, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onHit: "{ triggeringToken, weapon, targets: [{target, roll, crit}], hitTokens, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onMiss: "{ triggeringToken, weapon, targets: [{target, roll}], hitTokens, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onPreDamage: "{ triggeringToken, weapon, targets, hitTokens, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onDamage: "{ triggeringToken, weapon, target, hitTokens, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onPreMove: "{ triggeringToken, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, isUndo, isModified, pathHexes }, cancel(), cancelTriggeredMove(reasonText, allowConfirm, userIdControl, preConfirm, postChoice), changeTriggeredMove(position, extraData, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger, canTriggerReaction}",
             onTurnStart: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTurnEnd: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
@@ -2103,31 +2045,31 @@ export class ReactionEditor extends FormApplication
             onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl), canTriggerReaction}",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger, canTriggerReaction}",
             onStatusRemoved: "{ triggeringToken, statusId, effect, distanceToTrigger, canTriggerReaction}",
-            onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onStructure: "{ triggeringToken, remainingStructure, rollResult, rollDice, cancelStructureOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), distanceToTrigger, canTriggerReaction}",
-            onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), distanceToTrigger, canTriggerReaction}",
+            onPreStructure: "{ triggeringToken, remainingStructure, cancelStructure(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onStructure: "{ triggeringToken, remainingStructure, rollResult, rollDice, cancelStructureOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), flowState, distanceToTrigger, canTriggerReaction}",
+            onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), flowState, distanceToTrigger, canTriggerReaction}",
             onHeatGain: "{ triggeringToken, heatChange, currentHeat, inDangerZone, distanceToTrigger, canTriggerReaction}",
             onDestroyed: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTokenCreated: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTokenRemoved: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTokenVisibility: "{ triggeringToken, isHidden, distanceToTrigger, canTriggerReaction}",
-            onTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], actionName, isInvade, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], actionName, isInvade, tags, actionData, distanceToTrigger, canTriggerReaction}",
-            onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, distanceToTrigger, canTriggerReaction}",
-            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onInitAttack: "{ triggeringToken, weapon, targets, actionName, tags, actionData, cancelAttack(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onInitTechAttack: "{ triggeringToken, techItem, targets, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, cancelAction(reasonText, title, allowConfirm, userIdControl), distanceToTrigger, canTriggerReaction}",
-            onActivation: "{ triggeringToken, actionType, actionName, item, actionData, distanceToTrigger, endActivation, canTriggerReaction}",
+            onTechAttack: "{ triggeringToken, techItem, targets, hitTokens, actionName, isInvade, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onTechHit: "{ triggeringToken, techItem, targets: [{target, roll, crit}], hitTokens, actionName, isInvade, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onTechMiss: "{ triggeringToken, techItem, targets: [{target, roll}], hitTokens, actionName, isInvade, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
+            onCheck: "{ triggeringToken, statName, roll, total, success, checkAgainstToken, targetVal, flowState, distanceToTrigger, canTriggerReaction}",
+            onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onInitAttack: "{ triggeringToken, weapon, targets, hitTokens, actionName, tags, actionData, cancelAttack(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onInitTechAttack: "{ triggeringToken, techItem, targets, hitTokens, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, cancelAction(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, distanceToTrigger, canTriggerReaction}",
             onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, allowConfirm, userIdControl), modifyHpChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onHpGain: "{ triggeringToken, hpChange, currentHP, maxHP, distanceToTrigger, canTriggerReaction}",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger, canTriggerReaction}",
             onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, allowConfirm, userIdControl), modifyHeatChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onHeatLoss: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger, canTriggerReaction}",
             onInvoluntaryMove: "{ triggeringToken, token, distance, actionName, item, destination: {x,y}, cancel(reason), distanceToTrigger, canTriggerReaction}",
-            onRoll: "{ triggeringToken, rollType: 'attackRoll'|'techAttackRoll'|'damageRoll'|'skillRoll'|'structureRoll'|'stressRoll', roll, total, success, targets, item, isReroll, rerollCount, reroll(reason), changeRoll(newTotal), flowState, distanceToTrigger, canTriggerReaction}",
+            onRoll: "{ triggeringToken, rollType: 'attackRoll'|'techAttackRoll'|'damageRoll'|'skillRoll'|'structureRoll'|'stressRoll', roll, total, success, targets, item, isReroll, rerollCount, hitTokens, reroll(reasonText, subtype, title, allowConfirm, userIdControl), changeRoll(newTotal, reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger, canTriggerReaction}",
             onUpdate: "{ triggeringToken, document, change, options, canTriggerReaction}",
             onEnterCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
@@ -2135,9 +2077,9 @@ export class ReactionEditor extends FormApplication
         };
 
         const result = {
-            isGeneral: data.isGeneral || false,
-            name: data.name || "",
-            lid: data.lid || "",
+            isGeneral: config.isGeneral || false,
+            name: config.name || "",
+            lid: config.lid || "",
             foundItemName: foundItemName,
             foundItemUuid: foundItemUuid,
             foundActionName: foundActionName,
@@ -2160,7 +2102,11 @@ export class ReactionEditor extends FormApplication
             activationMode: reaction.activationMode || "instead",
             activationMacro: reaction.activationMacro || "",
             activationCode: typeof reaction.activationCode === 'function' ? reaction.activationCode.toString() : (reaction.activationCode || ""),
-            reactionIndex: data.reactionIndex,
+            reactionIndex: config.reactionIndex,
+            workshopId: reaction.workshopId || "",
+            workshopAuthor: (reaction.workshopId || "").split('/')[0] || "",
+            workshopPreview: config.workshopPreview === true,
+            originalName: config.name || "",
             onInit: typeof reaction.onInit === 'function' ? reaction.onInit.toString() : (reaction.onInit || ""),
             onMessage: typeof reaction.onMessage === 'function' ? reaction.onMessage.toString() : (reaction.onMessage || ""),
             actionType: reaction.actionType || "Automation",
@@ -2198,6 +2144,9 @@ export class ReactionEditor extends FormApplication
     {
         super.activateListeners(html);
 
+        this._bindDirtyTracking(html);
+        html.find('.la-close-btn').on('click', () => this.close());
+
         const generalCheckbox = html.find('#isGeneral');
         const generalOnlyFields = html.find('.general-only');
         const itemOnlyFields = html.find('.item-only');
@@ -2217,7 +2166,7 @@ export class ReactionEditor extends FormApplication
         {
             try
             {
-                const r = this.object?.reaction ?? {};
+                const existingReaction = this.object?.reaction ?? {};
                 const triggers = [];
                 html.find('input[name^="trigger."]').each(function ()
                 {
@@ -2235,8 +2184,8 @@ export class ReactionEditor extends FormApplication
                     evaluate: this.evaluateEditor ? this.evaluateEditor.getValue() : (html.find('textarea[name="evaluate"]').val() || ""),
                     triggerDescription: String(html.find('textarea[name="triggerDescription"]').val() || ""),
                     effectDescription: String(html.find('textarea[name="effectDescription"]').val() || ""),
-                    actionType: String(html.find('select[name="actionType"]').val() || r.actionType || "Automation"),
-                    frequency: String(html.find('select[name="frequency"]').val() || r.frequency || "Unlimited"),
+                    actionType: String(html.find('select[name="actionType"]').val() || existingReaction.actionType || "Automation"),
+                    frequency: String(html.find('select[name="frequency"]').val() || existingReaction.frequency || "Unlimited"),
                     checkReaction: html.find('input[name="checkReaction"]').prop('checked'),
                     requireCanProvoke: html.find('input[name="requireCanProvoke"]').prop('checked'),
                     checkUsage: html.find('input[name="checkUsage"]').prop('checked'),
@@ -2246,8 +2195,8 @@ export class ReactionEditor extends FormApplication
                     triggerOther: html.find('input[name="triggerOther"]').prop('checked'),
                     outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
                     onlyOnSourceMatch: html.find('input[name="onlyOnSourceMatch"]').filter(':checked').length > 0,
-                    activationType: String(html.find('select[name="activationType"]').val() || r.activationType || "flow"),
-                    activationMode: String(html.find('select[name="activationMode"]').val() || r.activationMode || "instead"),
+                    activationType: String(html.find('select[name="activationType"]').val() || existingReaction.activationType || "flow"),
+                    activationMode: String(html.find('select[name="activationMode"]').val() || existingReaction.activationMode || "instead"),
                     activationMacro: String(html.find('input[name="activationMacro"]').val() || ""),
                     activationCode: this.codeEditor ? this.codeEditor.getValue() : (html.find('textarea[name="activationCode"]').val() || ""),
                     onInit: this.onInitEditor ? this.onInitEditor.getValue() : (html.find('textarea[name="onInit"]').val() || ""),
@@ -2610,7 +2559,11 @@ export class ReactionEditor extends FormApplication
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.evaluateEditor.on('change', (editor) => editor.save());
+                this.evaluateEditor.on('change', (editor) =>
+                {
+                    editor.save();
+                    this._markDirty();
+                });
                 installLancerHints(this.evaluateEditor, 'evaluate');
             }
 
@@ -2628,7 +2581,11 @@ export class ReactionEditor extends FormApplication
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.codeEditor.on('change', (editor) => editor.save());
+                this.codeEditor.on('change', (editor) =>
+                {
+                    editor.save();
+                    this._markDirty();
+                });
                 installLancerHints(this.codeEditor, 'activationCode');
             }
 
@@ -2646,7 +2603,11 @@ export class ReactionEditor extends FormApplication
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.onInitEditor.on('change', (editor) => editor.save());
+                this.onInitEditor.on('change', (editor) =>
+                {
+                    editor.save();
+                    this._markDirty();
+                });
                 installLancerHints(this.onInitEditor, 'onInit');
             }
 
@@ -2664,7 +2625,11 @@ export class ReactionEditor extends FormApplication
                     lineWrapping: false,
                     scrollbarStyle: "native"
                 });
-                this.onMessageEditor.on('change', (editor) => editor.save());
+                this.onMessageEditor.on('change', (editor) =>
+                {
+                    editor.save();
+                    this._markDirty();
+                });
                 installLancerHints(this.onMessageEditor, 'onMessage');
             }
 
@@ -2734,6 +2699,16 @@ export class ReactionEditor extends FormApplication
             const checked = $(this).find('.trigger-group-body input:checked').length;
             if (checked === 0)
                 $(this).addClass('collapsed');
+        });
+
+        html.find('#open-api-ref').on('click', () =>
+        {
+            if (this._apiRefPopup && document.body.contains(this._apiRefPopup.element))
+            {
+                this._closeApiRefPopup();
+                return;
+            }
+            this._apiRefPopup = openApiRefPopup();
         });
 
         // Trigger data reference popup
@@ -2879,9 +2854,117 @@ export class ReactionEditor extends FormApplication
         this._triggerRefPopup = null;
     }
 
+    _closeApiRefPopup()
+    {
+        this._apiRefPopup?.destroy();
+        this._apiRefPopup = null;
+    }
+
+    _bindDirtyTracking(html)
+    {
+        this._dirty = false;
+        html.find('input, select, textarea').on('change input', () => this._markDirty());
+        // CodeMirror fires change while it builds, so only arm once the render settles.
+        setTimeout(() =>
+        {
+            this._dirty = false;
+            this._refreshDirtyMark();
+        }, 0);
+    }
+
+    _markDirty()
+    {
+        if (this._dirty)
+            return;
+        this._dirty = true;
+        this._refreshDirtyMark();
+    }
+
+    _refreshDirtyMark()
+    {
+        this.element?.find?.('.la-dirty-star').text(this._dirty ? ' *' : '');
+    }
+
+    async _onSubmit(event, options = {})
+    {
+        this._lastSaveOk = false;
+        const icon = this.element?.find?.('.la-save-icon');
+        icon?.removeClass('far fa-save').addClass('fas fa-spinner fa-spin');
+        try
+        {
+            const [result] = await Promise.all([
+                super._onSubmit(event, options),
+                new Promise(resolve => setTimeout(resolve, 400)),
+            ]);
+            if (this._lastSaveOk)
+            {
+                this._dirty = false;
+                this._refreshDirtyMark();
+            }
+            return result;
+        }
+        finally
+        {
+            icon?.removeClass('fas fa-spinner fa-spin').addClass('far fa-save');
+        }
+    }
+
+    _confirmUnsaved()
+    {
+        return new Promise((resolve) =>
+        {
+            let picked = 'cancel';
+            new Dialog({
+                title: "Unsaved changes",
+                content: "<p style='padding:4px 2px;'>This activation has unsaved changes.</p>",
+                buttons: {
+                    save: {
+                        icon: '<i class="far fa-save"></i>',
+                        label: "Save & Close",
+                        callback: () =>
+                        {
+                            picked = 'save';
+                        }
+                    },
+                    discard: {
+                        icon: '<i class="fas fa-trash"></i>',
+                        label: "Discard",
+                        callback: () =>
+                        {
+                            picked = 'discard';
+                        }
+                    },
+                    cancel: {
+                        icon: '<i class="fas fa-arrow-left"></i>',
+                        label: "Keep Editing",
+                        callback: () =>
+                        {
+                            picked = 'cancel';
+                        }
+                    }
+                },
+                default: 'save',
+                close: () => resolve(picked)
+            }, { classes: ["lancer-dialog-base", "lancer-no-title"] }).render(true);
+        });
+    }
+
     async close(options = {})
     {
+        if (this._dirty && !options.force)
+        {
+            const picked = await this._confirmUnsaved();
+            if (picked === 'cancel')
+                return;
+            if (picked === 'save')
+            {
+                await this.submit({ preventClose: true, preventRender: true });
+                if (!this._lastSaveOk)
+                    return;
+            }
+        }
         this._closeTriggerRefPopup();
+        this._closeApiRefPopup();
         return super.close(options);
     }
 
@@ -3113,6 +3196,16 @@ export class ReactionEditor extends FormApplication
             return actions;
         }
 
+        if (item.type === "bond")
+        {
+            (item.system?.powers ?? []).forEach((power, powerIdx) =>
+            {
+                const rank = power.master ? ' (Master)' : power.veteran ? ' (Veteran)' : '';
+                actions.push({ name: `${power.name || `Power ${powerIdx + 1}`}${rank}`, path: `powers[${powerIdx}]` });
+            });
+            return actions;
+        }
+
         if (item.type === "npc_feature")
         {
             if (item.system?.trigger)
@@ -3131,6 +3224,7 @@ export class ReactionEditor extends FormApplication
             {
                 item.system.ranks.forEach((rank, rIdx) =>
                 {
+                    actions.push({ name: `${rank.name || `Rank ${rIdx + 1}`} (Rank ${rIdx + 1})`, path: `ranks[${rIdx}]` });
                     if (rank.actions)
                     {
                         rank.actions.forEach((action, aIdx) =>
@@ -3191,6 +3285,7 @@ export class ReactionEditor extends FormApplication
                 }
                 (item.system?.traits ?? []).forEach((trait, tIdx) =>
                 {
+                    actions.push({ name: `${trait.name || `Trait ${tIdx + 1}`} (Trait)`, path: `traits[${tIdx}]` });
                     (trait.actions ?? []).forEach((action, aIdx) =>
                     {
                         actions.push({
@@ -3282,6 +3377,7 @@ export class ReactionEditor extends FormApplication
 
     async _updateObject(event, formData)
     {
+        this._lastSaveOk = false;
         const isGeneral = formData.isGeneral === true;
 
         const triggers = [];
@@ -3338,6 +3434,25 @@ export class ReactionEditor extends FormApplication
                 dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };
 
+            if (formData.workshopId && formData.name === formData.originalName)
+                newReaction.workshopId = formData.workshopId;
+
+            if (newReaction.workshopId)
+            {
+                const savedGenerals = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS);
+                let staleRemoved = false;
+                for (const [otherName, other] of Object.entries(savedGenerals))
+                {
+                    if (otherName !== name && other?.workshopId === newReaction.workshopId)
+                    {
+                        delete savedGenerals[otherName];
+                        staleRemoved = true;
+                    }
+                }
+                if (staleRemoved)
+                    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, savedGenerals);
+            }
+
             await ReactionManager.saveGeneralReaction(name, newReaction);
         }
         else
@@ -3374,12 +3489,21 @@ export class ReactionEditor extends FormApplication
                 dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };
 
+            if (formData.workshopId)
+                newReaction.workshopId = formData.workshopId;
+
             let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);
 
             if (!userReactions[lid])
                 userReactions[lid] = { itemType: "any", reactions: [] };
 
-            const index = formData.reactionIndex;
+            let index = formData.reactionIndex;
+            if ((index === undefined || index === null || index === "") && newReaction.workshopId)
+            {
+                const existing = userReactions[lid].reactions.findIndex(entry => entry?.workshopId === newReaction.workshopId);
+                if (existing >= 0)
+                    index = existing;
+            }
             if (index !== undefined && index !== null && index !== "")
             {
                 if (userReactions[lid].reactions[index])
@@ -3393,6 +3517,15 @@ export class ReactionEditor extends FormApplication
             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
         }
 
+        if (this.object.workshopPreview && String(formData.workshopId || "").includes('/') &&
+            (!isGeneral || formData.name === formData.originalName))
+        {
+            const author = formData.workshopId.split('/')[0];
+            await ReactionManager.createFolder(author);
+            await ReactionManager.assignToFolder(author, isGeneral ? `general::${formData.name}` : `item::${formData.lid}`);
+        }
+
+        this._lastSaveOk = true;
         clearScriptCache();
 
         Object.values(ui.windows).forEach(w =>

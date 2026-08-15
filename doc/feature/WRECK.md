@@ -62,7 +62,7 @@ The explosion animation and sound are **`enableWreckAnimation`** and **`enableWr
 
 ## Custom wreck assets
 
-**`wreckAssetsPath`** points the system at a folder of your own wreck images, effects, and sounds; left blank it falls back to `modules/lancer-automations/wrecks`. Lay the folder out like this:
+**`wreckAssetsPath`** points the system at a folder of your own wreck images, effects, and sounds. Left blank, it falls back to `modules/lancer-automations/wrecks`. Lay the folder out like this:
 
 ```
 <wreckAssetsPath>/

@@ -298,7 +298,7 @@ function _serializeFns(value)
     return value;
 }
 
-function packSection(id, label, rows)
+export function packSection(id, label, rows)
 {
     return `
         <details class="la-pack-sec" data-section="${id}" open>
@@ -310,7 +310,7 @@ function packSection(id, label, rows)
         </details>`;
 }
 
-function packGroup(groupId, label, count, rows)
+export function packGroup(groupId, label, count, rows)
 {
     return `
         <details class="la-pack-sec" data-group="${groupId}" open>
@@ -322,7 +322,7 @@ function packGroup(groupId, label, count, rows)
         </details>`;
 }
 
-function packPick(section, key, label, { disabled = false, note = '', group = '' } = {})
+export function packPick(section, key, label, { disabled = false, note = '', group = '' } = {})
 {
     return `<label style="display:flex;align-items:center;gap:6px;font-size:0.88em;${disabled ? 'opacity:0.55;' : ''}">
         <input type="checkbox" class="la-pack-pick" data-section="${section}" data-key="${esc(key)}" data-group="${esc(group)}" ${disabled ? 'disabled' : 'checked'}>
@@ -330,13 +330,13 @@ function packPick(section, key, label, { disabled = false, note = '', group = ''
     </label>`;
 }
 
-const _packSelectAllBar = `
+export const packSelectAllBar = `
     <div style="display:flex;gap:6px;margin-bottom:4px;">
         <button type="button" class="la-pack-all-on" style="font-size:0.85em;padding:2px 8px;cursor:pointer;">Select all</button>
         <button type="button" class="la-pack-all-off" style="font-size:0.85em;padding:2px 8px;cursor:pointer;">Deselect all</button>
     </div>`;
 
-function _wirePackSelectAll(html)
+export function wirePackSelectAll(html)
 {
     html.find('.la-pack-section-all').on('change', (ev) =>
     {
@@ -465,7 +465,7 @@ export function openPackExport()
             <label style="font-weight:bold;">Pack name</label>
             <input type="text" class="la-pack-name" value="My Activation Pack" style="width:100%;">
         </div>
-        ${_packSelectAllBar}
+        ${packSelectAllBar}
         <div class="lancer-scroll" style="max-height:55vh;overflow-y:auto;padding-right:6px;">
             ${groupSections.join('')}
             ${packGroup('startups', 'Startup Scripts', startupRows.length, startupRows)}
@@ -487,7 +487,7 @@ export function openPackExport()
                         ui.notifications.warn("Nothing selected to export.");
                         return;
                     }
-                    const pack = _serializeFns({
+                    const pack = ReactionManager.stripWorkshopIds(_serializeFns({
                         type: PACK_TYPE,
                         version: 1,
                         name,
@@ -495,7 +495,7 @@ export function openPackExport()
                         itemReactions: items,
                         generalReactions: generals,
                         startupScripts: startups,
-                    });
+                    }));
                     const safeName = name.replace(/[^\w-]+/g, '_').slice(0, 60) || 'pack';
                     saveDataToFile(JSON.stringify(pack, null, 2), "application/json", `la-pack-${safeName}.json`);
                     ui.notifications.info(`Exported pack "${name}".`);
@@ -504,7 +504,7 @@ export function openPackExport()
             cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
         },
         default: "export",
-        render: (html) => _wirePackSelectAll(html)
+        render: (html) => wirePackSelectAll(html)
     }, { width: 560, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
 
@@ -578,7 +578,7 @@ function openPackImportSummary(data, onDone)
             Pack <b>${esc(packName)}</b>${data.exportDate ? ` <span style="color:#888;">(${esc(data.exportDate)})</span>` : ''}.
             Activations import into a folder named <b>${esc(packName)}</b>.
         </div>
-        ${_packSelectAllBar}
+        ${packSelectAllBar}
         <div class="lancer-scroll" style="max-height:55vh;overflow-y:auto;padding-right:6px;">
             ${packSection('itemReactions', 'Item Activations', itemRows)}
             ${packSection('generalReactions', 'General Activations', generalRows)}
@@ -603,7 +603,7 @@ function openPackImportSummary(data, onDone)
             cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
         },
         default: "import",
-        render: (html) => _wirePackSelectAll(html)
+        render: (html) => wirePackSelectAll(html)
     }, { width: 640, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
 
@@ -640,6 +640,9 @@ async function _resolveFolderName(name)
 
 async function applyPackImport(packName, itemReactions, generalReactions, startupScripts)
 {
+    itemReactions = ReactionManager.stripWorkshopIds(itemReactions);
+    generalReactions = ReactionManager.stripWorkshopIds(generalReactions);
+    startupScripts = ReactionManager.stripWorkshopIds(startupScripts);
     const hasActivations = Object.keys(itemReactions).length || Object.keys(generalReactions).length;
 
     let folderName = null;

@@ -88,7 +88,7 @@ function scanFreqLimit(sys, rx, useSet, textRx = rx)
 
 function scanFreqLimitFromSub(sub, rx, useSet, textRx = rx)
 {
-    if (!sub)
+    if (!sub || sub._coreActive)
         return 0;
     let best = 0;
     const bump = (value) =>

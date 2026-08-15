@@ -7,11 +7,13 @@ import {
 import { startChoiceCard } from "./network.js";
 import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX, playReloadFX } from "../fx/actionFX.js";
+import { stripDeployOwner } from "./detail-renderers.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
 } from "../combat/grid-helpers.js";
 
+import { applyActionOverlays } from "./action-overlays.js";
 import { itemAllTags } from "../combat/per-frequency-tags.js";
 import { getItemActionLocks, lockEntryId } from "../combat/action-limits.js";
 
@@ -209,7 +211,7 @@ export async function spawnHardCover(originToken, options = {})
             }
         }
     });
-    // Override size and HP on the token's synthetic actor via delta (Foundry v12)
+    // Override size and HP on the token's synthetic actor via delta
     if (size !== 1)
     {
         extraData.delta = {
@@ -424,9 +426,9 @@ async function stampDeployableSource(tokens, sourceItem)
     if (!uuid)
         return;
     const tokenList = Array.isArray(tokens) ? tokens : (tokens ? [tokens] : []);
-    for (const t of tokenList)
+    for (const token of tokenList)
     {
-        const doc = t?.document ?? t;
+        const doc = token?.document ?? token;
         if (!doc?.update)
             continue;
         try
@@ -694,14 +696,12 @@ export async function placeDeployable(options = /** @type {any} */({}))
     if (ownerActor.is_mech?.() && ownerActor.system.pilot?.status === "resolved")
         ownerName = ownerActor.system.pilot.value.system.callsign || ownerActor.system.pilot.value.name;
 
-    // Determine defaults for disposition and team from owner
     const disposition = dispositionOpt ?? ownerActor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
     let team = teamOpt;
     if (team === null || team === undefined)
         team = game.modules.get('token-factions')?.active ? ownerActor.getFlag('token-factions', 'team') : null;
     team = team ?? null;
 
-    // Determine origin
     const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
 
     const deployableInputs = Array.isArray(deployableOrLid) ? deployableOrLid : [deployableOrLid];
@@ -729,7 +729,6 @@ export async function placeDeployable(options = /** @type {any} */({}))
             continue;
         }
 
-        // If from compendium, create a new actor first
         if (isFromCompendium)
         {
             const actorData = /** @type {any} */(actualDeployable.toObject());
@@ -898,7 +897,7 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
     const tokens = actor.getActiveTokens?.() || [];
     const sourceToken = tokens.find(t => t?.scene?.id === sceneId) || tokens[0] || null;
     if (sourceToken && depInfo?.activation)
-        playActionFxByActivation(depInfo.activation, sourceToken, depInfo.name);
+        playActionFxByActivation(depInfo.activation, sourceToken, stripDeployOwner(depInfo.name));
     await _printDeployableCard(parentItem);
     const extraOpts = getExtraDeployableOpts(parentItem ?? actor, deployableLid) || {};
     await placeDeployable({
@@ -962,8 +961,8 @@ export async function addItemFlags(item, flags)
         ui.notifications.error("addItemFlags: item and flags object are required.");
         return null;
     }
-    for (const [key, val] of Object.entries(flags))
-        await setItemFlag(item, 'lancer-automations', key, val);
+    for (const [key, flagValue] of Object.entries(flags))
+        await setItemFlag(item, 'lancer-automations', key, flagValue);
     return item;
 }
 
@@ -1121,6 +1120,100 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
     return actor;
 }
 
+/**
+ * Same as lockActorAction, but keyed on activation type instead of a single action name.
+ * @param {Item|Actor|Token} target - Item: lock held by the item. Actor: source-tracked manual lock.
+ * @param {string|string[]} activationTypes - e.g. `"Quick"` or `["Full", "Protocol"]`. `"*"` locks every type.
+ * @param {string|{reason?: string, except?: string[]}} [sourceIdOrOpts] - Actor target: sourceId. Item target: opts.
+ * @param {{reason?: string, except?: string[]}} [opts] - Actor target only.
+ * @returns {Promise<Item|Actor|null>}
+ */
+export async function lockActorActionTypes(target, activationTypes, sourceIdOrOpts = null, opts = null)
+{
+    const types = (Array.isArray(activationTypes) ? activationTypes : [activationTypes]).filter(Boolean).map(type => String(type));
+    if (!types.length)
+    {
+        ui.notifications.error("lockActorActionTypes: at least one activation type is required.");
+        return null;
+    }
+    const settings = (typeof sourceIdOrOpts === 'object' && sourceIdOrOpts !== null ? sourceIdOrOpts : opts) ?? {};
+    const except = (Array.isArray(settings.except) ? settings.except : [settings.except]).filter(Boolean).map(name => String(name));
+    const reason = settings.reason ?? null;
+
+    if (target?.documentName === 'Item')
+    {
+        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
+        const kept = locks.filter(lock => String(lock?.types) !== String(types));
+        const entry = /** @type {any} */ ({ types, except });
+        if (reason)
+            entry.reason = reason;
+        await target.setFlag('lancer-automations', 'actionTypeLocks', [...kept, entry]);
+        return target;
+    }
+
+    const actor = _resolveActor(target);
+    const sourceId = typeof sourceIdOrOpts === 'string' ? sourceIdOrOpts : null;
+    if (!actor || !sourceId)
+    {
+        ui.notifications.error("lockActorActionTypes: actor, activationTypes and sourceId are required.");
+        return null;
+    }
+    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActionTypes')) ?? {};
+    const next = { ...current };
+    for (const type of types)
+    {
+        const entries = Array.isArray(next[type]) ? next[type].slice() : [];
+        const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
+        const entry = { id: sourceId, except, ...(reason ? { reason } : {}) };
+        if (idx === -1)
+            entries.push(entry);
+        else
+            entries[idx] = entry;
+        next[type] = entries;
+    }
+    await addActorFlags(actor, { lockedActionTypes: next });
+    return actor;
+}
+
+/** Inverse of lockActorActionTypes. Item target drops the item's lock; actor target unlocks by sourceId. */
+export async function unlockActorActionTypes(target, activationTypes = null, sourceId = null)
+{
+    const types = activationTypes
+        ? (Array.isArray(activationTypes) ? activationTypes : [activationTypes]).filter(Boolean).map(type => String(type))
+        : null;
+
+    if (target?.documentName === 'Item')
+    {
+        if (!types)
+        {
+            await target.unsetFlag('lancer-automations', 'actionTypeLocks');
+            return target;
+        }
+        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
+        await target.setFlag('lancer-automations', 'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types)));
+        return target;
+    }
+
+    const actor = _resolveActor(target);
+    if (!actor || !types || !sourceId)
+    {
+        ui.notifications.error("unlockActorActionTypes: actor, activationTypes and sourceId are required.");
+        return null;
+    }
+    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActionTypes')) ?? {};
+    const next = { ...current };
+    for (const type of types)
+    {
+        const entries = Array.isArray(next[type]) ? next[type].filter(entry => lockEntryId(entry) !== sourceId) : [];
+        if (entries.length)
+            next[type] = entries;
+        else
+            delete next[type];
+    }
+    await addActorFlags(actor, { lockedActionTypes: next });
+    return actor;
+}
+
 /** Inverse of lockActorAction. Item target drops the item's lock; actor target unlocks by sourceId. */
 export async function unlockActorAction(target, actionName, sourceId = null)
 {
@@ -1237,9 +1330,9 @@ export async function endItemActivation(item, token)
     if (api?.executeSimpleActivation)
     {
         const result = await api.executeSimpleActivation(token.actor, {
-            title: `End ${item.name}`,
+            title: endActionDescription || `End ${item.name}`,
             action: { name: item.name, activation: endAction },
-            detail: endActionDescription,
+            detail: item.system?.effect || "",
             tags: item.system?.tags || []
         }, {
             item: item,
@@ -1278,7 +1371,7 @@ export async function openEndActivationMenu(token)
         {
             const flags = getItemFlags(w);
             const actionText = flags?.activeStateData?.endAction ? ` [${flags.activeStateData.endAction}]` : "";
-            return `End ${w.name}${actionText}`;
+            return `${flags?.activeStateData?.endActionDescription || `End ${w.name}`}${actionText}`;
         }
     });
 
@@ -1308,9 +1401,9 @@ export function getItemActions(item, opts = {})
         .filter(action => linkTierGate(action, owner, item));
     if (opts.extraOnly)
         return extraActions;
-    const systemActions = item.system?.actions ?? [];
+    const systemActions = applyActionOverlays(item, item.system?.actions ?? []);
     // Multi-profile weapons (e.g. Dynamo Blade) keep per-profile actions here.
-    const profileActions = item.system?.active_profile?.actions ?? [];
+    const profileActions = applyActionOverlays(item, item.system?.active_profile?.actions ?? []);
     // Some weapons list the same action in both system.actions and the active profile; drop exact dupes.
     const seen = new Set();
     return [...systemActions, ...profileActions, ...extraActions].filter(action =>
@@ -1575,8 +1668,7 @@ export async function reloadExtraAction(actor, actionName)
     }
 }
 
-// Per-deployable range/count overrides keyed by LID/UUID, stored on the owning doc.
-// Foundry setFlag treats dots in object keys as nested paths; encode them so UUIDs (which contain dots) stay flat.
+// Encode dots in LID/UUID keys; Foundry setFlag treats dot-separated keys as nested paths.
 function _encodeOptsKey(key)
 {
     return String(key).replace(/\./g, '$DOT$');
@@ -1601,12 +1693,12 @@ export async function setExtraDeployableOpts(target, key, opts)
     const map = { ...(doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {}) };
     const encoded = _encodeOptsKey(key);
     const cur = { ...map[encoded] };
-    for (const [k, v] of Object.entries(opts || {}))
+    for (const [k, optValue] of Object.entries(opts || {}))
     {
-        if (v == null || v === '')
+        if (optValue == null || optValue === '')
             delete cur[k];
         else
-            cur[k] = v;
+            cur[k] = optValue;
     }
     if (Object.keys(cur).length === 0)
         delete map[encoded];
@@ -1931,12 +2023,12 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
         ? 'Search for a deployable actor by name or LID. Click an entry to pick it.'
         : 'Search for a deployable actor by name or LID. Click <i class="fas fa-copy"></i> to copy.';
 
-    const buildEntry = (d) => `
-        <div class="lancer-item-card deployable-entry" data-lid="${d.lid}" style="margin-bottom:6px;padding:10px;${canPick ? '' : 'cursor:default;'}">
+    const buildEntry = (deployableEntry) => `
+        <div class="lancer-item-card deployable-entry" data-lid="${deployableEntry.lid}" style="margin-bottom:6px;padding:10px;${canPick ? '' : 'cursor:default;'}">
             <div class="lancer-item-icon"><i class="fas fa-rocket"></i></div>
             <div class="lancer-item-content" style="flex:1;min-width:0;">
-                <div class="lancer-item-name">${d.name}</div>
-                <div class="lancer-item-details">${d.type} | LID: ${d.lid}</div>
+                <div class="lancer-item-name">${deployableEntry.name}</div>
+                <div class="lancer-item-details">${deployableEntry.type} | LID: ${deployableEntry.lid}</div>
             </div>
             <a class="copy-lid-btn" title="Copy LID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;flex:0 0 auto;padding:0 4px;"><i class="fas fa-copy"></i></a>
         </div>`;
@@ -2210,8 +2302,7 @@ export function linkTierGate(entry, ownerActor, item = null)
     return gate === ownerTier;
 }
 
-// Filter deployable keys by explicit per-entry tier; legacy positional slice (1-or-3 = tier variants) only when
-// no entry has an explicit tier, so old content still works. Unifies the old 2-entry gap to a single pick.
+// Explicit per-entry tier wins; else legacy positional slice (1 or 3 = tier) so old content works.
 export function sliceDeployablesForTier(combined, ownerActor, optsSource, item = null)
 {
     if (!Array.isArray(combined) || combined.length <= 1)
@@ -2393,7 +2484,6 @@ export async function openDeployableMenu(actor)
         return;
     }
 
-    // Get all items that have deployables (system field or extra flags)
     const allSystemsWithDeployables = actor.items.filter(item =>
         getItemDeployables(item, actor).length > 0
     );
@@ -3064,8 +3154,8 @@ export async function rechargeSystem(actorOrToken, targetName)
         const hasRecharge = tags.some(tag => tag.lid === 'tg_recharge');
         if (hasLimited)
         {
-            const val = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
-            if (val <= 0)
+            const usesValue = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
+            if (usesValue <= 0)
                 return true;
         }
         if (hasRecharge && sys.charged === false)

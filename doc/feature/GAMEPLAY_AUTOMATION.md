@@ -29,7 +29,7 @@ Almost all of Lancer's actions and reactions are automated here. These aren't ne
 
 Search, Break Free, and Lancer's other opposed checks are rolled for you as **stat contests**, and you can trigger one from code with **`executeContestedCheck(tokenA, statA, tokenB, statB)`**, which returns the winner.
 
-**Force Check** (TAH Skills, or **`executeForceCheck`**) sends a HASE check to picked tokens, each rolled by its owner; give it a save target and it becomes a save vs that actor's SAVE, pre-targeted in the roller's HUD.
+**Force Check** (TAH Skills, or **`executeForceCheck`**) sends a HASE check to picked tokens, each rolled by its owner. Give it a save target and it becomes a save vs that actor's SAVE, pre-targeted in the roller's HUD.
 
 Auto-knockback (the damage dialog's **Knockback** checkbox, reading a weapon's Knockback tag) is a combat flow covered in [Interactive Tools](./INTERACTIVE_TOOLS.md). Throwing is one too: with **`enableThrowFlow`** on, attacking a throwable weapon first asks whether to attack or throw, and a thrown attack lands the weapon as a token (see [Advanced Targeting and Measurement](./ATTACK_TARGETING.md#throwing)).
 
@@ -41,10 +41,10 @@ With **`autoDamageRoll`** on, the damage roll opens on its own after an attack, 
 
 <img align="right" src="../img/ga-overwatch.png" width="45%"/>
 
-Overwatch is automated two ways; pick one in the Activation Manager.
+Overwatch is automated two ways. Pick one in the Activation Manager.
 
-- **Alert (default)**: when a hostile moves through your threat range, a prompt lists which of your tokens could react; click one to select and pan to it. It flags the chance but doesn't stop the move.
-- **Interrupt (v2)**: pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues. Off by default; enable it and disable the alert in the Activation Manager.
+- **Alert (default)**: when a hostile moves through your threat range, a prompt lists which of your tokens could react. Click one to select and pan to it. It flags the chance but doesn't stop the move.
+- **Interrupt (v2)**: pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues. Off by default. Enable it and disable the alert in the Activation Manager.
 
 Threat range reads from Grid-Aware-Auras threat auras when present, otherwise from the actor's weapon threat.
 
@@ -68,7 +68,7 @@ A target immune to Grappled is skipped, and there's a Grapple macro too.
 
 ## Action limits
 
-**Brace**, **Dazed**, **Staggered** (Dead Rings), and **Slow** grey out the actions they block in the HUD while the status is on; the action popup names the locking status. Dazed also shows no movement on the ruler.
+**Brace**, **Dazed**, **Staggered** (Dead Rings), and **Slow** grey out the actions they block in the HUD while the status is on. The action popup names the locking status. Dazed also shows no movement on the ruler.
 
 ---
 
@@ -76,7 +76,7 @@ A target immune to Grappled is skipped, and there's a Grapple macro too.
 
 <img align="right" src="../img/ga-stabilize.png" width="45%"/>
 
-Stabilize gets a clearer dialog for its two choices; an NPC only cools and reloads. Whether it spends a Full action is set by **`consumeAction`** (Activation Manager tab), and with infection integration on, clearing burn also clears [infection](./INFECTION.md).
+Stabilize gets a clearer dialog for its two choices. An NPC only cools and reloads. Whether it spends a Full action is set by **`consumeAction`** (Activation Manager tab), and with infection integration on, clearing burn also clears [infection](./INFECTION.md).
 
 <br clear="right"/>
 
@@ -116,9 +116,9 @@ Stop an item from spending its resources when it fires, per resource type. Toggl
 
 For units that arrive partway through a fight. Drag the new tokens onto the scene holding **Alt** to drop them hidden, then, in combat, select them, run the reinforcement tool, and set how many rounds until they land. They stay hidden until then.
 
-In their place it drops a countdown marker, but only if it can find one. For each token it looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on, and spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round. You make those placeholder actors yourself, one per size you use; without a match the token only hides with no marker.
+In their place it drops a countdown marker, but only if it can find one. For each token it looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on, and spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round. You make those placeholder actors yourself, one per size you use. Without a match the token only hides with no marker.
 
-When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a checkbox each so you pick who actually shows up. The chosen ones reappear with a burst effect (needs Sequencer and JB2A) and their marker is cleared; the rest are deleted along with their markers.
+When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a checkbox each so you pick who actually shows up. The chosen ones reappear with a burst effect (needs Sequencer and JB2A) and their marker is cleared. The rest are deleted along with their markers.
 
 <br clear="right"/>
 
@@ -128,7 +128,7 @@ When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a 
 
 Off by default, **`enableAltStruct`** swaps Lancer's structure and overheat rolls for the alternative ruleset, my implementation of BadIdeasBureau and Kaffo's [LANCER Alternative Structure](https://github.com/BadIdeasBureau/lancer-alt-structure).
 
-Both are rolled on keep-lowest tables: structure outcomes run from a glancing blow up to a crushing hit, with **HULL** checks and a system-trauma dialog where you tear off a weapon or system; stress outcomes cover power failure, emergency shunt, and reactor meltdown, gated by **ENGINEERING** checks and a meltdown countdown.
+Both are rolled on keep-lowest tables: structure outcomes run from a glancing blow up to a crushing hit, with **HULL** checks and a system-trauma dialog where you tear off a weapon or system. Stress outcomes cover power failure, emergency shunt, and reactor meltdown, gated by **ENGINEERING** checks and a meltdown countdown.
 
 **`enableOneStructNpc`** simplifies NPCs down to a single structure or stress: they're destroyed or Exposed outright instead of rolling.
 
@@ -141,9 +141,11 @@ Both are rolled on keep-lowest tables: structure outcomes run from a glancing bl
   <img src="../img/ga-scan-legacy-sheet.png" width="40%"/>
 </p>
 
-LA's scan runs on both the **legacy** scan and the **native** Lancer-system scan; **`scanJournalSource`** chooses which one produces the result. Routing it through LA is what makes a scan reusable: each one is recorded as **scan ownership**, granted to players by **`scanPlayerOwnershipMode`** (everyone, a player group, or only the scanner).
+LA's scan runs on both the **legacy** scan and the **native** Lancer-system scan. **`scanJournalSource`** chooses which one produces the result. Routing it through LA is what makes a scan reusable: each one is recorded as **scan ownership**, granted to players by **`scanPlayerOwnershipMode`** (everyone, a player group, or only the scanner).
 
 Other LA features read that ownership to tell whether a player may see a target's data, so an NPC's information stays hidden until it's scanned. The [token stat hint](./TOKEN_DISPLAY.md) reads **UNKNOWN** until then, the custom [stat bars](./TOKEN_DISPLAY.md) can be set to appear only once scanned, and the HUD glossary panel lists what you've scanned.
+
+**`revealStatsWithoutScan`** turns that gate off: every actor reads as scanned, so stats show without anyone running a scan. The glossary still lists only real scans.
 
 ---
 

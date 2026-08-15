@@ -921,7 +921,13 @@ const ADV_MEASURE_STEPS = [
     {
         id: 'range',
         title: 'Range Pulse',
-        content: "Pulse a range around the shape: a manual radius, threat, sensor, max reach, or a weapon's range. A movement-reach toggle is here too.",
+        content: "Pulse a range around the shape: a manual radius, threat, sensor, max reach, or a weapon's range. <b>T</b> cycles sources, re-clicking the active one turns it off. A movement-reach toggle is here too.",
+        selector: `${AM_ROOT} .la-mt-dd`,
+    },
+    {
+        id: 'pins',
+        title: 'Pinned Rings',
+        content: "<b>Right-click</b> a range source (or a weapon in its list) to pin it: a steady ring that stays while the tool is open, on as many tokens as you want. Pinned entries show a ★; the TAH range toggles pin the same way.",
         selector: `${AM_ROOT} .la-mt-dd`,
     },
     {
@@ -1140,16 +1146,7 @@ let _advTahTour;
 
 export async function startTahTour()
 {
-    if (!(await _ensureTAHOpen()))
-        return;
-    if (_tahTour)
-        await /** @type {any} */ (_tahTour).start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('tah-tour');
 }
 
 class _RootTour extends Tour
@@ -1257,28 +1254,26 @@ let _rulerTour;
 let _advMeasureTour;
 let _addExtraTour;
 
-function _ensureConfigOpen()
+function _ensureWindowOpen(windowId, importPath, className)
 {
-    const open = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).id === 'lancer-automations-config');
+    const open = Object.values(/** @type {any} */ (ui.windows)).find((win) => /** @type {any} */ (win).id === windowId);
     if (open)
         return Promise.resolve();
-    return import('./settingsMenus.js').then(({ LancerAutomationsConfig }) =>
+    return import(importPath).then((module) =>
     {
-        new LancerAutomationsConfig().render(true);
+        new module[className]().render(true);
         return new Promise((resolve) => setTimeout(resolve, 200));
     });
 }
 
+function _ensureConfigOpen()
+{
+    return _ensureWindowOpen('lancer-automations-config', './settingsMenus.js', 'LancerAutomationsConfig');
+}
+
 function _ensureActivationManagerOpen()
 {
-    const open = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).id === 'reaction-manager-config');
-    if (open)
-        return Promise.resolve();
-    return import('../activations/reaction-manager.js').then(({ ReactionConfig }) =>
-    {
-        new ReactionConfig().render(true);
-        return new Promise((resolve) => setTimeout(resolve, 200));
-    });
+    return _ensureWindowOpen('reaction-manager-config', '../activations/reaction-manager.js', 'ReactionConfig');
 }
 
 async function _ensureEffectManagerOpen()
@@ -1398,84 +1393,143 @@ async function _closeReactionEditor()
         await /** @type {any} */ (app).close({ submit: false });
 }
 
-export async function startConfigTour()
+// gated: ensure returning falsy aborts the start and skips the tour-done flag
+const TOURS = [
+    {
+        id: 'config-tour',
+        title: 'Lancer Automations: Configuration',
+        description: 'Guided walkthrough of every tab in the Lancer Automations configuration window.',
+        root: ROOT,
+        steps: () => CONFIG_STEPS.filter(step => !(/** @type {any} */ (step).condition) || /** @type {any} */ (step).condition()),
+        ensure: _ensureConfigOpen,
+        gated: false,
+        assign: (tour) => { _configTour = tour; },
+        get: () => _configTour,
+    },
+    {
+        id: 'activation-manager-tour',
+        title: 'Lancer Automations: Activation Manager',
+        description: 'Walks through the Activation Manager dialog (custom activations, defaults, startup scripts).',
+        root: RM_ROOT,
+        steps: () => ACTIVATION_MANAGER_STEPS,
+        ensure: _ensureActivationManagerOpen,
+        gated: false,
+        assign: (tour) => { _activationTour = tour; },
+        get: () => _activationTour,
+    },
+    {
+        id: 'tah-tour',
+        title: 'Lancer Automations: Token Action HUD',
+        description: 'Walks through the Token Action HUD on a controlled token.',
+        root: TAH_ROOT,
+        steps: () => TAH_STEPS,
+        ensure: _ensureTAHOpen,
+        gated: true,
+        cleanup: _restoreAfterTAH,
+        assign: (tour) => { _tahTour = tour; },
+        get: () => _tahTour,
+    },
+    {
+        id: 'tah-advanced-tour',
+        title: 'Lancer Automations: TAH Advanced Tools',
+        description: 'The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, downtime, reserve, vote.',
+        root: TAH_ROOT,
+        steps: () => ADV_TAH_STEPS,
+        ensure: () => _ensureTAHOpen({ withCombat: false }),
+        gated: true,
+        cleanup: _restoreAfterTAH,
+        assign: (tour) => { _advTahTour = tour; },
+        get: () => _advTahTour,
+    },
+    {
+        id: 'effect-manager-tour',
+        title: 'Lancer Automations: Effect Manager',
+        description: 'Walks through the Effect Manager dialog (standard, custom, bonus, manage).',
+        root: EM_ROOT,
+        steps: () => EFFECT_MANAGER_STEPS,
+        ensure: _ensureEffectManagerOpen,
+        gated: true,
+        cleanup: _closeEffectManager,
+        assign: (tour) => { _effectManagerTour = tour; },
+        get: () => _effectManagerTour,
+    },
+    {
+        id: 'ruler-tour',
+        title: 'Lancer Automations: Lancer Ruler',
+        description: 'The movement wheel, movement types, and the free/debug keys.',
+        root: 'body',
+        steps: () => RULER_STEPS,
+        assign: (tour) => { _rulerTour = tour; },
+        get: () => _rulerTour,
+    },
+    {
+        id: 'advanced-measure-tour',
+        title: 'Lancer Automations: Advanced Measure',
+        description: 'The Advanced Measure tool: shapes, ranges, markers, and shortcuts.',
+        root: AM_ROOT,
+        steps: () => ADV_MEASURE_STEPS,
+        ensure: _ensureAdvMeasureOpen,
+        gated: true,
+        cleanup: _closeAdvMeasure,
+        assign: (tour) => { _advMeasureTour = tour; },
+        get: () => _advMeasureTour,
+    },
+    {
+        id: 'add-extra-tour',
+        title: 'Lancer Automations: Add Extra',
+        description: 'Add Extra, Add Effect and Extra Config from an actor or item sheet.',
+        root: 'body',
+        steps: () => AD_EXTRA_STEPS,
+        ensure: _ensureAddExtraStart,
+        gated: true,
+        cleanup: _closeExtrasDialog,
+        assign: (tour) => { _addExtraTour = tour; },
+        get: () => _addExtraTour,
+    },
+];
+
+async function startTour(id)
 {
-    await _ensureConfigOpen();
-    if (_configTour)
-        await _configTour.start();
+    const entry = TOURS.find((candidate) => candidate.id === id);
+    const tour = entry?.get();
+    if (tour && (await tour.start()) === false)
+        return;
     try
     {
         await game.settings.set(NS, SETTING_TOUR_DONE, true);
     }
     catch
     { /* not ready */ }
+}
+
+export async function startConfigTour()
+{
+    return startTour('config-tour');
 }
 
 export async function startActivationManagerTour()
 {
-    await _ensureActivationManagerOpen();
-    if (_activationTour)
-        await _activationTour.start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('activation-manager-tour');
 }
 
 export async function startEffectManagerTour()
 {
-    if (!(await _ensureEffectManagerOpen()))
-        return;
-    if (_effectManagerTour)
-        await _effectManagerTour.start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('effect-manager-tour');
 }
 
 export async function startRulerTour()
 {
-    if (_rulerTour)
-        await _rulerTour.start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('ruler-tour');
 }
 
 export async function startAdvMeasureTour()
 {
-    if (!(await _ensureAdvMeasureOpen()))
-        return;
-    if (_advMeasureTour)
-        await _advMeasureTour.start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('advanced-measure-tour');
 }
 
 export async function startAddExtraTour()
 {
-    if (!(await _ensureAddExtraStart()))
-        return;
-    if (_addExtraTour)
-        await _addExtraTour.start();
-    try
-    {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
-    }
-    catch
-    { /* not ready */ }
+    return startTour('add-extra-tour');
 }
 
 // Welcome dialog (first install + menu button); resolves 'setup'|'tour'|'skip', Setup Wizard button GM-only.
@@ -1516,11 +1570,11 @@ function _welcomeDialog()
                 <div style="padding: 8px 10px; line-height: 1.5;">
                     <p style="margin: 0 0 8px;">First of all, thanks for downloading.</p>
                     <p style="margin: 0 0 8px;">It's a very dense, powerful, big module. Its use is mainly for me, so the design is catered to what I like.</p>
-                    <p style="margin: 0 0 8px;">I hope you read the <a href="https://github.com/Agraael/lancer-automations#readme" target="_blank" rel="noopener"><b>README</b> on GitHub</a> a bit. If not, you should.</p>
                     <p style="margin: 0 0 8px;">Since it's a big module, here's a set of tours for the important stuff. They can run long, so take them one at a time and come back later.</p>
                     <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
                     <p style="margin: 0; opacity: 0.85;">Shout to the people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a>.</p>
                     ${setupNote}
+                    <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);"><b>Last warning:</b> if you installed this without reading <a href="https://github.com/Agraael/lancer-automations#readme" target="_blank" rel="noopener">the documentation</a>, please go read it. This is not a plug and play module, and you have to be serious about that.</p>
                 </div>
                 <p style="padding: 6px 10px 0; font-size: 0.85em; opacity: 0.7; border-top: 1px solid rgba(120,46,34,0.2); margin-top: 6px;">You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b> &gt; <b>Tour</b>, or from Foundry's <b>Configure Tours</b> menu.</p>
             `,
@@ -1705,245 +1759,59 @@ export function registerTourBootstrap()
     const doRegister = () =>
     {
         console.log('lancer-automations | tour registration starting, Tour=', typeof Tour, 'game.tours=', !!game.tours);
-        try
+        for (const entry of TOURS)
         {
-            _configTour = new _RootTour({
-                title: 'Lancer Automations: Configuration',
-                description: 'Guided walkthrough of every tab in the Lancer Automations configuration window.',
-                display: true,
-                canBeResumed: false,
-                steps: CONFIG_STEPS.filter(step => !(/** @type {any} */ (step).condition) || /** @type {any} */ (step).condition()),
-            }, ROOT);
-            _activationTour = new _RootTour({
-                title: 'Lancer Automations: Activation Manager',
-                description: 'Walks through the Activation Manager dialog (custom activations, defaults, startup scripts).',
-                display: true,
-                canBeResumed: false,
-                steps: ACTIVATION_MANAGER_STEPS,
-            }, RM_ROOT);
-            _tahTour = new _RootTour({
-                title: 'Lancer Automations: Token Action HUD',
-                description: 'Walks through the Token Action HUD on a controlled token.',
-                display: true,
-                canBeResumed: false,
-                steps: TAH_STEPS,
-            }, TAH_ROOT);
-            _advTahTour = new _RootTour({
-                title: 'Lancer Automations: TAH Advanced Tools',
-                description: 'The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, downtime, reserve, vote.',
-                display: true,
-                canBeResumed: false,
-                steps: ADV_TAH_STEPS,
-            }, TAH_ROOT);
-            _effectManagerTour = new _RootTour({
-                title: 'Lancer Automations: Effect Manager',
-                description: 'Walks through the Effect Manager dialog (standard, custom, bonus, manage).',
-                display: true,
-                canBeResumed: false,
-                steps: EFFECT_MANAGER_STEPS,
-            }, EM_ROOT);
-            _rulerTour = new _RootTour({
-                title: 'Lancer Automations: Lancer Ruler',
-                description: 'The movement wheel, movement types, and the free/debug keys.',
-                display: true,
-                canBeResumed: false,
-                steps: RULER_STEPS,
-            }, 'body');
-            _advMeasureTour = new _RootTour({
-                title: 'Lancer Automations: Advanced Measure',
-                description: 'The Advanced Measure tool: shapes, ranges, markers, and shortcuts.',
-                display: true,
-                canBeResumed: false,
-                steps: ADV_MEASURE_STEPS,
-            }, AM_ROOT);
-            _addExtraTour = new _RootTour({
-                title: 'Lancer Automations: Add Extra',
-                description: 'Add Extra, Add Effect and Extra Config from an actor or item sheet.',
-                display: true,
-                canBeResumed: false,
-                steps: AD_EXTRA_STEPS,
-            }, 'body');
-            const cfgStart = _configTour.start.bind(_configTour);
-            _configTour.start = async () =>
+            try
             {
-                await _ensureConfigOpen();
-                await cfgStart();
-            };
-            const amStart = _activationTour.start.bind(_activationTour);
-            _activationTour.start = async () =>
+                const tour = new _RootTour({
+                    title: entry.title,
+                    description: entry.description,
+                    display: true,
+                    canBeResumed: false,
+                    steps: entry.steps(),
+                }, entry.root);
+                if (entry.ensure)
+                {
+                    const baseStart = tour.start.bind(tour);
+                    tour.start = async () =>
+                    {
+                        const ready = await entry.ensure();
+                        if (entry.gated && !ready)
+                            return false;
+                        await baseStart();
+                        return true;
+                    };
+                }
+                if (entry.cleanup)
+                {
+                    for (const method of ['exit', 'complete'])
+                    {
+                        const base = tour[method].bind(tour);
+                        tour[method] = async () =>
+                        {
+                            try
+                            {
+                                await base();
+                            }
+                            finally
+                            {
+                                // no await on sync cleanups: keeps resolution timing identical to the old per-tour wrappers
+                                const pending = entry.cleanup();
+                                if (pending)
+                                    await pending;
+                            }
+                        };
+                    }
+                }
+                entry.assign(tour);
+                game.tours.register(NS, entry.id, tour);
+            }
+            catch (e)
             {
-                await _ensureActivationManagerOpen();
-                await amStart();
-            };
-            const tahStart = _tahTour.start.bind(_tahTour);
-            _tahTour.start = async () =>
-            {
-                if (!(await _ensureTAHOpen()))
-                    return;
-                await tahStart();
-            };
-            const emStart = _effectManagerTour.start.bind(_effectManagerTour);
-            _effectManagerTour.start = async () =>
-            {
-                if (!(await _ensureEffectManagerOpen()))
-                    return;
-                await emStart();
-            };
-            const emExit = _effectManagerTour.exit.bind(_effectManagerTour);
-            _effectManagerTour.exit = async () =>
-            {
-                try
-                {
-                    await emExit();
-                }
-                finally
-                {
-                    _closeEffectManager();
-                }
-            };
-            const emComplete = _effectManagerTour.complete.bind(_effectManagerTour);
-            _effectManagerTour.complete = async () =>
-            {
-                try
-                {
-                    await emComplete();
-                }
-                finally
-                {
-                    _closeEffectManager();
-                }
-            };
-            const tahExit = _tahTour.exit.bind(_tahTour);
-            _tahTour.exit = async () =>
-            {
-                try
-                {
-                    await tahExit();
-                }
-                finally
-                {
-                    await _restoreAfterTAH();
-                }
-            };
-            const tahComplete = _tahTour.complete.bind(_tahTour);
-            _tahTour.complete = async () =>
-            {
-                try
-                {
-                    await tahComplete();
-                }
-                finally
-                {
-                    await _restoreAfterTAH();
-                }
-            };
-            const advTahStart = _advTahTour.start.bind(_advTahTour);
-            _advTahTour.start = async () =>
-            {
-                if (!(await _ensureTAHOpen({ withCombat: false })))
-                    return;
-                await advTahStart();
-            };
-            const advTahExit = _advTahTour.exit.bind(_advTahTour);
-            _advTahTour.exit = async () =>
-            {
-                try
-                {
-                    await advTahExit();
-                }
-                finally
-                {
-                    await _restoreAfterTAH();
-                }
-            };
-            const advTahComplete = _advTahTour.complete.bind(_advTahTour);
-            _advTahTour.complete = async () =>
-            {
-                try
-                {
-                    await advTahComplete();
-                }
-                finally
-                {
-                    await _restoreAfterTAH();
-                }
-            };
-            const advStart = _advMeasureTour.start.bind(_advMeasureTour);
-            _advMeasureTour.start = async () =>
-            {
-                if (!(await _ensureAdvMeasureOpen()))
-                    return;
-                await advStart();
-            };
-            const advExit = _advMeasureTour.exit.bind(_advMeasureTour);
-            _advMeasureTour.exit = async () =>
-            {
-                try
-                {
-                    await advExit();
-                }
-                finally
-                {
-                    await _closeAdvMeasure();
-                }
-            };
-            const advComplete = _advMeasureTour.complete.bind(_advMeasureTour);
-            _advMeasureTour.complete = async () =>
-            {
-                try
-                {
-                    await advComplete();
-                }
-                finally
-                {
-                    await _closeAdvMeasure();
-                }
-            };
-            const addExtraStart = _addExtraTour.start.bind(_addExtraTour);
-            _addExtraTour.start = async () =>
-            {
-                if (!(await _ensureAddExtraStart()))
-                    return;
-                await addExtraStart();
-            };
-            const addExtraExit = _addExtraTour.exit.bind(_addExtraTour);
-            _addExtraTour.exit = async () =>
-            {
-                try
-                {
-                    await addExtraExit();
-                }
-                finally
-                {
-                    _closeExtrasDialog();
-                }
-            };
-            const addExtraComplete = _addExtraTour.complete.bind(_addExtraTour);
-            _addExtraTour.complete = async () =>
-            {
-                try
-                {
-                    await addExtraComplete();
-                }
-                finally
-                {
-                    _closeExtrasDialog();
-                }
-            };
-            game.tours.register(NS, 'config-tour', _configTour);
-            game.tours.register(NS, 'activation-manager-tour', _activationTour);
-            game.tours.register(NS, 'tah-tour', _tahTour);
-            game.tours.register(NS, 'tah-advanced-tour', _advTahTour);
-            game.tours.register(NS, 'effect-manager-tour', _effectManagerTour);
-            game.tours.register(NS, 'ruler-tour', _rulerTour);
-            game.tours.register(NS, 'advanced-measure-tour', _advMeasureTour);
-            game.tours.register(NS, 'add-extra-tour', _addExtraTour);
-            console.log('lancer-automations | tours registered OK', game.tours.get(`${NS}.config-tour`), game.tours.get(`${NS}.activation-manager-tour`), game.tours.get(`${NS}.tah-tour`));
+                console.error(`lancer-automations | failed to register tour ${entry.id}`, e);
+            }
         }
-        catch (e)
-        {
-            console.error('lancer-automations | failed to register tours', e);
-        }
+        console.log('lancer-automations | tours registered OK', game.tours.get(`${NS}.config-tour`), game.tours.get(`${NS}.activation-manager-tour`), game.tours.get(`${NS}.tah-tour`));
     };
 
     Hooks.once('setup', doRegister);

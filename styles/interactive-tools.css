@@ -601,6 +601,21 @@ h2.la-collapsible:hover {
     transition: transform 0.16s ease;
 }
 
+#lancer-automations-config .form-group.la-req-unmet > div > div {
+    opacity: 0.45;
+}
+
+#lancer-automations-config .form-group.la-req-unmet label,
+#lancer-automations-config .form-group.la-req-unmet .notes {
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-req-icon {
+    color: #d0902f;
+    margin-left: 6px;
+    cursor: help;
+}
+
 .la-config-form {
     display: flex;
     flex-direction: column;
@@ -2207,15 +2222,17 @@ h2.la-collapsible:hover {
     line-height: 1.2;
 }
 
-/* Acc/diff HUD: wrap long roll titles; span max-width sets the line length. */
-#accdiff-hud .lancer-header {
+form[id^="accdiff"] .lancer-header,
+#damage-hud .lancer-header {
     height: auto;
     min-height: 2em;
     flex: 0 0 auto;
 }
 
-#accdiff-hud .lancer-header span,
-#accdiff-hud .lancer-header input {
+form[id^="accdiff"] .lancer-header span,
+form[id^="accdiff"] .lancer-header input,
+#damage-hud .lancer-header span,
+#damage-hud .lancer-header input {
     white-space: normal;
     overflow-wrap: anywhere;
     text-overflow: clip;

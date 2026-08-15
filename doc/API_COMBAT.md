@@ -28,6 +28,71 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 ---
 
 <details>
+<summary><b><code>executeSaveVsEffect</code></b> <sup>async</sup> → <code>Array&lt;{ target, passed, result }&gt;</code></summary>
+
+<br>
+
+```js
+await api.executeSaveVsEffect(targets, options)
+```
+
+Save-or-effect over a target list: each target rolls the save (owner-routed by default, in parallel), failures get `effects` and/or `onFail`, passes get `onPass`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>targets</kbd> | `Token\|Token[]` | *required* | Rollers |
+| <kbd>stat</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
+| <kbd>title</kbd> | `string` | *required* | Roll title |
+| <kbd>origin</kbd> | `number\|Token` | `10` | Difficulty value or token to derive it from |
+| <kbd>effects</kbd> | `string\|Object\|Array` | `null` | Applied on fail (`applyEffectsToTokens` shape) |
+| <kbd>duration</kbd> / <kbd>note</kbd> / <kbd>extraFlags</kbd> | | | Forwarded to the effect application |
+| <kbd>cardTitle</kbd> / <kbd>cardDescription</kbd> | `string \| ((target: Token) => string)` | `null` | Owner card text. Description can be per target |
+| <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its owner |
+| <kbd>onFail</kbd> / <kbd>onPass</kbd> | `(target: Token, result: { passed: boolean, total: number }) => void \| Promise<void>` | `null` | Per-target extras |
+| <kbd>halfDamageOnSave</kbd> | `{ value, type?, title? }` | `null` | Afterwards roll this damage on ALL targets, halved for the ones that saved |
+
+</details>
+
+---
+
+<details>
+<summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code> · <b><code>getTier</code></b> → <code>number</code> · <b><code>tierValue</code></b> → <code>any</code> · <b><code>getFlowFlag</code></b> → <code>any</code> · <b><code>setFlowFlag</code></b> → <code>boolean</code> · <b><code>consumeOncePerRound</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
+
+<br>
+
+```js
+await api.attackWith(weapon, targets?, { reloadIfEmpty? })   // target + start the weapon attack flow
+api.getTier(tokenOrActor)                                     // → 1-3
+api.tierValue(tokenOrActor, [t1, t2, t3])                     // → value for the actor's tier
+api.getFlowFlag(triggerData, key)                             // read a la_extraData flag off the flow
+api.setFlowFlag(triggerData, key, value?)                     // stamp it (once-per-flow gates)
+await api.consumeOncePerRound(owner, key, subject?)           // → true the first time this round
+```
+
+`attackWith` sets the given tokens as targets then starts the weapon's attack flow. `reloadIfEmpty: true` reloads instead and returns `{ reloaded: true }` when the weapon is unloaded.
+
+`tierValue(reactorToken, [4, 6, 8])` replaces tier ladders and clamped index picks. Flow flags replace the hand-written `flowState.la_extraData = ... || {}; ..._key = true` stamp and its evaluate read.
+
+`consumeOncePerRound` is the round-scoped version, for "first time in a round" rules.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>owner</kbd> | `Token \| Actor` | *required* | Holds the flag, usually the reactor |
+| <kbd>key</kbd> | `string` | *required* | Name of the gate, e.g. `'ring_of_fire'` |
+| <kbd>subject</kbd> | `Token \| Actor \| string \| null` | `null` | Counted separately per subject. Omit for one gate on the owner |
+
+`true` on the first call this round, `false` after. Last round's flag is cleaned up for you, and out of combat it is always `true`.
+
+```js
+if (await api.consumeOncePerRound(reactorToken, 'ring_of_fire', target))
+    await api.executeDamageRoll(reactorToken, [target], 2, 'Heat', 'Ring of Fire');
+```
+
+</details>
+
+---
+
+<details>
 <summary><b><code>executeContestedCheck</code></b> <sup>async</sup> → <code>{ completed, winner, loser, winnerToken, loserToken, tie, results }</code></summary>
 
 <br>
@@ -44,7 +109,7 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>stat2</kbd> | `string` | *required* | Second contender's stat |
 | <kbd>options</kbd> | `Object` | `{}` | `{ title?: string, sendToOwner?: boolean }` |
 
-Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie; `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
+Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
 
 </details>
 
@@ -65,7 +130,7 @@ const res = await api.executeForceCheck(skill, targets, options)
 | <kbd>targets</kbd> | `Token[]` | user targets | The tokens that roll |
 | <kbd>options</kbd> | `Object` | `{}` | `{ saveVs?: Token\|Actor, sendToOwner?: boolean = true, title?: string }` |
 
-Sends each target its HASE check (owner rolls; GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary; returned by `openForceCheckCard`.
+Sends each target its HASE check (owner rolls, or the GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
 
 </details>
 
@@ -128,7 +193,7 @@ Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actor</kbd> | `Actor` | *required* | The actor making the attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow constructor options |
+| <kbd>options</kbd> | `Object` | `{}` | Flow constructor options. `tags` / `damage` carry weapon tags and a damage list onto the attack card, so its damage button rolls them pre-filled |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected into `state.la_extraData` |
 
 </details>
@@ -147,7 +212,7 @@ await api.executeTechAttack(target, options, extraData)
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Actor\|Item` | *required* | The actor or item initiating the tech attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow options |
+| <kbd>options</kbd> | `Object` | `{}` | Flow options. `tags` / `damage` carry onto the attack card like `executeBasicAttack` |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
 </details>
@@ -163,7 +228,7 @@ await api.executeTechAttack(target, options, extraData)
 await api.executeExtraActionCombat(actorOrToken, action, sourceItem?)
 ```
 
-Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`); `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [API_HUD.md](API_HUD.md).
+Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`). `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [API_HUD.md](API_HUD.md).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -200,7 +265,7 @@ await api.executeSimpleActivation(actor, options, extraData)
 <br>
 
 ```js
-await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter)
+await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, opts)
 ```
 
 | Param | Type | Default | Description |
@@ -208,7 +273,8 @@ await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter)
 | <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | The actor or token performing the skirmish |
 | <kbd>bypassMount</kbd> | `Object` | `null` | Mount object to skip mount selection |
 | <kbd>preTarget</kbd> | `Token` | `null` | Pre-selected target token |
-| <kbd>weaponFilter</kbd> | `Function` | `null` | `(weapon) => boolean` filter for available weapons |
+| <kbd>weaponFilter</kbd> | `(weapon: Item) => boolean` | `null` | Filter for available weapons |
+| <kbd>opts</kbd> | `Object` | `{}` | `noFX: true` skips the skirmish FX |
 
 </details>
 
@@ -260,12 +326,12 @@ Effective tag list for one item.
 ---
 
 <details>
-<summary><b><code>getActorMaxThreat</code></b> <sup>async</sup> → <code>number</code></summary>
+<summary><b><code>getActorMaxThreat</code></b> → <code>number</code></summary>
 
 <br>
 
 ```js
-await api.getActorMaxThreat(actor)
+api.getActorMaxThreat(actor)
 ```
 
 Returns the highest Threat range across all weapons held by the actor, accounting for active bonuses.
@@ -279,12 +345,12 @@ Returns the highest Threat range across all weapons held by the actor, accountin
 ---
 
 <details>
-<summary><b><code>getMaxWeaponRanges_WithBonus</code></b> <sup>async</sup> → <code>Object</code></summary>
+<summary><b><code>getMaxWeaponRanges_WithBonus</code></b> → <code>Record&lt;string, number&gt;</code></summary>
 
 <br>
 
 ```js
-await api.getMaxWeaponRanges_WithBonus(input)
+api.getMaxWeaponRanges_WithBonus(input)
 // e.g. returns { Range: 25, Burst: 3 }
 ```
 

@@ -3,8 +3,7 @@
 const MODULE_ID = 'lancer-automations';
 
 /**
- * Check if the Engagement reaction is enabled in lancer-automations.
- * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
+ * Registry default has no `enabled` field â†’ defaults to true (line 420 in reaction-manager.js).
  * Users can disable it via the reactions UI, which stores { enabled: false } in generalReactions.
  */
 function isEngagementReactionEnabled()
@@ -30,7 +29,7 @@ function isEngagementReactionEnabled()
  *   - id: unique identifier
  *   - label: description shown in the dialog
  *   - check(): returns true if conflict exists
- *   - fix(): resolves the conflict
+ *   - fix(): resolves the conflict. Omit for a warning-only rule.
  */
 function getConflictRules()
 {
@@ -272,7 +271,6 @@ function getConflictRules()
                 }
                 if (patched > 0)
                     console.log(`${MODULE_ID} | Migrated wreck flags on ${patched} actor prototype(s)`);
-                // Also patch placed scene tokens.
                 let scenePatched = 0;
                 for (const scene of game.scenes)
                 {
@@ -313,6 +311,15 @@ function getConflictRules()
                     console.log(`${MODULE_ID} | Migrated wreck flags on ${scenePatched} placed token(s)`);
             }
         },
+
+        {
+            id: 'jb2a-both-active',
+            label: 'Both <b>JB2A</b> packs are active. The Patreon library already contains everything in the free one, so <i>JB2A_DnD5e</i> can be disabled.',
+            check()
+            {
+                return !!game.modules.get('jb2a_patreon')?.active && !!game.modules.get('JB2A_DnD5e')?.active;
+            }
+        },
     ];
 }
 
@@ -343,11 +350,7 @@ function showQolAdvisoryOnce()
     }).render(true);
 }
 
-/**
- * Run all conflict checks. If any are found, show a dialog with details
- * and an "Auto-fix & Reload" button.
- * Call once during the `ready` hook (GM only).
- */
+// Call once during the ready hook (GM only).
 export function checkCompatibility()
 {
     if (!game.user.isGM)
@@ -356,53 +359,78 @@ export function checkCompatibility()
     showQolAdvisoryOnce();
 
     const rules = getConflictRules();
-    const conflicts = rules.filter(rule => rule.check());
+    const detected = rules.filter(rule => rule.check());
 
-    if (conflicts.length === 0)
+    const conflicts = detected.filter(rule => typeof rule.fix === 'function');
+    const seen = /** @type {string[]} */ (game.settings.get(MODULE_ID, 'compatWarningsShown') || []);
+    const warnings = detected.filter(rule => typeof rule.fix !== 'function' && !seen.includes(rule.id));
+
+    if (conflicts.length === 0 && warnings.length === 0)
         return;
 
-    const listHtml = conflicts.map(conflict =>
-        `<li style="margin-bottom:6px;"><i class="fas fa-exclamation-triangle" style="color:#ff6400;"></i> ${conflict.label}</li>`
+    if (warnings.length)
+        game.settings.set(MODULE_ID, 'compatWarningsShown', [...seen, ...warnings.map(rule => rule.id)]);
+
+    const listHtml = (entries, color) => entries.map(entry =>
+        `<li style="margin-bottom:6px;"><i class="fas fa-exclamation-triangle" style="color:${color};"></i> ${entry.label}</li>`
     ).join('');
 
-    new Dialog({
-        title: 'Lancer Automations — Compatibility Issues',
-        content: `
-            <p style="margin-bottom:8px;">The following conflicts were detected between <b>Lancer Automations</b> and other modules:</p>
-            <ul style="margin:8px 0; padding-left:20px; list-style:none;">${listHtml}</ul>
+    const conflictHtml = conflicts.length
+        ? `<p style="margin-bottom:8px;">The following conflicts were detected between <b>Lancer Automations</b> and other modules:</p>
+            <ul style="margin:8px 0; padding-left:20px; list-style:none;">${listHtml(conflicts, '#ff6400')}</ul>
             <hr>
             <p><b>Auto-fix</b> will disable the conflicting settings in the other modules and reload Foundry.</p>
-            <p style="font-size:0.85em; opacity:0.7;">You can re-enable them later in the respective module settings if needed.</p>
-        `,
-        buttons: {
-            fix: {
-                icon: '<i class="fas fa-wrench"></i>',
-                label: 'Auto-fix & Reload',
-                callback: async () =>
+            <p style="font-size:0.85em; opacity:0.7;">You can re-enable them later in the respective module settings if needed.</p>`
+        : '';
+
+    const warningHtml = warnings.length
+        ? `<p style="margin-bottom:8px;">Not conflicts, but worth a look:</p>
+            <ul style="margin:8px 0; padding-left:20px; list-style:none;">${listHtml(warnings, '#e0b040')}</ul>`
+        : '';
+
+    const fixButtons = {
+        fix: {
+            icon: '<i class="fas fa-wrench"></i>',
+            label: 'Auto-fix & Reload',
+            callback: async () =>
+            {
+                for (const conflict of conflicts)
                 {
-                    for (const conflict of conflicts)
+                    try
                     {
-                        try
-                        {
-                            await conflict.fix();
-                            console.log(`${MODULE_ID} | Compatibility: fixed ${conflict.id}`);
-                        }
-                        catch (e)
-                        {
-                            console.error(`${MODULE_ID} | Compatibility: failed to fix ${conflict.id}:`, e);
-                        }
+                        await conflict.fix();
+                        console.log(`${MODULE_ID} | Compatibility: fixed ${conflict.id}`);
                     }
-                    ui.notifications.info('Migration complete. Reloading in 1 second...');
-                    setTimeout(() => foundry.utils.debouncedReload(), 1000);
+                    catch (e)
+                    {
+                        console.error(`${MODULE_ID} | Compatibility: failed to fix ${conflict.id}:`, e);
+                    }
                 }
-            },
-            ignore: {
-                icon: '<i class="fas fa-times"></i>',
-                label: 'Ignore for now',
-                callback: () =>
-                {}
+                ui.notifications.info('Migration complete. Reloading in 1 second...');
+                setTimeout(() => foundry.utils.debouncedReload(), 1000);
             }
         },
-        default: 'fix'
+        ignore: {
+            icon: '<i class="fas fa-times"></i>',
+            label: 'Ignore for now',
+            callback: () =>
+            {}
+        }
+    };
+
+    const okButton = {
+        ok: {
+            icon: '<i class="fas fa-check"></i>',
+            label: 'Understood',
+            callback: () =>
+            {}
+        }
+    };
+
+    new Dialog({
+        title: conflicts.length ? 'Lancer Automations - Compatibility Issues' : 'Lancer Automations - Compatibility Notes',
+        content: conflictHtml + (conflictHtml && warningHtml ? '<hr>' : '') + warningHtml,
+        buttons: conflicts.length ? fixButtons : okButton,
+        default: conflicts.length ? 'fix' : 'ok'
     }).render(true);
 }

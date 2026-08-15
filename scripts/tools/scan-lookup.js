@@ -31,9 +31,24 @@ export function getScanJournalsForActor(actor, options = {})
     return out;
 }
 
+// World override: treat everything as scanned, for tables that don't play with hidden stats.
+function _revealWithoutScan()
+{
+    try
+    {
+        return !!game.settings.get('lancer-automations', 'revealStatsWithoutScan');
+    }
+    catch
+    {
+        return false;
+    }
+}
+
 export function isActorScannedForUser(actor, user)
 {
     if (!actor || !user)
         return false;
+    if (_revealWithoutScan())
+        return true;
     return getScanJournalsForActor(actor, { user }).length > 0;
 }

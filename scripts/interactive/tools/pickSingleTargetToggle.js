@@ -3,9 +3,9 @@
 import { pixelToOffset } from "../../combat/grid-helpers.js";
 
 import {
-    pointerToWorld, suppressTokenLayerClick, makeSafe, createCursorPreview, createMultiPlusIndicator, gridLineWidth,
+    pointerToWorld, suppressTokenInteraction, createPickerSession, createCursorPreview, createMultiPlusIndicator, gridLineWidth,
     makeText, gridTextResolution, applyTargetInfoLabel, HIT_LABEL_STYLE, hitLabelFontSize, paintSingleMarkCursor,
-    suppressEvent,
+    suppressEvent, showOverlapStackPicker,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { broadcastToolPresence, clearToolPresence } from "../presence.js";
@@ -73,25 +73,13 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             hitLabel.visible = true;
         };
 
-        const prevInteractive = canvas.tokens.interactiveChildren;
-        canvas.tokens.interactiveChildren = false;
-        const restoreLayerClick = suppressTokenLayerClick();
+        const restoreTokenInteraction = suppressTokenInteraction();
 
-        let safeMove, safeClick, safeAbort, safeKey;
-        let stackPopupEl = null;
-        let stackOutsideHandler = null;
+        let closeStack = null;
         const closeStackPopup = () =>
         {
-            if (stackPopupEl)
-            {
-                stackPopupEl.remove();
-                stackPopupEl = null;
-            }
-            if (stackOutsideHandler)
-            {
-                document.removeEventListener('pointerdown', stackOutsideHandler, true);
-                stackOutsideHandler = null;
-            }
+            closeStack?.();
+            closeStack = null;
         };
 
         const doCleanup = () =>
@@ -105,16 +93,8 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
                 hitLabel.destroy();
                 hitLabel = null;
             }
-            if (safeClick)
-                canvas.stage.off('click', safeClick);
-            if (safeAbort)
-                canvas.stage.off('rightdown', safeAbort);
-            if (safeMove)
-                canvas.stage.off('pointermove', safeMove);
-            if (safeKey)
-                document.removeEventListener('keydown', safeKey, true);
-            canvas.tokens.interactiveChildren = prevInteractive;
-            restoreLayerClick();
+            session.unbind();
+            restoreTokenInteraction();
             closeStackPopup();
         };
 
@@ -151,52 +131,14 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             playTargetingMove(o.col, o.row);
         };
 
+        const isTokenTargeted = (token) => Array.from(game.user.targets ?? []).some(target => target.id === token.id);
         const showStackPicker = (tokens, screenX, screenY) =>
         {
             closeStackPopup();
-            const el = document.createElement('div');
-            el.className = 'la-stack-picker';
-            el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
-            for (const token of tokens)
-            {
-                const isTargeted = Array.from(game.user.targets ?? []).some(t => t.id === token.id);
-                const row = document.createElement('div');
-                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${isTargeted ? 'background:rgba(255,100,0,0.25);' : ''}`;
-                row.innerHTML = `
-                    <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
-                    <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
-                    ${isTargeted ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
-                row.addEventListener('mouseenter', () =>
-                {
-                    row.style.background = 'rgba(255,100,0,0.4)';
-                });
-                row.addEventListener('mouseleave', () =>
-                {
-                    row.style.background = isTargeted ? 'rgba(255,100,0,0.25)' : 'transparent';
-                });
-                row.addEventListener('click', (e) =>
-                {
-                    e.stopPropagation();
-                    const keep = !!e.shiftKey;
-                    toggleTarget(token, keep);
-                    if (keep)
-                        closeStackPopup();
-                });
-                el.appendChild(row);
-            }
-            document.body.appendChild(el);
-            stackPopupEl = el;
-            const r = el.getBoundingClientRect();
-            if (r.right > window.innerWidth)
-                el.style.left = `${Math.max(0, window.innerWidth - r.width - 4)}px`;
-            if (r.bottom > window.innerHeight)
-                el.style.top = `${Math.max(0, window.innerHeight - r.height - 4)}px`;
-            stackOutsideHandler = (e) =>
-            {
-                if (stackPopupEl && !stackPopupEl.contains(/** @type {Node} */ (e.target)))
-                    closeStackPopup();
-            };
-            setTimeout(() => document.addEventListener('pointerdown', stackOutsideHandler, true), 0);
+            closeStack = showOverlapStackPicker(tokens, screenX, screenY, {
+                isSelected: isTokenTargeted,
+                onPick: (token, event) => toggleTarget(token, !!event.shiftKey),
+            });
         };
 
         const clickHandler = (event) =>
@@ -224,7 +166,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             if (event.key === 'Escape')
             {
                 suppressEvent(event);
-                if (stackPopupEl)
+                if (document.querySelector('.la-stack-picker'))
                 {
                     closeStackPopup();
                     return;
@@ -235,7 +177,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             }
         };
 
-        const safe = makeSafe('pickSingleTargetToggle', () =>
+        const session = createPickerSession('pickSingleTargetToggle', () =>
         {
             try
             {
@@ -251,11 +193,6 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             doCleanup();
             resolve(null);
         };
-        safeMove = safe(moveHandler);
-        safeClick = safe(clickHandler);
-        safeKey = safe(keyHandler);
-        canvas.stage.on('pointermove', safeMove);
-        canvas.stage.on('click', safeClick);
-        document.addEventListener('keydown', safeKey, true);
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
     });
 }

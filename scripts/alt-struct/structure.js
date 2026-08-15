@@ -93,11 +93,7 @@ async function createDirectHitRoll(damage)
     return roll;
 }
 
-/**
- * Pre-roll step for 1-structure NPCs: bypass the table entirely and show
- * an immediate "Crushing Hit - destroyed" card, mirroring oneStructFlowStep
- * from csm-lancer-qol. Injected before preStructureRollChecks in StructureFlow.
- */
+/** 1-struct NPC bypass: skip table, show immediate Crushing Hit card (mirrors csm-lancer-qol oneStructFlowStep). */
 export async function npcOneStructStep(state)
 {
     if (!game.settings.get("lancer-automations", "enableOneStructNpc"))
@@ -803,10 +799,7 @@ export async function selectDestructionTargetCrushingHitFallback(state)
     return handleTearOffChoice(state, false);
 }
 
-/**
- * Secondary Structure selection step - runs after TEAR OFF roll
- * Shows dialog to select which item to destroy based on 1d6 roll
- */
+/** Selection dialog after TEAR OFF roll; item to destroy determined by 1d6. */
 async function handleTearOffChoice(state, isSystemTrauma)
 {
     if (!state.data)

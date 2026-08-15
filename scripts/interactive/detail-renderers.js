@@ -140,8 +140,8 @@ function tagConfigName(lid)
         return null;
     try
     {
-        const lancer = /** @type {any} */ (globalThis).game;
-        return lancer?.settings?.get(lancer.system.id, 'tagConfig')?.[lid]?.name ?? null;
+        const game = /** @type {any} */ (globalThis).game;
+        return game?.settings?.get(game.system.id, 'tagConfig')?.[lid]?.name ?? null;
     }
     catch
     {
@@ -206,10 +206,6 @@ export function laRenderActions(actions, resolveStr)
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('ACTIONS', '#1a5c3a')}${items}</div>`;
 }
 
-/**
- * @param {Array} deployableActors
- * @returns {string}
- */
 // Strip the trailing " [owner]" suffix a deploy adds to token names; display-only.
 export function stripDeployOwner(name)
 {
@@ -217,6 +213,10 @@ export function stripDeployOwner(name)
     return stripped || String(name ?? '');
 }
 
+/**
+ * @param {Array} deployableActors
+ * @returns {string}
+ */
 export function laRenderDeployables(deployableActors, opts = {})
 {
     if (!deployableActors?.length)

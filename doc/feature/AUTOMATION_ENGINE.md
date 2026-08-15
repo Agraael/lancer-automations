@@ -33,11 +33,27 @@ Each activation has an **enable / disable** toggle. It works per sub-reaction on
 
 <br clear="right"/>
 
+### Changing a built-in automation
+
+You can't edit a built-in directly. Three ways around it:
+
+| Want | Do |
+|------|----|
+| Turn it off | The **enable toggle**. Saved, so updates don't undo it. |
+| Change it | **Edit** it. Your version is saved over the default. |
+| Make a variant | **Copy to Custom** (copy icon on the row). Makes an editable copy and opens it. The original stays. |
+
+To replace a built-in: copy it, edit the copy, disable the original.
+
+All of this is saved in your world, not the module, so updates never overwrite it. **Export / Import** moves it to another world.
+
+<br clear="right"/>
+
 ### Finding an item's LID
 
 <img align="right" src="../img/ae-lid-finder.png" width="45%"/>
 
-Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger); covered in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
+Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger), covered in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
 
 <br clear="right"/>
 
@@ -94,7 +110,7 @@ What makes it self-react on use:
 
 - **`activationMode: "instead"`** - your code replaces the action's flow. Use `"after"` to run alongside it.
 
-- **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action; drop `reactionPath` to bind the whole item.
+- **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action. Drop `reactionPath` to bind the whole item.
 
 ---
 
@@ -114,7 +130,7 @@ There's also an **onInit** block that runs once when a token is created, for pas
 
 You write these as plain function bodies, or full functions (the wrapper is stripped for you). The exact arguments each block receives, the order filters run in, and the synchronous rule for cancel and modify triggers are in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
 
-By default `onActivation` fires when an item runs through an activation; **`treatGenericPrintAsActivation`** also fires it for items printed via Lancer's generic print.
+By default `onActivation` fires when an item runs through an activation. **`treatGenericPrintAsActivation`** also fires it for items printed via Lancer's generic print.
 
 ### Debugging what you get
 
@@ -155,6 +171,16 @@ The **Startup Scripts** tab in the Activation Manager holds code that runs once 
 The registration patterns are in [API_HOWTO.md](../API_HOWTO.md).
 
 <br clear="right"/>
+
+---
+
+## Sharing automations
+
+**Copy** / **Paste** in the activation editor moves one activation. **Export Pack** / **Import Pack** in the Activation Manager moves a bundle of activations and startup scripts as `la-pack-<name>.json`, with a summary to pick what applies.
+
+The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share those files. The **Workshop** tab in the Activation Manager browses and imports it directly; re-importing a file updates your copy instead of duplicating it.
+
+<img src="../vid/ae-workshop.gif" width="80%"/>
 
 ---
 

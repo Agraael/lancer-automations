@@ -12,7 +12,7 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near the top-left of the screen:
 
-- **Move it** by dragging; the **lock** button pins it, the **reset** button puts it back. Stays above open actor sheets (`aboveActorSheets`).
+- **Move it** by dragging. The **lock** button pins it, the **reset** button puts it back. Stays above open actor sheets (`aboveActorSheets`).
 - Categories open on **hover** by default, or set **`clickToOpen`** to open them on click. `hoverCloseDelay` controls how long the menu lingers after the mouse leaves, and `maxColumnItems` makes long columns scroll.
 
 <br clear="right"/>
@@ -35,7 +35,7 @@ The bar at the top of the HUD shows:
 
 - the **token name** - click it to open the actor sheet (shows "N TOKENS" when several are selected),
 - a **combat toggle** (the swords icon) to add or remove the token from combat,
-- an optional **team / disposition stripe** down the edge (`showDisposition`; uses Token Factions teams if installed, otherwise the disposition).
+- an optional **team / disposition stripe** down the edge (`showDisposition`, uses Token Factions teams if installed, otherwise the disposition).
 
 ---
 
@@ -43,7 +43,7 @@ The bar at the top of the HUD shows:
 
 <img align="right" src="../img/hud-stats.png" width="35%"/>
 
-A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it); then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
+A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it), then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
 
 <br clear="right"/>
 
@@ -66,7 +66,7 @@ Appears while combat is running:
 
 ## Action menus
 
-The left column lists categories; opening one cascades its items out to the right. Which categories appear depends on the actor (mech / NPC / pilot / deployable).
+The left column lists categories. Opening one cascades its items out to the right. Which categories appear depends on the actor (mech / NPC / pilot / deployable).
 
 <img src="../img/hud-menus.png" width="45%"/>
 
@@ -77,14 +77,14 @@ The left column lists categories; opening one cascades its items out to the righ
 | **Weapons** | Equipped weapons, grouped by mount (mech) or listed flat (NPC / pilot) |
 | **Tech** | Basic Tech, Scan, Lock On, Bolster, Invade |
 | **Systems** | Equipped systems (mech) or system features (NPC) |
-| **Frame** | Core system, traits, integrated systems, built-ins (mech); stats, traits, class features (NPC) |
+| **Frame** | Core system, traits, integrated systems, built-ins (mech). Stats, traits, class features (NPC) |
 | **Pilot / Pilot Gear** | Pilot stats, talents, gear, skills |
 | **Talents / Skills** | Talent ranks and skill checks |
 | **Deployables** | Deploy, recall, and link buttons, plus the actor's deployables |
 | **Resources** | Counter cells for resources, extra trackables, and ammo |
 | **Utility** | Combat (start/end turn, hide, reinforcement), gameplay (full repair, structure, overheat, resurrect, recharge, generate scan), movement (knockback, teleport, fall, revert), and the aura toggles |
 | **Statuses** | Opens the status panel (below) |
-| **Macros** | Your pinned macros (`macroList`); right-click a slot to edit it |
+| **Macros** | Your pinned macros (`macroList`), right-click a slot to edit it |
 
 Toggle `showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category. These come from PPG (Prototype Pattern Group).
 
@@ -112,7 +112,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 <br clear="right"/>
 
-**Disable / destroy toggles** appear on items that support them (grayed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded; clicking still fires it with a warning).
+**Disable / destroy toggles** appear on items that support them (grayed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded, clicking still fires it with a warning).
 
 ---
 
@@ -155,13 +155,13 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <img align="right" src="../img/hud-search.png" width="35%"/>
 
-**Search** - press Alt+F (or click the search icon) to filter every category at once; matches gather into a single column as you type.
+**Search** - press Alt+F (or click the search icon) to filter every category at once. Matches gather into a single column as you type.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-favorites.png" width="35%"/>
 
-**Favorites** - Ctrl+right-click an item to star it; the star tab on the HUD's edge gathers your favorites in one place.
+**Favorites** - Ctrl+right-click an item to star it. The star tab on the HUD's edge gathers your favorites in one place.
 
 <br clear="right"/>
 
@@ -185,9 +185,9 @@ With **`tah.keyboardNav`** on (default), you can drive the whole HUD from the ke
 
 - **Shift+WASD** moves a cursor through the menus: up/down within a column, left/right to step into a submenu or back out.
 - **Shift+E** activates the focused row (left-click), **Shift+Q** opens its context action (right-click).
-- The cursor clears after a spell of no input; **`tah.keyboardNavResetDelay`** sets how long it lingers.
+- The cursor clears after a spell of no input. **`tah.keyboardNavResetDelay`** sets how long it lingers.
 
-The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token; turn on **`tah.preventWasdMovement`** to block that during nav.
+The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token. Turn on **`tah.preventWasdMovement`** to block that during nav.
 
 ---
 
@@ -195,7 +195,7 @@ The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry'
 
 <img align="right" src="../vid/hud-range-hover.gif" width="35%"/>
 
-**Hover preview** - hovering a weapon or action pulses its range on the canvas (`rangePreview`); the attack card can pulse the attacker's range too (`rangePreviewOnAttackCard`). Works standalone, no extra module needed.
+**Hover preview** - hovering a weapon or action pulses its range on the canvas (`rangePreview`). The attack card can pulse the attacker's range too (`rangePreviewOnAttackCard`). Works standalone, no extra module needed.
 
 <br clear="right"/>
 
@@ -203,7 +203,7 @@ The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry'
 
 **Range measures** - toggles in the Utility → Measures menu that drive the [Advanced Measure tool](./ATTACK_TARGETING.md) to pulse a range on the canvas: **Threat**, **Sensors**, **Max Reach**, and, when the Lancer ruler is on, **Movement**. A **Custom** measure lets you set a size and toggle it on.
 
-- **Area Elevation Aware** (`areaElevationAware`) - default for area pickers (blast etc.); when on, areas become 3D volumes that clip to terrain.
+- **Area Elevation Aware** (`areaElevationAware`) - default for area pickers (blast etc.). When on, areas become 3D volumes that clip to terrain.
 
 <br clear="right"/>
 

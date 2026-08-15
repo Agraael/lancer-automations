@@ -23,7 +23,7 @@ export { knockBackToken } from "./tools/knockBackToken.js";
 export { placeToken } from "./tools/placeToken.js";
 export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";
 export { pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape } from "./tools/pickAreaTargetToggle.js";
-export { clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark } from "./target-shapes.js";
+export { clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel } from "./target-shapes.js";
 export { rangePulse, RANGE_PULSE_PRIORITY } from "./range-pulse-manager.js";
 export {
     toggleAdvancedMeasure, openAdvancedMeasure, closeAdvancedMeasure,

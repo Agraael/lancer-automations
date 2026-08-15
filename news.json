@@ -182,6 +182,15 @@
             ]
         },
         {
+            "id": "2026-08-15-lancer-4-1-0",
+            "date": "2026-08-15",
+            "title": "Lancer Automations 4.1.0",
+            "body": [
+                "<p><b>FIX PATHFINDING, that was not active!!!</b> Plus the Workshop, Bonds in the TAH, and more.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-0-166714633\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
             "id": "2026-08-08-lancer-4-0-0-battle-log",
             "date": "2026-08-08",
             "title": "Lancer Automations 4.0.0: Battle Log is out",

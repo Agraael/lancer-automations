@@ -1,5 +1,4 @@
-// Path-preserving replay for the movement cancel/redirect system: trimmed,
-// rerouted or resumed moves follow the route the token actually dragged.
+// Path replay for movement cancel/redirect: follows the route the token actually dragged.
 
 function posEq(first, second)
 {

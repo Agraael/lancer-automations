@@ -39,7 +39,7 @@ export function buildCombatBar(actor, token)
 {
     if (!game.combat?.active)
         return null;
-    const combatant = game.combat.combatants.find(c => c.tokenId === token.document?.id);
+    const combatant = game.combat.combatants.find(combatant => combatant.tokenId === token.document?.id);
     if (!combatant)
         return null;
 
@@ -130,10 +130,10 @@ export function buildCombatBar(actor, token)
     // Action icons
     for (const def of ACTION_DEFS)
     {
-        const val = actions[def.key];
-        const isAvailable = def.isMove ? (val > 0) : !!val;
+        const actionValue = actions[def.key];
+        const isAvailable = def.isMove ? (actionValue > 0) : !!actionValue;
         const tooltip = def.isMove
-            ? `${def.label}: ${val ?? 0}`
+            ? `${def.label}: ${actionValue ?? 0}`
             : `${def.label}: ${isAvailable ? 'Available' : 'Spent'}`;
 
         const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
@@ -147,7 +147,7 @@ export function buildCombatBar(actor, token)
         {
             icon.on('click', async () =>
             {
-                await modifyAction(actor, def.key, !!val);
+                await modifyAction(actor, def.key, !!actionValue);
             });
         }
         bar.append(icon);

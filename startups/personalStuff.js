@@ -1,5 +1,5 @@
 /*global game, Hooks, console, foundry */
-// ── ZDA (Zone of Deadly Approach) aura ──────────────────────────────────────
+const ZDA_ACTOR_TYPES = new Set(['mech', 'npc', 'pilot']);
 
 const ZDA_TEMPLATE = {
     _v: 1,
@@ -46,12 +46,13 @@ const ZDA_TEMPLATE = {
     },
 };
 
+// Adds the ZDA aura (disabled, radius = 75% of sensors) if the token doesn't already have one.
 async function ensureZDAAura(tokenDoc)
 {
     if (!game.modules.get('grid-aware-auras')?.active)
         return;
     const auras = tokenDoc.getFlag('grid-aware-auras', 'auras') ?? [];
-    if (auras.some(a => a.name === 'ZDA'))
+    if (auras.some(existing => existing.name === 'ZDA'))
         return;
     const actor = tokenDoc.actor;
     if (!actor)
@@ -63,53 +64,43 @@ async function ensureZDAAura(tokenDoc)
     await tokenDoc.setFlag('grid-aware-auras', 'auras', [...auras, aura]);
 }
 
-// Create ZDA on token creation.
-Hooks.on('createToken', async (tokenDoc, _options, userId) =>
-{
-    if (userId !== game.user.id)
-        return;
-    if (!game.modules.get('grid-aware-auras')?.active)
-        return;
-    const actorType = tokenDoc.actor?.type;
-    if (!['mech', 'npc', 'pilot'].includes(actorType))
-        return;
-    await ensureZDAAura(tokenDoc);
+api.registerDefaultGeneralReactions({
+    "ZDA Aura": {
+        category: "General (LaSossis)",
+        comments: "Zone of Deadly Approach aura, created disabled on every mech/npc/pilot token",
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            if (!ZDA_ACTOR_TYPES.has(token.actor?.type))
+                return;
+            await ensureZDAAura(token.document);
+        }
+    }
 });
 
-// Global toggle function — call from macro or console.
+// Macro entry point: toggle the ZDA aura on the selected tokens.
 window.toggleLancerZDA = async function ()
 {
     const controlled = canvas.tokens.controlled;
-    if (controlled.length === 0)
+    if (!controlled.length)
     {
         ui.notifications.warn("No tokens selected");
         return;
     }
     for (const token of controlled)
     {
-        const actorType = token.actor?.type;
-        if (!['mech', 'npc', 'pilot'].includes(actorType))
+        if (!ZDA_ACTOR_TYPES.has(token.actor?.type))
             continue;
-        const existingAuras = token.document.getFlag('grid-aware-auras', 'auras') || [];
-        const zdaAura = existingAuras.find(a => a.name === 'ZDA');
-        if (zdaAura)
-        {
-            zdaAura.enabled = !zdaAura.enabled;
-            await token.document.setFlag('grid-aware-auras', 'auras', existingAuras);
-        }
-        else
-        {
-            await ensureZDAAura(token.document);
-            // Enable it after creation.
-            const refreshed = token.document.getFlag('grid-aware-auras', 'auras') || [];
-            const created = refreshed.find(a => a.name === 'ZDA');
-            if (created)
-            {
-                created.enabled = true;
-                await token.document.setFlag('grid-aware-auras', 'auras', refreshed);
-            }
-        }
+        await ensureZDAAura(token.document);
+        const auras = token.document.getFlag('grid-aware-auras', 'auras') ?? [];
+        const zdaAura = auras.find(existing => existing.name === 'ZDA');
+        if (!zdaAura)
+            continue;
+        zdaAura.enabled = !zdaAura.enabled;
+        await token.document.setFlag('grid-aware-auras', 'auras', auras);
     }
 };
-
-console.log('lancer-automations | Personal token setup startup loaded');

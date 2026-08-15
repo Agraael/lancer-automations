@@ -384,11 +384,11 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
         const centers2 = getOccupiedCenters(token2);
 
         let minDist = Infinity;
-        for (const c1 of centers1)
+        for (const center1 of centers1)
         {
-            for (const c2 of centers2)
+            for (const center2 of centers2)
             {
-                const rawDist = measureGridDistance(c1, c2);
+                const rawDist = measureGridDistance(center1, center2);
                 if (rawDist < minDist)
                     minDist = rawDist;
             }
@@ -401,12 +401,12 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
         const offsets2 = getOccupiedOffsets(token2);
 
         let minDist = Infinity;
-        for (const o1 of offsets1)
+        for (const offset1 of offsets1)
         {
-            const cube1 = offsetToCube(o1.col, o1.row);
-            for (const o2 of offsets2)
+            const cube1 = offsetToCube(offset1.col, offset1.row);
+            for (const offset2 of offsets2)
             {
-                const cube2 = offsetToCube(o2.col, o2.row);
+                const cube2 = offsetToCube(offset2.col, offset2.row);
                 const dist = cubeDistance(cube1, cube2);
                 if (dist < minDist)
                     minDist = dist;
@@ -544,9 +544,9 @@ export function isPositionInRange(origin, target, range)
     const isPoint = target && !target.document && typeof target.x === 'number' && typeof target.y === 'number';
     const targetOffsets = isPoint ? [pixelToOffset(target.x, target.y)] : getOccupiedOffsets(target);
     let horizontalOk = false;
-    for (const o of targetOffsets)
+    for (const offset of targetOffsets)
     {
-        if (inRange.has(`${o.col},${o.row}`))
+        if (inRange.has(`${offset.col},${offset.row}`))
         {
             horizontalOk = true;
             break;
@@ -766,7 +766,6 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
 }
 
 /**
- * Draws a visual debug layout of a token's movement path using PIXI Graphics.
  * @param {PathHexArray} pathHexes
  */
 export function drawDebugPath(pathHexes)
@@ -783,15 +782,15 @@ export function drawDebugPath(pathHexes)
 
     for (let i = 0; i < pathHexes.length; i++)
     {
-        const stepData = pathHexes[i];
+        const step = pathHexes[i];
         const stepColor = Math.floor(Math.random() * 0xFFFFFF);
 
         graphics.lineStyle(4, stepColor);
 
-        for (let center of stepData.hexes)
+        for (let center of step.hexes)
         {
-            let fillAlpha = stepData.isHistory ? 0.2 : 0.4;
-            let radius = stepData.isHistory ? canvas.grid.size / 6 : canvas.grid.size / 3;
+            let fillAlpha = step.isHistory ? 0.2 : 0.4;
+            let radius = step.isHistory ? canvas.grid.size / 6 : canvas.grid.size / 3;
 
             graphics.beginFill(stepColor, fillAlpha);
             graphics.drawCircle(center.x, center.y, radius);

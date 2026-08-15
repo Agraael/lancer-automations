@@ -397,9 +397,10 @@ export function injectTriggerSilentsAtDrop(event)
 {
     if (_patchDetected)
         return;
+    const pathfindOn = _settingOn(PATHFIND_DRAG_MOVEMENT);
     const triggerOn = _settingOn(SPLIT_AT_TRIGGER_BOUNDARIES);
     const tierOn = _settingOn(SPLIT_AT_SPEED_TIERS);
-    if (!triggerOn && !tierOn)
+    if (!pathfindOn && !triggerOn && !tierOn)
         return;
     const contexts = event?.interactionData?.contexts ?? {};
     for (const [tokenId, ctx] of Object.entries(contexts))
@@ -409,33 +410,64 @@ export function injectTriggerSilentsAtDrop(event)
             continue;
         try
         {
-            _injectSilents(token.document, /** @type {any} */ (ctx), { triggerOn, tierOn });
+            if (pathfindOn)
+                _injectRoute(token, /** @type {any} */ (ctx));
+            if (triggerOn || tierOn)
+                _injectSilents(token.document, /** @type {any} */ (ctx), { triggerOn, tierOn });
         }
         catch (err)
         {
-            console.warn(`${MODULE_ID} | silent injection failed for ${tokenId}`, err);
+            console.warn(`${MODULE_ID} | drop injection failed for ${tokenId}`, err);
         }
     }
+}
+
+function _transformFoundPath(token, path)
+{
+    if (!Array.isArray(path) || path.length < 2)
+        return path;
+    const pathfindOn = _settingOn(PATHFIND_DRAG_MOVEMENT);
+    const triggerOn = _settingOn(SPLIT_AT_TRIGGER_BOUNDARIES);
+    const tierOn = _settingOn(SPLIT_AT_SPEED_TIERS);
+    if (!pathfindOn && !triggerOn && !tierOn)
+        return path;
+    const ctx = { foundPath: path };
+    if (pathfindOn)
+        _injectRoute(token, ctx);
+    if (triggerOn || tierOn)
+        _injectSilents(token.document, ctx, { triggerOn, tierOn });
+    return ctx.foundPath;
 }
 
 export function initTerrainTriggerSplits()
 {
     Hooks.on('modifyPlannedMovement', _onModifyPlannedMovement);
+
+    // Fallback seam when the modifyPlannedMovement core patch is absent.
+    libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype.createTerrainMovementPath', function(wrapped, waypoints, options)
+    {
+        if (!_patchDetected)
+        {
+            const dragCtx = this.layer?._draggedToken?.mouseInteractionManager?.interactionData?.contexts?.[this.document.id];
+            if (dragCtx && waypoints === dragCtx.foundPath)
+            {
+                dragCtx.foundPath = _transformFoundPath(this, dragCtx.foundPath);
+                waypoints = dragCtx.foundPath;
+            }
+        }
+        return wrapped.call(this, waypoints, options);
+    }, 'WRAPPER');
 }
 
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, SPLIT_AT_SPEED_TIERS, {
-        name: 'Split Movement at Speed Tiers',
-        hint: 'Split a drag into sub-movements where the ruler tier changes, so events fire per tier.',
         scope: 'world',
         type: Boolean,
         default: true,
         config: false
     });
     game.settings.register(MODULE_ID, PATHFIND_DRAG_MOVEMENT, {
-        name: 'Pathfind Drag Movement',
-        hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.',
         scope: 'world',
         type: Boolean,
         default: false,

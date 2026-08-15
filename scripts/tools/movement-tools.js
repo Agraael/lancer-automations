@@ -1,7 +1,7 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { playStandingUpFX, playTeleportFX } from "../fx/actionFX.js";
-import { executeDamageRoll } from "./misc-tools.js";
+import { executeDamageRoll, executeSimpleActivation } from "./misc-tools.js";
 
 /** Add a virtual LA movement entry for actions that cost movement without physically moving the token. */
 async function addVirtualMovement(token, cost)
@@ -20,9 +20,19 @@ async function addVirtualMovement(token, cost)
     await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } });
 }
 
+export async function applyStandingUp(token)
+{
+    if (!token?.actor)
+        return;
+    await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
+    playStandingUpFX(token);
+    Hooks.callAll('lancer-automations.battelog.action', { token, name: 'STAND UP', actionType: 'Move' });
+    await addVirtualMovement(token, token.actor.system?.speed ?? 0);
+}
+
 /**
- * Stand up from prone: removes the Prone status and adds +speed to the movement cap.
- * Costs the standard move (not a quick/full action).
+ * Stands up from prone; costs standard move, charges movement cap.
+ * @returns {Promise<void>}
  */
 export async function executeStandingUp(token)
 {
@@ -34,17 +44,15 @@ export async function executeStandingUp(token)
         ui.notifications.info(`${token.name} is not Prone.`);
         return;
     }
-    await removeEffectsByNameFromTokens({ tokens: [token], effectNames: ['prone'] });
-    playStandingUpFX(token);
-    Hooks.callAll('lancer-automations.battelog.action', { token, name: 'STAND UP', actionType: 'Move' });
     const speed = token.actor.system?.speed ?? 0;
-    await addVirtualMovement(token, speed);
-    ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ token: token.document }),
-        content: `<b>${token.name}</b> stands up, using their standard move (+${speed} speed).`,
+    await executeSimpleActivation(token.actor, {
+        title: 'Standing Up',
+        action: { name: 'Standing Up', activation: 'Movement' },
+        detail: `Stands up, using their standard move (+${speed} speed). Removes Prone.`
     });
 }
 
+/** @returns {Promise<void>} */
 export async function executeTeleport(token, cost)
 {
     if (!token?.actor)
@@ -69,8 +77,8 @@ export async function executeTeleport(token, cost)
 }
 
 /**
- * Tick a fall: if the token is above ground, reduce elevation by up to 10 spaces.
- * Once it lands, deal 3 AP kinetic per 3 spaces fallen (capped at 9).
+ * Reduces elevation by ≤10/tick; on landing deals 3 AP kinetic per 3 spaces fallen (capped at 9).
+ * @returns {Promise<void>}
  */
 export async function executeFall(targetToken)
 {
@@ -147,7 +155,7 @@ export async function executeFall(targetToken)
         await applyEffectsToTokens({
             tokens: [targetToken],
             effectNames: ["Falling"],
-            duration: { label: "unlimited" }
+            duration: { label: "indefinite" }
         });
         await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
     }

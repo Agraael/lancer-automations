@@ -1,8 +1,4 @@
-/**
- * TAH Stats Bar
- * Pure function: no class coupling, no jQuery dependencies.
- * Generates the inline HTML for the HP / heat / structure / pips display.
- */
+// TAH stats bar: the inline HP / heat / structure / pips display.
 
 import { playUiSound } from './sound.js';
 
@@ -45,6 +41,9 @@ export function buildStatsHtml(actor, token = null)
     const pilotStressVal = sys.bond_state?.stress?.value ?? 0;
     const pilotStressMax = sys.bond_state?.stress?.max ?? 0;
     const hasPilotStress = actor.type === 'pilot' && pilotStressMax > 0;
+    const bondXpVal = sys.bond_state?.xp?.value ?? 0;
+    const bondXpMax = sys.bond_state?.xp?.max ?? 0;
+    const hasBondXp = actor.type === 'pilot' && bondXpMax > 0 && !!actor.items?.find?.((/** @type {any} */ ownedItem) => ownedItem.type === 'bond');
     const pilotStressRatio = pilotStressMax > 0 ? pilotStressVal / pilotStressMax : 0;
     // grey at 0 -> #d9b800 at max
     const pilotStressColor = lerpColor(136, 136, 136, 217, 184, 0, pilotStressRatio);
@@ -139,7 +138,7 @@ export function buildStatsHtml(actor, token = null)
         `${hasStructure ? `${strPips}${SEP}` : ''}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
         `</div>` +
         `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${hasStress ? `${stressPips}${SEP}` : ''}${hasHeat ? `<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>` : (hasPilotStress ? `<span title="Stress" style="color:${pilotStressColor};">${pilotStressVal}/${pilotStressMax}<i class="mdi mdi-brain" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>` : '')}${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
+        `${hasStress ? `${stressPips}${SEP}` : ''}${hasHeat ? `<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>` : (hasPilotStress ? `<span title="Stress" style="color:${pilotStressColor};">${pilotStressVal}/${pilotStressMax}<i class="mdi mdi-brain" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>` : '')}${hasBondXp ? `${SEP}<span title="Bond XP" style="color:${bondXpVal > 0 ? '#00b8d4' : '#888'};">${bondXpVal}/${bondXpMax}<i class="mdi mdi-head-cog-outline" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>` : ''}${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
         `</div>` +
         `</div>` +
         `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +
@@ -172,7 +171,6 @@ export function buildStatsEl(actor, token = null)
     const el = $(buildStatsHtml(actor, token));
     const detail = el.find('.la-stats-detail');
     const toggle = el.find('.la-stats-toggle');
-    // Set initial width for animation
     if (_statsExpanded)
         detail.css({ display: 'flex', 'flex-direction': 'column', overflow: 'hidden' });
     else

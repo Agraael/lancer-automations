@@ -20,6 +20,7 @@ const SETTING_COMBAT_ONLY = 'tokenStatHintCombatOnly';
 const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
 const SETTING_UNKNOWN_LABEL = 'tokenStatHintUnknownLabel';
 const SETTING_HIDE_CLASS_UNKNOWN = 'tokenStatHintHideClassWhenUnknown';
+const SETTING_HIDE_CURRENT_ON_SCAN = 'tokenStatHintHideCurrentOnScan';
 
 const LABEL_ACTOR = 'actor';   // always show the token name
 const LABEL_SCAN = 'scan';     // tied to scan: name if scanned, "UNKNOWN" otherwise
@@ -204,10 +205,48 @@ function resolveViewMode(actor)
     return 'unknown';
 }
 
+function hasObserverAccess(actor)
+{
+    try
+    {
+        return !!actor?.testUserPermission?.(game.user, 'OBSERVER');
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+// No ownership/observer permission (scan-only or unknown) with the hide-current option on.
+function masksCurrentStats(actor, mode)
+{
+    if (mode === 'gm')
+        return false;
+    if (mode === 'scanned' && hasObserverAccess(actor))
+        return false;
+    try
+    {
+        return game.settings.get(MODULE_ID, SETTING_HIDE_CURRENT_ON_SCAN) === true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
 // The same reveal gate the stat-hover uses: GM, OBSERVER permission, or scanned (incl. scannedByAll).
 export function isActorRevealedToUser(actor)
 {
     return !!actor && resolveViewMode(actor) !== 'unknown';
+}
+
+// Bond XP color follows the auto-injected XP bar's color when one exists.
+function _bondXpColor(actor)
+{
+    const tokenDoc = actor?.getActiveTokens?.()?.[0]?.document;
+    const extras = tokenDoc?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const entry = extras.find((/** @type {any} */ extra) => extra?.autoKey === 'bondXp');
+    return entry?.color?.stops?.[0] || '#00b8d4';
 }
 
 function effectiveHpMax(actor)
@@ -254,6 +293,9 @@ export function getStatsForActor(actor)
         repairsMax: sys.repairs?.max ?? 0,
         pilotStressVal: sys.bond_state?.stress?.value ?? 0,
         pilotStressMax: sys.bond_state?.stress?.max ?? 0,
+        pilotXpVal: sys.bond_state?.xp?.value ?? 0,
+        pilotXpMax: sys.bond_state?.xp?.max ?? 0,
+        hasBond: !!actor?.items?.find?.((/** @type {any} */ ownedItem) => ownedItem.type === 'bond'),
         tier: sys.tier,
     };
 }
@@ -311,9 +353,9 @@ function corePowerColor(energy, active)
         return active ? '#a855f7' : '#3a9e6e';
     return '#c33';
 }
-function signed(n)
+function signed(num)
 {
-    return n >= 0 ? `+${n}` : `${n}`;
+    return num >= 0 ? `+${num}` : `${num}`;
 }
 import { escapeHtml as esc } from "../tools/string-utils.js";
 
@@ -445,13 +487,14 @@ function buildHeaderHtml(token, mode)
     return `<div class="la-stat-hint-header"><div class="la-stat-hint-title">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span>${titleExtra}</div>${subtitle}</div>`;
 }
 
-export function buildRevealRowsHtml(actor, stats)
+export function buildRevealRowsHtml(actor, stats, { maskCurrent = false } = {})
 {
     const burnOn = isBurnEnabled();
     const infOn = isInfectionEnabled();
     const rows = [];
 
     const dimColor = '#555';
+    const maskColor = '#888';
     const isMechOrNpc = stats.type === 'mech' || stats.type === 'npc';
 
     {
@@ -461,8 +504,9 @@ export function buildRevealRowsHtml(actor, stats)
             parts.push(cell(cciIcon('cci-structure', '#e8d060'),
                 `${stats.structVal}/${stats.structMax}`, '#e8d060'));
         }
-        const hpC = hpColorCss(stats.hpVal, stats.hpNominalMax || stats.hpMax);
-        parts.push(cell(glyph('♥', hpC, 16), `${stats.hpVal}/${stats.hpNominalMax}`, hpC));
+        const hpFull = stats.hpNominalMax || stats.hpMax;
+        const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
+        parts.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
         if (burnOn)
         {
             const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
@@ -470,8 +514,8 @@ export function buildRevealRowsHtml(actor, stats)
         }
         if (isMechOrNpc)
             parts.push(cell(svgIcon(ICON.armor), String(stats.armor)));
-        const osCol = stats.overshield > 0 ? '#60a5fa' : dimColor;
-        parts.push(cell(mdi('mdi-hexagon-multiple-outline', osCol), String(stats.overshield), osCol));
+        const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
+        parts.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
         rows.push(parts.join(''));
     }
 
@@ -484,24 +528,31 @@ export function buildRevealRowsHtml(actor, stats)
         }
         if (stats.heatMax > 0)
         {
-            const heatColor = heatColorCss(stats.heatVal, stats.heatMax);
-            parts.push(cell(glyph('🌡', heatColor, 16), `${stats.heatVal}/${stats.heatMax}`, heatColor));
+            const heatColor = maskCurrent ? heatColorCss(0, stats.heatMax) : heatColorCss(stats.heatVal, stats.heatMax);
+            parts.push(cell(glyph('🌡', heatColor, 16), maskCurrent ? `?/${stats.heatMax}` : `${stats.heatVal}/${stats.heatMax}`, heatColor));
         }
         else if (stats.type === 'pilot' && stats.pilotStressMax > 0)
         {
             parts.push(cell(mdi('mdi-brain', '#d9b800'),
                 `${stats.pilotStressVal}/${stats.pilotStressMax}`, '#d9b800'));
         }
+        if (stats.type === 'pilot' && stats.hasBond && stats.pilotXpMax > 0)
+        {
+            const xpColor = (maskCurrent || stats.pilotXpVal > 0) ? _bondXpColor(actor) : dimColor;
+            parts.push(cell(mdi('mdi-head-cog-outline', xpColor),
+                maskCurrent ? `?/${stats.pilotXpMax}` : `${stats.pilotXpVal}/${stats.pilotXpMax}`, xpColor));
+        }
         if (infOn)
         {
-            const infCol = stats.infection > 0 ? '#1a8a3a' : dimColor;
-            parts.push(cell(glyph('☣', infCol, 16), String(stats.infection), infCol));
+            const infectionColor = stats.infection > 0 ? '#1a8a3a' : dimColor;
+            parts.push(cell(glyph('☣', infectionColor, 16), String(stats.infection), infectionColor));
         }
         if (stats.type !== 'deployable')
         {
-            const reactionColor = stats.reaction ? '#a855f7' : dimColor;
-            parts.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${stats.reaction ? 1 : 0.4};">`,
-                stats.reaction ? '1' : '0', reactionColor));
+            const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
+            const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
+            parts.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
+                maskCurrent ? '?' : (stats.reaction ? '1' : '0'), reactionColor));
         }
         if (parts.length)
             rows.push(parts.join(''));
@@ -529,22 +580,22 @@ export function buildRevealRowsHtml(actor, stats)
             : [];
         if (ocSeq.length > 0)
         {
-            const ocLabel = ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—';
-            const ocCol = ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
+            const ocLabel = maskCurrent ? '?' : (ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
+            const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
             parts.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
         if (stats.hasRepairs)
         {
-            const repairsColor = stats.repairs > 0 ? '#66cc66' : '#555';
-            const repairsLabel = stats.repairsMax > 0
-                ? `${stats.repairs}/${stats.repairsMax}`
-                : String(stats.repairs);
+            const repairsColor = maskCurrent ? '#66cc66' : (stats.repairs > 0 ? '#66cc66' : '#555');
+            const repairsLabel = maskCurrent
+                ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
+                : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
             parts.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
         }
         if (stats.coreEnergy != null)
         {
-            const corePwrColor = corePowerColor(stats.coreEnergy, stats.coreActive);
-            const label = stats.coreEnergy > 0 ? (stats.coreActive ? 'ON' : '✓') : '✗';
+            const corePwrColor = maskCurrent ? corePowerColor(1, false) : corePowerColor(stats.coreEnergy, stats.coreActive);
+            const label = maskCurrent ? '?' : (stats.coreEnergy > 0 ? (stats.coreActive ? 'ON' : '✓') : '✗');
             parts.push(cell(svgIcon(ICON.corePwr), label, corePwrColor));
         }
         rows.push(parts.join(''));
@@ -558,7 +609,7 @@ export function buildRevealRowsHtml(actor, stats)
 }
 
 // Unknown view: vitals only; HP/Heat shown as deltas so the maxes don't leak.
-function buildDamagedRowsHtml(actor, stats)
+function buildDamagedRowsHtml(actor, stats, { maskCurrent = false } = {})
 {
     const burnOn = isBurnEnabled();
     const infOn = isInfectionEnabled();
@@ -572,7 +623,7 @@ function buildDamagedRowsHtml(actor, stats)
             parts.push(cell(cciIcon('cci-structure', '#e8d060'),
                 `${stats.structVal}/${stats.structMax}`, '#e8d060'));
         }
-        if (stats.hpNominalMax > 0 && stats.hpVal < stats.hpNominalMax)
+        if (!maskCurrent && stats.hpNominalMax > 0 && stats.hpVal < stats.hpNominalMax)
         {
             parts.push(cell(glyph('♥', '#d74242', 16),
                 `-${stats.hpNominalMax - stats.hpVal}`, '#d74242'));
@@ -593,7 +644,7 @@ function buildDamagedRowsHtml(actor, stats)
             parts.push(cell(cciIcon('cci-reactor', '#e07830'),
                 `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
         }
-        if (stats.heatMax > 0 && stats.heatVal > 0)
+        if (!maskCurrent && stats.heatMax > 0 && stats.heatVal > 0)
         {
             parts.push(cell(glyph('🌡', '#ff8a00', 16),
                 `+${stats.heatVal}`, '#ff8a00'));
@@ -787,7 +838,7 @@ export function ensureStyleSheet()
 }
 
 // User-defined extra bars; empty string when none are visible.
-function buildExtrasHintHtml(token, actor)
+function buildExtrasHintHtml(token, actor, maskCurrent = false)
 {
     const tokenDoc = token?.document;
     if (!tokenDoc || !actor)
@@ -795,12 +846,15 @@ function buildExtrasHintHtml(token, actor)
     const extras = tokenDoc.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
     if (!extras.length)
         return '';
-    const visible = extras.filter(extra => _resolveExtraBarValues(actor, extra).ownerOk);
+    const visible = extras.filter(extra => !extra.hideInHint && _resolveExtraBarValues(actor, extra).ownerOk);
     if (!visible.length)
         return '';
     const rows = visible.map(extra =>
     {
         const { value, max } = _resolveExtraBarValues(actor, extra);
+        // Bars set to 'all' are public even unscanned; only scan-gated bars mask.
+        const entryVisibility = extra.visibility ?? (extra.ownerOnly === true ? 'owner' : extra.ownerOnly === false ? 'all' : 'scanned');
+        const masked = maskCurrent && entryVisibility === 'scanned';
         const color = extra.color?.stops?.[0] ?? '#cccccc';
         const iconSrc = extra.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg';
         const iconHtml = /\.(svg|png|webp|jpe?g|gif)$/i.test(iconSrc)
@@ -811,7 +865,7 @@ function buildExtrasHintHtml(token, actor)
             : '';
         return `<div class="la-stat-hint-extra-row">
             ${iconHtml}
-            <span class="la-stat-hint-extra-val" style="color:${esc(color)};">${value}/${max}</span>
+            <span class="la-stat-hint-extra-val" style="color:${esc(color)};">${masked ? `?/${max}` : `${value}/${max}`}</span>
             ${labelHtml}
         </div>`;
     }).join('');
@@ -825,6 +879,7 @@ function buildPopupDom(token)
         return null;
     const mode = resolveViewMode(actor);
     const stats = getStatsForActor(actor);
+    const maskCurrent = masksCurrentStats(actor, mode);
 
     let viewMode = mode;
     let headerHtml;
@@ -832,15 +887,15 @@ function buildPopupDom(token)
     if (mode === 'gm' || mode === 'scanned')
     {
         headerHtml = buildHeaderHtml(token, 'reveal');
-        rowsHtml = `<div class="la-stat-hint-rows">${buildRevealRowsHtml(actor, stats)}</div>`;
+        rowsHtml = `<div class="la-stat-hint-rows">${buildRevealRowsHtml(actor, stats, { maskCurrent })}</div>`;
     }
     else
     {
         viewMode = 'unknown';
         headerHtml = buildHeaderHtml(token, 'unknown-damaged');
-        rowsHtml = `<div class="la-stat-hint-rows">${buildDamagedRowsHtml(actor, stats)}</div>`;
+        rowsHtml = `<div class="la-stat-hint-rows">${buildDamagedRowsHtml(actor, stats, { maskCurrent })}</div>`;
     }
-    const extrasHtml = buildExtrasHintHtml(token, actor);
+    const extrasHtml = buildExtrasHintHtml(token, actor, maskCurrent);
 
     const popup = document.createElement('div');
     popup.className = 'la-stat-hint-popup';
@@ -1213,16 +1268,12 @@ function rebuildIfVisible(actor)
 export function registerTokenStatHintSettings()
 {
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
-        name: 'Enable Token Stat Hint',
-        hint: 'Hover popup showing stats for hovered tokens.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE_ID, SETTING_DELAY_MS, {
-        name: 'Hover Delay (ms)',
-        hint: 'Delay before the popup appears on hover.',
         scope: 'world',
         config: false,
         type: Number,
@@ -1230,8 +1281,6 @@ export function registerTokenStatHintSettings()
         range: { min: 0, max: 2000, step: 50 },
     });
     game.settings.register(MODULE_ID, SETTING_SCALE, {
-        name: 'Popup Scale',
-        hint: 'Visual scale of the popup. 1 is default, lower shrinks, higher grows.',
         scope: 'world',
         config: false,
         type: Number,
@@ -1244,24 +1293,18 @@ export function registerTokenStatHintSettings()
         },
     });
     game.settings.register(MODULE_ID, SETTING_SHOW_CONTROLLED, {
-        name: 'Show for Controlled Token',
-        hint: 'When off, the popup is suppressed for the token you currently control.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID, SETTING_COMBAT_ONLY, {
-        name: 'Show Only In Combat',
-        hint: 'Suppress the popup outside of an active combat.',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE_ID, SETTING_LABEL_MODE, {
-        name: 'Header Label (NPC)',
-        hint: 'How to display the NPC token name in the popup header.',
         scope: 'world',
         config: false,
         type: String,
@@ -1272,16 +1315,18 @@ export function registerTokenStatHintSettings()
         },
     });
     game.settings.register(MODULE_ID, SETTING_UNKNOWN_LABEL, {
-        name: 'Unknown Label',
-        hint: 'Text shown in the header when label mode is Tied to scan and the token is not scanned.',
         scope: 'world',
         config: false,
         type: String,
         default: 'UNKNOWN',
     });
     game.settings.register(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN, {
-        name: 'Hide NPC class/templates/tier when not scanned',
-        hint: 'When on, the class + templates subtitle (NPC), frame name (Mech), and NPC tier badge are hidden under the UNKNOWN header until scanned.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_HIDE_CURRENT_ON_SCAN, {
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1324,11 +1369,11 @@ export function initTokenStatHint()
     {
         if (_currentTokenId !== tokenDoc?.id)
             return;
-        const tok = canvas?.tokens?.get(tokenDoc.id);
-        if (!tok)
+        const token = canvas?.tokens?.get(tokenDoc.id);
+        if (!token)
             return;
-        _currentToken = tok;
-        applyPosition(tok);
+        _currentToken = token;
+        applyPosition(token);
     });
 
     if (!_hookedPan)

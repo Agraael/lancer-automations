@@ -18,7 +18,6 @@ export const RESOURCE_LABELS = {
     reserveUsed: 'Reserve Used',
 };
 
-// Detect whether an item actually has a given resource type.
 export function _hasResource(item, type)
 {
     if (!item)
@@ -51,6 +50,7 @@ export function _detectResources(item)
     return CANONICAL_TYPES.filter(type => _hasResource(item, type));
 }
 
+/** @returns {object|null} The stored extra config, or null */
 export function getExtraConfig(item)
 {
     if (!item?.getFlag)
@@ -58,8 +58,8 @@ export function getExtraConfig(item)
     return item.getFlag(MODULE_ID, FLAG_KEY) ?? null;
 }
 
-// Deep-merge a patch into the Extra Config flag. Advanced/generic setter used by
-// per-feature helpers below; callers should prefer the explicit helpers when they exist.
+// Deep-merge patch into Extra Config; prefer explicit helpers when they exist.
+/** @returns {Promise<object>} The stored config after the change */
 export async function configureItemExtraConfig(item, patch)
 {
     if (!item?.setFlag)
@@ -70,6 +70,7 @@ export async function configureItemExtraConfig(item, patch)
     return next;
 }
 
+/** @returns {Set<string>} Tag types with auto-consume turned off */
 export function getAutoConsumeDisabled(item)
 {
     const cfg = getExtraConfig(item);
@@ -77,6 +78,7 @@ export function getAutoConsumeDisabled(item)
     return new Set(list);
 }
 
+/** @returns {boolean} */
 export function isAutoConsumeDisabled(item, type)
 {
     return getAutoConsumeDisabled(item).has(type);

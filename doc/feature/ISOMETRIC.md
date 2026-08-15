@@ -26,7 +26,7 @@ It re-aligns its own overlays (stat bars, labels, target reticle, etc.) so they 
 
 ## Keeping the UI aligned
 
-The rest of the toggles cancel the isometric skew on each overlay so it reads straight over the token. All are on by default; turn one off only if it clashes.
+The rest of the toggles cancel the isometric skew on each overlay so it reads straight over the token. All are on by default. Turn one off only if it clashes.
 
 | Setting | Keeps aligned |
 |---------|---------------|

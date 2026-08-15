@@ -83,7 +83,7 @@ export async function openThrowMenu(actor)
             if (dmg)
                 parts.push(dmg);
             parts.push(`Throw ${throwRange}`);
-            return `${weapon.name} (${parts.join(' — ')})`;
+            return `${weapon.name} (${parts.join(', ')})`;
         }
     });
 
@@ -383,7 +383,7 @@ export async function openChoiceMenu()
                                 await ChatMessage.create({
                                     content: `
                                         <div>
-                                            <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle} — Vote Result</div>
+                                            <div class="lancer-dialog-title" style="font-size: 1.1em; color: #ff6400; border-bottom: 1px solid #ff640050; padding-bottom: 4px; margin-bottom: 8px;">${finalTitle}: Vote Result</div>
                                             <div class="lancer-dialog-subtitle">The vote has concluded. Winner:</div>
                                             <div style="font-weight: bold; font-size: 1.25em; padding: 12px; background: rgba(0,0,0,0.05); border-left: 3px solid #ff6400; margin-top: 5px; display: flex; align-items: center; gap: 8px;">
                                                 <span style="color: #ff6400; opacity: 0.7;">${data.number}.</span> ${data.text}
@@ -456,17 +456,6 @@ export async function openChoiceMenu()
 }
 
 /**
- * Prompts the user to choose one or more weapon mounts (Mechs) or weapons (NPCs/Pilots).
- * @param {Actor|Token} actorOrToken
- * @param {number} numberToChoose - Maximum number of items to choose
- * @param {Function} [filterPredicate] - Optional predicate to filter weapons
- * @param {string[]} [allowedMountTypes] - Optional list of allowed mount types (Mech only)
- * @param {string} [title] - Optional custom title
- * @param {Function} [selectionValidator] - Optional (selectedItems) => { valid, message }
- * @returns {Promise<any[]|null>} Resolves to an array of selected mounts/items, or null if cancelled.
- */
-
-/**
  * Builds and renders the standard multi-select choice dialog.
  * Used by choseMount, choseSystem, choseTrait.
  * @param {Array<{id:number,item:any,img:string,labelHtml:string,sublabel:string,selectable:boolean,destroyed:boolean}>} choices
@@ -485,8 +474,7 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
             <div class="la-choice-list" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
                 ${choices.map(choice =>
                 {
-                    // SVG icons are monochrome (light-mode base filter here); .la-dark flips them for a dark plate.
-                    // Raster art (png/webp) is left untouched so real weapon images keep their colours.
+                    // SVGs are monochrome and get colour-filtered; raster art is left untouched
                     const isSvg = typeof choice.img === 'string' && choice.img.endsWith('.svg');
                     const iconCls = isSvg ? ` class="la-hud-icon--${isWhiteSvgIcon(choice.img) ? 'white' : 'dark'}"` : '';
                     const iconFilter = isSvg ? `filter:${isWhiteSvgIcon(choice.img) ? 'invert(1)' : 'none'};` : '';
@@ -596,7 +584,16 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
     dialog.render(true);
 }
 
-/** @returns {Promise<object[]|null>} array of selected mounts, or null if cancelled */
+/**
+ * Prompts the user to choose one or more weapon mounts (Mechs) or weapons (NPCs/Pilots).
+ * @param {Actor|Token} actorOrToken
+ * @param {number} numberToChoose - Maximum number of items to choose
+ * @param {Function} [filterPredicate] - Optional predicate to filter weapons
+ * @param {string[]} [allowedMountTypes] - Optional list of allowed mount types (Mech only)
+ * @param {string} [title] - Optional custom title
+ * @param {Function} [selectionValidator] - Optional (selectedItems) => { valid, message }
+ * @returns {Promise<any[]|null>} Resolves to an array of selected mounts/items, or null if cancelled.
+ */
 export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null)
 {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
@@ -661,7 +658,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const hasWeapon = weaponData.length > 0;
             // A mount is destroyed only if ALL weapons are destroyed
             const allDestroyed = hasWeapon && weaponData.every(weapon => weapon.destroyed);
-            // A mount is only selectable if ALL weapons pass the filter and at least one is not destroyed
+            // selectable only if every weapon passes the filter
             const allFitFilter = weaponData.every(weapon => weapon.fitsFilter);
 
             return {
@@ -703,16 +700,16 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 profileName = profiles[activeProfileIndex].name;
             const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
             const hasLoading      = allTagsNonMech.some(tag => tag.lid === 'tg_loading');
-            const hasRechargeNM   = allTagsNonMech.some(tag => tag.lid === 'tg_recharge');
-            const hasLimitedNM    = allTagsNonMech.some(tag => tag.lid === 'tg_limited');
-            const loadStatusNM    = hasLoading    ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
-            const chargeStatusNM  = hasRechargeNM ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
-            let usesTextNM = '';
-            if (hasLimitedNM)
+            const hasRecharge   = allTagsNonMech.some(tag => tag.lid === 'tg_recharge');
+            const hasLimited    = allTagsNonMech.some(tag => tag.lid === 'tg_limited');
+            const loadStatus    = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
+            const chargeStatus  = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
+            let usesText = '';
+            if (hasLimited)
             {
                 const usesValue = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
                 const max = sys.uses == null ? 0 : typeof sys.uses === 'number' ? 0 : (sys.uses.max ?? 0);
-                usesTextNM = `${usesValue}/${max}`;
+                usesText = `${usesValue}/${max}`;
             }
 
             return {
@@ -723,10 +720,10 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     img: item.img,
                     destroyed,
                     disabled: !!sys.disabled,
-                    unloaded: loadStatusNM === 'UNLOADED',
-                    loadStatus: loadStatusNM,
-                    chargeStatus: chargeStatusNM,
-                    usesText: usesTextNM,
+                    unloaded: loadStatus === 'UNLOADED',
+                    loadStatus,
+                    chargeStatus,
+                    usesText,
                     fitsFilter,
                     type: sys?.weapon_type || sys?.active_profile?.type || "",
                     size: sys?.weapon_type ? "" : (sys?.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys?.size || "")),
@@ -816,7 +813,6 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const sublabel = isMount ? `${choice.item.type} MOUNT` : (choice.item.type === 'npc_feature' ? choice.item.system.type : choice.item.type.replace('mech_', '').replace('pilot_', ''));
             const img = weaponData[0]?.img || "icons/svg/item-bag.svg";
 
-            // Build detail data for right-click popup
             const weaponDetails = weaponData.map(wData =>
             {
                 const weaponItem = wData.value;

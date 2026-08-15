@@ -195,8 +195,8 @@ export function undoMoveData(tokenOrId, _distance)
 export function getCumulativeMoveData(tokenOrId)
 {
     const data = _getMoveHistoryData(tokenOrId);
-    return (data.moves || []).filter(m => !m.isFreeMovement).reduce(
-        (acc, m) => ({ moved: acc.moved + m.distanceMoved, cost: acc.cost + (m.movementCost ?? m.distanceMoved) }),
+    return (data.moves || []).filter(move => !move.isFreeMovement).reduce(
+        (acc, move) => ({ moved: acc.moved + move.distanceMoved, cost: acc.cost + (move.movementCost ?? move.distanceMoved) }),
         { moved: 0, cost: 0 }
     );
 }
@@ -204,8 +204,8 @@ export function getCumulativeMoveData(tokenOrId)
 export function getIntentionalMoveData(tokenOrId)
 {
     const data = _getMoveHistoryData(tokenOrId);
-    return (data.moves || []).filter(m => m.isDrag && !m.isFreeMovement).reduce(
-        (acc, m) => ({ moved: acc.moved + m.distanceMoved, cost: acc.cost + (m.movementCost ?? m.distanceMoved) }),
+    return (data.moves || []).filter(move => move.isDrag && !move.isFreeMovement).reduce(
+        (acc, move) => ({ moved: acc.moved + move.distanceMoved, cost: acc.cost + (move.movementCost ?? move.distanceMoved) }),
         { moved: 0, cost: 0 }
     );
 }
@@ -294,7 +294,7 @@ export function initMovementCap(token)
     if (!doc)
         return;
     const tokenId = doc.id ?? doc._id;
-    const isInCombat = !!game.combat?.combatants.find(c => c.token?.id === tokenId);
+    const isInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === tokenId);
     if (!isInCombat)
         return;
     const isImmobilized = !!findEffectOnToken(token, 'immobilized');
@@ -401,8 +401,7 @@ export function _handleMovementCapExceeded(token, ctx)
             }
             return;
         }
-        // NPC path: fire the registered "Overcharge (NPC)" extra action so its built-in
-        // reaction (heat roll + FX) handles it.
+        // NPC path: fire 'Overcharge (NPC)' action; its built-in reaction handles it.
         await executeSimpleActivation(token.actor, {
             title: 'Overcharge (NPC)',
             action: { name: 'Overcharge (NPC)', activation: 'Protocol' },
@@ -491,8 +490,7 @@ export function _handleMovementCapExceeded(token, ctx)
     }
     else if (canOvercharge && boostOffer && !options._skipBoostOffer)
     {
-        // 3-leg path: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3.
-        // If cap already exhausted, skip leg1 and start at the Boost.
+        // 3-leg: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3; skip leg1 if cap exhausted.
         const remaining = cap - spent;
         const mid1 = remaining > 0 ? computeMid(remaining) : null;
         const mid2 = computeMid(remaining + speed);

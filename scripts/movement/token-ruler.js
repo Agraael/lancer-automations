@@ -1141,8 +1141,6 @@ Hooks.once('init', () =>
     CONFIG.Token.rulerClass = LancerTokenRuler;
     CONFIG.Canvas.rulerClass = LancerCanvasRuler;
     game.settings.register(MODULE_ID, PER_STEP_RENDER, {
-        name: 'Per-step Ruler Path',
-        hint: 'Polyline through each grid step instead of a straight line.',
         scope: 'client',
         config: false,
         type: Boolean,

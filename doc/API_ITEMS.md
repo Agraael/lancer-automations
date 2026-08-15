@@ -54,7 +54,7 @@ Routes through the GM via socket when the calling user does not own the actor.
 |:----|:-----|:--------|:------------|
 | <kbd>mineDetectionRadius</kbd> | `number` | `1` | Aura radius in grid units. |
 | <kbd>mineDetectionDisposition</kbd> | `"ALL"` \| `"FRIENDLY"` \| `"HOSTILE"` \| `"NEUTRAL"` | `"ALL"` | Which disposition triggers the detonation prompt. |
-| <kbd>customMineDetection</kbd> | `boolean` | `false` | Skip the default `LA_MineZone` aura entirely; the per-LID handler installs its own detection. |
+| <kbd>customMineDetection</kbd> | `boolean` | `false` | Skip the default `LA_MineZone` aura entirely. The per-LID handler installs its own detection. |
 
 **Example:**
 ```js
@@ -201,7 +201,7 @@ Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `reserv
 await api.setItemAutoConsumeDisabled(item, 'uses', true);
 ```
 
-Toggle auto-consume opt-out for a single resource type. `true` = do NOT decrement on activation; `false` = default behavior.
+Toggle auto-consume opt-out for a single resource type. `true` = do NOT decrement on activation. `false` = default behavior.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -266,13 +266,13 @@ await api.consumeItemResource(item, 'uses', 2);   // uses -= 2 (clamped to 0)
 await api.consumeItemResource(item, 'loading');   // loaded = false
 ```
 
-Force a consume regardless of opt-out. Throws if the item does not have the resource type. Numeric fields clamp to `[0, max]`; booleans set to `false`.
+Force a consume regardless of opt-out. Throws if the item does not have the resource type. Numeric fields clamp to `[0, max]`. Booleans set to `false`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>item</kbd> | `Item` | *required* | Owned Lancer item |
 | <kbd>type</kbd> | `string` | *required* | Resource key |
-| <kbd>amount</kbd> | `number` | `1` | Positive integer for numeric fields; ignored for booleans |
+| <kbd>amount</kbd> | `number` | `1` | Positive integer for numeric fields, ignored for booleans |
 
 </details>
 
@@ -303,7 +303,7 @@ Reverse of consume. Same signature, same validation.
 await api.configureItemExtraConfig(item, { autoConsumeDisabled: ['uses', 'loading'] });
 ```
 
-Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature; use this only for fields with no helper.
+Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature. Use this only for fields with no helper.
 
 </details>
 

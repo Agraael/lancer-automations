@@ -34,8 +34,7 @@ function _isoElevationDelta(elevation)
 const _smoothBump = new WeakMap();
 const BUMP_EASE = 0.22;
 
-// Debug accumulator. `globalThis._laIsoDebugOn = true` to record, `globalThis._laIsoDebug = null`
-// to clear before a move, then drag the token and inspect `globalThis._laIsoDebug[<tokenId>]`.
+// Set globalThis._laIsoDebugOn = true; clear globalThis._laIsoDebug before a move to record frames.
 function _laIsoDebug(token, frame)
 {
     const debugGlobals = /** @type {any} */ (globalThis);
@@ -82,8 +81,7 @@ Hooks.on('refreshToken', (token) =>
         return;
     }
 
-    // Cancel iso-perspective's terrain contribution; rebuild it per-cell during a move so
-    // the flying portion of doc.elevation stays visible.
+    // Cancel iso-perspective's terrain contribution so flying elevation stays visible.
     const doc = token.document;
     const movement = doc.movement;
     const width = token.w, height = token.h;
@@ -170,9 +168,7 @@ Hooks.on('refreshToken', (token) =>
     }
 });
 
-// iso resets mesh.anchor to (0.5, 0.5) on non-iso scenes, so put the doc's own anchor back.
-// updateToken with no movement-fields (eg movementAction-only) sets no renderFlags -> refreshToken
-// never fires, so the standalone refresh hook isn't enough.
+// iso resets mesh.anchor on non-iso scenes; also hook updateToken since movement-free updates skip refreshToken.
 Hooks.once('ready', () =>
 {
     const mod = game.modules.get(ISO_MODULE_ID);

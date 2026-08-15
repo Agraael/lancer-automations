@@ -11,6 +11,8 @@ export function isWhiteSvgIcon(iconPath)
     return isWhiteIcon(iconPath);
 }
 
+const IMMOVABLE_ICON = 'modules/lancer-automations/icons/immovable.svg';
+
 const _ELEV_KEY_LABELS = { KeyQ: 'Q', KeyE: 'E', KeyA: 'A', KeyD: 'D', KeyW: 'W', KeyS: 'S' };
 function _elevationKeyLabels()
 {
@@ -388,6 +390,32 @@ export function _createInfoCard(type, opts)
                 <button type="button" data-action="run-forcecheck" class="lancer-button lancer-secondary submit default" disabled style="width:100%;padding:6px;font-weight:700;margin-top:2px;">
                     <i class="mdi mdi-alert-circle-check-outline"></i> FORCE CHECK
                 </button>
+            </div>`;
+    }
+    else if (type === "placeZone")
+    {
+        const zoneElevKeys = _elevationKeyLabels();
+        dynamicHtml = `
+            <h3 class="la-section-header lancer-border-primary">Placed Zones</h3>
+            <div style="display:flex;gap:12px;align-items:center;font-size:11.5px;margin-bottom:4px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Tokens outside the zone's elevation band are not counted as inside it">
+                    <input type="checkbox" data-role="zone-elev-toggle" ${opts.elevationAware === false ? '' : 'checked'} style="margin:0;">
+                    <span>Elevation aware</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Base the zone's elevation on the terrain under it">
+                    <input type="checkbox" data-role="zone-auto-elev" ${opts.autoElevation === false ? '' : 'checked'} style="margin:0;">
+                    <span>Auto elevation</span>
+                </label>
+            </div>
+            <div style="font-size:0.75em;opacity:0.8;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+                <span data-role="zone-elev-readout">Elevation: auto</span>
+                <span style="opacity:0.7;font-style:italic;">${zoneElevKeys.down}/${zoneElevKeys.up}: shift elevation</span>
+            </div>
+            <button type="button" data-role="place-more" style="width:100%;margin-bottom:6px;padding:5px;cursor:pointer;background:#3a9e6e;color:#fff;border:none;border-radius:3px;font-weight:600;">
+                <i class="fas fa-plus"></i> Place Zone
+            </button>
+            <div class="la-placed-zones" data-role="zone-list">
+                <div class="la-empty-state">No zones placed</div>
             </div>`;
     }
     else
@@ -791,9 +819,8 @@ export function _updateInfoCard(cardEl, type, cardState)
             const statusIcon = isMoved ? '<i class="fas fa-check" style="color:var(--lancer-color-green)"></i>' : '<i class="fas fa-arrow-right"></i>';
 
             let immovableIcon = "";
-            const api = game.modules.get('lancer-automations')?.api;
-            if (api?.findEffectOnToken(token, "immovable"))
-                immovableIcon = '<i class="cci cci-immovable" title="Immovable" style="color:#ff6400; margin-left: 8px;"></i>';
+            if (token.actor?.statuses?.has?.('immovable'))
+                immovableIcon = `<span title="Immovable" style="display:inline-block; width:14px; height:14px; margin-left:8px; background-color:#ff6400; mask-image:url('${IMMOVABLE_ICON}'); -webkit-mask-image:url('${IMMOVABLE_ICON}'); mask-size:contain; -webkit-mask-size:contain; mask-repeat:no-repeat; -webkit-mask-repeat:no-repeat;"></span>`;
 
             const itemHtml = `
                 <div class="la-knockback-item ${statusClass} ${activeClass}" data-token-index="${idx}">

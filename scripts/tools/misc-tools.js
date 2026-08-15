@@ -3,7 +3,7 @@ import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "../bonuses/genericBonuses.js";
 import { getItemActions, findItemByLid, linkTierGate, isPrimaryActionHidden } from "../interactive/deployables.js";
-import { playSkirmishFX, playBarrageFX, playFightFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX } from "../fx/actionFX.js";
+import { playSkirmishFX, playBarrageFX, playFightFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX, playMineDetonationFX } from "../fx/actionFX.js";
 import { awaitPendingAck } from "../socket.js";
 import { executeStandingUp, executeTeleport, executeFall } from "./movement-tools.js";
 import { openAddReserveDialog } from "./pilot-reserves.js";
@@ -41,14 +41,14 @@ export function getTokenDispositionInfo(token)
 {
     if (!token?.document)
         return null;
-    const disp = token.document.disposition;
-    const dispMap = {
+    const disposition = token.document.disposition;
+    const dispositionMap = {
         [CONST.TOKEN_DISPOSITIONS.HOSTILE]:  { color: '#e53935', label: 'Hostile' },
         [CONST.TOKEN_DISPOSITIONS.NEUTRAL]:  { color: '#f9a825', label: 'Neutral' },
         [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
         [CONST.TOKEN_DISPOSITIONS.SECRET]:   { color: '#7e57c2', label: 'Secret' },
     };
-    const fallback = dispMap[disp] ?? { color: '#888', label: 'Unknown' };
+    const fallback = dispositionMap[disposition] ?? { color: '#888', label: 'Unknown' };
     let color = fallback.color;
     let label = fallback.label;
     try
@@ -181,7 +181,7 @@ export function getActorActionItems(actor, activationType)
             if (coreSystem?.activation === activationType)
             {
                 results.push({
-                    action: { name: coreSystem.active_name ?? 'Core Power', activation: coreSystem.activation, detail: coreSystem.active_effect ?? '' },
+                    action: { name: coreSystem.active_name ?? 'Core Power', activation: coreSystem.activation, detail: coreSystem.active_effect ?? '', _coreActive: true },
                     sourceItem: frame,
                     _coreActive: true,
                 });
@@ -464,6 +464,7 @@ export async function addItemTag(item, tagData)
     return item.update(/** @type {any} */ ({ system: { tags: currentTags } }));
 }
 
+/** @returns {Promise<any>} The updated item */
 export async function removeItemTag(item, tagId)
 {
     if (!item || !tagId)
@@ -624,6 +625,77 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
 }
 
 /**
+ * Save-or-effect over a target list: each target rolls a stat save (owner-routed by default),
+ * failures get the effects / onFail, passes get onPass. Rolls run in parallel.
+ * @param {Token|Token[]} targets
+ * @param {Object} options
+ * @param {string} options.stat                     "HULL" / "AGI" / "SYS" / "ENG" / "GRIT"
+ * @param {string} options.title                    Roll title
+ * @param {number|Token} [options.origin=10]        Difficulty value or token to derive it from
+ * @param {any} [options.effects]                   Effect name(s)/descriptor(s) applied on fail
+ * @param {Object} [options.duration]               Duration for the applied effects
+ * @param {string} [options.note]                   Note for the applied effects (defaults to title)
+ * @param {Object} [options.extraFlags]             Identity flags stamped on the applied effects
+ * @param {string} [options.cardTitle]
+ * @param {string|Function} [options.cardDescription]  String or (target) => string
+ * @param {boolean} [options.sendToOwner=true]
+ * @param {Function} [options.onFail]               (target, rollResult) per failed save
+ * @param {Function} [options.onPass]               (target, rollResult) per passed save
+ * @param {{ value: number|string, type?: string, title?: string }} [options.halfDamageOnSave]
+ *        Roll this damage on ALL targets afterwards, half on the ones that saved
+ * @returns {Promise<Array<{ target: Token, passed: boolean, result: any }>>}
+ */
+export async function executeSaveVsEffect(targets, options = /** @type {any} */ ({}))
+{
+    const {
+        stat, title, origin = 10, effects = null, duration = { label: 'indefinite' }, note = null,
+        extraFlags = {}, cardTitle = null, cardDescription = null, sendToOwner = true,
+        onFail = null, onPass = null, halfDamageOnSave = null
+    } = /** @type {any} */ (options);
+    const list = (Array.isArray(targets) ? targets : [targets]).filter(target => target?.actor);
+    const results = await Promise.all(list.map(async (target) =>
+    {
+        const description = typeof cardDescription === 'function' ? cardDescription(target) : cardDescription;
+        const result = await executeStatRoll(target.actor, stat, title, origin,
+            { sendToOwner, ...(cardTitle ? { cardTitle } : {}), ...(description ? { cardDescription: description } : {}) });
+        return { target, passed: !!(result?.completed && result?.passed), result };
+    }));
+    for (const entry of results)
+    {
+        if (!entry.result?.completed)
+            continue;
+        if (entry.passed)
+        {
+            if (onPass)
+                await onPass(entry.target, entry.result);
+            continue;
+        }
+        if (effects)
+            await applyEffectsToTokens(
+                { tokens: [entry.target], effectNames: Array.isArray(effects) ? effects : [effects], note: note ?? title, duration },
+                extraFlags);
+        if (onFail)
+            await onFail(entry.target, entry.result);
+    }
+    if (halfDamageOnSave && list.length)
+    {
+        const { value, type = "Kinetic", title: damageTitle = title } = halfDamageOnSave;
+        const flowBonuses = results.filter(entry => entry.passed).map(entry => ({
+            id: `save-half-${entry.target.id}-${foundry.utils.randomID()}`,
+            name: title,
+            type: "target_modifier",
+            subtype: "half_damage",
+            applyTo: [entry.target.id]
+        }));
+        /** @type {any} */ (canvas.tokens).setTargets(list.map(target => target.id));
+        const originToken = (typeof origin === 'object' && origin) ? origin : null;
+        await executeDamageRoll(originToken, list, value, type, damageTitle, {},
+            flowBonuses.length ? { flow_bonus: flowBonuses } : {});
+    }
+    return results;
+}
+
+/**
  * Run a contested stat check between two actors/tokens. Each rolls their own stat
  * (with FX suppressed during the rolls); higher total wins. The winner gets the success
  * overlay on its token, the loser gets the failure overlay. On a tie, no FX play and
@@ -658,8 +730,8 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
     const actorName1 = actor1?.name ?? "?";
     const actorName2 = actor2?.name ?? "?";
     const [rollResult1, rollResult2] = await Promise.all([
-        executeStatRoll(actor1, stat1, `${statLabel1} vs ${actorName2} ${statLabel2}`, 0, { ...suppressedRollOpts, cardTitle: title, cardDescription: `${actorName1} :: ${statLabel1}` }),
-        executeStatRoll(actor2, stat2, `${statLabel2} vs ${actorName1} ${statLabel1}`, 0, { ...suppressedRollOpts, cardTitle: title, cardDescription: `${actorName2} :: ${statLabel2}` })
+        executeStatRoll(actor1, stat1, `${statLabel1} vs ${actorName2} ${statLabel2}`, 0, { ...suppressedRollOpts, cardTitle: title, cardDescription: `${actorName1} :: ${statLabel1}`, contest: { actorUuid: actor2?.uuid ?? null, stat: stat2 } }),
+        executeStatRoll(actor2, stat2, `${statLabel2} vs ${actorName1} ${statLabel1}`, 0, { ...suppressedRollOpts, cardTitle: title, cardDescription: `${actorName2} :: ${statLabel2}`, contest: { actorUuid: actor1?.uuid ?? null, stat: stat1 } })
     ]);
 
     if (!rollResult1?.completed || !rollResult2?.completed)
@@ -889,6 +961,104 @@ async function beginWeaponAttackFlow(weapon, options, extraData = {})
     return { completed, flow };
 }
 
+/**
+ * Target the given tokens and start the weapon's attack flow.
+ * @param {Item} weapon
+ * @param {Token|Token[]|null} [targets]
+ * @param {Object} [options]  Flow options; `reloadIfEmpty: true` reloads instead when the weapon is unloaded
+ * @returns {Promise<{completed: boolean, flow?: object, reloaded?: boolean}>}
+ */
+export async function attackWith(weapon, targets = null, options = {})
+{
+    const { reloadIfEmpty = false, ...flowOptions } = /** @type {any} */ (options);
+    if (reloadIfEmpty && weapon?.system?.loaded === false)
+    {
+        const holder = weapon.parent?.getActiveTokens?.()?.[0] ?? null;
+        if (holder)
+            await game.modules.get('lancer-automations')?.api?.reloadOneWeapon?.(holder);
+        return { completed: false, reloaded: true };
+    }
+    if (targets)
+        /** @type {any} */ (canvas.tokens).setTargets((Array.isArray(targets) ? targets : [targets]).filter(Boolean).map(target => target.id));
+    return beginWeaponAttackFlow(weapon, flowOptions);
+}
+
+/**
+ * Actor tier clamped to 1-3. Accepts a token or actor.
+ * @returns {number} 1, 2 or 3
+ */
+export function getTier(tokenOrActor)
+{
+    const actor = tokenOrActor?.actor ?? tokenOrActor;
+    const tier = Number(actor?.system?.tier) || 1;
+    return Math.max(1, Math.min(3, tier));
+}
+
+/**
+ * Value matching the actor's tier.
+ * @param {any} tokenOrActor
+ * @param {any[]} values  [tier1, tier2, tier3]
+ * @returns {any} The entry matching the actor's tier
+ */
+export function tierValue(tokenOrActor, values)
+{
+    return values?.[getTier(tokenOrActor) - 1];
+}
+
+/**
+ * Read a la_extraData flag off the trigger's flow state.
+ * @returns {any} The stored value, or undefined when there is no flow state
+ */
+export function getFlowFlag(triggerData, key)
+{
+    return triggerData?.flowState?.la_extraData?.[key];
+}
+
+/**
+ * Stamp a la_extraData flag on the trigger's flow state (once-per-flow gates).
+ * @returns {boolean} false when the trigger has no flow state to stamp
+ */
+export function setFlowFlag(triggerData, key, value = true)
+{
+    const state = triggerData?.flowState;
+    if (!state)
+        return false;
+    state.la_extraData = state.la_extraData || {};
+    state.la_extraData[key] = value;
+    return true;
+}
+
+/**
+ * Once-per-round gate stored on `owner`, counted separately per `subject`.
+ * Out of combat every call is the first one.
+ * @param {Token|Actor} owner - Holds the flag, usually the reactor.
+ * @param {string} key - Name of the gate, e.g. `'ring_of_fire'`.
+ * @param {Token|Actor|string} [subject] - Who is being gated. Omit for a single gate on the owner.
+ * @returns {Promise<boolean>} true the first time this round, false afterwards
+ */
+export async function consumeOncePerRound(owner, key, subject = null)
+{
+    const actor = /** @type {any} */ (owner)?.actor ?? owner;
+    if (!actor || !key)
+        return true;
+    const round = game.combat?.round ?? 0;
+    if (!round)
+        return true;
+
+    const api = game.modules.get('lancer-automations')?.api;
+    const subjectId = typeof subject === 'string' ? subject : (subject?.id ?? '_self');
+    const flagKey = `${key}_round_${round}`;
+    const used = api.getActorFlags(actor, flagKey) || [];
+    if (used.includes(subjectId))
+        return false;
+
+    await api.addActorFlags(actor, { [flagKey]: [...used, subjectId] });
+    const previousKey = `${key}_round_${round - 1}`;
+    if (round > 1 && api.getActorFlags(actor, previousKey))
+        await api.removeActorFlags(actor, { [previousKey]: true });
+    return true;
+}
+
 
 
 
@@ -898,7 +1068,7 @@ export async function executeBasicAttack(actor, options = {}, extraData = {})
     const BasicAttackFlow = game.lancer.flows.get("BasicAttackFlow");
     if (!BasicAttackFlow)
         return { completed: false };
-    const { tags, ...flowOptions } = options;
+    const { tags, damage, ...flowOptions } = options;
     const flow = new BasicAttackFlow(actor.uuid, flowOptions);
     if (Array.isArray(tags) && tags.length > 0)
     {
@@ -913,6 +1083,12 @@ export async function executeBasicAttack(actor, options = {}, extraData = {})
         flow.state.data.tags = [...(flow.state.data.tags || []), ...normalized];
         flow.state.la_extraData = flow.state.la_extraData || {};
         flow.state.la_extraData.injectedTags = normalized;
+    }
+    // Carried on the attack card; its damage button pre-fills the damage flow with these.
+    if (Array.isArray(damage) && damage.length > 0)
+    {
+        flow.state.la_extraData = flow.state.la_extraData || {};
+        flow.state.la_extraData.injectedDamage = damage;
     }
     if (extraData && typeof extraData === 'object')
         flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
@@ -931,7 +1107,19 @@ export async function executeTechAttack(target, options = {}, extraData = {})
         ui.notifications.error("lancer-automations | executeTechAttack: target (actor or item) is required.");
         return { completed: false };
     }
-    const flow = new TechAttackFlow(target, options);
+    const { damage, ...flowOptions } = options;
+    const flow = new TechAttackFlow(target, flowOptions);
+    // Carried on the tech attack card; its damage button pre-fills the damage flow with these.
+    if (Array.isArray(flowOptions.tags) && flowOptions.tags.length > 0)
+    {
+        flow.state.la_extraData = flow.state.la_extraData || {};
+        flow.state.la_extraData.injectedTags = flowOptions.tags;
+    }
+    if (Array.isArray(damage) && damage.length > 0)
+    {
+        flow.state.la_extraData = flow.state.la_extraData || {};
+        flow.state.la_extraData.injectedDamage = damage;
+    }
     if (extraData && typeof extraData === 'object')
         flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, extraData);
     const completed = await flow.begin();
@@ -954,6 +1142,7 @@ function extraDisplayTags(tags)
     }));
 }
 
+/** @returns {Promise<{completed: boolean, flow?: any}>} */
 export async function executeExtraActionCombat(actorOrToken, action, sourceItem = null)
 {
     const actor = /** @type {any} */ (actorOrToken)?.actor ?? actorOrToken;
@@ -974,14 +1163,12 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
             title: action.name,
             effect: action.detail ?? '',
             invade: action.activation === 'Invade',
-            tags: extraDisplayTags(weaponTags)
+            tags: extraDisplayTags(weaponTags),
+            damage: action.damage ?? []
         });
     }
 
     // Bare attack needs a full acc_diff for tags (smart) to apply + show checked.
-    const BasicAttackFlow = game.lancer?.flows?.get('BasicAttackFlow');
-    if (!BasicAttackFlow)
-        return { completed: false };
     const targets = Array.from(game.user?.targets ?? []);
     const grit = actor.system?.grit ?? actor.system?.tier ?? 0;
     const flatBonus = Number(action.attack_bonus ?? 0);
@@ -995,8 +1182,7 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
         targets: targets.map(/** @type {any} */ (tok) => ({ targetUuid: tok.document.uuid, grit, flatBonus, accuracy, difficulty, cover: coverOf(tok), consumeLockOn: true, prone: !!tok.actor?.system?.statuses?.prone, stunned: !!tok.actor?.system?.statuses?.stunned, plugins: {} })),
         runtimeData: actor.uuid
     };
-    const flow = new BasicAttackFlow(actor);
-    const completed = await flow.begin({
+    return executeBasicAttack(actor, {
         type: 'attack',
         title: action.name,
         grit,
@@ -1004,13 +1190,13 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
         action: null,
         is_smart: hasTag('tg_smart'),
         tags: extraDisplayTags(weaponTags),
+        damage: action.damage ?? [],
         acc_diff: accDiff,
         attack_rolls: { roll: '', targeted: [] },
         attack_results: [],
         hit_results: [],
         reroll_data: ''
     });
-    return { completed, flow };
 }
 
 /** @returns {Promise<void>} */
@@ -1338,7 +1524,7 @@ export async function updateTokenSystem(token, data)
  * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
  * @returns {Promise<void>}
  */
-export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null, opts = {})
+export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null, options = {})
 {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
 
@@ -1353,7 +1539,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             ? actorOrToken
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
-    if (sourceToken && !opts.noFX)
+    if (sourceToken && !options.noFX)
         await playSkirmishFX(sourceToken);
     if (sourceToken)
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
@@ -1751,6 +1937,7 @@ export function getActivationIcon(actionOrActivation)
 }
 
 // True if the item has the tag. Bonus-aware; accepts 'tg_smart' or 'smart'.
+/** @returns {Promise<boolean>} */
 export async function hasTag(item, tagLid, actor)
 {
     if (!item || !tagLid)
@@ -1760,6 +1947,7 @@ export async function hasTag(item, tagLid, actor)
 }
 
 // Dumps the trigger/activation params for a reaction author to the console; returns a summary object.
+/** @returns {any} Summary object of everything logged */
 export function debugActivation(triggerType, triggerData, token, item, activationName, label)
 {
     const helpers = [];
@@ -1795,8 +1983,16 @@ export function debugActivation(triggerType, triggerData, token, item, activatio
 }
 
 export const MiscAPI = {
+    playMineDetonationFX,
     executeStatRoll,
+    executeSaveVsEffect,
     executeContestedCheck,
+    attackWith,
+    getTier,
+    tierValue,
+    getFlowFlag,
+    setFlowFlag,
+    consumeOncePerRound,
     executeForceCheck,
     executeDamageRoll,
     executeBasicAttack,

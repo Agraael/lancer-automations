@@ -54,7 +54,7 @@ Hooks.once('init', () =>
 {
     game.keybindings.register(MODULE_ID, 'freeMovement', {
         name: 'Free Movement (hold)',
-        hint: 'While held, the next move (drag-drop or programmatic) does not consume the movement cap and ignores terrain penalty.',
+        hint: 'While held, the next move (drag-drop or from code) does not consume the movement cap and ignores terrain penalty.',
         editable: [{ key: 'KeyV' }],
         onDown: () =>
         {

@@ -50,6 +50,7 @@ async function _fetchReservesByType()
     return map;
 }
 
+/** @returns {Promise<void>} */
 export async function openAddReserveDialog(tokenOrActor)
 {
     const pilot = _resolvePilot(tokenOrActor);

@@ -23,7 +23,7 @@ Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token,
 const id = await api.addExtraBar(target, partial)
 ```
 
-Create a new extra bar by overlaying `partial` on the default shape. Token target returns the entry id; Item/Actor target returns the template id. Defaults to `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan)).
+Create a new extra bar by overlaying `partial` on the default shape. Token target returns the entry id. Item/Actor target returns the template id. Defaults to `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan)).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -68,7 +68,7 @@ Entry shape (all fields optional in `partial`):
 const newVal = await api.updateExtraBarValue(target, entryId, value)
 ```
 
-Token target: only **manual** entries can be updated; path-bound entries are read-only. Item/Actor target: manual templates mutate their value and reinject; path templates write through the resolved path via `.update()`.
+Token target: only **manual** entries can be updated. Path-bound entries are read-only. Item/Actor target: manual templates mutate their value and reinject. Path templates write through the resolved path via `.update()`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

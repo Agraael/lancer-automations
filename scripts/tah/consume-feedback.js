@@ -90,7 +90,7 @@ function _floatingNumbersOn()
     }
 }
 
-export function spawnConsumeFeedback(actor, type, pre, post)
+export function spawnConsumeFeedback(actor, type, pre, post, labelOverride = null)
 {
     try
     {
@@ -99,7 +99,7 @@ export function spawnConsumeFeedback(actor, type, pre, post)
         if (!token || !token.visible)
             return;
         const revealed = _canSeeConsume(actor);
-        const text = revealed ? _formatLabel(type, pre, post) : '???';
+        const text = revealed ? (labelOverride ?? _formatLabel(type, pre, post)) : '???';
         if (!text)
             return;
         const delta = (typeof pre === 'number' && typeof post === 'number') ? post - pre : 0;
@@ -138,6 +138,15 @@ function _snapshotItem(item)
         const value = read(item);
         if (value !== undefined)
             _lastConsume.set(`${item.uuid}:${type}`, value);
+    }
+    if (item.type === 'bond')
+    {
+        (item.system?.powers ?? []).forEach((/** @type {any} */ power, /** @type {number} */ powerIdx) =>
+        {
+            const value = power?.uses?.value;
+            if (value !== undefined && value !== null)
+                _lastConsume.set(`${item.uuid}:power:${powerIdx}`, Number(value));
+        });
     }
 }
 
@@ -184,6 +193,23 @@ export function initConsumeFeedback()
                 if (prev === undefined || prev === post || suppressed)
                     continue;
                 spawnConsumeFeedback(actor, type, prev, post);
+            }
+            if (item.type === 'bond' && change.system?.powers !== undefined)
+            {
+                (/** @type {any[]} */ (item.system?.powers ?? [])).forEach((power, powerIdx) =>
+                {
+                    const raw = power?.uses?.value;
+                    if (raw === undefined || raw === null)
+                        return;
+                    const post = Number(raw);
+                    const key = `${item.uuid}:power:${powerIdx}`;
+                    const prev = _lastConsume.get(key);
+                    _lastConsume.set(key, post);
+                    if (prev === undefined || prev === post || suppressed)
+                        return;
+                    const delta = post - prev;
+                    spawnConsumeFeedback(actor, 'uses', prev, post, `${power.name} ${delta > 0 ? '+' : ''}${delta}`);
+                });
             }
         }
         catch (err)

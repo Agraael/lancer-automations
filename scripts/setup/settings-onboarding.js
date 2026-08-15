@@ -39,7 +39,7 @@ const GROUPS = [
             {
                 id: 'prevent-wasd-movement',
                 label: 'Stop bare W/A/S/D/Q/E from moving the selected token?',
-                explain: 'Keeps the bare keys from nudging a token, so stray keypresses and the HUD\'s Shift+WASD navigation don\'t move it by accident.',
+                explain: 'Keeps bare W/A/S/D/Q/E from nudging the selected token.',
                 keys: ['tah.preventWasdMovement'],
             },
             {
@@ -94,6 +94,27 @@ const GROUPS = [
                 keys: ['tokenStatHintEnabled'],
             },
             {
+                id: 'stat-privacy',
+                label: 'What do players see of non-owned tokens?',
+                explain: 'Owners only: bars stay private and current values show as "?". Owners + scanned: a scan reveals bars in combat and real values.',
+                kind: 'choice',
+                keys: ['statBarVisibilityOutOfCombat', 'statBarVisibilityInCombat', 'tokenStatHintHideCurrentOnScan'],
+                choices: [
+                    { value: 'owner', label: 'Owners only' },
+                    { value: 'scanned', label: 'Owners + scanned' },
+                ],
+                read: () => game.settings.get(MODULE_ID, 'statBarVisibilityInCombat') === 'scanned' ? 'scanned' : 'owner',
+                apply: (value) => value === 'scanned'
+                    ? { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'scanned', tokenStatHintHideCurrentOnScan: false }
+                    : { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'owner', tokenStatHintHideCurrentOnScan: true },
+            },
+            {
+                id: 'reveal-without-scan',
+                label: 'Show enemy stats without scanning them first?',
+                explain: 'Otherwise the popup, the scanned stat bars, and the consume feedback keep an NPC\'s stats hidden until someone runs a SCAN on it.',
+                keys: ['revealStatsWithoutScan'],
+            },
+            {
                 id: 'status-fx-master',
                 label: 'Show visual effects for statuses?',
                 explain: 'Glows and shaders for statuses like Danger Zone, Burn, and Stunned.',
@@ -104,7 +125,7 @@ const GROUPS = [
             {
                 id: 'additional-statuses',
                 label: 'Add the extra LaSossis statuses?',
-                explain: 'My own statuses for states LCPs and alternate structure tables describe but never register: Immovable, Climber, Brace, Dazed, and more. Safe to leave off.',
+                explain: 'My own statuses for states LCPs and alternate structure tables describe but never register: Immovable, Climber, Brace, Dazed, and more.',
                 keys: ['additionalStatuses'],
             },
             {
@@ -122,7 +143,7 @@ const GROUPS = [
             {
                 id: 'token-hud-buttons',
                 label: 'Slim down the token right-click HUD?',
-                explain: 'Hides Foundry\'s status, combat, and target buttons plus the module\'s extra HUD buttons; the Action HUD covers them all.',
+                explain: 'Hides Foundry\'s status, combat, and target buttons plus the module\'s extra HUD buttons.',
                 keys: ['showStatusEffectsHudButton', 'showCombatStateHudButton', 'showTargetStateHudButton', 'showBonusHudButton', 'showRevertMovementHudButton'],
                 read: () => !game.settings.get(MODULE_ID, 'showStatusEffectsHudButton'),
                 apply: (yes) => ({
@@ -139,7 +160,8 @@ const GROUPS = [
                 explain: 'The faction ring renders under the sprite and its color fill is removed.',
                 module: 'token-factions',
                 keys: ['borderUnderSpriteOnHover', 'base-opacity'],
-                condition: () => !!game.modules.get('token-factions')?.active,
+                condition: () => game.settings.settings.has('token-factions.borderUnderSpriteOnHover')
+                    && game.settings.settings.has('token-factions.base-opacity'),
                 read: () => game.settings.get('token-factions', 'borderUnderSpriteOnHover') === true
                     && game.settings.get('token-factions', 'base-opacity') === 0,
                 apply: (yes) =>
@@ -165,8 +187,8 @@ const GROUPS = [
             },
             {
                 id: 'dialog-theme',
-                label: 'Panel colour for Lancer dialogs and the HUD?',
-                explain: 'The lancer-style-library Dialog Theme, used across LA dialogs, the Action HUD, and setup windows.',
+                label: 'Which theme for the Lancer windows?',
+                explain: 'The Lancer Style Library theme.',
                 kind: 'choice',
                 module: 'lancer-style-library',
                 keys: ['theme'],
@@ -221,7 +243,7 @@ const GROUPS = [
         id: 'attacks-areas',
         label: 'Areas & Attack Automation',
         icon: 'fas fa-bomb',
-        blurb: 'Placed areas, and a few attack-time automations.',
+        blurb: 'Placed areas and attack-time automations.',
         questions: [
             {
                 id: 'area-elevation-aware',
@@ -232,7 +254,7 @@ const GROUPS = [
             {
                 id: 'overlap-picker',
                 label: 'Show a picker when tokens sit on the same spot?',
-                explain: 'Clicking a stack of same-size tokens opens a small list so you pick the right one.',
+                explain: 'Clicking a stack of same-size tokens opens a list to pick from.',
                 keys: ['overlapTokenPicker'],
             },
             {
@@ -442,7 +464,7 @@ const GROUPS = [
             {
                 id: 'one-struct-npc',
                 label: 'Destroy 1-structure NPCs instantly instead of rolling?',
-                explain: 'A 1-structure NPC is destroyed, or Exposed, outright instead of rolling the structure table.',
+                explain: 'A 1-structure NPC is destroyed (or Exposed) instead of rolling on the structure table.',
                 keys: ['enableOneStructNpc'],
             },
             {
@@ -519,7 +541,7 @@ const GROUPS = [
             {
                 id: 'vehicle-squad-height',
                 label: 'Lower that height for vehicles and squads?',
-                explain: 'Vehicles and squads get a reduced height (the author\'s take, not an official rule).',
+                explain: 'Vehicles and squads get a reduced height (my take, not an official rule).',
                 keys: ['autoTokenHeightVehicleSquad'],
                 condition: () => game.modules.get('wall-height')?.active && game.settings.get(MODULE_ID, 'autoTokenHeight'),
             },
@@ -534,7 +556,7 @@ const GROUPS = [
             {
                 id: 'reaction-notify',
                 label: 'Who should see the activation popup?',
-                explain: 'When an activation fires, this decides who gets the prompt.',
+                explain: 'Who gets the prompt when an activation fires.',
                 kind: 'choice',
                 keys: ['reactionNotificationMode'],
                 choices: [
@@ -564,7 +586,7 @@ const GROUPS = [
             {
                 id: 'lasossis-items',
                 label: 'Install LaSossis\'s prebuilt item activations?',
-                explain: '30+ of the author\'s own item automations, like Dispersal Shield and Defense Net. Some deployables need LaSossis\'s personal NPC Deployables LCP; import it into the Lancer compendium.',
+                explain: '30+ of my own item automations, like Dispersal Shield and Defense Net. Some deployables need my personal NPC Deployables LCP.',
                 keys: ['enableLaSossisItems'],
                 link: { path: 'modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp', label: 'Get the Deployables LCP' },
             },
@@ -608,13 +630,13 @@ const GROUPS = [
             {
                 id: 'wrecks',
                 label: 'Drop a wreck when a unit hits 0 structure?',
-                explain: 'Spawns a wreck tile on the field when a unit is destroyed.',
+                explain: 'Spawns a wreck on the field when a unit is destroyed.',
                 keys: ['enableWrecks'],
             },
             {
                 id: 'wreck-cinematics',
                 label: 'Play the explosion and sound on wreck?',
-                explain: 'A cinematic boom when a unit is wrecked. Per-player, so each can choose their own.',
+                explain: 'A cinematic boom when a unit is wrecked. Per-player.',
                 keys: ['enableWreckAnimation', 'enableWreckAudio'],
                 condition: () => game.settings.get(MODULE_ID, 'enableWrecks') !== false,
             },
@@ -641,9 +663,11 @@ const RECOMMENDED = {
     'tah-narrative-mode': true,
     'token-stat-bar': true,
     'token-stat-hint': true,
+    'stat-privacy': 'owner',
     'status-fx-master': true,
     'additional-statuses': true,
     'deployable-lines': true,
+    'tf-border-under-token': true,
     'guardian-bulwark-aura': 'combat',
     'attack-targeting': true,
     'auto-start-targeting': true,
@@ -698,7 +722,8 @@ const QUICK_IDS = new Set([
     'tah-click-to-open',
     'half-size-tokens',
     'token-hud-buttons',
-    'tf-border-under-token',
+    'dialog-theme',
+    'stat-privacy',
     'ppg-actions',
     'infection-damage',
     'overwatch-style',
@@ -713,8 +738,11 @@ const QUICK_IDS = new Set([
 const ESSENTIAL_IDS = new Set([
     'tah-enabled',
     'tah-click-to-open',
+    'dialog-theme',
     'token-stat-bar',
     'token-stat-hint',
+    'stat-privacy',
+    'tf-border-under-token',
     'attack-targeting',
     'target-info',
     'knockback-flow',
@@ -1028,7 +1056,7 @@ export class SettingsOnboarding extends FormApplication
         });
         list.innerHTML = rows.length
             ? rows.join('')
-            : '<p style="opacity:0.7;">No changes - everything stays as it is.</p>';
+            : '<p style="opacity:0.7;">No changes.</p>';
     }
 
     _applyRecommended(root)
@@ -1109,7 +1137,15 @@ export class SettingsOnboarding extends FormApplication
                     reactionToggles.push(...question.togglesFor(raw));
             }
             else if (question.kind === 'choice')
-                changes.set(`${_mod(question)}.${question.keys[0]}`, raw);
+            {
+                if (question.apply)
+                {
+                    for (const [key, value] of Object.entries(question.apply(/** @type {any} */ (raw))))
+                        changes.set(`${_mod(question)}.${key}`, value);
+                }
+                else
+                    changes.set(`${_mod(question)}.${question.keys[0]}`, raw);
+            }
             else if (question.reaction)
             {
                 const yes = raw === 'yes';
@@ -1248,7 +1284,7 @@ export function registerOnboardingBootstrap()
     game.settings.registerMenu(MODULE_ID, 'settingsOnboardingMenu', {
         name: 'Setup Wizard',
         label: 'Run Setup Wizard',
-        hint: 'Walk through the main Lancer Automations settings as plain yes/no questions.',
+        hint: 'Walk through the main Lancer Automations settings as yes/no questions.',
         icon: 'fas fa-wand-magic-sparkles',
         type: SettingsOnboarding,
         restricted: true,

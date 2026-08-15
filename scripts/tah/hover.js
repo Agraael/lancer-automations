@@ -5,6 +5,7 @@ import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBo
 import { getActorMaxReach_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 import { resolveDeployRangeCount } from '../interactive/deployables.js';
+import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
 
 const _rangePreviewOwnerByTokenId = new Map();
 const hoverPulseOwner = tokenId => `tah-hover:${tokenId}`;
@@ -125,6 +126,12 @@ async function getItemMaxReach(item, actor)
 
 async function computePreviewRange(category, actionName, actor, item, profile, deployLid)
 {
+    const base = await computePreviewRangeBase(category, actionName, actor, item, profile, deployLid);
+    return actionName ? resolveGrantedActionRange(actor, actionName, base) : base;
+}
+
+async function computePreviewRangeBase(category, actionName, actor, item, profile, deployLid)
+{
     if (category === 'Deployables')
     {
         if (deployLid)
@@ -135,8 +142,8 @@ async function computePreviewRange(category, actionName, actor, item, profile, d
     if (profile?.range?.length)
     {
         const ranges = {};
-        for (const { type, val } of profile.range)
-            ranges[type] = Math.max(ranges[type] ?? 0, Number(val) || 0);
+        for (const { type, val: value } of profile.range)
+            ranges[type] = Math.max(ranges[type] ?? 0, Number(value) || 0);
         const max = weaponPulseRange(ranges);
         return max > 0 ? Math.max(1, max) : null;
     }

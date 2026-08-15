@@ -322,6 +322,8 @@ const STAT_SOUNDS = {
     heat_clean:  { src: `${STATS_BASE}/heat_clean.wav`,  scale: 0.05 },
     stress_hit:  { src: `${STATS_BASE}/stress_hit.wav`,  scale: 0.2 },
     stress_heal: { src: `${STATS_BASE}/stress_heal.mp3`, scale: 0.2 },
+    xp_gain:     { src: `${STATS_BASE}/xp_gain.wav`,     scale: 0.2 },
+    xp_loss:     { src: `${STATS_BASE}/xp_loss.wav`,     scale: 0.2 },
     miss:        { src: `${STATS_BASE}/miss.wav`,        scale: 0.7 },
     crit:        { src: `${STATS_BASE}/crit.mp3`,        scale: 0.5 },
     hit:         { src: `${STATS_BASE}/hit.mp3`,         scale: 0.2 },
@@ -574,6 +576,8 @@ Hooks.on('preUpdateActor', (actor, change) =>
         prev.overshield = Number(actorSystem.overshield?.value ?? 0);
     if (change?.system?.bond_state?.stress?.value !== undefined)
         prev.pilotStress = Number(actorSystem.bond_state?.stress?.value ?? 0);
+    if (change?.system?.bond_state?.xp?.value !== undefined)
+        prev.pilotXp = Number(actorSystem.bond_state?.xp?.value ?? 0);
     if (Object.keys(prev).length)
         _prevStatsByActor.set(actor.id, prev);
 });
@@ -636,6 +640,14 @@ Hooks.on('updateActor', (actor, change) =>
         }
         else if (newPilotStress < prev.pilotStress)
             playStatsSound('stress_heal');
+    }
+    const newPilotXp = change?.system?.bond_state?.xp?.value;
+    if (newPilotXp !== undefined && prev.pilotXp !== undefined)
+    {
+        if (newPilotXp > prev.pilotXp)
+            playStatsSound('xp_gain');
+        else if (newPilotXp < prev.pilotXp)
+            playStatsSound('xp_loss');
     }
 });
 

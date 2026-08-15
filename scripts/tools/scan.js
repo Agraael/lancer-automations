@@ -109,9 +109,9 @@ function _buildMechWeapon(slot)
     return weaponEntry;
 }
 
-function _buildMechSystem(sysObj)
+function _buildMechSystem(sysSlot)
 {
-    const sysData = sysObj.value;
+    const sysData = sysSlot.value;
     if (!sysData)
         return null;
     return {
@@ -873,11 +873,11 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                 label: 'Send to Chat',
                 callback: async (html) =>
                 {
-                    const info = String(html.find('[name="scan-info"]').val()).trim();
+                    const gmNotes = String(html.find('[name="scan-info"]').val()).trim();
                     const chat = await renderTemplate(TPL.chat, {
                         name: targetNames,
                         subtitle: scanTitle,
-                        gmInputBody: info || null,
+                        gmInputBody: gmNotes || null,
                         isGmInput: true,
                         section: SECTION_COLORS,
                     });
@@ -1055,6 +1055,7 @@ export async function showSystemScanDialog(targets)
     dlg.render(true);
 }
 
+/** @returns {Promise<void>} */
 export async function executeScanOnActivation(reactorToken)
 {
     const api = game.modules.get('lancer-automations')?.api;
@@ -1207,7 +1208,10 @@ function _bindOwnerGroupSync(html)
     }
 }
 
-/** TAH "Generate Scan": picks chat-only / chat+journal / journal-only and runs the scan. */
+/**
+ * TAH Generate Scan entry point.
+ * @returns {Promise<void>}
+ */
 export async function executeGenerateScan(targetsArg)
 {
     const targetArray = Array.isArray(targetsArg) ? targetsArg : [targetsArg];

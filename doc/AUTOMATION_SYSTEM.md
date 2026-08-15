@@ -6,6 +6,9 @@ For anyone writing activations, in the Activation Manager UI or through the regi
 
 For trigger payload schemas, see [API_REFERENCE.md](API_REFERENCE.md). For API surfaces (effects, bonuses, interactive tools), see the sibling files: [API_EFFECTS.md](API_EFFECTS.md), [API_INTERACTIVE.md](API_INTERACTIVE.md), [API_COMBAT.md](API_COMBAT.md), [API_ITEMS.md](API_ITEMS.md).
 
+> [!NOTE]
+> This started as a reaction reminder, so the internals are named after reactions: you write `reactions: [...]`, the action path field is `reactionPath`, and you register with `api.registerDefaultItemReactions()` / `api.registerDefaultGeneralReactions()`. Those all mean **activation**. Legacy naming, not a separate concept.
+
 <br>
 
 ---
@@ -92,7 +95,7 @@ What the engine does for one trigger:
 
    - `startRelatedFlow` / `startRelatedFlowToReactor` - launch the reacting item's own default flow, optionally on a specific user's client and with injected `extraData`. Full signatures in [section 8](#8-client-execution-and-sockets).
    - `sendMessageToReactor` - remote RPC to an `onMessage` handler. Full signature in [section 8](#8-client-execution-and-sockets).
-   - `debugActivation(label?)` - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console (expandable) and returns a summary. Available in `evaluate` and `activationCode`; also `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`.
+   - `debugActivation(label?)` - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console (expandable) and returns a summary. Available in `evaluate` and `activationCode`, plus `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`.
 
 2. **Reactor sweep.** Every token on the scene is a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
 
@@ -158,7 +161,7 @@ Filters and `evaluate` run for every reactor on the scene, every time a matching
 
 - `triggerData.deployable = { actor, lid }` is also set, providing the explicit deployable identity.
 
-- `triggerData.actionData.action.name` is the action's name (e.g. `"Move"`, `"Combine"`); for the top-level deploy click it's the deployable actor's name. `triggerData.actionData.action.activation` is the activation type (`"Protocol"`, `"Quick"`).
+- `triggerData.actionData.action.name` is the action's name (e.g. `"Move"`, `"Combine"`). For the top-level deploy click it's the deployable actor's name. `triggerData.actionData.action.activation` is the activation type (`"Protocol"`, `"Quick"`).
 
 - `onlyOnSourceMatch: true` means: *only fire when the activation source is the matching deployable* - i.e. one of this exact deployable's actions was the trigger.
 
@@ -224,7 +227,7 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 | 2 | `triggerSelf` / `triggerOther` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: require `triggerOther: true`. (Default both `false`, you must opt in.) |
 | 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning across item, general, deployable, and Actor-UUID reactions. The engine matches the triggering item LID, deployable LID, or triggering actor UUID against the registered key. |
 | 4 | `checkReaction` | If set (default `true`), skip the reaction when the reactor has no reaction left this round. Spending is separate: the world setting `consumeReaction`. |
-| 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed; otherwise `CONST.TOKEN_DISPOSITIONS`. |
+| 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed, otherwise `CONST.TOKEN_DISPOSITIONS`. |
 | 6 | `distanceFilter` | Compares the precomputed `distanceToTrigger` against the configured max range. |
 | 7 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
 | 8 | `evaluate()` | Your custom predicate. Last gate. |
@@ -237,7 +240,7 @@ Fail any: that activation is silently skipped for that reactor. No popup, no log
 
 ## 5. The Four Callbacks: evaluate, activationCode, onInit, onMessage
 
-All four receive `api` as the last argument. All four are wrapped in `try/catch`; uncaught exceptions are logged to the console, never thrown to the user.
+All four receive `api` as the last argument. All four are wrapped in `try/catch`. Uncaught exceptions are logged to the console, never thrown to the user.
 
 ### `evaluate(triggerType, triggerData, reactorToken, item, activationName, api) => boolean`
 
@@ -301,10 +304,9 @@ Two independent dimensions on each reaction config:
 | Value | Effect |
 |---|---|
 | `"instead"` | Replace the original flow entirely. Your code is the only thing that runs. |
-| `"before"` | Your code runs alongside the flow; conceptually first. |
-| `"after"` | Your code runs alongside the flow; conceptually after. |
+| `"after"` | Your code runs alongside the flow. Any value that is not `"instead"` lands here. |
 
-> Internally the engine schedules `"before"` and `"after"` via `Promise.all`, so they aren't strictly ordered relative to the underlying flow's async work. If you need strict ordering, use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
+> The engine schedules `"after"` code with `Promise.all`, so it is not strictly ordered against the flow's own async work. If you need strict ordering, use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
 
 For `activationType: "flow"`, `"instead"` means "skip the chat card": only the flow runs, not your code.
 
@@ -326,7 +328,7 @@ The activation runs immediately, on the local client, with no UI. Use this for t
 
 ### Popup (`autoActivate: false`, the default)
 
-The activation is queued. After every reactor has been checked, all queued entries for the trigger are bundled into a single **summary popup**. Each entry shows the reactor's name and the activation's label. Clicking an entry expands its details; clicking **Activate** runs that single entry's `activationCode`.
+The activation is queued. After every reactor has been checked, all queued entries for the trigger are bundled into a single **summary popup**. Each entry shows the reactor's name and the activation's label. Clicking an entry expands its details. Clicking **Activate** runs that single entry's `activationCode`.
 
 Multiple popups can be open at the same time: the system queues them and shows a "pending" badge so nothing is lost.
 
@@ -375,7 +377,7 @@ triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
 // reactor's onActivation: triggerData.extraData.chargeSpent === 2
 ```
 
-`opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion; the `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit-hp1-instead-of-0).
+`opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion. The `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit-hp1-instead-of-0).
 
 **`sendMessageToReactor(data, userId = null, opts = {})`** <sup>async</sup> → `any` - RPC to the reactor's `onMessage` (same `opts`). With `wait:true`, returns its result. Delegation primitive for GM-only work.
 
@@ -479,18 +481,14 @@ async: preConfirm()    -> false: executeOriginal + return (no postChoice)
 ### Example: True Grit (HP=1 instead of 0)
 ```js
 const preConfirm = async () => {
-    const result = await api.startChoiceCard({
+    const ask = await api.askCard({
         title: "TRUE GRIT",
         description: `<b>${ally.name}</b> would fall to 0 HP. Keep at 1 HP?`,
-        userIdControl: api.getTokenOwnerUserId(reactorToken),
-        choices: [
-            { text: "Use",  icon: "fas fa-check", callback: async () => {} },
-            { text: "Skip", icon: "fas fa-times", callback: async () => {} }
-        ]
+        owner: reactorToken
     });
-    if (result?.choiceIdx === 0)
-        triggerData.startRelatedFlowToReactor(result?.responderIds?.[0]);
-    return result?.choiceIdx === 0;
+    if (ask.confirmed)
+        triggerData.startRelatedFlowToReactor(ask.responderIds[0]);
+    return ask.confirmed;
 };
 triggerData.modifyHpChange(
     1,
@@ -514,7 +512,7 @@ Other frequency-related fields:
 
 - `actionType`: labels the popup entry (`"Reaction"`, `"Quick Action"`, `"Full Action"`, `"Protocol"`, `"Free Action"`, `"Other"`). Display only.
 
-- `frequency`: display string (`"1/Round"`, `"1/Combat"`). Currently display-only for non-reactions; the engine does not enforce per-combat counters automatically.
+- `frequency`: display string (`"1/Round"`, `"1/Combat"`). Currently display-only for non-reactions. The engine does not enforce per-combat counters automatically.
 
 - `usesPerRound`: for reactions, enforced via the reaction tracker.
 
@@ -576,14 +574,14 @@ This is how one item can have multiple independent activations (different sub-ac
 
 ### Extra actions
 
-API: `addExtraActions`, `getItemActions`, `getActorActions`, `removeExtraActions` (all on `InteractiveAPI`; documented in [API_HUD.md](API_HUD.md#extra-actions)).
+API: `addExtraActions`, `getItemActions`, `getActorActions`, `removeExtraActions` (all on `InteractiveAPI`, documented in [API_HUD.md](API_HUD.md#extra-actions)).
 
 Adds action objects (name, activation type, description, tags, etc.) onto an item, token, or actor via flags. Two storage locations:
 - Passed an item: stored in the item's `extraActions` flag. Merged into the item's action list by `getItemActions`.
 
 - Passed a token or actor: stored on the actor. Returned by `getActorActions`.
 
-Typical uses: Sniper's Mark adds a "Fall Prone" action; Limitless adds "Overcharge (NPC)"; Defense Net adds "Collapse the Defense Net" while it's active.
+Typical uses: Sniper's Mark adds a "Fall Prone" action, Limitless adds "Overcharge (NPC)", and Defense Net adds "Collapse the Defense Net" while it's active.
 
 `activation` field must use TAH's short form (`"Quick"`, `"Full"`, `"Protocol"`, `"Free"`, `"Reaction"`, `"Quick Tech"`, `"Full Tech"`). Not `"Quick Action"` etc. TAH filters by strict equality.
 
@@ -652,7 +650,7 @@ There are four ways to register an activation. They all end up in the same dispa
 
 ```js
 Hooks.on("lancer-automations.ready", (api) => {
-    api.registerExternalItemReactions({
+    api.registerDefaultItemReactions({
         "lid_of_the_item": {
             category: "Homebrew",
             itemType: "npc_feature",
@@ -671,7 +669,7 @@ Hooks.on("lancer-automations.ready", (api) => {
         }
     });
 
-    api.registerExternalGeneralReactions({
+    api.registerDefaultGeneralReactions({
         "My General Reaction": { reactions: [/* ... */] }
     });
 });
@@ -681,7 +679,7 @@ External registrations are merged with **last-write-wins** semantics: re-registe
 
 ### C. Built-in defaults (this module's own set)
 
-`registerDefaultItemReactions` / `registerDefaultGeneralReactions` are used by `startups/itemActivations.js` for the bundled NPC/feature automations. The result is the same as B; the distinction is provenance.
+The same two functions are used by `startups/itemActivations.js` for the bundled NPC/feature automations. The result is identical to B. The only difference is where it comes from.
 
 ### D. Startup scripts (UI-managed code)
 
@@ -703,7 +701,7 @@ The engine caches:
 
 - **Per-actor item list.** Each actor's item set is cached for the LID lookup. Cleared on `updateActor`, `createItem`, `deleteItem`, `updateItem`.
 
-- **Compiled function cache.** UI activations are stored as code strings; the engine compiles them on first use and caches the function. Cleared whenever the UI saves.
+- **Compiled function cache.** UI activations are stored as code strings. The engine compiles them on first use and caches the function. Cleared whenever the UI saves.
 
 If you ever change a reaction in the UI and *don't* see it take effect, fire the manual cache clear:
 

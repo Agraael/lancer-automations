@@ -7,6 +7,7 @@ import {
     snapTokenCenter, getInRangeOffsets,
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+import { isPhasing } from "../../movement/cost-rules.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { keyCodesFor } from "../keybindings.js";
 
@@ -17,9 +18,10 @@ import {
 import {
     TG,
     pointerToWorld, addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    makeSafe, createCursorPreview, drawRangeHighlight,
+    createPickerSession, createCursorPreview, drawRangeHighlight,
     _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
     suppressEvent,
+    teardownRangePulse,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
@@ -153,7 +155,6 @@ export async function moveToken(token, options = {})
             };
 
             const restoreLayerClick = suppressTokenLayerClick();
-            let safeMove, safeClick, safeAbort, safeKey;
             let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
 
             const doCleanup = () =>
@@ -164,14 +165,7 @@ export async function moveToken(token, options = {})
                 disposeCursorPreview();
                 destroyGraphics(cursorElevLabel);
                 rangePulse.clear('interactive:moveToken');
-                if (safeClick)
-                    canvas.stage.off('click', safeClick);
-                if (safeAbort)
-                    canvas.stage.off('rightdown', safeAbort);
-                if (safeMove)
-                    canvas.stage.off('pointermove', safeMove);
-                if (safeKey)
-                    document.removeEventListener('keydown', safeKey, true);
+                session.unbind();
                 restoreLayerClick();
                 waypointCollector.dispose();
                 destroyGraphics(trace);
@@ -221,12 +215,7 @@ export async function moveToken(token, options = {})
                         const hexesByDist = _groupCellsByDistance(getOccupiedOffsets(token), inRangeSet);
                         const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: token });
                         canvas.app.ticker.add(wavePulse);
-                        return () =>
-                        {
-                            canvas.app.ticker.remove(wavePulse);
-                            destroyGraphics(rangeHighlight);
-                            destroyGraphics(pulseGraphic);
-                        };
+                        return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                     },
                 });
             }
@@ -249,7 +238,7 @@ export async function moveToken(token, options = {})
                     }
                 }
                 trace.endFill();
-                // Target position (green for teleport)
+                // Destination footprint
                 trace.lineStyle(gridLineWidth(2), 0x00cc66, 0.8);
                 trace.beginFill(0x00cc66, 0.3);
                 for (const cellOffset of getOccupiedOffsets(token, { x: targetX, y: targetY }))
@@ -346,7 +335,7 @@ export async function moveToken(token, options = {})
                 playUiSound('targeting');
             };
 
-            const safe = makeSafe('moveToken', () =>
+            const session = createPickerSession('moveToken', () =>
             {
                 try
                 {
@@ -356,12 +345,7 @@ export async function moveToken(token, options = {})
                 { /* */ }
                 resolve(null);
             });
-            safeMove = safe(moveHandler);
-            safeClick = safe(clickHandler);
-            safeKey = safe(keyHandler);
-            canvas.stage.on('click', safeClick);
-            canvas.stage.on('pointermove', safeMove);
-            document.addEventListener('keydown', safeKey, true);
+            session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, clickFirst: true });
             stopPresenceBeat = startToolHeartbeat('moveToken', presenceData);
         }), defaultTitle);
         if (!picked)
@@ -372,7 +356,7 @@ export async function moveToken(token, options = {})
     }
 
     // Path collision check: stop before blocking tokens
-    if (options.canBeBlocked)
+    if (options.canBeBlocked && !isPhasing(token.document))
     {
         const startCenterCheck = token.getCenterPoint({ x: token.document.x, y: token.document.y });
         const endCenterCheck = token.getCenterPoint(destTopLeft);

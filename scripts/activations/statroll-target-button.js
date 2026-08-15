@@ -1,9 +1,40 @@
-/* global game, Hooks, $, canvas, foundry */
+/* global game, Hooks, $, canvas, foundry, fromUuidSync */
 
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
-    clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark,
+    clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel,
 } from '../interactive/canvas.js';
+import { targetInfoAllowed, haseSuccessChance, contestWinChance, pollForForm, chanceLabelsOn } from './targeting-ui.js';
+
+function rollerLiveChance(state)
+{
+    if (!targetInfoAllowed())
+        return null;
+    const skill = String(state.data?.path ?? '').split('.').pop()?.toUpperCase();
+    return () =>
+    {
+        const base = state.data?.acc_diff?.base;
+        const netAcc = (Number(base?.accuracy) || 0) - (Number(base?.difficulty) || 0);
+        const contest = state.la_extraData?.contest;
+        if (contest)
+        {
+            const opponent = contest.actorUuid ? fromUuidSync(contest.actorUuid) : null;
+            const oppActor = opponent?.actor ?? opponent;
+            return oppActor ? contestWinChance(state.actor, skill, oppActor, contest.stat, { netAcc }) : null;
+        }
+        const preId = state.la_extraData?.targetTokenId;
+        let hovered = isSingleTargetPickerActive() ? canvas.tokens?.hover : null;
+        if (hovered && hovered.actor === state.actor)
+            hovered = null;
+        const chosen = hovered ?? Array.from(game.user.targets ?? [])[0] ?? null;
+        let dc = 10;
+        if (chosen)
+            dc = (!hovered && preId && chosen.id === preId) ? (Number(state.la_extraData?.targetVal) || deriveTargetVal(chosen)) : deriveTargetVal(chosen);
+        else if (!preId)
+            dc = Number(state.la_extraData?.targetVal) || 10;
+        return haseSuccessChance(state.actor, skill, dc, { netAcc, applyStatuses: false });
+    };
+}
 
 // A Save is always rolled against the target's SAVE value.
 function deriveTargetVal(targetToken)
@@ -37,20 +68,7 @@ function statRollForm()
 
 function injectWhenReady(state)
 {
-    let elapsed = 0;
-    const tick = () =>
-    {
-        const $form = statRollForm();
-        if ($form)
-        {
-            injectButton(state, $form); return;
-        }
-        elapsed += 50;
-        if (elapsed > 2000)
-            return;
-        setTimeout(tick, 50);
-    };
-    tick();
+    pollForForm(statRollForm, $form => injectButton(state, $form));
 }
 
 function injectButton(state, $form)
@@ -138,6 +156,7 @@ export function registerStatRollTargetButton()
             })();
             const preId = active ? state.la_extraData?.targetTokenId : null;
             let rollerMark = null;
+            let rollerChance = null;
             if (active)
             {
                 try
@@ -151,12 +170,24 @@ export function registerStatRollTargetButton()
                 catch
                 { /* */ }
             }
+            if (isStatOrSkillRoll && chanceLabelsOn())
+            {
+                try
+                {
+                    const chanceFn = rollerLiveChance(state);
+                    if (chanceFn)
+                        rollerChance = createChanceLabel(state.actor?.getActiveTokens?.()[0] ?? null, chanceFn);
+                }
+                catch
+                { /* */ }
+            }
             try
             {
                 return await original(state, options);
             }
             finally
             {
+                rollerChance?.destroy();
                 if (active)
                 {
                     // HUD closed: fold the chosen target into la_extraData (onCheck + card read it)...

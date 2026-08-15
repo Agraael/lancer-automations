@@ -14,7 +14,7 @@ let cachedFlatGeneralReactions = null;
 /** @type {Map<string, Array>} triggerType → filtered non-action reactions; cleared with cachedFlatGeneralReactions */
 const cachedNonActionReactionsByTrigger = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart']);
-const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent"]);
+const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent", "bond"]);
 
 Hooks.on('lancer-automations.clearCaches', () =>
 {
@@ -103,8 +103,7 @@ export function getReactionItems(token)
         }
     }
 
-    // Deployables have no items: synthesize a surrogate keyed by the deployable's LID
-    // so reactions registered against `dep_*` resolve.
+    // Synthesize a deployable surrogate (no real items) so `dep_*` reactions resolve.
     if (actor.type === "deployable" && actor.system?.lid)
     {
         items = items.concat([{
@@ -328,22 +327,39 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
             cancelRecord.tokenId === token.id && cancelRecord.reactionName === reactionName
         );
         if (isCancelled)
+        {
+            dbgAuto('skip:', token.name, reactionName, 'already cancelled this pass');
             return null;
+        }
     }
+    dbgAuto('candidate:', token.name, reactionName, '(general)', { triggers: reaction.triggers });
     if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
     {
+        dbgAuto('skip:', token.name, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
         if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered, out of combat.`);
         return null;
     }
     if (isSelf && !reaction.triggerSelf)
+    {
+        dbgAuto('skip:', token.name, reactionName, 'reactor is the trigger source', { setting: 'triggerSelf', value: !!reaction.triggerSelf });
         return null;
+    }
     if (!isSelf && reaction.triggerOther === false)
+    {
+        dbgAuto('skip:', token.name, reactionName, 'reactor is not the trigger source', { setting: 'triggerOther', value: false });
         return null;
+    }
     if (reaction.checkReaction && !(isSelf && data.reactionJustConsumed) && !hasReactionAvailable(token))
+    {
+        dbgAuto('skip:', token.name, reactionName, 'no reaction available', { setting: 'checkReaction', value: true });
         return null;
+    }
     if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
+    {
+        dbgAuto('skip:', token.name, reactionName, 'disposition filter failed', { setting: 'dispositionFilter', value: reaction.dispositionFilter });
         return null;
+    }
 
     try
     {
@@ -359,6 +375,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
                 data._provokeImmunityBurned = true;
                 api.consumeImmunityUse?.(sourceToken.actor, 'provoke');
             }
+            dbgAuto('skip:', token.name, reactionName, 'cannot provoke', { setting: 'requireCanProvoke', value: true, reasons: provokeReasons });
             return null;
         }
         const enrichedData = { ...data, distanceToTrigger, canTriggerReaction };
@@ -396,6 +413,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         else
             shouldTrigger = true;
 
+        dbgAuto(shouldTrigger ? 'fire:' : 'skip:', token.name, reactionName, 'evaluate →', shouldTrigger);
         return shouldTrigger ? enrichedData : null;
     }
     catch (error)
@@ -484,7 +502,7 @@ export function _buildStartRelatedFlow(token, item, reaction, activationName, ex
                 return _beginFlow("WeaponAttackFlow", item, {}, extraData);
             if (item.system?.actions?.length > 0)
             {
-                const actionIndex = item.system.actions.findIndex(a => a.activation === 'Reaction');
+                const actionIndex = item.system.actions.findIndex(action => action.activation === 'Reaction');
                 const path = actionIndex >= 0 ? `system.actions.${actionIndex}` : 'system.actions.0';
                 return _beginFlow("ActivationFlow", item, { action_path: path }, extraData);
             }
@@ -599,8 +617,7 @@ async function checkReactions(triggerType, data)
     const reactionsPromises = [];
     const deferredFactories = [];
     const isCancellable = CANCELLABLE_TRIGGERS.has(triggerType);
-    // Re-stamp reactor identity on shared cancel/change/reroll/modify fns right before
-    // activation fires; the last eval-loop assignment would otherwise win.
+    // Re-stamp reactor identity on shared fns right before activation fires; last eval-loop assignment would otherwise win.
     const applyReactorIdentity = (reactionTriggerData, identity, context) =>
     {
         for (const key of Object.keys(reactionTriggerData))
@@ -708,7 +725,7 @@ async function checkReactions(triggerType, data)
                     continue;
                 }
 
-                dbgAuto('match:', token.name, item.name, lid, { triggers: reaction.triggers });
+                dbgAuto('candidate:', token.name, item.name, lid, { triggers: reaction.triggers, reactionPath: reaction.reactionPath || null });
 
                 if (reaction.onlyOnSourceMatch)
                 {
@@ -735,7 +752,7 @@ async function checkReactions(triggerType, data)
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
                     if (triggerType === 'onActivation' && (token.isOwner || game.user.isGM))
                         _warnReactionConfigOnce(`ooc|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" only triggers in combat. Enable "Out of Combat" to allow it outside.`);
-                    dbgAuto('skip:', token.name, item.name, 'out of combat');
+                    dbgAuto('skip:', token.name, item.name, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
                     continue;
                 }
 
@@ -743,7 +760,7 @@ async function checkReactions(triggerType, data)
                 {
                     if (!reaction.triggerSelf)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'isSelf and !triggerSelf');
+                        dbgAuto('skip:', token.name, item.name, 'reactor is the trigger source', { setting: 'triggerSelf', value: !!reaction.triggerSelf });
                         continue;
                     }
                 }
@@ -751,14 +768,14 @@ async function checkReactions(triggerType, data)
                 {
                     if (reaction.triggerOther === false)
                     {
-                        dbgAuto('skip:', token.name, item.name, '!isSelf and triggerOther=false');
+                        dbgAuto('skip:', token.name, item.name, 'reactor is not the trigger source', { setting: 'triggerOther', value: !!reaction.triggerOther });
                         continue;
                     }
                 }
 
                 if (reaction.checkReaction && !(isSelf && data.reactionJustConsumed) && !hasReactionAvailable(token))
                 {
-                    dbgAuto('skip:', token.name, item.name, 'no reaction available');
+                    dbgAuto('skip:', token.name, item.name, 'no reaction available', { setting: 'checkReaction', value: true });
                     continue;
                 }
 
@@ -769,14 +786,14 @@ async function checkReactions(triggerType, data)
                         data._provokeImmunityBurned = true;
                         api.consumeImmunityUse?.(sourceToken.actor, 'provoke');
                     }
-                    dbgAuto('skip:', token.name, item.name, 'cannot provoke');
+                    dbgAuto('skip:', token.name, item.name, 'cannot provoke', { setting: 'requireCanProvoke', value: true, reasons: provokeReasons });
                     continue;
                 }
 
                 const reactionPath = reaction.reactionPath || "";
                 if (!isItemAvailable(item, reactionPath))
                 {
-                    dbgAuto('skip:', token.name, item.name, 'item not available (destroyed/disabled/rank)');
+                    dbgAuto('skip:', token.name, item.name, 'item not available', { destroyed: item.system?.destroyed, disabled: item.system?.disabled, reactionPath: reaction.reactionPath || null });
                     continue;
                 }
 
@@ -795,34 +812,34 @@ async function checkReactions(triggerType, data)
                         _warnReactionConfigOnce(`usage|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" has Check Usage enabled but no loading, recharge, limited uses, or per-round/turn tag. The check has no effect.`);
                     if (hasLoading && sys?.loaded === false)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'not loaded');
+                        dbgAuto('skip:', token.name, item.name, 'not loaded', { setting: 'checkUsage', value: reaction.checkUsage, tag: 'tg_loading' });
                         continue;
                     }
                     if (hasUses && sys.uses.value <= 0)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'no uses left');
+                        dbgAuto('skip:', token.name, item.name, 'no uses left', { setting: 'checkUsage', value: reaction.checkUsage, uses: sys.uses });
                         continue;
                     }
                     if (hasRecharge && sys?.charged === false)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'not charged');
+                        dbgAuto('skip:', token.name, item.name, 'not charged', { setting: 'checkUsage', value: reaction.checkUsage, tag: 'tg_recharge' });
                         continue;
                     }
                     if (perRoundLimit > 0 && Number(sys?.uses_per_round?.value ?? 0) >= perRoundLimit)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'per-round limit reached');
+                        dbgAuto('skip:', token.name, item.name, 'per-round limit reached', { setting: 'checkUsage', value: reaction.checkUsage, limit: perRoundLimit, used: sys?.uses_per_round?.value });
                         continue;
                     }
                     if (perTurnLimit > 0 && Number(sys?.uses_per_turn?.value ?? 0) >= perTurnLimit)
                     {
-                        dbgAuto('skip:', token.name, item.name, 'per-turn limit reached');
+                        dbgAuto('skip:', token.name, item.name, 'per-turn limit reached', { setting: 'checkUsage', value: reaction.checkUsage, limit: perTurnLimit, used: sys?.uses_per_turn?.value });
                         continue;
                     }
                 }
 
                 if (!checkDispositionFilter(token, data.triggeringToken, reaction.dispositionFilter))
                 {
-                    dbgAuto('skip:', token.name, item.name, 'disposition filter failed');
+                    dbgAuto('skip:', token.name, item.name, 'disposition filter failed', { setting: 'dispositionFilter', value: reaction.dispositionFilter });
                     continue;
                 }
 
@@ -871,12 +888,16 @@ async function checkReactions(triggerType, data)
                         {
                             activationName = actionData.name;
                             if (data.actionName && data.actionName !== activationName)
+                            {
+                                dbgAuto('skip:', token.name, item.name, 'action name mismatch', { actionName: data.actionName, expected: activationName, reactionPath });
                                 continue;
+                            }
                         }
                     }
                     else if (reaction.onlyOnSourceMatch && data.actionName && data.actionName !== item.name)
                     {
                         // No reactionPath: skip when a specific sub-action was triggered (not the base item)
+                        dbgAuto('skip:', token.name, item.name, 'action name mismatch', { setting: 'onlyOnSourceMatch', actionName: data.actionName, expected: item.name });
                         continue;
                     }
 
@@ -888,7 +909,10 @@ async function checkReactions(triggerType, data)
                             cancelRecord.tokenId === token.id && cancelRecord.lid === lid && cancelRecord.reactionPath === (reaction.reactionPath || "")
                         );
                         if (isCancelled)
+                        {
+                            dbgAuto('skip:', token.name, item.name, 'already cancelled this pass');
                             continue;
+                        }
                     }
 
                     enrichedData.debugActivation = function (label)
@@ -1183,14 +1207,14 @@ async function checkReactions(triggerType, data)
 
                 const allGMs = game.users.filter(u => u.active && u.isGM);
 
-                for (const r of manualReactions)
+                for (const reaction of manualReactions)
                 {
                     const recipients = new Set();
 
                     if (mode === 'owner' || mode === 'both')
                     {
-                        const owners = game.users.filter(u => u.active && !u.isGM && r.token.document.testUserPermission(u, "OWNER"));
-                        owners.forEach(u => recipients.add(u));
+                        const owners = game.users.filter(user => user.active && !user.isGM && reaction.token.document.testUserPermission(user, "OWNER"));
+                        owners.forEach(user => recipients.add(user));
                     }
 
                     if (mode === 'gm' || mode === 'both')
@@ -1200,7 +1224,7 @@ async function checkReactions(triggerType, data)
                     {
                         if (!distribution.has(user.id))
                             distribution.set(user.id, []);
-                        distribution.get(user.id).push(r);
+                        distribution.get(user.id).push(reaction);
                     }
                 }
 
@@ -1403,6 +1427,7 @@ export async function handleTrigger(triggerType, data)
         effectName: data?.effect?.name,
         actionName: data?.actionName,
         itemName: (data?.item ?? data?.weapon ?? data?.techItem)?.name,
+        payload: Object.keys(data ?? {}).sort().join(', '),
     });
     if (_BATTLELOG_TELEMETRY_TRIGGERS.has(triggerType))
         Hooks.callAll('lancer-automations.battelog.trigger', triggerType, data);
@@ -1417,6 +1442,13 @@ async function _handleTriggerBody(triggerType, data)
     // runInFlowBody: child flow.begin() from reactions routes to innerChain, avoids parent-await deadlock.
     return runInFlowBody(async () =>
     {
+        // Normalized target list: entries may be raw tokens or { target } wrappers, single target included.
+        if (!('hitTokens' in data))
+        {
+            const unwrap = entry => (entry?.constructor === Object ? entry.target : entry);
+            const raw = Array.isArray(data.targets) ? data.targets.map(unwrap) : (data.target ? [unwrap(data.target)] : []);
+            data.hitTokens = raw.filter(candidate => candidate?.actor);
+        }
         data.startRelatedFlow = async () =>
         {
             const item = data.item ?? data.weapon ?? data.techItem;

@@ -1,5 +1,4 @@
-// Config constants for the token stat-bar system: setting keys, flag keys, visibility
-// modes, animation timings, and layout dimensions. Leaf module, no imports.
+// Config constants for the token stat-bar system.
 
 export const MODULE_ID = 'lancer-automations';
 
@@ -18,10 +17,12 @@ export const SETTING_AUTO_INJECT_TALENT_COLOR = 'statBarAutoInjectTalentColor';
 export const SETTING_AUTO_INJECT_TALENT_WIDTH = 'statBarAutoInjectTalentWidthPct';
 export const SETTING_AUTO_INJECT_TALENT_FEEDBACK = 'statBarAutoInjectTalentFeedback';
 export const SETTING_AUTO_INJECT_CUSTOM_FLAGS = 'statBarAutoInjectCustomFlags';
+export const SETTING_AUTO_INJECT_BOND_XP = 'statBarAutoInjectBondXp';
 
 export const VIS_ALL = 'all';
 export const VIS_OWNER = 'owner';
 export const VIS_NONE = 'none';
+export const VIS_SCANNED = 'scanned';
 
 export const FLASH_HOLD_MS = 250;
 export const FLASH_SHRINK_MS = 1300;

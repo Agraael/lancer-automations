@@ -171,12 +171,12 @@ function _vertexKey(x, y)
     return `${Math.round(x)},${Math.round(y)}`;
 }
 
-// At a shared wall vertex the ray blocks only if it passes between the two edges into the solid; a tip graze is a skim.
+// Vertex graze: false = real crossing, ±1 = which side the solid is on (0 unknown).
 function _skimsVertex(origin, dest, edge, vx, vy)
 {
     const neighbors = _losVertexMap?.get(_vertexKey(vx, vy));
     if (!neighbors)
-        return true;
+        return 0;
     const thisFar = Math.hypot(edge.a.x - vx, edge.a.y - vy) <= Math.hypot(edge.b.x - vx, edge.b.y - vy) ? edge.b : edge.a;
     let otherFar = null;
     for (const neighbor of neighbors)
@@ -187,14 +187,27 @@ function _skimsVertex(origin, dest, edge, vx, vy)
         break;
     }
     if (!otherFar)
-        return true;
+        return 0;
     const dirX = dest.x - origin.x;
     const dirY = dest.y - origin.y;
     const sideThis = Math.sign(dirX * (thisFar.y - vy) - dirY * (thisFar.x - vx));
     const sideOther = Math.sign(dirX * (otherFar.y - vy) - dirY * (otherFar.x - vx));
     if (sideThis === 0 || sideOther === 0)
-        return true;
-    return sideThis === sideOther;
+        return 0;
+    return sideThis === sideOther ? sideThis : false;
+}
+
+// A ray collinear with a wall face must be judged like a crossing, not slip along the lattice line.
+function _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, tol)
+{
+    const rayLen = Math.sqrt(rayLenSq);
+    const crossA = Math.abs(((edge.a.x - origin.x) * rayDirY) - ((edge.a.y - origin.y) * rayDirX));
+    const crossB = Math.abs(((edge.b.x - origin.x) * rayDirY) - ((edge.b.y - origin.y) * rayDirX));
+    if (crossA > tol * rayLen || crossB > tol * rayLen)
+        return false;
+    const alongA = (((edge.a.x - origin.x) * rayDirX) + ((edge.a.y - origin.y) * rayDirY)) / rayLenSq;
+    const alongB = (((edge.b.x - origin.x) * rayDirX) + ((edge.b.y - origin.y) * rayDirY)) / rayLenSq;
+    return Math.min(alongA, alongB) < 1 && Math.max(alongA, alongB) > 0;
 }
 
 function _pointToSegmentDist(px, py, ax, ay, bx, by)
@@ -214,6 +227,11 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
     const adjacentSlack = canvas.grid.size * 0.75;
     ctx.lastReason = 'open';
     ctx.blockPoint = null;
+    ctx.skimPos = false;
+    ctx.skimNeg = false;
+    const rayDirX = dest.x - origin.x;
+    const rayDirY = dest.y - origin.y;
+    const rayLenSq = ((rayDirX * rayDirX) + (rayDirY * rayDirY)) || 1;
     const segMinX = Math.min(origin.x, dest.x);
     const segMaxX = Math.max(origin.x, dest.x);
     const segMinY = Math.min(origin.y, dest.y);
@@ -230,17 +248,42 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
         const originOn = _pointToSegmentDist(origin.x, origin.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
         const destOn = _pointToSegmentDist(dest.x, dest.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
         const touchesEnd = originOn || destOn;
+        const alongWall = _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol);
         const side = edge.orientPoint?.(origin) ?? 1;
-        if (!side && !touchesEnd)
+        if (!side && !touchesEnd && !alongWall)
             continue;
         if (edge.direction && side === edge.direction)
             continue;
         if (edge.applyThreshold?.('sight', origin))
             continue;
         const crosses = foundry.utils.lineSegmentIntersects(origin, dest, edge.a, edge.b);
-        if (!crosses && !touchesEnd)
+        if (!crosses && !touchesEnd && !alongWall)
             continue;
-        // Touching a wall only at an endpoint (lineSegmentIntersects counts it) blocks only if the ray heads into the wall.
+        const hit = foundry.utils.lineLineIntersection(origin, dest, edge.a, edge.b) ?? { x: origin.x, y: origin.y, t0: 0 };
+        const originOver = originHeight > record.top;
+        const destOver = destHeight > record.top;
+        if (originOver && destOver)
+        {
+            ctx.lastReason = 'over2';
+            continue;
+        }
+        // The height rule outranks endpoint and tip grazes, so a corner-touching line cannot dodge the adjacent shadow.
+        if (originOver !== destOver)
+        {
+            const shorterCenter = originOver ? centerB : centerA;
+            const shorterRadius = originOver ? radiusB : radiusA;
+            const viewerEye = originOver ? originHeight : destHeight;
+            const dist = _pointToSegmentDist(shorterCenter.x, shorterCenter.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y);
+            const shorterAdj = (dist - shorterRadius) <= adjacentSlack;
+            if (shorterAdj && viewerEye < record.top + 1)
+            {
+                ctx.lastReason = 'adj';
+                ctx.blockPoint = { x: hit.x, y: hit.y };
+                return true;
+            }
+            ctx.lastReason = 'over1';
+            continue;
+        }
         if (touchesEnd)
         {
             const startPt = originOn ? origin : dest;
@@ -251,47 +294,36 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             if (!_pointInWall(sampleX, sampleY, record))
                 continue;
         }
-        const hit = foundry.utils.lineLineIntersection(origin, dest, edge.a, edge.b) ?? { x: origin.x, y: origin.y, t0: 0 };
-        // Grazing a wall's tip (line of sight along the edge) does not block.
         if (hit)
         {
             const vertexTol = canvas.grid.size * 0.05;
             const distA = Math.hypot(hit.x - edge.a.x, hit.y - edge.a.y);
             const distB = Math.hypot(hit.x - edge.b.x, hit.y - edge.b.y);
-            if (distA <= vertexTol && distA <= distB && _skimsVertex(origin, dest, edge, edge.a.x, edge.a.y))
+            let grazed = null;
+            if (distA <= vertexTol && distA <= distB)
+                grazed = edge.a;
+            else if (distB <= vertexTol)
+                grazed = edge.b;
+            if (grazed)
             {
-                ctx.lastReason = 'skim';
-                continue;
+                const skimSide = _skimsVertex(origin, dest, edge, grazed.x, grazed.y);
+                if (skimSide !== false)
+                {
+                    if (skimSide < 0)
+                        ctx.skimNeg = true;
+                    else if (skimSide > 0)
+                        ctx.skimPos = true;
+                    // opposite-side skims pinch the line: tilting off one corner lands on the other
+                    if (ctx.skimNeg && ctx.skimPos)
+                    {
+                        ctx.lastReason = 'pinch';
+                        ctx.blockPoint = { x: hit.x, y: hit.y };
+                        return true;
+                    }
+                    ctx.lastReason = 'skim';
+                    continue;
+                }
             }
-            if (distB <= vertexTol && distB < distA && _skimsVertex(origin, dest, edge, edge.b.x, edge.b.y))
-            {
-                ctx.lastReason = 'skim';
-                continue;
-            }
-        }
-        const originOver = originHeight > record.top;
-        const destOver = destHeight > record.top;
-        if (originOver && destOver)
-        {
-            ctx.lastReason = 'over2';
-            continue;
-        }
-        if (originOver !== destOver)
-        {
-            const shorterCenter = originOver ? centerB : centerA;
-            const shorterRadius = originOver ? radiusB : radiusA;
-            const viewerEye = originOver ? originHeight : destHeight;
-            const dist = _pointToSegmentDist(shorterCenter.x, shorterCenter.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y);
-            const shorterAdj = (dist - shorterRadius) <= adjacentSlack;
-            // adjacent shadow hides it, unless the viewer stands a full level above the wall
-            if (shorterAdj && viewerEye < record.top + 1)
-            {
-                ctx.lastReason = 'adj';
-                ctx.blockPoint = { x: hit.x, y: hit.y };
-                return true;
-            }
-            ctx.lastReason = 'over1';
-            continue;
         }
         if (hit)
         {
@@ -538,10 +570,32 @@ function _dumpLos()
             const clear = !_segmentBlocked(origin, heightV, pointsT[index], heightT, edges, ctx);
             return { name: ['centre', 'left', 'right'][index] ?? index, origin: _roundPoint(origin), dest: _roundPoint(pointsT[index]), clear, reason: ctx.lastReason };
         });
+        const denseForward = _denseLosClear(viewer, target, heightV, heightT, edges, ctx);
+        const ctxReverse = {
+            skipPrefixA: ctx.skipPrefixB,
+            skipPrefixB: ctx.skipPrefixA,
+            centerA: centerT,
+            centerB: centerV,
+            radiusA: ctx.radiusB,
+            radiusB: ctx.radiusA,
+        };
+        const pointsTRev = _tokenLosPoints(target, centerT, centerV);
+        const pointsVRev = _tokenLosPoints(viewer, centerT, centerV);
+        const raysReverse = pointsTRev.map((origin, index) =>
+        {
+            const clear = !_segmentBlocked(origin, heightT, pointsVRev[index], heightV, edges, ctxReverse);
+            return { name: ['centre', 'left', 'right'][index] ?? index, origin: _roundPoint(origin), dest: _roundPoint(pointsVRev[index]), clear, reason: ctxReverse.lastReason };
+        });
+        const denseReverse = _denseLosClear(target, viewer, heightT, heightV, edges, ctxReverse);
+        const keyV = _losPosKey(viewer.document);
+        const keyT = _losPosKey(target.document);
+        const pairKey = keyV < keyT ? `${keyV}|${keyT}` : `${keyT}|${keyV}`;
+        const cached = _losPairCache.get(pairKey);
         const nearEdges = edges
             .filter(record => !(record.maxX < minX || record.minX > maxX || record.maxY < minY || record.minY > maxY))
             .map(record => ({ id: record.id, a: _roundPoint(record.edge.a), b: _roundPoint(record.edge.b), top: record.top }));
-        dump.push({ viewer: viewer.document.name, viewerEye: heightV, target: target.document.name, targetEye: heightT, grid: canvas.grid.size, rays, nearEdges });
+        dump.push({ viewer: viewer.document.name, viewerEye: heightV, target: target.document.name, targetEye: heightT, grid: canvas.grid.size,
+            forward: { rays, dense: denseForward }, reverse: { rays: raysReverse, dense: denseReverse }, cachedRenderValue: cached, nearEdges });
     }
     console.log('LANCER_LOS_DUMP\n' + JSON.stringify(dump, null, 1));
     return dump;
@@ -1498,7 +1552,7 @@ function _applyOcclusionDim(token)
     }
 }
 
-// Occlusion + overlay set only change on vision changes: recompute on the dirty signal (plus a 500ms fallback) instead of running a per-token LOS raycast every frame.
+// Dirty-flag + 500ms fallback; avoids per-frame per-token LOS raycasts.
 const _overlayTokens = new Map();
 let _overlayDirty = true;
 let _lastOverlayRefresh = 0;

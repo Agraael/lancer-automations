@@ -435,8 +435,8 @@ export function mockCombatTelemetry()
 {
     const mechs = game.actors?.filter(a => a.type === 'mech') ?? [];
     const excludedNpcClasses = new Set(['human', 'pilot']);
-    const npcClassName = a => String(
-        a?.items?.find?.(i => i.type === 'npc_class')?.name ?? '',
+    const npcClassName = actor => String(
+        actor?.items?.find?.(item => item.type === 'npc_class')?.name ?? '',
     ).toLowerCase();
     const npcs = (game.actors?.filter(a => a.type === 'npc') ?? [])
         .filter(a => !excludedNpcClasses.has(npcClassName(a)));
@@ -506,14 +506,14 @@ export function mockCombatTelemetry()
             hostileTurn(round, f, f.__state, hostiles.filter(h => !h.__state.destroyed));
         }
         // Neutrals / secrets fire occasionally at anyone still up.
-        for (const b of [...neutrals, ...secrets])
+        for (const combatant of [...neutrals, ...secrets])
         {
-            if (b.__state.destroyed || !_chance(0.3))
+            if (combatant.__state.destroyed || !_chance(0.3))
                 continue;
             const anyone = [...players, ...hostiles, ...friendlies]
-                .filter(t => !t.__state.destroyed && t !== b);
+                .filter(target => !target.__state.destroyed && target !== combatant);
             if (anyone.length > 0)
-                hostileTurn(round, b, b.__state, anyone);
+                hostileTurn(round, combatant, combatant.__state, anyone);
         }
         const combatants = [...players, ...hostiles, ...friendlies, ...neutrals, ...secrets];
         for (const c of combatants)
@@ -531,8 +531,7 @@ export function mockCombatTelemetry()
         }
     }
 
-    // Exactly one mech destroyed. Lancer death = 0 structure OR 0 stress. HP and heat
-    // are independent pools; the destroyed mech keeps whatever value it had at the moment.
+    // Force exactly one player mech destroyed post-sim; Lancer death = 0 structure or 0 stress.
     if (players.length > 0)
     {
         const doomed = [...players].sort((a, b) => (a.__state.hp / a.__state.hpMax) - (b.__state.hp / b.__state.hpMax))[0];

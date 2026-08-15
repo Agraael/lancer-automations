@@ -39,8 +39,8 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
 {
     const toggle = () =>
     {
-        const val = $root.find(`#${prefix}-duration`).val();
-        const off = val === 'indefinite' || val === 'permanent';
+        const durationLabel = $root.find(`#${prefix}-duration`).val();
+        const off = durationLabel === 'indefinite' || durationLabel === 'permanent';
         const opts = $root.find(`#${prefix}-duration`).siblings('.dur-opts');
         opts.toggleClass('la-dur-disabled', off);
         opts.filter('select, input, button').prop('disabled', off);
@@ -76,6 +76,18 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
     toggle();
 }
 
+// permanent/indefinite skip turns; otherwise adjust for whether it's origin's current turn.
+export function buildDuration(durationLabel, originID, turnsInput)
+{
+    if (durationLabel === 'permanent')
+        return { label: 'permanent', turns: null, rounds: null };
+    if (durationLabel === 'indefinite')
+        return { label: 'indefinite', turns: null, rounds: null };
+    const isOriginTurn = game.combat?.current?.tokenId === originID;
+    const turns = (durationLabel === 'end' && isOriginTurn) ? turnsInput + 1 : (turnsInput === 0 ? 1 : turnsInput);
+    return { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
+}
+
 // Same read/adjust logic as the Effect Manager apply (effectManager.js standard tab).
 export function getDurationConfig($root, prefix)
 {
@@ -83,16 +95,7 @@ export function getDurationConfig($root, prefix)
     const originID = String($root.find(`#${prefix}-origin`).val());
     const turnsInputRaw = Number.parseInt(String($root.find(`#${prefix}-turns`).val()));
     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
-    let duration = { label: 'indefinite', turns: null, rounds: null };
-    if (durationLabel === 'permanent')
-        duration.label = 'permanent';
-    else if (durationLabel !== 'indefinite')
-    {
-        const isOriginTurn = game.combat?.current?.tokenId === originID;
-        const turns = (durationLabel === 'end' && isOriginTurn) ? turnsInput + 1 : (turnsInput === 0 ? 1 : turnsInput);
-        duration = { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
-    }
-    return { duration, originID };
+    return { duration: buildDuration(durationLabel, originID, turnsInput), originID };
 }
 
 // White mark on the effect target, yellow on the duration origin, single yellow when same token.

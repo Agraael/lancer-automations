@@ -12,7 +12,7 @@ Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set.
 |-------|--------------|
 | Skirmish | Attack with a single weapon. |
 | Barrage | Attack with up to two weapons. |
-| Ram | Melee ram; knocks the target Prone. |
+| Ram | Melee ram that knocks the target Prone. |
 | Grapple | Grapple, Break Free, or End Grapple. |
 | Brace | Brace, as a reaction. |
 | Overwatch | Trigger an Overwatch skirmish. |

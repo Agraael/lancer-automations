@@ -188,13 +188,7 @@ export async function pushEffect(targetID, effect, duration, note, originID)
 
 const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
 
-/**
- * Returns true if the incoming extraOptions are considered the same "source" as an existing effect's stored flags.
- * Effects with different identity key values (e.g. different suppressSourceId) are treated as distinct
- * and should NOT be stacked onto each other.
- * @param {SetEffectOptions} extraOptions - The incoming extra options
- * @param {ActiveEffect} existingEffect - The existing effect on the actor
- */
+// True if all extraOptions identity keys match the existing effect's flags (mismatches = distinct effect, no stacking)
 function _sameIdentity(extraOptions, existingEffect)
 {
     const identityKeys = Object.keys(extraOptions || {}).filter(key => !META_KEYS.has(key));
@@ -213,7 +207,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         return;
 
     let effectNameForLog = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
-    const isCustomRequest = (typeof effectOrData === 'object' && effectOrData.isCustom);// Auto-detect if "string" effect is actually an existing custom effect
+    const isCustomRequest = (typeof effectOrData === 'object' && effectOrData.isCustom);
     let resolvedEffectData = effectOrData;
     if (typeof effectOrData === 'string')
     {
@@ -221,9 +215,9 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         if (customStatusApi)
         {
             const savedStatuses = _getSavedStatuses();
-            const hasCustom = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
-            if (hasCustom)
-                resolvedEffectData = { name: effectOrData, icon: hasCustom.icon || "icons/svg/mystery-man.svg", isCustom: true };
+            const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
+            if (customStatusMatch)
+                resolvedEffectData = { name: effectOrData, icon: customStatusMatch.icon || "icons/svg/mystery-man.svg", isCustom: true };
         }
     }
     else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom)
@@ -487,6 +481,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     }
 }
 
+/** @returns {Promise<void>} */
 export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null)
 {
     log('**removeEffectsByName**');
@@ -546,7 +541,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
  * @param {string} [options.note=""] - Note/description for the effect
  * @param {Object} [options.duration={}] - Duration object
  * @param {string} [options.duration.overrideTurnOriginId] - When set, ties duration tracking to this token ID instead of the target's turn
- * @param {string} [options.duration.label] - Display label for the duration (e.g. 'start', 'end', 'unlimited')
+ * @param {string} [options.duration.label] - Display label for the duration (e.g. 'start', 'end', 'indefinite')
  * @param {number} [options.duration.turns] - Number of turns before expiration
  * @param {number} [options.duration.rounds] - Number of rounds before expiration
  * @param {Function} [options.checkEffectCallback=null] - Optional custom function to check if effect already exists
@@ -564,6 +559,10 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         checkEffectCallback = null,
         notify = true
     } = /** @type {any} */ (options);
+
+    // 'unlimited' is the retired synonym of 'indefinite'
+    if (duration?.label === 'unlimited')
+        duration.label = 'indefinite';
 
     if (extraOptions?.consumption?.grouped && !extraOptions.consumption.groupId)
         extraOptions.consumption.groupId = foundry.utils.randomID();
@@ -857,6 +856,7 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
  * Convert a template AE into the descriptor shape `applyEffectsToTokens` expects
  * (a string status id, an `{isCustom, ...}` custom-status object, or a raw AE-like descriptor).
  * @param {any} template
+ * @returns {object} Effect descriptor { name, icon, isCustom?, changes }
  */
 export function templateToEffectDescriptor(template)
 {
@@ -922,6 +922,7 @@ async function _applyTemplatesToTokens(sourceDoc, templates, sourceKey, tokens)
  * Idempotent - skips tokens that already carry the runtime for that template.
  * @param {any} item
  * @param {any[]} tokens
+ * @returns {Promise<void>}
  */
 export async function applyItemTemplatesToTokens(item, tokens)
 {
@@ -938,6 +939,7 @@ export async function applyItemTemplatesToTokens(item, tokens)
  * Materialize all `isActorTemplate` templates on an actor to the given tokens via the standard applier.
  * @param {any} actor
  * @param {any[]} tokens
+ * @returns {Promise<void>}
  */
 export async function applyActorTemplatesToTokens(actor, tokens)
 {
@@ -958,6 +960,7 @@ export async function applyActorTemplatesToTokens(actor, tokens)
  * @param {string} [options.note]
  * @param {Object} [options.duration]
  * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} The items that were stamped
  */
 export async function linkEffectToItem(options = /** @type {any} */ ({}), extraOptions = {})
 {
@@ -983,6 +986,157 @@ export async function linkEffectToItem(options = /** @type {any} */ ({}), extraO
 }
 
 /**
+ * linkEffectToItem, but idempotent: skips effects the item already carries as a template.
+ * Match = template name (same rules as unlinkEffectFromItem) + every extraOptions identity flag.
+ * @param {Object} options  Same shape as linkEffectToItem
+ * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} Effects actually linked, per item
+ */
+export async function ensureLinkedEffect(options = /** @type {any} */ ({}), extraOptions = {})
+{
+    const { items = [], effectNames = [] } = /** @type {any} */ (options);
+    const wanted = Array.isArray(effectNames) ? effectNames : [effectNames];
+    const identity = Object.entries(extraOptions ?? {}).filter(([key]) => key !== 'originID');
+    const linked = [];
+    for (const item of items)
+    {
+        if (!item || item.documentName !== 'Item')
+            continue;
+        const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
+            .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+        const missing = wanted.filter(effect =>
+        {
+            const name = typeof effect === 'string' ? effect : effect?.name;
+            const nameLower = String(name ?? '').toLowerCase();
+            return !templates.some(template =>
+            {
+                const laFlags = template.flags?.['lancer-automations'] ?? {};
+                const nameMatch = template.name?.toLowerCase() === nameLower
+                    || template.statuses?.has?.(name)
+                    || laFlags.effect === name;
+                return nameMatch && identity.every(([key, value]) => laFlags[key] === value);
+            });
+        });
+        if (missing.length)
+        {
+            await linkEffectToItem({ ...options, items: [item], effectNames: missing }, extraOptions);
+            linked.push({ item, effects: missing });
+        }
+    }
+    return linked;
+}
+
+/**
+ * Apply a source-stamped effect to targets. The stamp (`flagKey: source.id`) makes the
+ * marks findable and sweepable later via findMarkedTokens / clearMarks.
+ * @param {Token} sourceToken
+ * @param {Token[]} targets
+ * @param {Object} options
+ * @param {string|Object} options.effect  Effect name or descriptor ({ name, icon, isCustom })
+ * @param {string} [options.note]
+ * @param {Object} [options.duration]
+ * @param {string} [options.flagKey='markSourceId']
+ * @param {Object} [options.extraOptions]  Extra flags forwarded alongside the stamp
+ * @returns {Promise<Token[]>} Tokens the mark was applied to
+ */
+export async function applyMark(sourceToken, targets, options = /** @type {any} */ ({}))
+{
+    const { effect, note = "", duration = { label: 'indefinite' }, flagKey = 'markSourceId', extraOptions = {} } = /** @type {any} */ (options);
+    if (!sourceToken?.id || !effect)
+        return [];
+    return applyEffectsToTokens(
+        { tokens: Array.isArray(targets) ? targets : [targets], effectNames: [effect], note, duration },
+        { ...extraOptions, [flagKey]: sourceToken.id });
+}
+
+/**
+ * All effects on a token matching a name/status (same loose rules as findEffectOnToken),
+ * with optional flag filters.
+ * @param {Token} token
+ * @param {string} effectName
+ * @param {Object} [options]
+ * @param {Object} [options.extraFlags]   la-flags that must match exactly
+ * @param {string[]} [options.hasFlags]   la-flag keys that must be present, any value
+ * @param {string} [options.excludeId]    Effect id to skip (onStatusRemoved "any other" checks)
+ * @returns {any[]}
+ */
+export function findEffectsOnToken(token, effectName, options = /** @type {any} */ ({}))
+{
+    const { extraFlags = null, hasFlags = null, excludeId = null } = /** @type {any} */ (options);
+    const actor = token?.actor;
+    if (!actor || !effectName)
+        return [];
+    const tail = String(effectName).split('.').pop();
+    const tailLower = tail.toLowerCase();
+    return /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(effect =>
+    {
+        if (excludeId && effect.id === excludeId)
+            return false;
+        const laFlags = effect.flags?.['lancer-automations'] ?? {};
+        const nameMatch = effect.name === effectName
+            || effect.flags?.['temporary-custom-statuses']?.originalName === effectName
+            || laFlags.effect === effectName
+            || effect.flags?.['csm-lancer-qol']?.effect === effectName
+            || effect.name?.toLowerCase().includes(tailLower)
+            || effect.statuses?.has?.(tail);
+        if (!nameMatch)
+            return false;
+        if (extraFlags && !Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value))
+            return false;
+        if (hasFlags && !hasFlags.every(key => laFlags[key] !== undefined))
+            return false;
+        return true;
+    });
+}
+
+/**
+ * Effect on the token whose originID matches the source token (the addGlobalBonus `origin` stamp).
+ * @param {Token} token
+ * @param {string} effectName
+ * @param {Token} sourceToken
+ * @returns {ActiveEffect|undefined}
+ */
+export function findEffectFrom(token, effectName, sourceToken)
+{
+    if (!sourceToken?.id)
+        return undefined;
+    return findEffectOnToken(token, effect =>
+        effect.name === effectName && effect.flags?.['lancer-automations']?.originID === sourceToken.id);
+}
+
+/**
+ * Scene tokens carrying a mark stamped by sourceToken.
+ * @param {Token} sourceToken
+ * @param {string} effectName
+ * @param {{ flagKey?: string }} [options]
+ * @returns {Token[]}
+ */
+export function findMarkedTokens(sourceToken, effectName, options = /** @type {any} */ ({}))
+{
+    const { flagKey = 'markSourceId' } = /** @type {any} */ (options);
+    if (!sourceToken?.id)
+        return [];
+    return (canvas.tokens?.placeables ?? []).filter(token =>
+        !!findEffectOnToken(token, effect =>
+            effect.name === effectName && effect.flags?.['lancer-automations']?.[flagKey] === sourceToken.id));
+}
+
+/**
+ * Remove every mark stamped by sourceToken from the scene.
+ * @returns {Promise<Token[]>} Tokens the mark was removed from
+ */
+export async function clearMarks(sourceToken, effectName, options = /** @type {any} */ ({}))
+{
+    const { flagKey = 'markSourceId' } = /** @type {any} */ (options);
+    const marked = findMarkedTokens(sourceToken, effectName, options);
+    if (marked.length)
+    {
+        await removeEffectsByNameFromTokens({ tokens: marked, effectNames: [effectName], extraFlags: { [flagKey]: sourceToken.id } });
+    }
+    return marked;
+}
+
+/**
  * Stamp effect template(s) on the given actor(s) and immediately materialize on any active tokens.
  * Templates on prototype actors also fire from `createToken` for future spawns.
  * @param {Object} options
@@ -991,6 +1145,7 @@ export async function linkEffectToItem(options = /** @type {any} */ ({}), extraO
  * @param {string} [options.note]
  * @param {Object} [options.duration]
  * @param {Object} [extraOptions]
+ * @returns {Promise<any[]>} The actors that were stamped
  */
 export async function linkEffectToActor(options = /** @type {any} */ ({}), extraOptions = {})
 {
@@ -1020,6 +1175,7 @@ export async function linkEffectToActor(options = /** @type {any} */ ({}), extra
  * @param {any[]} options.items
  * @param {string} options.effectName
  * @param {Object} [options.extraFlags]
+ * @returns {Promise<any[]>} The removed effect templates
  */
 export async function unlinkEffectFromItem(options = /** @type {any} */ ({}))
 {
@@ -1060,6 +1216,7 @@ export async function unlinkEffectFromItem(options = /** @type {any} */ ({}))
  * @param {any[]} options.actors
  * @param {string} options.effectName
  * @param {Object} [options.extraFlags]
+ * @returns {Promise<any[]>} The removed effect templates
  */
 export async function unlinkEffectFromActor(options = /** @type {any} */ ({}))
 {
@@ -1217,6 +1374,20 @@ export async function removeEffectsByNameFromTokens(options = {})
  * @param {string|((e: ActiveEffect) => boolean)} identifier - Effect name (string) or predicate function (e => boolean)
  * @returns {ActiveEffect|undefined} The found effect or undefined
  */
+/**
+ * True when the token or actor carries any of the given status ids.
+ * @param {Token|Actor|TokenDocument} tokenOrActor
+ * @param {...(string|string[])} statusIds - Ids or arrays of ids; matches if any is present.
+ * @returns {boolean}
+ */
+export function hasStatus(tokenOrActor, ...statusIds)
+{
+    const actor = /** @type {any} */ (tokenOrActor)?.actor ?? tokenOrActor;
+    if (!actor?.statuses)
+        return false;
+    return statusIds.flat().some(statusId => actor.statuses.has(statusId));
+}
+
 export function findEffectOnToken(token, identifier)
 {
     const actor = /** @type {Actor} */(token?.actor);
@@ -1227,27 +1398,7 @@ export function findEffectOnToken(token, identifier)
         return actor.effects.find(identifier);
 
     if (typeof identifier === 'string')
-    {
-        const identifierPathTail = identifier.split('.').pop();
-        const identifierPathTailLower = identifierPathTail.toLowerCase();
-
-        return actor.effects.find(/** @param {any} e */ effect =>
-        {
-            const flags = effect.flags;
-            const laFlags = flags?.['lancer-automations'];
-            const tcsFlags = flags?.['temporary-custom-statuses'];
-            const qolFlags = flags?.['csm-lancer-qol'];
-
-            return (
-                tcsFlags?.originalName === identifier ||
-                effect.name === identifier ||
-                laFlags?.effect === identifier ||
-                qolFlags?.effect === identifier ||
-                (effect.name?.toLowerCase().includes(identifierPathTailLower)) ||
-                (effect.statuses?.has(identifierPathTail))
-            );
-        });
-    }
+        return findEffectsOnToken(token, identifier)[0];
 
     return undefined;
 }
@@ -1490,8 +1641,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId)
     }
 }
 /**
- * Check if the token has any of the specified effects, remove them,
- * and trigger a chat message mentioning the token's immunity.
+ * Remove matching effects from the token and notify of immunity.
  * @param {Token|TokenDocument} token - The token to check
  * @param {Array<string>|string} effectNames - List of effects to check for
  * @param {Item|string} source - The item or text describing the source of immunity
@@ -1908,7 +2058,14 @@ export function getLinkedEffects(source)
 export const EffectsAPI = {
     applyEffectsToTokens,
     removeEffectsByNameFromTokens,
+    removeEffectsByName,
+    applyMark,
+    findMarkedTokens,
+    clearMarks,
+    findEffectFrom,
+    findEffectsOnToken,
     linkEffectToItem,
+    ensureLinkedEffect,
     linkEffectToActor,
     unlinkEffectFromItem,
     unlinkEffectFromActor,
@@ -1917,6 +2074,7 @@ export const EffectsAPI = {
     templateToEffectDescriptor,
     getLinkedEffects,
     findEffectOnToken,
+    hasStatus,
     getAllEffects,
     deleteEffect,
     consumeEffectCharge,

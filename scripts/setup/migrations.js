@@ -30,6 +30,15 @@ const MIGRATIONS = [
         },
     },
     {
+        id: 'lancerLosModes_v1',
+        async run()
+        {
+            if (!game.settings.get(MODULE, 'lancerVisionAutoAdd'))
+                return;
+            await globalThis.lancerAutoVisionSetup?.();
+        },
+    },
+    {
         id: 'tah.scopeMigration_clientToWorld_v1',
         run()
         {

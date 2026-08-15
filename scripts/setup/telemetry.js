@@ -97,7 +97,7 @@ async function _showFirstLaunchPopup()
                 <div style="padding: 8px 10px; line-height: 1.5;">
                     <p>I'd love to know roughly how many people use this module. If you're up for it, just pick the role you usually play.</p>
                     <p>What gets sent: a random ID generated here, your module version, and your Foundry language. That's it.</p>
-                    <p>Already counted somewhere else (another world or another machine)? Pick <em>"Don't count me"</em> here so you're not double-counted.</p>
+                    <p>Already counted somewhere else (another world or another machine)? Pick <em>"I'm already counted"</em> so you're not double-counted.</p>
                     <p>You can change your mind anytime in module settings.</p>
                 </div>
             `,
@@ -159,8 +159,7 @@ async function _handleStartup()
         // Setting not registered yet; treat as pending.
     }
 
-    // Old scheme had 'allowed'/'denied' tied to a different ID and now-empty Supabase tables.
-    // Re-prompt both groups so the new role-based count starts from a clean baseline.
+    // Old 'allowed'/'denied' used a different ID scheme; re-prompt for a clean baseline.
     if (consent === "allowed" || consent === "denied")
         consent = CONSENT_PENDING;
 

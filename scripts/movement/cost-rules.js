@@ -68,6 +68,7 @@ function debugFootprint(cellOffset, cellCenter, isNew = false)
 const FLYING_STATUSES = ['flying', 'hover'];
 const CLIMB_IMMUNE_STATUSES = ['climber'];
 const TERRAIN_IMMUNE_STATUSES = ['terrain_immunity', 'surefoot'];
+const PHASING_STATUSES = ['phasing'];
 
 function hasAny(actor, ids)
 {
@@ -102,6 +103,11 @@ export function isTerrainImmune(tokenDoc)
 {
     const actor = tokenDoc?.actor;
     return hasAny(actor, TERRAIN_IMMUNE_STATUSES) || hasImmunityBonus(actor, 'terrain');
+}
+export function isPhasing(tokenDoc)
+{
+    const actor = tokenDoc?.actor;
+    return hasAny(actor, PHASING_STATUSES) || hasImmunityBonus(actor, 'obstacle');
 }
 
 import { thtApi } from './movement-utils.js';

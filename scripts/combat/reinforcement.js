@@ -16,7 +16,6 @@ export async function delayedTokenAppearance()
         return;
     }
 
-    // Map sizes to placeholder actor names
     const getSizeName = (size) =>
     {
         if (size === 0.5)
@@ -24,7 +23,6 @@ export async function delayedTokenAppearance()
         return `Size ${size}`;
     };
 
-    // Ask how many rounds before appearance
     const rounds = await new Promise((resolve) =>
     {
         new Dialog({
@@ -71,11 +69,9 @@ export async function delayedTokenAppearance()
         const size = token.actor?.system?.size ?? 1;
         const sizeName = getSizeName(size);
 
-        // Try to find corresponding placeholder actor
         let placeholderActor = game.actors.find(actor => actor.name === sizeName);
         let placeholderTokenId = null;
 
-        // Create placeholder token if actor exists - just spawn the prototype at the position
         if (placeholderActor)
         {
             const prototypeData = placeholderActor.prototypeToken.toObject();
@@ -152,13 +148,11 @@ export function initDelayedAppearanceHook()
         let delayedAppearances = (combat.getFlag("lancer-automations", "delayedAppearances")) || [];
         const currentRound = combat.round;
 
-        // Clean up entries where original token no longer exists
         const validAppearances = (Array.isArray(delayedAppearances) ? delayedAppearances : []).filter(appearance =>
         {
             const originalToken = canvas.scene.tokens.get(appearance.originalTokenId);
             if (!originalToken)
             {
-                // Token was deleted, clean up placeholder if it exists
                 if (appearance.placeholderId)
                 {
                     const placeholder = canvas.scene.tokens.get(appearance.placeholderId);
@@ -170,7 +164,6 @@ export function initDelayedAppearanceHook()
             return true;
         });
 
-        // Update the flag with cleaned list if anything was removed
         if (validAppearances.length !== (Array.isArray(delayedAppearances) ? delayedAppearances.length : 0))
         {
             await combat.setFlag("lancer-automations", "delayedAppearances", validAppearances);
@@ -247,7 +240,6 @@ export function initDelayedAppearanceHook()
 
         for (let appearance of (Array.isArray(selectedToAppear) ? selectedToAppear : []))
         {
-            // Delete placeholder if it exists
             if (appearance.placeholderId)
             {
                 const placeholder = canvas.scene.tokens.get(appearance.placeholderId);
@@ -285,7 +277,6 @@ export function initDelayedAppearanceHook()
                     await placeholder.delete();
             }
 
-            // Delete original token that was hidden
             const originalToken = canvas.scene.tokens.get(appearance.originalTokenId);
             if (originalToken)
                 await originalToken.delete();

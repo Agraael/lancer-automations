@@ -1,82 +1,17 @@
 /* global $, game, CONFIG */
 
-import { removeGlobalBonus, removeConstantBonus } from '../bonuses/genericBonuses.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString } from '../bonuses/genericBonuses.js';
 import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
 import { durationFieldsHtml, setupDurationUI, getDurationConfig, createDurationMarks } from '../bonuses/duration-widget.js';
 import { playUiSound } from './sound.js';
-import { tahScale } from './item-helpers.js';
+import { tahScale, laHudRenderIcon } from './item-helpers.js';
+import { HudPanel } from './hud-panel.js';
 
 function getBonusDetailStr(/** @type {any} */ bonus)
 {
-    if (bonus.type === 'accuracy')
-        return `Accuracy +${bonus.val}`;
-    if (bonus.type === 'difficulty')
-        return `Difficulty +${bonus.val}`;
-    if (bonus.type === 'stat')
-    {
-        const name = bonus.stat?.split('.').pop() || bonus.stat;
-        if ((bonus.statMode || 'add') === 'replace')
-            return `${name} = ${bonus.val}`;
-        return `${name} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
-    }
-    if (bonus.type === 'damage')
-    {
-        const mode = bonus.damageMode || 'add';
-        const entries = bonus.damage || [];
-        if (mode === 'change_type')
-        {
-            const parts = entries.map((/** @type {any} */ dmg) =>
-            {
-                const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
-                return `${from} → ${dmg.to}`;
-            });
-            return `Change Type: ${parts.join(', ')}`;
-        }
-        const body = entries.map((/** @type {any} */ dmg) => `${dmg.val} ${dmg.type}`).join(' + ');
-        if (mode === 'replace')
-            return `Replace: ${body}`;
-        if (mode === 'add_base')
-            return `Add: ${body}`;
-        return body;
-    }
-    if (bonus.type === 'tag')
-        return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : 'Add'} ${bonus.tagName} ${bonus.val}`;
-    if (bonus.type === 'range')
-        return `${bonus.rangeMode === 'override' ? 'Set' : 'Add'} ${bonus.rangeType} ${bonus.val}`;
-    if (bonus.type === 'immunity')
-    {
-        if (bonus.subtype === 'effect' && bonus.effects)
-            return `Immunity: ${bonus.effects.join(', ')}`;
-        if ((bonus.subtype === 'damage' || bonus.subtype === 'resistance') && bonus.damageTypes)
-            return `${bonus.subtype}: ${bonus.damageTypes.join(', ')}`;
-        if (bonus.subtype === 'crit')
-            return 'Crit immunity';
-        if (bonus.subtype === 'hit')
-            return 'Hit immunity';
-        if (bonus.subtype === 'miss')
-            return 'Miss immunity';
-        return bonus.subtype;
-    }
-    if (bonus.type === 'target_modifier')
-    {
-        const labels = {
-            invisible: 'Invisible (50% miss)',
-            no_invisible: 'Not Invisible',
-            no_cover: 'No Cover',
-            soft_cover: 'Soft Cover',
-            hard_cover: 'Hard Cover',
-            ap: 'Armor Piercing',
-            half_damage: 'Half Damage',
-            paracausal: 'Cannot be Reduced',
-            crit: 'Force Crit',
-            hit: 'Force Hit',
-            miss: 'Force Miss'
-        };
-        return `Target: ${labels[bonus.subtype] || bonus.subtype}`;
-    }
     if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
         return bonus.bonuses.map(getBonusDetailStr).join(' | ');
-    return bonus.type || '?';
+    return getBonusDetailString(bonus);
 }
 
 let _lastSearchQuery = '';
@@ -88,23 +23,18 @@ const BG_HOVER   = 'color-mix(in srgb, var(--la-plate), #000 12%)';
 const FG_DEFAULT = 'var(--la-ink)';
 const FG_ACTIVE  = '#111';
 
-export class StatusPanel
+export class StatusPanel extends HudPanel
 {
-    constructor({ actor, token, tokens, el, cancelCollapse, scheduleCollapse, incDepth, decDepth, suppressCollapse, extendCollapse })
+    constructor(options)
     {
-        this._actor           = actor;
-        this._token           = token;
-        this._tokens          = tokens ?? [token];
-        this._el              = el;
-        this._cancelCollapse  = cancelCollapse;
-        this._scheduleCollapse = scheduleCollapse;
-        this._incDepth        = incDepth;
-        this._decDepth        = decDepth;
+        super(options);
+        const { token, tokens, incDepth, decDepth, suppressCollapse, extendCollapse } = options;
+        this._tokens           = tokens ?? [token];
+        this._incDepth         = incDepth;
+        this._decDepth         = decDepth;
         this._suppressCollapse = suppressCollapse;
-        this._extendCollapse  = extendCollapse;
+        this._extendCollapse   = extendCollapse;
 
-        this._panel        = null;
-        this._anchor       = null;
         this._subtypePanel = null;
         this._durMarks     = null;
     }
@@ -119,11 +49,6 @@ export class StatusPanel
         });
     }
 
-    get isVisible()
-    {
-        return this._panel?.is(':visible') ?? false;
-    }
-
     close()
     {
         this._suppressCollapse?.(false);
@@ -135,15 +60,7 @@ export class StatusPanel
             this._subtypePanel.remove();
             this._subtypePanel = null;
         }
-        if (this._panel)
-        {
-            const panel = this._panel;
-            this._panel = null;
-            panel.stop(true).animate({ opacity: 0, marginLeft: -10 }, 250, function()
-            {
-                $(this).remove();
-            });
-        }
+        super.close();
     }
 
     syncRows()
@@ -179,27 +96,16 @@ export class StatusPanel
         });
     }
 
-    refresh()
-    {
-        if (this._panel && this._anchor)
-            this.open(this._anchor);
-    }
-
     open(anchorRow)
     {
         $('.la-status-tooltip').remove();
-        if (this._panel)
-        {
-            this._panel.stop(true).remove();
-            this._panel = null;
-        }
-        this._anchor = anchorRow;
+        this._resetPanel(anchorRow);
         const actor = this._actor;
         const token = this._token;
         if (!actor || !token)
             return;
 
-        const hasSC  = !!game.modules.get('statuscounter')?.active;
+        const hasStatusCounter  = !!game.modules.get('statuscounter')?.active;
         const hasTempCustomStatuses = !!game.modules.get('temporary-custom-statuses')?.active;
         const tempCustomStatusesApi = hasTempCustomStatuses ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
         const savedStatuses = hasTempCustomStatuses ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
@@ -270,7 +176,7 @@ export class StatusPanel
             /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff => eff.statuses?.has(sid) && !eff.disabled);
 
         const getStack = (/** @type {any} */ eff) =>
-            hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
+            hasStatusCounter ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
 
         const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
 
@@ -305,9 +211,9 @@ export class StatusPanel
             const effects = getEffectsForStatus(s.id);
             if (!effects.length)
                 return '';
-            const totalStack = hasSC ? effects.reduce((sum, e) => sum + getStack(e), 0) : 0;
+            const totalStack = hasStatusCounter ? effects.reduce((sum, e) => sum + getStack(e), 0) : 0;
             const parts = [];
-            if (hasSC && totalStack > 1)
+            if (hasStatusCounter && totalStack > 1)
                 parts.push(`×${totalStack}`);
             if (effects.length > 1)
                 parts.push(`[${effects.length}]`);
@@ -323,7 +229,7 @@ export class StatusPanel
             for (const eff of effects)
             {
                 const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
-                const stackCount = hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
+                const stackCount = hasStatusCounter ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
                 let label = 'Base Effect';
                 if (laFlags?.consumption)
                 {
@@ -389,7 +295,7 @@ export class StatusPanel
             _lastDurationLabel = String($(this).val());
         });
         const searchRow = $(`<div class="la-status-search-row"></div>`);
-        const helpTip = $(`<i class="fas fa-circle-question la-status-help" title="Click: apply or add a stack&#10;Right-click: remove or reduce&#10;Ctrl+click: favorite&#10;Hover: description"></i>`);
+        const helpTip = $(`<i class="fas fa-circle-question la-status-help" data-tooltip="Click: apply or add a stack<br>Right-click: remove or reduce<br>Ctrl+click: favorite<br>Hover: description"></i>`);
         searchRow.append(searchWrap, durTool, helpTip);
         const refreshDurMarks = () =>
         {
@@ -480,7 +386,7 @@ export class StatusPanel
                 this._incDepth();
                 try
                 {
-                    if (hasSC && effects.length === 1)
+                    if (hasStatusCounter && effects.length === 1)
                     {
                         const eff = effects[0];
                         await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
@@ -532,17 +438,16 @@ export class StatusPanel
                 {
                     const eff = effects[0];
                     const stack = getStack(eff);
-                    if (hasSC && stack > 1)
+                    if (hasStatusCounter && stack > 1)
                         await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                     else
                     {
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                        // Broadcast removal to all other tokens
-                        for (const tok of this._tokens.slice(1))
+                        for (const token of this._tokens.slice(1))
                         {
-                            const tokenEff = [...tok.actor.effects].find(matchingEff => matchingEff.statuses?.has(status.id) && !matchingEff.disabled);
+                            const tokenEff = [...token.actor.effects].find(matchingEff => matchingEff.statuses?.has(status.id) && !matchingEff.disabled);
                             if (tokenEff)
-                                await tok.actor.deleteEmbeddedDocuments('ActiveEffect', [tokenEff.id]);
+                                await token.actor.deleteEmbeddedDocuments('ActiveEffect', [tokenEff.id]);
                         }
                     }
                     updateRowBadge(rowEl, status);
@@ -606,9 +511,9 @@ export class StatusPanel
                 const effs = getCustomEffects(name);
                 if (!effs.length)
                     return '';
-                const totalStack = hasSC ? effs.reduce((sum, /** @type {any} */ eff) => sum + (eff.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
+                const totalStack = hasStatusCounter ? effs.reduce((sum, /** @type {any} */ eff) => sum + (eff.getFlag?.('statuscounter', 'value') ?? 1), 0) : 0;
                 const parts = [];
-                if (hasSC && totalStack > 1)
+                if (hasStatusCounter && totalStack > 1)
                     parts.push(`×${totalStack}`);
                 if (effs.length > 1)
                     parts.push(`[${effs.length}]`);
@@ -641,7 +546,7 @@ export class StatusPanel
                 });
                 customRow.data('active', active);
 
-                const updateCRow = () =>
+                const updateCustomRow = () =>
                 {
                     customRow.find('.la-status-badge').text(getCustomBadge(customStatus.name));
                     setRowActive(customRow, isCustomActive(customStatus.name));
@@ -660,15 +565,15 @@ export class StatusPanel
                     this._incDepth();
                     try
                     {
-                        if (hasSC && effs.length === 1)
+                        if (hasStatusCounter && effs.length === 1)
                         {
                             const eff = effs[0];
                             await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
                         }
                         else if (effs.length === 0)
                         {
-                            for (const tok of this._tokens)
-                                await tempCustomStatusesApi.addStatus(tok.actor, customStatus.name, customStatus.icon, 1);
+                            for (const token of this._tokens)
+                                await tempCustomStatusesApi.addStatus(token.actor, customStatus.name, customStatus.icon, 1);
                         }
                         else
                         {
@@ -680,7 +585,7 @@ export class StatusPanel
                                     await tok.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             }
                         }
-                        updateCRow();
+                        updateCustomRow();
                     }
                     finally
                     {
@@ -705,7 +610,7 @@ export class StatusPanel
                         {
                             for (const token of this._tokens)
                                 await tempCustomStatusesApi.addStatus(token.actor, customStatus.name, customStatus.icon, 1);
-                            updateCRow();
+                            updateCustomRow();
                         }
                         finally
                         {
@@ -718,19 +623,19 @@ export class StatusPanel
                     {
                         const eff = effs[0];
                         const stack = getStack(eff);
-                        if (hasSC && stack > 1)
+                        if (hasStatusCounter && stack > 1)
                             await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                         else
                         {
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             for (const token of this._tokens.slice(1))
                             {
-                                const matchingEff = [...token.actor.effects].find(eff => eff.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || eff.name === customStatus.name);
+                                const matchingEff = [...token.actor.effects].find(candidate => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || candidate.name === customStatus.name);
                                 if (matchingEff)
                                     await token.actor.deleteEmbeddedDocuments('ActiveEffect', [matchingEff.id]);
                             }
                         }
-                        updateCRow();
+                        updateCustomRow();
                     }
                     finally
                     {
@@ -762,6 +667,7 @@ export class StatusPanel
                 const detail = getBonusDetailStr(bonus);
                 const kindBadge = kind === 'constant' ? ' <span class="la-bonus-row__kind">(const)</span>' : '';
                 const row = $(`<div class="la-bonus-row" title="${bonus.name}: ${detail}">
+                    ${laHudRenderIcon(bonus.icon || getBonusIcon(bonus))}
                     <div class="la-bonus-row__body">
                         <b>${bonus.name}</b>${kindBadge}<br>
                         <span class="la-bonus-row__detail">${detail}</span>
@@ -820,26 +726,8 @@ export class StatusPanel
         leftWrap.append(header, searchRow, gridEl);
         panel.append(leftWrap, rightEl);
 
-        const scale = tahScale();
-        let topInHud  = (anchorRow.offset().top - this._el.offset().top) / scale;
-        const leftInHud = /** @type {any} */ (this._el.children().first()).outerWidth();
-        panel.css({ position: 'absolute', top: topInHud, left: leftInHud, zIndex: 10 });
-
-        this._el.append(panel);
-
-        // Clamp so the panel fits in the viewport; shift up if it would overflow the bottom.
-        const margin = 8;
-        const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
-        const hudTop = this._el.offset().top;
-        const maxTopInHud = (window.innerHeight - margin - panelHeight - hudTop) / scale;
-        if (topInHud > maxTopInHud)
-            topInHud = Math.max((margin - hudTop) / scale, maxTopInHud);
-        panel.css({ top: topInHud });
-
-        panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
+        this._mount(panel, anchorRow, { useParentCol: false, clampTop: true });
         panel.on('click', extendFade);
-        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
-        this._panel = panel;
     }
 
     _openSubtypeManager(actor, statusConfig, effects, anchorRow)
@@ -848,8 +736,8 @@ export class StatusPanel
         {
             this._subtypePanel.remove(); this._subtypePanel = null;
         }
-        const hasSC = !!game.modules.get('statuscounter')?.active;
-        const getStack = (/** @type {any} */ eff) => hasSC ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
+        const hasStatusCounter = !!game.modules.get('statuscounter')?.active;
+        const getStack = (/** @type {any} */ eff) => hasStatusCounter ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : 1;
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
 
         const panel = $(`<div class="la-hud-sub-panel"></div>`);
@@ -881,8 +769,8 @@ export class StatusPanel
                 const row = $(`<div class="la-hud-sub-row" data-eid="${eff.id}">
                     <span class="la-sub-label">${label}</span>
                     <span class="la-sub-stack">×${stack}</span>
-                    ${hasSC ? `<span class="la-sub-minus la-sub-btn la-sub-btn--minus">−</span>` : ''}
-                    ${hasSC ? `<span class="la-sub-plus la-sub-btn la-sub-btn--plus">+</span>` : ''}
+                    ${hasStatusCounter ? `<span class="la-sub-minus la-sub-btn la-sub-btn--minus">−</span>` : ''}
+                    ${hasStatusCounter ? `<span class="la-sub-plus la-sub-btn la-sub-btn--plus">+</span>` : ''}
                     <span class="la-sub-del la-sub-btn la-sub-btn--del">✕</span>
                 </div>`);
                 row.find('.la-sub-minus').on('click', async () =>

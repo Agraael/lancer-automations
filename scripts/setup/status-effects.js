@@ -42,6 +42,16 @@ Hooks.on('lancer.statusesReady', () =>
         });
     }
 
+    if (!CONFIG.statusEffects.find(status => status.id === 'phasing'))
+    {
+        CONFIG.statusEffects.push({
+            id: "phasing",
+            name: "Phasing",
+            img: "modules/lancer-automations/icons/back-forth.svg",
+            description: "This character can move through other characters, but still cannot end its movement on them."
+        });
+    }
+
     // fallback for users without csm-lancer-qol; that module normally provides these
     if (!game.modules.get('csm-lancer-qol')?.active)
     {
@@ -197,11 +207,18 @@ Hooks.on('lancer.statusesReady', () =>
             { key: "system.statuses.core_power_active", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     },
+    //these effect also exist in prototype-pattern-groups-data-1.16.0.lcp
     {
         id: "dazed",
         name: "Dazed",
         img: "modules/lancer-automations/icons/dazed.svg",
         description: "DAZED mechs can only take one quick action – they cannot OVERCHARGE, move normally, nor take full actions, reactions, or free actions."
+    },
+    {
+        id: "overheated",
+        name: "Overheated",
+        img: "modules/lancer-automations/icons/overheated.svg",
+        description: "An OVERHEATED mech cannot take any actions or activate abilities that would inflict Heat upon themselves, including OVERCHARGE and systems with the HEAT X (SELF) tag. Weapons with OVERKILL lose the tag while OVERHEATED. Cleared by STABILIZE."
     }];
 
     additionalStatusKeys = new Set(additional.flatMap(status => [status.id, status.name]));

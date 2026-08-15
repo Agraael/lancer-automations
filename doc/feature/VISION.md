@@ -18,9 +18,13 @@ The **Vision** tab.
 
 ## Lancer line of sight
 
-<img align="right" src="../img/vis-los.gif" width="45%"/>
+<img align="right" src="../vid/vis-los.gif" width="45%"/>
 
-**`lancerLos`** emulates Lancer's line-of-sight rules: a token behind a wall stays visible if another token can see it. Turn on **`lancerLosDebug`** to see how it resolves.
+**`lancerLos`** emulates Lancer's line-of-sight rules: a token behind a wall stays visible if another token can see it. The result is accurate, but it stays mostly visual for now, since there's no integrated tool to use it in play. Turn on **`lancerLosDebug`** to see how it resolves.
+
+It calculates from walls, so it works with walls you place by hand and with walls generated from terrain by Terrain Height Tools. That's also why [tokens that block sight](#token-blocks-line-of-sight), Bulwark included, count here: they act as walls.
+
+From code, [`hasLineOfSight`](../API_SPATIAL.md#line-of-sight) runs the same test.
 
 <br clear="right"/>
 
@@ -30,7 +34,7 @@ The **Vision** tab.
 
 <img align="right" src="../img/vis-from-edge.png" width="45%"/>
 
-Experimental. Vanilla Foundry checks line of sight from a token's center; **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner. A per-token override lives in the Token Config Vision tab.
+Experimental. Vanilla Foundry checks line of sight from a token's center. **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner. A per-token override lives in the Token Config Vision tab.
 
 Tune it with the **sample density** (`visionFromEdgeSampleMode`: 4 corners, 8 perimeter, or adaptive) and the **sample offset** (`visionFromEdgeSampleOffset`, how far outside the token the points sit). **`visionFromEdgeDebug`** draws the sample points on the canvas. With Wall Height, the samples respect elevation barriers.
 

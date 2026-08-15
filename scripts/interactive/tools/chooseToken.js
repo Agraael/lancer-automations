@@ -14,14 +14,16 @@ import {
 } from "../cards.js";
 
 import {
-    pointerToWorld, addGraphicsBelowTokens, addGraphicsAboveTokens, suppressTokenLayerClick, destroyGraphics,
-    makeSafe, createCursorPreview, drawRangeHighlight,
+    pointerToWorld, addGraphicsBelowTokens, addGraphicsAboveTokens, suppressTokenInteraction, destroyGraphics,
+    createPickerSession, createCursorPreview, drawRangeHighlight,
     _paintCells, _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText, TG, paintWithHalo, RANGE_GLOW, RANGE_PULSE_STYLE,
-    suppressEvent,
+    suppressEvent, showOverlapStackPicker,
+    teardownRangePulse,
 } from "../canvas-helpers.js";
 import { computeArea } from "../area-geometry.js";
 import { keyCodesFor } from "../keybindings.js";
 import { broadcastToolPresence, clearToolPresence } from "../presence.js";
+import { isFriendly, isHostile } from "../../combat/overwatch.js";
 import { playUiSound, playTargetingMove } from "../../tah/sound.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 
@@ -32,13 +34,25 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
  */
 export function chooseToken(casterToken, options = {})
 {
+    const _opts = /** @type {any} */ (options);
+    if (_opts.range === 'sensors')
+        options = { ..._opts, range: casterToken?.actor?.system?.sensor_range ?? 10 };
+    const disposition = /** @type {any} */ (options).disposition;
+    if (disposition === 'friendly' || disposition === 'hostile')
+    {
+        const baseFilter = /** @type {any} */ (options).filter;
+        const wantFriendly = disposition === 'friendly';
+        options = { .../** @type {any} */ (options), filter: (token) =>
+            (wantFriendly ? isFriendly(casterToken, token) : isHostile(casterToken, token))
+            && (!baseFilter || baseFilter(token)) };
+    }
     const _title = options.title || 'SELECT TARGETS';
     const _queue = options.urgent ? _queueCardUrgent : _queueCard;
     return _queue(() => new Promise((resolve) =>
     {
         const {
             range = null,
-            includeSelf = false,
+            includeSelf = true,
             filter = null,
             filterWarning = null,
             soft = true,
@@ -178,12 +192,7 @@ export function chooseToken(casterToken, options = {})
                     );
                     const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken });
                     canvas.app.ticker.add(wavePulse);
-                    return () =>
-                    {
-                        canvas.app.ticker.remove(wavePulse);
-                        destroyGraphics(rangeHighlight);
-                        destroyGraphics(pulseGraphic);
-                    };
+                    return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                 },
             });
         }
@@ -323,11 +332,8 @@ export function chooseToken(casterToken, options = {})
         };
         let allTokens = getActiveTokens();
 
-        const prevInteractive = canvas.tokens.interactiveChildren;
-        canvas.tokens.interactiveChildren = false;
-        const restoreLayerClick = suppressTokenLayerClick();
+        const restoreTokenInteraction = suppressTokenInteraction();
 
-        let safeMove, safeClick, safeAbort, safeKey, safeWheel;
         const doCleanup = () =>
         {
             clearToolPresence('chooseToken');
@@ -340,24 +346,14 @@ export function chooseToken(casterToken, options = {})
             destroyGraphics(cellLabelLayer);
             destroyGraphics(previewSelectHighlight);
             rangePulse.clear('interactive:chooseToken');
-            if (safeClick)
-                canvas.stage.off('click', safeClick);
-            if (safeAbort)
-                canvas.stage.off('rightdown', safeAbort);
-            if (safeMove)
-                canvas.stage.off('pointermove', safeMove);
-            if (safeKey)
-                document.removeEventListener('keydown', safeKey, true);
-            if (safeWheel)
-                document.removeEventListener('wheel', safeWheel, { capture: true });
+            session.unbind();
             selectionHighlightGraphics.forEach(destroyGraphics);
             selectionHighlights.forEach(entry => destroyGraphics(entry.graphics));
             for (const placement of placements)
                 destroyGraphics(placement.graphics);
             placements.length = 0;
 
-            canvas.tokens.interactiveChildren = prevInteractive;
-            restoreLayerClick();
+            restoreTokenInteraction();
             _removeInfoCard(cardEl);
             closeStackPopup();
         };
@@ -1492,20 +1488,11 @@ export function chooseToken(casterToken, options = {})
             placeCone(tx, ty);
         };
 
-        let stackPopupEl = null;
-        let stackOutsideHandler = null;
+        let closeStack = null;
         const closeStackPopup = () =>
         {
-            if (stackPopupEl)
-            {
-                stackPopupEl.remove();
-                stackPopupEl = null;
-            }
-            if (stackOutsideHandler)
-            {
-                document.removeEventListener('pointerdown', stackOutsideHandler, true);
-                stackOutsideHandler = null;
-            }
+            closeStack?.();
+            closeStack = null;
         };
 
         const toggleTokenSelection = (token) =>
@@ -1543,47 +1530,10 @@ export function chooseToken(casterToken, options = {})
         const showStackPicker = (tokens, screenX, screenY) =>
         {
             closeStackPopup();
-            const el = document.createElement('div');
-            el.className = 'la-stack-picker';
-            el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
-            for (const token of tokens)
-            {
-                const isSelected = selectedTokens.has(token);
-                const row = document.createElement('div');
-                row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:3px;${isSelected ? 'background:rgba(255,100,0,0.25);' : ''}`;
-                row.innerHTML = `
-                    <img src="${token.document.texture.src}" style="width:24px;height:24px;object-fit:contain;border:1px solid #555;border-radius:2px;background:#000;">
-                    <span style="color:#fff;font-size:0.9em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${token.name}</span>
-                    ${isSelected ? '<i class="fas fa-check" style="color:#5cff5c;"></i>' : ''}`;
-                row.addEventListener('mouseenter', () =>
-                {
-                    row.style.background = 'rgba(255,100,0,0.4)';
-                });
-                row.addEventListener('mouseleave', () =>
-                {
-                    row.style.background = isSelected ? 'rgba(255,100,0,0.25)' : 'transparent';
-                });
-                row.addEventListener('click', (e) =>
-                {
-                    e.stopPropagation();
-                    toggleTokenSelection(token);
-                    closeStackPopup();
-                });
-                el.appendChild(row);
-            }
-            document.body.appendChild(el);
-            stackPopupEl = el;
-            const rect = el.getBoundingClientRect();
-            if (rect.right > window.innerWidth)
-                el.style.left = `${Math.max(0, window.innerWidth - rect.width - 4)}px`;
-            if (rect.bottom > window.innerHeight)
-                el.style.top = `${Math.max(0, window.innerHeight - rect.height - 4)}px`;
-            stackOutsideHandler = (event) =>
-            {
-                if (stackPopupEl && !stackPopupEl.contains(/** @type {Node} */ (event.target)))
-                    closeStackPopup();
-            };
-            setTimeout(() => document.addEventListener('pointerdown', stackOutsideHandler, true), 0);
+            closeStack = showOverlapStackPicker(tokens, screenX, screenY, {
+                isSelected: (token) => selectedTokens.has(token),
+                onPick: toggleTokenSelection,
+            });
         };
 
         const clickHandler = (event) =>
@@ -1666,7 +1616,7 @@ export function chooseToken(casterToken, options = {})
             if (event.key === "Escape")
             {
                 suppressEvent(event);
-                if (stackPopupEl)
+                if (document.querySelector('.la-stack-picker'))
                 {
                     closeStackPopup();
                     return;
@@ -1729,31 +1679,25 @@ export function chooseToken(casterToken, options = {})
         if (isAreaMode)
             refreshCard();
 
-        const safe = makeSafe('chooseToken', doCancel);
+        const session = createPickerSession('chooseToken', doCancel);
         const isAimed = isConeMode || isLineMode;
         const _move = isAimed ? coneMoveHandler : isBurstMode ? burstMoveHandler : isBlastMode ? blastMoveHandler : moveHandler;
-        safeMove = safe((e) =>
-        {
-            const { x, y } = pointerToWorld(e);
-            const offset = pixelToOffset(x, y);
-            playTargetingMove(offset.col, offset.row);
-            _move(e);
-        });
         const _click = isAimed ? coneClickHandler : isBurstMode ? burstClickHandler : isBlastMode ? blastClickHandler : clickHandler;
-        safeClick = safe((e) =>
-        {
-            playUiSound('targetingConfirm');
-            _click(e);
+        session.bind({
+            move: (event) =>
+            {
+                const { x, y } = pointerToWorld(event);
+                const offset = pixelToOffset(x, y);
+                playTargetingMove(offset.col, offset.row);
+                _move(event);
+            },
+            click: (event) =>
+            {
+                playUiSound('targetingConfirm');
+                _click(event);
+            },
+            key: keyHandler,
+            wheel: isAimed ? wheelHandler : null,
         });
-        safeKey = safe(keyHandler);
-        canvas.stage.on('pointermove', safeMove);
-        canvas.stage.on('click', safeClick);
-        document.addEventListener('keydown', safeKey, true);
-        if (isAimed)
-        {
-            safeWheel = safe(wheelHandler);
-            // Capture phase + non-passive so we can preventDefault before Foundry's canvas zoom listener.
-            document.addEventListener('wheel', safeWheel, { capture: true, passive: false });
-        }
     }), _title);
 }

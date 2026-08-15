@@ -114,8 +114,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
 
         const originalAction = options.movement?.[document.id]?.waypoints?.find(waypoint => waypoint?.action)?.action;
         const originalIsTeleport = !!CONFIG.Token?.movement?.actions?.[originalAction]?.teleport;
-        const originalPathWps = getOriginalMovePath(document, options);
-        const intentEndPos = originalPathWps.at(-1) ?? endPos;
+        const originalPathWaypoints = getOriginalMovePath(document, options);
+        const intentEndPos = originalPathWaypoints.at(-1) ?? endPos;
         const continueCallback = async () =>
         {
             const dest = { x: change.x ?? token.x, y: change.y ?? token.y };
@@ -125,7 +125,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                 dest.action = originalAction;
             // Strip v13-internal options before re-firing: the cancelled call froze them with defineProperty, and spreading them crashes #preUpdateMovement.
             const { _movement, _movementArguments, movement, _laTeleFxPlayed, ...cleanOptions } = options;
-            await _rulerMove(token, originalPathWps.length ? originalPathWps : dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
+            await _rulerMove(token, originalPathWaypoints.length ? originalPathWaypoints : dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
         };
         triggerData._cancelledBy = options._cancelledBy || [];
         const _cancelMoveCard = _buildCancelFn({
@@ -141,7 +141,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             choice1Text: "Stop",
             choice2Text: "Ignore",
             getExtraCardOptions: (userIdControl) => ({
-                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos: intentEndPos, newEndPos: null, path: originalPathWps } : null
+                traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos: intentEndPos, newEndPos: null, path: originalPathWaypoints } : null
             }),
         });
         // adapter: trace drawn here (not in _cancelMoveCard) so it shows during preConfirm too
@@ -149,7 +149,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
         {
             _cancelMoveCard._reactorIdentity = triggerData.cancelTriggeredMove._reactorIdentity;
             _cancelMoveCard._engineCancel = triggerData.cancelTriggeredMove._engineCancel;
-            const trace = drawMovementTrace(token, intentEndPos, null, { path: originalPathWps });
+            const trace = drawMovementTrace(token, intentEndPos, null, { path: originalPathWaypoints });
             const cleanup = () =>
             {
                 if (trace?.parent)
@@ -168,8 +168,9 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             const identity = triggerData.changeTriggeredMove._reactorIdentity;
             if (identity && triggerData._cancelledBy)
                 triggerData._cancelledBy.push(identity);
-            const trimmedPath = trimPathToPosition(token, originalPathWps, startPos, position, originalAction);
+            const trimmedPath = trimPathToPosition(token, originalPathWaypoints, startPos, position, originalAction);
 
+            // Rerouted move is a real new move on purpose: no _cancelledBy carry, reactors may evaluate it again.
             const executeChange = () =>
             {
                 setTimeout(async () =>
@@ -187,10 +188,10 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             };
             const executeOriginal = async () =>
             {
-                if (originalPathWps.length)
+                if (originalPathWaypoints.length)
                 {
                     const { _movement, _movementArguments, movement, _laTeleFxPlayed, ...cleanOptions } = options;
-                    await _rulerMove(token, originalPathWps, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
+                    await _rulerMove(token, originalPathWaypoints, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
                     return;
                 }
                 const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
@@ -218,7 +219,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                 return;
             }
 
-            const trace = drawMovementTrace(token, intentEndPos, position, { path: originalPathWps, newPath: trimmedPath });
+            const trace = drawMovementTrace(token, intentEndPos, position, { path: originalPathWaypoints, newPath: trimmedPath });
 
             try
             {
@@ -230,7 +231,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                     originToken,
                     relatedToken,
                     userIdControl: userIdControl ?? getActiveGMId(),
-                    traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos: intentEndPos, newEndPos: position, path: originalPathWps, newPath: trimmedPath } : null,
+                    traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos: intentEndPos, newEndPos: position, path: originalPathWaypoints, newPath: trimmedPath } : null,
                     choices: [
                         { text: "Confirm",
                             icon: "fas fa-check",
@@ -257,7 +258,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             }
         };
 
-        _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost: moveCost, moveIsFreeMovement, triggerData, intentPath: originalPathWps, intentEndPos });
+        _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost: moveCost, moveIsFreeMovement, triggerData, intentPath: originalPathWaypoints, intentEndPos });
 
         // no await: sync reactors flip cancelUpdate before the next line reads it
         if (!cancelUpdate)

@@ -40,7 +40,7 @@ Elevation also gets a small badge at the token's corner (up/down arrow with the 
 
 <img align="right" src="../img/td-config.png" width="45%"/>
 
-The settings hold the **world defaults**; each token can override them from **Token Config → Resources tab**:
+The settings hold the **world defaults**. Each token can override them from **Token Config → Resources tab**:
 
 - **Visibility mode**, set separately for **in combat** and **out of combat**: *all* (anyone who can see the token), *owners only*, or *none* (only when the token is selected).
 - **Show only in combat** - bars appear only during an encounter.
@@ -67,7 +67,7 @@ The **Extra Bars** section of Token Config → Resources adds your own bars belo
 - a **label**, **width %**, **new line / same line** layout, **color**, and **icon**,
 - a **visibility** (owner / scanned / all), a **show-label-in-hint** toggle (label next to the icon in the hint), optional **floating-text + sound** on change, and an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
 
-Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`); see [API_REFERENCE.md](../API_REFERENCE.md).
+Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`), see [API_TOKEN_DISPLAY.md](../API_TOKEN_DISPLAY.md).
 
 Set on an item or actor instead of one token, an extra bar becomes a template that auto-adds to that actor's tokens. **Alt Sheets** custom fraction flags show up as bars here too.
 
@@ -104,7 +104,9 @@ A hover popup with a token's full stats, enabled with **`tokenStatHintEnabled`**
 
 For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned).
 
-A scanned token (or the GM view) shows the full stat block; an unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
+A scanned token (or the GM view) shows the full stat block. An unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
+
+To drop the scan gate entirely, turn on **Reveal Stats Without Scanning** (**Activations → Scan**). Every actor then reads as scanned, for the hint, the scanned stat bars, and the consume feedback alike.
 
 <br clear="right"/>
 
