@@ -46,6 +46,7 @@ import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerF
 // Vision
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
+import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
 import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
 
@@ -80,6 +81,7 @@ import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtili
     forceTechHUDStep
 } from "./activations/flows.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
+import { bindAfterFxDrain } from "./activations/after-fx.js";
 import { registerAccDiffTargetButton } from "./activations/accdiff-target-button.js";
 import { registerStatRollTargetButton } from "./activations/statroll-target-button.js";
 import { registerDamageTargetButton } from "./activations/damage-target-button.js";
@@ -87,7 +89,7 @@ import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
 import { initAutoDamage } from "./activations/auto-damage.js";
 import { initCombatBannerFit } from "./tools/combat-banner-fit.js";
 import {
-    onAttackStep, onHitMissStep, onPreDamageStep, onDamageStep,
+    onAttackStep, hitImmunityStep, onHitMissStep, onPreDamageStep, onDamageStep,
     onPreStructureStep, onStructureStep, onPreStressStep, onStressStep,
     onTechAttackStep, onTechHitMissStep, onCheckStep,
     stunnedAutoFailStep, onInitCheckStep, onInitAttackStep, onInitTechAttackStep,
@@ -325,6 +327,7 @@ function patchHalfSizeTokens()
 function insertModuleFlowSteps(flowSteps, flows)
 {
     flowSteps.set('lancer-automations:onAttack', onAttackStep);
+    flowSteps.set('lancer-automations:hitImmunity', hitImmunityStep);
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-automations:onPreDamage', onPreDamageStep);
     flowSteps.set('lancer-automations:onDamage', onDamageStep);
@@ -381,11 +384,14 @@ function insertModuleFlowSteps(flowSteps, flows)
     // mirror back: if the user ticks Thrown in the HUD, drive LA's throwDeploy step
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:syncAccDiffToThrow');
     flows.get('WeaponAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
-    flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
+    flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
+
+    flows.get('WeaponAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:hitImmunity');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:hitImmunity', 'lancer-automations:onHitMiss');
     flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onHitMiss', 'lancer-automations:throwDeploy');
 
-    flows.get('BasicAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onAttack');
-    flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onHitMiss');
+    flows.get('BasicAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:hitImmunity');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:hitImmunity', 'lancer-automations:onHitMiss');
     flows.get('BasicAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:stubBasicAttackItemForFx');
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:stubBasicAttackItemForFx', 'lancer-automations:playThrowFXIfNeeded');
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:playThrowFXIfNeeded', 'lancer-automations:playBasicRangedFXIfNeeded');
@@ -512,6 +518,7 @@ Hooks.on('init', () =>
 
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
+    initBlindedVision(); // Blinded status clamps the token's sight to one space
     registerActionLimitsHooks();
     initVisionDisableOnSelect();
     injectDisabledSchemaField();
@@ -666,6 +673,7 @@ function patchFromUuidSyncForCompendiumActors()
 
 Hooks.once('ready', async () =>
 {
+    setTimeout(bindAfterFxDrain, 0);
     installJb2aHooks();
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();

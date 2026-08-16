@@ -303,21 +303,6 @@ function markedTokens()
     return out;
 }
 
-let _dbgMoveCount = 0;
-let _dbgLastMoveAt = 0;
-let _dbgLastHealSkip = '';
-globalThis.laMeasureRef = () => ({
-    hover: _hoverToken ? `${_hoverToken.name} (destroyed:${_hoverToken.destroyed}, hover:${_hoverToken.hover})` : null,
-    controlled: getControlled().map(token => token.name),
-    whiteMarks: markedTokens().map(token => token.name),
-    references: getReferenceTokens().map(token => token.name),
-    overToolbar: _overToolbar,
-    pointerOverToolbar: pointerOverToolbar(),
-    pointerMoves: _dbgMoveCount,
-    msSinceLastMove: _dbgLastMoveAt ? Math.round(performance.now() - _dbgLastMoveAt) : null,
-    lastHealSkip: _dbgLastHealSkip,
-});
-
 function getReferenceTokens()
 {
     const primary = (_hoverToken && isValidRef(_hoverToken))
@@ -390,6 +375,36 @@ function _tokenHasPin(tokenId)
 
 let _pinGroups = new Map();
 let _pinBreathTick = null;
+let _pinPixTick = null;
+
+const _pinPix = { rows: [], prevAlpha: null, sample: null };
+globalThis.laPinPix = (count = 240) =>
+{
+    const rows = _pinPix.rows.slice(-count);
+    console.table(rows);
+    return rows;
+};
+
+// Reads the composited pixel the GPU actually produced last frame.
+function _readPixel(worldX, worldY)
+{
+    const renderer = canvas.app?.renderer;
+    const gl = renderer?.gl;
+    if (!gl)
+        return null;
+    const global = canvas.stage.toGlobal({ x: worldX, y: worldY });
+    const res = renderer.resolution ?? 1;
+    const px = Math.round(global.x * res);
+    const py = Math.round(renderer.height - global.y * res);
+    if (px < 0 || py < 0 || px >= renderer.width || py >= renderer.height)
+        return null;
+    const buf = new Uint8Array(4);
+    const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
+    return { r: buf[0], g: buf[1], b: buf[2] };
+}
 
 function _syncPinBreath()
 {
@@ -397,7 +412,9 @@ function _syncPinBreath()
     {
         _pinBreathTick = () =>
         {
-            const alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+            // Peaks at 0.77: measured, the interior gains a shade only across 0.78-0.85, so the sweep stays under it.
+            const alpha = 0.535 + 0.235 * Math.sin(performance.now() / 280);
+            _pinPix.prevAlpha = alpha;
             for (const destroy of _pinGroups.values())
             {
                 for (const graphic of destroy.graphics ?? [])
@@ -408,11 +425,45 @@ function _syncPinBreath()
             }
         };
         canvas.app.ticker.add(_pinBreathTick);
+        // Runs after Application's render (LOW), so the drawing buffer still holds this frame.
+        _pinPixTick = () =>
+        {
+            if (!_pinPix.sample || _pinPix.prevAlpha === null)
+                return;
+            const rgb = _readPixel(_pinPix.sample.x, _pinPix.sample.y);
+            if (!rgb)
+                return;
+            _pinPix.rows.push({
+                alpha: Math.round(_pinPix.prevAlpha * 10000) / 10000,
+                r: rgb.r,
+                g: rgb.g,
+                b: rgb.b,
+            });
+            if (_pinPix.rows.length > 900)
+                _pinPix.rows.shift();
+        };
+        canvas.app.ticker.add(_pinPixTick, null, PIXI.UPDATE_PRIORITY.UTILITY);
     }
     else if (!_pinGroups.size && _pinBreathTick)
     {
         canvas?.app?.ticker?.remove(_pinBreathTick);
         _pinBreathTick = null;
+        if (_pinPixTick)
+            canvas?.app?.ticker?.remove(_pinPixTick);
+        _pinPixTick = null;
+    }
+}
+
+// Re-insert pin graphics so the pulse, built later, cannot bury the coloured rings.
+function _raisePins()
+{
+    for (const destroy of _pinGroups.values())
+    {
+        for (const graphic of destroy.graphics ?? [])
+        {
+            if (!graphic.destroyed)
+                addGraphicsBelowTokens(graphic);
+        }
     }
 }
 
@@ -428,6 +479,7 @@ function _hidePins()
 function _rebuildPinVisuals()
 {
     _hidePins();
+    _pinPix.sample = null;
     if (!_open)
         return;
     const bySource = new Map();
@@ -439,6 +491,19 @@ function _rebuildPinVisuals()
         if (!bySource.has(pin.source))
             bySource.set(pin.source, []);
         bySource.get(pin.source).push({ token, range: pin.range });
+        if (!_pinPix.sample)
+            _pinPix.sample = { x: token.center.x + canvas.grid.size, y: token.center.y };
+    }
+
+    const allEntries = [...bySource.values()].flat();
+    if (allEntries.length && !rangePulse.has('advanced-measure'))
+    {
+        _pinGroups.set('__fill', createMergedRangeHighlight(allEntries, {
+            includeSelf: true,
+            wave: false,
+            perimeter: false,
+            fadeInMs: 0,
+        }));
     }
     for (const [source, entries] of bySource)
     {
@@ -446,10 +511,14 @@ function _rebuildPinVisuals()
             includeSelf: true,
             glowColor: RANGE_GLOW[source] ?? RANGE_GLOW.manual,
             wave: false,
+            staticFillAlpha: 0,
+            staticLineAlpha: 0,
             perimeterAlpha: 0.6,
+            perimeterHalo: false,
             fadeInMs: 0,
         }));
     }
+    _raisePins();
     _syncPinBreath();
 }
 
@@ -547,16 +616,24 @@ function rebuildPulse()
     }
     if (_suppressed || _saved.rangeSource === 'none' || !entries.length)
     {
+        const had = rangePulse.has('advanced-measure');
         rangePulse.clear('advanced-measure');
+        if (had)
+            _rebuildPinVisuals();
         return;
     }
     const glowColor = RANGE_GLOW[_saved.rangeSource] ?? RANGE_GLOW.manual;
     const signature = `${_saved.rangeSource}|` + entries.map(entry => entry.token ? `${entry.token.document.id}:${entry.range}` : `c:${entry.point.x},${entry.point.y}:${entry.range}`).sort().join('|');
+    const hadPulse = rangePulse.has('advanced-measure');
     rangePulse.set('advanced-measure', {
         priority: RANGE_PULSE_PRIORITY.MEASURE,
         signature,
         build: () => createMergedRangeHighlight(entries, { includeSelf: true, glowColor }),
     });
+    if (hadPulse)
+        _raisePins();
+    else
+        _rebuildPinVisuals();
 }
 
 // Tool-owned so it coexists with rangePulse; force=true recreates on turn/cap change.
@@ -679,21 +756,12 @@ function applyMark(mark, token, adding, sound)
 function onCtrlMarkMove(event)
 {
     _ctrlCursorWorld = pointerToWorld(event);
-    _dbgMoveCount++;
-    _dbgLastMoveAt = performance.now();
     // drop the hover reference once the cursor leaves the token, even without a hover-out event
-    if (_hoverToken)
+    if (_hoverToken && !pointerOverToolbar()
+        && (_hoverToken.destroyed || !_hoverToken.bounds.contains(_ctrlCursorWorld.x, _ctrlCursorWorld.y)))
     {
-        if (pointerOverToolbar())
-            _dbgLastHealSkip = 'overToolbar';
-        else if (!_hoverToken.destroyed && _hoverToken.bounds.contains(_ctrlCursorWorld.x, _ctrlCursorWorld.y))
-            _dbgLastHealSkip = 'insideBounds';
-        else
-        {
-            _dbgLastHealSkip = 'healed';
-            _hoverToken = null;
-            onSelectionChange();
-        }
+        _hoverToken = null;
+        onSelectionChange();
     }
     _ctrlIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     _areaIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
@@ -1424,9 +1492,9 @@ function injectStyles()
         #la-measure-toolbar .la-mt-name { display: inline-block; width: 96px; max-width: 96px; overflow: hidden; white-space: nowrap; }
         #la-measure-toolbar .la-mt-name-inner { display: inline-block; white-space: nowrap; will-change: transform; }
         #la-measure-toolbar .la-mt-help { position: relative; width: 21px; height: 21px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--primary-color, #ff6400); border-radius: 50%; font-weight: 700; font-size: 13px; cursor: help; color: var(--la-accent); }
-        #la-measure-toolbar .la-mt-help-tip { display: none; position: absolute; bottom: 150%; left: 0; z-index: 71; background: var(--la-plate, rgba(15,15,17,0.98)); border: 1px solid var(--primary-color, #ff6400); padding: 14px 18px; font-size: 14px; color: var(--la-ink, #f2f2f2); width: max-content; max-width: 440px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); }
-        #la-measure-toolbar .la-mt-help-tip .la-mt-help-row { line-height: 1.95; }
-        #la-measure-toolbar .la-mt-help-tip .la-mt-key { display: inline-block; margin: 0 3px; padding: 1px 7px; border-radius: 3px; background: var(--primary-color, #ff6400); color: var(--light-text, #fff); font-weight: 700; font-size: 12px; letter-spacing: 0.3px; box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+        #la-measure-toolbar .la-mt-help-tip { display: none; position: absolute; bottom: 150%; left: 0; z-index: 71; background: var(--la-plate, rgba(15,15,17,0.98)); border: 1px solid var(--primary-color, #ff6400); padding: 10px 13px; font-size: 11.5px; color: var(--la-ink, #f2f2f2); width: max-content; max-width: 360px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); }
+        #la-measure-toolbar .la-mt-help-tip .la-mt-help-row { line-height: 1.7; }
+        #la-measure-toolbar .la-mt-help-tip .la-mt-key { display: inline-block; margin: 0 2px; padding: 1px 5px; border-radius: 3px; background: var(--primary-color, #ff6400); color: var(--light-text, #fff); font-weight: 700; font-size: 10px; letter-spacing: 0.3px; box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
         #la-measure-toolbar .la-mt-help:hover .la-mt-help-tip { display: block; }
         #la-measure-toolbar .la-mt-icon-btn { padding: 6px 8px; display: inline-flex; align-items: center; justify-content: center; }
         #la-measure-toolbar .la-mt-icon-btn i, #la-measure-toolbar .la-mt-dd-trigger i { font-size: 15px; line-height: 1; }
@@ -1448,7 +1516,12 @@ function injectStyles()
         #la-measure-toolbar .la-mt-dd-item { display: flex; align-items: center; gap: 9px; padding: 6px 11px; background: transparent; border: none; border-radius: 0; color: var(--la-ink, #e8e8e8); font-family: var(--la-mono, ui-monospace, monospace); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-align: left; white-space: nowrap; }
         #la-measure-toolbar .la-mt-dd-item i { width: 16px; text-align: center; font-size: 14px; }
         #la-measure-toolbar .la-mt-dd-item:hover:not(:disabled) { background: color-mix(in srgb, var(--primary-color, #ff6400), transparent 80%); }
-        #la-measure-toolbar .la-mt-dd-item.active { color: var(--la-accent); }
+        #la-measure-toolbar .la-mt-dd-item.active { background: var(--primary-color, #ff6400); color: var(--light-text, #fff); }
+        #la-measure-toolbar .la-mt-dd-item.active:hover:not(:disabled) { background: color-mix(in srgb, var(--primary-color, #ff6400), #000 18%); }
+        #la-measure-toolbar .la-mt-dd-item.active i { color: var(--light-text, #fff); }
+        #la-measure-toolbar .la-mt-dd-item.active .la-mt-svg-icon { background-color: var(--light-text, #fff); }
+        #la-measure-toolbar .la-mt-dd-item.active .la-hud-fav-mark { color: var(--light-text, #fff) !important; }
+        #la-measure-toolbar .la-mt-dd-item.active .la-mt-weap-r { color: var(--light-text, #fff); }
         #la-measure-toolbar .la-mt-dd-item:disabled { opacity: 0.4; cursor: default; }
         #la-measure-toolbar .la-mt-weap-row { justify-content: space-between; gap: 16px; }
         #la-measure-toolbar .la-mt-weap-r { color: var(--la-accent); font-variant-numeric: tabular-nums; }
@@ -1552,6 +1625,8 @@ function makeIconDropdown(current, items, onSelect, onContext = null, isPinned =
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'lancer-action-btn la-mt-dd-trigger';
+    if (current && current !== 'none')
+        markActive(trigger, false);
     trigger.title = currentItem.label;
     const triggerLabel = document.createElement('span');
     triggerLabel.textContent = currentItem.label;

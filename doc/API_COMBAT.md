@@ -23,6 +23,12 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 | <kbd>target</kbd> | `number\|"token"\|Token\|TokenDocument` | `10` | Pass threshold or `"token"` for interactive choice |
 | <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup |
 
+`extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD, the way a weapon's tags pre-fill an attack. They are added to whatever the HUD already computed and stay editable by the roller. No bonus needed for a one-off +1 Difficulty.
+
+```js
+await api.executeStatRoll(actor, 'SYS', 'Blind', witchToken, { difficulty: 1 });
+```
+
 </details>
 
 ---
@@ -49,7 +55,15 @@ Save-or-effect over a target list: each target rolls the save (owner-routed by d
 | <kbd>cardTitle</kbd> / <kbd>cardDescription</kbd> | `string \| ((target: Token) => string)` | `null` | Owner card text. Description can be per target |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its owner |
 | <kbd>onFail</kbd> / <kbd>onPass</kbd> | `(target: Token, result: { passed: boolean, total: number }) => void \| Promise<void>` | `null` | Per-target extras |
+| <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number \| ((target: Token) => number)` | `0` | Pre-fill each roller's HASE HUD. Pass a function for a per-target value |
 | <kbd>halfDamageOnSave</kbd> | `{ value, type?, title? }` | `null` | Afterwards roll this damage on ALL targets, halved for the ones that saved |
+
+```js
+await api.executeSaveVsEffect(targets, {
+    stat: 'SYS', title: 'Blind', origin: witchToken, effects: ['blinded'],
+    difficulty: (target) => api.inDangerZone(target) ? 1 : 0,
+});
+```
 
 </details>
 
@@ -107,7 +121,7 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>stat1</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
 | <kbd>input2</kbd> | `Actor\|Token` | *required* | Second contender |
 | <kbd>stat2</kbd> | `string` | *required* | Second contender's stat |
-| <kbd>options</kbd> | `Object` | `{}` | `{ title?: string, sendToOwner?: boolean }` |
+| <kbd>options</kbd> | `Object` | `{}` | `{ title?: string, sendToOwner?: boolean }` plus `accuracy1` / `difficulty1` / `flatModifier1` and the `2` variants, pre-filling each side's HASE HUD |
 
 Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
 
@@ -128,7 +142,7 @@ const res = await api.executeForceCheck(skill, targets, options)
 |:------|:-----|:--------|:------------|
 | <kbd>skill</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` |
 | <kbd>targets</kbd> | `Token[]` | user targets | The tokens that roll |
-| <kbd>options</kbd> | `Object` | `{}` | `{ saveVs?: Token\|Actor, sendToOwner?: boolean = true, title?: string }` |
+| <kbd>options</kbd> | `Object` | `{}` | `{ saveVs?: Token\|Actor, sendToOwner?: boolean = true, title?: string }` plus `accuracy` / `difficulty` / `flatModifier`, each a number or `(rollerToken) => number` |
 
 Sends each target its HASE check (owner rolls, or the GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
 
@@ -193,7 +207,7 @@ Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actor</kbd> | `Actor` | *required* | The actor making the attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow constructor options. `tags` / `damage` carry weapon tags and a damage list onto the attack card, so its damage button rolls them pre-filled |
+| <kbd>options</kbd> | `Object` | `{}` | Flow constructor options. `targets: Token\|Token[]` sets who is attacked. `tags` / `damage` carry weapon tags and a damage list onto the attack card, so its damage button rolls them pre-filled |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected into `state.la_extraData` |
 
 </details>
@@ -212,7 +226,7 @@ await api.executeTechAttack(target, options, extraData)
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Actor\|Item` | *required* | The actor or item initiating the tech attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow options. `tags` / `damage` carry onto the attack card like `executeBasicAttack` |
+| <kbd>options</kbd> | `Object` | `{}` | Flow options. `targets: Token\|Token[]` sets who is attacked. `tags` / `damage` carry onto the attack card like `executeBasicAttack` |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
 </details>
@@ -260,6 +274,21 @@ await api.executeSimpleActivation(actor, options, extraData)
 ---
 
 <details>
+<summary><b><code>activateGeneralAction</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
+
+<br>
+
+```js
+await api.activateGeneralAction(actorOrToken, name)
+```
+
+Triggers a general action (Brace, Boost, ...) from its registry definition: activation type and card text come from the registry, and the action's automation fires. For an item's action use `executeItemActivation`.
+
+</details>
+
+---
+
+<details>
 <summary><b><code>executeSkirmish</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -294,8 +323,29 @@ Starts a weapon attack flow for a given weapon item.
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>weapon</kbd> | `Item` | *required* | The weapon item to attack with |
-| <kbd>options</kbd> | `Object` | `{}` | Flow options |
+| <kbd>options</kbd> | `Object` | `{}` | Flow options, plus `targets: Token\|Token[]` to set who is attacked |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
+
+Pass `targets` rather than calling `setTarget` yourself.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>afterFx</code></b> → <code>void</code></summary>
+
+<br>
+
+```js
+api.afterFx(callback)
+```
+
+Runs `callback` at flow end, right after lancer-weapon-fx starts its sequence (or immediately at flow end if there is no FX). Use in trigger code whose printed cards should land after the FX.
+
+```js
+api.afterFx(() => api.executeDamageRoll(reactorToken, targets, 4, 'Heat', 'Tear Down'));
+```
 
 </details>
 

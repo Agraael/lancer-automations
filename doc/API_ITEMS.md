@@ -112,6 +112,23 @@ Returns items currently marked as activated on a token (via `setItemAsActivated`
 
 ---
 
+<details>
+<summary><b><code>destroyItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code> · <b><code>disableItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code> · <b><code>restoreItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
+
+<br>
+
+```js
+await api.destroyItem(item)   // system.destroyed = true
+await api.disableItem(item)   // system.disabled = true
+await api.restoreItem(item)   // clears both
+```
+
+Destroyed/disabled items are skipped by the reaction engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
+
+</details>
+
+---
+
 ## Resource Management
 
 <details>

@@ -4,6 +4,7 @@ import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel,
 } from '../interactive/canvas.js';
+import { createTokenTether } from '../interactive/canvas-helpers.js';
 import { targetInfoAllowed, haseSuccessChance, contestWinChance, pollForForm, chanceLabelsOn } from './targeting-ui.js';
 
 function rollerLiveChance(state)
@@ -157,6 +158,8 @@ export function registerStatRollTargetButton()
             const preId = active ? state.la_extraData?.targetTokenId : null;
             let rollerMark = null;
             let rollerChance = null;
+            let saveTether = null;
+            let tetherHookId = null;
             if (active)
             {
                 try
@@ -165,7 +168,15 @@ export function registerStatRollTargetButton()
                     state.data?.acc_diff?.replaceTargets?.([...(game.user.targets ?? [])].map((target) => target.document.uuid));
                     injectWhenReady(state);
                     beginTargetSession();
-                    rollerMark = createTokenMark(state.actor?.getActiveTokens?.()[0] ?? null);
+                    const roller = state.actor?.getActiveTokens?.()[0] ?? null;
+                    rollerMark = createTokenMark(roller);
+                    // Tether the roller to whatever it is currently saving against.
+                    saveTether = createTokenTether();
+                    const refreshTether = () => saveTether.setPairs(roller
+                        ? [...(game.user.targets ?? [])].map(target => [roller, target])
+                        : []);
+                    refreshTether();
+                    tetherHookId = Hooks.on('targetToken', refreshTether);
                 }
                 catch
                 { /* */ }
@@ -218,6 +229,9 @@ export function registerStatRollTargetButton()
                         try
                         {
                             rollerMark?.destroy();
+                            saveTether?.destroy();
+                            if (tetherHookId)
+                                Hooks.off('targetToken', tetherHookId);
                             if (isSingleTargetPickerActive())
                                 cancelSingleTargetPicker();
                             clearSingleTargetShape();

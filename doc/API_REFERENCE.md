@@ -797,6 +797,7 @@ Charge-consumption config attached to an effect. Set it via `extraOptions.consum
 |:------|:-----|:--------|:------------|
 | <kbd>trigger</kbd> | `TriggerType \| TriggerType[]` | *required* | Trigger(s) that consume a charge |
 | <kbd>originId</kbd> | `string` | bearer token id | Only consume if this token is involved |
+| <kbd>role</kbd> | `"source" \| "target"` | either | How the origin must be involved: caused the trigger, or was one of its targets |
 | <kbd>stack</kbd> | `number` | `1` | Initial charge count. Each matching trigger removes 1 |
 | <kbd>grouped</kbd> | `boolean` | `false` | Share one counter across all effects in this call (auto-fills `groupId`) |
 | <kbd>groupId</kbd> | `string` | auto | Shared counter id across calls |
@@ -902,15 +903,16 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | <kbd>actionType</kbd> | `"Automation" \| "Reaction" \| "Free Action" \| "Quick Action" \| "Full Action" \| "Protocol" \| "Other"` | `"Automation"` | Lancer action type. `"Reaction"` is what spends a reaction |
 | <kbd>frequency</kbd> | `string` | `""` | Display-only text |
 | <kbd>triggerSelf</kbd> | `boolean` | `false` | React to own actions |
-| <kbd>triggerOther</kbd> | `boolean` | `true` | React to others' actions |
+| <kbd>triggerOther</kbd> | `boolean` | `true` | React to others' actions (includes targets) |
+| <kbd>triggerTarget</kbd> | `boolean` | `false` | React when the reactor is one of the event's targets, even with `triggerOther` off. Target-capable triggers only |
 | <kbd>checkReaction</kbd> | `boolean` | `true` | Skip if the reactor has no Reaction left this round |
 | <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat |
 | <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
 | <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
 | <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print` |
 | <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Must be synchronous on cancellable triggers |
-| <kbd>activationType</kbd> | `"code" \| "macro" \| "item-use" \| "flow" \| "none"` | `"flow"` | What runs |
-| <kbd>activationMode</kbd> | `"instead" \| "after"` | `"after"` | `instead` replaces the item's own flow |
+| <kbd>activationType</kbd> | `"code" \| "macro" \| "flow" \| "none"` | `"flow"` | What runs |
+| <kbd>activationMode</kbd> | `"instead" \| "after"` | item: `"instead"`, general: `"after"` | `after` also fires the reaction's own flow/card; macro/code only |
 | <kbd>activationCode</kbd> | `ActivationCallback \| string` | - | The body, for `activationType: "code"` |
 | <kbd>activationMacro</kbd> | `string` | `""` | Macro name, for `activationType: "macro"` |
 | <kbd>autoActivate</kbd> | `boolean` | `false` | Skip the popup and run immediately |

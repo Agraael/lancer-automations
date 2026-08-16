@@ -125,6 +125,24 @@ onInit: async function (token, item, api) {
 ---
 
 <details>
+<summary><b><code>disableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>enableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>disableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>enableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+
+<br>
+
+```js
+await api.disableActorAction(target, actionName, sourceIdOrOpts?, opts?)
+await api.enableActorAction(target, actionName, sourceId?)
+await api.disableActorActionTypes(target, activationTypes, sourceIdOrOpts?, opts?)
+await api.enableActorActionTypes(target, activationTypes?, sourceId?)
+```
+
+Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show yellow (like status-disabled actions) instead of grey - use disable for temporary states, lock for lasting ones. Disabled entries are tracked separately: `unlock*` never removes them, `enable*` only removes them.
+
+</details>
+
+---
+
+<details>
 <summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getActionOverlay</code></b> → <code>object | null</code> · <b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code> · <b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>applyActionOverlays</code></b> → <code>object[]</code> · <b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
 
 <br>

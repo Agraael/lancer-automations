@@ -343,7 +343,7 @@
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
                                         <span class="col-name">
-                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
+                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
                                             {{#if this.comments}}<span
                                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
@@ -369,11 +369,11 @@
                                 </span>
                                 <span class="col-name">
                                     {{#if this.isGeneral}}
-                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
-                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span

@@ -233,6 +233,12 @@
                         <span>React to Others</span>
                     </label>
 
+                    <!-- React as Target -->
+                    <label class="checkbox" title="Fires when this token is one of the event's targets, even with React to Others off. Only works on triggers that carry targets (attacks, tech, damage, checks, forced movement).">
+                        <input type="checkbox" name="triggerTarget" {{#if triggerTarget}}checked{{/if}}>
+                        <span>React as Target</span>
+                    </label>
+
                     <!-- Out of Combat -->
                     <label class="checkbox" title="Allow tokens not in combat to react">
                         <input type="checkbox" name="outOfCombat" {{#if outOfCombat}}checked{{/if}}>
@@ -332,16 +338,21 @@
                 <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>JavaScript</option>
             </select>
             <select name="activationMode" id="activationMode" style="flex: 1;">
-                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of Flow</option>
-                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>After Flow</option>
+                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of flow (code only)</option>
+                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>Alongside flow (also posts card)</option>
             </select>
         </div>
-        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Macro/JS can run
-            after or instead of flow.</p>
+        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Mode: run Macro/JS
+            alone, or alongside this reaction's own flow/card.</p>
+        <p id="activation-after-warning" class="notes" style="display:none; color:#b60; margin-top:4px;">
+            <i class="fas fa-info-circle"></i> <b>Alongside flow</b> also fires this reaction's own flow / chat card.
+            It does not delay your code until after the triggering action; both run together. The action you are
+            reacting to always runs either way.
+        </p>
         <p id="activation-recursion-warning" class="notes" style="display:none; color:#c00; margin-top:4px;">
             <i class="fas fa-exclamation-triangle"></i> With trigger <code>onActivation</code> /
             <code>onInitActivation</code> and this setting, re-activating the same item would loop. Lancer Automations
-            will skip the item re-activation (console warning). Prefer <b>Instead of Flow</b> for clearer behavior.
+            will skip the item re-activation (console warning). Prefer <b>Instead of flow</b> for clearer behavior.
         </p>
     </div>
 

@@ -6,7 +6,7 @@ import {
     rangePulse, RANGE_PULSE_PRIORITY,
 } from "../canvas.js";
 import { buildTargetingUI, clearAllAttackShapes, targetInfoAllowed, haseSuccessChance } from "../../activations/targeting-ui.js";
-import { TG } from "../canvas-helpers.js";
+import { TG, createTokenTether } from "../canvas-helpers.js";
 
 const PICK_PULSE_OWNER = 'la-forcecheck-pick';
 const SAVE_PULSE_OWNER = 'la-forcecheck-save';
@@ -30,7 +30,8 @@ function deriveSaveDc(saveVsToken)
  * actor (statroll SAVE picker), then route each target's roll to its owner.
  * @param {object} [options]
  */
-export function openForceCheckCard({ tokenA = null, skill = null, range = null, saveVs = null, targets = null, sendToOwner = true } = {})
+export function openForceCheckCard({ tokenA = null, skill = null, range = null, saveVs = null, targets = null, sendToOwner = true,
+    accuracy = 0, difficulty = 0, flatModifier = 0 } = {})
 {
     return _queueCard(() => new Promise((resolve) =>
     {
@@ -63,16 +64,30 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             pickState.__laAttackShape = { pattern: 'target', size: 1, range: Math.max(0, Number(range) || 0) };
 
         let saveMark = null;
+        let saveTether = null;
         const clearSaveMark = () =>
         {
             saveMark?.destroy();
             saveMark = null;
+            saveTether?.setPairs([]);
         };
         const drawSaveMark = () =>
         {
             clearSaveMark();
             if (state.saveVs)
                 saveMark = createTokenMark(state.saveVs, TG.reference);
+            refreshSaveTether();
+        };
+        // One tether per roller back to the token they save against.
+        const refreshSaveTether = () =>
+        {
+            if (!state.saveVs)
+            {
+                saveTether?.setPairs([]);
+                return;
+            }
+            saveTether ??= createTokenTether();
+            saveTether.setPairs(rollerTargets().map(roller => [roller, state.saveVs]));
         };
 
         let cardEl;
@@ -92,6 +107,8 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             rangePulse.clear(SAVE_PULSE_OWNER);
             clearAllAttackShapes();
             clearSaveMark();
+            saveTether?.destroy();
+            saveTether = null;
             if (targetHookId)
             {
                 Hooks.off('targetToken', targetHookId);
@@ -143,6 +160,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             const listEl = cardEl.find('[data-role="target-list"]');
             listEl.empty();
             const rollers = rollerTargets();
+            refreshSaveTether();
             if (!rollers.length)
             {
                 listEl.html('<div class="la-empty-state">No targets</div>');
@@ -252,7 +270,8 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             const runSaveVs = state.saveVs;
             const runSendToOwner = state.sendToOwner;
             cleanup();
-            const result = await api?.executeForceCheck?.(runSkill, rollers, { saveVs: runSaveVs, sendToOwner: runSendToOwner });
+            const result = await api?.executeForceCheck?.(runSkill, rollers,
+                { saveVs: runSaveVs, sendToOwner: runSendToOwner, accuracy, difficulty, flatModifier });
             resolve(result ?? null);
         });
 

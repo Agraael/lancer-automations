@@ -1084,7 +1084,7 @@ function _resolveActor(target)
 }
 
 // Item target: lock lives on the item (off while destroyed/disabled, gone when removed). Actor target: source-tracked manual lock.
-export async function lockActorAction(target, actionName, sourceIdOrOpts = null, opts = null)
+export async function lockActorAction(target, actionName, sourceIdOrOpts = null, opts = null, kind = null)
 {
     if (target?.documentName === 'Item')
     {
@@ -1097,7 +1097,7 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
         const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionLocks') ?? []);
         if (locks.some(lock => lock?.actionName === actionName))
             return target;
-        await target.setFlag('lancer-automations', 'actionLocks', [...locks, reason ? { actionName, reason } : { actionName }]);
+        await target.setFlag('lancer-automations', 'actionLocks', [...locks, { actionName, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) }]);
         return target;
     }
     const actor = _resolveActor(target);
@@ -1111,7 +1111,7 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
     const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
     const entries = Array.isArray(current[actionName]) ? current[actionName].slice() : [];
     const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
-    const entry = reason ? { id: sourceId, reason } : sourceId;
+    const entry = (reason || kind) ? { id: sourceId, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) } : sourceId;
     if (idx === -1)
         entries.push(entry);
     else if (reason)
@@ -1128,7 +1128,7 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
  * @param {{reason?: string, except?: string[]}} [opts] - Actor target only.
  * @returns {Promise<Item|Actor|null>}
  */
-export async function lockActorActionTypes(target, activationTypes, sourceIdOrOpts = null, opts = null)
+export async function lockActorActionTypes(target, activationTypes, sourceIdOrOpts = null, opts = null, kind = null)
 {
     const types = (Array.isArray(activationTypes) ? activationTypes : [activationTypes]).filter(Boolean).map(type => String(type));
     if (!types.length)
@@ -1147,6 +1147,8 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
         const entry = /** @type {any} */ ({ types, except });
         if (reason)
             entry.reason = reason;
+        if (kind)
+            entry.kind = kind;
         await target.setFlag('lancer-automations', 'actionTypeLocks', [...kept, entry]);
         return target;
     }
@@ -1164,7 +1166,7 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
     {
         const entries = Array.isArray(next[type]) ? next[type].slice() : [];
         const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
-        const entry = { id: sourceId, except, ...(reason ? { reason } : {}) };
+        const entry = { id: sourceId, except, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) };
         if (idx === -1)
             entries.push(entry);
         else
@@ -1176,7 +1178,7 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
 }
 
 /** Inverse of lockActorActionTypes. Item target drops the item's lock; actor target unlocks by sourceId. */
-export async function unlockActorActionTypes(target, activationTypes = null, sourceId = null)
+export async function unlockActorActionTypes(target, activationTypes = null, sourceId = null, kind = null)
 {
     const types = activationTypes
         ? (Array.isArray(activationTypes) ? activationTypes : [activationTypes]).filter(Boolean).map(type => String(type))
@@ -1186,11 +1188,17 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
     {
         if (!types)
         {
-            await target.unsetFlag('lancer-automations', 'actionTypeLocks');
+            if (kind === null)
+            {
+                await target.unsetFlag('lancer-automations', 'actionTypeLocks');
+                return target;
+            }
+            const all = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
+            await target.setFlag('lancer-automations', 'actionTypeLocks', all.filter(lock => (lock?.kind ?? null) !== kind));
             return target;
         }
         const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
-        await target.setFlag('lancer-automations', 'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types)));
+        await target.setFlag('lancer-automations', 'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types) || (lock?.kind ?? null) !== kind));
         return target;
     }
 
@@ -1204,7 +1212,7 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
     const next = { ...current };
     for (const type of types)
     {
-        const entries = Array.isArray(next[type]) ? next[type].filter(entry => lockEntryId(entry) !== sourceId) : [];
+        const entries = Array.isArray(next[type]) ? next[type].filter(entry => lockEntryId(entry) !== sourceId || (entry?.kind ?? null) !== kind) : [];
         if (entries.length)
             next[type] = entries;
         else
@@ -1215,12 +1223,12 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
 }
 
 /** Inverse of lockActorAction. Item target drops the item's lock; actor target unlocks by sourceId. */
-export async function unlockActorAction(target, actionName, sourceId = null)
+export async function unlockActorAction(target, actionName, sourceId = null, kind = null)
 {
     if (target?.documentName === 'Item')
     {
         const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionLocks') ?? []);
-        const kept = locks.filter(lock => lock?.actionName !== actionName);
+        const kept = locks.filter(lock => lock?.actionName !== actionName || (lock?.kind ?? null) !== kind);
         if (kept.length !== locks.length)
             await target.setFlag('lancer-automations', 'actionLocks', kept);
         return target;
@@ -1232,7 +1240,7 @@ export async function unlockActorAction(target, actionName, sourceId = null)
         return null;
     }
     const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
-    const entries = Array.isArray(current[actionName]) ? current[actionName].filter(entry => lockEntryId(entry) !== sourceId) : [];
+    const entries = Array.isArray(current[actionName]) ? current[actionName].filter(entry => lockEntryId(entry) !== sourceId || (entry?.kind ?? null) !== kind) : [];
     const next = { ...current };
     if (entries.length)
         next[actionName] = entries;
@@ -1240,6 +1248,57 @@ export async function unlockActorAction(target, actionName, sourceId = null)
         delete next[actionName];
     await addActorFlags(actor, { lockedActions: next });
     return actor;
+}
+
+/** Same as lockActorAction, but shown yellow (disabled) in the HUD instead of grey. */
+export async function disableActorAction(target, actionName, sourceIdOrOpts = null, opts = null)
+{
+    return lockActorAction(target, actionName, sourceIdOrOpts, opts, 'disabled');
+}
+
+/** Inverse of disableActorAction. Only removes disabled-kind entries. */
+export async function enableActorAction(target, actionName, sourceId = null)
+{
+    return unlockActorAction(target, actionName, sourceId, 'disabled');
+}
+
+/** Same as lockActorActionTypes, but shown yellow (disabled) in the HUD instead of grey. */
+export async function disableActorActionTypes(target, activationTypes, sourceIdOrOpts = null, opts = null)
+{
+    return lockActorActionTypes(target, activationTypes, sourceIdOrOpts, opts, 'disabled');
+}
+
+/** Inverse of disableActorActionTypes. Only removes disabled-kind entries. */
+export async function enableActorActionTypes(target, activationTypes = null, sourceId = null)
+{
+    return unlockActorActionTypes(target, activationTypes, sourceId, 'disabled');
+}
+
+/** Marks the item destroyed (Lancer native field). */
+export async function destroyItem(item)
+{
+    if (item?.documentName !== 'Item')
+        return null;
+    await item.update({ 'system.destroyed': true });
+    return item;
+}
+
+/** Marks the item disabled (skipped by locks, greyed by the system). */
+export async function disableItem(item)
+{
+    if (item?.documentName !== 'Item')
+        return null;
+    await item.update({ 'system.disabled': true });
+    return item;
+}
+
+/** Clears destroyed and disabled on the item. */
+export async function restoreItem(item)
+{
+    if (item?.documentName !== 'Item')
+        return null;
+    await item.update({ 'system.destroyed': false, 'system.disabled': false });
+    return item;
 }
 
 export function isActionLocked(target, actionName)

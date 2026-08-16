@@ -10,7 +10,7 @@ const CURATED_GROUPS = [
     { label: 'Bonuses', names: ['addGlobalBonus', 'removeGlobalBonus', 'addConstantBonus', 'removeConstantBonus', 'getGlobalBonuses', 'getConstantBonuses', 'ensureLinkedBonus', 'linkBonusToItem', 'unlinkBonusFromItem', 'getLinkedBonuses', 'injectBonusToFlowState'] },
     { label: 'Cards & choices', names: ['startChoiceCard', 'confirmCard', 'askCard', 'pickCard', 'pickItem', 'startVoteCard', 'startWaitCard', 'openChoiceMenu'] },
     { label: 'Tokens & canvas', names: ['chooseToken', 'placeToken', 'moveToken', 'knockBackToken', 'placeZone', 'placeDeployable', 'spawnHardCover', 'createAura', 'ensureAura', 'findAura', 'getTokensInAura', 'deleteAuras'] },
-    { label: 'HUD actions', names: ['addExtraActions', 'removeExtraActions', 'lockActorAction', 'unlockActorAction', 'setActionOverlay', 'getActionOverlay', 'addExtraDeploymentLids', 'setHidePrimaryAction'] },
+    { label: 'HUD actions', names: ['addExtraActions', 'removeExtraActions', 'lockActorAction', 'unlockActorAction', 'lockActorActionTypes', 'unlockActorActionTypes', 'disableActorAction', 'enableActorAction', 'disableActorActionTypes', 'enableActorActionTypes', 'destroyItem', 'disableItem', 'restoreItem', 'setActionOverlay', 'getActionOverlay', 'addExtraDeploymentLids', 'setHidePrimaryAction'] },
     { label: 'Flags', names: ['getActorFlags', 'addActorFlags', 'removeActorFlags', 'getItemFlags', 'addItemFlags', 'getTokenFlags', 'addTokenFlags'] },
     { label: 'Queries', names: ['getTokenDistance', 'getMinGridDistance', 'findItemByLid', 'getWeapons', 'getMaxWeaponRanges_WithBonus', 'isHostile', 'isFriendly', 'canProvokeReaction', 'hasLineOfSight', 'consumeItemResource', 'getTier', 'tierValue'] },
 ];

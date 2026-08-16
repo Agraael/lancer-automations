@@ -11,8 +11,8 @@ export function isAdditionalStatusUnavailable(nameOrId)
 
 Hooks.on('lancer.statusesReady', () =>
 {
-    // infection is always needed by StatusFX, even when additionalStatuses is off
-    if (!CONFIG.statusEffects.find(s => s.id === 'infection'))
+    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
+        && !CONFIG.statusEffects.find(status => status.id === 'infection'))
     {
         CONFIG.statusEffects.push({
             id: "infection",
@@ -22,34 +22,37 @@ Hooks.on('lancer.statusesReady', () =>
         });
     }
 
-    if (!CONFIG.statusEffects.find(s => s.id === 'guardian'))
+    if (game.settings.get('lancer-automations', 'additionalStatuses'))
     {
-        CONFIG.statusEffects.push({
-            id: "guardian",
-            name: "Guardian",
-            img: "modules/lancer-automations/icons/guarded-tower.svg",
-            description: "Allied characters adjacent to this character can use them as hard cover."
-        });
-    }
+        if (!CONFIG.statusEffects.find(status => status.id === 'guardian'))
+        {
+            CONFIG.statusEffects.push({
+                id: "guardian",
+                name: "Guardian",
+                img: "modules/lancer-automations/icons/guarded-tower.svg",
+                description: "Allied characters adjacent to this character can use them as hard cover."
+            });
+        }
 
-    if (!CONFIG.statusEffects.find(s => s.id === 'bulwark'))
-    {
-        CONFIG.statusEffects.push({
-            id: "bulwark",
-            name: "Bulwark",
-            img: "modules/lancer-automations/icons/brick-wall.svg",
-            description: "This character is treated as hard cover and blocks line of sight."
-        });
-    }
+        if (!CONFIG.statusEffects.find(status => status.id === 'bulwark'))
+        {
+            CONFIG.statusEffects.push({
+                id: "bulwark",
+                name: "Bulwark",
+                img: "modules/lancer-automations/icons/brick-wall.svg",
+                description: "This character is treated as hard cover and blocks line of sight."
+            });
+        }
 
-    if (!CONFIG.statusEffects.find(status => status.id === 'phasing'))
-    {
-        CONFIG.statusEffects.push({
-            id: "phasing",
-            name: "Phasing",
-            img: "modules/lancer-automations/icons/back-forth.svg",
-            description: "This character can move through other characters, but still cannot end its movement on them."
-        });
+        if (!CONFIG.statusEffects.find(status => status.id === 'phasing'))
+        {
+            CONFIG.statusEffects.push({
+                id: "phasing",
+                name: "Phasing",
+                img: "modules/lancer-automations/icons/back-forth.svg",
+                description: "This character can move through other characters, but still cannot end its movement on them."
+            });
+        }
     }
 
     // fallback for users without csm-lancer-qol; that module normally provides these
@@ -221,7 +224,10 @@ Hooks.on('lancer.statusesReady', () =>
         description: "An OVERHEATED mech cannot take any actions or activate abilities that would inflict Heat upon themselves, including OVERCHARGE and systems with the HEAT X (SELF) tag. Weapons with OVERKILL lose the tag while OVERHEATED. Cleared by STABILIZE."
     }];
 
-    additionalStatusKeys = new Set(additional.flatMap(status => [status.id, status.name]));
+    additionalStatusKeys = new Set([
+        ...additional.flatMap(status => [status.id, status.name]),
+        'bulwark', 'Bulwark', 'phasing', 'Phasing', 'guardian', 'Guardian'
+    ]);
 
     if (!game.settings.get('lancer-automations', 'additionalStatuses'))
         return;

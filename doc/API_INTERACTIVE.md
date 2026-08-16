@@ -55,6 +55,7 @@ const result = await api.openHaseContestCard(options)
 | <kbd>skillB</kbd> | `string` | `null` | Contender B stat |
 | <kbd>title</kbd> | `string` | `"HASE Contest"` | Card and chat title |
 | <kbd>sendToOwner</kbd> | `boolean` | `false` | Route each roll to its token owner |
+| <kbd>accuracy1</kbd> / <kbd>difficulty1</kbd> / <kbd>flatModifier1</kbd> | `number` | `0` | Pre-fill contender A's HASE HUD. `2` variants do the same for B |
 
 Card to set up and run a HASE contest between two tokens. Returns the [`executeContestedCheck`](API_COMBAT.md) result, or `null` if cancelled. Pre-set fields stay editable, and any missing token/skill is prompted for.
 
@@ -79,6 +80,7 @@ const result = await api.openForceCheckCard(options)
 | <kbd>saveVs</kbd> | `Token\|Actor` | `null` | Save target. Empty = plain check |
 | <kbd>targets</kbd> | `Token[]` | `null` | Pre-picked rollers |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its token owner |
+| <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number \| ((rollerToken: Token) => number)` | `0` | Pre-fill each roller's HASE HUD |
 
 Card to force HASE checks: targets pick like an attack roll, the save target like a stat-roll save. Returns the [`executeForceCheck`](API_COMBAT.md) result, or `null` if cancelled.
 

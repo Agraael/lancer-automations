@@ -108,7 +108,7 @@ What the engine does for one trigger:
 
 5. **General reactions second.** Walk the flat list of general activations that listen to this trigger, and run the filter chain.
 
-6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
+6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther` / `triggerTarget`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
 
 7. **`evaluate()`** runs synchronously (see [section 5](#5-the-four-callbacks-evaluate-activationcode-oninit-onmessage)). Exceptions are caught and logged, and the activation is skipped on error.
 
@@ -224,7 +224,7 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 | # | Filter | Behavior |
 |---|---|---|
 | 1 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
-| 2 | `triggerSelf` / `triggerOther` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: require `triggerOther: true`. (Default both `false`, you must opt in.) |
+| 2 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. |
 | 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning across item, general, deployable, and Actor-UUID reactions. The engine matches the triggering item LID, deployable LID, or triggering actor UUID against the registered key. |
 | 4 | `checkReaction` | If set (default `true`), skip the reaction when the reactor has no reaction left this round. Spending is separate: the world setting `consumeReaction`. |
 | 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed, otherwise `CONST.TOKEN_DISPOSITIONS`. |
@@ -233,6 +233,8 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 | 8 | `evaluate()` | Your custom predicate. Last gate. |
 
 Fail any: that activation is silently skipped for that reactor. No popup, no log entry.
+
+**The three identities.** An actor does a thing, everyone may react. `triggerSelf` = the one doing it. `triggerTarget` = the one it is done TO. `triggerOther` = anyone else - and for compatibility it still includes targets, so `triggerTarget` matters when `triggerOther` is off ("target only": Self off, Other off, Target on). It only works on triggers whose payload carries targets (attacks, tech, damage, `onRoll`, `onCheck`, `onInvoluntaryMove`); the editor greys the rest. Target-reactors get `isTarget: true` and `targetEntry` (their own roll/crit on hit/miss triggers), and they still fire when the attacker is hidden - being attacked is knowable. A target-side reaction that cancels (`cancelAttack`, `cancelDamage`) must be `autoActivate`: manual popups routed to another client receive serialized data without the cancel functions.
 
 <br>
 
@@ -295,20 +297,20 @@ Two independent dimensions on each reaction config:
 | Value | Effect |
 |---|---|
 | `"code"` | Run your `activationCode` function. The most common choice. |
-| `"flow"` | Launch the item's normal Lancer activation flow (System / Activation / WeaponAttack as appropriate). |
+| `"flow"` | Launch the reaction's own flow: the `reactionPath` action, else the item's first Reaction action, else the system flow, else a generic chat card (weapons get this; it never rolls an attack). General reactions post a trigger/effect card. |
 | `"macro"` | Execute a Foundry macro by name (`activationMacro` field). |
 | `"none"` | Do nothing. Typically only used for `onInit`-only reactions. |
 
-### `activationMode`: *how* it composes with the original flow
+### `activationMode`: does the reaction's own flow *also* fire?
+
+Macro/code only; ignored for `"flow"` and `"none"`.
 
 | Value | Effect |
 |---|---|
-| `"instead"` | Replace the original flow entirely. Your code is the only thing that runs. |
-| `"after"` | Your code runs alongside the flow. Any value that is not `"instead"` lands here. |
+| `"instead"` | Your code runs alone. Default for item reactions. |
+| `"after"` | The reaction's own flow/card fires alongside your code. Default for general reactions. |
 
-> The engine schedules `"after"` code with `Promise.all`, so it is not strictly ordered against the flow's own async work. If you need strict ordering, use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
-
-For `activationType: "flow"`, `"instead"` means "skip the chat card": only the flow runs, not your code.
+> `activationMode` never touches the flow you are *reacting to*; that runs regardless. And `"after"` is not ordered: both run together via `Promise.all`. For strict ordering use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
 
 <br>
 

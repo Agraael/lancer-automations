@@ -54,6 +54,28 @@ export function wrapRollDamageForNoBonusDmg(flowSteps)
     }
 }
 
+/**
+ * Seed the HASE HUD from `la_extraData` before it opens, so a caller can set acc/diff/flat
+ * the way a weapon's tags do on an attack. The player still sees and can change them.
+ * @param {any} state
+ */
+function applyStatRollPresets(state)
+{
+    const extra = state.la_extraData;
+    if (!extra)
+        return;
+    const base = state.data.acc_diff?.base;
+    if (base)
+    {
+        if (Number(extra.accuracy))
+            base.accuracy = (base.accuracy || 0) + Number(extra.accuracy);
+        if (Number(extra.difficulty))
+            base.difficulty = (base.difficulty || 0) + Number(extra.difficulty);
+    }
+    if (Number(extra.flatModifier))
+        state.data.bonus = (state.data.bonus || 0) + Number(extra.flatModifier);
+}
+
 export function wrapStatRollFlatModifier(flowSteps)
 {
     const orig = flowSteps.get('showStatRollHUD');
@@ -63,6 +85,7 @@ export function wrapStatRollFlatModifier(flowSteps)
     {
         if (!state.data)
             throw new TypeError('Stat roll flow state missing!');
+        applyStatRollPresets(state);
         const bonus = state.data.bonus || 0;
         let flatMod = 0;
 

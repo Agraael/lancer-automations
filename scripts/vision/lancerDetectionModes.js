@@ -2,6 +2,7 @@
 
 import { getTokenDistance } from "../combat/overwatch.js";
 import { getTokenVisionLOS } from "./visionFromEdge.js";
+import { blindedVisionEnabled } from "./blindedVision.js";
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
@@ -430,12 +431,26 @@ function _tokenSamplePoints(token)
     return points;
 }
 
+/**
+ * True once the placeable's PIXI object is gone. `transform` is nulled on destroy, and every
+ * position getter dereferences it.
+ * @param {any} token
+ * @returns {boolean}
+ */
+function _isDestroyed(token)
+{
+    return !token || token.destroyed === true || !token.transform;
+}
+
 export function lancerHasLineOfSight(tokenA, tokenB)
 {
     const docA = tokenA?.document;
     const docB = tokenB?.document;
     // fail open on missing data so occlusion never hides a token by accident
     if (!docA || !docB || docA.id === docB.id)
+        return true;
+    // A destroyed placeable still reachable from a ticker: reading .x throws inside PIXI.
+    if (_isDestroyed(tokenA) || _isDestroyed(tokenB))
         return true;
     // key on position + elevation so a move automatically misses the stale entry
     const keyA = _losPosKey(docA);
@@ -511,7 +526,22 @@ function _resolveToken(ref)
 }
 
 /**
- * Beta. Does A have a clear Lancer line of sight to B? Wall-based, height-aware, reciprocal.
+ * Blinded draws line of sight to adjacent spaces only. Unlike the wall check this is directional:
+ * the blinded token loses sight, the one opposite it does not.
+ * @param {Token} viewerToken
+ * @param {Token} targetToken
+ * @returns {boolean}
+ */
+function _blindedBlocksSight(viewerToken, targetToken)
+{
+    if (!blindedVisionEnabled() || !viewerToken?.actor?.statuses?.has?.('blinded'))
+        return false;
+    return getTokenDistance(viewerToken, targetToken) > 1;
+}
+
+/**
+ * Beta. Does A have a clear Lancer line of sight to B? Wall-based, height-aware, reciprocal,
+ * except that A being Blinded only blinds A.
  * @param {Token|TokenDocument|string} refA
  * @param {Token|TokenDocument|string} refB
  * @returns {boolean}
@@ -521,6 +551,8 @@ export function hasLineOfSight(refA, refB)
     const tokenA = _resolveToken(refA);
     const tokenB = _resolveToken(refB);
     if (!tokenA || !tokenB)
+        return false;
+    if (_blindedBlocksSight(tokenA, tokenB))
         return false;
     return lancerHasLineOfSight(tokenA, tokenB);
 }
@@ -887,6 +919,8 @@ class DetectionModeLancerLineOfSight extends DetectionMode
         const viewerToken = visionSource?.object;
         if (!viewerToken?.document)
             return false;
+        if (_blindedBlocksSight(viewerToken, target))
+            return false;
         return lancerHasLineOfSight(target, viewerToken);
     }
 
@@ -917,6 +951,8 @@ class DetectionModeLancerLosShadow extends DetectionMode
         if (!(target instanceof Token))
             return false;
         if (target.document?.getFlag?.(MODULE_ID, 'awarenessMode') === 'ignore')
+            return false;
+        if (_blindedBlocksSight(visionSource?.object, target))
             return false;
         if (!_fovContains(visionSource, target))
             return false;

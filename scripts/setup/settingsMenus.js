@@ -537,6 +537,9 @@ const VISION_FIELDS = [
     { type: 'section', label: 'Token Blocks Line of Sight', hint: 'Bulwarked tokens block line of sight around their footprint.' },
     { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
 
+    { type: 'section', label: 'Blinded' },
+    { key: 'blindedSetsVision', type: 'boolean' },
+
     { type: 'section', label: 'Token Height (Wall Height)', hint: 'Vertical tokenHeight for 3D line-of-sight over walls of the token\'s own size.' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
     { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.' },
@@ -565,7 +568,7 @@ const VISION_FIELDS = [
 
 const TOOLS_FIELDS = [
     { type: 'section', label: 'Optional content packs', hint: 'Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager.' },
-    { key: 'enableLaSossisItems', type: 'boolean' },
+    { key: 'enableLaSossisItems', type: 'boolean', requires: 'additionalStatuses' },
     { key: 'enablePersonalStuff', type: 'boolean' },
     { type: 'button',
         key: 'getDeployablesLcp',
@@ -697,7 +700,7 @@ const BATTLE_LOG_FIELDS = [
         key: 'tah.telemetryFriendlyMechAsSquad',
         type: 'boolean',
         label: 'Friendly mechs count as squad',
-        hint: 'Count FRIENDLY-disposition mechs not owned by players as squad instead of friendlies.',
+        hint: 'Squad membership normally means owned by a player. This also counts FRIENDLY mechs that no player owns, so GM-run pilots and solo testing still show up in the log.',
         requires: 'battleLogEnabled' },
     {
         key: 'tah.disableAwards',

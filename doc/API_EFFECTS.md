@@ -200,6 +200,44 @@ if (api.hasStatus(target, 'prone', 'cover_hard', 'cover_soft'))
 ---
 
 <details>
+<summary><b><code>inDangerZone</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.inDangerZone(tokenOrActor)
+```
+
+True when heat is at or above half the heat cap. Same rule the `onHeatGain` trigger reports as `inDangerZone`.
+
+</details>
+
+---
+
+<details>
+<summary><b><code>untilEndOfTurn</code></b> · <b><code>untilStartOfTurn</code></b> → <code>object</code> · <b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
+
+<br>
+
+```js
+api.untilEndOfTurn(token, turns = 1)      // → duration object
+api.untilStartOfTurn(token, turns = 1)
+api.currentTurnKey()                       // → "round:turn", null out of combat
+```
+
+`untilEndOfTurn` / `untilStartOfTurn` build the "until the end of *their* next turn" duration: the token becomes the turn origin, and the count is bumped by one when it is already that token's turn. Use these instead of hand-writing `{ label: 'end', turns: 1, rounds: 0 }`, which is off by one if applied on the target's own turn.
+
+`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn.
+
+```js
+await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], duration: api.untilEndOfTurn(target) });
+```
+
+</details>
+
+---
+
+<details>
 <summary><b><code>getAllEffects</code></b> → <code>Array&lt;ActiveEffect&gt;</code></summary>
 
 <br>

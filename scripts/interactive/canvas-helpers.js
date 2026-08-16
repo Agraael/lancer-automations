@@ -58,7 +58,7 @@ export const RANGE_PULSE_STYLE = {
     lineColor: 0xFFFFFF,
     staticFillAlpha: 0.0125,
     staticLineAlpha: 0.0125,
-    perimeterAlpha: 0.3,
+    perimeterAlpha: 0.6,
     pulseSpeed: 1,
 };
 
@@ -480,6 +480,55 @@ export function drawDashedEdges(graphic, edges, dash, gap, phase)
             graphic.lineTo(from.x + ux * end, from.y + uy * end);
         }
     }
+}
+
+/**
+ * Marching-dash tether between token pairs, drawn in the token layer. Same look as the deployable link.
+ * @param {{color?: number, alpha?: number}} options
+ * @returns {{setPairs: (pairs: any[][]) => void, destroy: () => void}}
+ */
+export function createTokenTether({ color = TG.reference, alpha = 0.7 } = {})
+{
+    const graphic = new PIXI.Graphics();
+    graphic.eventMode = 'none';
+    canvas.tokens.addChild(graphic);
+    let pairs = [];
+    const redraw = () =>
+    {
+        if (graphic.destroyed)
+            return;
+        graphic.clear();
+        if (!pairs.length)
+            return;
+        const edges = [];
+        for (const [from, to] of pairs)
+        {
+            if (from?.center && to?.center && from.id !== to.id)
+                edges.push([from.center, to.center]);
+        }
+        if (!edges.length)
+            return;
+        const dash = canvas.grid.size * 0.16;
+        const gap = canvas.grid.size * 0.14;
+        const phase = -performance.now() * 0.02;
+        paintWithHalo(graphic, () => drawDashedEdges(graphic, edges, dash, gap, phase), {
+            color,
+            lineWidth: 2,
+            lineAlpha: alpha,
+        });
+    };
+    canvas.app.ticker.add(redraw);
+    return {
+        setPairs(next)
+        {
+            pairs = next ?? [];
+        },
+        destroy()
+        {
+            canvas.app.ticker.remove(redraw);
+            destroyGraphics(graphic);
+        },
+    };
 }
 
 function footprintCellPoints(col, row)
@@ -949,7 +998,7 @@ export function _perimeterEdges(cells)
 }
 
 // Halo + colored glow + white core along a cell set's outer boundary (matches the pulse glow).
-export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STYLE.lineColor, lineAlpha = RANGE_PULSE_STYLE.perimeterAlpha, glowColor = RANGE_GLOW.manual, lineWidth = 1.2 } = {})
+export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STYLE.lineColor, lineAlpha = RANGE_PULSE_STYLE.perimeterAlpha, glowColor = RANGE_GLOW.manual, lineWidth = 1.2, halo = true } = {})
 {
     const boundary = _perimeterEdges(cells);
     if (!boundary.length)
@@ -968,7 +1017,8 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
             graphic.lineTo(edge.bx, edge.by);
         }
     };
-    strokeBoundary(haloW, 0x000000, lineAlpha);
+    if (halo)
+        strokeBoundary(haloW, 0x000000, lineAlpha);
     if (glowColor !== null)
         strokeBoundary(glowW, glowColor, lineAlpha);
     if (!_OUTLINE_ONLY)
@@ -1133,7 +1183,11 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
 }
 
 // Union of all-entry in-range cells, wave from nearest origin; returns destroy().
-export function createMergedRangeHighlight(entries, { includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha, fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual, wave = true, perimeterAlpha } = {})
+export function createMergedRangeHighlight(entries, {
+    includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha,
+    fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual, wave = true,
+    perimeterAlpha, perimeterHalo = true, perimeter = true,
+} = {})
 {
     const waveRange = Math.max(1, ...entries.map(entry => entry.range));
     const originOffsetsFor = (entry) => entry.point
@@ -1180,7 +1234,14 @@ export function createMergedRangeHighlight(entries, { includeSelf = false, stati
         rangeHighlight.clear();
         if (!_OUTLINE_ONLY)
             paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: staticLineAlpha, lineColor: RANGE_PULSE_STYLE.lineColor });
-        paintPerimeterGlow(rangeHighlight, unionWave, { glowColor, ...(perimeterAlpha !== undefined ? { lineAlpha: perimeterAlpha } : {}) });
+        if (perimeter)
+        {
+            paintPerimeterGlow(rangeHighlight, unionWave, {
+                glowColor,
+                halo: perimeterHalo,
+                ...(perimeterAlpha !== undefined ? { lineAlpha: perimeterAlpha } : {}),
+            });
+        }
         if (!pulseGraphic)
             return;
         const hexesByDist = _groupCellsByDistance(unionOrigins, unionWave);

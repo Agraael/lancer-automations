@@ -44,7 +44,7 @@ export function getItemActionLocks(actor, actionName = null)
         {
             if (!lock?.actionName || (actionName && lock.actionName !== actionName))
                 continue;
-            out.push({ item, actionName: lock.actionName, reason: lock.reason ?? null });
+            out.push({ item, actionName: lock.actionName, reason: lock.reason ?? null, kind: lock.kind ?? null });
         }
     }
     return out;
@@ -71,7 +71,7 @@ export function getItemActionTypeLocks(actor, actionName = null, activation = nu
         for (const lock of (item.getFlag?.('lancer-automations', 'actionTypeLocks') ?? []))
         {
             if (typeLockApplies(lock, activation, actionName))
-                out.push({ item, actionName, activation, reason: lock.reason ?? null });
+                out.push({ item, actionName, activation, reason: lock.reason ?? null, kind: lock.kind ?? null });
         }
     }
     return out;

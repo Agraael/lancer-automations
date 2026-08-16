@@ -1,61 +1,8 @@
 /* global canvas, game, ui, FilePicker, Dialog, CodeMirror, PIXI, performance, fromUuidSync */
 
-/** Duration-origin value meaning "every target is its own reference". */
-const EACH_ORIGIN = '__each';
-
-/** Split a target field value into ids. Multi-target fields hold a comma-joined list. */
-function _emTargetIds(targetID)
-{
-    return String(targetID ?? '').split(',').map(id => id.trim()).filter(Boolean);
-}
-
-/** One apply call per token when each target is its own duration reference, otherwise one for all. */
-function _emApplyGroups(tokens, originID)
-{
-    if (originID !== EACH_ORIGIN)
-        return [{ tokens, origin: originID }];
-    return tokens.map(token => ({ tokens: [token], origin: token.id }));
-}
-
-/** Notification label for a resolved target list. */
-function _emTargetLabel(docs)
-{
-    if (docs.length > 3)
-        return `${docs.length} tokens`;
-    return docs.map(doc => doc.name).join(', ');
-}
-
-/** Resolve every id in a target field value. */
-function _resolveEmTargets(targetID)
-{
-    return _emTargetIds(targetID).map(id => _resolveEmTarget(id));
-}
-
-/**
- * Point a target `<select>` at one or more ids, adding a synthetic option for a multi-token set.
- * @param {any} $select
- * @param {string[]} ids
- */
-function _setEmTargetValue($select, ids)
-{
-    const el = $select[0];
-    if (!el)
-        return;
-    const value = ids.join(', ');
-    if (el.tagName === 'SELECT')
-    {
-        $select.find('option.em-multi-opt').remove();
-        if (ids.length > 1)
-            $select.prepend(`<option class="em-multi-opt" value="${value}">${ids.length} tokens</option>`);
-    }
-    $select.val(value).change();
-}
-
 /** Resolve a dropdown targetID to `{actor, token, item}`. targetID can be a scene tokenId or an actor/item UUID. */
 function _resolveEmTarget(targetID)
 {
-    if (typeof targetID === 'string' && targetID.includes(','))
-        targetID = _emTargetIds(targetID)[0];
     if (!targetID)
         return { actor: null, token: null, item: null };
     if (typeof targetID === 'string' && targetID.includes('.'))
@@ -90,7 +37,6 @@ import {
 import { openItemBrowserDialog } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
-import { TG } from "../interactive/canvas-helpers.js";
 
 // Bonus composition modes. First entry is the default for backward compatibility.
 const RANGE_BONUS_MODES = [
@@ -662,20 +608,18 @@ function triggerFieldsHtml(prefix, tokensHtml)
                     <button type="button" class="token-picker-btn" data-target="${prefix}-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                 </div>
             </div>
-            <div class="te-row-2col">
-                <div class="form-group cfilter-itemLid" style="display:none;">
-                    <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Item:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
-                        <button type="button" class="find-lid-btn" data-target="${prefix}-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
-                    </div>
+            <div class="form-group cfilter-itemLid" style="display:none;">
+                <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Consume on item:</label>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <input type="text" id="${prefix}-filter-itemLid" placeholder="e.g. mw_assault_rifle, mw_pistol" style="flex:1;">
+                    <button type="button" class="find-lid-btn" data-target="${prefix}-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                 </div>
-                <div class="form-group cfilter-itemId" style="display:none;">
-                    <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Item ID:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemId" placeholder="Item ID" style="flex:1;">
-                        <button type="button" class="item-picker-btn" data-target="${prefix}-filter-itemId" data-token-source="${prefix}-target" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                    </div>
+            </div>
+            <div class="form-group cfilter-itemId" style="display:none;">
+                <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Consume on item ID:</label>
+                <div style="flex:1; display:flex; gap:3px;">
+                    <input type="text" id="${prefix}-filter-itemId" placeholder="Item ID" style="flex:1;">
+                    <button type="button" class="item-picker-btn" data-target="${prefix}-filter-itemId" data-token-source="${prefix}-target" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                 </div>
             </div>
             <div class="form-group cfilter-actionName" style="display:none;">
@@ -1006,10 +950,6 @@ export async function executeEffectManager(options = {})
         if (active[0])
             defaultTarget = active[0];
     }
-    // Several tokens selected: open targeting all of them.
-    const multiDefault = (!options.forcePrototype && !isItemContext && canvas.tokens.controlled.length > 1)
-        ? canvas.tokens.controlled.map(token => token.id).join(', ')
-        : null;
     if (!options.forcePrototype && !isItemContext && !defaultTarget && canvas.tokens.controlled.length > 0)
         defaultTarget = canvas.tokens.controlled[0];
     else if (!options.forcePrototype && !isItemContext && !defaultTarget && game.user.targets.size > 0)
@@ -1029,15 +969,6 @@ export async function executeEffectManager(options = {})
         const isSelf = !protoActor && !isItemContext && token.id === defaultTarget?.id;
         return `<option value="${token.id}" ${isSelf ? 'selected' : ''}>${token.name}${isSelf ? ' (self)' : ''}</option>`;
     }).join('');
-    // Target selects only: the multi option wins over the (self) one; origin selects keep the single list.
-    const targetsHtml = multiDefault
-        ? `<option class="em-multi-opt" value="${multiDefault}" selected>${canvas.tokens.controlled.length} tokens</option>`
-            + tokensHtml.replaceAll(' selected>', '>')
-        : tokensHtml;
-    // Origin selects: EACH_ORIGIN makes every target its own duration reference. Default when several targets.
-    const originsHtml = multiDefault
-        ? `<option value="${EACH_ORIGIN}" selected>Each Target</option>` + tokensHtml.replaceAll(' selected>', '>')
-        : `<option value="${EACH_ORIGIN}">Each Target</option>` + tokensHtml;
 
     let durations = [{
         label: 'end',
@@ -1195,8 +1126,8 @@ export async function executeEffectManager(options = {})
             <div class="form-group">
                 <label>Target:</label>
                 <div style="flex:1; display:flex; gap:3px;">
-                    <select id="std-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="std-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
+                    <select id="std-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="std-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     <span class="em-tier-slot" data-tab="std" style="display:none; align-self:center; margin-left:4px;">${tierGateControl(null, 'data-role="em-std"')}</span>
                 </div>
             </div>
@@ -1230,7 +1161,7 @@ export async function executeEffectManager(options = {})
                     <select id="std-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
                     <span class="dur-opts" style="flex-shrink:0;"> of </span>
                     <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="std-origin" style="flex:1; min-width:0;">${originsHtml}</select>
+                        <select id="std-origin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="std-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
                     <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
@@ -1257,8 +1188,8 @@ export async function executeEffectManager(options = {})
             <div class="form-group two-col">
                 <label>Target:</label>
                 <div style="flex:1; display:flex; gap:3px;">
-                    <select id="cust-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="cust-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
+                    <select id="cust-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="cust-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     <span class="em-tier-slot" data-tab="cust" style="display:none; align-self:center; margin-left:4px;">${tierGateControl(null, 'data-role="em-cust"')}</span>
                 </div>
                 <label style="text-align:right; padding-right:5px;">Saved:</label>
@@ -1294,7 +1225,7 @@ export async function executeEffectManager(options = {})
                     <select id="cust-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
                     <span class="dur-opts" style="flex-shrink:0;"> of </span>
                     <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="cust-origin" style="flex:1; min-width:0;">${originsHtml}</select>
+                        <select id="cust-origin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="cust-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
                     <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
@@ -1342,8 +1273,8 @@ export async function executeEffectManager(options = {})
             <div class="form-group">
                 <label>Token:</label>
                 <div style="flex:1; display:flex; gap:3px;">
-                    <select id="bonus-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
+                    <select id="bonus-target" style="flex:1;">${tokensHtml}</select>
+                    <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                 </div>
                 <span id="bonus-summary" class="bonus-summary-pill">—</span>
                 <span class="em-tier-slot" data-tab="bonus" style="display:none;">${tierGateControl(null, 'data-role="em-bonus"')}</span>
@@ -1368,7 +1299,7 @@ export async function executeEffectManager(options = {})
                     <select id="bonus-duration" style="flex:0 0 120px !important; width:120px !important; max-width:120px !important;">${bonusDurationOptionsHtml}</select>
                     <span class="bonus-dur-opts" style="flex-shrink:0;"> of </span>
                     <div class="bonus-dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="bonus-durOrigin" style="flex:1; min-width:0;">${originsHtml}</select>
+                        <select id="bonus-durOrigin" style="flex:1; min-width:0;">${tokensHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="bonus-durOrigin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
                     <span class="bonus-dur-opts" style="margin-left:3px; flex-shrink:0; white-space:nowrap;">Turns:</span>
@@ -1422,20 +1353,18 @@ export async function executeEffectManager(options = {})
                         <button type="button" class="token-picker-btn" data-target="bonus-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
                 </div>
-                <div class="te-row-2col">
-                    <div class="form-group bonus-filter-itemLid" style="display:none;">
-                        <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Item:</label>
-                        <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
-                            <button type="button" class="find-lid-btn" data-target="bonus-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
-                        </div>
+                <div class="form-group bonus-filter-itemLid" style="display:none;">
+                    <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Consume on item:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
+                        <button type="button" class="find-lid-btn" data-target="bonus-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                     </div>
-                    <div class="form-group bonus-filter-itemId" style="display:none;">
-                        <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Item ID:</label>
-                        <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemId" placeholder="Item ID" style="flex:1;">
-                            <button type="button" class="item-picker-btn" data-target="bonus-filter-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                        </div>
+                </div>
+                <div class="form-group bonus-filter-itemId" style="display:none;">
+                    <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Consume on item ID:</label>
+                    <div style="flex:1; display:flex; gap:3px;">
+                        <input type="text" id="bonus-filter-itemId" placeholder="Item ID" style="flex:1;">
+                        <button type="button" class="item-picker-btn" data-target="bonus-filter-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                     </div>
                 </div>
                 <div class="form-group bonus-filter-actionName" style="display:none;">
@@ -1770,14 +1699,14 @@ export async function executeEffectManager(options = {})
     </div>
     `;
 
-    // White target mark, yellow tethered mark on every reference token, while the manager is open.
+    // White target mark / yellow duration-origin mark while the manager is open.
     const emMarks = createDurationMarks();
     const clearEmHighlight = () => emMarks.destroy();
-    const highlightEmToken = (tokenId, originIds = []) =>
+    const highlightEmToken = (tokenId, originId) =>
     {
         emMarks.update({
-            targetTokens: _emTargetIds(tokenId).map(id => canvas.tokens?.get(id)),
-            originTokens: originIds.flatMap(id => _emTargetIds(id)).map(id => canvas.tokens?.get(id)),
+            targetToken: tokenId ? canvas.tokens?.get(String(tokenId)) : null,
+            originToken: originId ? canvas.tokens?.get(String(originId)) : null,
         });
     };
 
@@ -1863,7 +1792,6 @@ export async function executeEffectManager(options = {})
             // Highlight the active tab's target token on the scene. Tab keys differ from select prefixes.
             const TAB_TARGET_PREFIX = { standard: 'std', custom: 'cust', bonus: 'bonus', manage: 'manage' };
             const TAB_ORIGIN_SELECT = { std: '#std-origin', cust: '#cust-origin', bonus: '#bonus-durOrigin' };
-            const TAB_TRIGGER_SELECT = { std: '#std-trigger-origin', cust: '#cust-trigger-origin', bonus: '#bonus-trigger-origin' };
             const TAB_DURATION_SELECT = { std: '#std-duration', cust: '#cust-duration', bonus: '#bonus-duration' };
             const refreshEmHighlight = () =>
             {
@@ -1871,59 +1799,11 @@ export async function executeEffectManager(options = {})
                 const label = String(html.find(TAB_DURATION_SELECT[prefix] ?? '').val() ?? '');
                 const turnBased = label === 'end' || label === 'start';
                 const originSelect = TAB_ORIGIN_SELECT[prefix];
-                const triggerSelect = TAB_TRIGGER_SELECT[prefix];
-                const origins = [];
-                if (turnBased && originSelect)
-                    origins.push(html.find(originSelect).val());
-                // Trigger origin only matters once a consumption trigger is checked.
-                if (triggerSelect && html.find(`#${prefix}-trigger input:checked`).length)
-                    origins.push(html.find(triggerSelect).val());
-                highlightEmToken(html.find(`#${prefix}-target`).val(), origins.filter(Boolean));
+                highlightEmToken(html.find(`#${prefix}-target`).val(), turnBased && originSelect ? html.find(originSelect).val() : null);
             };
             html.find('#std-target, #cust-target, #bonus-target, #manage-target').on('change', refreshEmHighlight);
             html.find('#std-origin, #cust-origin, #bonus-durOrigin').on('change', refreshEmHighlight);
-            html.find('#std-trigger-origin, #cust-trigger-origin, #bonus-trigger-origin').on('change', refreshEmHighlight);
             html.find('#std-duration, #cust-duration, #bonus-duration').on('change', refreshEmHighlight);
-
-            // One target for the whole manager: Standard / Custom / Bonus / Manage stay in step.
-            const EM_TARGET_IDS = ['std-target', 'cust-target', 'bonus-target', 'manage-target'];
-            let syncingTargets = false;
-            const syncEmTargets = (sourceId) =>
-            {
-                if (syncingTargets)
-                    return;
-                syncingTargets = true;
-                const ids = _emTargetIds(html.find(`#${sourceId}`).val());
-                for (const id of EM_TARGET_IDS)
-                {
-                    if (id === sourceId)
-                        continue;
-                    const $select = html.find(`#${id}`);
-                    // Manage lists one actor's effects, so it follows the first target only.
-                    const next = id === 'manage-target' ? ids.slice(0, 1) : ids;
-                    if (!$select.length || _emTargetIds($select.val()).join(',') === next.join(','))
-                        continue;
-                    _setEmTargetValue($select, next);
-                }
-                syncingTargets = false;
-            };
-            html.find('#std-target, #cust-target, #bonus-target, #manage-target').on('change', function ()
-            {
-                syncEmTargets(String(this.id));
-            });
-            syncEmTargets('std-target');
-
-            // Several targets default to each being its own duration reference.
-            html.find('#std-target, #cust-target, #bonus-target').on('change', function ()
-            {
-                const prefix = String(this.id).replace('-target', '');
-                const $origin = html.find(TAB_ORIGIN_SELECT[prefix]);
-                const ids = _emTargetIds($(this).val());
-                if (ids.length > 1)
-                    $origin.val(EACH_ORIGIN).change();
-                else if (String($origin.val()) === EACH_ORIGIN)
-                    $origin.val(ids[0] ?? '').change();
-            });
 
             // Tier pills only where a tier can matter; std/cust also hide for live-token targets (direct apply, no template).
             const updateTierSlots = () =>
@@ -2317,53 +2197,42 @@ export async function executeEffectManager(options = {})
                     const turnsInputRaw = Number.parseInt(String(html.find('#std-turns').val()));
                     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
 
-                    const perEach = originID === EACH_ORIGIN;
-                    const docOrigin = perEach ? '' : originID;
-                    const duration = buildDuration(durationLabel, docOrigin, turnsInput);
+                    const duration = buildDuration(durationLabel, originID, turnsInput);
 
                     const consumption = getTriggerConfig(html, 'std');
-                    const ownConsumptionOrigin = perEach && !consumption?.originId;
                     const extraOptions = {};
                     if (stack > 1 || consumption)
                         extraOptions.stack = stack;
                     if (consumption)
                     {
                         if (!consumption.originId)
-                            consumption.originId = _emTargetIds(targetID)[0] ?? targetID;
+                            consumption.originId = targetID;
                         extraOptions.consumption = consumption;
                     }
                     const stdTier = readTierGate(html.find('.la-tier-gate[data-role="em-std"]')[0]);
                     if (stdTier)
                         extraOptions.tier = stdTier;
 
-                    const resolved = _resolveEmTargets(targetID);
-                    const liveTokens = resolved.filter(entry => entry.token && !entry.item).map(entry => entry.token);
-                    if (liveTokens.length)
+                    const { actor: resolvedActor, item: resolvedItem, token } = _resolveEmTarget(targetID);
+                    if (token && !resolvedItem)
                     {
-                        for (const group of _emApplyGroups(liveTokens, originID))
-                        {
-                            const groupOptions = ownConsumptionOrigin
-                                ? { ...extraOptions, consumption: { ...consumption, originId: group.origin } }
-                                : extraOptions;
-                            await applyEffectsToTokens({
-                                tokens: group.tokens,
-                                effectNames: effectName,
-                                note: note,
-                                duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
-                            }, groupOptions);
-                        }
-                        ui.notifications.info(`Applied ${effectName} to ${_emTargetLabel(liveTokens)}.`);
+                        await applyEffectsToTokens({
+                            tokens: [token],
+                            effectNames: effectName,
+                            note: note,
+                            duration: { ...duration, overrideTurnOriginId: originID },
+                        }, extraOptions);
+                        ui.notifications.info(`Applied ${effectName} to ${token.name}.`);
                     }
                     else
                     {
-                        const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
                         if (!doc)
                             return ui.notifications.error("Target not found!");
                         const linkOpts = {
                             effectNames: effectName,
                             note: note,
-                            duration: { ...duration, overrideTurnOriginId: docOrigin },
+                            duration: { ...duration, overrideTurnOriginId: originID },
                         };
                         if (doc.documentName === 'Item')
                             await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
@@ -2389,19 +2258,16 @@ export async function executeEffectManager(options = {})
                     if (!name)
                         return ui.notifications.error("Name is required!");
 
-                    const perEach = originID === EACH_ORIGIN;
-                    const docOrigin = perEach ? '' : originID;
-                    const duration = buildDuration(durationLabel, docOrigin, turnsInput);
+                    const duration = buildDuration(durationLabel, originID, turnsInput);
 
                     const consumption = getTriggerConfig(html, 'cust');
-                    const ownConsumptionOrigin = perEach && !consumption?.originId;
                     const extraOptions = {};
                     if (stack > 1)
                         extraOptions.stack = stack;
                     if (consumption)
                     {
                         if (!consumption.originId)
-                            consumption.originId = _emTargetIds(targetID)[0] ?? targetID;
+                            consumption.originId = targetID;
                         extraOptions.consumption = consumption;
                         extraOptions.stack = stack;
                     }
@@ -2424,40 +2290,32 @@ export async function executeEffectManager(options = {})
                         }
                     }
 
-                    const resolved = _resolveEmTargets(targetID);
-                    const liveTokens = resolved.filter(entry => entry.token && !entry.item).map(entry => entry.token);
+                    const { actor: resolvedActor, item: resolvedItem, token } = _resolveEmTarget(targetID);
                     const effectData = {
                         name: name,
                         icon: icon,
                         stack: stack,
                         isCustom: true
                     };
-                    if (liveTokens.length)
+                    if (token && !resolvedItem)
                     {
-                        for (const group of _emApplyGroups(liveTokens, originID))
-                        {
-                            const groupOptions = ownConsumptionOrigin
-                                ? { ...extraOptions, consumption: { ...consumption, originId: group.origin } }
-                                : extraOptions;
-                            await applyEffectsToTokens({
-                                tokens: group.tokens,
-                                effectNames: effectData,
-                                note: note,
-                                duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
-                            }, groupOptions);
-                        }
-                        ui.notifications.info(`Applied ${name} to ${_emTargetLabel(liveTokens)}.`);
+                        await applyEffectsToTokens({
+                            tokens: [token],
+                            effectNames: effectData,
+                            note: note,
+                            duration: { ...duration, overrideTurnOriginId: originID },
+                        }, extraOptions);
+                        ui.notifications.info(`Applied ${name} to ${token.name}.`);
                     }
                     else
                     {
-                        const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
                         if (!doc)
                             return ui.notifications.error("Target not found!");
                         const linkOpts = {
                             effectNames: effectData,
                             note: note,
-                            duration: { ...duration, overrideTurnOriginId: docOrigin },
+                            duration: { ...duration, overrideTurnOriginId: originID },
                         };
                         if (doc.documentName === 'Item')
                             await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
@@ -2825,31 +2683,34 @@ export async function executeEffectManager(options = {})
             {
                 e.preventDefault();
                 const targetId = $(this).data('target');
-                // Origin fields hold one token, so Shift-click can't extend them.
-                const single = !['std-target', 'cust-target', 'bonus-target', 'bonus-applyTo'].includes(targetId);
+                const count = Number.parseInt($(this).data('count')) || 1;
                 const api = game.modules.get('lancer-automations').api;
-                const currentIds = _emTargetIds(html.find(`#${targetId}`).val());
 
                 // Use currently selected token as caster for the selection tool context if possible
-                const caster = canvas.tokens.get(currentIds[0] ?? '') || canvas.tokens.controlled[0];
-
-                // Reference picks (duration / trigger origin) mark yellow and tether back to the target.
-                const prefix = TAB_TARGET_PREFIX[html.find('.te-tab.active').data('tab')] || 'std';
-                const anchors = single
-                    ? _emTargetIds(html.find(`#${prefix}-target`).val()).map(id => canvas.tokens.get(id)).filter(Boolean)
-                    : [];
+                const currentVal = String(html.find(`#${targetId}`).val());
+                const caster = canvas.tokens.get(currentVal) || canvas.tokens.controlled[0];
 
                 clearEmHighlight(); // drop the target highlight so it doesn't clash with the canvas picker
-                const selected = await api.pickTokensCardless(caster, {
+                const selected = await api.chooseToken(caster, {
+                    count: count,
                     includeSelf: true,
-                    single: single,
-                    preselected: single ? [] : currentIds,
-                    markColor: single ? TG.placed : TG.reference,
-                    linkFrom: anchors,
+                    urgent: true,
+                    autoConfirm: count === 1,
+                    title: count === 1 ? "Pick Token" : "Select Tokens",
+                    description: count === 1 ? "Select a token on the map to update the field." : "Select tokens to apply this bonus to. Close the card to confirm.",
+                    icon: "fas fa-crosshairs"
                 });
 
                 if (selected && selected.length > 0)
-                    _setEmTargetValue(html.find(`#${targetId}`), selected.map(token => token.id));
+                {
+                    if (count === 1)
+                        html.find(`#${targetId}`).val(selected[0].id).change();
+                    else
+                    {
+                        const ids = selected.map(token => token.id).join(', ');
+                        html.find(`#${targetId}`).val(ids).change();
+                    }
+                }
                 refreshEmHighlight();
             });
 
@@ -2949,8 +2810,8 @@ export async function executeEffectManager(options = {})
             const addBonusFromTab = async (type) =>
             {
                 const targetID = String(html.find('#bonus-target').val());
-                const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
-                if (!resolvedTargets.length)
+                const { actor, item, token } = _resolveEmTarget(targetID);
+                if (!actor && !item)
                     return ui.notifications.error("Target not found!");
 
                 const name = String(html.find('#bonus-name').val() || "Test Bonus");
@@ -3136,22 +2997,16 @@ export async function executeEffectManager(options = {})
                     bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
                 if (bonusData.uses === undefined && (addOptions.consumption || bonusData.consumeOnUsage === true))
                     ui.notifications.warn(`${name}: no Uses set - consumed on first use.`);
-                for (const entry of resolvedTargets)
-                {
-                    const targetIsItem = !!entry.item;
-                    const targetIsPrototype = !targetIsItem && !entry.token && entry.actor?.documentName === 'Actor';
-                    const entryOptions = durOrigin === EACH_ORIGIN
-                        ? { ...addOptions, origin: entry.token?.id ?? '' }
-                        : addOptions;
-                    if (targetIsItem)
-                        await linkBonusToItem({ items: [entry.item], bonusData, addOptions: entryOptions });
-                    else if (targetIsPrototype)
-                        await linkBonusToActor({ actors: [entry.actor], bonusData, addOptions: entryOptions });
-                    else if (duration === 'constant')
-                        await addConstantBonus(entry.actor, bonusData);
-                    else
-                        await addGlobalBonus(entry.actor, bonusData, entryOptions);
-                }
+                const targetIsItem = !!item;
+                const targetIsPrototype = !targetIsItem && !token && actor?.documentName === 'Actor';
+                if (targetIsItem)
+                    await linkBonusToItem({ items: [item], bonusData, addOptions });
+                else if (targetIsPrototype)
+                    await linkBonusToActor({ actors: [actor], bonusData, addOptions });
+                else if (duration === 'constant')
+                    await addConstantBonus(actor, bonusData);
+                else
+                    await addGlobalBonus(actor, bonusData, addOptions);
                 setTimeout(updateBonusList, 200);
                 setTimeout(updateManageTabCount, 200);
             };

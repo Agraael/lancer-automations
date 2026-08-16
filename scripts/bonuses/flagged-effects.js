@@ -3,6 +3,7 @@
 import { socketRequestWithAck } from '../socket.js';
 import { linkTierGate } from '../interactive/deployables.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
+import { untilEndOfTurn, untilStartOfTurn, currentTurnKey } from './duration-widget.js';
 
 function log(...args)
 {
@@ -2056,6 +2057,9 @@ export function getLinkedEffects(source)
 }
 
 export const EffectsAPI = {
+    untilEndOfTurn,
+    untilStartOfTurn,
+    currentTurnKey,
     applyEffectsToTokens,
     removeEffectsByNameFromTokens,
     removeEffectsByName,

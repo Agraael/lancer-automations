@@ -2040,6 +2040,7 @@ export async function playDamageImpactFX(type, target, amount = null)
             .file(file)
             .atLocation(target, { offset: randomOffset() })
             .scaleToObject(2.5)
+            .aboveInterface()
             .playbackRate(0.8)
             .delay(hit * DAMAGE_IMPACT_DELAY_MS);
         if (key === 'hit_overshield')
@@ -2117,6 +2118,7 @@ export async function playTargetFailFX(token)
         .file('jb2a.ui.miss.red')
         .atLocation(token)
         .scaleToObject(1.5)
+        .aboveInterface()
         .sound()
         .file('modules/lancer-automations/FX/audio/denyerror-sound.wav')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
@@ -2220,6 +2222,7 @@ const _missCritOverlayHandler = async (flow) =>
                 .file(file)
                 .attachTo(tokenObj)
                 .scale(0.5)
+                .aboveInterface()
                 .delay(delay);
             setTimeout(() => playStatsSound(soundKey), delay);
         }

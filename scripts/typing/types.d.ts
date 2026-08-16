@@ -93,8 +93,12 @@ interface TriggerDataBase {
     triggeringToken?: Token;
     distanceToTrigger?: number | null;
     canTriggerReaction?: boolean;
-    /** Normalized target tokens: unwraps `targets` entries ({ target } wrappers or raw tokens) and single `target`, actor-bearing only. */
+    /** Normalized target tokens: unwraps `targets` entries ({ target }/{ token } wrappers or raw tokens) and single `target`/`token`/`checkAgainstToken`, actor-bearing only. */
     hitTokens?: Token[];
+    /** True when the reactor token is one of the event's targets (per-reactor). */
+    isTarget?: boolean;
+    /** The reactor's own entry of `targets` ({ target/token, roll, crit, ... }) when the trigger carries per-target entries, else null. */
+    targetEntry?: { target?: Token; token?: Token; roll?: Roll; crit?: boolean; [key: string]: any } | null;
     /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
@@ -1099,6 +1103,8 @@ interface ReactionConfig {
     triggers: TriggerType[];
     triggerSelf?: boolean;
     triggerOther?: boolean;
+    /** Fires when the reactor is one of the event's targets, even with triggerOther off. Target-capable triggers only. */
+    triggerTarget?: boolean;
     outOfCombat?: boolean;
     isReaction?: boolean;
     checkReaction?: boolean;
@@ -1108,7 +1114,7 @@ interface ReactionConfig {
     awaitActivationCompletion?: boolean;
     actionType?: string;
     frequency?: string;
-    activationType?: "code" | "macro" | "item-use" | "flow" | "none";
+    activationType?: "code" | "macro" | "flow" | "none";
     activationMode?: "instead" | "after";
     reactionPath?: string;
     dispositionFilter?: string[];

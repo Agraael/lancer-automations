@@ -104,11 +104,11 @@ What makes it self-react on use:
 
 - **`triggers: ["onActivation"]`** - fires when the item's action runs.
 
-- **`triggerSelf: true`** (with `triggerOther: false`) - the acting token is the reactor, so it reacts to its own action.
+- **`triggerSelf: true`** (with `triggerOther: false`) - the acting token is the reactor, so it reacts to its own action. There is also `triggerTarget: true` - the reactor is one of the event's targets (the one being attacked), usable with both others off for target-only reactions.
 
 - **`autoActivate: true`** - runs silently, no popup.
 
-- **`activationMode: "instead"`** - your code replaces the action's flow. Use `"after"` to run alongside it.
+- **`activationMode: "instead"`** - your code runs alone. `"after"` also fires the reaction's own flow/card alongside it; neither touches the flow that triggered you.
 
 - **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action. Drop `reactionPath` to bind the whole item.
 

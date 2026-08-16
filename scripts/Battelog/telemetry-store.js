@@ -212,17 +212,20 @@ export function reclassifyCombat(combat)
     for (const name of BUCKETS)
     {
         for (const entry of telemetry[name] ?? [])
-            entries.push(entry);
+            entries.push({ entry, from: name });
         telemetry[name] = [];
     }
     const squadRef = _squadRefToken(combat);
-    for (const entry of entries)
+    for (const { entry, from } of entries)
     {
         const combatant = combat.combatants?.find(item => (item.tokenId ?? item.actorId) === entry.tokenId);
-        const bucket = combatant ? classifyCombatant(combatant, squadRef) : 'players';
+        // Combatant gone (token deleted, removed from the encounter): keep the bucket it was
+        // recorded in. Defaulting here would file departed hostiles as squad.
+        const bucket = combatant ? classifyCombatant(combatant, squadRef) : from;
         if (bucket === 'exclude')
             continue;
-        entry.side = combatant ? factionSide(combatant, squadRef) : (entry.side ?? 'player');
+        const priorSide = (from === 'hostiles' || from === 'secrets') ? 'enemy' : 'player';
+        entry.side = combatant ? factionSide(combatant, squadRef) : (entry.side ?? priorSide);
         telemetry[bucket].push(entry);
     }
     return _enqueueWrite(combat);

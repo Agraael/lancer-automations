@@ -76,7 +76,7 @@ The most common spot is [my channel](https://discord.com/channels/42628641049699
 
 ## Workshop
 
-[Lancer Automations Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share the automations they made, and grab other people's. You get a folder named after your GitHub account, and a bot merges the pull request as long as you only changed your own folder. Talk about it in the [workshop channel](https://discord.com/channels/426286410496999425/1537081666483527690).
+[Lancer Automations Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share the automations they made, and grab other people's. You get a folder named after your GitHub account, and a bot merges the pull request as long as you only changed your own folder. Anything about writing or sharing automations goes in the [workshop channel](https://discord.com/channels/426286410496999425/1537081666483527690).
 
 ## Community guides
 

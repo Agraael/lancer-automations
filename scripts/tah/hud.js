@@ -1266,7 +1266,8 @@ export class LancerHUD
         const origBroadcast = item.broadcastFn;
         const info = getActionLockInfo(this._actor, actionName, activation);
         const byStatus = isActionDisabledByStatus(this._actor, actionName);
-        if (byStatus)
+        const disabledKind = [...info.itemLocks, ...info.sources].some(entry => (entry?.kind ?? null) === 'disabled');
+        if (byStatus || disabledKind)
             item.statusKind = 'unavailable';
         else if (info.itemLocks.length || info.sources.length)
             item.softDisabled = true;
