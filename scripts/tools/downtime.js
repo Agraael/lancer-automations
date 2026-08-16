@@ -326,8 +326,14 @@ export async function executeDowntime()
 
     let pilotData = {};
 
-    let pilots = game.actors.filter(actor => actor.hasPlayerOwner && actor.type === "pilot" && actor.isOwner);
-    let pilotNames = pilots.map(pilot => `<option value="${pilot.name}">${pilot.name}</option>`).join("");
+    let pilots = game.actors.filter(actor => actor.type === "pilot" && (game.user.isGM || actor.isOwner));
+    let pilotNames = pilots.map(pilot => `<option value="${pilot.id}">${pilot.name}</option>`).join("");
+
+    if (!pilots.length)
+    {
+        ui.notifications.warn("Downtime: no pilot available.");
+        return;
+    }
 
     let dialogContent = `
     <div class="la-downtime" style="margin-bottom:1rem; font-family: monospace;">
@@ -345,9 +351,10 @@ export async function executeDowntime()
                 // @ts-ignore
                 callback: (html) =>
                 {
-                    pilotData.name = /** @type {HTMLInputElement} */ (html.find("#pilotpicker")[0]).value;
-
-                    let selectedActor = game.actors.find(actor => actor.name === pilotData.name);
+                    const selectedActor = game.actors.get(/** @type {HTMLInputElement} */ (html.find("#pilotpicker")[0]).value);
+                    if (!selectedActor)
+                        return;
+                    pilotData.name = selectedActor.name;
                     let pilotSkills = (/** @type {any} */ (selectedActor.collections.items)).filter(/** @param {any} item */ item => item.type === 'skill');
 
                     pilotData.skills = pilotSkills

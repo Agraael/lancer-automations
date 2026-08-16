@@ -1,0 +1,103 @@
+site_name: Lancer Automations
+site_description: Automation module for the Lancer system in Foundry VTT
+site_url: https://agraael.github.io/lancer-automations/
+repo_url: https://github.com/Agraael/lancer-automations
+repo_name: Agraael/lancer-automations
+edit_uri: ""
+
+docs_dir: .docs-build
+site_dir: .docs-site
+use_directory_urls: false
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: orange
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - assets/la-theme.css
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Feature guides:
+      - Automation Engine: feature/AUTOMATION_ENGINE.md
+      - Effects & Bonuses: feature/EFFECTS_AND_BONUSES.md
+      - Token Action HUD: feature/HUD.md
+      - Token Display: feature/TOKEN_DISPLAY.md
+      - Movement: feature/MOVEMENT.md
+      - Movement Advanced: feature/MOVEMENT_ADVANCED.md
+      - Isometric: feature/ISOMETRIC.md
+      - Interactive Tools: feature/INTERACTIVE_TOOLS.md
+      - Attack Targeting: feature/ATTACK_TARGETING.md
+      - Gameplay Automation: feature/GAMEPLAY_AUTOMATION.md
+      - FX and Sounds: feature/FX_AND_SOUNDS.md
+      - Vision: feature/VISION.md
+      - Wrecks: feature/WRECK.md
+      - Battle Log: feature/BATTLE_LOG.md
+      - System Additions: feature/SYSTEM_ADDITIONS.md
+      - Setup & Tools: feature/SETUP_AND_TOOLS.md
+      - Infection: feature/INFECTION.md
+      - NPC Examples: feature/NPC_EXAMPLES.md
+      - Macros: MACROS.md
+  - API:
+      - Automation System: AUTOMATION_SYSTEM.md
+      - API Reference: API_REFERENCE.md
+      - Combat: API_COMBAT.md
+      - Spatial: API_SPATIAL.md
+      - Effects: API_EFFECTS.md
+      - Interactive: API_INTERACTIVE.md
+      - Items: API_ITEMS.md
+      - HUD: API_HUD.md
+      - Movement: API_MOVEMENT.md
+      - Token Display: API_TOKEN_DISPLAY.md
+      - How-To: API_HOWTO.md

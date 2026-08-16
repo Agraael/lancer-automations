@@ -1,5 +1,7 @@
 # Build output
 module.zip
+.docs-build/
+.docs-site/
 
 # Dependencies (install with npm install)
 node_modules/
