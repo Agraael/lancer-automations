@@ -29,6 +29,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: .github/scripts/requirements-docs.txt
       - run: pip install -r .github/scripts/requirements-docs.txt
       - run: python .github/scripts/docs_prep.py
       - run: mkdocs build --strict
