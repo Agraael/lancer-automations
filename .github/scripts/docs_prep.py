@@ -85,10 +85,37 @@ def linkify(text, prefix):
     return ''.join(out)
 
 
+ALERT_TYPES = {'NOTE': 'note', 'TIP': 'tip', 'IMPORTANT': 'info',
+               'WARNING': 'warning', 'CAUTION': 'danger'}
+ALERT_HEAD = re.compile(r'^> \[!(' + '|'.join(ALERT_TYPES) + r')\]\s*$', re.M)
+
+
+def convert_alerts(text):
+    """GitHub `> [!TIP]` blockquote alerts -> Material `!!! tip` admonitions."""
+    lines = text.split('\n')
+    out, i = [], 0
+    while i < len(lines):
+        head = ALERT_HEAD.match(lines[i])
+        if not head:
+            out.append(lines[i])
+            i += 1
+            continue
+        i += 1
+        body = []
+        while i < len(lines) and lines[i].startswith('>'):
+            body.append(lines[i][1:].lstrip(' '))
+            i += 1
+        out.append(f'!!! {ALERT_TYPES[head.group(1)]}')
+        out.append('')
+        out.extend(f'    {line}' if line else '' for line in body)
+    return '\n'.join(out)
+
+
 def rewrite(text, prefix=''):
     for old, new in ESCAPES.items():
         text = text.replace(old, new)
     text = DETAILS.sub(r'<details markdown="1"\1>', text)
+    text = convert_alerts(text)
     text = highlight_inline_code(text)
     text = linkify(text, prefix)
     return unfence_banner(text)

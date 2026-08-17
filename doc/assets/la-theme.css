@@ -114,6 +114,51 @@
   box-shadow: 0 2px 0 0 var(--la-signal);
 }
 
+.la-header-links {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-left: auto;
+  padding: 0 0.6rem;
+  flex-shrink: 0;
+}
+
+.la-header-links a {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: var(--la-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.la-header-links a:hover {
+  opacity: 1;
+  color: var(--la-signal);
+}
+
+.la-header-icon svg {
+  display: block;
+  width: 1.25em;
+  height: 1.25em;
+}
+
+@media screen and (max-width: 76.1875em) {
+  .la-header-links span {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 44.9375em) {
+  .la-header-links {
+    display: none;
+  }
+}
+
 .la-byline {
   font-size: 0.62rem;
   letter-spacing: 0.02em;
@@ -343,8 +388,12 @@
   overflow-wrap: normal;
 }
 
-.md-typeset table:not([class]):not(.la-params *) td:not(:last-child) {
+.md-typeset table:not([class]) td:not(:last-child) {
   white-space: nowrap;
+}
+
+.md-typeset .la-params table:not([class]) td {
+  white-space: normal;
 }
 
 .md-typeset table:not([class]) th,
