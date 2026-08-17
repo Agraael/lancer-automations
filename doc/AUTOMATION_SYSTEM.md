@@ -4,7 +4,7 @@
 
 For anyone writing activations, in the Activation Manager UI or through the registration API. Covers what the engine does between a game event and your `activationCode` running.
 
-For trigger payload schemas, see [API_REFERENCE.md](API_REFERENCE.md). For API surfaces (effects, bonuses, interactive tools), see the sibling files: [API_EFFECTS.md](API_EFFECTS.md), [API_INTERACTIVE.md](API_INTERACTIVE.md), [API_COMBAT.md](API_COMBAT.md), [API_ITEMS.md](API_ITEMS.md).
+For trigger payload schemas, see [API Reference](API_REFERENCE.md). For API surfaces (effects, bonuses, interactive tools), see the sibling files: [Effects API](API_EFFECTS.md), [Interactive API](API_INTERACTIVE.md), [Combat API](API_COMBAT.md), [Items API](API_ITEMS.md).
 
 > [!NOTE]
 > This started as a reaction reminder, so the internals are named after reactions: you write `reactions: [...]`, the action path field is `reactionPath`, and you register with `api.registerDefaultItemReactions()` / `api.registerDefaultGeneralReactions()`. Those all mean **activation**. Legacy naming, not a separate concept.
@@ -282,7 +282,7 @@ For reactions that only have an `onInit` and no triggers, set `triggers: []`, `t
 
 Handler for cross-client requests. Invoked when another client calls `triggerData.sendMessageToReactor(data, userId, opts)`. Runs on the **target** client (the user named by `userId`).
 
-If the caller passed `wait: true`, whatever you `return` (or `resolve(...)`) from `onMessage` is delivered back as the caller's return value. See [API_INTERACTIVE.md](API_INTERACTIVE.md) for the wait card / response pattern.
+If the caller passed `wait: true`, whatever you `return` (or `resolve(...)`) from `onMessage` is delivered back as the caller's return value. See [Interactive API](API_INTERACTIVE.md) for the wait card / response pattern.
 
 <br>
 
@@ -572,7 +572,7 @@ This is how one item can have multiple independent activations (different sub-ac
 
 ### Extra actions
 
-API: `addExtraActions`, `getItemActions`, `getActorActions`, `removeExtraActions` (all on `InteractiveAPI`, documented in [API_HUD.md](API_HUD.md#extra-actions)).
+API: `addExtraActions`, `getItemActions`, `getActorActions`, `removeExtraActions` (all on `InteractiveAPI`, documented in [HUD API](API_HUD.md#extra-actions)).
 
 Adds action objects (name, activation type, description, tags, etc.) onto an item, token, or actor via flags. Two storage locations:
 - Passed an item: stored in the item's `extraActions` flag. Merged into the item's action list by `getItemActions`.

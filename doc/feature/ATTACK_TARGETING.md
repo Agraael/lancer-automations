@@ -1,6 +1,6 @@
 # Advanced Targeting and Measurement
 
-[← Back to the README](../index.md)
+[← Back to Home](../index.md)
 
 With **`enableAttackTargeting`** on, the attack HUD gains a picker for choosing your target or placing your area straight from the accuracy/difficulty dialog. Whatever you pick becomes a normal Foundry target the roll reads as usual, and it clears again once the attack resolves.
 

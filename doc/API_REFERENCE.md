@@ -1,21 +1,21 @@
 # Lancer Automations - API Reference
 
-[← Back to the README](index.md)
+[← Back to Home](index.md)
 
 ## Documentation Files
 
 | File | Contents |
 |------|----------|
-| **[AUTOMATION_SYSTEM.md](AUTOMATION_SYSTEM.md)** | How the automation engine works: trigger lifecycle, filters, callbacks, activation modes, sockets, cancel/modify, flow injection, registration, caches |
-| **[API_COMBAT.md](API_COMBAT.md)** | Combat & execution flows, weapon/item details |
-| **[API_SPATIAL.md](API_SPATIAL.md)** | Distance & grid math, coordinate helpers, faction/disposition, cell data, debug overlays |
-| **[API_EFFECTS.md](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
-| **[API_INTERACTIVE.md](API_INTERACTIVE.md)** | Token picker, zones, knockback, choice/vote cards, deployables, thrown weapons, hard cover |
-| **[API_ITEMS.md](API_ITEMS.md)** | Item & actor flags, tags, resource management, auto-consume config |
-| **[API_HUD.md](API_HUD.md)** | Extra actions, action locks, and combat overlays in the Token Action HUD |
-| **[API_MOVEMENT.md](API_MOVEMENT.md)** | Movement tracking, history, movement cap |
-| **[API_TOKEN_DISPLAY.md](API_TOKEN_DISPLAY.md)** | Extra token stat bars |
-| **[API_HOWTO.md](API_HOWTO.md)** | Registration, user helpers, how-tos, Grid-Aware Auras wrapper |
+| **[Automation System](AUTOMATION_SYSTEM.md)** | How the automation engine works: trigger lifecycle, filters, callbacks, activation modes, sockets, cancel/modify, flow injection, registration, caches |
+| **[Combat API](API_COMBAT.md)** | Combat & execution flows, weapon/item details |
+| **[Spatial API](API_SPATIAL.md)** | Distance & grid math, coordinate helpers, faction/disposition, cell data, debug overlays |
+| **[Effects API](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
+| **[Interactive API](API_INTERACTIVE.md)** | Token picker, zones, knockback, choice/vote cards, deployables, thrown weapons, hard cover |
+| **[Items API](API_ITEMS.md)** | Item & actor flags, tags, resource management, auto-consume config |
+| **[HUD API](API_HUD.md)** | Extra actions, action locks, and combat overlays in the Token Action HUD |
+| **[Movement API](API_MOVEMENT.md)** | Movement tracking, history, movement cap |
+| **[Token Display API](API_TOKEN_DISPLAY.md)** | Extra token stat bars |
+| **[API How-To](API_HOWTO.md)** | Registration, user helpers, how-tos, Grid-Aware Auras wrapper |
 
 ---
 

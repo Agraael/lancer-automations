@@ -32,7 +32,7 @@ api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current t
 **`getCumulativeMoveData` / `getIntentionalMoveData`** both return `{ moved: number, cost: number }` (`moved` = grid distance, `cost` = movement cost with terrain penalty, falling back to `moved`).
 - **Cumulative** = every move that isn't free movement, i.e. voluntary drags **plus** involuntary/forced pushes (knockback etc.).
 - **Intentional** = only player-driven drag moves (`isDrag`), excluding involuntary/forced.
-- Both exclude **free** movement (the V-key hold, see [feature/MOVEMENT.md](feature/MOVEMENT.md)).
+- Both exclude **free** movement (the V-key hold, see [Movement](feature/MOVEMENT.md)).
 
 **`getMovementHistory(tokenOrId)`** returns:
 ```js
@@ -50,6 +50,6 @@ api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current t
 ```
 
 - **`intentional.regular` vs `intentional.free`**: drag movement split by whether it was free. `regular` counts against the movement cap (`regularCost` is what the boost/cap detection compares against), `free` is V-key movement that ignores the cap. `total` = `regular + free`.
-- **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on. A boost is counted each time intentional cost crosses a multiple of SPEED. See [MOVEMENT_ADVANCED.md](feature/MOVEMENT_ADVANCED.md).
+- **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on. A boost is counted each time intentional cost crosses a multiple of SPEED. See [Movement Advanced](feature/MOVEMENT_ADVANCED.md).
 
 </details>

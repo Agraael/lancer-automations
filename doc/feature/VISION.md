@@ -1,6 +1,6 @@
 # Vision
 
-[← Back to the README](../index.md)
+[← Back to Home](../index.md)
 
 Lancer has no fog of war or vision, but these tools bring it closer to its rules: line of sight sampled from the token's edge, tokens that block sight, and Sensor / Battlefield Awareness detection modes. They work best with fog of war and token vision turned on.
 

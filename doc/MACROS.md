@@ -1,6 +1,6 @@
 # Macros
 
-[← Back to the README](index.md)
+[← Back to Home](index.md)
 
 Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set. Drag one to the hotbar and run it on the selected token. Each runs the matching feature documented in the other guides.
 

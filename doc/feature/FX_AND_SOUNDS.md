@@ -1,6 +1,6 @@
 # FX and Sounds
 
-[← Back to the README](../index.md)
+[← Back to Home](../index.md)
 
 The cosmetic and feedback layer: visual effects on statuses, animations when actions fire, and sounds for most table events. All optional.
 

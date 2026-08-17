@@ -1,6 +1,6 @@
 # Token Action HUD (TAH)
 
-[← Back to the README](../index.md) · Token bars: [TOKEN_DISPLAY.md](./TOKEN_DISPLAY.md)
+[← Back to Home](../index.md) · Token bars: [Token Display](./TOKEN_DISPLAY.md)
 
 Custom action menu attached to the token: actions, weapons, systems, frame abilities, talents, skills, statuses, scan glossary, and an action log. Beta. Enable in settings.
 
@@ -54,7 +54,7 @@ Appears while combat is running:
 - **Activation pips** - click to spend one (start your turn), right-click to toggle availability by hand.
 - An **end-turn** button (right-click to end the turn *and* give back one activation).
 - **Action-status icons** (protocol / move / full / quick / reaction) you can toggle.
-- Buttons to **reset actions**, **revert your last move**, and **clear movement history** (movement itself lives in [MOVEMENT.md](./MOVEMENT.md)).
+- Buttons to **reset actions**, **revert your last move**, and **clear movement history** (movement itself lives in [Movement](./MOVEMENT.md)).
 
 <br clear="right"/>
 
@@ -84,7 +84,7 @@ The left column lists categories. Opening one cascades its items out to the righ
 
 Toggle `showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category. These come from PPG (Prototype Pattern Group).
 
-See also: movement actions → [MOVEMENT.md](./MOVEMENT.md), resurrect → [WRECK.md](./WRECK.md), reinforcement → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md), scan → [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).
+See also: movement actions → [Movement](./MOVEMENT.md), resurrect → [Wrecks](./WRECK.md), reinforcement → [Gameplay Automation](./GAMEPLAY_AUTOMATION.md), scan → [Gameplay Automation](./GAMEPLAY_AUTOMATION.md).
 
 ---
 
@@ -119,7 +119,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
 
 - lists the token's **bonuses** (with a trash button to remove them),
-- links to the **Effect Manager** (see [EFFECTS_AND_BONUSES.md](./EFFECTS_AND_BONUSES.md)),
+- links to the **Effect Manager** (see [Effects & Bonuses](./EFFECTS_AND_BONUSES.md)),
 - has a **clear-all-effects** button,
 - and shows your **custom statuses** when Temporary Custom Statuses is installed.
 
@@ -137,7 +137,7 @@ The token's last ~40 action cards, newest first. Click one to expand the full ca
 
 ## Glossary panel
 
-The scans you've run, shown with portraits and names and searchable by name. Click one to open its scan journal entry. (The scan tools themselves are in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).)
+The scans you've run, shown with portraits and names and searchable by name. Click one to open its scan journal entry. (The scan tools themselves are in [Gameplay Automation](./GAMEPLAY_AUTOMATION.md).)
 
 <img src="../img/hud-glossary.png" width="70%"/>
 

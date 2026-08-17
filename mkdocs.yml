@@ -68,6 +68,7 @@ extra_javascript:
   - assets/la-code.js
   - assets/la-header.js
   - assets/la-tables.js
+  - assets/la-index.js
 
 plugins:
   - search

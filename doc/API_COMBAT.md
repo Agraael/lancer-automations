@@ -288,7 +288,7 @@ await api.executeTechAttack(actor, { targets: [target] });
 await api.executeExtraActionCombat(actorOrToken, action, sourceItem?)
 ```
 
-Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`). `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [API_HUD.md](API_HUD.md).
+Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`). `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [HUD API](API_HUD.md).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

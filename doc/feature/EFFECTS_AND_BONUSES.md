@@ -1,6 +1,6 @@
 # Effect Manager & Bonuses
 
-[← Back to the README](../index.md) · API: [API_EFFECTS.md](../API_EFFECTS.md)
+[← Back to Home](../index.md) · API: [Effects API](../API_EFFECTS.md)
 
 The Effect Manager applies status effects and bonuses to a token. Drive it by hand from the token HUD, or from automation code. Effects can carry a duration and consumable charges. Bonuses apply to Lancer's roll flows.
 
@@ -21,7 +21,7 @@ Its tabs:
 - **Bonus** - build accuracy, damage, stat, and other bonuses.
 - **Manage** - see and edit what's already on the token.
 
-Everything here can also be driven from automation code. Signatures are in [API_EFFECTS.md](../API_EFFECTS.md).
+Everything here can also be driven from automation code. Signatures are in [Effects API](../API_EFFECTS.md).
 
 ---
 
@@ -76,10 +76,10 @@ For anything the filters can't express, write a short **evaluate function** that
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
 - **General** - visible on the token. Give it a duration (end of turn, start of turn, or indefinite) and it shows an icon like a status, with optional charges.
-- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md)). It survives a reload.
+- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [Automation Engine](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC Examples](./NPC_EXAMPLES.md)). It survives a reload.
 - **Flow** - injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from a reaction.
 
-Full API (every type, immunity queries, flow injection) is in [API_EFFECTS.md](../API_EFFECTS.md).
+Full API (every type, immunity queries, flow injection) is in [Effects API](../API_EFFECTS.md).
 
 <br clear="right"/>
 
@@ -145,4 +145,4 @@ Duplicate module effects that share a name collapse into one icon with a count b
 
 <br clear="right"/>
 
-> The Infection damage type is built on this system but has its own guide: [INFECTION.md](./INFECTION.md).
+> The Infection damage type is built on this system but has its own guide: [Infection](./INFECTION.md).

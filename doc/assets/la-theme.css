@@ -210,6 +210,65 @@
   padding-left: 0.5em;
 }
 
+.la-fn-index {
+  margin: 1.2em 0 2em;
+  padding-bottom: 1.4em;
+  border-bottom: var(--la-line-w) solid var(--la-edge);
+}
+
+.la-fn-filter {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--la-mono);
+  font-size: 0.72rem;
+  color: var(--la-ink);
+  background: var(--la-raise);
+  border: var(--la-line-w) solid var(--la-edge);
+  border-radius: 0;
+  padding: 0.4em 0.7em;
+}
+
+.la-fn-filter:focus {
+  outline: none;
+  border-color: var(--la-signal);
+}
+
+.la-fn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.1em 0.8em;
+  margin-top: 0.7em;
+}
+
+.la-fn-chip {
+  font-family: var(--la-mono);
+  font-size: 0.68rem;
+  color: var(--la-ink) !important;
+  padding: 0.15em 0.3em;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.la-fn-chip:hover {
+  color: var(--la-signal) !important;
+  border-left-color: var(--la-signal);
+  background: color-mix(in srgb, var(--la-signal), transparent 92%);
+}
+
+.la-fn-empty {
+  display: none;
+  font-family: var(--la-mono);
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+
+.la-fn-none .la-fn-empty {
+  display: block;
+}
+
 .md-typeset details {
   position: relative;
   isolation: isolate;
@@ -282,6 +341,10 @@
 .md-typeset table:not([class]) code {
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.md-typeset table:not([class]):not(.la-params *) td:not(:last-child) {
+  white-space: nowrap;
 }
 
 .md-typeset table:not([class]) th,

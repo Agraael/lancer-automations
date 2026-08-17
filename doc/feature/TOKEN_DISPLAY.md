@@ -1,6 +1,6 @@
 # Custom Token Stat Bars
 
-[← Back to the README](../index.md) · The action HUD: [HUD.md](./HUD.md)
+[← Back to Home](../index.md) · The action HUD: [Token Action HUD](./HUD.md)
 
 Lancer Automations draws its own bars and labels directly on the token, as a replacement for Bar Brawl. It also adds a hover popup (the token stat hint) with a token's full stats. Both are separate from the [Token Action HUD](./HUD.md) and work whether or not the HUD menu is enabled.
 
@@ -65,7 +65,7 @@ The **Extra Bars** section of Token Config → Resources adds your own bars belo
 - a **label**, **width %**, **new line / same line** layout, **color**, and **icon**,
 - a **visibility** (owner / scanned / all), a **show-label-in-hint** toggle (label next to the icon in the hint), optional **floating-text + sound** on change, and an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
 
-Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`), see [API_TOKEN_DISPLAY.md](../API_TOKEN_DISPLAY.md).
+Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`), see [Token Display API](../API_TOKEN_DISPLAY.md).
 
 Set on an item or actor instead of one token, an extra bar becomes a template that auto-adds to that actor's tokens. **Alt Sheets** custom fraction flags show up as bars here too.
 

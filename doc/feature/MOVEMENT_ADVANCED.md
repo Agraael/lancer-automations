@@ -1,6 +1,6 @@
 # Movement: Advanced & Beta
 
-[← Back to the README](../index.md) · Main guide: [MOVEMENT.md](./MOVEMENT.md)
+[← Back to Home](../index.md) · Main guide: [Movement](./MOVEMENT.md)
 
 In the **Combat & Movement** tab: boost detection, the movement cap, the boost offer, drag pathfinding, path-hex, and 3D distance under **Combat Flows**, and trigger-boundary splits under **Lancer Automations Ruler**. The debug ones are in the **Debug** tab.
 

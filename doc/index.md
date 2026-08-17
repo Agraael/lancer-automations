@@ -173,7 +173,7 @@ Many of Lancer's base actions, plus some items and simple NPC automations, are h
 
 I also ship my personal set of activations, but that's separate: just my own games' stuff shared as-is, not part of the core module, there for you to use, inspect, or modify to dip your toes into the engine.
 
-→ Full guide: [`doc/feature/AUTOMATION_ENGINE.md`](feature/AUTOMATION_ENGINE.md) ・ engine internals: [`doc/AUTOMATION_SYSTEM.md`](AUTOMATION_SYSTEM.md) ・ worked examples: [`doc/feature/NPC_EXAMPLES.md`](feature/NPC_EXAMPLES.md)
+→ Full guide: [Automation Engine](feature/AUTOMATION_ENGINE.md) ・ engine internals: [Automation System](AUTOMATION_SYSTEM.md) ・ worked examples: [NPC Examples](feature/NPC_EXAMPLES.md)
 
 <br clear="right"/>
 
@@ -187,7 +187,7 @@ The Effect Manager can be driven from automation code through the API, but it's 
 
 It manages effects, custom effects, and many bonuses and status effects so you can apply almost anything you want: custom effects that grant charges, weapon range bonuses, a single reroll, and more.
 
-→ Full guide: [`doc/feature/EFFECTS_AND_BONUSES.md`](feature/EFFECTS_AND_BONUSES.md)
+→ Full guide: [Effects & Bonuses](feature/EFFECTS_AND_BONUSES.md)
 
 <br clear="right"/>
 
@@ -199,7 +199,7 @@ It manages effects, custom effects, and many bonuses and status effects so you c
 
 The TAH, or Token Action HUD, is a custom-built action menu attached right to your token: your items, skills, stats, scans, history, favorites, a search tool, range preview, and more.
 
-→ Full guide: [`doc/feature/HUD.md`](feature/HUD.md)
+→ Full guide: [Token Action HUD](feature/HUD.md)
 
 <br clear="right"/>
 
@@ -215,7 +215,7 @@ They show the stats that matter, with per-token control over when they're visibl
 
 You can add extra custom bars per token, and talent counters can be injected automatically.
 
-→ Full guide: [`doc/feature/TOKEN_DISPLAY.md`](feature/TOKEN_DISPLAY.md)
+→ Full guide: [Token Display](feature/TOKEN_DISPLAY.md)
 
 <br clear="right"/>
 
@@ -231,7 +231,7 @@ There's still more work to do, but if you want accurate, detailed information ab
 
 The same system powers boost detection, cancelling movement through engagement, and more, all wired into the automation engine.
 
-→ Full guide: [`doc/feature/MOVEMENT.md`](feature/MOVEMENT.md) ・ advanced/beta: [`MOVEMENT_ADVANCED.md`](feature/MOVEMENT_ADVANCED.md)
+→ Full guide: [Movement](feature/MOVEMENT.md) ・ advanced/beta: [Movement Advanced](feature/MOVEMENT_ADVANCED.md)
 
 <br clear="right"/>
 
@@ -251,7 +251,7 @@ Fair warning though: the module keeps growing, and these isometric adaptations a
 
 Honestly, I don't play isometric myself, so it's lower on my priority list for now. What exists works, but some features built to handle 3D elevation on a flat grid don't have an isometric counterpart yet.
 
-→ Full guide: [`doc/feature/ISOMETRIC.md`](feature/ISOMETRIC.md)
+→ Full guide: [Isometric](feature/ISOMETRIC.md)
 
 <br clear="right"/>
 
@@ -265,7 +265,7 @@ Interactive tools are meant to be used with the automation engine, and elsewhere
 
 Lancer Automations provides many of them to build multi-step actions: applying knockback, choosing targets, picking tokens within a defined range, spawning tokens, running votes, and more.
 
-→ Full guide: [`doc/feature/INTERACTIVE_TOOLS.md`](feature/INTERACTIVE_TOOLS.md)
+→ Full guide: [Interactive Tools](feature/INTERACTIVE_TOOLS.md)
 
 <br clear="right"/>
 
@@ -277,7 +277,7 @@ Lancer Automations provides many of them to build multi-step actions: applying k
 
 An upgrade to the Lancer system's targeting flow: choose your target or place a blast, cone, or line from the attack HUD, with 3D targeting, elevation and terrain blocking through Terrain Height Tools, adjustable line angles, and multi-targeting.
 
-→ Full guide: [`doc/feature/ATTACK_TARGETING.md`](feature/ATTACK_TARGETING.md)
+→ Full guide: [Attack Targeting](feature/ATTACK_TARGETING.md)
 
 <br clear="right"/>
 
@@ -291,7 +291,7 @@ Through the automation engine and many tweaks to the Lancer system, Lancer Autom
 
 It also handles skill checks and contests, and tracks usage per turn, per round, or per scene.
 
-→ Full guide: [`doc/feature/GAMEPLAY_AUTOMATION.md`](feature/GAMEPLAY_AUTOMATION.md)
+→ Full guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md)
 
 <br clear="right"/>
 
@@ -305,7 +305,7 @@ There's more flavor in Lancer Automations than just JB2A and Lancer Weapon FX.
 
 Sounds and graphical effects run throughout the module, and almost all of them can be tweaked or disabled.
 
-→ Full guide: [`doc/feature/FX_AND_SOUNDS.md`](feature/FX_AND_SOUNDS.md)
+→ Full guide: [FX and Sounds](feature/FX_AND_SOUNDS.md)
 
 <br clear="right"/>
 
@@ -323,7 +323,7 @@ A per-token "blocks line of sight" option (with Bulwark support, elevation-aware
 
 There are also performance tools for light and movement, and a system that emulates Lancer's true edge-of-token line of sight (visually only).
 
-→ Full guide: [`doc/feature/VISION.md`](feature/VISION.md)
+→ Full guide: [Vision](feature/VISION.md)
 
 <br clear="right"/>
 
@@ -337,7 +337,7 @@ When a unit is destroyed, the module drops a dedicated wreck on the field, with 
 
 Art, FX, sound, and scale can be overridden per token.
 
-→ Full guide: [`doc/feature/WRECK.md`](feature/WRECK.md)
+→ Full guide: [Wrecks](feature/WRECK.md)
 
 <br clear="right"/>
 
@@ -349,7 +349,7 @@ Art, FX, sound, and scale can be overridden per token.
 
 When a combat ends the module tracks the whole fight and hands you a recap, XCom-style. As GM you set the outcome and MVP on a card, then broadcast it: per-pilot stats, the enemies and who killed them, awards, and per-round telemetry charts.
 
-→ Full guide: [`doc/feature/BATTLE_LOG.md`](feature/BATTLE_LOG.md)
+→ Full guide: [Battle Log](feature/BATTLE_LOG.md)
 
 <br clear="right"/>
 
@@ -363,7 +363,7 @@ Some of the most useful things here aren't flashy, they're changes baked directl
 
 The GM setup and maintenance tools have their own guide.
 
-→ Full guide: [`doc/feature/SYSTEM_ADDITIONS.md`](feature/SYSTEM_ADDITIONS.md) ・ setup & tools: [`doc/feature/SETUP_AND_TOOLS.md`](feature/SETUP_AND_TOOLS.md)
+→ Full guide: [System Additions](feature/SYSTEM_ADDITIONS.md) ・ setup & tools: [Setup & Tools](feature/SETUP_AND_TOOLS.md)
 
 <br clear="right"/>
 
@@ -379,7 +379,7 @@ It works like Burn, but for Heat, and it asks for a Systems check instead of Eng
 
 You get the damage type itself, the turn-end check flow, an Infection card on the sheet, and the matching visual effects.
 
-→ Full guide: [`doc/feature/INFECTION.md`](feature/INFECTION.md)
+→ Full guide: [Infection](feature/INFECTION.md)
 
 <br clear="right"/>
 

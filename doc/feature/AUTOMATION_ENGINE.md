@@ -1,12 +1,12 @@
 # Automation Engine
 
-[← Back to the README](../index.md) · Engine internals: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
+[← Back to Home](../index.md) · Engine internals: [Automation System](../AUTOMATION_SYSTEM.md) · API: [API Reference](../API_REFERENCE.md)
 
 <img src="../img/feature-automation-engine.png" width="55%"/>
 
 Automate almost any Lancer action.
 
-Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md)**.
+Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[Automation System](../AUTOMATION_SYSTEM.md)**.
 
 ---
 
@@ -53,7 +53,7 @@ All of this is saved in your world, not the module, so updates never overwrite i
 
 <img align="right" src="../img/ae-lid-finder.png" width="45%"/>
 
-Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger), covered in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
+Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger), covered in [Automation System](../AUTOMATION_SYSTEM.md).
 
 <br clear="right"/>
 
@@ -67,7 +67,7 @@ Each activation is a small form. The main fields:
 
 | Group | What you set |
 |-------|--------------|
-| **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md). |
+| **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). |
 | **Mode** | How it composes with the original action: **instead of** or **after** it, and whether it **auto-activates** silently (no popup). |
 | **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, and out-of-combat. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type shown in the popup (Reaction / Quick / Full / ...), and frequency. |
@@ -128,7 +128,7 @@ When a trigger fires and the filters pass, three pieces decide the outcome.
 
 There's also an **onInit** block that runs once when a token is created, for passive setup like constant bonuses or auras.
 
-You write these as plain function bodies, or full functions (the wrapper is stripped for you). The exact arguments each block receives, the order filters run in, and the synchronous rule for cancel and modify triggers are in [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
+You write these as plain function bodies, or full functions (the wrapper is stripped for you). The exact arguments each block receives, the order filters run in, and the synchronous rule for cancel and modify triggers are in [Automation System](../AUTOMATION_SYSTEM.md).
 
 By default `onActivation` fires when an item runs through an activation. **`treatGenericPrintAsActivation`** also fires it for items printed via Lancer's generic print.
 
@@ -168,7 +168,7 @@ If **`consumeReaction`** is on, activating a reaction spends that token's reacti
 
 The **Startup Scripts** tab in the Activation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any activation or macro.
 
-The registration patterns are in [API_HOWTO.md](../API_HOWTO.md).
+The registration patterns are in [API How-To](../API_HOWTO.md).
 
 <br clear="right"/>
 
@@ -191,7 +191,7 @@ Module Settings has a toggle for my personal activation set (**`enableLaSossisIt
 > [!NOTE]
 > This is **my own stuff, not part of the core module**. It's literally the automations I built for my own games (my NPCs, my items), shared as-is. It isn't a complete or general library, and it won't automate your content. Treat it as a set of examples to learn from, not something to rely on.
 
-The worked examples are walked through in [NPC_EXAMPLES.md](./NPC_EXAMPLES.md), and the patterns for registering your own automations from code are in [API_HOWTO.md](../API_HOWTO.md).
+The worked examples are walked through in [NPC Examples](./NPC_EXAMPLES.md), and the patterns for registering your own automations from code are in [API How-To](../API_HOWTO.md).
 
 Some of these deployables aren't in any official LCP. If a personal activation spawns one that won't resolve, import the small companion pack that ships with the module: [`extra/LaSossis_Npc_Deployables.lcp`](../../extra/LaSossis_Npc_Deployables.lcp).
 

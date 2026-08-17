@@ -1,8 +1,8 @@
 # Interactive Tools
 
-[← Back to the README](../index.md) · API: [API_INTERACTIVE.md](../API_INTERACTIVE.md)
+[← Back to Home](../index.md) · API: [Interactive API](../API_INTERACTIVE.md)
 
-Cards that ask players to choose or vote, and on-canvas tools to pick, place, and move tokens and zones. Automations and macros call these. The function signatures are in [API_INTERACTIVE.md](../API_INTERACTIVE.md).
+Cards that ask players to choose or vote, and on-canvas tools to pick, place, and move tokens and zones. Automations and macros call these. The function signatures are in [Interactive API](../API_INTERACTIVE.md).
 
 ---
 
@@ -130,7 +130,7 @@ The **Colors** settings tab lets each player recolor the targeting and range-glo
 
 With **`linkManualDeploy`**, a deployable you drag onto the scene yourself links to your token and fires its `onDeploy`, like the deploy menu does. **`showDeployableLines`** draws a line from an owner to its deployables on hover.
 
-Delayed appearance / reinforcement is in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).
+Delayed appearance / reinforcement is in [Gameplay Automation](./GAMEPLAY_AUTOMATION.md).
 
 <br clear="right"/>
 

@@ -1,6 +1,6 @@
 # System Additions
 
-[← Back to the README](../index.md)
+[← Back to Home](../index.md)
 
 A few changes Lancer Automations makes to the Lancer system and its sheets.
 

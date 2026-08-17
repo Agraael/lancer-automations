@@ -1,11 +1,11 @@
 # Building NPC Automations - Worked Examples
 
-[← Back to the README](../index.md) · Engine guide: [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
+[← Back to Home](../index.md) · Engine guide: [Automation Engine](./AUTOMATION_ENGINE.md) · API: [API Reference](../API_REFERENCE.md)
 
 > [!WARNING]
 > **These come from my personal NPC set** - teaching material, not a supported content pack. The LIDs, numbers, and balance are tuned for my own games, and **some are old and may not run as-is anymore** (the engine and API move on). Copy the patterns, not the literal code. See [the personal activation set](./AUTOMATION_ENGINE.md#the-personal-activation-set).
 
-Each example teaches one engine concept, simplest first. Read [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) first for the basics.
+Each example teaches one engine concept, simplest first. Read [Automation Engine](./AUTOMATION_ENGINE.md) first for the basics.
 
 ---
 
@@ -43,7 +43,7 @@ const npcInsulatedBonus = {
 ```
 
 > [!TIP]
-> `onInit` runs once on token creation, no trigger needed. Check `getConstantBonuses` first so it isn't added twice. Constant bonuses are invisible and persistent (see [EFFECTS_AND_BONUSES.md](./EFFECTS_AND_BONUSES.md)).
+> `onInit` runs once on token creation, no trigger needed. Check `getConstantBonuses` first so it isn't added twice. Constant bonuses are invisible and persistent (see [Effects & Bonuses](./EFFECTS_AND_BONUSES.md)).
 
 ---
 
@@ -294,7 +294,7 @@ const movingTargetSniperAutomation = {
 ```
 
 > [!TIP]
-> The classic interrupt. `onPreMove` fires before the move runs, so the cancel code can't be async, which is why `awaitActivationCompletion` is set. `cancelTriggeredMove` takes a `preConfirm` (a choice card) that decides whether to stop the move. Firing the weapon is handed to the reactor's client via `onMessage`. Cancel rules: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md).
+> The classic interrupt. `onPreMove` fires before the move runs, so the cancel code can't be async, which is why `awaitActivationCompletion` is set. `cancelTriggeredMove` takes a `preConfirm` (a choice card) that decides whether to stop the move. Firing the weapon is handed to the reactor's client via `onMessage`. Cancel rules: [Automation System](../AUTOMATION_SYSTEM.md).
 
 ---
 
@@ -366,7 +366,7 @@ const restockDroneSupportAutomation = {
 <img src="../img/npc-restock-aura.png" width="53%"/>
 
 > [!TIP]
-> Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. See [self-deploy in AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md#self-deployable-reacting-to-your-own-deploy).
+> Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. See [self-deploy in Automation System](../AUTOMATION_SYSTEM.md#self-deployable-reacting-to-your-own-deploy).
 
 ---
 
