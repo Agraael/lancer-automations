@@ -134,7 +134,13 @@ By default `onActivation` fires when an item runs through an activation. **`trea
 
 ### Debugging what you get
 
-Call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console: the trigger type, the reactor token, the item, the activation name, every field on `triggerData`, and the list of helper functions available for that specific trigger. Pass a label (`debugActivation("before the check")`) to name the group when you have several.
+Call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
+
+- the trigger type, the reactor token, the item, the activation name
+- every field on `triggerData`
+- the helper functions available for that specific trigger
+
+Pass a label (`debugActivation("before the check")`) to name the group when you have several.
 
 It returns the same information as an object, and it's also on the api as `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label)`.
 

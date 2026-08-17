@@ -13,7 +13,12 @@ In the **Combat & Movement** tab: boost detection, the movement cap, the boost o
 
 **`experimentalBoostDetection`** tracks the cumulative cost of a token's intentional (dragged) movement and works out when it crosses a boost threshold. Boost N is counted once the running cost passes N times the token's speed.
 
-When it fires, the `onMove` trigger data carries `moveInfo.isBoost` (this move crossed a threshold) and `moveInfo.boostSet` (which boost numbers were crossed). Cumulative movement resets when the move history clears (combat start, or per turn/round if you enabled those). **`debugBoostDetection`** shows a notification with the numbers each time it triggers.
+When it fires, the `onMove` trigger data carries:
+
+- `moveInfo.isBoost` - this move crossed a threshold
+- `moveInfo.boostSet` - which boost numbers were crossed
+
+Cumulative movement resets when the move history clears (combat start, or per turn/round if you enabled those). **`debugBoostDetection`** shows a notification with the numbers each time it triggers.
 
 ---
 

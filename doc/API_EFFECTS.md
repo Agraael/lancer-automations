@@ -823,7 +823,7 @@ await api.cleanupActorBonusesFromTokens(actor)              // remove bonuses th
 
 The lifecycle hooks call these for you. Only reach for them if you need to force a pass from custom code. All safe to call repeatedly - they skip anything already applied.
 
-Args: `item`/`actor` source doc. The `apply*` helpers also take `tokens` (`Array<Token\|TokenDocument>`). `cleanupItemBonusesFromActor(item, actor)` and `cleanupActorBonusesFromTokens(actor)`.
+Args: `item`/`actor` source doc. The `apply*` helpers also take `tokens` (`Array<Token|TokenDocument>`). `cleanupItemBonusesFromActor(item, actor)` and `cleanupActorBonusesFromTokens(actor)`.
 
 </details>
 

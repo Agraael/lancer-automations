@@ -114,7 +114,13 @@ Stop an item from spending its resources when it fires, per resource type. Toggl
 
 For units that arrive partway through a fight. Drag the new tokens onto the scene holding **Alt** to drop them hidden, then, in combat, select them, run the reinforcement tool, and set how many rounds until they land. They stay hidden until then.
 
-In their place it drops a countdown marker, but only if it can find one. For each token it looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on, and spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round. You make those placeholder actors yourself, one per size you use. Without a match the token only hides with no marker.
+In their place it drops a countdown marker, but only if it can find one:
+
+- It looks up a world actor named after that token's size, exactly **`Size 1`**, **`Size 2`**, **`Size 0.5`** and so on.
+- It spawns that actor's token at the spot, renamed **`[N]`** and ticking down each round.
+- Without a match the token only hides, with no marker.
+
+You make those placeholder actors yourself, one per size you use.
 
 When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a checkbox each so you pick who actually shows up. The chosen ones reappear with a burst effect (needs Sequencer and JB2A) and their marker is cleared. The rest are deleted along with their markers.
 

@@ -11,12 +11,16 @@ use_directory_urls: false
 
 theme:
   name: material
+  font:
+    text: Roboto
+    code: JetBrains Mono
   icon:
     repo: fontawesome/brands/github
   features:
     - navigation.instant
     - navigation.tracking
     - navigation.sections
+    - navigation.footer
     - navigation.top
     - navigation.indexes
     - search.suggest
@@ -69,6 +73,7 @@ extra_javascript:
   - assets/la-header.js
   - assets/la-tables.js
   - assets/la-index.js
+  - assets/la-zoom.js
 
 plugins:
   - search

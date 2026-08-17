@@ -13,31 +13,39 @@ function collectEntries()
     return out;
 }
 
+function makeChip(name, targetId)
+{
+    const chip = document.createElement("a");
+    chip.className = "la-fn-chip";
+    chip.href = `#${targetId}`;
+    chip.textContent = name;
+    chip.dataset.name = name.toLowerCase();
+    return chip;
+}
+
 function buildIndex(entries)
 {
     const box = document.createElement("div");
     box.className = "la-fn-index";
 
+    const bar = document.createElement("div");
+    bar.className = "la-fn-bar";
+
     const search = document.createElement("input");
     search.type = "search";
     search.className = "la-fn-filter";
     search.placeholder = `Filter ${entries.length} functions...`;
-    box.append(search);
+    bar.append(search);
+
+    const panel = document.createElement("div");
+    panel.className = "la-fn-panel";
+    bar.append(panel);
 
     const grid = document.createElement("div");
     grid.className = "la-fn-grid";
     for (const entry of entries)
-    {
         for (const name of entry.names)
-        {
-            const chip = document.createElement("a");
-            chip.className = "la-fn-chip";
-            chip.href = `#${entry.details.id}`;
-            chip.textContent = name;
-            chip.dataset.name = name.toLowerCase();
-            grid.append(chip);
-        }
-    }
+            grid.append(makeChip(name, entry.details.id));
     box.append(grid);
 
     const empty = document.createElement("p");
@@ -45,7 +53,9 @@ function buildIndex(entries)
     empty.textContent = "No function matches.";
     box.append(empty);
 
-    search.addEventListener("input", () =>
+    let gridVisible = true;
+
+    const apply = () =>
     {
         const query = search.value.trim().toLowerCase();
         let shown = 0;
@@ -57,12 +67,41 @@ function buildIndex(entries)
                 shown++;
         }
         for (const entry of entries)
-        {
-            const hit = !query || entry.names.some(name => name.toLowerCase().includes(query));
-            entry.details.hidden = !hit;
-        }
+            entry.details.hidden = !!query && !entry.names.some(name => name.toLowerCase().includes(query));
         box.classList.toggle("la-fn-none", shown === 0);
+
+        panel.textContent = "";
+        const usePanel = !!query && !gridVisible;
+        if (usePanel)
+        {
+            for (const entry of entries)
+                for (const name of entry.names)
+                    if (name.toLowerCase().includes(query))
+                        panel.append(makeChip(name, entry.details.id));
+            if (!panel.children.length)
+            {
+                const none = document.createElement("p");
+                none.className = "la-fn-empty";
+                none.textContent = "No function matches.";
+                panel.append(none);
+            }
+        }
+        panel.classList.toggle("la-fn-panel-open", usePanel);
+    };
+
+    search.addEventListener("input", apply);
+    box.laBar = bar;
+    panel.addEventListener("click", () =>
+    {
+        search.value = "";
+        apply();
     });
+
+    new IntersectionObserver((records) =>
+    {
+        gridVisible = records[0].isIntersecting;
+        apply();
+    }).observe(grid);
 
     return box;
 }
@@ -81,5 +120,7 @@ document$.subscribe(() =>
             anchor = node;
             break;
         }
-    anchor.parentElement.insertBefore(buildIndex(entries), anchor);
+    const box = buildIndex(entries);
+    anchor.parentElement.insertBefore(box.laBar, anchor);
+    anchor.parentElement.insertBefore(box, anchor);
 });

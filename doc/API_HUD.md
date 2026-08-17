@@ -220,7 +220,7 @@ Combat data on an item's **native** actions (`system.actions`), stored in a flag
 | <kbd>actionName</kbd> | `string` | Name as it appears in `system.actions`. Dots are safe |
 | <kbd>overlay</kbd> | `Object\|null` | Combat fields below. Patch-merge. An empty value clears a field, `null` removes the overlay |
 
-**Overlay fields:** `laCombat` (`'attack'\|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range` - same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
+**Overlay fields:** `laCombat` (`'attack'|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range` - same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
 
 **Range grants:** `resolveGrantedActionRange` folds every non-destroyed item's overlay `range` entries for that action onto `base`. Per-entry `mode` works like AE changes: `upgrade` (default, greater wins), `add` (sums, negatives allowed), `override` (hard set). Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
 

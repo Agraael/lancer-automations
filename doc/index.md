@@ -419,3 +419,4 @@ Inspiration, reference code, and ideas drawn from the work of:
 - [caewok](https://github.com/caewok)
 - [Wibble199](https://github.com/Wibble199)
 - [csmcfarland](https://gitlab.com/csmcfarland)
+- [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
