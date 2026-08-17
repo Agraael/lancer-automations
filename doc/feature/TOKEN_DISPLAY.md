@@ -8,13 +8,11 @@ Lancer Automations draws its own bars and labels directly on the token, as a rep
 
 ## Settings
 
-<img align="right" src="../img/td-settings.png" width="45%"/>
-
 Everything here lives in the **Tokens & Display** tab, under the **Custom Token Stat Bars** and **Token Stat Hint** sections.
 
 Turn the bars on with **`tokenStatBar`** (Enable Custom Token Stat Bars). It needs a reload, and it's disabled while **Bar Brawl** is active, so turn Bar Brawl off first.
 
-<br clear="right"/>
+<img src="../img/td-settings.png" width="70%"/>
 
 ---
 

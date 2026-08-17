@@ -6,7 +6,7 @@
 
 ## Combat & Execution Flows
 
-<details>
+<details id="executeStatRoll">
 <summary><b><code>executeStatRoll</code></b> <sup>async</sup> → <code>{completed, total, roll, passed}</code></summary>
 
 <br>
@@ -33,7 +33,7 @@ await api.executeStatRoll(actor, 'SYS', 'Blind', witchToken, { difficulty: 1 });
 
 ---
 
-<details>
+<details id="executeSaveVsEffect">
 <summary><b><code>executeSaveVsEffect</code></b> <sup>async</sup> → <code>Array&lt;{ target, passed, result }&gt;</code></summary>
 
 <br>
@@ -47,11 +47,12 @@ Save-or-effect over a target list: each target rolls the save (owner-routed by d
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>targets</kbd> | `Token\|Token[]` | *required* | Rollers |
+| **inside `options`** | | | |
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
 | <kbd>title</kbd> | `string` | *required* | Roll title |
 | <kbd>origin</kbd> | `number\|Token` | `10` | Difficulty value or token to derive it from |
 | <kbd>effects</kbd> | `string\|Object\|Array` | `null` | Applied on fail (`applyEffectsToTokens` shape) |
-| <kbd>duration</kbd> / <kbd>note</kbd> / <kbd>extraFlags</kbd> | | | Forwarded to the effect application |
+| <kbd>duration</kbd> / <kbd>note</kbd> / <kbd>extraFlags</kbd> | `Object` / `string` / `Object` | `null` | Forwarded to the effect application |
 | <kbd>cardTitle</kbd> / <kbd>cardDescription</kbd> | `string \| ((target: Token) => string)` | `null` | Owner card text. Description can be per target |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its owner |
 | <kbd>onFail</kbd> / <kbd>onPass</kbd> | `(target: Token, result: { passed: boolean, total: number }) => void \| Promise<void>` | `null` | Per-target extras |
@@ -69,7 +70,7 @@ await api.executeSaveVsEffect(targets, {
 
 ---
 
-<details>
+<details id="attackWith">
 <summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code><br><b><code>getTier</code></b> → <code>number</code><br><b><code>tierValue</code></b> → <code>any</code><br><b><code>getFlowFlag</code></b> → <code>any</code><br><b><code>setFlowFlag</code></b> → <code>boolean</code><br><b><code>consumeOncePerRound</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
 
 <br>
@@ -82,6 +83,8 @@ api.getFlowFlag(triggerData, key)                             // read a la_extra
 api.setFlowFlag(triggerData, key, value?)                     // stamp it (once-per-flow gates)
 await api.consumeOncePerRound(owner, key, subject?)           // → true the first time this round
 ```
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>values</kbd> `[any, any, any]` per-tier values · <kbd>triggerData</kbd> the trigger's data object · <kbd>value</kbd> `any` (default `true`) · <kbd>reloadIfEmpty</kbd> `boolean` (default `false`)
 
 `attackWith` sets the given tokens as targets then starts the weapon's attack flow. `reloadIfEmpty: true` reloads instead and returns `{ reloaded: true }` when the weapon is unloaded.
 
@@ -106,7 +109,7 @@ if (await api.consumeOncePerRound(reactorToken, 'ring_of_fire', target))
 
 ---
 
-<details>
+<details id="executeContestedCheck">
 <summary><b><code>executeContestedCheck</code></b> <sup>async</sup> → <code>{ completed, winner, loser, winnerToken, loserToken, tie, results }</code></summary>
 
 <br>
@@ -121,15 +124,26 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>stat1</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
 | <kbd>input2</kbd> | `Actor\|Token` | *required* | Second contender |
 | <kbd>stat2</kbd> | `string` | *required* | Second contender's stat |
-| <kbd>options</kbd> | `Object` | `{}` | `{ title?: string, sendToOwner?: boolean }` plus `accuracy1` / `difficulty1` / `flatModifier1` and the `2` variants, pre-filling each side's HASE HUD |
+| **inside `options`** | | | |
+| <kbd>title</kbd> | `string` | `"Contested Check"` | Card header |
+| <kbd>sendToOwner</kbd> | `boolean` | `true` | Roll on each contender's owner client |
+| <kbd>accuracy1</kbd> / <kbd>accuracy2</kbd> | `number` | `0` | Accuracy dice pre-filled on that side's HASE HUD |
+| <kbd>difficulty1</kbd> / <kbd>difficulty2</kbd> | `number` | `0` | Difficulty dice pre-filled on that side's HASE HUD |
+| <kbd>flatModifier1</kbd> / <kbd>flatModifier2</kbd> | `number` | `0` | Flat modifier pre-filled on that side's HASE HUD |
 
 Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
+
+```js
+const res = await api.executeContestedCheck(tokenA, 'HULL', tokenB, 'AGI', { title: 'Grapple', difficulty2: 1 });
+if (!res.tie && res.winnerToken === tokenA)
+    ui.notifications.info(`${tokenA.name} wins the grapple`);
+```
 
 </details>
 
 ---
 
-<details>
+<details id="executeForceCheck">
 <summary><b><code>executeForceCheck</code></b> <sup>async</sup> → <code>{ completed, results }</code></summary>
 
 <br>
@@ -142,15 +156,23 @@ const res = await api.executeForceCheck(skill, targets, options)
 |:------|:-----|:--------|:------------|
 | <kbd>skill</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` |
 | <kbd>targets</kbd> | `Token[]` | user targets | The tokens that roll |
-| <kbd>options</kbd> | `Object` | `{}` | `{ saveVs?: Token\|Actor, sendToOwner?: boolean = true, title?: string }` plus `accuracy` / `difficulty` / `flatModifier`, each a number or `(rollerToken) => number` |
+| **inside `options`** | | | |
+| <kbd>saveVs</kbd> | `Token\|Actor` | `null` | Makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD |
+| <kbd>sendToOwner</kbd> | `boolean` | `true` | Roll on each target's owner client |
+| <kbd>title</kbd> | `string` | `""` | Card header |
+| <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number\|(rollerToken) => number` | `0` | Pre-filled on the roller's HASE HUD. Per-roller when given a function |
 
 Sends each target its HASE check (owner rolls, or the GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
+
+```js
+await api.executeForceCheck('ENG', [target], { saveVs: witchToken, title: 'Petrify' });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="executeDamageRoll">
 <summary><b><code>executeDamageRoll</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -189,11 +211,15 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 
 **`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }` - opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target.
 
+```js
+await api.executeDamageRoll(reactorToken, [target], 2, 'Heat', 'Ring of Fire');
+```
+
 </details>
 
 ---
 
-<details>
+<details id="executeBasicAttack">
 <summary><b><code>executeBasicAttack</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -207,14 +233,26 @@ Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actor</kbd> | `Actor` | *required* | The actor making the attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow constructor options. `targets: Token\|Token[]` sets who is attacked. `tags` / `damage` carry weapon tags and a damage list onto the attack card, so its damage button rolls them pre-filled |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected into `state.la_extraData` |
+| **inside `options`** | | | |
+| <kbd>targets</kbd> | `Token\|Token[]` | `null` | Who is attacked. Avoids touching `setTarget` |
+| <kbd>tags</kbd> | `Array` | `undefined` | Weapon tags carried onto the attack card |
+| <kbd>damage</kbd> | `Array` | `undefined` | Damage list carried onto the card, so its damage button rolls pre-filled |
+
+Any other key is forwarded to the `BasicAttackFlow` constructor.
+
+```js
+await api.executeBasicAttack(actor, {
+    targets: targetToken,
+    damage: [{ type: 'Energy', val: '1d6' }]
+});
+```
 
 </details>
 
 ---
 
-<details>
+<details id="executeTechAttack">
 <summary><b><code>executeTechAttack</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -226,14 +264,22 @@ await api.executeTechAttack(target, options, extraData)
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Actor\|Item` | *required* | The actor or item initiating the tech attack |
-| <kbd>options</kbd> | `Object` | `{}` | Flow options. `targets: Token\|Token[]` sets who is attacked. `tags` / `damage` carry onto the attack card like `executeBasicAttack` |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
+| **inside `options`** | | | |
+| <kbd>targets</kbd> | `Token\|Token[]` | `null` | Who is attacked |
+| <kbd>damage</kbd> | `Array` | `undefined` | Damage list carried onto the attack card |
+
+Any other key is forwarded to the flow constructor.
+
+```js
+await api.executeTechAttack(actor, { targets: [target] });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="executeExtraActionCombat">
 <summary><b><code>executeExtraActionCombat</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -250,11 +296,21 @@ Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-h
 | <kbd>action</kbd> | `ExtraAction` | *required* | The extra action (must have `laCombat`) |
 | <kbd>sourceItem</kbd> | `Item\|null` | `null` | Owning item, if any (tech attacks route through it) |
 
+```js
+await api.executeExtraActionCombat(actor, {
+    name: 'Turret Shot',
+    activation: 'Quick',
+    laCombat: 'attack',
+    attack_bonus: 2,
+    damage: [{ type: 'Kinetic', val: '1d3' }]
+});
+```
+
 </details>
 
 ---
 
-<details>
+<details id="executeSimpleActivation">
 <summary><b><code>executeSimpleActivation</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -269,11 +325,19 @@ await api.executeSimpleActivation(actor, options, extraData)
 | <kbd>options</kbd> | `{ title?: string; action?: { name, activation }; detail?: string; tags?: Array }` | `{}` | Card fields |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
+```js
+await api.executeSimpleActivation(actor, {
+    title: 'Vent Coolant',
+    action: { name: 'Vent', activation: 'Quick' },
+    detail: 'Clear 2 heat.'
+});
+```
+
 </details>
 
 ---
 
-<details>
+<details id="activateGeneralAction">
 <summary><b><code>activateGeneralAction</code></b> <sup>async</sup> → <code>{completed, flow}</code></summary>
 
 <br>
@@ -282,13 +346,46 @@ await api.executeSimpleActivation(actor, options, extraData)
 await api.activateGeneralAction(actorOrToken, name)
 ```
 
+**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>name</kbd> `string` registry action name
+
 Triggers a general action (Brace, Boost, ...) from its registry definition: activation type and card text come from the registry, and the action's automation fires. For an item's action use `executeItemActivation`.
+
+```js
+await api.activateGeneralAction(reactorToken, 'Brace');
+```
 
 </details>
 
 ---
 
-<details>
+<details id="executeItemActivation">
+<summary><b><code>executeItemActivation</code></b> <sup>async</sup> → <code>{completed, flow?}</code></summary>
+
+<br>
+
+```js
+await api.executeItemActivation(item, options, extraData)
+```
+
+Runs an item's activation flow, using the same dispatch rules as `triggerData.startRelatedFlow`. The item's own automation fires. `activateGeneralAction` is the equivalent for registry actions that belong to no item.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>item</kbd> | `Item` | *required* | The item to activate |
+| <kbd>extraData</kbd> | `Object` | `{}` | Merged onto `flow.state.la_extraData` before the flow begins |
+| **inside `options`** | | | |
+| <kbd>path</kbd> | `string` | `null` | Sets `action_path`, to pick one action on a multi-action item |
+| <kbd>flowName</kbd> | `string` | `null` | Forces a specific flow class instead of the dispatched one |
+
+```js
+const { completed } = await api.executeItemActivation(item, {}, { fromReaction: true });
+```
+
+</details>
+
+---
+
+<details id="executeSkirmish">
 <summary><b><code>executeSkirmish</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -305,11 +402,106 @@ await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, op
 | <kbd>weaponFilter</kbd> | `(weapon: Item) => boolean` | `null` | Filter for available weapons |
 | <kbd>opts</kbd> | `Object` | `{}` | `noFX: true` skips the skirmish FX |
 
+```js
+await api.executeSkirmish(token, null, targetToken);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="executeBarrage">
+<summary><b><code>executeBarrage</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.executeBarrage(actorOrToken, bypassMount, preTarget)
+```
+
+Runs a Barrage: attacks with either two different mounts or one superheavy mount. Prompts for the mounts unless `bypassMount` supplies them.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | The acting entity |
+| <kbd>bypassMount</kbd> | `Object\|Array` | `null` | Mounts to use, skipping selection |
+| <kbd>preTarget</kbd> | `Token` | `null` | Pre-targeted before each attack flow |
+
+```js
+await api.executeBarrage(token, null, targetToken);
+```
+
+</details>
+
+---
+
+<details id="executeInvade">
+<summary><b><code>executeInvade</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.executeInvade(actorOrToken, bypassChoice)
+```
+
+Prompts for one of the actor's invade options, then fires the tech attack flow.
+
+**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>bypassChoice</kbd> `Object` preselected invade, skips the prompt
+
+```js
+await api.executeInvade(token);
+```
+
+</details>
+
+---
+
+<details id="executeReactorMeltdown">
+<summary><b><code>executeReactorMeltdown</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>executeReactorExplosion</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.executeReactorMeltdown(tokenOrActor, turns)
+await api.executeReactorExplosion(token)
+```
+
+`executeReactorMeltdown` starts the meltdown countdown; `turns` skips the turn-picker dialog. `executeReactorExplosion` runs the explosion itself: a Burst 2 catch-confirm picker around the token, then the damage.
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>turns</kbd> `number` countdown length · <kbd>token</kbd> `Token` the exploding mech
+
+```js
+await api.executeReactorMeltdown(token, 2);
+```
+
+</details>
+
+---
+
+<details id="executeRest">
+<summary><b><code>executeRest</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>executeDowntime</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openAddReserveDialog</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.executeRest(token)
+await api.executeDowntime()
+await api.openAddReserveDialog(tokenOrActor)
+```
+
+The out-of-combat flows, same as their TAH entries: the Rest card, the downtime activity builder, and the add-a-reserve dialog. Feature guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md).
+
+**Params:** <kbd>token</kbd> `Token` the resting mech · <kbd>tokenOrActor</kbd> `Token|Actor` the pilot's mech
+
+```js
+await api.executeRest(token);
+```
+
+</details>
+
+---
+
+<details id="beginWeaponAttackFlow">
 <summary><b><code>beginWeaponAttackFlow</code></b> <sup>async</sup> → <code>{completed, flow?}</code></summary>
 
 <br>
@@ -323,16 +515,23 @@ Starts a weapon attack flow for a given weapon item.
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>weapon</kbd> | `Item` | *required* | The weapon item to attack with |
-| <kbd>options</kbd> | `Object` | `{}` | Flow options, plus `targets: Token\|Token[]` to set who is attacked |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
+| **inside `options`** | | | |
+| <kbd>targets</kbd> | `Token\|Token[]` | `null` | Who is attacked |
+
+Any other key is forwarded to the flow constructor.
 
 Pass `targets` rather than calling `setTarget` yourself.
+
+```js
+await api.beginWeaponAttackFlow(weapon, { targets: [target] });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="afterFx">
 <summary><b><code>afterFx</code></b> → <code>void</code></summary>
 
 <br>
@@ -355,7 +554,7 @@ api.afterFx(() => api.executeDamageRoll(reactorToken, targets, 4, 'Heat', 'Tear 
 
 Processed weapon/item info, with active actor bonuses applied (e.g. Accuracy, Threat).
 
-<details>
+<details id="getItemTags_WithBonus">
 <summary><b><code>getItemTags_WithBonus</code></b> <sup>async</sup> → <code>Array&lt;Object&gt;</code></summary>
 
 <br>
@@ -371,11 +570,16 @@ Effective tag list for one item.
 | <kbd>item</kbd> | `Item` | *required* | The item to inspect |
 | <kbd>actor</kbd> | `Actor` | `item.parent` | The actor whose bonuses should be applied |
 
+```js
+const tags = await api.getItemTags_WithBonus(weapon);
+const isSmart = tags.some(t => t.lid === 'tg_smart');
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getActorMaxThreat">
 <summary><b><code>getActorMaxThreat</code></b> → <code>number</code></summary>
 
 <br>
@@ -390,18 +594,22 @@ Returns the highest Threat range across all weapons held by the actor, accountin
 |:------|:-----|:------------|
 | <kbd>actor</kbd> | `Actor` | The actor to inspect |
 
+```js
+if (api.getTokenDistance(reactorToken, moverToken) <= api.getActorMaxThreat(reactorToken.actor))
+    return true;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getMaxWeaponRanges_WithBonus">
 <summary><b><code>getMaxWeaponRanges_WithBonus</code></b> → <code>Record&lt;string, number&gt;</code></summary>
 
 <br>
 
 ```js
 api.getMaxWeaponRanges_WithBonus(input)
-// e.g. returns { Range: 25, Burst: 3 }
 ```
 
 Returns the maximum range value per range type across all weapons provided in the input.
@@ -410,11 +618,16 @@ Returns the maximum range value per range type across all weapons provided in th
 |:------|:-----|:------------|
 | <kbd>input</kbd> | `Actor\|Token\|Item\|Array` | The source(s) to scan for weapons |
 
+```js
+const ranges = api.getMaxWeaponRanges_WithBonus(actor);
+const threat = ranges.Threat ?? 1;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getMaxWeaponReach_WithBonus">
 <summary><b><code>getMaxWeaponReach_WithBonus</code></b> <sup>async</sup> → <code>number</code></summary>
 
 <br>
@@ -429,11 +642,15 @@ Returns the single highest reach value across all scanned weapons. Scans `Range`
 |:------|:-----|:------------|
 | <kbd>input</kbd> | `Actor\|Token\|Item\|Array` | The source(s) to scan for weapons |
 
+```js
+const reach = await api.getMaxWeaponReach_WithBonus(reactorToken);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getMaxItemRanges_WithBonus">
 <summary><b><code>getMaxItemRanges_WithBonus</code></b> <sup>async</sup> → <code>Object</code></summary>
 
 <br>
@@ -446,11 +663,16 @@ Single item's max range per type, with bonuses. Also folds in action ranges, `tg
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>actor</kbd> `Actor` (optional, defaults to `item.parent`).
 
+```js
+const ranges = await api.getMaxItemRanges_WithBonus(item);
+const throwRange = ranges.Thrown ?? 0;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getWeaponProfiles_WithBonus">
 <summary><b><code>getWeaponProfiles_WithBonus</code></b> → <code>Array&lt;Object&gt;</code></summary>
 
 <br>
@@ -463,11 +685,15 @@ All profiles with bonuses merged into `range`/`damage` (`base_range`/`base_damag
 
 **Params:** <kbd>weapon</kbd> `Item` · <kbd>actor</kbd> `Actor` (optional, defaults to `weapon.parent`).
 
+```js
+const profile = api.getWeaponProfiles_WithBonus(weapon)[weapon.system.selected_profile_index ?? 0];
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getSensorRange_WithBonus">
 <summary><b><code>getSensorRange_WithBonus</code></b> → <code>number</code></summary>
 
 <br>
@@ -478,13 +704,17 @@ api.getSensorRange_WithBonus(actor)
 
 Actor's effective sensor range (`system.sensor_range`, else `10`), plus any `Sensor` range-type bonuses.
 
-**Params:** <kbd>actor</kbd> `Actor|Token`.
+**Params:** <kbd>input</kbd> `Actor|Token`.
+
+```js
+const inSensors = api.getTokenDistance(reactorToken, target) <= api.getSensorRange_WithBonus(reactorToken);
+```
 
 </details>
 
 ---
 
-<details>
+<details id="hasTag">
 <summary><b><code>hasTag</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -493,7 +723,13 @@ Actor's effective sensor range (`system.sensor_range`, else `10`), plus any `Sen
 await api.hasTag(item, 'smart')   // or 'tg_smart'
 ```
 
+**Params:** <kbd>item</kbd> `Item` · <kbd>lid</kbd> `string` tag LID
+
 True if the item has the tag (bonus-aware). Accepts the LID with or without `tg_`.
+
+```js
+if (!await api.hasTag(weapon, 'smart')) return false;
+```
 
 </details>
 

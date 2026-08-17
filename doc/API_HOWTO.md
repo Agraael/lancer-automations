@@ -8,7 +8,7 @@
 
 ### User Helpers
 
-<details>
+<details id="registerUserHelper">
 <summary><b><code>registerUserHelper</code></b><br><b><code>getUserHelper</code></b> → <code>Function | null</code></summary>
 
 <br>
@@ -25,13 +25,18 @@ Shares logic between activation scripts.
 | <kbd>name</kbd> | `string` | Unique name for the helper |
 | <kbd>fn</kbd> | `(...args: any[]) => any` | The function to register |
 
+```js
+api.registerUserHelper('isOverheated', (actor) => actor.system.heat.value >= actor.system.heat.max);
+const isOverheated = api.getUserHelper('isOverheated');
+```
+
 </details>
 
 ---
 
 ### Registration Functions
 
-<details>
+<details id="registerDefaultItemReactions">
 <summary><b><code>registerDefaultItemReactions</code></b> → <code>void</code><br><b><code>registerDefaultGeneralReactions</code></b> → <code>void</code></summary>
 
 <br>
@@ -89,7 +94,7 @@ await api.applyEffectsToTokens({
 
 Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) module (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)).
 
-<details>
+<details id="createAura">
 <summary><b><code>createAura</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
@@ -105,7 +110,7 @@ Wrapper accepts a JS `function` in place of a macro ID.
 | <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura. An Item owner ties the aura to the item's lifetime |
 | <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
 
-`ensureAura(owner, auraConfig)` <sup>async</sup> → `Promise<any|null>` creates it only if the owner has no aura by that `name`, else returns `null`. Use it in `onInit`.
+See `ensureAura` below for the idempotent form.
 
 **`macros` Function Example:**
 ```javascript
@@ -127,11 +132,45 @@ macros: [{
 
 </details>
 
+```js
+await api.createAura(reactorToken, {
+    name: 'Suppression',
+    radius: 3,
+    lineWidth: 3,
+    lineColor: '#ffd600',
+    lineOpacity: 0.9
+});
+```
+
 </details>
 
 ---
 
-<details>
+<details id="ensureAura">
+<summary><b><code>ensureAura</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code></summary>
+
+<br>
+
+```js
+await api.ensureAura(owner, auraConfig)
+```
+
+`createAura` that no-ops when the owner already has an aura with that `name`, returning `null` instead of a second copy. The `onInit` way to add an aura: safe to run on every init without a hand-written guard. `auraConfig.name` is required for the dedupe.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura |
+| <kbd>auraConfig</kbd> | `Object` | Same shape as `createAura`. `name` is required |
+
+```js
+await api.ensureAura(token, { name: 'Suppression', radius: 3 });
+```
+
+</details>
+
+---
+
+<details id="deleteAuras">
 <summary><b><code>deleteAuras</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -148,11 +187,15 @@ Deletes the owner's auras and their function callbacks.
 | <kbd>filter</kbd> | `string\|Object` | *required* | String ID, name, or Object filter |
 | <kbd>options</kbd> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
 
+```js
+await api.deleteAuras(token, 'Suppression');
+```
+
 </details>
 
 ---
 
-<details>
+<details id="toggleAura">
 <summary><b><code>toggleAura</code></b> <sup>async</sup> → <code>boolean | null</code></summary>
 
 <br>

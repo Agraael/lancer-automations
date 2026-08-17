@@ -8,11 +8,9 @@ When a token dies, the module leaves a wreck where it stood. Per category and pe
 
 ## Settings
 
-<img align="right" src="../img/wr-settings.png" width="45%"/>
-
 The **Wrecks** tab.
 
-<br clear="right"/>
+<img src="../img/wr-settings.png" width="70%"/>
 
 ---
 
@@ -40,11 +38,9 @@ A wreck can leave something on its footprint: **THT difficult terrain** (needs T
 
 ## Per-token config
 
-<img align="right" src="../img/wr-token-config.png" width="45%"/>
-
 A single token can override its category in the Token Config **L.A** tab: its wreck mode and terrain, a custom wreck image, effect, and sound, the tile scale, and whether the image, sound, and effect play at all.
 
-<br clear="right"/>
+<img src="../img/wr-token-config.png" width="55%"/>
 
 ---
 

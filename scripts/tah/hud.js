@@ -4625,7 +4625,12 @@ export class LancerHUD
                 step: 1,
                 min: 0,
                 max: resolved.max,
-                getValue: () => _resolveExtraBarValues(actor, entry).value,
+                getValue: () =>
+                {
+                    const live = (tokenDoc?.getFlag?.('lancer-automations', 'statBarExtras') ?? [])
+                        .find(/** @type {any} */ item => item?.id === entry.id);
+                    return _resolveExtraBarValues(actor, live ?? entry).value;
+                },
                 onValueChanged: (newVal) => updateExtraBarValue(tokenDoc, entry.id, newVal),
                 ...(entry.linkedItemUuid ? {
                     onRightClick: async () =>

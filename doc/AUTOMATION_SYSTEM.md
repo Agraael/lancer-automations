@@ -64,7 +64,7 @@ The engine pumps every trigger through this pipeline for every reactor candidate
 
 ## 2. Lifecycle of a Trigger
 
-<details open>
+<details>
 <summary><b>Flow diagram</b> (click to expand)</summary>
 
 ```mermaid
@@ -376,7 +376,6 @@ Wired onto `triggerData` for every reaction. Call from `evaluate` / `activationC
 
 ```js
 triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
-// reactor's onActivation: triggerData.extraData.chargeSpent === 2
 ```
 
 `opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion. The `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit-hp1-instead-of-0).
@@ -531,8 +530,6 @@ For activations that need their own per-round / per-target tracking (e.g. "1x pe
 Inside an `activationCode` whose trigger carries a `flowState` (most attack/damage/check/activation triggers), you can mutate the in-progress flow:
 
 ```js
-// Inject a bonus visible to subsequent flow steps (and to the damage step,
-// even if you injected it during AttackRoll).
 triggerData.flowState.injectBonus({
     id: "my-bonus",
     name: "Marker Rifle Mark",
@@ -540,7 +537,6 @@ triggerData.flowState.injectBonus({
     val: 1
 });
 
-// Inject any other data into the flow state for later steps to read.
 triggerData.flowState.injectData({ myFlag: true });
 ```
 
@@ -615,7 +611,6 @@ activationCode: async function (triggerType, triggerData, reactorToken, item, ac
         await teardownEffect(reactorToken, item, api);
         return;
     }
-    // First activation: set everything up
     await setupEffect(reactorToken, item, api);
     await api.setItemAsActivated(item, reactorToken, "Protocol", "Collapse the Defense Net");
 }
@@ -627,7 +622,6 @@ Other triggers on the same item can gate themselves by checking `getActivatedIte
 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api) {
     if (!api.getActivatedItems(reactorToken)?.some(i => i.id === item.id))
         return false;
-    // item is on, proceed
     ...
 }
 ```
@@ -665,7 +659,6 @@ Hooks.on("lancer-automations.ready", (api) => {
                 activationType: "code",
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-                    // ...
                 }
             }]
         }

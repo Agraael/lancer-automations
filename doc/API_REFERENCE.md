@@ -39,7 +39,7 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 Source: [`scripts/typing/types.d.ts`](../scripts/typing/types.d.ts).
 
-<details>
+<details id="CancelFunction">
 <summary><b><code>CancelFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -65,7 +65,7 @@ The ignore path re-runs the original action. Reactors already in `_cancelledBy` 
 
 </details>
 
-<details>
+<details id="CancelMoveFunction">
 <summary><b><code>CancelMoveFunction</code></b><br><b><code>ChangeMoveFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -79,7 +79,7 @@ changeTriggeredMove(position: {x: number, y: number}, extraData?, reasonText?, a
 
 </details>
 
-<details>
+<details id="ModifyValueFunction">
 <summary><b><code>ModifyValueFunction</code></b><br><b><code>RerollFunction</code></b><br><b><code>ChangeRollFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -96,7 +96,7 @@ changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?,
 
 </details>
 
-<details>
+<details id="ActivationCallback">
 <summary><b><code>ActivationCallback</code></b> - shape of <code>evaluate</code> and <code>activationCode</code></summary>
 
 <br>
@@ -110,7 +110,7 @@ changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?,
 
 </details>
 
-<details>
+<details id="actionData">
 <summary><b><code>actionData</code></b><br><b><code>flowState</code></b> - the recurring payload objects</summary>
 
 <br>
@@ -136,9 +136,11 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 `Tag` is `{ lid: string, val?: string }`. `ActionData` and `FlowState` are defined above.
 
+---
+
 #### Attack Triggers
 
-<details><summary><b><code>onInitAttack</code></b> - attack initiated, before Attack HUD</summary>
+<details id="onInitAttack"><summary><b><code>onInitAttack</code></b> - attack initiated, before Attack HUD</summary>
 
 ```js
 {
@@ -154,7 +156,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 </details>
 
-<details><summary><b><code>onAttack</code></b> - attack roll made</summary>
+<details id="onAttack"><summary><b><code>onAttack</code></b> - attack roll made</summary>
 
 ```js
 {
@@ -170,7 +172,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 </details>
 
-<details><summary><b><code>onHit</code></b> - attack hit</summary>
+<details id="onHit"><summary><b><code>onHit</code></b> - attack hit</summary>
 
 ```js
 {
@@ -186,7 +188,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 </details>
 
-<details><summary><b><code>onMiss</code></b> - attack missed</summary>
+<details id="onMiss"><summary><b><code>onMiss</code></b> - attack missed</summary>
 
 ```js
 {
@@ -202,7 +204,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 </details>
 
-<details><summary><b><code>onPreDamage</code></b> - once per damage roll, before the damage HUD builds</summary>
+<details id="onPreDamage"><summary><b><code>onPreDamage</code></b> - once per damage roll, before the damage HUD builds</summary>
 
 Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base damage types/values before the player rolls.
 
@@ -225,7 +227,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onDamage</code></b> - damage applied</summary>
+<details id="onDamage"><summary><b><code>onDamage</code></b> - damage applied</summary>
 
 ```js
 {
@@ -245,9 +247,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Tech Triggers
 
-<details><summary><b><code>onInitTechAttack</code></b> - before Tech HUD</summary>
+<details id="onInitTechAttack"><summary><b><code>onInitTechAttack</code></b> - before Tech HUD</summary>
 
 ```js
 {
@@ -264,7 +268,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onTechAttack</code></b> - tech roll made</summary>
+<details id="onTechAttack"><summary><b><code>onTechAttack</code></b> - tech roll made</summary>
 
 ```js
 {
@@ -280,7 +284,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onTechHit</code></b> - tech attack hit</summary>
+<details id="onTechHit"><summary><b><code>onTechHit</code></b> - tech attack hit</summary>
 
 ```js
 {
@@ -296,7 +300,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onTechMiss</code></b> - tech attack missed</summary>
+<details id="onTechMiss"><summary><b><code>onTechMiss</code></b> - tech attack missed</summary>
 
 ```js
 {
@@ -312,9 +316,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Movement Triggers
 
-<details><summary><b><code>onPreMove</code></b> - before movement is finalized</summary>
+<details id="onPreMove"><summary><b><code>onPreMove</code></b> - before movement is finalized</summary>
 
 ```js
 {
@@ -339,7 +345,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onMove</code></b> - movement completed</summary>
+<details id="onMove"><summary><b><code>onMove</code></b> - movement completed</summary>
 
 ```js
 {
@@ -363,7 +369,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onInvoluntaryMove</code></b> - before each involuntary per-token move, cancellable</summary>
+<details id="onInvoluntaryMove"><summary><b><code>onInvoluntaryMove</code></b> - before each involuntary per-token move, cancellable</summary>
 
 ```js
 {
@@ -383,9 +389,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Deployment & Placement Triggers
 
-<details><summary><b><code>onDeploy</code></b> - deployable or weapon token placed on the map</summary>
+<details id="onDeploy"><summary><b><code>onDeploy</code></b> - deployable or weapon token placed on the map</summary>
 
 ```js
 {
@@ -400,9 +408,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Turn Events
 
-<details><summary><b><code>onTurnStart</code></b> / <b><code>onTurnEnd</code></b></summary>
+<details id="onTurnStart"><summary><b><code>onTurnStart</code></b> / <b><code>onTurnEnd</code></b></summary>
 
 ```js
 { triggeringToken: Token }
@@ -410,7 +420,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onRoundStart</code></b> - once at the start of every round, including round 1</summary>
+<details id="onRoundStart"><summary><b><code>onRoundStart</code></b> - once at the start of every round, including round 1</summary>
 
 ```js
 { combat: Combat, round: number }
@@ -418,7 +428,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onEnterCombat</code></b> / <b><code>onExitCombat</code></b> - token added to / removed from the combat tracker</summary>
+<details id="onEnterCombat"><summary><b><code>onEnterCombat</code></b> / <b><code>onExitCombat</code></b> - token added to / removed from the combat tracker</summary>
 
 ```js
 { triggeringToken: Token }
@@ -426,9 +436,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Status Effect Triggers
 
-<details><summary><b><code>onPreStatusApplied</code></b> - before a status is applied (non-async evaluate only)</summary>
+<details id="onPreStatusApplied"><summary><b><code>onPreStatusApplied</code></b> - before a status is applied (non-async evaluate only)</summary>
 
 ```js
 {
@@ -441,7 +453,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onPreStatusRemoved</code></b> - before a status is removed (non-async evaluate only)</summary>
+<details id="onPreStatusRemoved"><summary><b><code>onPreStatusRemoved</code></b> - before a status is removed (non-async evaluate only)</summary>
 
 ```js
 {
@@ -454,7 +466,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onStatusApplied</code></b> / <b><code>onStatusRemoved</code></b></summary>
+<details id="onStatusApplied"><summary><b><code>onStatusApplied</code></b> / <b><code>onStatusRemoved</code></b></summary>
 
 ```js
 {
@@ -466,9 +478,11 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+---
+
 #### Structure & Stress Triggers
 
-<details><summary><b><code>onPreStructure</code></b> - before the structure roll, can cancel the flow</summary>
+<details id="onPreStructure"><summary><b><code>onPreStructure</code></b> - before the structure roll, can cancel the flow</summary>
 
 ```js
 {
@@ -481,7 +495,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onStructure</code></b> - after the structure roll</summary>
+<details id="onStructure"><summary><b><code>onStructure</code></b> - after the structure roll</summary>
 
 ```js
 {
@@ -497,7 +511,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onPreStress</code></b> - before the overheat roll, can cancel the flow</summary>
+<details id="onPreStress"><summary><b><code>onPreStress</code></b> - before the overheat roll, can cancel the flow</summary>
 
 ```js
 {
@@ -510,7 +524,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onStress</code></b> - after the overheat roll</summary>
+<details id="onStress"><summary><b><code>onStress</code></b> - after the overheat roll</summary>
 
 ```js
 {
@@ -526,7 +540,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details><summary><b><code>onRoll</code></b> - between a roll resolving and its chat card printing</summary>
+<details id="onRoll"><summary><b><code>onRoll</code></b> - between a roll resolving and its chat card printing</summary>
 
 Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureRoll`, `stressRoll`.
 
@@ -554,7 +568,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onDestroyed</code></b> - token delete when <code>structure.value &lt;= 0 || stress.value &lt;= 0</code></summary>
+<details id="onDestroyed"><summary><b><code>onDestroyed</code></b> - token delete when <code>structure.value &lt;= 0 || stress.value &lt;= 0</code></summary>
 
 ```js
 { triggeringToken: Token }
@@ -562,7 +576,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onTokenCreated</code></b> - any token placed on the canvas (100ms delay, same timing as onInit)</summary>
+<details id="onTokenCreated"><summary><b><code>onTokenCreated</code></b> - any token placed on the canvas (100ms delay, same timing as onInit)</summary>
 
 ```js
 {
@@ -574,7 +588,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onTokenRemoved</code></b> - any token deletion (unconditional, unlike onDestroyed)</summary>
+<details id="onTokenRemoved"><summary><b><code>onTokenRemoved</code></b> - any token deletion (unconditional, unlike onDestroyed)</summary>
 
 `triggeringToken` may be a fallback `{ document, id, name, actor }` object if the canvas token is already gone.
 
@@ -588,7 +602,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onTokenVisibility</code></b> - token <code>hidden</code> flag toggled (GM eye icon)</summary>
+<details id="onTokenVisibility"><summary><b><code>onTokenVisibility</code></b> - token <code>hidden</code> flag toggled (GM eye icon)</summary>
 
 ```js
 {
@@ -601,9 +615,11 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
+---
+
 #### HP & Heat Triggers
 
-<details><summary><b><code>onPreHpChange</code></b> - before HP changes, can cancel or modify the value</summary>
+<details id="onPreHpChange"><summary><b><code>onPreHpChange</code></b> - before HP changes, can cancel or modify the value</summary>
 
 ```js
 {
@@ -618,7 +634,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onHpGain</code></b> - after HP increases</summary>
+<details id="onHpGain"><summary><b><code>onHpGain</code></b> - after HP increases</summary>
 
 ```js
 {
@@ -631,7 +647,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onHpLoss</code></b> - after HP decreases</summary>
+<details id="onHpLoss"><summary><b><code>onHpLoss</code></b> - after HP decreases</summary>
 
 ```js
 {
@@ -643,7 +659,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onPreHeatChange</code></b> - before heat changes, can cancel or modify the value</summary>
+<details id="onPreHeatChange"><summary><b><code>onPreHeatChange</code></b> - before heat changes, can cancel or modify the value</summary>
 
 ```js
 {
@@ -658,7 +674,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onHeatGain</code></b> - after heat increases</summary>
+<details id="onHeatGain"><summary><b><code>onHeatGain</code></b> - after heat increases</summary>
 
 ```js
 {
@@ -671,7 +687,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onHeatLoss</code></b> - after heat decreases</summary>
+<details id="onHeatLoss"><summary><b><code>onHeatLoss</code></b> - after heat decreases</summary>
 
 ```js
 {
@@ -683,9 +699,11 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
+---
+
 #### Stat & Activation Triggers
 
-<details><summary><b><code>onInitCheck</code></b> - before the check roll</summary>
+<details id="onInitCheck"><summary><b><code>onInitCheck</code></b> - before the check roll</summary>
 
 ```js
 {
@@ -699,7 +717,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onCheck</code></b> - check result</summary>
+<details id="onCheck"><summary><b><code>onCheck</code></b> - check result</summary>
 
 ```js
 {
@@ -715,7 +733,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onInitActivation</code></b> - before item/action activates, before resource use (non-async evaluate only)</summary>
+<details id="onInitActivation"><summary><b><code>onInitActivation</code></b> - before item/action activates, before resource use (non-async evaluate only)</summary>
 
 ```js
 {
@@ -732,7 +750,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onActivation</code></b> - item/action fired</summary>
+<details id="onActivation"><summary><b><code>onActivation</code></b> - item/action fired</summary>
 
 `extraData` carries anything injected via `startRelatedFlowToReactor` / flow-state injection.
 
@@ -752,7 +770,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 </details>
 
-<details><summary><b><code>onUpdate</code></b> - any token document update (high frequency, gate tightly)</summary>
+<details id="onUpdate"><summary><b><code>onUpdate</code></b> - any token document update (high frequency, gate tightly)</summary>
 
 ```js
 {

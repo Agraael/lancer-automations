@@ -12,7 +12,7 @@ You can open it two ways: the **Effect Manager** button in the Token Action HUD,
 
 | From the Token Action HUD | From the token HUD |
 |:---:|:---:|
-| ![Effect Manager in the TAH](../img/em-open-tah.png) | ![Effect Manager on the token HUD](../img/em-open-hud.png) |
+| <img src="../img/em-open-tah.png" width="100%"/> | <img src="../img/em-open-hud.png" width="100%"/> |
 
 Its tabs:
 
@@ -115,7 +115,7 @@ Accuracy and difficulty bonuses show up in the roll HUD before you confirm. Dama
 
 ## Attach to items and prototype actors
 
-<img align="right" src="../img/em-item-template.png" width="45%"/>
+<img align="right" src="../img/em-item-template.png" width="55%"/>
 
 Statuses, bonuses, and extras can be attached to an **item** or a **prototype actor** instead of a scene token. Open the Effect Manager from the **L.A** button on the item or actor sheet header.
 
@@ -129,11 +129,9 @@ When the owner is a tiered NPC, an entry can be **tier-gated** so it only applie
 
 ## Immunity and the choice card
 
-<img align="right" src="../img/em-immunity-card.png" width="53%"/>
-
 When a token holds an immunity bonus and takes matching damage, a **choice card** prompts whether to apply the immunity.
 
-<br clear="right"/>
+<img src="../img/em-immunity-card.png" width="75%"/>
 
 ---
 

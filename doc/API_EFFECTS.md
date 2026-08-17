@@ -6,7 +6,7 @@
 
 ## Effect Management
 
-<details>
+<details id="applyEffectsToTokens">
 <summary><b><code>applyEffectsToTokens</code></b> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
 
 <br>
@@ -19,6 +19,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
 | <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }`. `isCustom: true` marks a Temporary-Custom-Statuses effect, not a built-in status |
 | <kbd>note</kbd> | `string` | `undefined` | Flavor note |
@@ -32,11 +33,18 @@ await api.applyEffectsToTokens(options, extraOptions)
 - `consumption` → [Concepts: Consumption](API_REFERENCE.md#consumption).
 - `linkedBonusId`, `statDirect`, and any extra `...customFlags` → [Concepts: Effect flags](API_REFERENCE.md#effect-flags). Extra keys (e.g. `suppressSourceId`) are stored as-is in `flags['lancer-automations']` on each created effect and become removal filters via `extraFlags` in `removeEffectsByNameFromTokens`.
 
+```js
+await api.applyEffectsToTokens(
+    { tokens: hitTokens, effectNames: ['lockon'] },
+    { stack: 2 }
+);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="removeEffectsByNameFromTokens">
 <summary><b><code>removeEffectsByNameFromTokens</code></b> <sup>async</sup> → <code>Array&lt;Token|TokenDocument&gt;</code></summary>
 
 <br>
@@ -49,6 +57,7 @@ Removes every effect matching the given name(s). Use `deleteEffect` for one spec
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | *required* | Tokens to remove from |
 | <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | Effect name(s) to match and remove |
 | <kbd>originId</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
@@ -70,7 +79,7 @@ await api.removeEffectsByNameFromTokens({
 
 ---
 
-<details>
+<details id="applyMark">
 <summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>findMarkedTokens</code></b> → <code>Token[]</code><br><b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
 
 <br>
@@ -81,24 +90,31 @@ api.findMarkedTokens(sourceToken, effectName, { flagKey })   // → Token[]
 await api.clearMarks(sourceToken, effectName, { flagKey })   // → Token[] cleared
 ```
 
+**Params:** <kbd>targets</kbd> `Token[]` · <kbd>effectName</kbd> `string` the mark's effect name
+
 Source-stamped effect lifecycle: `applyMark` applies the effect with `{ [flagKey]: sourceToken.id }` stamped on it, `findMarkedTokens` scans the scene for tokens carrying it, `clearMarks` sweeps them all. The Suppress / Engineer's Mark / Sniper's Mark pattern.
 
-`api.findEffectFrom(token, effectName, sourceToken)` is the `originID` variant: finds the effect a specific source applied via `addGlobalBonus`/`applyEffectsToTokens` `origin`.
-
-`api.findEffectsOnToken(token, effectName, { extraFlags?, hasFlags?, excludeId? })` returns ALL matching effects on one token (same name/status rules as `findEffectOnToken`, which now delegates to it): `extraFlags` must match exactly, `hasFlags` keys must be present, `excludeId` skips one effect (the onStatusRemoved "any other left?" checks).
+See `findEffectFrom` and `findEffectsOnToken` for the lookup side.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>effect</kbd> | `string\|{ name, icon, isCustom }` | *required* | What to apply |
-| <kbd>note</kbd> / <kbd>duration</kbd> | | `""` / indefinite | Forwarded to `applyEffectsToTokens` |
+| <kbd>note</kbd> / <kbd>duration</kbd> | `string` / `Object` | `""` / indefinite | Forwarded to `applyEffectsToTokens` |
 | <kbd>flagKey</kbd> | `string` | `'markSourceId'` | Stamp key. Pass a feature-specific one to keep marks independent |
 | <kbd>extraOptions</kbd> | `Object` | `{}` | Extra flags stamped alongside |
+
+```js
+await api.applyMark(reactorToken, [target], { effect: 'Suppress', flagKey: 'suppressSourceId' });
+const marked = api.findMarkedTokens(reactorToken, 'Suppress', { flagKey: 'suppressSourceId' });
+await api.clearMarks(reactorToken, 'Suppress', { flagKey: 'suppressSourceId' });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="removeEffectsByName">
 <summary><b><code>removeEffectsByName</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -116,11 +132,15 @@ Single-token version of `removeEffectsByNameFromTokens`.
 | <kbd>originID</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches |
 | <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
 
+```js
+await api.removeEffectsByName(target.id, 'Suppress', reactorToken.id);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="deleteEffect">
 <summary><b><code>deleteEffect</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -146,7 +166,7 @@ await api.deleteEffect(target, effects[0]);
 
 ---
 
-<details>
+<details id="findEffectOnToken">
 <summary><b><code>findEffectOnToken</code></b> → <code>ActiveEffect | undefined</code></summary>
 
 <br>
@@ -172,7 +192,60 @@ const mark = api.findEffectsOnToken(target, "Suppress", { extraFlags: { suppress
 
 ---
 
-<details>
+<details id="findEffectsOnToken">
+<summary><b><code>findEffectsOnToken</code></b> → <code>any[]</code></summary>
+
+<br>
+
+```js
+api.findEffectsOnToken(token, effectName, options)
+```
+
+Every matching effect on one token, using the same loose name rules as `findEffectOnToken` (which delegates to this). Use it when you need flag filters or all matches rather than the first.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token\|TokenDocument` | *required* | The token to search |
+| <kbd>effectName</kbd> | `string` | *required* | Name or status id |
+| **inside `options`** | | | |
+| <kbd>extraFlags</kbd> | `Object` | `{}` | Module flags that must match exactly |
+| <kbd>hasFlags</kbd> | `string[]` | `[]` | Flag keys that must be present, any value |
+| <kbd>excludeId</kbd> | `string` | `null` | Effect id to skip, for `onStatusRemoved` "is any other left?" checks |
+
+```js
+const others = api.findEffectsOnToken(token, 'Overshield', { excludeId: effect.id });
+```
+
+</details>
+
+---
+
+<details id="findEffectFrom">
+<summary><b><code>findEffectFrom</code></b> → <code>ActiveEffect | undefined</code></summary>
+
+<br>
+
+```js
+api.findEffectFrom(token, effectName, sourceToken)
+```
+
+The `originID` variant: the effect on `token` that `sourceToken` applied, matched on the `origin` stamp left by `addGlobalBonus` / `applyEffectsToTokens`. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>token</kbd> | `Token` | The token carrying the effect |
+| <kbd>effectName</kbd> | `string` | Name or status id |
+| <kbd>sourceToken</kbd> | `Token` | The token that applied it |
+
+```js
+const eff = api.findEffectFrom(target, 'Lock On', reactorToken);
+```
+
+</details>
+
+---
+
+<details id="hasStatus">
 <summary><b><code>hasStatus</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -199,7 +272,7 @@ if (api.hasStatus(target, 'prone', 'cover_hard', 'cover_soft'))
 
 ---
 
-<details>
+<details id="inDangerZone">
 <summary><b><code>inDangerZone</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -208,13 +281,19 @@ if (api.hasStatus(target, 'prone', 'cover_hard', 'cover_soft'))
 api.inDangerZone(tokenOrActor)
 ```
 
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
+
 True when heat is at or above half the heat cap. Same rule the `onHeatGain` trigger reports as `inDangerZone`.
+
+```js
+const difficulty = api.inDangerZone(target) ? 1 : 0;
+```
 
 </details>
 
 ---
 
-<details>
+<details id="untilEndOfTurn">
 <summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
 
 <br>
@@ -237,7 +316,7 @@ await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], dura
 
 ---
 
-<details>
+<details id="getAllEffects">
 <summary><b><code>getAllEffects</code></b> → <code>Array&lt;ActiveEffect&gt;</code></summary>
 
 <br>
@@ -252,11 +331,15 @@ Returns all active effects on the target, including unflagged player-added ones.
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Token\|TokenDocument\|Actor` | The target to inspect |
 
+```js
+const names = api.getAllEffects(token).map(e => e.name);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="consumeEffectCharge">
 <summary><b><code>consumeEffectCharge</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -273,11 +356,16 @@ Decrements the effect's stack counter by 1. If the counter reaches 0, the effect
 
 Returns `true` if consumed, `false` if the effect has no consumption data.
 
+```js
+const eff = api.findEffectOnToken(token, 'Shield Charges');
+if (eff) await api.consumeEffectCharge(eff);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="triggerEffectImmunity">
 <summary><b><code>triggerEffectImmunity</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -295,11 +383,15 @@ Removes the named effects from the token and announces immunity in chat.
 | <kbd>source</kbd> | `Item\|string` | `""` | Source of immunity (item or text) |
 | <kbd>notify</kbd> | `boolean` | `true` | Post chat notification |
 
+```js
+await api.triggerEffectImmunity(target, ['impaired'], reactorToken, true);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="checkEffectImmunities">
 <summary><b><code>checkEffectImmunities</code></b> → <code>Array&lt;string&gt;</code></summary>
 
 <br>
@@ -317,11 +409,15 @@ Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`) if
 | <kbd>effect</kbd> | `ActiveEffect` | `null` | Optional effect object for additional context |
 | <kbd>state</kbd> | `Object` | `null` | Optional flow state |
 
+```js
+if (api.checkEffectImmunities(target.actor, 'prone')) return;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="deleteAllEffects">
 <summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -337,13 +433,17 @@ await api.executeEffectManager(options) // Opens the Effect Manager UI
 
 `executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype? }`, pre-selecting the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`).
 
+```js
+await api.deleteAllEffects([token]);
+```
+
 </details>
 
 ---
 
 ## Global & Constant Bonuses
 
-<details>
+<details id="addGlobalBonus">
 <summary><b><code>addGlobalBonus</code></b> <sup>async</sup> → <code>string</code> (Bonus ID)</summary>
 
 <br>
@@ -484,7 +584,7 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 
 ---
 
-<details>
+<details id="removeGlobalBonus">
 <summary><b><code>removeGlobalBonus</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -503,10 +603,8 @@ Removes one or more global bonuses from an actor. Also deletes linked active eff
 
 **Example:**
 ```js
-// Remove by ID
 await api.removeGlobalBonus(actor, "defense-net-abc123");
 
-// Remove by predicate
 await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reactorToken.id);
 ```
 
@@ -514,7 +612,7 @@ await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reacto
 
 ---
 
-<details>
+<details id="getGlobalBonuses">
 <summary><b><code>getGlobalBonuses</code></b> → <code>any[]</code><br><b><code>getGlobalBonus</code></b> → <code>object|null</code></summary>
 
 <br>
@@ -529,11 +627,15 @@ const single = api.getGlobalBonus(actor, bonusId)  // → BonusData | null
 | <kbd>actor</kbd> | `Actor` | The actor to inspect |
 | <kbd>bonusId</kbd> | `string` | The bonus ID (for `getGlobalBonus` only) |
 
+```js
+const bonus = api.getGlobalBonus(actor, 'lightning-reflexes');
+```
+
 </details>
 
 ---
 
-<details>
+<details id="addConstantBonus">
 <summary><b><code>addConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>getConstantBonuses</code></b> → <code>any[]</code><br><b><code>removeConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -548,11 +650,16 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>actor</kbd> | `Actor` | The actor to modify/inspect |
+| <kbd>target</kbd> / <kbd>actor</kbd> | `Actor` | The actor to modify/inspect |
 | <kbd>bonusData</kbd> | `Object` | Same shape as `addGlobalBonus` |
 | <kbd>bonusIdOrPredicate</kbd> | `string\|((bonus) => boolean)` | Bonus ID or predicate `(bonus) => boolean` |
 
 > When the target is an **item** or a **prototype actor**, use `linkBonusToItem` / `linkBonusToActor` instead.
+
+```js
+await api.addConstantBonus(actor, { name: 'Core Power', type: 'accuracy', val: 1, rollTypes: ['attack'] });
+await api.removeConstantBonus(actor, (b) => b.name === 'Core Power');
+```
 
 </details>
 
@@ -562,7 +669,7 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 
 Statuses and bonuses can be attached directly to an **item** or a **prototype actor** instead of a token. The entry lives on the source doc, and applies to the token's actor on item-add, token-spawn, or re-enable. It's cleaned up on remove / destroy / disable. Charges persist across the cycle.
 
-<details>
+<details id="linkEffectToItem">
 <summary><b><code>linkEffectToItem</code></b><br><b><code>linkEffectToActor</code></b><br><b><code>ensureLinkedEffect</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
@@ -577,6 +684,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>items</kbd> / <kbd>actors</kbd> | `Array` | *required* | Source docs |
 | <kbd>effectNames</kbd> | `string\|Object\|Array` | *required* | Same shape as `applyEffectsToTokens` |
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
@@ -586,11 +694,15 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 
 `ensureLinkedEffect` is `linkEffectToItem` that skips effects the item already carries as a template (match = effect name + every `extraOptions` flag). The onInit way to link: no hand-written guard needed.
 
+```js
+await api.ensureLinkedEffect({ items: [item], effectNames: ['resistance_kinetic'] });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="unlinkEffectFromItem">
 <summary><b><code>unlinkEffectFromItem</code></b><br><b><code>unlinkEffectFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
@@ -602,13 +714,22 @@ await api.unlinkEffectFromActor({ actors, effectName, extraFlags })
 
 Removes the entry from the source doc. Every effect that came from it is removed from active tokens too.
 
-Keys: `items`/`actors` (`Item[]`/`Actor[]`), `effectName` `string`, `extraFlags` `Object` (optional, must match the linked entry).
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>items</kbd> / <kbd>actors</kbd> | `Item[]` / `Actor[]` | `[]` | Source docs to unlink from |
+| <kbd>effectName</kbd> | `string` | `""` | Name of the linked effect |
+| <kbd>extraFlags</kbd> | `Object` | `null` | Must match the linked entry's flags |
+
+```js
+await api.unlinkEffectFromItem({ items: [item], effectName: 'resistance_kinetic' });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="linkBonusToItem">
 <summary><b><code>linkBonusToItem</code></b><br><b><code>linkBonusToActor</code></b><br><b><code>ensureLinkedBonus</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
@@ -630,11 +751,15 @@ The `duration` in `addOptions` decides how it shows up:
 
 `ensureLinkedBonus` is `linkBonusToItem` that skips items already carrying a template with the same `bonusData.id`. The onInit way to link a bonus.
 
+```js
+await api.ensureLinkedBonus({ items: [item], bonusData: { id: 'smart-rounds', type: 'accuracy', val: 1, rollTypes: ['attack'] } });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="unlinkBonusFromItem">
 <summary><b><code>unlinkBonusFromItem</code></b><br><b><code>unlinkBonusFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
@@ -646,13 +771,21 @@ await api.unlinkBonusFromActor({ actors, templateId })
 
 Removes the entry from the source doc. Every bonus that came from it is removed from active tokens too. Charge counts are saved back to the source first, so a re-link picks them back up.
 
-Keys: `items`/`actors` (`Item[]`/`Actor[]`), `templateId` `string` (the linked bonus's id).
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>items</kbd> / <kbd>actors</kbd> | `Item[]` / `Actor[]` | `[]` | Source docs to unlink from |
+| <kbd>templateId</kbd> | `string` | *required* | The linked bonus's id |
+
+```js
+await api.unlinkBonusFromItem({ items: [item], templateId: 'smart-rounds' });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="getLinkedEffects">
 <summary><b><code>getLinkedEffects</code></b> → <code>any[]</code><br><b><code>getLinkedBonuses</code></b> → <code>any[]</code></summary>
 
 <br>
@@ -662,7 +795,13 @@ api.getLinkedEffects(source)   // → ActiveEffect[]  status templates on Item o
 api.getLinkedBonuses(source)   // → Object[]        bonus templates on Item or Actor
 ```
 
+**Params:** <kbd>source</kbd> `Item|Actor`
+
 Read-side helpers, symmetric with `getConstantBonuses` / `getGlobalBonuses`. Returns the LINKED entries only (not merged with runtime state on the actor).
+
+```js
+const hasTemplate = api.getLinkedBonuses(item).some(t => t.id === 'smart-rounds');
+```
 
 </details>
 
@@ -713,9 +852,38 @@ triggerData.flowState.getFlowExtraData()             // read la_extraData
 
 ---
 
+<details id="injectBonusToFlowState">
+<summary><b><code>injectBonusToFlowState</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.injectBonusToFlowState(state, bonus)
+```
+
+The standalone form of `flowState.injectBonus`, for when you hold the flow state rather than a `triggerData`. Pushes the bonus onto `state.la_extraData.flow_bonus`, generating an `id` if you didn't supply one. Does nothing if `state` is missing.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>state</kbd> | `Object` | The flow state, e.g. `triggerData.flowState` |
+| <kbd>bonus</kbd> | `Object` | Same shape as `addGlobalBonus`. Gets an `id` if absent |
+
+```js
+await api.injectBonusToFlowState(triggerData.flowState, {
+    id: `lightning-reflexes-${reactorToken.id}`,
+    name: 'Lightning Reflexes',
+    type: 'immunity',
+    subtype: 'hit'
+});
+```
+
+</details>
+
+---
+
 ### Immunity Queries
 
-<details>
+<details id="getImmunityBonuses">
 <summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b> → <code>any[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
 
 <br>
@@ -726,6 +894,8 @@ api.checkDamageResistances(actor, damageType)     // → Array<object>
 api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 ```
 
+**Params:** <kbd>actor</kbd> `Actor` · <kbd>subtype</kbd> `string` immunity subtype · <kbd>damageType</kbd> `string` · <kbd>damages</kbd> `Array<{type, val}>`
+
 | Function | Description |
 |:---------|:------------|
 | `getImmunityBonuses` | Returns all immunity bonuses of the specified [subtype](API_REFERENCE.md#immunity-subtypes) for the actor. |
@@ -734,12 +904,15 @@ api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 
 `getImmunityBonuses` and `applyDamageImmunities` accept an optional <kbd>state</kbd> (`Object`, default `null`) for conditional immunity evaluation.
 
+```js
+const resist = api.checkDamageResistances(target.actor, 'Energy');
+```
 
 </details>
 
 ---
 
-<details>
+<details id="hasCritImmunity">
 <summary><b><code>hasCritImmunity</code></b><br><b><code>hasHitImmunity</code></b><br><b><code>hasMissImmunity</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -757,5 +930,9 @@ Returns `true` if the actor has any immunity bonuses of the corresponding subtyp
 | <kbd>actor</kbd> | `Actor` | *required* | The actor to check |
 | <kbd>attackerActor</kbd> | `Actor` | `null` | Optional attacker for conditional immunity checks |
 | <kbd>state</kbd> | `Object` | `null` | Optional flow state |
+
+```js
+if (await api.hasHitImmunity(target.actor, attackerActor, triggerData.flowState)) return;
+```
 
 </details>

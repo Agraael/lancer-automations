@@ -46,27 +46,18 @@ Where tokens overlap, a small picker lists them to choose from.
 
 ## Hit chance and damage
 
-<img align="right" src="../vid/at-hitchance.gif" width="45%"/>
-
 Each targeted token gets a live **hit chance** and **damage range** label. **`targetInfoDisplay`** sets who sees them: **No**, **GM only** (default), or **GM and players**.
 
-<br clear="right"/>
+<img src="../vid/at-hitchance.gif" width="70%"/>
 
 ---
 
 ## Throwing
 
-<img align="right" src="../img/at-throw.png" width="45%"/>
-
-Tick a throwable weapon's **Thrown** box in the HUD and the button becomes **Throw N**, previewing the throw distance in place of the melee reach. Clear it to go back to the weapon's normal range. A weapon whose box is ticked but carries no Thrown tag keeps its normal range.
-
-<br clear="right"/>
-
-<img align="right" src="../img/at-throw-placed.png" width="45%"/>
-
-Rolling the attack then lands the weapon on the field as a token and disables it on the sheet until you [pick it back up](./INTERACTIVE_TOOLS.md). With **`enableThrowFlow`** on, attacking a throwable weapon first asks whether to attack with it or throw it.
-
-<br clear="right"/>
+| Throwing | Landing |
+|:---------|:--------|
+| Tick a throwable weapon's **Thrown** box in the HUD and the button becomes **Throw N**, previewing the throw distance in place of the melee reach. Clear it to go back to the weapon's normal range. A weapon whose box is ticked but carries no Thrown tag keeps its normal range. | Rolling the attack then lands the weapon on the field as a token and disables it on the sheet until you [pick it back up](./INTERACTIVE_TOOLS.md). With **`enableThrowFlow`** on, attacking a throwable weapon first asks whether to attack with it or throw it. |
+| <img src="../img/at-throw.png" width="100%"/> | <img src="../img/at-throw-placed.png" width="100%"/> |
 
 ---
 

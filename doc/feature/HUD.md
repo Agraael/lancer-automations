@@ -8,7 +8,7 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 ## Enabling and opening
 
-<img align="right" src="../img/hud-overview.png" width="35%"/>
+<img align="right" src="../img/hud-overview.png" width="40%"/>
 
 Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near the top-left of the screen:
 
@@ -21,11 +21,9 @@ Enable it with the **`tahEnabled`** setting (needs a reload). It attaches near t
 
 ## Settings
 
-<img align="right" src="../img/hud-settings.png" width="35%"/>
-
 The **Token Action HUD** tab.
 
-<br clear="right"/>
+<img src="../img/hud-settings.png" width="70%"/>
 
 ---
 
@@ -41,11 +39,9 @@ The bar at the top of the HUD shows:
 
 ## Stats bar
 
-<img align="right" src="../img/hud-stats.png" width="35%"/>
-
 A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it), then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
 
-<br clear="right"/>
+<img src="../img/hud-stats.png" width="70%"/>
 
 ---
 
@@ -94,19 +90,19 @@ See also: movement actions → [MOVEMENT.md](./MOVEMENT.md), resurrect → [WREC
 
 ## Item interaction
 
-<img align="right" src="../img/hud-popup.png" width="35%"/>
+<img align="right" src="../img/hud-popup.png" width="45%"/>
 
 Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Menu rows and popups also carry small markers.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-automation-indicator.png" width="35%"/>
+<img align="right" src="../img/hud-automation-indicator.png" width="45%"/>
 
 **Automation indicator** - a tiny triangle on the menu row, and ⚡ in the popup header, mean the item or action has automation.
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-extra-action-dot.png" width="35%"/>
+<img align="right" src="../img/hud-extra-action-dot.png" width="45%"/>
 
 **Extra-action dot** - an orange ● before an action's name means it was added by extras-UI code (e.g. via `addExtraActions`, or attached to an item by a registered reaction) rather than by the system itself.
 
@@ -118,7 +114,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 ## Status panel
 
-<img align="right" src="../img/hud-status-panel.png" width="35%"/>
+<img align="right" src="../img/hud-status-panel.png" width="45%"/>
 
 Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
 
@@ -133,21 +129,17 @@ Search and toggle statuses on a grid: left-click adds or increments a stack, rig
 
 ## Log panel
 
-<img align="right" src="../img/hud-log.png" width="35%"/>
-
 The token's last ~40 action cards, newest first. Click one to expand the full card again.
 
-<br clear="right"/>
+<img src="../img/hud-log.png" width="70%"/>
 
 ---
 
 ## Glossary panel
 
-<img align="right" src="../img/hud-glossary.png" width="35%"/>
-
 The scans you've run, shown with portraits and names and searchable by name. Click one to open its scan journal entry. (The scan tools themselves are in [GAMEPLAY_AUTOMATION.md](./GAMEPLAY_AUTOMATION.md).)
 
-<br clear="right"/>
+<img src="../img/hud-glossary.png" width="70%"/>
 
 ---
 
@@ -165,7 +157,7 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
-<img align="right" src="../img/hud-macro-slot.png" width="35%"/>
+<img align="right" src="../img/hud-macro-slot.png" width="45%"/>
 
 **Macro slots** - right-click a slot in the Macros row to open its edit dialog, then drop a macro from the hotbar onto the drop zone to assign it.
 

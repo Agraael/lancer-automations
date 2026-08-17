@@ -6,7 +6,7 @@
 
 ## Interactive Player Tools
 
-<details>
+<details id="chooseToken">
 <summary><b><code>chooseToken</code></b> <sup>async</sup> → <code>Array&lt;Token&gt; | null</code></summary>
 
 <br>
@@ -15,16 +15,56 @@
 const targets = await api.chooseToken(casterToken, options)
 ```
 
+```js
+const picked = await api.chooseToken(casterToken, {
+    title: 'PICK ALLY',
+    range: 5,
+    includeSelf: false,
+    count: 1
+});
+const target = picked?.[0];
+if (!target) return;
+```
+
+```js
+const caught = await api.chooseToken(casterToken, {
+    title: 'BLAST 1',
+    range: 10,
+    pattern: 'blast',
+    areaRange: 1,
+    allowEmptyConfirm: true
+});
+```
+
+```js
+const selected = await api.chooseToken(ownerToken, {
+    title: 'RECALL DEPLOYABLE',
+    selection: deployedTokens,
+    includeSelf: false,
+    count: 1
+});
+```
+
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>range</kbd> | `number\|"sensors"` | `null` | Max range for advisory highlight. `"sensors"` = caster's sensor range |
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
 | <kbd>disposition</kbd> | `"friendly"\|"hostile"` | `null` | Keep only tokens with that disposition toward the caster (composes with `filter`) |
 | <kbd>filter</kbd> | `(token: Token) => boolean` | `null` | Excludes tokens when returning false |
 | <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
 | <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections. |
-| <kbd>includeHidden</kbd> | `boolean` | `false` | Include hidden tokens |
-| <kbd>includeSelf</kbd> | `boolean` | `false` | Caster is selectable |
+| <kbd>includeSelf</kbd> | `boolean` | `true` | Caster is selectable |
+| <kbd>selection</kbd> | `Token[]` | `null` | Restrict picking to these tokens |
+| <kbd>preSelected</kbd> | `Token[]` | `[]` | Start with these selected. Ignored in blast mode; trimmed to `count` with a warning if longer |
+| <kbd>allowEmptyConfirm</kbd> | `boolean` | `false` | Confirming with nothing selected resolves `[]` instead of `null` |
+| <kbd>pattern</kbd> | `"token"\|"blast"\|"burst"\|"cone"\|"line"` | `"token"` | Pick tokens directly, or place an area that captures them |
+| <kbd>areaRange</kbd> | `number` | `null` | Area size in spaces. Required when `pattern` is not `"token"`, must be >= 1 or the call resolves `null` |
+| <kbd>areaCount</kbd> | `number` | `1` | Areas to place. `0` counts as `1` |
+| <kbd>size</kbd> | `number` | `1` | Line width in cells, perpendicular to the line. `"line"` only |
+| <kbd>elevationAware</kbd> | `boolean` | setting | Area respects elevation. Falls back to the `tah.areaElevationAware` setting |
+| <kbd>autoElevation</kbd> | `boolean` | `true` | Area sits on the ground elevation under its center |
+| <kbd>propagation</kbd> | `boolean` | `false` | Area spreads cell to cell from its origin and tall terrain blocks it. Needs `elevationAware` |
 | <kbd>title</kbd> | `string` | `"SELECT TARGETS"` | Card header |
 | <kbd>description</kbd> | `string` | `""` | Card description |
 | <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
@@ -32,13 +72,17 @@ const targets = await api.chooseToken(casterToken, options)
 | <kbd>urgent</kbd> | `boolean` | `false` | Show the card immediately instead of waiting in the card queue |
 | <kbd>autoConfirm</kbd> | `boolean` | `false` | Resolve as soon as `count` tokens are selected, no Confirm click |
 
+`casterToken` is the measuring origin for `range` and disposition checks.
+
 Generic range failures render as `Out of range (X > Y)`. Filter failures render as `filterWarning` (or `Invalid target` if omitted).
+
+Hidden tokens are included for GMs and excluded for players. Not an option.
 
 </details>
 
 ---
 
-<details>
+<details id="openHaseContestCard">
 <summary><b><code>openHaseContestCard</code></b> <sup>async</sup> → <code>{ completed, winner, loser, winnerToken, loserToken, tie, results } | null</code></summary>
 
 <br>
@@ -49,6 +93,7 @@ const result = await api.openHaseContestCard(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `opts`** | | | |
 | <kbd>tokenA</kbd> | `Token` | `null` | Contender A |
 | <kbd>skillA</kbd> | `string` | `null` | Contender A stat: `HULL` / `AGI` / `SYS` / `ENG` / `GRIT` |
 | <kbd>tokenB</kbd> | `Token` | `null` | Contender B |
@@ -59,11 +104,15 @@ const result = await api.openHaseContestCard(options)
 
 Card to set up and run a HASE contest between two tokens. Returns the [`executeContestedCheck`](API_COMBAT.md) result, or `null` if cancelled. Pre-set fields stay editable, and any missing token/skill is prompted for.
 
+```js
+const result = await api.openHaseContestCard({ tokenA, skillA: 'HULL', tokenB, skillB: 'AGI', title: 'Grapple' });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="openForceCheckCard">
 <summary><b><code>openForceCheckCard</code></b> <sup>async</sup> → <code>{ completed, results } | null</code></summary>
 
 <br>
@@ -74,6 +123,7 @@ const result = await api.openForceCheckCard(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `opts`** | | | |
 | <kbd>tokenA</kbd> | `Token` | `null` | Caster for the pickers' range pulse |
 | <kbd>skill</kbd> | `string` | `"HULL"` | Stat every target rolls: `HULL` / `AGI` / `SYS` / `ENG` |
 | <kbd>range</kbd> | `number` | `null` | Preset range on the target picker |
@@ -84,11 +134,15 @@ const result = await api.openForceCheckCard(options)
 
 Card to force HASE checks: targets pick like an attack roll, the save target like a stat-roll save. Returns the [`executeForceCheck`](API_COMBAT.md) result, or `null` if cancelled.
 
+```js
+const result = await api.openForceCheckCard({ tokenA: casterToken, skill: 'ENG', range: 5, saveVs: casterToken });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="placeZone">
 <summary><b><code>placeZone</code></b> <sup>async</sup> → <code>Array&lt;MeasuredTemplate&gt;</code></summary>
 
 <br>
@@ -97,8 +151,11 @@ Card to force HASE checks: targets pick like an attack roll, the save target lik
 await api.placeZone(casterToken, options)
 ```
 
+`casterToken` is the range-measurement origin.
+
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>range</kbd> | `number` | `null` | Max range highlight |
 | <kbd>rangeOrigin</kbd> | `{x, y}\|Token` | `null` | Override the range-measurement origin |
 | <kbd>size</kbd> | `number` | `1` | Zone size |
@@ -135,16 +192,12 @@ Both formats **stack**.
 
 **Examples:**
 ```js
-// Dangerous zone
 placeZone(token, { size: 2, dangerous: { damageType: "kinetic", damageValue: 5 } });
 
-// Status effect zone
 placeZone(token, { size: 2, statusEffects: ["impaired", "lockon"] });
 
-// Difficult terrain
 placeZone(token, { size: 2, difficultTerrain: { movementPenalty: 1, isFlatPenalty: true } });
 
-// Custom hook function
 api.placeZone(token, {
     size: 2,
     hooks: {
@@ -163,7 +216,7 @@ api.placeZone(token, {
 
 ---
 
-<details>
+<details id="tokensInTemplate">
 <summary><b><code>tokensInTemplate</code></b> → <code>Array&lt;Token&gt;</code></summary>
 
 <br>
@@ -188,7 +241,7 @@ if (targets.length) await api.executeDamageRoll(casterToken, targets, 5, "explos
 
 ---
 
-<details>
+<details id="placeToken">
 <summary><b><code>placeToken</code></b> <sup>async</sup> → <code>Promise&lt;Array&lt;TokenDocument&gt;|null&gt;</code></summary>
 
 <br>
@@ -199,6 +252,7 @@ await api.placeToken(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>actor</kbd> | `Actor\|Array<Actor>\|Array<{actor, extraData}>` | `null` | Single Actor, Array of Actors, or Array of `{actor, extraData}`. Array shows selector. |
 | <kbd>range</kbd> | `number` | `null` | Placement range |
 | <kbd>count</kbd> | `number` | `1` | Total tokens to place |
@@ -211,11 +265,15 @@ await api.placeToken(options)
 | <kbd>team</kbd> | `string` | `null` | token-factions team override |
 | <kbd>elevation</kbd> | `number` | `null` | Placement elevation |
 
+```js
+await api.placeToken({ actor: turretActor, origin: casterToken, range: 2 });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="knockBackToken">
 <summary><b><code>knockBackToken</code></b> <sup>async</sup> → <code>Array | null</code></summary>
 
 <br>
@@ -235,18 +293,26 @@ Interactive knockback tool. Shows movement traces and requires confirmation per 
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>title</kbd> | `string` | `"KNOCKBACK"` | Card header |
 | <kbd>description</kbd> | `string` | `"Select destination for each token."` | Card description |
 | <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
 | <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
 | <kbd>item</kbd> | `Item` | `null` | Source item |
 | <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire, no `onInvoluntaryMove`). |
+| <kbd>icon</kbd> | `string` | none | FontAwesome class for the card |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
+| <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
+
+```js
+await api.knockBackToken([target], 3, { triggeringToken: reactorToken });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="revertMovement">
 <summary><b><code>revertMovement</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -262,11 +328,15 @@ Reverts the token's last recorded movement. If the token has no movement history
 | <kbd>token</kbd> | `Token` | *required* | The token to revert |
 | <kbd>destination</kbd> | `{x, y}` | `null` | Override destination (world coordinates) |
 
+```js
+await api.revertMovement(token, { x: 1200, y: 800 });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="pickItem">
 <summary><b><code>pickItem</code></b> <sup>async</sup> → <code>Item | null</code></summary>
 
 <br>
@@ -280,16 +350,21 @@ Pick an item from a list via a Choice Card.
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>items</kbd> | `Array<Item>` | *required* | Array of items to choose from |
+| **inside `options`** | | | |
 | <kbd>title</kbd> | `string` | `"PICK ITEM"` | Card title |
 | <kbd>description</kbd> | `string` | `"Select an item:"` | Subtitle text |
 | <kbd>icon</kbd> | `string` | `"fas fa-box"` | FontAwesome class |
 | <kbd>formatText</kbd> | `(item: Item) => string` | `null` | `(item) => item.name` |
 
+```js
+const weapon = await api.pickItem(actor.items.filter(i => i.type === 'mech_weapon'), { title: 'PICK WEAPON' });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getWeapons">
 <summary><b><code>getWeapons</code></b> → <code>any[]</code><br><b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>findAura</code></b> → <code>object | null</code><br><b><code>getTokensInAura</code></b> → <code>Token[] | null</code><br><b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code><br><b><code>findItemByLid</code></b> → <code>any | null</code></summary>
 
 <br>
@@ -304,6 +379,8 @@ await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - fli
 api.findItemByLid(actorOrToken, lid)                   // → Item|null - find item by Lancer ID
 ```
 
+**Params:** <kbd>actorOrToken</kbd> / <kbd>entity</kbd> `Actor|Token|TokenDocument` · <kbd>auraName</kbd> `string` · <kbd>lid</kbd> `string` · <kbd>targetName</kbd> `string` picker notification label
+
 All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSystem` open a picker (`name?` is only the notification label). `toggleAura`'s `on?` sets state (omit to flip). Full entry in [API_HOWTO](API_HOWTO.md).
 
 `getTokensInAura` reads GAA's live occupancy, so it is elevation aware and skips drag previews. `null` means it could not be resolved (GAA off, or no such aura), unlike `[]` for an empty aura.
@@ -312,7 +389,7 @@ All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSyste
 
 ---
 
-<details>
+<details id="startChoiceCard">
 <summary><b><code>startChoiceCard</code></b> <sup>async</sup> → <code>{ choiceIdx, responderIds } | null</code></summary>
 
 <br>
@@ -325,6 +402,7 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>mode</kbd> | `string` | `"or"` | `"or"` (pick one), `"and"` (confirm all), `"vote"` (live tally), `"vote-hidden"` (hidden tally) |
 | <kbd>choices</kbd> | `Array<Object>` | `[]` | List of choice objects (see below) |
 | <kbd>title</kbd> | `string` | `"CHOICE"` | Card header |
@@ -332,6 +410,12 @@ Presents a choice card to the user (or GM) with custom buttons and callbacks.
 | <kbd>icon</kbd> | `string` | `null` | FontAwesome class |
 | <kbd>headerClass</kbd> | `string` | `""` | Optional CSS class |
 | <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
+| <kbd>originToken</kbd> | `Token` | `null` | Token the card is attributed to |
+| <kbd>relatedToken</kbd> | `Token` | `null` | Second token shown on the card |
+| <kbd>item</kbd> | `Item` | `null` | Source item shown on the card |
+| <kbd>traceData</kbd> | `Object` | `null` | Trigger data carried through for tracing |
+| <kbd>forceSocket</kbd> | `boolean` | `false` | Always route through the socket, even for the local user |
+| <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
 
 **Choice Object:**
 ```js
@@ -344,7 +428,7 @@ For vote modes, `userIdControl` must be a non-empty array of user IDs. The creat
 
 ---
 
-<details>
+<details id="confirmCard">
 <summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code><br><b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code><br><b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
 
 <br>
@@ -361,13 +445,28 @@ Sugar over `startChoiceCard`. Extra options (`originToken`, `relatedToken`, `ite
 
 `askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). `owner` (a Token) routes control to that token's owner with active-GM fallback. An explicit `userIdControl` wins. The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
 
-`pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`). `label`: property name or `(entry) => text` (default `entry.name`). `entryIcon`: fixed icon or `(entry) => icon`.
+`pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`).
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>confirmText</kbd> | `string` | `"Confirm"` | `confirmCard` button label |
+| <kbd>confirmIcon</kbd> | `string` | `null` | `confirmCard` button icon |
+| <kbd>yesText</kbd> / <kbd>noText</kbd> | `string` | `"Use"` / `"Skip"` | `askCard` button labels |
+| <kbd>yesIcon</kbd> / <kbd>noIcon</kbd> | `string` | `null` | `askCard` button icons |
+| <kbd>owner</kbd> | `Token` | `null` | Routes control to that token's owner, active-GM fallback. An explicit `userIdControl` wins |
+| <kbd>label</kbd> | `string\|(entry) => string` | `entry.name` | `pickCard` button text: property name or function |
+| <kbd>entryIcon</kbd> | `string\|(entry) => string` | `null` | `pickCard` button icon: fixed or per entry |
+
+```js
+const { confirmed } = await api.askCard({ title: 'BRACE?', yesText: 'Brace', noText: 'Pass', owner: reactorToken });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="openChoiceMenu">
 <summary><b><code>openChoiceMenu</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -389,7 +488,41 @@ Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote
 
 ---
 
-<details>
+<details id="startVoteCard">
+<summary><b><code>startVoteCard</code></b> <sup>async</sup> → <code>true | null</code></summary>
+
+<br>
+
+```js
+const done = await api.startVoteCard(options)
+```
+
+Every listed voter gets a card and casts one choice. Only the caller sees the tally and can confirm to close the vote. Resolves `true` on confirm, `null` if dismissed.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>choices</kbd> | `Array<{ text, icon?, callback?, data? }>` | `[]` | The options voters pick from |
+| <kbd>title</kbd> | `string` | card default | Card header |
+| <kbd>description</kbd> | `string` | `""` | Subtitle text |
+| <kbd>icon</kbd> | `string` | none | FontAwesome class |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
+| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | Voter user IDs |
+| <kbd>hidden</kbd> | `boolean` | `false` | Voters cannot see each other's counts |
+
+```js
+await api.startVoteCard({
+    title: 'NEXT MISSION',
+    choices: [{ text: 'Assault' }, { text: 'Recon' }],
+    userIdControl: game.users.filter(u => !u.isGM).map(u => u.id)
+});
+```
+
+</details>
+
+---
+
+<details id="moveToken">
 <summary><b><code>moveToken</code></b> <sup>async</sup> → <code>TokenDocument | null</code></summary>
 
 <br>
@@ -401,6 +534,7 @@ await api.moveToken(token, options)
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token</kbd> | `Token` | *required* | The token to move |
+| **inside `options`** | | | |
 | <kbd>destination</kbd> | `{x: number, y: number}` | `null` | Center point (world coords), snapped to the grid. If omitted, interactive picker. |
 | <kbd>teleport</kbd> | `boolean` | `false` | Blink/teleport instead of a slide: plays teleport VFX and records it as a teleport in history. |
 | <kbd>action</kbd> | `string` | `null` | Movement action key (see below). Animates the move as that type, forced (ignores walls/cost). Takes precedence over `teleport`. |
@@ -408,6 +542,9 @@ await api.moveToken(token, options)
 | <kbd>cost</kbd> | `number` | `null` | Movement cost in spaces |
 | <kbd>canBeBlocked</kbd> | `boolean` | `true` | Whether engagement/overwatch can intercept |
 | <kbd>title</kbd> | `string` | `"TELEPORT"` / `"MOVE"` | Card header (interactive mode). Defaults to TELEPORT when `teleport` is on |
+| <kbd>description</kbd> | `string` | `"Select destination."` | Card description |
+| <kbd>icon</kbd> | `string` | none | FontAwesome class for the card |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
 
 **`action` keys** (the same actions the `M` movement-type wheel offers):
 
@@ -424,11 +561,15 @@ await api.moveToken(token, options)
 
 `swim` and `burrow` are disabled by the Lancer system. `displace` is the internal fallback for unknown keys. The API forwards `action` straight to `token.document.move`, so it accepts any key in `CONFIG.Token.movement.actions`. `canSelect` only governs the wheel, not code-driven moves.
 
+```js
+await api.moveToken(token, { teleport: true, range: 5 });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getTokenOwnerUserId">
 <summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code></summary>
 
 <br>
@@ -443,13 +584,17 @@ Returns the user ID(s) that own a token. Checks active non-GM players first, fal
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token to check |
 
+```js
+const userId = api.getTokenOwnerUserId(target) ?? game.users.activeGM?.id;
+```
+
 </details>
 
 ---
 
 ## Deployables & Thrown Weapons
 
-<details>
+<details id="addExtraDeploymentLids">
 <summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>addExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActorDeployables</code></b> → <code>string[]</code><br><b><code>getLinkedDeployables</code></b> → <code>string[]</code></summary>
 
 <br>
@@ -462,6 +607,8 @@ api.getActorDeployables(tokenOrActor)
 api.getLinkedDeployables(source)   // Item/Actor/Token, combined LIDs+UUIDs
 ```
 
+**Params (read side):** <kbd>tokenOrActor</kbd> / <kbd>source</kbd> `Item|Actor|Token`
+
 Item / Actor / Token target. Item stores on itself. Token/Actor stores on the actor. Both feed `getItemDeployables`, and `getActorDeployables` applies the tier gate with the actor as owner.
 
 **NPC tier:** gate each entry inline - `addExtraDeploymentLids(item, [{ lid, tier: 1 }, { lid, tier: 2 }, ...])` - or separately via `setExtraDeployableOpts(target, key, { tier })` (1-3, unset = all tiers). Legacy: with no explicit tiers, 3 LIDs on an NPC still read positionally as T1/T2/T3.
@@ -472,11 +619,15 @@ Item / Actor / Token target. Item stores on itself. Token/Actor stores on the ac
 | <kbd>lids</kbd> | `string\|Array<string\|{lid,tier?,range?,count?}>` | LID(s), or `{ lid, ...opts }` to gate/size each inline |
 | <kbd>actors</kbd> | `Actor\|string\|Array<Actor\|string>` | Actor doc(s) or UUID(s) |
 
+```js
+await api.addExtraDeploymentLids(actor, ['dep_turret_drone']);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getExtraDeployableOpts">
 <summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code><br><b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
@@ -494,11 +645,15 @@ Per-deployable range / count / tier override keyed by LID or UUID. `tier` gates 
 | <kbd>key</kbd> | `string` | LID or actor UUID |
 | <kbd>opts</kbd> | `{ range?: number\|null, count?: number\|null, tier?: 1\|2\|3\|null }` | Patch |
 
+```js
+await api.setExtraDeployableOpts(actor, 'dep_turret_drone', { count: 2, range: 3 });
+```
+
 </details>
 
 ---
 
-<details>
+<details id="setHidePrimaryAction">
 <summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>isPrimaryActionHidden</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -515,11 +670,17 @@ Hides an item's primary (base) action row in the HUD, leaving only its deployabl
 | <kbd>itemOrUuid</kbd> | `Item\|string` | Item doc or its UUID |
 | <kbd>hidden</kbd> | `boolean` | `true` (default) hides, `false` restores |
 
+`isPrimaryActionHidden` takes the `item` doc.
+
+```js
+await api.setHidePrimaryAction(item, true);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="promptLinkOrUnlinkActor">
 <summary><b><code>promptLinkOrUnlinkActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -538,7 +699,7 @@ Picker that toggles the deployable-owner link flag (`ownerActorUuid` + `ownerNam
 
 ---
 
-<details>
+<details id="getItemDeployables">
 <summary><b><code>getItemDeployables</code></b> → <code>string[]</code></summary>
 
 <br>
@@ -558,7 +719,7 @@ Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-
 
 ---
 
-<details>
+<details id="placeDeployable">
 <summary><b><code>placeDeployable</code></b> <sup>async</sup> → <code>Promise&lt;Object|null&gt;</code></summary>
 
 <br>
@@ -569,6 +730,7 @@ await api.placeDeployable(options)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
 | <kbd>deployable</kbd> | `Actor\|string\|Array<Actor\|string>` | *required* | LID, Actor, or array (shows selector) |
 | <kbd>ownerActor</kbd> | `Actor` | *required* | Owner |
 | <kbd>systemItem</kbd> | `Item` | `null` | Parent item |
@@ -581,12 +743,17 @@ await api.placeDeployable(options)
 | <kbd>at</kbd> | `Token\|Object` | `null` | Measurement origin |
 | <kbd>title</kbd> | `string` | `"DEPLOY"` | Card title |
 | <kbd>noCard</kbd> | `boolean` | `false` | Auto-confirm |
+| <kbd>elevationOffset</kbd> | `number` | `deployElevationOffset` flag, else `0` | Added to the ground elevation at the placement |
+
+```js
+await api.placeDeployable({ deployable: 'dep_turret_drone', ownerActor: actor, range: 2 });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="beginDeploymentCard">
 <summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>deployWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
@@ -596,16 +763,38 @@ await api.beginDeploymentCard({ actor, item, deployableOptions: [] })
 await api.deployWeaponToken(weapon, ownerActor, originToken, options)
 ```
 
-| Function | Description |
-|:---------|:------------|
-| `beginDeploymentCard` | Resolves all deployable LIDs on an item and opens a `placeDeployable` session with actor selector. |
-| `deployWeaponToken` | Deploys a weapon as a token on the map (for thrown weapons). Options: `{ range, title, description, at }` (`at` = measurement origin, `range` default 1). |
+`beginDeploymentCard` resolves all deployable LIDs on an item and opens a `placeDeployable` session with an actor selector. `deployWeaponToken` deploys a weapon as a token on the map, for thrown weapons.
+
+**`beginDeploymentCard` options:**
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>actor</kbd> | `Actor` | *required* | Owner of the deployables |
+| <kbd>item</kbd> | `Item` | `null` | Item whose deployable LIDs are resolved |
+| <kbd>deployableOptions</kbd> | `Array` | `[]` | Pre-resolved deployable entries, skipping LID lookup |
+
+**`deployWeaponToken` positional args:** <kbd>weapon</kbd> `Item` · <kbd>ownerActor</kbd> `Actor` · <kbd>originToken</kbd> `Token`
+
+**`deployWeaponToken` options:**
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>range</kbd> | `number` | `1` | Placement range |
+| <kbd>at</kbd> | `Token\|Object` | `null` | Measurement origin |
+| <kbd>title</kbd> | `string` | card default | Card header |
+| <kbd>description</kbd> | `string` | card default | Card description |
+
+```js
+await api.beginDeploymentCard({ actor, item });
+```
 
 </details>
 
 ---
 
-<details>
+<details id="openDeployableMenu">
 <summary><b><code>openDeployableMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>recallDeployable</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>pickupWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openThrowMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openItemBrowser</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
@@ -618,7 +807,7 @@ await api.openThrowMenu(actor)            // open throw weapon menu
 await api.openItemBrowser(targetInput)    // open item browser
 ```
 
-`openThrowMenu(actor?)` defaults to the controlled token's actor. `recallDeployable`/`pickupWeaponToken` take the owner `Token`. `openItemBrowser(targetInput)` fills a jQuery input with the picked item and returns its LID.
+`openThrowMenu(actor?)` defaults to the controlled token's actor. `recallDeployable`/`pickupWeaponToken` take the owner token (`ownerToken`). `openItemBrowser(targetInput)` fills a jQuery input with the picked item and returns its LID.
 
 </details>
 
@@ -626,7 +815,7 @@ await api.openItemBrowser(targetInput)    // open item browser
 
 ## Hard Cover
 
-<details>
+<details id="spawnHardCover">
 <summary><b><code>spawnHardCover</code></b> <sup>async</sup> → <code>Array&lt;TokenDocument&gt; | null</code></summary>
 
 <br>
@@ -639,11 +828,34 @@ Spawns hard cover deployable tokens on the map.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
+| <kbd>originToken</kbd> | `Token` | *required* | Measurement origin |
+| **inside `options`** | | | |
 | <kbd>range</kbd> | `number` | `null` | Placement range |
 | <kbd>count</kbd> | `number` | `1` | Number of hard covers |
 | <kbd>size</kbd> | `number` | `1` | Size override |
 | <kbd>name</kbd> | `string` | `"Hard Cover"` | Display name |
 | <kbd>title</kbd> | `string` | `"PLACE HARD COVER"` | Card header |
 | <kbd>description</kbd> | `string` | `""` | Card description |
+
+```js
+await api.spawnHardCover(casterToken, { count: 2, range: 3, name: 'Rampart Wall' });
+```
+
+</details>
+
+---
+
+## Reinforcements
+
+<details id="delayedTokenAppearance">
+<summary><b><code>delayedTokenAppearance</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.delayedTokenAppearance()
+```
+
+Hides the currently selected tokens and schedules their arrival: pick the round, and they appear at its start with FX. Needs an active combat and at least one controlled token. The `L.A - Reinforcement` macro is this call.
 
 </details>

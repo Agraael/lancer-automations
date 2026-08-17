@@ -1,6 +1,6 @@
 /* global CodeMirror, game */
 
-import { AUTO_API_MANIFEST, AUTO_OPTION_SCHEMAS, AUTO_DOC_INDEX, AUTO_DOC_REF } from '../../tools/codemirror-hints-data.generated.js';
+import { AUTO_API_MANIFEST, AUTO_OPTION_SCHEMAS, AUTO_DOC_INDEX, AUTO_DOC_REF, AUTO_DOC_PARAMS } from '../../tools/codemirror-hints-data.generated.js';
 
 const HAND_SIGNATURE_OVERRIDES = {
 };
@@ -738,7 +738,8 @@ export function apiDocUrl(name)
     if (!entry && !ref)
         return null;
     const file = entry?.file ?? ref.file;
-    return `https://agraael.github.io/lancer-automations/${file.replace(/\.md$/, '.html')}`;
+    const anchor = entry?.anchor ? `#${entry.anchor}` : '';
+    return `https://agraael.github.io/lancer-automations/${file.replace(/\.md$/, '.html')}${anchor}`;
 }
 
 // Live api surface (spread-composed names included), enriched from the generated manifest.
@@ -779,6 +780,17 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
     _hideTooltip();
     const parts = _splitArgs(fullArgs);
     const paramByName = new Map((params ?? []).map((param) => [param.name, param]));
+    // Doc tables are the maintained source; prefer them over JSDoc-derived meta.
+    const docRows = AUTO_DOC_PARAMS[name] ?? null;
+    const positionalNames = new Set(parts.map((argStr) =>
+    {
+        const eq = argStr.indexOf('=');
+        return (eq >= 0 ? argStr.slice(0, eq) : argStr).trim();
+    }));
+    if (docRows)
+        for (const [pname, ptype, pdflt] of docRows)
+            if (positionalNames.has(pname))
+                paramByName.set(pname, { name: pname, type: ptype, desc: pdflt && pdflt !== 'required' ? `default: ${pdflt}` : '' });
     let body;
     if (!fullArgs || fullArgs === '()' || fullArgs === '(...)')
         body = `<div class="la-hint-tt-paren">${fullArgs || '()'}</div>`;
@@ -791,11 +803,17 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
             const defPart = eq >= 0 ? ` = ${argStr.slice(eq + 1).trim()}` : '';
             const comma = i < parts.length - 1 ? ',' : '';
             const lookupKey = namePart.replace(/^\{.*\}$/, 'options');
-            const schema = OPTION_SCHEMAS[`${name}.${lookupKey}`];
+            let schema = OPTION_SCHEMAS[`${name}.${lookupKey}`];
+            if (docRows && (lookupKey === 'options' || lookupKey === 'opts'))
+            {
+                const bagRows = docRows.filter(([pname]) => !positionalNames.has(pname));
+                if (bagRows.length)
+                    schema = bagRows.map(([pname, ptype]) => [pname, ptype || 'any']);
+            }
             let schemaHtml = '';
             if (schema)
             {
-                const lines = schema.map(([fieldName, fieldType]) => `<div class="la-hint-tt-schema-line"><span class="la-hint-tt-argname">${fieldName}</span><span class="la-hint-tt-default">: ${fieldType}</span></div>`).join('');
+                const lines = schema.map(([fieldName, fieldType]) => `<div class="la-hint-tt-schema-line"><span class="la-hint-tt-argname">${_escapeHtml(fieldName)}</span><span class="la-hint-tt-default">: ${_escapeHtml(fieldType)}</span></div>`).join('');
                 schemaHtml = `<div class="la-hint-tt-schema">${lines}</div>`;
             }
             const paramMeta = paramByName.get(namePart);

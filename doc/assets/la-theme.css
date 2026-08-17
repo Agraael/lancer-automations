@@ -101,6 +101,15 @@
   color: var(--la-signal);
 }
 
+.md-typeset h4 {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
+  color: var(--la-ink);
+  border-left: 3px solid var(--la-signal);
+  padding-left: 0.45em;
+}
+
 .md-header {
   box-shadow: 0 2px 0 0 var(--la-signal);
 }
@@ -137,8 +146,28 @@
   80% { text-shadow: none; }
 }
 
+@keyframes la-fold-open {
+  from { opacity: 0; transform: translateY(-5px); }
+}
+
+@keyframes la-fold-close {
+  to { opacity: 0; transform: translateY(-5px); }
+}
+
+.md-typeset details[open]:not(.la-closing) > :not(summary) {
+  animation: la-fold-open 0.18s ease-out;
+}
+
+.md-typeset details.la-closing > :not(summary) {
+  animation: la-fold-close 0.15s ease-in forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .la-banner {
+    animation: none;
+  }
+  .md-typeset details[open]:not(.la-closing) > :not(summary),
+  .md-typeset details.la-closing > :not(summary) {
     animation: none;
   }
 }
@@ -158,6 +187,22 @@
 .md-nav__link--active,
 .md-nav__link--active code {
   color: var(--la-signal) !important;
+}
+
+.md-nav--primary .md-nav__item--section > label.md-nav__link {
+  color: var(--la-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.62rem;
+  font-weight: 700;
+  margin-top: 0.9em;
+  padding-bottom: 0.25em;
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--la-accent), transparent 45%);
+}
+
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__item--section > label.md-nav__link {
+  color: var(--la-signal);
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--la-signal), transparent 45%);
 }
 
 .md-nav__item--active > .md-nav__link {
@@ -239,10 +284,102 @@
   overflow-wrap: normal;
 }
 
-.md-typeset table:not([class]) td:first-child,
-.md-typeset table:not([class]) th:first-child {
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+  padding: 0.35em 0.7em;
+  line-height: 1.45;
+}
+
+.md-typeset details.la-params {
+  background: none !important;
+  clip-path: none;
+  margin: 0.6em 0;
+}
+
+.md-typeset details.la-params::before {
+  display: none;
+}
+
+.md-typeset details.la-params > summary {
+  display: inline-block;
+  font-family: var(--la-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.66rem;
+  line-height: 1.6;
+  color: var(--la-signal);
+  padding: 0.1rem 1.6rem 0.25rem 0.2rem;
+  background: linear-gradient(color-mix(in srgb, var(--la-signal), transparent 55%), color-mix(in srgb, var(--la-signal), transparent 55%)) no-repeat left bottom / calc(100% - 1.5rem) 2px;
+}
+
+.md-typeset details.la-params > summary::before {
+  display: none;
+}
+
+.md-typeset details.la-params > summary::after {
+  color: var(--la-signal);
+  right: 0.3rem;
+}
+
+.md-typeset details.la-params > summary:hover {
+  background-image: linear-gradient(var(--la-signal), var(--la-signal));
+}
+
+.la-params .la-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.la-params tr.la-open .la-clamp {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+.la-params tr.la-clampable {
+  cursor: pointer;
+}
+
+.la-params tr.la-clampable td:last-child::after {
+  content: "\00a0\25be";
+  color: var(--la-signal);
+}
+
+.la-params tr.la-clampable.la-open td:last-child::after {
+  content: "\00a0\25b4";
+}
+
+.la-params table:not([class]) td:first-child,
+.la-params table:not([class]) th:first-child {
   width: 1%;
   white-space: nowrap;
+}
+
+.md-typeset tr.la-bag-divider td {
+  background: color-mix(in srgb, var(--la-signal), transparent 86%) !important;
+  font-family: var(--la-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.62rem;
+  padding-top: 0.15em;
+  padding-bottom: 0.15em;
+}
+
+.md-typeset details[id] {
+  scroll-margin-top: 3.4rem;
+}
+
+.md-typeset table[data-la-zipped] td:nth-child(3),
+.md-typeset table[data-la-zipped] th:nth-child(3) {
+  border-left: var(--la-line-w) solid var(--la-edge);
+}
+
+.md-typeset table:not([class]):has(img) {
+  table-layout: fixed;
+  width: 100%;
 }
 
 .md-typeset table:not([class]) tr:hover {
@@ -301,6 +438,17 @@
 }
 
 .md-typeset a:hover {
+  color: var(--la-signal);
+}
+
+.md-typeset a code {
+  color: #f8f8f2;
+  text-decoration: underline;
+  text-decoration-color: var(--la-signal);
+  text-underline-offset: 3px;
+}
+
+.md-typeset a:hover code {
   color: var(--la-signal);
 }
 

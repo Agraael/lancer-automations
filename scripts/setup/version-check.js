@@ -112,7 +112,7 @@ function showUpdateDialog(module, newVersion, releaseNotes = "")
         <div class="form-group" style="padding: 10px;">
             <p>A new version of <b>${module.title}</b> is available: <span class="lancer-text-red">v${newVersion}</span> (Current: v${module.version})</p>
             <p>You can update it via the Foundry VTT Module Manager.</p>
-            <p style="margin-top: 8px;">More info, updates, and previews on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a>.</p>
+            <p style="margin-top: 8px;">If you like this module or my other work, you can support me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a>. Updates and previews land there too.</p>
         </div>
         ${notesHtml}
     `;

@@ -8,11 +8,9 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 ## Settings
 
-<img align="right" src="../img/mv-settings.png" width="45%"/>
-
 **Combat & Movement → Lancer Automations Ruler** (and its **Ruler Speed Colors** subsection).
 
-<br clear="right"/>
+<img src="../img/mv-settings.png" width="70%"/>
 
 ---
 

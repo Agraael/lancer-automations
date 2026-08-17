@@ -8,11 +8,9 @@ Lancer Automations runs the procedural parts of play for you: combat actions and
 
 ## Settings
 
-<img align="right" src="../img/ga-settings.png" width="45%"/>
-
 **Combat & Movement → Combat Flows**, and **Activations → Scan**.
 
-<br clear="right"/>
+<img src="../img/ga-settings.png" width="70%"/>
 
 ---
 
@@ -112,7 +110,7 @@ Stop an item from spending its resources when it fires, per resource type. Toggl
 
 ## Reinforcement
 
-<img align="right" src="../img/ga-reinforcement.png" width="45%"/>
+<img align="right" src="../img/ga-reinforcement.png" width="50%"/>
 
 For units that arrive partway through a fight. Drag the new tokens onto the scene holding **Alt** to drop them hidden, then, in combat, select them, run the reinforcement tool, and set how many rounds until they land. They stay hidden until then.
 

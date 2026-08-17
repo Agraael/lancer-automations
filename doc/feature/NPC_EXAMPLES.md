@@ -320,7 +320,6 @@ const restockDroneSupportAutomation = {
             const deployedToken = triggerData.deployedTokens?.[0];
             if (!deployedToken) return;
             const healAmount = api.tierValue(reactorToken, [5, 10, 15]);
-            // Build the aura on the drone itself.
             await api.createAura(deployedToken, {
                 name: "Restock Drone Zone",
                 radius: 1, elevationAware: true, disposition: 1,
@@ -353,13 +352,11 @@ const restockDroneSupportAutomation = {
         activationType: "none",
         onInit: async function (token, item, api) {
             await api.addItemFlags(item, { deployRange: 5 });
-            // These drone LIDs are from a custom LCP.
             await api.addExtraDeploymentLids(item, [
                 { lid: "dep_(npc)_support_restock_drone_t1", tier: 1 },
                 { lid: "dep_(npc)_support_restock_drone_t2", tier: 2 },
                 { lid: "dep_(npc)_support_restock_drone_t3", tier: 3 }
             ]);
-            // Deploy-only feature: hide the base action, leaving just the deploy row.
             await api.setHidePrimaryAction(item);
         }
     }]
@@ -405,7 +402,6 @@ function buildDefenseNetAutomation(radius, isRebake = false) {
                     name: 'Defense Net', radius, elevationAware: true,
                     macros: [{ function: buildDefenseNetAuraCallback() }] // applies bonuses to allies inside
                 });
-                // ... optional Sequencer shield VFX ...
             }
         },
         {

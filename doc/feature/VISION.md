@@ -8,11 +8,9 @@ Lancer has no fog of war or vision, but these tools bring it closer to its rules
 
 ## Settings
 
-<img align="right" src="../img/vis-settings.png" width="45%"/>
-
 The **Vision** tab.
 
-<br clear="right"/>
+<img src="../img/vis-settings.png" width="70%"/>
 
 ---
 

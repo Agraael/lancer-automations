@@ -49,11 +49,48 @@ def highlight_inline_code(text):
     return "".join(out)
 
 
-def rewrite(text):
+def build_anchor_map():
+    anchors = {}
+    for f in sorted(SRC.glob('API_*.md')):
+        for name in re.findall(r'<details id="(\w+)"', f.read_text(encoding='utf-8')):
+            anchors.setdefault(name, f.name)
+    return anchors
+
+
+ANCHORS = build_anchor_map()
+BARE_REF = re.compile(r'(?<!\[)`(api\.)?(\w+)`')
+CALL_REF = re.compile(r'(?<!\[)`#!js (await )?(api\.)?(\w+)(\([^`]*\))`')
+
+
+def linkify(text, prefix):
+    def sub_bare(m):
+        name = m.group(2)
+        if name not in ANCHORS:
+            return m.group(0)
+        return f'[{m.group(0)}]({prefix}{ANCHORS[name]}#{name})'
+
+    def sub_call(m):
+        name = m.group(3)
+        if name not in ANCHORS:
+            return m.group(0)
+        return f'[{m.group(0)}]({prefix}{ANCHORS[name]}#{name})'
+
+    out, pos = [], 0
+    for fence in FENCE.finditer(text):
+        seg = text[pos:fence.start()]
+        out.append(CALL_REF.sub(sub_call, BARE_REF.sub(sub_bare, seg)))
+        out.append(fence.group(0))
+        pos = fence.end()
+    out.append(CALL_REF.sub(sub_call, BARE_REF.sub(sub_bare, text[pos:])))
+    return ''.join(out)
+
+
+def rewrite(text, prefix=''):
     for old, new in ESCAPES.items():
         text = text.replace(old, new)
     text = DETAILS.sub(r'<details markdown="1"\1>', text)
     text = highlight_inline_code(text)
+    text = linkify(text, prefix)
     return unfence_banner(text)
 
 
@@ -73,7 +110,8 @@ def main():
     shutil.copytree(SRC, OUT, copy_function=link_or_copy)
 
     for md in OUT.rglob("*.md"):
-        md.write_text(rewrite(md.read_text(encoding="utf-8")), encoding="utf-8")
+        prefix = '' if md.parent == OUT else '../'
+        md.write_text(rewrite(md.read_text(encoding="utf-8"), prefix), encoding="utf-8")
 
     print(f"prepared {OUT} ({len(list(OUT.rglob('*.md')))} pages)")
 

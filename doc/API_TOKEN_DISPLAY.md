@@ -14,7 +14,7 @@ Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token,
 | `Item` | `item.flags.lancer-automations.extraBarTemplates` | Auto-injects onto every scene token of the item's actor |
 | `Actor` | `actor.flags.lancer-automations.extraBarTemplates` | Auto-injects onto every scene token of the actor |
 
-<details>
+<details id="addExtraBar">
 <summary><b><code>addExtraBar</code></b> <sup>async</sup> → <code>string | null</code></summary>
 
 <br>
@@ -59,7 +59,7 @@ Entry shape (all fields optional in `partial`):
 
 ---
 
-<details>
+<details id="updateExtraBarValue">
 <summary><b><code>updateExtraBarValue</code></b> <sup>async</sup> → <code>number | null</code></summary>
 
 <br>
@@ -76,11 +76,15 @@ Token target: only **manual** entries can be updated. Path-bound entries are rea
 | <kbd>entryId</kbd> | `string` | *required* | The entry / template id |
 | <kbd>value</kbd> | `number \| string` | *required* | A number, numeric string, or delta string (`"+2"` / `"-3"`) |
 
+```js
+await api.updateExtraBarValue(token, entryId, '-1');
+```
+
 </details>
 
 ---
 
-<details>
+<details id="removeExtraBar">
 <summary><b><code>removeExtraBar</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
@@ -96,11 +100,15 @@ Remove an entry (Token) or template (Item/Actor) by id. Item/Actor removal also 
 | <kbd>target</kbd> | `Token \| TokenDocument \| Item \| Actor \| string` | *required* | Document (or uuid/id) |
 | <kbd>entryId</kbd> | `string` | *required* | The entry / template id |
 
+```js
+await api.removeExtraBar(token, entryId);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getExtraBars">
 <summary><b><code>getExtraBars</code></b> → <code>Array</code></summary>
 
 <br>
@@ -114,5 +122,9 @@ List the extra bars / templates on a target. Token → entries in `statBarExtras
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Token \| TokenDocument \| Item \| Actor` | *required* | Document |
+
+```js
+const entryId = api.getExtraBars(token)[0]?.id;
+```
 
 </details>

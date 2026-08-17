@@ -6,7 +6,7 @@
 
 ## Item & Actor Flags
 
-<details>
+<details id="addItemFlags">
 <summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>removeItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>getItemFlags</code></b> → <code>any</code></summary>
 
 <br>
@@ -16,6 +16,8 @@ await api.addItemFlags(item, flags)            // set flags under 'lancer-automa
 await api.removeItemFlags(item, flags)         // unset the listed keys
 api.getItemFlags(item, flagName?)              // read flags (specific key or all)
 ```
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>flags</kbd> `Object` key/value pairs · <kbd>flagName</kbd> `string` optional single key
 
 Routes through the GM via socket when the calling user does not own the item.
 
@@ -35,7 +37,34 @@ await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
 
 ---
 
-<details>
+<details id="addTokenFlags">
+<summary><b><code>addTokenFlags</code></b> <sup>async</sup> → <code>TokenDocument</code><br><b><code>getTokenFlags</code></b> → <code>any</code></summary>
+
+<br>
+
+```js
+await api.addTokenFlags(tokenOrDoc, flags)
+api.getTokenFlags(tokenOrDoc, flagName?)
+```
+
+The token-document counterpart to `addItemFlags` / `getItemFlags`. Routes through the GM via socket when the calling user does not own the token.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>tokenOrDoc</kbd> | `Token\|TokenDocument` | *required* | Token to read or stamp |
+| <kbd>flags</kbd> | `Object` | *required* | Key/value pairs set under `lancer-automations` |
+| <kbd>flagName</kbd> | `string` | `null` | Read one key. Omit for the whole namespace object |
+
+```js
+await api.addTokenFlags(token, { mineArmed: true });
+const armed = api.getTokenFlags(token, 'mineArmed');
+```
+
+</details>
+
+---
+
+<details id="addActorFlags">
 <summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>getActorFlags</code></b> → <code>any</code></summary>
 
 <br>
@@ -45,6 +74,8 @@ await api.addActorFlags(actor, flags)          // set flags under 'lancer-automa
 await api.removeActorFlags(actor, flags)       // unset the listed keys
 api.getActorFlags(actor, flagName?)            // read flags (specific key or all)
 ```
+
+**Params:** <kbd>actor</kbd> `Actor` · <kbd>flags</kbd> `Object` key/value pairs · <kbd>flagName</kbd> `string` optional single key
 
 Routes through the GM via socket when the calling user does not own the actor.
 
@@ -58,7 +89,6 @@ Routes through the GM via socket when the calling user does not own the actor.
 
 **Example:**
 ```js
-// Custom mine: 3-space radius, hostile only.
 await api.addActorFlags(mineActor, {
     mineDetectionRadius: 3,
     mineDetectionDisposition: "HOSTILE"
@@ -71,7 +101,7 @@ await api.addActorFlags(mineActor, {
 
 ## Item Tags
 
-<details>
+<details id="addItemTag">
 <summary><b><code>addItemTag</code></b> <sup>async</sup> → <code>Item</code><br><b><code>removeItemTag</code></b> <sup>async</sup> → <code>Item</code></summary>
 
 <br>
@@ -93,7 +123,33 @@ await api.removeItemTag(item, "tg_heat_self")                   // removes tag b
 
 ## Activated Items
 
-<details>
+<details id="setItemAsActivated">
+<summary><b><code>setItemAsActivated</code></b> <sup>async</sup> → <code>Promise&lt;Item&gt;</code></summary>
+
+<br>
+
+```js
+await api.setItemAsActivated(item, token, endAction, endActionDescription)
+```
+
+Marks an item as activated, so it shows as active in the HUD and appears in `getActivatedItems`. `endAction` is the action the player spends to end it, surfaced on the end-activation entry. Close it with `endItemActivation`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>item</kbd> | `Item` | *required* | The item to mark |
+| <kbd>token</kbd> | `Token` | *required* | Owner of the item |
+| <kbd>endAction</kbd> | `string` | *required* | Action spent to end it, e.g. `"Quick"` / `"Full"` |
+| <kbd>endActionDescription</kbd> | `string` | `""` | Text shown when ending the activation |
+
+```js
+await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.');
+```
+
+</details>
+
+---
+
+<details id="getActivatedItems">
 <summary><b><code>getActivatedItems</code></b> → <code>Array&lt;Item&gt;</code></summary>
 
 <br>
@@ -108,11 +164,57 @@ Returns items currently marked as activated on a token (via `setItemAsActivated`
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token to inspect |
 
+```js
+const active = api.getActivatedItems(token);
+if (active.some(i => i.name === 'Aegis Shield Generator')) return false;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="endItemActivation">
+<summary><b><code>endItemActivation</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
+
+<br>
+
+```js
+await api.endItemActivation(item, token)
+```
+
+Ends an activation started by `setItemAsActivated`: clears the activated flags and posts the end-of-activation chat message through `SimpleActivationFlow`. Resolves whether the flow completed.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>item</kbd> | `Item` | The activated item |
+| <kbd>token</kbd> | `Token` | The token the flow runs for |
+
+```js
+await api.endItemActivation(item, token);
+```
+
+</details>
+
+---
+
+<details id="openEndActivationMenu">
+<summary><b><code>openEndActivationMenu</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
+
+<br>
+
+```js
+await api.openEndActivationMenu(token)
+```
+
+Prompt listing the token's activated items; the picked one is ended via `endItemActivation`. Resolves the ended item, or `null` on cancel.
+
+**Params:** <kbd>token</kbd> `Token` holder of the activated items
+
+</details>
+
+---
+
+<details id="destroyItem">
 <summary><b><code>destroyItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>disableItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>restoreItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
 
 <br>
@@ -123,7 +225,14 @@ await api.disableItem(item)   // system.disabled = true
 await api.restoreItem(item)   // clears both
 ```
 
+**Params:** <kbd>item</kbd> `Item`
+
 Destroyed/disabled items are skipped by the reaction engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
+
+```js
+await api.disableItem(weapon);
+await api.restoreItem(weapon);
+```
 
 </details>
 
@@ -131,7 +240,7 @@ Destroyed/disabled items are skipped by the reaction engine and the action-lock 
 
 ## Resource Management
 
-<details>
+<details id="setReaction">
 <summary><b><code>setReaction</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -147,11 +256,36 @@ Sets the reaction availability flag on an actor's action tracker.
 | <kbd>actorOrToken</kbd> | `Token\|Actor` | The token or actor to update |
 | <kbd>value</kbd> | `boolean` | `true` = reaction available, `false` = reaction spent |
 
+```js
+await api.setReaction(reactorToken, false);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="hasReactionAvailable">
+<summary><b><code>hasReactionAvailable</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.hasReactionAvailable(tokenOrActor)
+```
+
+Reads the reaction flag on the actor's action tracker. Out of combat (no combatant for this actor) it is always `true`.
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
+
+```js
+if (!api.hasReactionAvailable(reactorToken)) return false;
+```
+
+</details>
+
+---
+
+<details id="setItemResource">
 <summary><b><code>setItemResource</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -174,11 +308,15 @@ Detection order:
 | <kbd>nb</kbd> | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
 | <kbd>counterIndex</kbd> | `number` | `0` | For talent items: which counter to update. |
 
+```js
+await api.setItemResource(talentItem, 2, 0);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="updateTokenSystem">
 <summary><b><code>updateTokenSystem</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -209,7 +347,7 @@ Per-item config controlling Lancer's automation of the item. Currently: opt out 
 
 Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `reserveUsed`.
 
-<details>
+<details id="setItemAutoConsumeDisabled">
 <summary><b><code>setItemAutoConsumeDisabled</code></b> <sup>async</sup> → <code>string[]</code></summary>
 
 <br>
@@ -232,7 +370,7 @@ Returns the updated opt-out array.
 
 ---
 
-<details>
+<details id="setItemAutoConsumeDisabledAll">
 <summary><b><code>setItemAutoConsumeDisabledAll</code></b> <sup>async</sup> → <code>string[]</code></summary>
 
 <br>
@@ -241,13 +379,15 @@ Returns the updated opt-out array.
 await api.setItemAutoConsumeDisabledAll(item, true);  // disable every resource the item has
 ```
 
+**Params:** <kbd>item</kbd> `Item` · <kbd>disabled</kbd> `boolean`
+
 Mass-toggle: apply opt-out to every resource type the item has (or clear all).
 
 </details>
 
 ---
 
-<details>
+<details id="isAutoConsumeDisabled">
 <summary><b><code>isAutoConsumeDisabled</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -256,11 +396,13 @@ Mass-toggle: apply opt-out to every resource type the item has (or clear all).
 if (api.isAutoConsumeDisabled(item, 'uses')) { ... }
 ```
 
+**Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `string` resource key
+
 </details>
 
 ---
 
-<details>
+<details id="getAutoConsumeDisabled">
 <summary><b><code>getAutoConsumeDisabled</code></b> → <code>Set&lt;string&gt;</code></summary>
 
 <br>
@@ -269,11 +411,13 @@ if (api.isAutoConsumeDisabled(item, 'uses')) { ... }
 const disabled = api.getAutoConsumeDisabled(item);  // Set of type keys
 ```
 
+**Params:** <kbd>item</kbd> `Item`
+
 </details>
 
 ---
 
-<details>
+<details id="consumeItemResource">
 <summary><b><code>consumeItemResource</code></b> <sup>async</sup> → <code>number|boolean|null</code></summary>
 
 <br>
@@ -295,7 +439,7 @@ Force a consume regardless of opt-out. Throws if the item does not have the reso
 
 ---
 
-<details>
+<details id="rechargeItemResource">
 <summary><b><code>rechargeItemResource</code></b> <sup>async</sup> → <code>number|boolean|null</code></summary>
 
 <br>
@@ -305,13 +449,15 @@ await api.rechargeItemResource(item, 'uses', 3);  // uses += 3 (clamped to max)
 await api.rechargeItemResource(item, 'charged'); // charged = true
 ```
 
+**Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `string` resource key · <kbd>amount</kbd> `number` (default `1`)
+
 Reverse of consume. Same signature, same validation.
 
 </details>
 
 ---
 
-<details>
+<details id="configureItemExtraConfig">
 <summary><b><code>configureItemExtraConfig</code></b> <sup>async</sup> → <code>object</code></summary>
 
 <br>
@@ -320,13 +466,15 @@ Reverse of consume. Same signature, same validation.
 await api.configureItemExtraConfig(item, { autoConsumeDisabled: ['uses', 'loading'] });
 ```
 
+**Params:** <kbd>item</kbd> `Item` · <kbd>patch</kbd> `Object` shallow-merged fields
+
 Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature. Use this only for fields with no helper.
 
 </details>
 
 ---
 
-<details>
+<details id="getExtraConfig">
 <summary><b><code>getExtraConfig</code></b> → <code>object|null</code></summary>
 
 <br>
@@ -334,6 +482,8 @@ Generic setter that shallow-merges a patch into the Extra Config flag. Prefer th
 ```js
 const cfg = api.getExtraConfig(item);
 ```
+
+**Params:** <kbd>item</kbd> `Item`
 
 Returns the full Extra Config flag object, or `null` if never configured.
 

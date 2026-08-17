@@ -24,7 +24,6 @@
 [![GMs counted](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fexglsurpdbmpkvqdfvid.supabase.co%2Frest%2Fv1%2Fseen_users%3Fselect%3Dcount%26role%3Deq.gm%26apikey%3DeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2xzdXJwZGJtcGt2cWRmdmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MTcyNzAsImV4cCI6MjA5MzQ5MzI3MH0.p6oLn61mhe9hxThh-bwkVIADvSU6oyG4VnAkhkJmHJU&query=%24%5B0%5D.count&label=GMs%20counted&style=for-the-badge&color=blue)](#)
 [![Players counted](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fexglsurpdbmpkvqdfvid.supabase.co%2Frest%2Fv1%2Fseen_users%3Fselect%3Dcount%26role%3Deq.player%26apikey%3DeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2xzdXJwZGJtcGt2cWRmdmlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MTcyNzAsImV4cCI6MjA5MzQ5MzI3MH0.p6oLn61mhe9hxThh-bwkVIADvSU6oyG4VnAkhkJmHJU&query=%24%5B0%5D.count&label=Players%20counted&style=for-the-badge&color=green)](#)
 
-
 <details>
 <summary>patreon...</summary>
 

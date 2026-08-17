@@ -14,7 +14,7 @@ Three distance functions. All return distance in **grid spaces** (not pixels).
 | `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. Optional `includeElevation` adds elevation difference to the planar distance. |
 | `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
 
-<details>
+<details id="getTokenDistance">
 <summary><b><code>getTokenDistance</code></b> → <code>number</code></summary>
 
 <br>
@@ -31,11 +31,16 @@ Delegates to `getMinGridDistance(token1, token2, null, includeElevation)`.
 | <kbd>token2</kbd> | `Token` | Second token |
 | <kbd>includeElevation</kbd> | `boolean` | If `true`, add the grid-space elevation difference to the planar result |
 
+```js
+const dist = api.getTokenDistance(reactorToken, moverToken);
+if (dist > 3) return false;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getMinGridDistance">
 <summary><b><code>getMinGridDistance</code></b> → <code>number</code></summary>
 
 <br>
@@ -55,11 +60,16 @@ With `includeElevation`, the grid-space elevation difference is added to the pla
 | <kbd>overridePos1</kbd> | `{ x: number; y: number }` | `null` | Evaluate as if token1 were at this world position |
 | <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `\|elevation1 − elevation2\|` (in grid spaces) to the planar result |
 
+```js
+const planar = api.getMinGridDistance(tokenA, tokenB);
+const withElevation = api.getMinGridDistance(tokenA, tokenB, null, true);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getGridDistance">
 <summary><b><code>getGridDistance</code></b> → <code>number</code></summary>
 
 <br>
@@ -74,6 +84,10 @@ Hex grids: cube distance. Square grids: `measurePath` rounded to grid units.
 |:------|:-----|:------------|
 | <kbd>pos1</kbd> | `{ x: number; y: number }` | World coordinates |
 | <kbd>pos2</kbd> | `{ x: number; y: number }` | World coordinates |
+
+```js
+const spaces = api.getGridDistance(token.center, { x: 1200, y: 800 });
+```
 
 </details>
 
@@ -99,7 +113,7 @@ Square + hex. "Center" points drop straight into `moveToken({ destination })`.
 
 **Beta.** Wall-based, height-aware, reciprocal line of sight - the same test the Lancer LOS detection mode runs. Only meaningful with **Lancer Line of Sight** enabled in the [Vision tab](feature/VISION.md).
 
-<details>
+<details id="hasLineOfSight">
 <summary><b><code>hasLineOfSight</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -115,13 +129,17 @@ True if `refA` has a clear Lancer line of sight to `refB`. Reciprocal: if A sees
 | <kbd>refA</kbd> | `Token \| TokenDocument \| string` | Token, document, or id |
 | <kbd>refB</kbd> | `Token \| TokenDocument \| string` | Token, document, or id |
 
+```js
+if (!api.hasLineOfSight(reactorToken, targetToken)) return false;
+```
+
 </details>
 
 ---
 
 ## Faction & Disposition
 
-<details>
+<details id="isHostile">
 <summary><b><code>isHostile</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -137,11 +155,42 @@ Compatible with the Token Factions module.
 | <kbd>reactor</kbd> | `Token` | The reacting token |
 | <kbd>mover</kbd> | `Token` | The triggering token |
 
+```js
+if (!api.isHostile(reactorToken, moverToken)) return false;
+```
+
 </details>
 
 ---
 
-<details>
+<details id="canProvokeReaction">
+<summary><b><code>canProvokeReaction</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.canProvokeReaction(triggering, reactor, reasonOut?)
+```
+
+`false` when the triggering token cannot provoke: it is `hidden`, took `disengage`, carries the `provoke` immunity, or is `intangible` while the reactor is not. A token paired with itself always provokes. This is the same gate the engine applies before offering a reaction, exposed for your own filters.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>triggering</kbd> | `Token` | *required* | The token that would provoke |
+| <kbd>reactor</kbd> | `Token` | *required* | The token that would react |
+| <kbd>reasonOut</kbd> | `Object` | `null` | Filled with why it was blocked |
+
+```js
+const reason = {};
+if (!api.canProvokeReaction(moverToken, reactorToken, reason))
+    console.log(reason);
+```
+
+</details>
+
+---
+
+<details id="isFriendly">
 <summary><b><code>isFriendly</code></b> → <code>boolean</code></summary>
 
 <br>
@@ -157,11 +206,15 @@ Compatible with the Token Factions module.
 | <kbd>token1</kbd> | `Token` | First token |
 | <kbd>token2</kbd> | `Token` | Second token |
 
+```js
+const allies = canvas.tokens.placeables.filter(t => api.isFriendly(casterToken, t));
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getRelativeDisposition">
 <summary><b><code>getRelativeDisposition</code></b> → <code>number|null</code></summary>
 
 <br>
@@ -177,13 +230,17 @@ Disposition of `other` as seen from `viewer`, returned as a `CONST.TOKEN_DISPOSI
 | <kbd>viewer</kbd> | `Token` | The reference token (perspective) |
 | <kbd>other</kbd> | `Token` | The token being classified |
 
+```js
+const hostile = api.getRelativeDisposition(viewerToken, otherToken) === CONST.TOKEN_DISPOSITIONS.HOSTILE;
+```
+
 </details>
 
 ---
 
 ## Grid & Cell Data
 
-<details>
+<details id="getTokenCells">
 <summary><b><code>getTokenCells</code></b> → <code>Array&lt;[row, col]&gt;</code></summary>
 
 <br>
@@ -196,11 +253,15 @@ api.getTokenCells(token)
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token to inspect |
 
+```js
+const occupied = new Set(api.getTokenCells(token).map(([row, col]) => `${col},${row}`));
+```
+
 </details>
 
 ---
 
-<details>
+<details id="getMaxGroundHeightUnderToken">
 <summary><b><code>getMaxGroundHeightUnderToken</code></b> → <code>number</code></summary>
 
 <br>
@@ -216,11 +277,16 @@ Returns the highest terrain height value under any cell occupied by the token. R
 | <kbd>token</kbd> | `Token` | The token to check |
 | <kbd>terrainAPI</kbd> | `Object` | Terrain Height Tools API object |
 
+```js
+const tht = game.modules.get("terrain-height-tools")?.api;
+const ground = api.getMaxGroundHeightUnderToken(token, tht);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="triggerDangerousZoneFlow">
 <summary><b><code>triggerDangerousZoneFlow</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -251,7 +317,7 @@ await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token,
 
 ## Debug Visualizations
 
-<details>
+<details id="drawThreatDebug">
 <summary><b><code>drawThreatDebug</code></b><br><b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
@@ -261,11 +327,17 @@ await api.drawThreatDebug(token)    // Draws threat range cells on canvas. Hex g
 await api.drawDistanceDebug()       // Select 2 tokens, draws shortest distance line.
 ```
 
+**Params:** <kbd>token</kbd> `Token`
+
+```js
+await api.drawThreatDebug(canvas.tokens.controlled[0]);
+```
+
 </details>
 
 ---
 
-<details>
+<details id="drawRangeHighlight">
 <summary><b><code>drawRangeHighlight</code></b> → <code>PIXI.Graphics</code></summary>
 
 <br>
@@ -282,5 +354,10 @@ api.drawRangeHighlight(casterToken, range, color, alpha, includeSelf, opts)
 | <kbd>alpha</kbd> | `number` | `0.2` | Opacity (0-1) |
 | <kbd>includeSelf</kbd> | `boolean` | `false` | Include origin cells |
 | <kbd>opts</kbd> | `Object` | `{}` | Extra styling: `lineAlpha`, `lineColor`, `lineWidth`, `glowColor` |
+
+```js
+const gfx = api.drawRangeHighlight(casterToken, 5, 0xff6400, 0.15);
+gfx.destroy();
+```
 
 </details>

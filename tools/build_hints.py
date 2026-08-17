@@ -23,9 +23,27 @@ DOC_FILES = ['API_REFERENCE.md', 'API_COMBAT.md', 'API_SPATIAL.md', 'API_EFFECTS
              'API_INTERACTIVE.md', 'API_ITEMS.md', 'API_HUD.md', 'API_MOVEMENT.md',
              'API_TOKEN_DISPLAY.md', 'API_HOWTO.md']
 DETAILS_RE = re.compile(
-    r'<details>\s*<summary><b><code>(\w+)</code></b>[^\n]*\n([\s\S]*?)</details>',
+    r'<details[^>]*>\s*<summary>((?:(?!</summary>)[\s\S])*?)</summary>([\s\S]*?)</details>',
     re.IGNORECASE,
 )
+SUMMARY_NAME_RE = re.compile(r'<b><code>(\w+)</code></b>')
+DOC_KBD_RE = re.compile(r'<kbd>([\w.]+)</kbd>')
+DOC_CELL_SPLIT = re.compile(r'(?<!\\)\|')
+
+
+def doc_param_rows(snippet):
+    rows = []
+    for line in snippet.splitlines():
+        if not line.startswith('|') or '<kbd>' not in line:
+            continue
+        cells = [c.strip() for c in DOC_CELL_SPLIT.split(line)[1:-1]]
+        if len(cells) < 2:
+            continue
+        typ = cells[1].strip('`').replace('\\|', '|')
+        dflt = (cells[2].strip('`').strip('*').replace('\\|', '|') if len(cells) >= 4 else '')
+        for pname in DOC_KBD_RE.findall(cells[0]):
+            rows.append([pname, typ, dflt])
+    return rows
 
 OPTION_PARAM_NAMES = ['options', 'opts', 'config', 'extraOptions', 'extraData']
 OUTPUT = Path(__file__).resolve().parent / 'codemirror-hints-data.generated.js'
@@ -186,12 +204,17 @@ def extract_doc_index(known_names):
             continue
         text = path.read_text(encoding='utf-8')
         for m in DETAILS_RE.finditer(text):
-            name = m.group(1)
+            names = SUMMARY_NAME_RE.findall(m.group(1))
+            if not names:
+                continue
             snippet = m.group(0)
             line = text.count('\n', 0, m.start()) + 1
-            if name in docs:
-                continue
-            docs[name] = {'file': fname, 'line': line, 'snippet': snippet}
+            rows = doc_param_rows(snippet)
+            for name in names:
+                if name in docs:
+                    continue
+                docs[name] = {'file': fname, 'line': line, 'snippet': snippet,
+                              'anchor': names[0], 'params': rows}
         for m in CODE_MENTION_RE.finditer(text):
             name = m.group(1) or m.group(2) or m.group(3)
             if not name or name in refs or name in docs:
@@ -251,19 +274,46 @@ def parse_declaration(src, m, manifest_raw, schemas):
             schemas[f'{name}.{p_name}'] = [[k, ''] for k in keys]
 
 
+def extract_api_aliases(src):
+    """`publicName: realFn` pairs inside *API blocks (registerDefaultGeneralReactions etc.)."""
+    aliases = {}
+    for m in API_BLOCK_RE.finditer(src):
+        open_idx = src.find('{', m.start() + len(m.group(0)) - 1)
+        if open_idx == -1:
+            continue
+        close_idx = find_close(src, open_idx, '{', '}')
+        for raw in src[open_idx + 1:close_idx - 1].split(','):
+            parts = raw.split(':')
+            if len(parts) != 2:
+                continue
+            alias, real = parts[0].strip(), parts[1].strip()
+            if alias != real and re.fullmatch(r'[A-Za-z_]\w*', alias) and re.fullmatch(r'[A-Za-z_]\w*', real):
+                aliases[alias] = real
+    return aliases
+
+
 def main():
     manifest_raw = []
     schemas = {}
     api_surface = set()
+    aliases = {}
 
     for path in iter_js_files():
         src = path.read_text(encoding='utf-8')
         api_surface.update(extract_api_surface(src))
+        aliases.update(extract_api_aliases(src))
 
         for m in FN_RE.finditer(src):
             parse_declaration(src, m, manifest_raw, schemas)
         for m in STATIC_METHOD_RE.finditer(src):
             parse_declaration(src, m, manifest_raw, schemas)
+
+    declared = {e['name'] for e in manifest_raw}
+    for alias, real in aliases.items():
+        if alias in declared or real not in declared:
+            continue
+        src_entry = next(e for e in manifest_raw if e['name'] == real)
+        manifest_raw.append({**src_entry, 'name': alias})
 
     known_names = {e['name'] for e in manifest_raw}
     docs, refs = extract_doc_index(known_names)
@@ -336,9 +386,20 @@ def main():
             f'    {json.dumps(name)}: {{ '
             f'file: {json.dumps(d["file"])}, '
             f'line: {d["line"]}, '
+            f'anchor: {json.dumps(d["anchor"])}, '
             f'snippet: {json.dumps(d["snippet"])} '
             f'}},'
         )
+    lines.append('};')
+    lines.append('')
+
+    lines.append('export const AUTO_DOC_PARAMS = {')
+    for name in sorted(docs):
+        rows = docs[name]['params']
+        if not rows:
+            continue
+        formatted = ', '.join(json.dumps(r) for r in rows)
+        lines.append(f'    {json.dumps(name)}: [{formatted}],')
     lines.append('};')
     lines.append('')
 

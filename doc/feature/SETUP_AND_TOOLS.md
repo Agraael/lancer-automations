@@ -8,11 +8,9 @@ Setup and housekeeping: optional content, actor and data cleanup, news, guided t
 
 ## Settings
 
-<img align="right" src="../img/st-settings.png" width="45%"/>
-
 The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
-<br clear="right"/>
+<img src="../img/st-settings.png" width="70%"/>
 
 ---
 
@@ -48,18 +46,15 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 
 ## Guided tours
 
-<img align="right" src="../img/st-tour.png" width="45%"/>
-
 There are guided in-app tours to explain the main systems, from the **Tutorial & Help** tab. A welcome dialog offers them on first install, along with a **Setup Wizard** for the main settings.
 
-<br clear="right"/>
+<img src="../img/st-tour.png" width="70%"/>
 
 ---
 
 ## Scene dimensions
 
-<img align="right" src="../img/st-scene.png" width="45%"/>
-
 In a scene's configuration, **Match background image** sets the scene's width and height to the background's pixel size, and a **Scale W/H %** row scales the current dimensions by a percentage, linked or separate.
 
-<br clear="right"/>
+<img src="../img/st-scene.png" width="70%"/>
+
