@@ -7,7 +7,7 @@
 ## Movement Tracking
 
 <details>
-<summary><b><code>clearMoveData</code></b> → <code>void</code> · <b><code>getCumulativeMoveData</code></b> → <code>MoveSummary</code> · <b><code>getIntentionalMoveData</code></b> → <code>MoveSummary</code> · <b><code>clearMovementHistory</code></b> <sup>async</sup> → <code>void</code> · <b><code>getMovementHistory</code></b> → <code>MovementHistoryResult | { exists: false }</code> · <b><code>increaseMovementCap</code></b> → <code>void</code></summary>
+<summary><b><code>clearMoveData</code></b> → <code>void</code><br><b><code>getCumulativeMoveData</code></b> → <code>MoveSummary</code><br><b><code>getIntentionalMoveData</code></b> → <code>MoveSummary</code><br><b><code>clearMovementHistory</code></b> <sup>async</sup> → <code>void</code><br><b><code>getMovementHistory</code></b> → <code>MovementHistoryResult | { exists: false }</code><br><b><code>increaseMovementCap</code></b> → <code>void</code></summary>
 
 <br>
 

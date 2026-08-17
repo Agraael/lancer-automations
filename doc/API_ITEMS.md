@@ -7,7 +7,7 @@
 ## Item & Actor Flags
 
 <details>
-<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>removeItemFlags</code></b> <sup>async</sup> → <code>Item</code> · <b><code>getItemFlags</code></b> → <code>any</code></summary>
+<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>removeItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>getItemFlags</code></b> → <code>any</code></summary>
 
 <br>
 
@@ -36,7 +36,7 @@ await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
 ---
 
 <details>
-<summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code> · <b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code> · <b><code>getActorFlags</code></b> → <code>any</code></summary>
+<summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>getActorFlags</code></b> → <code>any</code></summary>
 
 <br>
 
@@ -72,7 +72,7 @@ await api.addActorFlags(mineActor, {
 ## Item Tags
 
 <details>
-<summary><b><code>addItemTag</code></b> <sup>async</sup> → <code>Item</code> · <b><code>removeItemTag</code></b> <sup>async</sup> → <code>Item</code></summary>
+<summary><b><code>addItemTag</code></b> <sup>async</sup> → <code>Item</code><br><b><code>removeItemTag</code></b> <sup>async</sup> → <code>Item</code></summary>
 
 <br>
 
@@ -113,7 +113,7 @@ Returns items currently marked as activated on a token (via `setItemAsActivated`
 ---
 
 <details>
-<summary><b><code>destroyItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code> · <b><code>disableItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code> · <b><code>restoreItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
+<summary><b><code>destroyItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>disableItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>restoreItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
 
 <br>
 

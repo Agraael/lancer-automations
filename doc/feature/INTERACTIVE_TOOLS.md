@@ -1,6 +1,6 @@
 # Interactive Tools
 
-[← Back to the README](../../README.md) · API: [API_INTERACTIVE.md](../API_INTERACTIVE.md)
+[← Back to the README](../index.md) · API: [API_INTERACTIVE.md](../API_INTERACTIVE.md)
 
 Cards that ask players to choose or vote, and on-canvas tools to pick, place, and move tokens and zones. Automations and macros call these. The function signatures are in [API_INTERACTIVE.md](../API_INTERACTIVE.md).
 

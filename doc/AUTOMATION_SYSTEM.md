@@ -64,7 +64,7 @@ The engine pumps every trigger through this pipeline for every reactor candidate
 
 ## 2. Lifecycle of a Trigger
 
-<details>
+<details open>
 <summary><b>Flow diagram</b> (click to expand)</summary>
 
 ```mermaid

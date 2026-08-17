@@ -1,6 +1,6 @@
 # Custom Token Stat Bars
 
-[← Back to the README](../../README.md) · The action HUD: [HUD.md](./HUD.md)
+[← Back to the README](../index.md) · The action HUD: [HUD.md](./HUD.md)
 
 Lancer Automations draws its own bars and labels directly on the token, as a replacement for Bar Brawl. It also adds a hover popup (the token stat hint) with a token's full stats. Both are separate from the [Token Action HUD](./HUD.md) and work whether or not the HUD menu is enabled.
 

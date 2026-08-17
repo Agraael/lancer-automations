@@ -738,8 +738,7 @@ export function apiDocUrl(name)
     if (!entry && !ref)
         return null;
     const file = entry?.file ?? ref.file;
-    const line = entry?.line ?? ref.line;
-    return `https://github.com/Agraael/lancer-automations/blob/main/doc/${file}#L${line}`;
+    return `https://agraael.github.io/lancer-automations/${file.replace(/\.md$/, '.html')}`;
 }
 
 // Live api surface (spread-composed names included), enriched from the generated manifest.

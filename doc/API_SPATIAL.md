@@ -252,7 +252,7 @@ await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token,
 ## Debug Visualizations
 
 <details>
-<summary><b><code>drawThreatDebug</code></b> · <b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
+<summary><b><code>drawThreatDebug</code></b><br><b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
 

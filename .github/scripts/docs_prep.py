@@ -15,21 +15,10 @@ ESCAPES = {
     "](../../scripts/": f"]({BLOB}scripts/",
 }
 
-INDEX_FIXES = {
-    "](doc/": "](",
-    'src="doc/': 'src="',
-    "](extra/": f"]({BLOB}extra/",
-    "](scripts/": f"]({BLOB}scripts/",
-}
-
-BACKLINKS = {
-    "](../../README.md": "](../index.md",
-    "](../README.md": "](index.md",
-}
-
 DETAILS = re.compile(r"<details(?![^>]*\bmarkdown=)((?:\s[^>]*)?)>")
 BANNER = re.compile(r"\A```[^\n]*\n(.*?)\n```", re.S)
-OPEN_TAG = re.compile(r'<details markdown="1"([^>]*)>')
+FENCE = re.compile(r"^```.*?^```", re.S | re.M)
+INLINE_CODE = re.compile(r"`([^`\n]+)`")
 
 
 def unfence_banner(text):
@@ -40,24 +29,31 @@ def unfence_banner(text):
     return f'<div class="la-banner-wrap"><pre class="la-banner">{art}</pre></div>' + text[m.end():]
 
 
-def open_mermaid_details(text):
-    edits = []
-    for m in OPEN_TAG.finditer(text):
-        end = text.find("</details>", m.end())
-        block = text[m.end():end if end != -1 else len(text)]
-        if "```mermaid" in block and " open" not in m.group(1):
-            edits.append((m.start(), m.end(), f'<details markdown="1"{m.group(1)} open>'))
-    for start, end, tag in reversed(edits):
-        text = text[:start] + tag + text[end:]
-    return text
+def _promote(m):
+    body = m.group(1)
+    if body.startswith("#!") or "\\|" in body:
+        return m.group(0)
+    if "(" not in body and "{" not in body:
+        return m.group(0)
+    return f"`#!js {body}`"
 
 
-def rewrite(text, is_index):
-    rules = INDEX_FIXES if is_index else {**BACKLINKS, **ESCAPES}
-    for old, new in rules.items():
+def highlight_inline_code(text):
+    out = []
+    pos = 0
+    for fence in FENCE.finditer(text):
+        out.append(INLINE_CODE.sub(_promote, text[pos:fence.start()]))
+        out.append(fence.group(0))
+        pos = fence.end()
+    out.append(INLINE_CODE.sub(_promote, text[pos:]))
+    return "".join(out)
+
+
+def rewrite(text):
+    for old, new in ESCAPES.items():
         text = text.replace(old, new)
     text = DETAILS.sub(r'<details markdown="1"\1>', text)
-    text = open_mermaid_details(text)
+    text = highlight_inline_code(text)
     return unfence_banner(text)
 
 
@@ -77,16 +73,9 @@ def main():
     shutil.copytree(SRC, OUT, copy_function=link_or_copy)
 
     for md in OUT.rglob("*.md"):
-        md.write_text(rewrite(md.read_text(encoding="utf-8"), False), encoding="utf-8")
+        md.write_text(rewrite(md.read_text(encoding="utf-8")), encoding="utf-8")
 
-    if (OUT / "index.md").exists():
-        home = "doc/index.md"
-    else:
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        (OUT / "index.md").write_text(rewrite(readme, True), encoding="utf-8")
-        home = "README.md"
-
-    print(f"prepared {OUT} ({len(list(OUT.rglob('*.md')))} pages, home from {home})")
+    print(f"prepared {OUT} ({len(list(OUT.rglob('*.md')))} pages)")
 
 
 if __name__ == "__main__":

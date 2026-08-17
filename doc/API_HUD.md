@@ -9,7 +9,7 @@
 Inject actions onto items or actors, drive their charge / limited state, lock native actions, and overlay combat data onto native actions. Everything here shows up in the TAH action menu.
 
 <details>
-<summary><b><code>addExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getItemActions</code></b> → <code>object[]</code> · <b><code>getActorActions</code></b> → <code>object[]</code> · <b><code>getLinkedActions</code></b> → <code>any[]</code> · <b><code>removeExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>addExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getItemActions</code></b> → <code>object[]</code><br><b><code>getActorActions</code></b> → <code>object[]</code><br><b><code>getLinkedActions</code></b> → <code>any[]</code><br><b><code>removeExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -69,7 +69,7 @@ await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", la
 ---
 
 <details>
-<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code> · <b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -92,7 +92,7 @@ Charge plumbing for extras with `tg_loading` / `tg_recharge` / `tg_limited` tags
 ---
 
 <details>
-<summary><b><code>lockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>unlockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>isActionLocked</code></b> → <code>boolean</code> · <b><code>getLockedActions</code></b> → <code>string[]</code></summary>
+<summary><b><code>lockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>unlockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>isActionLocked</code></b> → <code>boolean</code><br><b><code>getLockedActions</code></b> → <code>string[]</code></summary>
 
 <br>
 
@@ -125,7 +125,7 @@ onInit: async function (token, item, api) {
 ---
 
 <details>
-<summary><b><code>disableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>enableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>disableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>enableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+<summary><b><code>disableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>enableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>disableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>enableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -143,7 +143,7 @@ Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show 
 ---
 
 <details>
-<summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getActionOverlay</code></b> → <code>object | null</code> · <b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code> · <b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>applyActionOverlays</code></b> → <code>object[]</code> · <b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
+<summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActionOverlay</code></b> → <code>object | null</code><br><b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code><br><b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>applyActionOverlays</code></b> → <code>object[]</code><br><b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
 
 <br>
 

@@ -9,7 +9,7 @@
 ### User Helpers
 
 <details>
-<summary><b><code>registerUserHelper</code></b> · <b><code>getUserHelper</code></b> → <code>Function | null</code></summary>
+<summary><b><code>registerUserHelper</code></b><br><b><code>getUserHelper</code></b> → <code>Function | null</code></summary>
 
 <br>
 
@@ -32,7 +32,7 @@ Shares logic between activation scripts.
 ### Registration Functions
 
 <details>
-<summary><b><code>registerDefaultItemReactions</code></b> → <code>void</code> · <b><code>registerDefaultGeneralReactions</code></b> → <code>void</code></summary>
+<summary><b><code>registerDefaultItemReactions</code></b> → <code>void</code><br><b><code>registerDefaultGeneralReactions</code></b> → <code>void</code></summary>
 
 <br>
 

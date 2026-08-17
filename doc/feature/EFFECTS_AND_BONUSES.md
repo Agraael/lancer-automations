@@ -1,6 +1,6 @@
 # Effect Manager & Bonuses
 
-[← Back to the README](../../README.md) · API: [API_EFFECTS.md](../API_EFFECTS.md)
+[← Back to the README](../index.md) · API: [API_EFFECTS.md](../API_EFFECTS.md)
 
 The Effect Manager applies status effects and bonuses to a token. Drive it by hand from the token HUD, or from automation code. Effects can carry a duration and consumable charges. Bonuses apply to Lancer's roll flows.
 

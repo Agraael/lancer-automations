@@ -1,6 +1,6 @@
 # Gameplay Automation
 
-[← Back to the README](../../README.md) · Engine: [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md)
+[← Back to the README](../index.md) · Engine: [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md)
 
 Lancer Automations runs the procedural parts of play for you: combat actions and reactions, plus Lancer's own out-of-combat flows for scanning, rest, and downtime. Most fire off triggers (a move, a hit, the start of a turn) and resolve the rules.
 

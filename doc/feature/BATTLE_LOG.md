@@ -1,6 +1,6 @@
 # Battle Log
 
-[← Back to the README](../../README.md)
+[← Back to the README](../index.md)
 
 This is the first patron-requested feature. Well, sort of. I extrapolated a lot, and maybe went a bit too hard with it. It grows bit by bit, so it is not perfect yet.
 

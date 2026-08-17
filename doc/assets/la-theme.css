@@ -9,6 +9,7 @@
 }
 
 [data-md-color-scheme="default"] {
+  --la-code-plate: #34362e;
   --la-plate: #e7e7e7;
   --la-ink: #16181c;
   --la-raise: #dedad2;
@@ -29,6 +30,7 @@
 }
 
 [data-md-color-scheme="slate"] {
+  --la-code-plate: #1c1d18;
   --la-plate: #2e2e2e;
   --la-ink: #e2e2e2;
   --la-raise: #383838;
@@ -153,6 +155,21 @@
   background: transparent !important;
   border: none !important;
   letter-spacing: 0.02em;
+  line-height: 1.9;
+}
+
+.md-typeset details > summary code {
+  background: color-mix(in srgb, var(--la-ink), var(--la-plate) 22%);
+  color: var(--la-plate);
+  padding: 0.15em 0.45em;
+}
+
+.md-typeset details > summary b > code {
+  font-weight: 700;
+}
+
+.md-typeset details > summary sup {
+  color: var(--la-signal);
 }
 
 .md-typeset details > summary::before {
@@ -194,14 +211,55 @@
   background: color-mix(in srgb, var(--la-signal), transparent 88%);
 }
 
+.md-typeset code {
+  border-radius: 0;
+  background: var(--la-code-plate);
+  color: #f8f8f2;
+  border: 1px solid color-mix(in srgb, var(--la-code-plate), #f8f8f2 14%);
+}
+
 .md-typeset pre > code,
 .md-typeset .highlight {
   border-radius: 0;
+  --md-code-bg-color: var(--la-code-plate);
+  --md-code-fg-color: #f8f8f2;
+  --md-code-hl-comment-color: #75715e;
+  --md-code-hl-string-color: #e6db74;
+  --md-code-hl-number-color: #ae81ff;
+  --md-code-hl-constant-color: #ae81ff;
+  --md-code-hl-keyword-color: #f92672;
+  --md-code-hl-operator-color: #f92672;
+  --md-code-hl-special-color: #f92672;
+  --md-code-hl-function-color: #a6e22e;
+  --md-code-hl-name-color: #f8f8f2;
+  --md-code-hl-variable-color: #fd971f;
+  --md-code-hl-punctuation-color: #f8f8f2;
+  --md-code-hl-generic-color: #f8f8f2;
 }
 
-.md-typeset code {
-  border-radius: 0;
-  color: var(--la-signal);
+.md-typeset .la-fn {
+  color: #a6e22e;
+}
+
+.md-typeset .la-arg {
+  color: #fd971f;
+}
+
+.md-typeset code.highlight {
+  --md-code-bg-color: var(--la-code-plate);
+  --md-code-fg-color: #f8f8f2;
+  --md-code-hl-comment-color: #75715e;
+  --md-code-hl-string-color: #e6db74;
+  --md-code-hl-number-color: #ae81ff;
+  --md-code-hl-constant-color: #ae81ff;
+  --md-code-hl-keyword-color: #f92672;
+  --md-code-hl-operator-color: #f92672;
+  --md-code-hl-special-color: #f92672;
+  --md-code-hl-function-color: #a6e22e;
+  --md-code-hl-name-color: #f8f8f2;
+  --md-code-hl-variable-color: #fd971f;
+  --md-code-hl-punctuation-color: #f8f8f2;
+  --md-code-hl-generic-color: #f8f8f2;
 }
 
 .md-typeset a:hover {

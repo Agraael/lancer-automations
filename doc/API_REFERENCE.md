@@ -1,6 +1,6 @@
 # Lancer Automations - API Reference
 
-[← Back to the README](../README.md)
+[← Back to the README](index.md)
 
 ## Documentation Files
 
@@ -66,7 +66,7 @@ The ignore path re-runs the original action. Reactors already in `_cancelledBy` 
 </details>
 
 <details>
-<summary><b><code>CancelMoveFunction</code></b> · <b><code>ChangeMoveFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>CancelMoveFunction</code></b><br><b><code>ChangeMoveFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -80,7 +80,7 @@ changeTriggeredMove(position: {x: number, y: number}, extraData?, reasonText?, a
 </details>
 
 <details>
-<summary><b><code>ModifyValueFunction</code></b> · <b><code>RerollFunction</code></b> · <b><code>ChangeRollFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>ModifyValueFunction</code></b><br><b><code>RerollFunction</code></b><br><b><code>ChangeRollFunction</code></b> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -111,7 +111,7 @@ changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?,
 </details>
 
 <details>
-<summary><b><code>actionData</code></b> · <b><code>flowState</code></b> - the recurring payload objects</summary>
+<summary><b><code>actionData</code></b><br><b><code>flowState</code></b> - the recurring payload objects</summary>
 
 <br>
 

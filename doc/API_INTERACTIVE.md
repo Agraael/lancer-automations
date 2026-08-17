@@ -290,7 +290,7 @@ Pick an item from a list via a Choice Card.
 ---
 
 <details>
-<summary><b><code>getWeapons</code></b> → <code>any[]</code> · <b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code> · <b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code> · <b><code>findAura</code></b> → <code>object | null</code> · <b><code>getTokensInAura</code></b> → <code>Token[] | null</code> · <b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code> · <b><code>findItemByLid</code></b> → <code>any | null</code></summary>
+<summary><b><code>getWeapons</code></b> → <code>any[]</code><br><b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>findAura</code></b> → <code>object | null</code><br><b><code>getTokensInAura</code></b> → <code>Token[] | null</code><br><b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code><br><b><code>findItemByLid</code></b> → <code>any | null</code></summary>
 
 <br>
 
@@ -345,7 +345,7 @@ For vote modes, `userIdControl` must be a non-empty array of user IDs. The creat
 ---
 
 <details>
-<summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code> · <b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code> · <b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
+<summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code><br><b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code><br><b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
 
 <br>
 
@@ -450,7 +450,7 @@ Returns the user ID(s) that own a token. Checks active non-GM players first, fal
 ## Deployables & Thrown Weapons
 
 <details>
-<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>addExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>getActorDeployables</code></b> → <code>string[]</code> · <b><code>getLinkedDeployables</code></b> → <code>string[]</code></summary>
+<summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>addExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActorDeployables</code></b> → <code>string[]</code><br><b><code>getLinkedDeployables</code></b> → <code>string[]</code></summary>
 
 <br>
 
@@ -477,7 +477,7 @@ Item / Actor / Token target. Item stores on itself. Token/Actor stores on the ac
 ---
 
 <details>
-<summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code> · <b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+<summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code><br><b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -499,7 +499,7 @@ Per-deployable range / count / tier override keyed by LID or UUID. `tier` gates 
 ---
 
 <details>
-<summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>isPrimaryActionHidden</code></b> → <code>boolean</code></summary>
+<summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>isPrimaryActionHidden</code></b> → <code>boolean</code></summary>
 
 <br>
 
@@ -587,7 +587,7 @@ await api.placeDeployable(options)
 ---
 
 <details>
-<summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code> · <b><code>deployWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+<summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>deployWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -606,7 +606,7 @@ await api.deployWeaponToken(weapon, ownerActor, originToken, options)
 ---
 
 <details>
-<summary><b><code>openDeployableMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>recallDeployable</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>pickupWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>openThrowMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>openItemBrowser</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>openDeployableMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>recallDeployable</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>pickupWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openThrowMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openItemBrowser</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 

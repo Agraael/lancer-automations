@@ -1,6 +1,6 @@
 # Setup & Tools
 
-[← Back to the README](../../README.md)
+[← Back to the README](../index.md)
 
 Setup and housekeeping: optional content, actor and data cleanup, news, guided tours, and scene helpers.
 

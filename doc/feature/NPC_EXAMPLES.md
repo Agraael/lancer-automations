@@ -1,6 +1,6 @@
 # Building NPC Automations - Worked Examples
 
-[← Back to the README](../../README.md) · Engine guide: [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
+[← Back to the README](../index.md) · Engine guide: [AUTOMATION_ENGINE.md](./AUTOMATION_ENGINE.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
 
 > [!WARNING]
 > **These come from my personal NPC set** - teaching material, not a supported content pack. The LIDs, numbers, and balance are tuned for my own games, and **some are old and may not run as-is anymore** (the engine and API move on). Copy the patterns, not the literal code. See [the personal activation set](./AUTOMATION_ENGINE.md#the-personal-activation-set).
@@ -147,7 +147,7 @@ const veterancyVeteranAutomation = {
 
 **What it does.** Grants a friendly target in sensor range resistance to all damage for the next `1d3` attacks.
 
-**Triggers:** `onActivation`  ·  **Level:** medium  ·  *(also in the [README](../../README.md))*
+**Triggers:** `onActivation`  ·  **Level:** medium  ·  *(also in the [README](../index.md))*
 
 ```js
 "npcf_dispersal_shield_priest": {
@@ -201,7 +201,7 @@ const veterancyVeteranAutomation = {
 
 **What it does.** Places a Blast 2 smoke zone that persists until the start of the NPC's next turn, then deletes itself.
 
-**Triggers:** `onActivation`  ·  **Level:** simple  ·  *(also in the [README](../../README.md))*
+**Triggers:** `onActivation`  ·  **Level:** simple  ·  *(also in the [README](../index.md))*
 
 ```js
 "nrfaw-npc_carrier_SmokeLaunchers": {

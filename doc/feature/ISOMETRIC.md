@@ -1,6 +1,6 @@
 # Isometric Compatibility
 
-[← Back to the README](../../README.md)
+[← Back to the README](../index.md)
 
 Lancer Automations works with the isometric modules, **isometric-perspective** and **grape_juice-isometrics**.
 

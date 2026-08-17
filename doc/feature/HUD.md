@@ -1,6 +1,6 @@
 # Token Action HUD (TAH)
 
-[← Back to the README](../../README.md) · Token bars: [TOKEN_DISPLAY.md](./TOKEN_DISPLAY.md)
+[← Back to the README](../index.md) · Token bars: [TOKEN_DISPLAY.md](./TOKEN_DISPLAY.md)
 
 Custom action menu attached to the token: actions, weapons, systems, frame abilities, talents, skills, statuses, scan glossary, and an action log. Beta. Enable in settings.
 

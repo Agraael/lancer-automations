@@ -1,6 +1,6 @@
 # Movement & the Lancer Ruler
 
-[← Back to the README](../../README.md) · Advanced: [MOVEMENT_ADVANCED.md](./MOVEMENT_ADVANCED.md) · Isometric: [ISOMETRIC.md](./ISOMETRIC.md)
+[← Back to the README](../index.md) · Advanced: [MOVEMENT_ADVANCED.md](./MOVEMENT_ADVANCED.md) · Isometric: [ISOMETRIC.md](./ISOMETRIC.md)
 
 Lancer Automations ships its own token and canvas ruler, built around Lancer's speed tiers and elevation. Boost detection, the movement cap, and the debug toggles are in [MOVEMENT_ADVANCED.md](./MOVEMENT_ADVANCED.md).
 

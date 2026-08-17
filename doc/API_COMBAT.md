@@ -70,7 +70,7 @@ await api.executeSaveVsEffect(targets, {
 ---
 
 <details>
-<summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code> · <b><code>getTier</code></b> → <code>number</code> · <b><code>tierValue</code></b> → <code>any</code> · <b><code>getFlowFlag</code></b> → <code>any</code> · <b><code>setFlowFlag</code></b> → <code>boolean</code> · <b><code>consumeOncePerRound</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
+<summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code><br><b><code>getTier</code></b> → <code>number</code><br><b><code>tierValue</code></b> → <code>any</code><br><b><code>getFlowFlag</code></b> → <code>any</code><br><b><code>setFlowFlag</code></b> → <code>boolean</code><br><b><code>consumeOncePerRound</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
 
 <br>
 

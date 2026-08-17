@@ -1,6 +1,6 @@
 # Wrecks
 
-[← Back to the README](../../README.md)
+[← Back to the README](../index.md)
 
 When a token dies, the module leaves a wreck where it stood. Per category and per token you set what it is (token or flat tile), whether it blocks the field, and how it looks and sounds. Wrecks can be resurrected back into the original.
 

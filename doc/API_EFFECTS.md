@@ -71,7 +71,7 @@ await api.removeEffectsByNameFromTokens({
 ---
 
 <details>
-<summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code> · <b><code>findMarkedTokens</code></b> → <code>Token[]</code> · <b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
+<summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>findMarkedTokens</code></b> → <code>Token[]</code><br><b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
 
 <br>
 
@@ -215,7 +215,7 @@ True when heat is at or above half the heat cap. Same rule the `onHeatGain` trig
 ---
 
 <details>
-<summary><b><code>untilEndOfTurn</code></b> · <b><code>untilStartOfTurn</code></b> → <code>object</code> · <b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
+<summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
 
 <br>
 
@@ -322,7 +322,7 @@ Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`) if
 ---
 
 <details>
-<summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code> · <b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -515,7 +515,7 @@ await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reacto
 ---
 
 <details>
-<summary><b><code>getGlobalBonuses</code></b> → <code>any[]</code> · <b><code>getGlobalBonus</code></b> → <code>object|null</code></summary>
+<summary><b><code>getGlobalBonuses</code></b> → <code>any[]</code><br><b><code>getGlobalBonus</code></b> → <code>object|null</code></summary>
 
 <br>
 
@@ -534,7 +534,7 @@ const single = api.getGlobalBonus(actor, bonusId)  // → BonusData | null
 ---
 
 <details>
-<summary><b><code>addConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code> · <b><code>getConstantBonuses</code></b> → <code>any[]</code> · <b><code>removeConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>addConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>getConstantBonuses</code></b> → <code>any[]</code><br><b><code>removeConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -563,7 +563,7 @@ Constant bonuses are permanent (stored in flags, not linked to an active effect)
 Statuses and bonuses can be attached directly to an **item** or a **prototype actor** instead of a token. The entry lives on the source doc, and applies to the token's actor on item-add, token-spawn, or re-enable. It's cleaned up on remove / destroy / disable. Charges persist across the cycle.
 
 <details>
-<summary><b><code>linkEffectToItem</code></b> · <b><code>linkEffectToActor</code></b> · <b><code>ensureLinkedEffect</code></b> <sup>async</sup> → <code>Array</code></summary>
+<summary><b><code>linkEffectToItem</code></b><br><b><code>linkEffectToActor</code></b><br><b><code>ensureLinkedEffect</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
 
@@ -591,7 +591,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 ---
 
 <details>
-<summary><b><code>unlinkEffectFromItem</code></b> · <b><code>unlinkEffectFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
+<summary><b><code>unlinkEffectFromItem</code></b><br><b><code>unlinkEffectFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
 
@@ -609,7 +609,7 @@ Keys: `items`/`actors` (`Item[]`/`Actor[]`), `effectName` `string`, `extraFlags`
 ---
 
 <details>
-<summary><b><code>linkBonusToItem</code></b> · <b><code>linkBonusToActor</code></b> · <b><code>ensureLinkedBonus</code></b> <sup>async</sup> → <code>Array</code></summary>
+<summary><b><code>linkBonusToItem</code></b><br><b><code>linkBonusToActor</code></b><br><b><code>ensureLinkedBonus</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
 
@@ -635,7 +635,7 @@ The `duration` in `addOptions` decides how it shows up:
 ---
 
 <details>
-<summary><b><code>unlinkBonusFromItem</code></b> · <b><code>unlinkBonusFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
+<summary><b><code>unlinkBonusFromItem</code></b><br><b><code>unlinkBonusFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
 <br>
 
@@ -653,7 +653,7 @@ Keys: `items`/`actors` (`Item[]`/`Actor[]`), `templateId` `string` (the linked b
 ---
 
 <details>
-<summary><b><code>getLinkedEffects</code></b> → <code>any[]</code> · <b><code>getLinkedBonuses</code></b> → <code>any[]</code></summary>
+<summary><b><code>getLinkedEffects</code></b> → <code>any[]</code><br><b><code>getLinkedBonuses</code></b> → <code>any[]</code></summary>
 
 <br>
 
@@ -695,7 +695,7 @@ Args: `item`/`actor` source doc. The `apply*` helpers also take `tokens` (`Array
 During an active flow (attack, check, etc.), `triggerData` contains a `flowState` object. Inject ephemeral bonuses or share variables across triggers for the flow's lifespan.
 
 <details>
-<summary><b><code>flowState.injectBonus</code></b> · <b><code>flowState.injectFlowExtraData</code></b> · <b><code>flowState.getFlowExtraData</code></b></summary>
+<summary><b><code>flowState.injectBonus</code></b><br><b><code>flowState.injectFlowExtraData</code></b><br><b><code>flowState.getFlowExtraData</code></b></summary>
 
 <br>
 
@@ -716,7 +716,7 @@ triggerData.flowState.getFlowExtraData()             // read la_extraData
 ### Immunity Queries
 
 <details>
-<summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code> · <b><code>checkDamageResistances</code></b> → <code>any[]</code> · <b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
+<summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b> → <code>any[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
 
 <br>
 
@@ -740,7 +740,7 @@ api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 ---
 
 <details>
-<summary><b><code>hasCritImmunity</code></b> · <b><code>hasHitImmunity</code></b> · <b><code>hasMissImmunity</code></b> <sup>async</sup> → <code>boolean</code></summary>
+<summary><b><code>hasCritImmunity</code></b><br><b><code>hasHitImmunity</code></b><br><b><code>hasMissImmunity</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
 

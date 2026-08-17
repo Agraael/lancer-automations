@@ -1,6 +1,6 @@
 # Automation Engine
 
-[← Back to the README](../../README.md) · Engine internals: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
+[← Back to the README](../index.md) · Engine internals: [AUTOMATION_SYSTEM.md](../AUTOMATION_SYSTEM.md) · API: [API_REFERENCE.md](../API_REFERENCE.md)
 
 <img src="../img/feature-automation-engine.png" width="55%"/>
 

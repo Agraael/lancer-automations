@@ -1577,7 +1577,7 @@ export class ReactionConfig extends FormApplication
         const content = /*html*/`
         <div style="font-family: 'Roboto', sans-serif; line-height: 1.5;">
             <p>This system got bigger to a point I can't explain it in a few words.</p>
-            <p>As always the main reference is the <a href="https://github.com/Agraael/lancer-automations/blob/main/README.md">readme.md</a> file and the <a href="https://github.com/Agraael/lancer-automations/blob/main/doc/API_REFERENCE.md">API_REFERENCE.md</a> file.</p>
+            <p>As always the main reference is the <a href="https://agraael.github.io/lancer-automations/">documentation</a> and the <a href="https://agraael.github.io/lancer-automations/API_REFERENCE.html">API reference</a>.</p>
             <p>You can ask me questions if you don't understand something on <a href="https://discord.com/channels/426286410496999425/1436087781666455642">discord</a>.</p>
         </div>
         `;
