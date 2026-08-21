@@ -421,6 +421,7 @@ Inspiration, reference code, and ideas drawn from the work of:
 - [csmcfarland](https://gitlab.com/csmcfarland)
 - [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
 - [mxzf](https://gitlab.com/mxzf/status-halo)
+- [hylandpad](https://github.com/hylandpad)
 
 ## Assets
 

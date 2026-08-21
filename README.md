@@ -60,6 +60,19 @@ A heads-up: not all of it is built to be fully customizable, a lot is just how I
 
 The most common spot is [my channel](https://discord.com/channels/426286410496999425/1436087781666455642) on the [Pilot NET Discord](https://discord.com/invite/lancer).
 
+## Acknowledgments
+
+Inspiration, reference code, and ideas drawn from the work of:
+
+- [Eranziel](https://github.com/Eranziel)
+- [mandatoryhashtags](https://github.com/mandatoryhashtags)
+- [caewok](https://github.com/caewok)
+- [Wibble199](https://github.com/Wibble199)
+- [csmcfarland](https://gitlab.com/csmcfarland)
+- [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
+- [mxzf](https://gitlab.com/mxzf/status-halo)
+- [hylandpad](https://github.com/hylandpad)
+
 ## Assets
 
 UI icons come from [game-icons.net](https://game-icons.net), licensed CC BY 3.0, credited to their individual authors.
