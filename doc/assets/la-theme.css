@@ -554,9 +554,17 @@
 
 .la-fn-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.1em 0.8em;
   margin-top: 0.7em;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+@media screen and (max-width: 44rem) {
+  .la-fn-grid {
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  }
 }
 
 .la-fn-chip {
