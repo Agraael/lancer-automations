@@ -127,7 +127,9 @@ async function getItemMaxReach(item, actor)
 async function computePreviewRange(category, actionName, actor, item, profile, deployLid)
 {
     const base = await computePreviewRangeBase(category, actionName, actor, item, profile, deployLid);
-    return actionName ? resolveGrantedActionRange(actor, actionName, base) : base;
+    // item rows carry no action; their own activation is named after the item
+    const grantName = actionName ?? item?.name;
+    return grantName ? resolveGrantedActionRange(actor, grantName, base) : base;
 }
 
 async function computePreviewRangeBase(category, actionName, actor, item, profile, deployLid)

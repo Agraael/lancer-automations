@@ -34,9 +34,9 @@ function _vol(fx, action)
 }
 
 const ACTION_FX_PREVIEW = {
-    skirmish:    { src: () => `modules/lancer-automations/FX/audio/Skirmish${1 + Math.floor(Math.random() * 3)}.wav`, scale: 0.35 },
+    skirmish:    { src: () => `modules/lancer-automations/FX/audio/skirmish_${1 + Math.floor(Math.random() * 3)}.wav`, scale: 0.35 },
     barrage:     { src: 'modules/lancer-automations/FX/audio/barrage.wav', scale: 0.35 },
-    eject:        { src: 'modules/lancer-automations/FX/audio/jetpack_unpack_1.wav', scale: 0.5 },
+    eject:        { src: 'modules/lancer-automations/FX/audio/eject.wav', scale: 0.5 },
     selfDestruct: { src: 'modules/lancer-weapon-fx/soundfx/Annihilator.ogg', scale: 0.5 },
     bootUp:       { src: 'modules/lancer-automations/FX/audio/bootup.wav', scale: 0.5 },
     dismount:     { src: 'modules/lancer-automations/FX/audio/liftoff.wav', scale: 0.5 },
@@ -44,7 +44,7 @@ const ACTION_FX_PREVIEW = {
     reload:       { src: 'modules/lancer-automations/FX/audio/reload.wav', scale: 0.5 },
     fight:        { src: 'modules/lancer-automations/FX/audio/fight.wav', scale: 0.35 },
     jockey:       { src: 'modules/lancer-automations/FX/audio/jockey.wav', scale: 0.5 },
-    disengage:    { src: 'modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav', scale: 0.5 },
+    disengage:    { src: 'modules/lancer-automations/FX/audio/disengage.wav', scale: 0.5 },
     deployable:   { src: 'modules/lancer-automations/FX/audio/deploy.wav', scale: 0.35 },
     freeAction:   { src: 'modules/lancer-automations/FX/audio/free.wav', scale: 0.35 },
     corePower:    { src: 'modules/lancer-automations/FX/audio/corepower.wav', scale: 0.5 },
@@ -60,22 +60,50 @@ const ACTION_FX_PREVIEW = {
     fullTech:     { src: 'modules/lancer-automations/FX/audio/fulltech.wav', scale: 0.3 },
     quickTech:    { src: 'modules/lancer-automations/FX/audio/quicktech.wav', scale: 0.3 },
     invade:       { src: 'modules/lancer-automations/FX/audio/invade.wav', scale: 0.3 },
-    grapple:      { src: 'modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav', scale: 0.5 },
+    grapple:      { src: 'modules/lancer-automations/FX/audio/grapple.wav', scale: 0.5 },
     ram:          { src: 'modules/lancer-automations/FX/audio/ram.wav', scale: 0.5 },
     boost:        { src: 'modules/lancer-automations/FX/audio/boost.wav', scale: 0.3 },
     overchargeNpc:{ src: 'modules/lancer-weapon-fx/soundfx/Overcharge.ogg', scale: 0.5 },
     shutDown:     { src: 'modules/lancer-automations/FX/audio/shutdown.wav', scale: 0.7 },
     fall:         { src: 'modules/lancer-automations/FX/audio/fall.mp3', scale: 0.7 },
-    fallImpact:   { src: 'modules/lancer-automations/FX/audio/IMPACT.mp3', scale: 0.5 },
-    search:       { src: 'modules/lancer-automations/FX/audio/radar-4.wav', scale: 0.5 },
+    fallImpact:   { src: 'modules/lancer-automations/FX/audio/fallImpact.mp3', scale: 0.5 },
+    search:       { src: 'modules/lancer-automations/FX/audio/search.wav', scale: 0.5 },
     scan:         { src: 'modules/lancer-automations/FX/audio/scan.mp3', scale: 0.7 },
-    targetSuccess:{ src: 'modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3', scale: 0.5 },
-    targetFail:   { src: 'modules/lancer-automations/FX/audio/denyerror-sound.wav', scale: 0.5 },
-    hide:         { src: 'modules/lancer-automations/FX/audio/PuffSmoke.wav', scale: 0.7 },
+    targetSuccess:{ src: 'modules/lancer-automations/FX/audio/targetSuccess.mp3', scale: 0.5 },
+    targetFail:   { src: 'modules/lancer-automations/FX/audio/targetFail.wav', scale: 0.5 },
+    hide:         { src: 'modules/lancer-automations/FX/audio/hide.wav', scale: 0.7 },
     defaultThrow: { src: 'modules/lancer-weapon-fx/soundfx/bladeswing.ogg', scale: 0.2 },
-    teleport:     { src: 'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav', scale: 0.2 },
-    mineDetonation: { src: 'modules/lancer-automations/FX/audio/extra/mine.wav', scale: 0.5 },
+    teleport:     { src: 'modules/lancer-automations/FX/audio/teleport.wav', scale: 0.2 },
+    mineDetonation: { src: 'modules/lancer-automations/FX/audio/extra/mineDetonation.wav', scale: 0.5 },
 };
+
+/**
+ * Read the Lancer size off whatever `.atLocation()` was handed. Deployables keep it under
+ * `system.stats`, everything else under `system`.
+ * @param {any} source  Token, TokenDocument or Actor
+ * @returns {number}
+ */
+function _lancerSize(source)
+{
+    const actor = source?.actor ?? source?.document?.actor ?? source;
+    return actor?.system?.size ?? actor?.system?.stats?.size ?? 1;
+}
+
+/**
+ * `la_scaleToBurst` preset: sizes an effect to a Burst around its source, in grid units.
+ * Reads the source from the section, so `.atLocation()` must come first.
+ * @returns {void}
+ */
+export function registerSequencerPresets()
+{
+    if (typeof Sequencer === 'undefined')
+        return;
+    Sequencer.Presets.add('la_scaleToBurst', (effect, burst = 1, source = null) =>
+    {
+        const span = _lancerSize(source ?? effect._source) * 2 * (burst + 1);
+        return effect.size({ width: span, height: span }, { gridUnits: true });
+    }, true);
+}
 
 /** @param {string} action */
 export function previewActionFxSound(action)
@@ -121,7 +149,7 @@ export async function playSkirmishFX(token)
     const fx = _weaponFx();
     if (!fx || !_canPlay())
         return;
-    const soundFile = `modules/lancer-automations/FX/audio/Skirmish${1 + Math.floor(Math.random() * 3)}.wav`;
+    const soundFile = `modules/lancer-automations/FX/audio/skirmish_${1 + Math.floor(Math.random() * 3)}.wav`;
     await Sequencer.Preloader.preloadForClients([
         soundFile,
         'modules/lancer-automations/FX/svg/Skirmish.svg',
@@ -234,8 +262,8 @@ export async function playEjectFX(source, dest)
     const negPivotX = -pivotx;
     const negPivotY = -pivoty;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/jetpack_unpack_1.wav',
-        'modules/lancer-automations/FX/audio/smokeimpact.wav',
+        'modules/lancer-automations/FX/audio/eject.wav',
+        'modules/lancer-automations/FX/audio/ejectImpact.wav',
         'modules/lancer-automations/FX/svg/Eject.svg',
         'jb2a.pack_hound_missile',
         'jb2a.smoke.puff.ring.01.white',
@@ -243,7 +271,7 @@ export async function playEjectFX(source, dest)
     ]);
     const sourceSeq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/jetpack_unpack_1.wav')
+        .file('modules/lancer-automations/FX/audio/eject.wav')
         .volume(_vol(fx, 'eject'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -281,7 +309,7 @@ export async function playEjectFX(source, dest)
             .atLocation(dest)
             .scaleToObject(5)
             .sound()
-            .file('modules/lancer-automations/FX/audio/smokeimpact.wav')
+            .file('modules/lancer-automations/FX/audio/ejectImpact.wav')
             .volume(_vol(fx, 'eject'))
             .play();
     }
@@ -418,11 +446,11 @@ export async function playTeleportSoundFX()
         return;
     const fx = _weaponFx();
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav',
+        'modules/lancer-automations/FX/audio/teleport.wav',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/laser_shot_mark_02_10052025.wav')
+        .file('modules/lancer-automations/FX/audio/teleport.wav')
         .volume(fx ? _vol(fx, 'teleport') : (ACTION_FX_PREVIEW.teleport?.scale ?? 0.7))
         .play();
 }
@@ -640,13 +668,13 @@ export async function playDisengageFX(caster)
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav',
+        'modules/lancer-automations/FX/audio/disengage.wav',
         'modules/lancer-automations/FX/svg/Disengage.svg',
         'jb2a.extras.tmfx.outpulse.line.02.normal',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/742717__artix0__dash-sound-effect.wav')
+        .file('modules/lancer-automations/FX/audio/disengage.wav')
         .volume(_vol(fx, 'disengage'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -1117,20 +1145,20 @@ export async function playGrappleFX(caster)
     if (!fx || !_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav',
+        'modules/lancer-automations/FX/audio/grapple.wav',
         'modules/lancer-automations/FX/svg/Grapple.svg',
         'jb2a.extras.tmfx.inpulse.circle.04.normal',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/harpoon-deploy-swoosh.wav')
+        .file('modules/lancer-automations/FX/audio/grapple.wav')
         .volume(_vol(fx, 'grapple'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
         .file('jb2a.extras.tmfx.inpulse.circle.04.normal')
         .atLocation(caster)
-        .scaleToObject(2);
+        .preset('la_scaleToBurst', 0);
     await _appendActionBadge(seq, caster, 'modules/lancer-automations/FX/svg/Grapple.svg').play();
 }
 
@@ -1141,13 +1169,13 @@ export async function playMineDetonationFX(mineToken)
         return;
     const position = { x: mineToken.center?.x ?? mineToken.x, y: mineToken.center?.y ?? mineToken.y };
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/extra/mine.wav',
+        'modules/lancer-automations/FX/audio/extra/mineDetonation.wav',
         'modules/lancer-automations/FX/svg/Mine.svg',
         'jb2a.explosion.01.orange',
     ]);
     await new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/extra/mine.wav')
+        .file('modules/lancer-automations/FX/audio/extra/mineDetonation.wav')
         .volume(_vol(fx, 'mineDetonation'))
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
@@ -1217,7 +1245,7 @@ export async function playJockeyFX(caster, target)
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
         .file('jb2a.extras.tmfx.inpulse.circle.01.normal')
         .atLocation(caster)
-        .scaleToObject(1.8);
+        .preset('la_scaleToBurst', 0);
     if (target)
     {
         seq.effect()
@@ -1361,7 +1389,7 @@ export async function playOverchargeNpcFX(token)
         .atLocation(token, { offset: { x: -pivotx, y: -pivoty } })
         .belowTokens()
         .playbackRate(1.3)
-        .scaleToObject(2.0)
+        .preset("la_scaleToBurst", 0)
         .effect()
         .xray(fx.isEffectIgnoreFogOfWar())
         .aboveInterface(fx.isEffectIgnoreLightingColoration())
@@ -1399,7 +1427,7 @@ export async function playHideFX(token)
         .atLocation(token)
         .scale(1.1)
         .sound()
-        .file('modules/lancer-automations/FX/audio/PuffSmoke.wav')
+        .file('modules/lancer-automations/FX/audio/hide.wav')
         .volume(fx ? _vol(fx, 'hide') : 0.7);
     await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Hide.svg').play();
 }
@@ -1423,7 +1451,7 @@ export async function playShutDownFX(token)
         .effect()
         .file('jb2a.extras.tmfx.inpulse.circle.02.normal')
         .atLocation(token)
-        .scaleToObject(2)
+        .preset('la_scaleToBurst', 0)
         .effect()
         .file('jb2a.smoke.plumes.01.grey')
         .atLocation(token, { offset: { x: 0, y: -0.5 }, gridUnits: true })
@@ -1458,7 +1486,7 @@ export async function playFallImpactFX(token)
     await Sequencer.Preloader.preloadForClients([
         'jb2a.impact.boulder.02',
         'jb2a.impact.ground_crack.white.01',
-        'modules/lancer-automations/FX/audio/IMPACT.mp3',
+        'modules/lancer-automations/FX/audio/fallImpact.mp3',
     ]);
     const scale = Math.floor(token.actor?.system?.size || 1);
     await new Sequence()
@@ -1472,7 +1500,7 @@ export async function playFallImpactFX(token)
         .scale(scale / 2)
         .belowTokens()
         .sound()
-        .file('modules/lancer-automations/FX/audio/IMPACT.mp3')
+        .file('modules/lancer-automations/FX/audio/fallImpact.mp3')
         .volume(_weaponFx()?.getEffectVolume(0.7) ?? 0.7)
         .waitUntilFinished()
         .play();
@@ -1483,14 +1511,14 @@ export async function playSearchFX(token, target = null)
     if (!_canPlay())
         return;
     await Sequencer.Preloader.preloadForClients([
-        'modules/lancer-automations/FX/audio/radar-4.wav',
+        'modules/lancer-automations/FX/audio/search.wav',
         'modules/lancer-automations/FX/svg/Search.svg',
         'jb2a.soundwave.01.blue',
         'jb2a.extras.tmfx.inpulse.circle.01.normal',
     ]);
     const seq = new Sequence()
         .sound()
-        .file('modules/lancer-automations/FX/audio/radar-4.wav')
+        .file('modules/lancer-automations/FX/audio/search.wav')
         .volume(_weaponFx()?.getEffectVolume(0.5) ?? 0.5)
         .effect()
         .file('jb2a.soundwave.01.blue')
@@ -1501,7 +1529,7 @@ export async function playSearchFX(token, target = null)
         seq.effect()
             .file('jb2a.extras.tmfx.inpulse.circle.01.normal')
             .atLocation(target)
-            .scaleToObject(2)
+            .preset('la_scaleToBurst', 0)
             .tint(0x4a9eff)
             .belowTokens();
     }
@@ -1546,7 +1574,7 @@ export async function playSearchFailFX(target)
         .effect()
         .file('jb2a.extras.tmfx.outpulse.circle.01.normal')
         .atLocation(target)
-        .scaleToObject(2)
+        .preset("la_scaleToBurst", 0)
         .play();
 }
 
@@ -1587,16 +1615,16 @@ export async function playTargetSuccessFX(token)
         return;
     await Sequencer.Preloader.preloadForClients([
         'jb2a.extras.tmfx.inpulse.circle.03.fast',
-        'modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3',
+        'modules/lancer-automations/FX/audio/targetSuccess.mp3',
     ]);
     await new Sequence()
         .effect()
         .file('jb2a.extras.tmfx.inpulse.circle.03.fast')
         .atLocation(token)
-        .scaleToObject(2)
+        .preset("la_scaleToBurst", 0)
         .tint(0x4a9eff)
         .sound()
-        .file('modules/lancer-automations/FX/audio/750428__rescopicsound__ui-alert-menu-modern-interface-confirm-small.mp3')
+        .file('modules/lancer-automations/FX/audio/targetSuccess.mp3')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
         .play();
 }
@@ -1686,7 +1714,7 @@ export const LA_INLINE_ATTACK_FX = {
         for (const target of targetTokens)
         {
             seq.sound()
-                .file('modules/lancer-automations/FX/audio/ram_impact.wav')
+                .file('modules/lancer-automations/FX/audio/ramImpact.wav')
                 .playIf(!targetsMissed.has(target.id))
                 .volume(volume);
             seq.effect()
@@ -1717,7 +1745,7 @@ export const LA_INLINE_ATTACK_FX = {
         fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         seq.sound()
-            .file('modules/lancer-automations/FX/audio/grapple_gun.wav')
+            .file('modules/lancer-automations/FX/audio/grappleShot.wav')
             .volume(volume);
         for (const target of targetTokens)
         {
@@ -1731,7 +1759,7 @@ export const LA_INLINE_ATTACK_FX = {
                     .stretchTo(target);
             }
             seq.sound()
-                .file('modules/lancer-automations/FX/audio/rope-swinging.wav')
+                .file('modules/lancer-automations/FX/audio/grapplePull.wav')
                 .playIf(!targetsMissed.has(target.id))
                 .volume(volume);
             seq.effect()
@@ -1864,49 +1892,66 @@ const _TITLES_WITH_SPECIFIC_FX = new Set([
 ]);
 
 /** Dispatch a tech-tier or generic-tier action FX based on activation + title. */
+// two action FX launched close together: the second waits for the first;
+// Sequencer's play() resolves early for effects, so each entry also holds a minimum time
+const FX_MIN_HOLD_MS = 1500;
+let _actionFxChain = Promise.resolve();
+export function queueActionFx(fn)
+{
+    const next = _actionFxChain.then(() => Promise.all([
+        Promise.resolve().then(fn),
+        new Promise(resolve => setTimeout(resolve, FX_MIN_HOLD_MS))
+    ])).catch(err => console.error('lancer-automations | action FX failed:', err));
+    _actionFxChain = next;
+    return next;
+}
+const _queueActionFx = queueActionFx;
+
 export function playActionFxByActivation(activation, token, title, { nameOnBadge = true } = {})
 {
-    _playActionFxForActivation(activation, token, title, nameOnBadge);
+    _queueActionFx(() => _playActionFxForActivation(activation, token, title, nameOnBadge));
 }
 function _playActionFxForActivation(activation, token, title, nameOnBadge = true)
 {
     const actor = token?.actor;
-    if (actor?.type === 'deployable' && actor.system?.type === 'Mine')
+    if (actor?.type === 'deployable' && actor.system?.type === 'Mine' && title === actor.name)
     {
         if (!actor.getFlag?.('lancer-automations', 'mineFxDisabled'))
-            playMineDetonationFX(token);
-        return;
+            return playMineDetonationFX(token);
+        return undefined;
     }
     const label = nameOnBadge ? title : null;
+    if (title === 'Boost')
+        return playBoostFX(token);
     if (activation === 'Quick Tech')
-        playQuickTechFX(token, label);
-    else if (activation === 'Full Tech')
-        playFullTechFX(token, label);
-    else if (!_TITLES_WITH_SPECIFIC_FX.has(title))
+        return playQuickTechFX(token, label);
+    if (activation === 'Full Tech')
+        return playFullTechFX(token, label);
+    if (!_TITLES_WITH_SPECIFIC_FX.has(title))
     {
         if (activation === 'Quick')
-            playQuickActionFX(token, label);
-        else if (activation === 'Full')
-            playFullActionFX(token, label);
-        else if (activation === 'Protocol')
-            playProtocolFX(token, label);
-        else if (activation === 'Free')
+            return playQuickActionFX(token, label);
+        if (activation === 'Full')
+            return playFullActionFX(token, label);
+        if (activation === 'Protocol')
+            return playProtocolFX(token, label);
+        if (activation === 'Free')
         {
             const svg = title === 'Squeeze'
                 ? 'modules/lancer-automations/FX/svg/Squeeze.svg'
                 : 'modules/lancer-automations/FX/svg/FreeAction.svg';
-            playFreeActionFX(token, svg, title === 'Squeeze' ? null : label);
+            return playFreeActionFX(token, svg, title === 'Squeeze' ? null : label);
         }
-        else if (activation === 'Reaction')
+        if (activation === 'Reaction')
         {
             const svg = title === 'Overwatch'
                 ? 'modules/lancer-automations/FX/svg/Overwatch.svg'
                 : 'modules/lancer-automations/FX/svg/Reaction.svg';
-            playReactionFX(token, svg, title === 'Overwatch' ? null : label);
+            return playReactionFX(token, svg, title === 'Overwatch' ? null : label);
         }
-        else
-            playActivationFX(token, undefined, label);
+        return playActivationFX(token, undefined, label);
     }
+    return undefined;
 }
 
 /** Fires invade FX when TechAttackFlow starts with `invade: true`, else dispatches by activation. */
@@ -1918,10 +1963,10 @@ Hooks.on('lancer.preFlow.TechAttackFlow', (flow) =>
     if (flow.state.data?.invade)
     {
         const title = _flowTitle(flow);
-        playInvadeFX(token, title && title !== 'Invade' ? title : null);
+        _queueActionFx(() => playInvadeFX(token, title && title !== 'Invade' ? title : null));
         return;
     }
-    _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow));
+    _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
 });
 
 /** Fires Core Power FX when a CoreActiveFlow starts. Skipped when no core energy remains (Lancer aborts at checkCorePower). */
@@ -1932,7 +1977,7 @@ Hooks.on('lancer.preFlow.CoreActiveFlow', (flow) =>
         return;
     if (token.actor?.system?.core_energy === 0)
         return;
-    playCorePowerFX(token, _flowTitle(flow));
+    _queueActionFx(() => playCorePowerFX(token, _flowTitle(flow)));
 });
 
 /** Fires Quick/Full Tech or generic Quick FX when ActivationFlow/SystemFlow starts. */
@@ -1940,13 +1985,13 @@ Hooks.on('lancer.preFlow.ActivationFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow));
+        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
 });
 Hooks.on('lancer.preFlow.SystemFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow));
+        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
 });
 
 /** Fires the generic activation FX when a BondPowerFlow starts. */
@@ -1954,7 +1999,7 @@ Hooks.on('lancer.preFlow.BondPowerFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        playActivationFX(token, undefined, _flowTitle(flow));
+        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)));
 });
 
 /** Fires the generic activation FX when a TalentFlow prints a rank card. */
@@ -1962,7 +2007,7 @@ Hooks.on('lancer.preFlow.TalentFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        playActivationFX(token, undefined, _flowTitle(flow));
+        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)));
 });
 
 /** Fires named action FX when a SimpleActivationFlow starts with a matching title. */
@@ -1972,14 +2017,16 @@ Hooks.on('lancer.preFlow.SimpleActivationFlow', (flow) =>
     if (!token)
         return;
     const title = _flowTitle(flow);
-    if (title === 'Handle')
-        playHandleFX(token);
-    else if (title === 'Interact')
-        playInteractFX(token);
-    else if (title === 'Prepare')
-        playPrepareFX(token);
-    else
-        _playActionFxForActivation(_flowResolveActivationLabel(flow), token, title);
+    _queueActionFx(() =>
+    {
+        if (title === 'Handle')
+            return playHandleFX(token);
+        if (title === 'Interact')
+            return playInteractFX(token);
+        if (title === 'Prepare')
+            return playPrepareFX(token);
+        return _playActionFxForActivation(_flowResolveActivationLabel(flow), token, title);
+    });
 });
 
 function _playGenericPrintActivationFX(flow)
@@ -1988,7 +2035,7 @@ function _playGenericPrintActivationFX(flow)
         return;
     const token = _flowSourceToken(flow);
     if (token)
-        playActivationFX(token);
+        _queueActionFx(() => playActivationFX(token));
 }
 Hooks.on('lancer.preFlow.SimpleHTMLFlow', _playGenericPrintActivationFX);
 Hooks.on('lancer.preFlow.SendUnknownToChat', _playGenericPrintActivationFX);
@@ -2094,7 +2141,7 @@ export async function playBonusAddedFX(token, origin = null)
     seq.effect()
         .file('jb2a.extras.tmfx.inpulse.circle.04')
         .atLocation(token)
-        .scaleToObject(2);
+        .preset('la_scaleToBurst', 0);
     seq.play();
     playStatusSfxSound('bonus');
 }
@@ -2107,7 +2154,7 @@ export async function playTargetFailFX(token)
     await Sequencer.Preloader.preloadForClients([
         'jb2a.extras.tmfx.border.circle.inpulse.01.normal',
         'jb2a.ui.miss.red',
-        'modules/lancer-automations/FX/audio/denyerror-sound.wav',
+        'modules/lancer-automations/FX/audio/targetFail.wav',
     ]);
     await new Sequence()
         .effect()
@@ -2120,7 +2167,7 @@ export async function playTargetFailFX(token)
         .scaleToObject(1.5)
         .aboveInterface()
         .sound()
-        .file('modules/lancer-automations/FX/audio/denyerror-sound.wav')
+        .file('modules/lancer-automations/FX/audio/targetFail.wav')
         .volume(_weaponFx()?.getEffectVolume(0.6) ?? 0.6)
         .play();
 }

@@ -302,6 +302,29 @@ Hooks.on('init', () =>
             scope: 'world', config: false, type: String, default: '',
         });
     }
+    game.settings.register(MODULE, 'tah.battleLog.themeVolume', {
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0.5, max: 2, step: 0.05 },
+    });
+    game.settings.register(MODULE, 'tah.battleLog.themeLoop', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
+    });
+    game.settings.register(MODULE, 'tah.battleLog.themeStart', {
+        scope: 'world',
+        config: false,
+        type: String,
+        default: 'intro',
+        choices: {
+            intro: 'Intro start',
+            result: 'Result reveal',
+        },
+    });
     game.settings.register(MODULE, 'tah.telemetryFriendlyMechAsSquad', {
         scope: 'world',
         config: false,

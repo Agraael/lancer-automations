@@ -1,3 +1,5 @@
+import { DOWNTIME_TYPE, DOWNTIME_PACK, importDowntimeActionsJson, openDowntimeImportDialog } from './downtime-item.js';
+
 let unionDate = () =>
 {
     const date = new Date();
@@ -36,6 +38,295 @@ function createRange(start, end)
     return range;
 }
 
+
+const DEFAULT_ACTIVITIES = [
+    {
+        Name: "Power At A Cost",
+        Rollable: false,
+        Description: "Name what you want. You can definitely get it, but\ndepending on the outlandishness of the request, the\nGM chooses one or two:\n• It's going to take a lot more time than you thought.\n• It's going to be really damn risky.\n• You'll have to have to give something up or leave\nsomething behind (e.g., wealth, resources, allies).\n• You're going to piss off someone or something\nimportant and powerful.\n• Things are going to go wildly off-plan.\n• You'll need more information to proceed safely.\n• It's going to fall apart damn soon.\n• You'll need more resources, but you know where\nto find them.\n• You can get something almost right: a lesser\nversion, or less of it.",
+        Results: [
+            {
+                ShortDesc: "Success",
+                LongDesc: "I'm resourceful, I can get what I need... or something very near to it. It's just a matter of time, manna and how much I'm willing to stick my neck out for it.",
+                Info: "<p>Name what you want. You can definitely get it, but depending on the outlandishness of the request, the GM chooses one or two:<ul><li>It's going to take a lot more time than you thought.</li><li>It's going to be really damn risky.</li><li>You'll have to have to give something up or leave something behind (e.g., wealth, resources, allies).</li> <li>You're going to piss off someone or something important and powerful.</li><li>Things are going to go wildly off-plan.</li> <li>You'll need more information to proceed safely.</li><li>It's going to fall apart damn soon.</li><li>You'll need more resources, but you know where to find them.</li> <li>You can get something almost right: a lesser version, or less of it.</li></p>"
+            }
+        ]
+    },
+
+    {
+        Name: "Get Focused",
+        Rollable: false,
+        Description: "When you GET FOCUSED, you focus on increasing your\nown skills, training, and self-improvement. You might\npractice, learn, meditate, or call on a teacher.\nName what you want to learn or improve (e.g., a skill,\ntechnique, academic subject, or language). The GM will\ngive your pilot a new +2 trigger based on your practice\nand training. For example, the trigger could be +2 Playing\nChess or +2 Dancing. You can also improve a trigger\nfrom +2 to +4 or +4 to +6 by taking this downtime action.",
+        Results: [
+            {
+                ShortDesc: "Success",
+                LongDesc: "Sometimes, you just need to work on yourself. You never know when your honed <i>kapkat</i> skills will come in handy.",
+                Info: "<p>Name what you want to learn or improve (e.g., a skill, technique, academic subject, or language). The GM will give your pilot a new +2 trigger based on your practice and training. For example, the trigger could be +2 Playing Chess or +2 Dancing. You can also improve a trigger from +2 to +4 or +4 to +6 by taking this downtime action.</p>"
+            }
+        ]
+    },
+
+    {
+        Name: "Buy Some Time",
+        Rollable: true,
+        Description: "When you BUY SOME TIME, you try to stave off a\nreckoning, extend a window of opportunity, or merely\nbuy some time and breathing room for you and your\ngroup. You might be trying to dodge some heat,\nsurvive stranded in the wilderness, or cause a\ndistraction so another plan can reach its climax. You\ncan use that distraction or bought time as RESERVES for\nthe next mission.\nDescribe your plan and roll:\nOn 9 or less, you can only buy a little time, and only if\ndrastic measures are taken right now. Otherwise,\nwhatever you're trying to stave off catches up to you.\nOn 10–19, you buy enough time, but the situation\nbecomes precarious or desperate. Next time you get\nthis result for the same situation, treat it as 9 or less.\nOn 20+, you buy as much time as you need, until the\nnext downtime session. Next time you get this result\nfor the same situation, treat it as 10–19.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Mild Success",
+                LongDesc: "The situation is deteriorating quickly. Whatever I'm running from required some sacrifices to escape - or maybe I didn't escape it at all.",
+                Info: "You can only buy a little time, and only if drastic measures are taken right now. Otherwise,whatever you're trying to stave off catches up to you."
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "My situation has improved, but not by much. I bought a little time - for now. Next time, simple measures like this won't suffice.",
+                Info: "You buy enough time, but the situation becomes precarious or desperate. Next time you get this result for the same situation, treat it as 9 or less."
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "I got the time I needed, and then some. Whatever was dogging me has abated - for now.",
+                Info: "You buy as much time as you need, until the next downtime session. Next time you get this result for the same situation, treat it as 10–19."
+            }
+        ]
+    },
+
+    {
+        Name: "Gather Information",
+        Rollable: true,
+        Description: "When you GATHER INFORMATION, you poke your nose\naround, perhaps where it doesn't belong, and\ninvestigate something – conducting research,\nfollowing up on a mystery, tracking a target, or\nkeeping an eye on something. You might head to a\nlibrary or go undercover to learn what you can.\nWhatever it involves, you're trying to GATHER\nINFORMATION on a subject of your choice. You can use\ninformation gained as RESERVES.\nName your subject and method, and roll:\nOn 9 or less, choose one:\n• You get what you're looking for, but it gets you\ninto trouble straight away.\n• You get out now and avoid trouble.\nOn 10–19, you find what you're looking for, but choose\none:\n• You leave clear evidence of your rummaging.\n• You have to dispatch someone or implicate\nsomeone innocent to avoid attention.\nOn 20+, you get what you're looking for with no\ncomplications.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Mild Success",
+                LongDesc: "I got the info I wanted, but it cost me.",
+                Info: "<p>Choose one: <ul><li>You get what you're looking for, but it gets you into trouble straight away</li><li>You get out now and avoid trouble.</li></ul></p>"
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "I got the info I wanted, but not without some complications.",
+                Info: "You find what you're looking for, but choose one:<ul><li>You leave clear evidence of your rummaging.</li><li>You have to dispatch someone or implicate someone innocent to avoid attention.</li></ul>"
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "Mission accomplished. I got my intel, and I got out. No one was the wiser, and by the time they are - I'm gonna' be in the wind.",
+                Info: "You get what you're looking for with no complications."
+            }
+        ]
+    },
+
+    {
+        Name: "Get A Damn Drink",
+        Rollable: true,
+        Description: "When you GET A DAMN DRINK, you blow off some\nsteam, carouse, and generally get into trouble. You\nmight be trying to make connections, collect gossip,\nforge a reputation, or even just to forget what\nhappened on the last mission. There's usually trouble.\nState your intention and roll:\nOn 9 or less, decide whether you had good time or\nnot; either way, you wake up in a gutter somewhere\nwith only one thing remaining:\n• Your dignity.\n• All of your possessions.\n• Your memory.\nOn 10–19, gain one as a reserve and lose one:\n• A good reputation.\n• A friend or connection.\n• A useful item or piece of information.\n• A convenient opportunity.\nOn 20+, gain two from the 10–19 list as RESERVES and\ndon't lose anything.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Mild Success?",
+                LongDesc: "I'm not sure if last night was a great time or a terrible time but I woke up in a strange place and I feel like something is missing.",
+                Info: "Decide whether you had good time or not; either way, you wake up in a gutter somewhere with only one remaining:<ul><li>Your dignity.</li><li>All of your possessions.</li><li>Your memory.</li></ul>"
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "Things got a bit hazy after that 11th shot, but after checking my messages this morning I found that something happened last night.",
+                Info: "Gain one as RESERVES and lose one:<ul><li>A good reputation.</li><li>A friend or connection.</li><li>A useful item or piece of information.</li><li>A convenient opportunity.</li></ul>"
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "To say I'm the life of the party wherever I go would be the understatement of the  century. I definitely impressed someone important through either sheer liver-power or raw rizz. Whatever the case, I scored myself some pristine assets and woke up without a headache. Awesome.",
+                Info: "Gain two as RESERVES:<ul><li>A good reputation.</li><li>A friend or connection.</li><li>A useful item or piece of information.</li><li>A convenient opportunity.</li></ul>"
+            }
+        ]
+    },
+
+    {
+        Name: "Get Creative",
+        Rollable: true,
+        Description: "When you GET CREATIVE, you tweak something or try to\nmake something new – either a physical item, or a piece\nof software. Once finished, you can use it as RESERVES.\nDescribe your project and roll:\nOn 9 or less, you don't make any progress on your\nproject. Next time you get this result for the same\nproject, treat it as a 10–19.\nOn 10–19, you make progress on your project, but\ndon't quite finish it. You can finish it during your next\ndowntime without rolling, but choose the two things\nyou're going to need:\n• Quality materials.\n• Specific knowledge or techniques.\n• Specialized tools.\n• A good workspace.\nOn 20+, you finish your project before the next\nmission. If it's especially complex, treat this as 10–19,\nbut only choose one.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Failure",
+                LongDesc: "What a waste. All that time spent, and I dont have shit to show for it. Better luck next time, I guess.",
+                Info: "You don't make any progress on your project. Next time you get this result for the same project, treat it as a 10–19."
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "I am so close to being done with it. I will definitely finish it next time, but I'll need some stuff. I'll surely have whatever I need by then - right?",
+                Info: "You make progress on your project, but don't quite finish it. You can finish it during your next downtime without rolling, but choose the two things you're going to need:<ul><li>Quality materials.</li><li>Specific knowledge or techniques.</li><li>Specialized tools.</li><li>A good workspace.</li></ul>"
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "Project done and just in time for the next mission. Nice - I was looking forward to that...thing.",
+                Info: "You finish your project before the next mission. If it's especially complex, treat this as 10–19, but only choose one."
+            }
+        ]
+    },
+
+    {
+        Name: "Get Organized",
+        Rollable: true,
+        Description: "When you GET ORGANIZED, you start, run, or improve an\norganization, business, or other venture.\nState your organization's purpose or goal, and\nchoose a FOCUS: military, scientific, academic, criminal,\nhumanitarian, industrial, entertainment, or political. It\nbegins with +2 in either EFFICIENCY or INFLUENCE and +0\nin the other, with a maximum of +6. EFFICIENCY\ndetermines how effectively your organization conducts\nactivities within its scope (e.g., a military organization\nwith high efficiency would be good at combat).\nINFLUENCE is its size, reach, wealth, and reputation.\nWhen your organization directly assists with an activity,\nyou may add either its EFFICIENCY or INFLUENCE as a\nstatistic bonus to your skill check. EFFICIENCY is used\nwhen performing activities related to your\norganization's FOCUS. INFLUENCE is used when acquiring\nassets, creating opportunities, or swaying public\nopinion. Advantages gained with the help of your\norganization can be used as RESERVES.\nEach downtime after the first, roll 1d20:\nOn 9 or less, choose one or your organization folds\nimmediately:\n• Your organization loses 2 EFFICIENCY and 2\nINFLUENCE, to a minimum of 0. If both are already\nat 0, you may not choose this.\n• Your organization needs to pay debts, make an\naggressive move, or get bailed out. You choose\nwhich, and the GM decides what that looks like.\nOn 10–19, your organization is stable. It gains +2\nEFFICIENCY or INFLUENCE, to a maximum of +6.\nOn 20+, your organization gains +2 EFFICIENCY and +2\nINFLUENCE, to a maximum of +6.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Failure",
+                LongDesc: "Managing an organization is hard work, and today shit went wrong.",
+                Info: "Choose one or your organization folds immediately:<ul><li>Your organization loses 2 EFFICIENCY and 2 INFLUENCE, to a minimum of 0. If both are already at 0, you may not choose this.</li><li>Your organization needs to pay debts, make an aggressive move, or get bailed out. You choose which, and the GM decides what that looks like.</li></ul>"
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "Today was a good day. Things are chugging along and we're making waves.",
+                Info: "Your organization is stable. It gains +2 EFFICIENCY or INFLUENCE, to a maximum of +6."
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "Every once in a while things just come together. I managed to improve your processes and project your influence all in one fell swoop. Time to put my feet up after that one.",
+                Info: "Your organization gains +2 EFFICIENCY and +2 INFLUENCE, to a maximum of +6."
+            }
+        ]
+    },
+
+    {
+        Name: "Get Connected",
+        Rollable: true,
+        Description: "When you GET CONNECTED, you make connections, call\nin favors, ask for help, or drum up support for a course\nof action. You can use your contacts' resources or aid\nas RESERVES for the next mission.\nName your contact and roll:\nOn 9 or less, your contact will help you, but you've got\nto do a favor or make good on a promise right now. If\nyou don't, they won't help you.\nOn 10–19, your contact will help you, but you've got\nto do a favor or make good on a promise afterwards.\nIf you don't follow through, treat this result as 9 or less\nnext time you get it for the same organization.\nOn 20+, your contact will help you, no strings\nattached. Treat this result as 10–19 next time you get\nit for the same organization.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Mild Success",
+                LongDesc: "I know this guy, and he's got some useful tools and friends - but those connections don't come cheap. And he wants something from me before he's ready to do business.",
+                Info: "Your contact will help you, but you've got to do a favor or make good on a promise right now. If you don't, they won't help you."
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "Yeah, they're gonna come through for me. Though it's not gratis - after this, they're gonna call in a favor from me, I just know it. But fair is fair.",
+                Info: "Your contact will help you, but you've got to do a favor or make good on a promise afterwards. If you don't follow through, treat this result as 9 or less next time you get it for the same organization."
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "Damn I'm magnanimous. I mean seriously, people are just itching to help me - no strings attached.",
+                Info: "Your contact will help you, no strings attached. Treat this result as 10–19 next time you get it for the same organization."
+            }
+        ]
+    },
+
+    {
+        Name: "Scrounge And Barter",
+        Rollable: true,
+        Description: "When you SCROUNGE AND BARTER, you try to get your\nhands on some gear or an asset by dredging the\nscrapyard, chasing down rumors, bartering in the local\nmarket, or hunting around.\nYou might want some better pilot gear, a vehicle,\nnarcotics, goods, or other sundries. It needs to be\nsomething physical, but doesn't necessarily have to\nbe on the gear list. If you get it, you can take it on the\nnext mission as RESERVES.\nName what you want and roll:\nOn 9 or less, you get what you're looking for, but\nchoose one:\n• It was stolen, probably from someone who's\nlooking for it.\n• It's degraded, old, filthy, or malfunctioning.\n• Someone else has it right now and won't give it\nup without force or convincing.\nOn 10–19, you get what you're looking for, but choose\nthe price you need to pay:\n• Time.\n• Dignity.\n• Reputation.\n• Health, comfort, and wellness. \nOn 20+, you get what you're looking for, no problem.",
+        Results: [
+            {
+                RollRange: createRange(1, 9),
+                ShortDesc: "Mild Success",
+                LongDesc: "I found what I was looking for, but not without a hitch.",
+                Info: "You get what you want, but choose one:<ul><li>It was stolen, probably from someone who's looking for it.</li><li>It's degraded, old, filthy, or malfunctioning.</li><li>Someone else has it right now and won't give it up without force or convincing.</li></ul>"
+            },
+            {
+                RollRange: createRange(10, 19),
+                ShortDesc: "Moderate Success",
+                LongDesc: "I got that piece, but it cost me.",
+                Info: "You get what you want, but choose the price you need to pay:<ul><li>Time.</li><li>Dignity.</li><li>Reputation.</li><li>Health, comfort, and wellness.</li></ul>"
+            },
+            {
+                RollRange: createRange(20, 100),
+                ShortDesc: "Monumental Success",
+                LongDesc: "Easy pickings. Wave around a little manna, flash the old sidearm, waggle the silver tongue - whatever it took, I got it, all above board - well mostly...probably...kinda.",
+                Info: "You get what you're looking for, no problem."
+            }
+        ]
+    }
+];
+
+const CUSTOM_ACTIVITY = {
+    Name: "Custom",
+    Rollable: true,
+    Description: "Describe what you do; the GM adjudicates the outcome.",
+    Results: [
+        {
+            RollRange: createRange(1, 9),
+            ShortDesc: "Mild Success",
+            LongDesc: "It did not go the way I planned. Something had to give.",
+            Info: "The GM adjudicates a costly or partial outcome."
+        },
+        {
+            RollRange: createRange(10, 19),
+            ShortDesc: "Moderate Success",
+            LongDesc: "I got most of what I wanted, with a complication.",
+            Info: "The GM adjudicates a success with a complication."
+        },
+        {
+            RollRange: createRange(20, 100),
+            ShortDesc: "Monumental Success",
+            LongDesc: "Everything went according to plan.",
+            Info: "The GM adjudicates a clean success."
+        }
+    ]
+};
+
+function htmlToPlain(html)
+{
+    return String(html ?? '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|li|ul|ol|div)>/gi, '\n')
+        .replace(/<li[^>]*>/gi, '• ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function itemToActivity(item)
+{
+    const system = item.system ?? {};
+    const bands = (system.results ?? []).filter(result => result.short || result.long || result.info);
+    const rollable = !!system.rollable && bands.some(result => Number(result.max) > 0);
+    return {
+        Name: item.name,
+        Rollable: rollable,
+        Hidden: !!system.hidden,
+        Description: htmlToPlain(system.description),
+        Results: (bands.length ? bands : [{ short: 'Result', info: system.description ?? '' }]).map(result => ({
+            ...(rollable && Number(result.max) > 0
+                ? { RollRange: createRange(Math.max(1, Number(result.min) || 1), Number(result.max)) }
+                : {}),
+            ShortDesc: result.short || 'Result',
+            LongDesc: result.long || '',
+            Info: result.info || ''
+        }))
+    };
+}
+
+export async function getDowntimeActivities()
+{
+    const merged = new Map();
+    for (const activity of DEFAULT_ACTIVITIES)
+        merged.set(activity.Name, activity);
+    const pack = game.packs.get(`world.${DOWNTIME_PACK}`);
+    if (pack)
+    {
+        for (const doc of await pack.getDocuments())
+        {
+            if (doc.type === DOWNTIME_TYPE)
+                merged.set(doc.name, itemToActivity(doc));
+        }
+    }
+    for (const item of game.items.filter(worldItem => worldItem.type === DOWNTIME_TYPE))
+        merged.set(item.name, itemToActivity(item));
+    const activities = [...merged.values()].filter(activity => !activity.Hidden);
+    activities.push(CUSTOM_ACTIVITY);
+    return activities;
+}
 
 export async function executeDowntime()
 {
@@ -112,228 +403,29 @@ export async function executeDowntime()
     let sessionId = generateId(20);
 
 
-    let Activities = [
-        {
-            Name: "Power At A Cost",
-            Rollable: false,
-            Description: "Name what you want. You can definitely get it, but\ndepending on the outlandishness of the request, the\nGM chooses one or two:\n• It's going to take a lot more time than you thought.\n• It's going to be really damn risky.\n• You'll have to have to give something up or leave\nsomething behind (e.g., wealth, resources, allies).\n• You're going to piss off someone or something\nimportant and powerful.\n• Things are going to go wildly off-plan.\n• You'll need more information to proceed safely.\n• It's going to fall apart damn soon.\n• You'll need more resources, but you know where\nto find them.\n• You can get something almost right: a lesser\nversion, or less of it.",
-            Results: [
-                {
-                    ShortDesc: "Success",
-                    LongDesc: "I'm resourceful, I can get what I need... or something very near to it. It's just a matter of time, manna and how much I'm willing to stick my neck out for it.",
-                    Info: "<p>Name what you want. You can definitely get it, but depending on the outlandishness of the request, the GM chooses one or two:<ul><li>It's going to take a lot more time than you thought.</li><li>It's going to be really damn risky.</li><li>You'll have to have to give something up or leave something behind (e.g., wealth, resources, allies).</li> <li>You're going to piss off someone or something important and powerful.</li><li>Things are going to go wildly off-plan.</li> <li>You'll need more information to proceed safely.</li><li>It's going to fall apart damn soon.</li><li>You'll need more resources, but you know where to find them.</li> <li>You can get something almost right: a lesser version, or less of it.</li></p>"
-                }
-            ]
-        },
-
-        {
-            Name: "Get Focused",
-            Rollable: false,
-            Description: "When you GET FOCUSED, you focus on increasing your\nown skills, training, and self-improvement. You might\npractice, learn, meditate, or call on a teacher.\nName what you want to learn or improve (e.g., a skill,\ntechnique, academic subject, or language). The GM will\ngive your pilot a new +2 trigger based on your practice\nand training. For example, the trigger could be +2 Playing\nChess or +2 Dancing. You can also improve a trigger\nfrom +2 to +4 or +4 to +6 by taking this downtime action.",
-            Results: [
-                {
-                    ShortDesc: "Success",
-                    LongDesc: "Sometimes, you just need to work on yourself. You never know when your honed <i>kapkat</i> skills will come in handy.",
-                    Info: "<p>Name what you want to learn or improve (e.g., a skill, technique, academic subject, or language). The GM will give your pilot a new +2 trigger based on your practice and training. For example, the trigger could be +2 Playing Chess or +2 Dancing. You can also improve a trigger from +2 to +4 or +4 to +6 by taking this downtime action.</p>"
-                }
-            ]
-        },
-
-        {
-            Name: "Buy Some Time",
-            Rollable: true,
-            Description: "When you BUY SOME TIME, you try to stave off a\nreckoning, extend a window of opportunity, or merely\nbuy some time and breathing room for you and your\ngroup. You might be trying to dodge some heat,\nsurvive stranded in the wilderness, or cause a\ndistraction so another plan can reach its climax. You\ncan use that distraction or bought time as RESERVES for\nthe next mission.\nDescribe your plan and roll:\nOn 9 or less, you can only buy a little time, and only if\ndrastic measures are taken right now. Otherwise,\nwhatever you're trying to stave off catches up to you.\nOn 10–19, you buy enough time, but the situation\nbecomes precarious or desperate. Next time you get\nthis result for the same situation, treat it as 9 or less.\nOn 20+, you buy as much time as you need, until the\nnext downtime session. Next time you get this result\nfor the same situation, treat it as 10–19.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Mild Success",
-                    LongDesc: "The situation is deteriorating quickly. Whatever I'm running from required some sacrifices to escape - or maybe I didn't escape it at all.",
-                    Info: "You can only buy a little time, and only if drastic measures are taken right now. Otherwise,whatever you're trying to stave off catches up to you."
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "My situation has improved, but not by much. I bought a little time - for now. Next time, simple measures like this won't suffice.",
-                    Info: "You buy enough time, but the situation becomes precarious or desperate. Next time you get this result for the same situation, treat it as 9 or less."
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "I got the time I needed, and then some. Whatever was dogging me has abated - for now.",
-                    Info: "You buy as much time as you need, until the next downtime session. Next time you get this result for the same situation, treat it as 10–19."
-                }
-            ]
-        },
-
-        {
-            Name: "Gather Information",
-            Rollable: true,
-            Description: "When you GATHER INFORMATION, you poke your nose\naround, perhaps where it doesn't belong, and\ninvestigate something – conducting research,\nfollowing up on a mystery, tracking a target, or\nkeeping an eye on something. You might head to a\nlibrary or go undercover to learn what you can.\nWhatever it involves, you're trying to GATHER\nINFORMATION on a subject of your choice. You can use\ninformation gained as RESERVES.\nName your subject and method, and roll:\nOn 9 or less, choose one:\n• You get what you're looking for, but it gets you\ninto trouble straight away.\n• You get out now and avoid trouble.\nOn 10–19, you find what you're looking for, but choose\none:\n• You leave clear evidence of your rummaging.\n• You have to dispatch someone or implicate\nsomeone innocent to avoid attention.\nOn 20+, you get what you're looking for with no\ncomplications.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Mild Success",
-                    LongDesc: "I got the info I wanted, but it cost me.",
-                    Info: "<p>Choose one: <ul><li>You get what you're looking for, but it gets you into trouble straight away</li><li>You get out now and avoid trouble.</li></ul></p>"
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "I got the info I wanted, but not without some complications.",
-                    Info: "You find what you're looking for, but choose one:<ul><li>You leave clear evidence of your rummaging.</li><li>You have to dispatch someone or implicate someone innocent to avoid attention.</li></ul>"
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "Mission accomplished. I got my intel, and I got out. No one was the wiser, and by the time they are - I'm gonna' be in the wind.",
-                    Info: "You get what you're looking for with no complications."
-                }
-            ]
-        },
-
-        {
-            Name: "Get A Damn Drink",
-            Rollable: true,
-            Description: "When you GET A DAMN DRINK, you blow off some\nsteam, carouse, and generally get into trouble. You\nmight be trying to make connections, collect gossip,\nforge a reputation, or even just to forget what\nhappened on the last mission. There's usually trouble.\nState your intention and roll:\nOn 9 or less, decide whether you had good time or\nnot; either way, you wake up in a gutter somewhere\nwith only one thing remaining:\n• Your dignity.\n• All of your possessions.\n• Your memory.\nOn 10–19, gain one as a reserve and lose one:\n• A good reputation.\n• A friend or connection.\n• A useful item or piece of information.\n• A convenient opportunity.\nOn 20+, gain two from the 10–19 list as RESERVES and\ndon't lose anything.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Mild Success?",
-                    LongDesc: "I'm not sure if last night was a great time or a terrible time but I woke up in a strange place and I feel like something is missing.",
-                    Info: "Decide whether you had good time or not; either way, you wake up in a gutter somewhere with only one remaining:<ul><li>Your dignity.</li><li>All of your possessions.</li><li>Your memory.</li></ul>"
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "Things got a bit hazy after that 11th shot, but after checking my messages this morning I found that something happened last night.",
-                    Info: "Gain one as RESERVES and lose one:<ul><li>A good reputation.</li><li>A friend or connection.</li><li>A useful item or piece of information.</li><li>A convenient opportunity.</li></ul>"
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "To say I'm the life of the party wherever I go would be the understatement of the  century. I definitely impressed someone important through either sheer liver-power or raw rizz. Whatever the case, I scored myself some pristine assets and woke up without a headache. Awesome.",
-                    Info: "Gain two as RESERVES:<ul><li>A good reputation.</li><li>A friend or connection.</li><li>A useful item or piece of information.</li><li>A convenient opportunity.</li></ul>"
-                }
-            ]
-        },
-
-        {
-            Name: "Get Creative",
-            Rollable: true,
-            Description: "When you GET CREATIVE, you tweak something or try to\nmake something new – either a physical item, or a piece\nof software. Once finished, you can use it as RESERVES.\nDescribe your project and roll:\nOn 9 or less, you don't make any progress on your\nproject. Next time you get this result for the same\nproject, treat it as a 10–19.\nOn 10–19, you make progress on your project, but\ndon't quite finish it. You can finish it during your next\ndowntime without rolling, but choose the two things\nyou're going to need:\n• Quality materials.\n• Specific knowledge or techniques.\n• Specialized tools.\n• A good workspace.\nOn 20+, you finish your project before the next\nmission. If it's especially complex, treat this as 10–19,\nbut only choose one.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Failure",
-                    LongDesc: "What a waste. All that time spent, and I dont have shit to show for it. Better luck next time, I guess.",
-                    Info: "You don't make any progress on your project. Next time you get this result for the same project, treat it as a 10–19."
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "I am so close to being done with it. I will definitely finish it next time, but I'll need some stuff. I'll surely have whatever I need by then - right?",
-                    Info: "You make progress on your project, but don't quite finish it. You can finish it during your next downtime without rolling, but choose the two things you're going to need:<ul><li>Quality materials.</li><li>Specific knowledge or techniques.</li><li>Specialized tools.</li><li>A good workspace.</li></ul>"
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "Project done and just in time for the next mission. Nice - I was looking forward to that...thing.",
-                    Info: "You finish your project before the next mission. If it's especially complex, treat this as 10–19, but only choose one."
-                }
-            ]
-        },
-
-        {
-            Name: "Get Organized",
-            Rollable: true,
-            Description: "When you GET ORGANIZED, you start, run, or improve an\norganization, business, or other venture.\nState your organization's purpose or goal, and\nchoose a FOCUS: military, scientific, academic, criminal,\nhumanitarian, industrial, entertainment, or political. It\nbegins with +2 in either EFFICIENCY or INFLUENCE and +0\nin the other, with a maximum of +6. EFFICIENCY\ndetermines how effectively your organization conducts\nactivities within its scope (e.g., a military organization\nwith high efficiency would be good at combat).\nINFLUENCE is its size, reach, wealth, and reputation.\nWhen your organization directly assists with an activity,\nyou may add either its EFFICIENCY or INFLUENCE as a\nstatistic bonus to your skill check. EFFICIENCY is used\nwhen performing activities related to your\norganization's FOCUS. INFLUENCE is used when acquiring\nassets, creating opportunities, or swaying public\nopinion. Advantages gained with the help of your\norganization can be used as RESERVES.\nEach downtime after the first, roll 1d20:\nOn 9 or less, choose one or your organization folds\nimmediately:\n• Your organization loses 2 EFFICIENCY and 2\nINFLUENCE, to a minimum of 0. If both are already\nat 0, you may not choose this.\n• Your organization needs to pay debts, make an\naggressive move, or get bailed out. You choose\nwhich, and the GM decides what that looks like.\nOn 10–19, your organization is stable. It gains +2\nEFFICIENCY or INFLUENCE, to a maximum of +6.\nOn 20+, your organization gains +2 EFFICIENCY and +2\nINFLUENCE, to a maximum of +6.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Failure",
-                    LongDesc: "Managing an organization is hard work, and today shit went wrong.",
-                    Info: "Choose one or your organization folds immediately:<ul><li>Your organization loses 2 EFFICIENCY and 2 INFLUENCE, to a minimum of 0. If both are already at 0, you may not choose this.</li><li>Your organization needs to pay debts, make an aggressive move, or get bailed out. You choose which, and the GM decides what that looks like.</li></ul>"
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "Today was a good day. Things are chugging along and we're making waves.",
-                    Info: "Your organization is stable. It gains +2 EFFICIENCY or INFLUENCE, to a maximum of +6."
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "Every once in a while things just come together. I managed to improve your processes and project your influence all in one fell swoop. Time to put my feet up after that one.",
-                    Info: "Your organization gains +2 EFFICIENCY and +2 INFLUENCE, to a maximum of +6."
-                }
-            ]
-        },
-
-        {
-            Name: "Get Connected",
-            Rollable: true,
-            Description: "When you GET CONNECTED, you make connections, call\nin favors, ask for help, or drum up support for a course\nof action. You can use your contacts' resources or aid\nas RESERVES for the next mission.\nName your contact and roll:\nOn 9 or less, your contact will help you, but you've got\nto do a favor or make good on a promise right now. If\nyou don't, they won't help you.\nOn 10–19, your contact will help you, but you've got\nto do a favor or make good on a promise afterwards.\nIf you don't follow through, treat this result as 9 or less\nnext time you get it for the same organization.\nOn 20+, your contact will help you, no strings\nattached. Treat this result as 10–19 next time you get\nit for the same organization.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Mild Success",
-                    LongDesc: "I know this guy, and he's got some useful tools and friends - but those connections don't come cheap. And he wants something from me before he's ready to do business.",
-                    Info: "Your contact will help you, but you've got to do a favor or make good on a promise right now. If you don't, they won't help you."
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "Yeah, they're gonna come through for me. Though it's not gratis - after this, they're gonna call in a favor from me, I just know it. But fair is fair.",
-                    Info: "Your contact will help you, but you've got to do a favor or make good on a promise afterwards. If you don't follow through, treat this result as 9 or less next time you get it for the same organization."
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "Damn I'm magnanimous. I mean seriously, people are just itching to help me - no strings attached.",
-                    Info: "Your contact will help you, no strings attached. Treat this result as 10–19 next time you get it for the same organization."
-                }
-            ]
-        },
-
-        {
-            Name: "Scrounge And Barter",
-            Rollable: true,
-            Description: "When you SCROUNGE AND BARTER, you try to get your\nhands on some gear or an asset by dredging the\nscrapyard, chasing down rumors, bartering in the local\nmarket, or hunting around.\nYou might want some better pilot gear, a vehicle,\nnarcotics, goods, or other sundries. It needs to be\nsomething physical, but doesn't necessarily have to\nbe on the gear list. If you get it, you can take it on the\nnext mission as RESERVES.\nName what you want and roll:\nOn 9 or less, you get what you're looking for, but\nchoose one:\n• It was stolen, probably from someone who's\nlooking for it.\n• It's degraded, old, filthy, or malfunctioning.\n• Someone else has it right now and won't give it\nup without force or convincing.\nOn 10–19, you get what you're looking for, but choose\nthe price you need to pay:\n• Time.\n• Dignity.\n• Reputation.\n• Health, comfort, and wellness. \nOn 20+, you get what you're looking for, no problem.",
-            Results: [
-                {
-                    RollRange: createRange(1, 9),
-                    ShortDesc: "Mild Success",
-                    LongDesc: "I found what I was looking for, but not without a hitch.",
-                    Info: "You get what you want, but choose one:<ul><li>It was stolen, probably from someone who's looking for it.</li><li>It's degraded, old, filthy, or malfunctioning.</li><li>Someone else has it right now and won't give it up without force or convincing.</li></ul>"
-                },
-                {
-                    RollRange: createRange(10, 19),
-                    ShortDesc: "Moderate Success",
-                    LongDesc: "I got that piece, but it cost me.",
-                    Info: "You get what you want, but choose the price you need to pay:<ul><li>Time.</li><li>Dignity.</li><li>Reputation.</li><li>Health, comfort, and wellness.</li></ul>"
-                },
-                {
-                    RollRange: createRange(20, 100),
-                    ShortDesc: "Monumental Success",
-                    LongDesc: "Easy pickings. Wave around a little manna, flash the old sidearm, waggle the silver tongue - whatever it took, I got it, all above board - well mostly...probably...kinda.",
-                    Info: "You get what you're looking for, no problem."
-                }
-            ]
-        }
-    ];
+    const Activities = await getDowntimeActivities();
 
     let activityOptions = Activities.map(activity => `<option>${activity.Name}</option>`).join('');
 
     let pilotData = {};
 
     let pilots = game.actors.filter(actor => actor.type === "pilot" && (game.user.isGM || actor.isOwner));
-    let pilotNames = pilots.map(pilot => `<option value="${pilot.id}">${pilot.name}</option>`).join("");
 
     if (!pilots.length)
     {
         ui.notifications.warn("Downtime: no pilot available.");
         return;
     }
+
+    const connectedOwner = (actor) => game.users.find(user =>
+        user.active && !user.isGM && actor.testUserPermission(user, 'OWNER'));
+    const online = pilots.filter(pilot => connectedOwner(pilot));
+    const offline = pilots.filter(pilot => !connectedOwner(pilot));
+    const option = (pilot) => `<option value="${pilot.id}">${pilot.name}</option>`;
+    let pilotNames = online.length
+        ? `<optgroup label="Connected Players">${online.map(option).join("")}</optgroup>`
+            + (offline.length ? `<optgroup label="Others">${offline.map(option).join("")}</optgroup>` : "")
+        : pilots.map(option).join("");
 
     let dialogContent = `
     <div class="la-downtime" style="margin-bottom:1rem; font-family: monospace;">
@@ -814,5 +906,8 @@ export function showDowntimeJournalPopup(pageUuid, pageName)
 }
 
 export const DowntimeAPI = {
-    executeDowntime
+    executeDowntime,
+    getDowntimeActivities,
+    importDowntimeActionsJson,
+    openDowntimeImportDialog
 };

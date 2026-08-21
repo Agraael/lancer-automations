@@ -22,7 +22,7 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
 ## Actor ↔ token sync
 
-**`syncActorImgToToken`** and **`syncActorNameToToken`** copy a prototype token's image and name onto the actor whenever they change, and **Sync All Actors Now** does it across every world actor at once.
+**`syncActorImgToToken`** and **`syncActorNameToToken`** copy a prototype token's image and name onto the actor whenever they change, and **Sync All Actors Now** does it across every world actor at once. Video token images are skipped, since an actor portrait only takes stills.
 
 ---
 

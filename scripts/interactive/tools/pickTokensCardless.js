@@ -1,7 +1,7 @@
 import { pixelToOffset } from "../../combat/grid-helpers.js";
 import {
     TG, pointerToWorld, suppressTokenInteraction, createPickerSession, createCursorPreview,
-    createCtrlMarkIndicator, paintSingleMarkCursor, suppressEvent, showOverlapStackPicker, createTokenTether,
+    createCtrlMarkIndicator, paintSingleMarkCursor, suppressEvent, showOverlapStackPicker, createTokenTether, isShiftDown,
 } from "../canvas-helpers.js";
 import { createTokenMark } from "../target-shapes.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
@@ -163,7 +163,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
         {
             const { x, y } = pointerToWorld(event);
             const { hoveredToken } = paintSingleMarkCursor(cursorPreview, x, y, { caster: casterToken, tokens: allTokens });
-            shiftHeld = !!event?.data?.originalEvent?.shiftKey;
+            shiftHeld = isShiftDown(event);
             lastCursor = { x, y };
             indicator.move(x, y);
             refreshTether(hoveredToken);
@@ -178,7 +178,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
         const clickHandler = (event) =>
         {
             const originalEvent = event?.data?.originalEvent;
-            const shift = !!originalEvent?.shiftKey;
+            const shift = isShiftDown(event);
             const { x, y } = pointerToWorld(event);
             const here = tokensAt(allTokens, x, y);
             if (!here.length)

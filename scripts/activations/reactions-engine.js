@@ -4,7 +4,7 @@ import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { consumeEffectCharge, runInOnInitTriggerContext } from "../bonuses/flagged-effects.js";
 import { getTokenDistance } from "../combat/overwatch.js";
-import { getItemLID, isItemAvailable, hasReactionAvailable, executeSimpleActivation, debugActivation } from "../tools/misc-tools.js";
+import { getItemLID, isItemAvailable, hasReactionAvailable, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
 
 let reactionDebounceTimer = null;
@@ -206,7 +206,7 @@ async function _checkOnInitReactionsBody(token, filterItem = null)
                     await reaction.onInit(token, item, api);
                 else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '')
                 {
-                    const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"]);
+                    const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"], reaction, `${lid}/${registryEntry.reactions.indexOf(reaction)}/onInit`);
                     await onInitFunc(token, item, api);
                 }
             }
@@ -231,7 +231,7 @@ async function _checkOnInitReactionsBody(token, filterItem = null)
                 await reaction.onInit(token, null, api);
             else if (typeof reaction.onInit === 'string' && reaction.onInit.trim() !== '')
             {
-                const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"]);
+                const onInitFunc = stringToFunction(reaction.onInit, ["token", "item", "api"], reaction, `${name}/onInit`);
                 await onInitFunc(token, null, api);
             }
         }
@@ -270,7 +270,7 @@ export async function checkOnMessageReactions(token, itemLid, reactionPath, acti
                         result = await reaction.onMessage(triggerType, data, token, item, activationName, api);
                     else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim())
                     {
-                        const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"]);
+                        const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"], `${itemLid}/${registryEntry.reactions.indexOf(reaction)}/onMessage`);
                         result = await fn(triggerType, data, token, item, activationName, api);
                     }
                     return result;
@@ -300,7 +300,7 @@ export async function checkOnMessageReactions(token, itemLid, reactionPath, acti
                     await reaction.onMessage(triggerType, data, token, null, activationName, api);
                 else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim())
                 {
-                    const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"]);
+                    const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"], `${name}/onMessage`);
                     await fn(triggerType, data, token, null, activationName, api);
                 }
             }
@@ -408,7 +408,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         }
         else if (typeof reaction.evaluate === 'string' && reaction.evaluate.trim() !== '')
         {
-            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
+            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction, `${reactionName}/evaluate`);
             const result = evalFunc(triggerType, enrichedData, token, null, reactionName, api);
             if (result instanceof Promise)
             {
@@ -856,6 +856,8 @@ async function checkReactions(triggerType, data)
                 {
                     let activationName = item.name;
                     const reactionPath = reaction.reactionPath || "";
+                    // actionName only identifies a sub-action on activation triggers; elsewhere it's a flow title
+                    const actionNameIsSubAction = triggerType === 'onActivation' || triggerType === 'onInitActivation';
 
                     if (reactionPath && reactionPath !== "" && reactionPath !== "system" && reactionPath !== "system.trigger")
                     {
@@ -896,14 +898,14 @@ async function checkReactions(triggerType, data)
                         if (actionData?.name)
                         {
                             activationName = actionData.name;
-                            if (data.actionName && data.actionName !== activationName)
+                            if (actionNameIsSubAction && data.actionName && data.actionName !== activationName)
                             {
                                 dbgAuto('skip:', token.name, item.name, 'action name mismatch', { actionName: data.actionName, expected: activationName, reactionPath });
                                 continue;
                             }
                         }
                     }
-                    else if (reaction.onlyOnSourceMatch && data.actionName && data.actionName !== item.name)
+                    else if (actionNameIsSubAction && reaction.onlyOnSourceMatch && data.actionName && data.actionName !== item.name)
                     {
                         // No reactionPath: skip when a specific sub-action was triggered (not the base item)
                         dbgAuto('skip:', token.name, item.name, 'action name mismatch', { setting: 'onlyOnSourceMatch', actionName: data.actionName, expected: item.name });
@@ -949,7 +951,7 @@ async function checkReactions(triggerType, data)
                     {
                         try
                         {
-                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction);
+                            const evalFunc = stringToFunction(reaction.evaluate, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], reaction, `${lid}/${registryEntry.reactions.indexOf(reaction)}/evaluate`);
                             const result = evalFunc(triggerType, enrichedData, token, item, activationName, api);
                             if (result instanceof Promise)
                             {
@@ -1457,6 +1459,7 @@ async function _handleTriggerBody(triggerType, data)
             const raw = Array.isArray(data.targets) ? data.targets.map(unwrap) : (single ? [unwrap(single)] : []);
             data.hitTokens = raw.filter(candidate => candidate?.actor);
         }
+        data.isRangedAttack = () => isRangedAttack(data);
         data.startRelatedFlow = async () =>
         {
             const item = data.item ?? data.weapon ?? data.techItem;

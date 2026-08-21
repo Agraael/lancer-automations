@@ -38,4 +38,5 @@ The rest of the toggles cancel the isometric skew on each overlay so it reads st
 | `iso.clickZone` | The click and hover area (click the sprite, not the cell) |
 | `iso.selectionMarquee` | The drag-select rectangle |
 | `iso.moduleLabels` | TemplateMacro zone and THT terrain labels |
+| `iso.effectAspect` | Upright Sequencer effects, un-squashed like the stat bars (off by default) |
 | `iso.restoreAnchor` | Fixes the token anchor on non-iso scenes (Isometric Perspective only) |

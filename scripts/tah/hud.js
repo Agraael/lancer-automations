@@ -7,7 +7,7 @@ import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, res
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
 import { applyActionOverlays } from '../interactive/action-overlays.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
-import { knockBackToken } from '../interactive/canvas.js';
+import { knockBackToken } from '../interactive/tools/moveTokenRuler.js';
 import { openHaseContestCard } from '../interactive/tools/haseContest.js';
 import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';

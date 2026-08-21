@@ -122,7 +122,7 @@ const WRECKS_FIELDS = [
         requires: 'enableWrecks' },
     { type: 'table',
         label: 'Per-Category Settings',
-        tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_human', 'wreckTerrain_human',
+        tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_vehicle', 'wreckTerrain_vehicle', 'wreckMode_human', 'wreckTerrain_human',
             'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
         getTable: () =>
         {
@@ -157,6 +157,11 @@ const WRECKS_FIELDS = [
                         cells: [
                             { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
                             { isSelect: true, name: 'wreckTerrain_mech', choices: terrainChoices('wreckTerrain_mech') },
+                        ]},
+                    { label: 'Vehicle',
+                        cells: [
+                            { isSelect: true, name: 'wreckMode_vehicle', choices: modeChoices('wreckMode_vehicle') },
+                            { isSelect: true, name: 'wreckTerrain_vehicle', choices: terrainChoices('wreckTerrain_vehicle') },
                         ]},
                     { label: 'Human / Pilot / Squad',
                         cells: [
@@ -236,11 +241,17 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'showRevertMovementHudButton', type: 'boolean' },
     { type: 'moduleBoolean', module: 'temporary-custom-statuses', key: 'enableHud', label: 'Custom Status HUD Button' },
 
+    { type: 'section', label: 'Status Icons', collapsible: true, collapsed: true },
+    { key: 'statusHalo', type: 'boolean' },
+    { key: 'statusHaloRadius', type: 'slider', min: 0.5, max: 2, step: 0.05 },
+    { key: 'statusHaloStartAngle', type: 'slider', min: 0, max: 360, step: 5 },
+    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale', min: 0.3, max: 2, step: 0.05 },
+    { key: 'statusIconHover', type: 'boolean' },
+
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
 
     { type: 'section', label: 'Display', subsection: true },
-    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale (Stat Bar)', min: 0.3, max: 1, step: 0.05 , requires: 'tokenStatBar' },
     { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'Draw HP/Heat/Stress numbers on top of the bars.' , requires: 'tokenStatBar' },
     { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' , requires: 'tokenStatBar' },
 
@@ -312,6 +323,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
     { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Also hide the class/frame subtitle and tier badge until scanned.' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'Hide current values without owner/observer access', hint: 'Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track.' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintShowHase', type: 'boolean', label: 'Show HASE', hint: 'Adds a hull/agility/systems/engineering line.', requires: 'tokenStatHintEnabled' },
 ];
 
 const TAH_FIELDS = [
@@ -579,7 +591,16 @@ const TOOLS_FIELDS = [
         onClick: () => window.open(foundry.utils.getRoute('modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp'), '_blank'),
     },
 
-    { type: 'section', label: 'Actor Ã¢â€ â€ Prototype Token sync' },
+    { type: 'section', label: 'Downtime', hint: 'Custom downtime activities are Downtime Activity items, in the LA compendium or the world directory.' },
+    { type: 'button',
+        key: 'importDowntimeLcp',
+        label: 'Import Downtime Actions (LCP)',
+        icon: 'fas fa-file-import',
+        hint: 'Create the items from an LCP\'s downtime actions.',
+        onClick: () => game.modules.get(MODULE_ID)?.api?.openDowntimeImportDialog?.(),
+    },
+
+    { type: 'section', label: 'Actor / Prototype Token sync' },
     { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait.' },
     { key: 'syncActorNameToToken', type: 'boolean', label: 'Sync actor name to token name', hint: 'When the prototype token name changes, also update the actor name.' },
     { type: 'button',
@@ -686,6 +707,7 @@ const ISO_FIELDS = [
     { key: 'iso.clickZone', type: 'boolean' , requires: 'tokenStatBar' },
     { key: 'iso.selectionMarquee', type: 'boolean' },
     { key: 'iso.moduleLabels', type: 'boolean' },
+    { key: 'iso.effectAspect', type: 'boolean' },
 ];
 
 const BATTLE_LOG_FIELDS = [
@@ -735,6 +757,19 @@ const BATTLE_LOG_FIELDS = [
     },
 
     { type: 'section', label: 'Theme music', collapsible: true, collapsed: true },
+    { key: 'tah.battleLog.themeStart',
+        type: 'select',
+        label: 'Theme starts',
+        hint: 'Whether the theme comes in with the intro or when the outcome lands.' },
+    { key: 'tah.battleLog.themeVolume',
+        type: 'slider',
+        label: 'Theme volume',
+        min: 0.5, max: 2, step: 0.05,
+        hint: 'Scales the theme on top of the Battle Log volume.' },
+    { key: 'tah.battleLog.themeLoop',
+        type: 'boolean',
+        label: 'Loop theme',
+        hint: 'Off plays the track once and lets it end.' },
     { key: 'tah.battleLog.themeDefault',
         type: 'audio',
         label: 'Default theme',
@@ -1725,7 +1760,8 @@ export class LancerAutomationsConfig extends FormApplication
             ev.stopPropagation();
             await _previewSettingSound(ev.currentTarget.dataset.previewKey);
         });
-        $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible').each((/** @type {number} */ _i, /** @type {any} */ h) =>
+        const $headers = $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible');
+        const applySectionState = (/** @type {any} */ h) =>
         {
             const $h = $(h);
             const label = $h.text().trim();
@@ -1733,7 +1769,15 @@ export class LancerAutomationsConfig extends FormApplication
                 ? this._sectionStates.get(label)
                 : $h.attr('data-collapsed') === 'true';
             _toggleSection($h, collapsed);
-        }).on('click', (/** @type {any} */ ev) =>
+        };
+        // subsections first: the top-level pass reapplies their rows, so it has the last word
+        const applyAllSectionStates = () =>
+        {
+            $headers.filter('h3').each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
+            $headers.filter('h2').each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
+        };
+        applyAllSectionStates();
+        $headers.on('click', (/** @type {any} */ ev) =>
         {
             const $h = $(ev.currentTarget);
             const next = $h.attr('data-collapsed') !== 'true';
@@ -1879,6 +1923,8 @@ export class LancerAutomationsConfig extends FormApplication
                 finalizeSub();
                 finalizeSection();
             });
+            if (!normalizedQuery)
+                applyAllSectionStates();
             if (normalizedQuery)
                 $html.find('.tab').addClass('active').css('display', '');
             else

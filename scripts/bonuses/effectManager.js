@@ -1145,6 +1145,8 @@ export async function executeEffectManager(options = {})
         .te-delete-btn:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); }
         .te-btn-group { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
         .te-btn { background: var(--la-plate); border: 2px solid var(--la-edge); color: var(--la-ink); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s ease; }
+        .te-btn-group .save-preset-btn, .te-btn-group .extract-code-btn { flex: 0 0 auto; width: auto; white-space: nowrap; }
+        .te-btn-group .apply-btn, .te-btn-group #bonus-add { flex: 1 1 auto; }
         .te-btn:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); border-color: var(--primary-color); box-shadow: 0 2px 8px rgba(0,0,0,0.3); transform: translateY(-1px); }
         .te-btn i { margin-right: 5px; color: var(--primary-color); }
         .te-stack-ctrl { display: flex; gap: 4px; }
@@ -1245,6 +1247,7 @@ export async function executeEffectManager(options = {})
             ${triggerFieldsHtml('std', tokensHtml)}
             <div class="te-btn-group">
                 <button type="button" class="te-btn save-preset-btn" data-prefix="std"><i class="fas fa-bookmark"></i> Save Preset</button>
+                <button type="button" class="te-btn extract-code-btn" data-tab="standard" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
                 <button type="button" class="te-btn apply-btn" data-tab="standard"><i class="fas fa-check"></i> Apply</button>
             </div>
         </div>
@@ -1313,6 +1316,7 @@ export async function executeEffectManager(options = {})
             </details>
             <div class="te-btn-group">
                 <button type="button" class="te-btn save-preset-btn" data-prefix="cust"><i class="fas fa-bookmark"></i> Save Preset</button>
+                <button type="button" class="te-btn extract-code-btn" data-tab="custom" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
                 <button type="button" class="te-btn apply-btn" data-tab="custom"><i class="fas fa-check"></i> Apply</button>
             </div>
         </div>
@@ -1327,6 +1331,10 @@ export async function executeEffectManager(options = {})
                     <button type="button" class="token-picker-btn" data-target="manage-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                 </div>
             </div>
+            <details class="te-advanced" id="manage-presets">
+                <summary>Presets</summary>
+                <div id="manage-presets-list" style="display:flex; flex-direction:column; gap:3px; padding:4px 0;"></div>
+            </details>
             <div class="te-effect-list" id="manage-list">
                 <p style="text-align:center">Loading...</p>
             </div>
@@ -1762,6 +1770,7 @@ export async function executeEffectManager(options = {})
             </div>
             <div class="te-btn-group">
                 <button type="button" class="te-btn save-preset-btn" data-prefix="bonus"><i class="fas fa-bookmark"></i> Save Preset</button>
+                <button type="button" class="te-btn extract-code-btn" data-tab="bonus" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
                 <button type="button" class="te-btn" id="bonus-add"><i class="fas fa-plus-circle"></i> Add Bonus</button>
             </div>
             <hr class="te-divider">
@@ -2256,6 +2265,7 @@ export async function executeEffectManager(options = {})
                 await setStoredPresets(all);
                 _rebuildPresetSelect(prefix);
                 html.find(`#${prefix}-preset-load`).val(name);
+                renderManagePresets();
                 ui.notifications.info(`Saved preset "${name}".`);
             });
             html.find('#std-preset-load, #cust-preset-load, #bonus-preset-load').change(function ()
@@ -2285,7 +2295,223 @@ export async function executeEffectManager(options = {})
                 await setStoredPresets(all);
                 _rebuildPresetSelect(prefix);
                 $sel.val('');
+                renderManagePresets();
                 ui.notifications.info(`Deleted preset "${name}".`);
+            });
+
+            const renderManagePresets = () =>
+            {
+                const all = getStoredPresets();
+                const rows = [];
+                for (const [cat, prefix, label] of [['standard', 'std', 'Standard'], ['custom', 'cust', 'Custom'], ['bonus', 'bonus', 'Bonus']])
+                {
+                    for (const preset of (all[cat] ?? []))
+                    {
+                        rows.push(`<div style="display:flex; align-items:center; gap:6px;" data-cat="${cat}" data-prefix="${prefix}" data-name="${preset.name}">
+                            <span style="flex:0 0 62px; font-size:0.75em; opacity:0.7; text-transform:uppercase;">${label}</span>
+                            <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${preset.name}</span>
+                            <button type="button" class="te-btn-icon manage-preset-load" title="Load in its tab" style="flex:0 0 28px; width:28px; height:24px; padding:0;"><i class="fas fa-file-import"></i></button>
+                            <button type="button" class="te-btn-icon manage-preset-delete" title="Delete" style="flex:0 0 28px; width:28px; height:24px; padding:0;"><i class="fas fa-trash"></i></button>
+                        </div>`);
+                    }
+                }
+                html.find('#manage-presets-list').html(rows.join('') || '<p style="opacity:0.6; margin:2px 0;">No presets saved.</p>');
+            };
+            renderManagePresets();
+            html.find('#manage-presets-list').on('click', '.manage-preset-load', function ()
+            {
+                const row = $(this).closest('[data-name]');
+                const cat = String(row.data('cat'));
+                const prefix = String(row.data('prefix'));
+                const name = String(row.data('name'));
+                const preset = (getStoredPresets()[cat] ?? []).find(entry => entry.name === name);
+                if (!preset)
+                    return;
+                const tabButton = html.find(`.te-tab[data-tab="${cat}"]`);
+                if (!tabButton.length)
+                    return ui.notifications.warn('That tab is not available.');
+                tabButton.trigger('click');
+                applyPresetData(html, prefix, preset.data);
+                html.find(`#${prefix}-preset-load`).val(name);
+            });
+            html.find('#manage-presets-list').on('click', '.manage-preset-delete', async function ()
+            {
+                const row = $(this).closest('[data-name]');
+                const cat = String(row.data('cat'));
+                const prefix = String(row.data('prefix'));
+                const name = String(row.data('name'));
+                const all = getStoredPresets();
+                all[cat] = (all[cat] ?? []).filter(entry => entry.name !== name);
+                await setStoredPresets(all);
+                _rebuildPresetSelect(prefix);
+                renderManagePresets();
+                ui.notifications.info(`Deleted preset "${name}".`);
+            });
+
+            const formatSnippet = (obj) => JSON.stringify(obj, null, 4)
+                .replaceAll(/"([A-Za-z_$][A-Za-z0-9_$]*)":/g, '$1:')
+                .replaceAll('"__REACTOR_TOKENS__"', '[reactorToken]')
+                .replaceAll('"__REACTOR_ID__"', 'reactorToken.id');
+
+            const pruneSnippet = (obj) =>
+            {
+                const out = {};
+                for (const [key, value] of Object.entries(obj))
+                {
+                    if (value === undefined || value === null || value === '' || value === false)
+                        continue;
+                    if (Array.isArray(value) && value.length === 0)
+                        continue;
+                    out[key] = value;
+                }
+                return out;
+            };
+
+            const buildExtractedCode = (tab) =>
+            {
+                if (tab === 'bonus')
+                {
+                    const type = String(html.find('#bonus-type').val());
+                    const { bonusData, addOptions, duration } = gatherBonusFormData(type);
+                    const prunedBonus = pruneSnippet(bonusData);
+                    if (duration === 'constant')
+                        return `await api.addConstantBonus(reactorToken.actor, ${formatSnippet(prunedBonus)});`;
+                    const options = pruneSnippet({ ...addOptions, origin: '__REACTOR_ID__', forcePrototype: undefined });
+                    return `await api.addGlobalBonus(reactorToken.actor, ${formatSnippet(prunedBonus)}, ${formatSnippet(options)});`;
+                }
+                const prefix = tab === 'standard' ? 'std' : 'cust';
+                const durationLabel = String(html.find(`#${prefix}-duration`).val());
+                const turnsRaw = Number.parseInt(String(html.find(`#${prefix}-turns`).val()));
+                const turns = Number.isNaN(turnsRaw) ? 1 : Math.max(0, turnsRaw);
+                const stack = Number.parseInt(String(html.find(`#${prefix}-stack`).val())) || 1;
+                const note = String(html.find(`#${prefix}-note`).val());
+                const duration = buildDuration(durationLabel, '', turns);
+                delete duration._preAdjusted;
+                if (['end', 'start', 'round'].includes(durationLabel))
+                    duration.overrideTurnOriginId = '__REACTOR_ID__';
+                const extraOptions = {};
+                if (stack > 1)
+                    extraOptions.stack = stack;
+                const consumption = getTriggerConfig(html, prefix);
+                if (consumption)
+                    extraOptions.consumption = consumption;
+                const tier = readTierGate(html.find(`.la-tier-gate[data-role="em-${prefix}"]`)[0]);
+                if (tier)
+                    extraOptions.tier = tier;
+                let effectNames;
+                if (tab === 'standard')
+                    effectNames = String(html.find('#std-effect').val());
+                else
+                {
+                    effectNames = pruneSnippet({
+                        name: String(html.find('#cust-name').val()),
+                        icon: String(html.find('#cust-icon').val()),
+                        isCustom: true
+                    });
+                    const changesSrc = String(html.find('#cust-changes-value').val() || '').trim();
+                    if (changesSrc)
+                    {
+                        try
+                        {
+                            extraOptions.changes = (new Function(`return (${changesSrc});`))();
+                        }
+                        catch
+                        {
+                            ui.notifications.warn('Active Effect Changes could not be parsed; left out of the snippet.');
+                        }
+                    }
+                }
+                const options = pruneSnippet({ tokens: '__REACTOR_TOKENS__', effectNames, note, duration });
+                const hasExtra = Object.keys(extraOptions).length > 0;
+                return `await api.applyEffectsToTokens(${formatSnippet(options)}${hasExtra ? `, ${formatSnippet(extraOptions)}` : ''});`;
+            };
+
+            const showExtractedCode = (code) =>
+            {
+                let editor;
+                let resizeObserver;
+                new Dialog({
+                    title: 'Extract Code',
+                    content: `<div class="lcm-host"></div>
+                        <style>
+                            .lcm-dialog .window-content { padding:0 !important; overflow:hidden !important; background:#272822; }
+                            .lcm-dialog .dialog-buttons { height:40px !important; min-height:40px !important; max-height:40px !important; background:#333 !important; border-top:1px solid #111 !important; padding:0 !important; margin:0 !important; display:flex !important; }
+                            .lcm-dialog button.dialog-button { background:#444 !important; color:#fff !important; border:none !important; border-right:1px solid #222 !important; width:100% !important; height:100% !important; margin:0 !important; display:flex !important; align-items:center !important; justify-content:center !important; font-size:1em !important; border-radius:0 !important; box-shadow:none !important; }
+                            .lcm-dialog button.dialog-button:last-child { border-right:none !important; }
+                            .lcm-dialog button.dialog-button:hover { background:#555 !important; }
+                        </style>`,
+                    buttons: {
+                        copy: {
+                            label: 'Copy',
+                            icon: '<i class="fas fa-copy" style="margin-right:8px;"></i>',
+                            callback: async () =>
+                            {
+                                await navigator.clipboard.writeText(code);
+                                ui.notifications.info('Copied to clipboard.');
+                            }
+                        },
+                        close: {
+                            label: 'Close',
+                            icon: '<i class="fas fa-times" style="margin-right:8px;"></i>'
+                        }
+                    },
+                    default: 'copy',
+                    render: (dlgHtml) =>
+                    {
+                        const host = dlgHtml.find('.lcm-host')[0];
+                        if (typeof CodeMirror === 'undefined')
+                        {
+                            host.innerHTML = '<textarea readonly spellcheck="false" style="width:100%; height:100%; font-family:var(--font-mono, monospace); font-size:12px; white-space:pre; resize:none;"></textarea>';
+                            host.firstChild.value = code;
+                            return;
+                        }
+                        editor = CodeMirror(host, {
+                            value: code,
+                            mode: 'javascript',
+                            theme: 'monokai',
+                            lineNumbers: true,
+                            matchBrackets: true,
+                            readOnly: true,
+                            indentUnit: 4,
+                            lineWrapping: false,
+                            scrollbarStyle: "native"
+                        });
+                        const windowEl = dlgHtml.closest('.window-app')[0];
+                        const updateSize = () =>
+                        {
+                            if (!windowEl)
+                                return;
+                            const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
+                            editor.setSize(null, windowEl.offsetHeight - headerH - 40);
+                            editor.refresh();
+                        };
+                        setTimeout(updateSize, 50);
+                        resizeObserver = new ResizeObserver(updateSize);
+                        resizeObserver.observe(windowEl);
+                    },
+                    close: () =>
+                    {
+                        resizeObserver?.disconnect();
+                    }
+                }, {
+                    width: 700,
+                    height: 460,
+                    resizable: true,
+                    classes: ["dialog", "lcm-dialog", "lancer-dialog-base", "lancer-no-title"]
+                }).render(true);
+            };
+
+            html.find('.extract-code-btn').click(function ()
+            {
+                const tab = $(this).data('tab');
+                try
+                {
+                    showExtractedCode(buildExtractedCode(tab));
+                }
+                catch (err)
+                {
+                    ui.notifications.error(`Extract failed: ${err.message}`);
+                }
             });
 
             html.find('.code-field-badge').click(function ()
@@ -2946,13 +3172,9 @@ export async function executeEffectManager(options = {})
                 openStatusPicker(html.find(`#${targetId}`));
             });
 
-            const addBonusFromTab = async (type) =>
+            const gatherBonusFormData = (type) =>
             {
                 const targetID = String(html.find('#bonus-target').val());
-                const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
-                if (!resolvedTargets.length)
-                    return ui.notifications.error("Target not found!");
-
                 const name = String(html.find('#bonus-name').val() || "Test Bonus");
                 const usesStr = String(html.find('#bonus-uses').val());
                 const uses = usesStr ? Number.parseInt(usesStr) : undefined;
@@ -3134,8 +3356,19 @@ export async function executeEffectManager(options = {})
 
                 if (supportsConsumeOnUsage(type, bonusData.subtype ?? null))
                     bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
+                return { bonusData, addOptions, duration };
+            };
+
+            const addBonusFromTab = async (type) =>
+            {
+                const targetID = String(html.find('#bonus-target').val());
+                const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
+                if (!resolvedTargets.length)
+                    return ui.notifications.error("Target not found!");
+                const { bonusData, addOptions, duration } = gatherBonusFormData(type);
+                const durOrigin = html.find('#bonus-durOrigin').val();
                 if (bonusData.uses === undefined && (addOptions.consumption || bonusData.consumeOnUsage === true))
-                    ui.notifications.warn(`${name}: no Uses set - consumed on first use.`);
+                    ui.notifications.warn(`${bonusData.name}: no Uses set - consumed on first use.`);
                 for (const entry of resolvedTargets)
                 {
                     const targetIsItem = !!entry.item;

@@ -16,6 +16,7 @@ export const ISO_SETTINGS = {
     clickZone: 'iso.clickZone',
     selectionMarquee: 'iso.selectionMarquee',
     moduleLabels: 'iso.moduleLabels',
+    effectAspect: 'iso.effectAspect',
     debugSelectionOverlay: 'iso.debugSelectionOverlay',
 };
 
@@ -69,6 +70,12 @@ const DEFS = [
         key: ISO_SETTINGS.moduleLabels,
         name: 'Template & Terrain Labels',
         hint: 'Keep TemplateMacro center labels and Terrain Height Tools labels upright.',
+    },
+    {
+        key: ISO_SETTINGS.effectAspect,
+        name: 'Sequencer Effect Aspect',
+        hint: 'Counter-scale upright Sequencer effects so they keep their shape, like the stat bars.',
+        defaultValue: false,
     },
     {
         key: ISO_SETTINGS.debugSelectionOverlay,
@@ -517,4 +524,30 @@ Hooks.once('ready', () =>
             }
             return this.setTargets(targets, { mode: (opts.releaseOthers ?? true) ? 'replace' : 'acquire' });
         }, 'MIXED');
+});
+
+// Sequencer's iso plugin stands effects up (45deg on isometricContainer) but skips the aspect
+// counter-scale, so billboarded FX render squashed. Overlay and beam effects use other paths.
+Hooks.on('createSequencerEffect', (effect) =>
+{
+    if (!isIsoFeatureEnabled(ISO_SETTINGS.effectAspect))
+        return;
+    const iso = getIsoProvider(canvas.scene);
+    if (!iso)
+        return;
+    if (effect?.data?.isometric?.overlay || effect?.data?.rotateTowards || effect?.data?.stretchTo)
+        return;
+    let tries = 0;
+    const apply = () =>
+    {
+        const container = effect?.isometricContainer;
+        if (!container || container.destroyed)
+        {
+            if (tries++ < 120)
+                requestAnimationFrame(apply);
+            return;
+        }
+        container.scale.set(iso.counterScale, 1 / iso.counterScale);
+    };
+    apply();
 });

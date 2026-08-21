@@ -1,8 +1,9 @@
 /* global Dialog, game, fromUuid */
 
 import { playBattleLogSound, playUiSound, stopBattleLogTheme, setBattleLogThemeMuted, getBattleLogThemeSrc } from '../tah/sound.js';
-import { getStatsForActor, buildRevealRowsHtml, ensureStyleSheet } from '../tah/tokenStatHint.js';
+import { getStatsForActor, buildTwoZoneStatsHtml, ensureStyleSheet } from '../tah/tokenStatHint.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
+import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
 
 const _escape = str => String(str ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
@@ -45,7 +46,7 @@ const TIP_HOVER_SELECTOR = [
 
 const IMMEDIATE_HOVER_SELECTOR = '.battelog-recap-tab:not(.disabled), .battelog-recap-dismiss, .battelog-recap-theme-mute, .battelog-hcard-scan-btn, .battelog-telemetry-metric, .battelog-telemetry-legend-item, .battelog-telemetry-legend-total, .battelog-encounter-filter-btn:not([disabled])';
 
-const CLICK_SELECTOR = '.battelog-recap-tab:not(.disabled), .battelog-hcard-scan-btn, .battelog-telemetry-metric, .battelog-telemetry-legend-item, .battelog-telemetry-legend-total, .battelog-recap-theme-mute, .battelog-recap-dismiss, .battelog-encounter-filter-btn:not([disabled])';
+const CLICK_SELECTOR = '.battelog-recap-tab:not(.disabled), .battelog-hcard-scan-btn, .battelog-telemetry-metric, .battelog-telemetry-legend-item, .battelog-telemetry-legend-total, .battelog-recap-theme-mute, .battelog-recap-dismiss, .battelog-encounter-filter-btn:not([disabled]), .battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-pcol';
 
 /**
  * @param {object} battle
@@ -124,6 +125,10 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             <button type="button" class="battelog-recap-theme-mute" data-action="toggle-theme" title="Mute theme">
                 <i class="fas fa-volume-high"></i>
             </button>
+            <button type="button" class="battelog-recap-share" data-action="share"
+                title="Save the squad as an image (Shift-click to copy to clipboard)">
+                <i class="fas fa-camera"></i>
+            </button>
             <button type="button" class="battelog-recap-dismiss" data-action="close">DISMISS</button>
         </footer>
     `;
@@ -196,6 +201,28 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     medals.scrollBy({ top: Number(/** @type {HTMLElement} */ (this).dataset.dir || 1) * 48, behavior: 'smooth' });
             });
 
+            $root.on('click', '.battelog-recap-share', function (ev)
+            {
+                ev.preventDefault();
+                const btn = /** @type {HTMLElement} */ (this);
+                btn.classList.add('is-busy');
+                const focusedCard = /** @type {HTMLElement} */ ($root[0].querySelector('.battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target'));
+                let exportPromise;
+                if (focusedCard)
+                {
+                    const detailEl = /** @type {HTMLElement} */ (focusedCard.parentElement?.querySelector('.battelog-focus-detail'));
+                    const pilot = (focusedCard.querySelector('.battelog-pcol-ribbon-text')?.textContent ?? '').split('·')[0].trim();
+                    exportPromise = exportPlayerPoster(/** @type {HTMLElement} */ ($root[0]), focusedCard,
+                        { pilot }, { toClipboard: !!ev.shiftKey, detailEl });
+                }
+                else
+                {
+                    exportPromise = exportSquadPoster(/** @type {HTMLElement} */ ($root[0]), { date },
+                        { toClipboard: !!ev.shiftKey });
+                }
+                exportPromise.finally(() => btn.classList.remove('is-busy'));
+            });
+
             $root.on('click', '.battelog-recap-dismiss', () => dlg.close());
             // Boot-in translate overshoots the container; hide the scrollbar and play displayList during the stagger.
             let bootLoop = null;
@@ -225,16 +252,27 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 stopBootLoop();
                 $root.find('.battelog-recap-tab-panel.is-booting').removeClass('is-booting');
                 $panel.addClass('is-booting');
-                const staggerCount = $panel.find('.stagger').length;
+                // recycled each boot; the fill-mode would pin transform/box-shadow forever
+                $panel.find('.stagger-done').removeClass('stagger-done').addClass('stagger');
+                // The last delay drives the end, not the count: hidden siblings never animate.
+                let lastDelayMs = -1;
+                $panel.find('.stagger').each((_, el) =>
+                {
+                    if (!el.offsetParent && el.style.position !== 'fixed')
+                        return;
+                    const step = Number(el.style.getPropertyValue('--i'));
+                    if (Number.isFinite(step))
+                        lastDelayMs = Math.max(lastDelayMs, 100 + step * 40);
+                });
                 const isTelemetry = $panel.attr('data-tab-panel') === 'telemetry';
                 // Telemetry has no stagger elements; it uses the chart line-draw animation (~1.7s).
-                const opacityEndMs = staggerCount > 0
-                    ? 150 + Math.max(0, staggerCount - 1) * 55 + 250
+                const opacityEndMs = lastDelayMs >= 0
+                    ? lastDelayMs + 250
                     : (isTelemetry ? 640 : 900);
-                const animEndMs = staggerCount > 0
-                    ? 150 + Math.max(0, staggerCount - 1) * 55 + 550
+                const animEndMs = lastDelayMs >= 0
+                    ? lastDelayMs + 550
                     : (isTelemetry ? 640 : 1400);
-                if (staggerCount > 0 || isTelemetry)
+                if (lastDelayMs >= 0 || isTelemetry)
                     bootLoop = playBattleLogSound('displayList', { loop: true });
                 stopLoopTimer = setTimeout(() =>
                 {
@@ -245,6 +283,10 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 {
                     stopClassTimer = null;
                     $panel.removeClass('is-booting');
+                    const $staggered = $panel.find('.stagger');
+                    // no hover lift snapping in under a resting cursor
+                    $staggered.filter((_, el) => el.matches(':hover')).addClass('hover-hold');
+                    $staggered.removeClass('stagger').addClass('stagger-done');
                 }, animEndMs);
             };
             suppressBooting($root.find('.battelog-recap-tab-panel.is-active'));
@@ -272,10 +314,134 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                             node.scrollLeft = 0;
                         });
                 }
+                $root.find('.battelog-recap-share').prop('disabled', target !== 'squad');
                 suppressBooting($newPanel);
                 // Chart can't measure until the panel is visible.
                 if (target === 'telemetry')
                     requestAnimationFrame(() => rerenderTelemetry());
+            });
+            // Focused mech view: stat strip on top, panels in three labeled category columns.
+            const PANEL_GROUPS = [
+                { label: 'Offense', titles: new Set(['confirmed kills', 'assisted kills', 'attacks & tech', 'accuracy', 'weapons used']) },
+                { label: 'Defense', titles: new Set(['damage dealt', 'damage taken', 'attacks avoided', 'h.a.s.e']) },
+                { label: 'Operations', titles: new Set(['actions used', 'movement', 'repairs', 'awards']) },
+            ];
+            const buildFocusDetail = (card) =>
+            {
+                const detail = document.createElement('div');
+                detail.className = 'battelog-focus-detail';
+                const wideRow = document.createElement('div');
+                wideRow.className = 'battelog-focus-wide';
+                const grouped = PANEL_GROUPS.map(() => []);
+                const linkByKey = new Map();
+                card.querySelectorAll('.has-tip, .battelog-pcol-medals').forEach((anchor) =>
+                {
+                    // __scanTip: the stat tip lives in <body> once it has been hovered
+                    const tip = /** @type {any} */ (anchor).__scanTip
+                        ?? (anchor.classList.contains('battelog-pcol-medals')
+                            ? card.querySelector('.battelog-awards-tip')
+                            : anchor.querySelector('.battelog-tip-panel'));
+                    if (!(tip instanceof HTMLElement))
+                        return;
+                    const key = (tip.textContent ?? '').replaceAll(/\s+/g, ' ').trim();
+                    if (!key)
+                        return;
+                    // duplicates (fav weapon / top action) just link to the first copy
+                    if (linkByKey.has(key))
+                    {
+                        anchor.setAttribute('data-tip-link', String(linkByKey.get(key)));
+                        return;
+                    }
+                    const panelIndex = linkByKey.size;
+                    linkByKey.set(key, panelIndex);
+                    const panelClone = /** @type {HTMLElement} */ (tip.cloneNode(true));
+                    panelClone.classList.remove('is-visible', 'is-left');
+                    panelClone.style.removeProperty('left');
+                    panelClone.style.removeProperty('top');
+                    panelClone.classList.add('stagger');
+                    panelClone.setAttribute('data-tip-link', String(panelIndex));
+                    anchor.setAttribute('data-tip-link', String(panelIndex));
+                    if (panelClone.classList.contains('battelog-scan-tip'))
+                    {
+                        wideRow.appendChild(panelClone);
+                        return;
+                    }
+                    const title = (panelClone.querySelector('.battelog-tip-title')?.textContent ?? '').trim().toLowerCase();
+                    const groupIndex = PANEL_GROUPS.findIndex(group => group.titles.has(title));
+                    grouped[groupIndex >= 0 ? groupIndex : PANEL_GROUPS.length - 1].push(panelClone);
+                });
+                if (wideRow.childElementCount)
+                    detail.appendChild(wideRow);
+                const colsWrap = document.createElement('div');
+                colsWrap.className = 'battelog-focus-cols';
+                PANEL_GROUPS.forEach((group, groupIndex) =>
+                {
+                    if (!grouped[groupIndex].length)
+                        return;
+                    const colEl = document.createElement('div');
+                    colEl.className = 'battelog-focus-col';
+                    const head = document.createElement('div');
+                    head.className = 'battelog-focus-colhead';
+                    head.textContent = group.label;
+                    colEl.appendChild(head);
+                    grouped[groupIndex].forEach(panel => colEl.appendChild(panel));
+                    colsWrap.appendChild(colEl);
+                });
+                detail.appendChild(colsWrap);
+                // stagger follows the final placement, not the order panels were discovered in
+                detail.querySelectorAll('.battelog-tip-panel').forEach((panel, index) =>
+                {
+                    /** @type {HTMLElement} */ (panel).style.setProperty('--i', String(index + 1));
+                });
+                card.insertAdjacentElement('afterend', detail);
+                return detail;
+            };
+            const closeFocus = () =>
+            {
+                const $grid = $root.find('.battelog-recap-squad-grid.is-focus');
+                if (!$grid.length)
+                    return false;
+                $grid.find('[data-tip-link]').removeAttr('data-tip-link');
+                $grid.find('.battelog-focus-detail').remove();
+                $grid.find('.battelog-pcol.is-focus-target').removeClass('is-focus-target');
+                $grid.removeClass('is-focus');
+                return true;
+            };
+            $root.on('click', '.battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-pcol', function (ev)
+            {
+                if (ev.target.closest('button, a'))
+                    return;
+                const card = /** @type {HTMLElement} */ (this);
+                const grid = card.closest('.battelog-recap-squad-grid');
+                if (!grid)
+                    return;
+                const wasFocused = card.classList.contains('is-focus-target');
+                closeFocus();
+                const $panel = $root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]');
+                if (wasFocused)
+                {
+                    // re-shown siblings replay their stagger
+                    suppressBooting($panel);
+                    return;
+                }
+                grid.classList.add('is-focus');
+                card.classList.add('is-focus-target');
+                buildFocusDetail(card);
+                suppressBooting($panel);
+            });
+            $root.on('mouseleave', '.hover-hold', function ()
+            {
+                this.classList.remove('hover-hold');
+            });
+            $root.on('mouseenter', '.battelog-pcol.is-focus-target [data-tip-link]', function ()
+            {
+                const linkIndex = /** @type {HTMLElement} */ (this).getAttribute('data-tip-link');
+                $root.find(`.battelog-focus-detail .battelog-tip-panel[data-tip-link="${linkIndex}"]`).addClass('is-linked');
+            });
+            $root.on('mouseleave', '.battelog-pcol.is-focus-target [data-tip-link]', function ()
+            {
+                const linkIndex = /** @type {HTMLElement} */ (this).getAttribute('data-tip-link');
+                $root.find(`.battelog-focus-detail .battelog-tip-panel[data-tip-link="${linkIndex}"]`).removeClass('is-linked');
             });
             $root.on('wheel', '.battelog-recap-squad-scroll', function (ev)
             {
@@ -446,6 +612,12 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const variant = el.matches('.battelog-hcard-scan-btn.has-tip, .battelog-pcol-frame-name.has-tip')
                     ? 'details'
                     : 'battleLogHover';
+                // the focused view has no tooltip reveal, so no sound delay
+                if (el.closest('.battelog-pcol.is-focus-target'))
+                {
+                    playUiSound(variant);
+                    return;
+                }
                 const timer = setTimeout(() =>
                 {
                     playUiSound(variant);
@@ -469,6 +641,9 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             $root.on('mouseenter', '.battelog-hcard-scan-btn.has-tip, .battelog-pcol-frame-name.has-tip', function ()
             {
                 const btn = /** @type {any} */ (this);
+                // the focused view already shows the stat panel flat
+                if (btn.closest('.battelog-pcol.is-focus-target'))
+                    return;
                 let tip = /** @type {HTMLElement | null} */ (btn.__scanTip ?? null);
                 if (!tip)
                 {
@@ -1079,6 +1254,17 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                         <button type="button" class="battelog-pcol-medals-scroll" data-dir="-1"><i class="fas fa-caret-up"></i></button>
                         <button type="button" class="battelog-pcol-medals-scroll" data-dir="1"><i class="fas fa-caret-down"></i></button>
                     </div>
+                    ${awards.length ? `
+                    <div class="battelog-tip-panel battelog-awards-tip align-left">
+                        <div class="battelog-tip-title">Awards</div>
+                        <div class="battelog-tip-rows">
+                            ${awards.map(award => `
+                            <div class="battelog-tip-row">
+                                <span class="battelog-tip-k"><i class="fas ${award.icon}"></i> ${_escape(award.label)}</span>
+                                <span class="battelog-tip-v">${_escape(award.stat ?? '')}</span>
+                            </div>`).join('')}
+                        </div>
+                    </div>` : ''}
                 </div>
             </div>
 
@@ -1338,13 +1524,10 @@ function _hostileScanTipHtml(group)
     if (!actor)
         return '';
     ensureStyleSheet();
-    const s = getStatsForActor(actor);
-    const rowsHtml = buildRevealRowsHtml(actor, s);
+    const stats = getStatsForActor(actor);
     return `
         <div class="battelog-tip-panel align-right battelog-scan-tip">
-            <div class="la-stat-hint-body">
-                <div class="la-stat-hint-rows">${rowsHtml}</div>
-            </div>
+            <div class="la-stat-hint-body">${buildTwoZoneStatsHtml(actor, stats, { omitCombatState: true })}</div>
         </div>
     `;
 }
@@ -1356,12 +1539,9 @@ function _playerStatTipHtml(player)
         return '';
     ensureStyleSheet();
     const stats = getStatsForActor(actor);
-    const rowsHtml = buildRevealRowsHtml(actor, stats);
     return `
         <div class="battelog-tip-panel align-right battelog-scan-tip">
-            <div class="la-stat-hint-body">
-                <div class="la-stat-hint-rows">${rowsHtml}</div>
-            </div>
+            <div class="la-stat-hint-body">${buildTwoZoneStatsHtml(actor, stats, { omitCombatState: true })}</div>
         </div>
     `;
 }

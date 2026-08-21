@@ -26,7 +26,7 @@ When a token's structure hits 0, the module drops its wreck in place and clears 
 
 ## Per-category behaviour
 
-The dead token is sorted into an auto-detected category, **Mech**, **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. Each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, set in the per-category table along with its on-wreck terrain.
+The dead token is sorted into an auto-detected category, **Mech**, **Vehicle** (any NPC carrying a VEHICLE template), **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. Each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, set in the per-category table along with its on-wreck terrain.
 
 ---
 
@@ -39,6 +39,8 @@ A wreck can leave something on its footprint: **THT difficult terrain** (needs T
 ## Per-token config
 
 A single token can override its category in the Token Config **L.A** tab: its wreck mode and terrain, a custom wreck image, effect, and sound, the tile scale, and whether the image, sound, and effect play at all.
+
+The image, effect, and sound fields also accept a **folder** path: a random file from it is picked on each death.
 
 <img src="../img/wr-token-config.png" width="55%"/>
 
@@ -62,28 +64,30 @@ The explosion animation and sound are **`enableWreckAnimation`** and **`enableWr
 
 ```
 <wreckAssetsPath>/
-├── s1/                 # wreck images for size-1 tokens
-│   ├── mech/
+├── s1/                 # wreck images for size-1 tokens; mech images go HERE, not in a subfolder
+│   ├── vehicle/
 │   ├── human/
 │   ├── squad/
 │   ├── monstrosity/
 │   └── biological/
-├── s2/                 # size-2 tokens (same five subfolders)
-├── s3/                 # size-3 tokens (same five subfolders)
-├── effects/            # explosion animations
-│   ├── mech/
-│   ├── human/
-│   ├── squad/
-│   ├── monstrosity/
-│   └── biological/
-└── audio/              # explosion sounds
-    ├── mech/
-    ├── human/
-    ├── squad/
-    ├── monstrosity/
-    └── biological/
+├── s2/                 # size-2 tokens (same subfolders); size 4+ uses s3
+├── s3/                 # size-3 tokens (same subfolders)
+├── effects/            # explosion animations; mech ones directly here
+│   └── ... same subfolders
+└── audio/              # explosion sounds; mech ones directly here
+    └── ... same subfolders
 ```
 
-On a wreck, the module picks a random file from the folder that matches the token's category (and size, for images). Empty folders fall back, squad → human → biological, monstrosity → biological, and mech images fall back to the bare `s{size}` folder.
+<img src="../img/wr-folders.png" width="70%"/>
+
+On a wreck, the module picks a random file from the folder that matches the token's category (and size, for images). Pilot uses the human folder. Empty folders fall back, squad → human → biological, monstrosity → biological, vehicle → the bare `s{size}` mech pool.
 
 A per-token image, effect, or sound set in the Token Config L.A tab overrides all of it.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Wreck Automation** | Automate wrecking on structure reaching 0. |
+| **Wreck Aura Color** | Line and fill color of the aura left on a wreck. Applies to new wrecks. |
+| **Wreck Aura Opacity** | Fill opacity of the wreck aura; the outline scales with it. |

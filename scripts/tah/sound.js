@@ -37,7 +37,7 @@ const SFX = {
     tokenTarget:   { src: 'modules/lancer-automations/FX/audio/target.wav',        scale: 0.5 },
     tokenUntarget: { src: 'modules/lancer-automations/FX/audio/untarget.wav',      scale: 0.4 },
     tokenDrag:     { src: 'modules/lancer-automations/FX/audio/drag.wav',          scale: 0.2 },
-    tokenMove:     { src: 'modules/lancer-automations/FX/audio/move2.wav',          scale: 0.3 },
+    tokenMove:     { src: 'modules/lancer-automations/FX/audio/tokenMove.wav',          scale: 0.3 },
     elevationKey:  { src: 'modules/lancer-automations/FX/audio/elevationKey.mp3',  scale: 0.5 },
     targeting:     { src: 'modules/lancer-automations/FX/audio/targeting_1.mp3', scale: 0.2 },
     targetingConfirm: { src: 'modules/lancer-automations/FX/audio/targeting_2.mp3', scale: 0.2 },
@@ -188,9 +188,21 @@ function _themeSrcForOutcome(outcome)
     return (specificKey && get(specificKey)) || get('themeDefault') || '';
 }
 
+function _themeLoops()
+{
+    try
+    {
+        return game.settings.get('lancer-automations', 'tah.battleLog.themeLoop') !== false;
+    }
+    catch
+    {
+        return true;
+    }
+}
+
 /**
- * Start the battle-log theme track (looping). Picks the outcome-specific file if
- * one is set; otherwise falls back to the default; otherwise plays nothing.
+ * Start the battle-log theme track. Picks the outcome-specific file if one is set;
+ * otherwise falls back to the default; otherwise plays nothing.
  * @param {'VICTORY'|'DEFEAT'|'PARTIAL'} outcome
  */
 export function playBattleLogTheme(outcome)
@@ -210,9 +222,19 @@ export function playBattleLogTheme(outcome)
     }
     if (vol <= 0)
         return;
-    const target = vol * 0.51;
+    let themeVol = 1;
+    try
+    {
+        const raw = Number(game.settings.get('lancer-automations', 'tah.battleLog.themeVolume'));
+        themeVol = Number.isFinite(raw) ? Math.min(2, Math.max(0.5, raw)) : 1;
+    }
+    catch
+    {
+        themeVol = 1;
+    }
+    const target = vol * 0.51 * themeVol;
     const promise = Promise.resolve(foundry.audio.AudioHelper.play(
-        /** @type {any} */ ({ src, volume: _battleLogThemeMuted ? 0 : target, autoplay: true, loop: true }),
+        /** @type {any} */ ({ src, volume: _battleLogThemeMuted ? 0 : target, autoplay: true, loop: _themeLoops() }),
         false,
     ));
     _battleLogTheme = { promise, target, src };

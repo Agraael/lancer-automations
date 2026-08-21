@@ -9,7 +9,7 @@ Each example teaches one engine concept, simplest first. Read [Automation Engine
 
 ---
 
-## 1. Insulated - a passive that runs on token creation
+## 1. Insulated
 
 **What it does.** Makes the NPC immune to Burn (both the Burn status and Burn damage), set up automatically the moment the token is placed.
 
@@ -47,7 +47,7 @@ const npcInsulatedBonus = {
 
 ---
 
-## 2. Sapper Smoke Grenade - an action that drops a zone
+## 2. Sapper Smoke Grenade
 
 **What it does.** A quick action that places a Blast 1 soft-cover smoke zone within Range 5.
 
@@ -85,7 +85,7 @@ const npcInsulatedBonus = {
 
 ---
 
-## 3. Veterancy - a combat-lifecycle pair with a choice card
+## 3. Veterancy
 
 **What it does.** On entering combat the NPC picks a skill (Hull / Agility / Systems / Engineering) and gains +1 accuracy on that kind of check. On leaving combat the bonus is removed.
 
@@ -143,7 +143,7 @@ const veterancyVeteranAutomation = {
 
 ---
 
-## 4. Dispersal Shield - target selection, a roll, and consumable stacks
+## 4. Dispersal Shield
 
 **What it does.** Grants a friendly target in sensor range resistance to all damage for the next `1d3` attacks.
 
@@ -197,7 +197,7 @@ const veterancyVeteranAutomation = {
 
 ---
 
-## 5. Smoke Launchers - a zone that cleans itself up
+## 5. Smoke Launchers
 
 **What it does.** Places a Blast 2 smoke zone that persists until the start of the NPC's next turn, then deletes itself.
 
@@ -232,7 +232,7 @@ const veterancyVeteranAutomation = {
 
 ---
 
-## 6. Moving Target - interrupting movement with `onPreMove`
+## 6. Moving Target
 
 **What it does.** When an enemy moves within 20 of the sniper, it can interrupt that movement and fire its Anti-materiel Rifle.
 
@@ -298,7 +298,7 @@ const movingTargetSniperAutomation = {
 
 ---
 
-## 7. Restock Drone - a deployable on an NPC
+## 7. Restock Drone
 
 **What it does.** A support feature that can deploy a Restock Drone. When the drone lands it gets a healing aura. Allies that enter the aura can spend it to heal (or reload, in the rebake variant).
 
@@ -366,11 +366,11 @@ const restockDroneSupportAutomation = {
 <img src="../img/npc-restock-aura.png" width="53%"/>
 
 > [!TIP]
-> Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. See [self-deploy in Automation System](../AUTOMATION_SYSTEM.md#self-deployable-reacting-to-your-own-deploy).
+> Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. See [self-deploy in Automation System](../AUTOMATION_SYSTEM.md#self-deployable).
 
 ---
 
-## 8. Defense Net - a self-deploying aura (capstone)
+## 8. Defense Net
 
 **What it does.** A Full Action that immobilizes the NPC and projects a Defense Net aura granting bonuses to nearby allies. It collapses if the NPC is stunned or jammed, and (in the rebake variant) reacts to overheating and to enemies' tech misses.
 

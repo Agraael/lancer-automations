@@ -112,3 +112,12 @@ Most things at the table make a sound:
 Each family has a master volume, and every event inside it can be muted on its own, click a toggle to preview it.
 
 <br clear="right"/>
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **UI Sounds** | Volume of TAH hover/click sounds. |
+| **Token Feedback** | Volume of token feedback sounds (hover, select, target, drag, move, elevation key). |
+| **Damage / Stat Feedback** | Volume of damage, HP/heat/burn/overshield/infection sounds. |
+| **Item Name on Action Badges** | The action badge banner shows the item name instead of the action type. |

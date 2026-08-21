@@ -67,3 +67,13 @@ The enemy side. Each hostile gets a card: whether it died and on which round, wh
 <img src="../vid/bl-telemetry.gif" width="80%"/>
 
 The nerd tab: per-round line charts for the squad, HP, heat, damage, and kills/assists, from R0 (the start of combat) to the last round. Click a name to isolate one pilot, or toggle the squad total.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Friendly mechs count as squad** | Squad membership normally means owned by a player. This also counts FRIENDLY mechs that no player owns, so GM-run pilots and solo testing still show up in the log. |
+| **Default theme** | Played for all outcomes unless a specific one is set below. |
+| **Success theme** | Overrides the default when the mission outcome is SUCCESS. |
+| **Failure theme** | Overrides the default when the mission outcome is FAILURE. |
+| **Partial theme** | Overrides the default when the mission outcome is PARTIAL. |

@@ -163,3 +163,10 @@ With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows
 ## Share Interactive Tools
 
 With **`displayToolsToOthers`** on (the default), your in-progress tools, target picking, zone/token placement, and movement traces show to other players as a faded ghost of the same shapes, so the table can follow what you're aiming at. A hidden caster or hidden tokens are never broadcast.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Ctrl Ruler** | Hold Ctrl to switch to the Measure Distance ruler. |
+| **Measure Toolbar Scale** | Size of the measure toolbar. |

@@ -54,6 +54,16 @@ Some carry mechanics:
 
 ---
 
+## Custom Downtime Activities
+
+A **Downtime Activity** item type: description, rollable toggle, roll-range result bands. The [downtime flow](./GAMEPLAY_AUTOMATION.md#downtime) lists the core nine plus every such item in the **LA - Downtime Activities** compendium or the world directory. Same-name items override core ones; **hidden** removes one.
+
+**Import Downtime Actions (LCP)** (Settings, Tools tab) creates these items from an `.lcp` file. Re-importing updates them.
+
+<img src="../img/sa-downtime-items.png" width="60%"/>
+
+---
+
 ## Permanent statuses
 
 A status whose duration is set to **permanent** (in the [Effect Manager](./EFFECTS_AND_BONUSES.md)) survives a Full Repair.
@@ -71,3 +81,9 @@ The module exposes **move** and **reaction** from the action tracker, plus **inf
 With **`resistSelfHeat`** on (Combat tab, default on), a mech that resists Heat takes half of its own self-inflicted heat.
 
 With **`convertHeatToEnergyOnHeatless`** on (default on), Heat damage becomes Energy against targets with no heat capacity (pilots, biological NPCs), the way Lancer already does for pilots.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Apply Token Heights to All Actors** | Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above. |

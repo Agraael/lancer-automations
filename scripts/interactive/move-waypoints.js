@@ -1,21 +1,10 @@
 // Shared Shift+click waypoint support for interactive move pickers.
 
+import { isShiftDown } from "./canvas-helpers.js";
+
 export function createWaypointCollector()
 {
     let pending = [];
-    let shiftHeld = false;
-    const onKeyDown = (event) =>
-    {
-        if (event.key === 'Shift')
-            shiftHeld = true;
-    };
-    const onKeyUp = (event) =>
-    {
-        if (event.key === 'Shift')
-            shiftHeld = false;
-    };
-    document.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('keyup', onKeyUp, true);
     return {
         get list()
         {
@@ -27,8 +16,7 @@ export function createWaypointCollector()
         },
         isAddClick(event)
         {
-            const keyboardShift = !!(game.keyboard?.downKeys?.has('ShiftLeft') || game.keyboard?.downKeys?.has('ShiftRight'));
-            return keyboardShift || shiftHeld || !!(event?.shiftKey ?? event?.data?.originalEvent?.shiftKey);
+            return isShiftDown(event);
         },
         add(point)
         {
@@ -46,8 +34,6 @@ export function createWaypointCollector()
         },
         dispose()
         {
-            document.removeEventListener('keydown', onKeyDown, true);
-            document.removeEventListener('keyup', onKeyUp, true);
         },
     };
 }

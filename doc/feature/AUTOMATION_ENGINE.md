@@ -61,7 +61,7 @@ Item-based automations need the item's LID. The **LID finder** on the Item tab b
 
 ## Configuring an activation
 
-![Reaction config form](../vid/ae-reaction-config.gif)
+<img src="../vid/ae-reaction-config.gif" width="65%"/>
 
 Each activation is a small form. The main fields:
 
@@ -116,7 +116,7 @@ What makes it self-react on use:
 
 ## How an activation runs
 
-<img src="../img/ae-example.png" width="45%"/>
+<img src="../img/ae-example.png" width="60%"/>
 
 When a trigger fires and the filters pass, three pieces decide the outcome.
 
@@ -132,9 +132,15 @@ You write these as plain function bodies, or full functions (the wrapper is stri
 
 By default `onActivation` fires when an item runs through an activation. **`treatGenericPrintAsActivation`** also fires it for items printed via Lancer's generic print.
 
-### Debugging what you get
+---
 
-Call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
+## Debugging an automation
+
+Three tools, from quickest to most powerful.
+
+### Console logging
+
+`console.log` works anywhere in your code; open the console with F12 and the logs show up as the automation runs. For a full picture of what a trigger hands you, call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
 
 - the trigger type, the reactor token, the item, the activation name
 - every field on `triggerData`
@@ -145,6 +151,28 @@ Pass a label (`debugActivation("before the check")`) to name the group when you 
 It returns the same information as an object, and it's also on the api as `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label)`.
 
 This is the fastest way to find out what a trigger actually hands you instead of guessing from the docs.
+
+### Debug mode
+
+The **Debug: Automation System** toggle (module settings, Debug tab) logs the whole trigger pipeline: which trigger fires, which activations were candidates, why each one was skipped (out of combat, wrong disposition, no reaction left, evaluate returned false, ...), and which one ran. Turn it on when your automation doesn't fire at all and you want to know where it fell out.
+
+<img src="../img/ae-debug-settings.png" width="60%"/>
+
+### Breakpoints
+
+Your most useful tool to understand what is going on inside an automation. A breakpoint pauses the game mid-run so you can step through your code line by line and inspect everything at that moment: `triggerData`, `reactorToken`, `api`, your own variables.
+
+Your functions are compiled the first time they run, so they don't exist in the devtools until then. The **Load for Debug** button at the top of the activation editor compiles them immediately:
+
+<img src="../img/ae-debug-load.png" width="60%"/>
+
+Then in devtools (F12), under **Sources**, your functions appear as files in `modules/lancer-automations/dynamic/`, one folder per activation with one file per function (`evaluate.js`, `activation.js`, `oninit.js`, `onmessage.js`). General activations are named by their activation name, item activations by their item LID. Click a line number to set a breakpoint.
+
+<img src="../img/ae-debug-sources.png" width="60%"/>
+
+Trigger the automation and the game freezes on your breakpoint. Hover a variable to see its value, step line by line with the arrows at the top, press F8 to resume. Breakpoints stay armed across triggers, so you can replay the situation as many times as you need.
+
+You can also write `debugger;` directly in your code: with devtools open, execution pauses on that line without any setup.
 
 ---
 
@@ -201,4 +229,4 @@ The worked examples are walked through in [NPC Examples](./NPC_EXAMPLES.md), and
 
 Some of these deployables aren't in any official LCP. If a personal activation spawns one that won't resolve, import the small companion pack that ships with the module: [`extra/LaSossis_Npc_Deployables.lcp`](../../extra/LaSossis_Npc_Deployables.lcp).
 
-<img src="../img/ae-personal-set.png" width="45%"/>
+<img src="../img/ae-personal-set.png" width="60%"/>

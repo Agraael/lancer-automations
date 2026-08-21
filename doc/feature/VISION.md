@@ -91,3 +91,11 @@ Recomputing vision is expensive. Two toggles ease that on busy scenes:
 
 - **`visionAnimationThrottleFps`** caps how often vision and light refresh while a token is moving (0 = vanilla).
 - **`disableVisionAboveControlled`** turns token vision off while more than N tokens are selected at once (0 = never), so batch-selecting doesn't recompute every token's sight.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Sensor: Use Mode Range** | Use the per-token detection-mode range instead of the actor sensor range. |
+| **Awareness: Use Mode Range** | Use the per-token detection-mode range instead of infinite. |
+| **Blinded reduces vision** | While Blinded, a token sees only one space. |

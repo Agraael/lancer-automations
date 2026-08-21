@@ -35,8 +35,6 @@ await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
 
 </details>
 
----
-
 <details id="addTokenFlags">
 <summary><b><code>addTokenFlags</code></b> <sup>async</sup> → <code>TokenDocument</code><br><b><code>getTokenFlags</code></b> → <code>any</code></summary>
 
@@ -61,8 +59,6 @@ const armed = api.getTokenFlags(token, 'mineArmed');
 ```
 
 </details>
-
----
 
 <details id="addActorFlags">
 <summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>getActorFlags</code></b> → <code>any</code></summary>
@@ -147,8 +143,6 @@ await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.');
 
 </details>
 
----
-
 <details id="getActivatedItems">
 <summary><b><code>getActivatedItems</code></b> → <code>Array&lt;Item&gt;</code></summary>
 
@@ -170,8 +164,6 @@ if (active.some(i => i.name === 'Aegis Shield Generator')) return false;
 ```
 
 </details>
-
----
 
 <details id="endItemActivation">
 <summary><b><code>endItemActivation</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
@@ -195,8 +187,6 @@ await api.endItemActivation(item, token);
 
 </details>
 
----
-
 <details id="openEndActivationMenu">
 <summary><b><code>openEndActivationMenu</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
 
@@ -211,8 +201,6 @@ Prompt listing the token's activated items; the picked one is ended via `endItem
 **Params:** <kbd>token</kbd> `Token` holder of the activated items
 
 </details>
-
----
 
 <details id="destroyItem">
 <summary><b><code>destroyItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>disableItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code><br><b><code>restoreItem</code></b> <sup>async</sup> → <code>Promise&lt;Item | null&gt;</code></summary>
@@ -262,8 +250,6 @@ await api.setReaction(reactorToken, false);
 
 </details>
 
----
-
 <details id="hasReactionAvailable">
 <summary><b><code>hasReactionAvailable</code></b> → <code>boolean</code></summary>
 
@@ -282,8 +268,6 @@ if (!api.hasReactionAvailable(reactorToken)) return false;
 ```
 
 </details>
-
----
 
 <details id="setItemResource">
 <summary><b><code>setItemResource</code></b> <sup>async</sup> → <code>void</code></summary>
@@ -313,8 +297,6 @@ await api.setItemResource(talentItem, 2, 0);
 ```
 
 </details>
-
----
 
 <details id="updateTokenSystem">
 <summary><b><code>updateTokenSystem</code></b> <sup>async</sup> → <code>void</code></summary>
@@ -368,8 +350,6 @@ Returns the updated opt-out array.
 
 </details>
 
----
-
 <details id="setItemAutoConsumeDisabledAll">
 <summary><b><code>setItemAutoConsumeDisabledAll</code></b> <sup>async</sup> → <code>string[]</code></summary>
 
@@ -385,8 +365,6 @@ Mass-toggle: apply opt-out to every resource type the item has (or clear all).
 
 </details>
 
----
-
 <details id="isAutoConsumeDisabled">
 <summary><b><code>isAutoConsumeDisabled</code></b> → <code>boolean</code></summary>
 
@@ -400,8 +378,6 @@ if (api.isAutoConsumeDisabled(item, 'uses')) { ... }
 
 </details>
 
----
-
 <details id="getAutoConsumeDisabled">
 <summary><b><code>getAutoConsumeDisabled</code></b> → <code>Set&lt;string&gt;</code></summary>
 
@@ -414,8 +390,6 @@ const disabled = api.getAutoConsumeDisabled(item);  // Set of type keys
 **Params:** <kbd>item</kbd> `Item`
 
 </details>
-
----
 
 <details id="consumeItemResource">
 <summary><b><code>consumeItemResource</code></b> <sup>async</sup> → <code>number|boolean|null</code></summary>
@@ -437,8 +411,6 @@ Force a consume regardless of opt-out. Throws if the item does not have the reso
 
 </details>
 
----
-
 <details id="rechargeItemResource">
 <summary><b><code>rechargeItemResource</code></b> <sup>async</sup> → <code>number|boolean|null</code></summary>
 
@@ -455,8 +427,6 @@ Reverse of consume. Same signature, same validation.
 
 </details>
 
----
-
 <details id="configureItemExtraConfig">
 <summary><b><code>configureItemExtraConfig</code></b> <sup>async</sup> → <code>object</code></summary>
 
@@ -471,8 +441,6 @@ await api.configureItemExtraConfig(item, { autoConsumeDisabled: ['uses', 'loadin
 Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature. Use this only for fields with no helper.
 
 </details>
-
----
 
 <details id="getExtraConfig">
 <summary><b><code>getExtraConfig</code></b> → <code>object|null</code></summary>

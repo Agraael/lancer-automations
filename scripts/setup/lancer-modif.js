@@ -96,7 +96,7 @@ export function registerDisabledFlowSteps(flowSteps, flows)
     for (const name of targets)
         flows.get(name)?.insertStepAfter('checkItemDestroyed', 'lancer-automations:checkItemDisabled');
 
-    // Repair: clear disabled flags after the full-repair executes
+    // Repair: clear disabled flags + recharge spent recharge features after the full-repair executes
     flowSteps.set('lancer-automations:clearDisabledOnRepair', clearDisabledOnRepair);
     flows.get('FullRepairFlow')?.insertStepAfter('executeFullRepair', 'lancer-automations:clearDisabledOnRepair');
 }
@@ -108,8 +108,13 @@ async function clearDisabledOnRepair(state)
     const updates = [];
     for (const item of state.actor.items)
     {
+        const update = { _id: item.id };
         if (isDisableable(item) && isItemDisabled(item))
-            updates.push({ _id: item.id, 'system.disabled': false });
+            update['system.disabled'] = false;
+        if (item.system?.charged === false && item.system.tags?.some(tag => tag.lid === 'tg_recharge'))
+            update['system.charged'] = true;
+        if (Object.keys(update).length > 1)
+            updates.push(update);
     }
     if (updates.length)
         await state.actor.updateEmbeddedDocuments('Item', updates);
@@ -1427,6 +1432,59 @@ export function wrapInitAttackData(flowSteps)
             state.data.effect = savedEffect;
         return result;
     });
+}
+
+/** Let non-Weapon npc features drive a damage flow; the system's setDamageTags only accepts weapon types. */
+export function wrapSetDamageTags(flowSteps)
+{
+    const orig = flowSteps.get('setDamageTags');
+    if (!orig)
+        return;
+    flowSteps.set('setDamageTags', async function (state, options)
+    {
+        const item = state.item;
+        if (item?.is_npc_feature?.() && item.system.type !== 'Weapon')
+        {
+            state.data.tags = item.system.tags ?? [];
+            state.data.ap = !!state.data.tags.find(tag => tag.is_ap);
+            state.data.overkill = !!state.data.tags.find(tag => tag.is_overkill);
+            const reliableTag = state.data.tags.find(tag => tag.is_reliable);
+            if (reliableTag)
+            {
+                state.data.reliable = true;
+                state.data.reliable_val = Number.parseInt(reliableTag.tierVal((state.actor?.is_npc?.() && state.actor.system.tier) || 1) || "0");
+            }
+            return true;
+        }
+        return orig(state, options);
+    });
+}
+
+// the system flags every non-weapon item attack as tech+smart; forceNonTech in la_extraData opts out
+async function forceNonTechAttack(state)
+{
+    if (!state.la_extraData?.forceNonTech)
+        return true;
+    const accDiff = state.data?.acc_diff;
+    if (!accDiff)
+        return true;
+    const weapon = accDiff.weapon;
+    if (weapon)
+    {
+        weapon.tech = false;
+        weapon.smart = false;
+    }
+    // the HUD derives its tech look from lancerItem's type, not weapon.tech
+    accDiff.lancerItem = undefined;
+    if (!accDiff.lancerActor)
+        accDiff.lancerActor = state.actor;
+    return true;
+}
+
+export function registerNonTechAttackStep(flowSteps, flows)
+{
+    flowSteps.set('lancer-automations:forceNonTechAttack', forceNonTechAttack);
+    flows.get('BasicAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:forceNonTechAttack');
 }
 
 export const ItemDisabledAPI = {

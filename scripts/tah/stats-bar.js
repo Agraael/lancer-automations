@@ -83,6 +83,8 @@ export function buildStatsHtml(actor, token = null)
     const ocMax    = ocSeq.length - 1;
     const ocColor  = !hasOvercharge ? '#555' : ocMax > 0 ? lerpColor(204, 170, 50, 244, 67, 54, Math.min(oc / ocMax, 1)) : '#eb4034';
     const SEP = `<span style="color:#444;">│</span>`;
+    const EMPTY = '<span></span>';
+    const cellWrap = (/** @type {string} */ inner) => `<span style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;">${inner}</span>`;
     const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${repairs > 0 ? 1 : 0.3};">`;
     const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
     const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${reaction ? 1 : 0.3};">`;
@@ -93,7 +95,7 @@ export function buildStatsHtml(actor, token = null)
     const inCombat = !!game.combat?.active &&
         !!(/** @type {any} */ (game.combat)?.combatants?.find((/** @type {{ tokenId: string }} */ c) => c.tokenId === tokenId));
     const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(2px);display:inline-block;"></i>`;
-    let movHtml;
+    let movCell;
     if (inCombat && token)
     {
         const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
@@ -107,10 +109,10 @@ export function buildStatsHtml(actor, token = null)
             movColor = lerpColor(76, 175, 80, 255, 235, 59, regularCost / cap);   // green→yellow
         else
             movColor = lerpColor(255, 235, 59, 244, 67, 54, Math.min(1, (regularCost - cap) / cap));   // yellow→red
-        movHtml = `${SEP}${movIcon}<span title="Movement used / cap" style="color:${movColor};">${regularCost}/${cap}</span>`;
+        movCell = cellWrap(`${movIcon}<span title="Movement used / cap" style="color:${movColor};">${regularCost}/${cap}</span>`);
     }
     else
-        movHtml = `${SEP}${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`;
+        movCell = cellWrap(`${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`);
 
     // Secondary stats row
     const armor       = sys.armor ?? 0;
@@ -125,37 +127,85 @@ export function buildStatsHtml(actor, token = null)
     const S_STAT = 'font-size:0.95em;';
     const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
     const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
-    const coreHtml = hasCoreSystem
-        ? `${SEP}<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#c33'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
+    const statCell = (/** @type {string} */ iconSrc, /** @type {string} */ title, /** @type {string} */ valueHtml) =>
+        `<span style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;">${statIcon(iconSrc, title)}${valueHtml}</span>`;
+    const coreCell = hasCoreSystem
+        ? `<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#c33'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
         : '';
 
-    const expanded = _statsExpanded ? 'display:flex;flex-direction:column' : 'display:none';
+    const haseCell = (/** @type {string} */ letter, /** @type {string} */ title, /** @type {number|null|undefined} */ value) =>
+        `<span title="${title}" style="white-space:nowrap;"><span style="color:#fff;font-weight:bold;">${letter}</span> <span style="color:#aaa;">${(value ?? 0) >= 0 ? '+' : ''}${value ?? 0}</span></span>`;
+    const hasHase = [sys.hull, sys.agi, sys.sys, sys.eng].some(value => value != null);
+    const haseHtml = hasHase
+        ? `<div style="width:1px;background:#444;align-self:stretch;margin:0 6px;flex-shrink:0;"></div>` +
+          `<div style="display:grid;grid-template-columns:repeat(2,auto);column-gap:8px;row-gap:2px;align-items:center;justify-items:start;align-self:center;${S_STAT}">` +
+          `${haseCell('H', 'Hull', sys.hull)}${haseCell('A', 'Agility', sys.agi)}` +
+          `${haseCell('S', 'Systems', sys.sys)}${haseCell('E', 'Engineering', sys.eng)}` +
+          `</div>`
+        : '';
+
+    const expanded = _statsExpanded ? 'display:flex' : 'display:none';
     const arrow = _statsExpanded ? '◀' : '▶';
 
+    // Two rows sharing grid columns so values align; │ separators are their own cells.
+    const topRow = [];
+    const bottomRow = [];
+    if (hasStructure || hasStress)
+    {
+        topRow.push(hasStructure ? cellWrap(strPips) : EMPTY, hasStructure ? SEP : EMPTY);
+        bottomRow.push(hasStress ? cellWrap(stressPips) : EMPTY, hasStress ? SEP : EMPTY);
+    }
+    topRow.push(cellWrap(`<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}`));
+    bottomRow.push(hasHeat
+        ? cellWrap(`<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>`)
+        : (hasPilotStress
+            ? cellWrap(`<span title="Stress" style="color:${pilotStressColor};">${pilotStressVal}/${pilotStressMax}<i class="mdi mdi-brain" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>`)
+            : EMPTY));
+    const topExtras = [];
+    if (hasRepairs)
+        topExtras.push(cellWrap(`${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>`));
+    const bottomExtras = [];
+    if (hasBondXp)
+        bottomExtras.push(cellWrap(`<span title="Bond XP" style="color:${bondXpVal > 0 ? '#00b8d4' : '#888'};">${bondXpVal}/${bondXpMax}<i class="mdi mdi-head-cog-outline" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>`));
+    if (burn > 0)
+        bottomExtras.push(cellWrap(`<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>`));
+    if (infection > 0)
+        bottomExtras.push(cellWrap(`<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>`));
+    if (hasOvercharge)
+        bottomExtras.push(cellWrap(`<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>`));
+    while (topExtras.length < bottomExtras.length)
+        topExtras.push(null);
+    while (bottomExtras.length < topExtras.length)
+        bottomExtras.push(null);
+    topExtras.forEach((cell, index) =>
+    {
+        topRow.push(cell ? SEP : EMPTY, cell ?? EMPTY);
+        bottomRow.push(bottomExtras[index] ? SEP : EMPTY, bottomExtras[index] ?? EMPTY);
+    });
+    topRow.push(SEP, movCell);
+    bottomRow.push(SEP, cellWrap(`${reactionImg}${reactionNum}`));
+
     return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;position:relative;z-index:2;">` +
-        `<div>` +
-        `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">` +
-        `${hasStructure ? `${strPips}${SEP}` : ''}<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}${hasRepairs ? `${SEP}${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>` : ''}${movHtml}` +
-        `</div>` +
-        `<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;margin-top:2px;">` +
-        `${hasStress ? `${stressPips}${SEP}` : ''}${hasHeat ? `<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>` : (hasPilotStress ? `<span title="Stress" style="color:${pilotStressColor};">${pilotStressVal}/${pilotStressMax}<i class="mdi mdi-brain" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>` : '')}${hasBondXp ? `${SEP}<span title="Bond XP" style="color:${bondXpVal > 0 ? '#00b8d4' : '#888'};">${bondXpVal}/${bondXpMax}<i class="mdi mdi-head-cog-outline" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>` : ''}${burn > 0 ? `${SEP}<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>` : ''}${infection > 0 ? `${SEP}<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>` : ''}${hasOvercharge ? `${SEP}<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>` : ''}${SEP}${reactionImg}${reactionNum}` +
-        `</div>` +
+        `<div style="display:grid;grid-template-columns:repeat(${topRow.length},auto);column-gap:3px;row-gap:2px;align-items:center;justify-items:start;align-self:center;">` +
+        `${topRow.join('')}${bottomRow.join('')}` +
         `</div>` +
         `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +
         `<span style="font-size:0.55em;color:#111;font-weight:bold;line-height:1;">${arrow}</span>` +
         `</div>` +
-        `<div class="la-stats-detail" style="${expanded};padding:0 8px 0 6px;justify-content:center;">` +
-        `<div style="display:flex;align-items:center;gap:4px;white-space:nowrap;${S_STAT}">` +
-        `${statIcon('systems/lancer/assets/icons/white/shield_outline.svg', 'Armor')}<span title="Armor" style="color:#aaa;">${armor}</span>` +
-        `${SEP}${statIcon('systems/lancer/assets/icons/white/evasion.svg', 'Evasion')}<span title="Evasion" style="color:#aaa;">${evasion}</span>` +
-        `${SEP}${statIcon('systems/lancer/assets/icons/white/edef.svg', 'E-Defense')}<span title="E-Defense" style="color:#aaa;">${edef}</span>` +
+        `<div class="la-stats-detail" style="${expanded};padding:0 8px 0 6px;justify-content:center;align-items:stretch;">` +
+        `<div style="display:grid;grid-template-columns:repeat(${hasCoreSystem ? 4 : 3},auto);column-gap:10px;row-gap:2px;align-items:center;justify-items:start;align-self:center;${S_STAT}">` +
+        `${statCell('systems/lancer/assets/icons/white/shield_outline.svg', 'Armor', `<span title="Armor" style="color:#aaa;">${armor}</span>`)}` +
+        `${statCell('systems/lancer/assets/icons/white/evasion.svg', 'Evasion', `<span title="Evasion" style="color:#aaa;">${evasion}</span>`)}` +
+        `${statCell('systems/lancer/assets/icons/white/edef.svg', 'E-Defense', `<span title="E-Defense" style="color:#aaa;">${edef}</span>`)}` +
+        `${hasCoreSystem ? (sys.grit != null
+            ? `<span title="Grit" style="white-space:nowrap;"><span style="color:#ffaa55;font-weight:bold;">G</span> <span style="color:#aaa;">+${sys.grit}</span></span>`
+            : '<span></span>') : ''}` +
+        `${statCell('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack', `<span title="Tech Attack" style="color:#aaa;">${techAttack >= 0 ? '+' : ''}${techAttack}</span>`)}` +
+        `${statCell('systems/lancer/assets/icons/white/save.svg', 'Save', `<span title="Save" style="color:#aaa;">${save}</span>`)}` +
+        `${statCell('systems/lancer/assets/icons/white/sensor.svg', 'Sensors', `<span title="Sensors" style="color:#aaa;">${sensorRange}</span>`)}` +
+        `${coreCell}` +
         `</div>` +
-        `<div style="display:flex;align-items:center;gap:4px;white-space:nowrap;margin-top:2px;${S_STAT}">` +
-        `${statIcon('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack')}<span title="Tech Attack" style="color:#aaa;">${techAttack >= 0 ? '+' : ''}${techAttack}</span>` +
-        `${SEP}${statIcon('systems/lancer/assets/icons/white/save.svg', 'Save')}<span title="Save" style="color:#aaa;">${save}</span>` +
-        `${SEP}${statIcon('systems/lancer/assets/icons/white/sensor.svg', 'Sensors')}<span title="Sensors" style="color:#aaa;">${sensorRange}</span>` +
-        `${coreHtml}` +
-        `</div>` +
+        `${haseHtml}` +
         `</div>` +
         `</div>`;
 }
@@ -172,19 +222,22 @@ export function buildStatsEl(actor, token = null)
     const detail = el.find('.la-stats-detail');
     const toggle = el.find('.la-stats-toggle');
     if (_statsExpanded)
-        detail.css({ display: 'flex', 'flex-direction': 'column', overflow: 'hidden' });
+        detail.css({ display: 'flex', overflow: 'hidden' });
     else
         detail.css({ display: 'none', overflow: 'hidden' });
+    // duration follows content width, so a wider panel still finishes its slide
+    const slideMs = (/** @type {number} */ targetWidth) => Math.min(320, Math.max(150, Math.round(targetWidth * 0.9)));
     const openDetail = () =>
     {
         if (_statsExpanded)
             return;
         _statsExpanded = true;
-        detail.stop(true).css({ display: 'flex', 'flex-direction': 'column', width: 0, opacity: 0 })
-            .animate({ width: detail.prop('scrollWidth'), opacity: 1 }, 150, function ()
-            {
-                $(this).css('width', '');
-            });
+        detail.stop(true).css({ display: 'flex', width: 0, opacity: 0 });
+        const targetWidth = detail.prop('scrollWidth');
+        detail.animate({ width: targetWidth, opacity: 1 }, slideMs(targetWidth), function ()
+        {
+            $(this).css('width', '');
+        });
         toggle.find('span').text('◀');
     };
     const closeDetail = () =>
@@ -192,7 +245,7 @@ export function buildStatsEl(actor, token = null)
         if (!_statsExpanded)
             return;
         _statsExpanded = false;
-        detail.stop(true).animate({ width: 0, opacity: 0 }, 120, function ()
+        detail.stop(true).animate({ width: 0, opacity: 0 }, slideMs(detail.prop('scrollWidth')) * 0.8, function ()
         {
             $(this).css({ display: 'none', width: '', opacity: '' });
         });

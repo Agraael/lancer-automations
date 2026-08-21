@@ -3327,14 +3327,14 @@ export function registerTokenStatBarSettings()
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
     game.settings.register(MODULE_ID, SETTING_EFFECT_ICON_SCALE, {
-        name: 'Effect Icon Scale (with Stat Bar)',
-        hint: 'Multiplier on token effect icon size when the custom stat bar is active. 1 = no shrink (Foundry default), lower values progressively shrink. Only used when stat bar is enabled.',
+        name: 'Effect Icon Scale',
+        hint: 'Multiplier on token effect icon size. 1 = default size, below shrinks, above enlarges.',
         scope: 'world',
         config: false,
         type: Number,
-        default: 0.7,
-        range: { min: 0.3, max: 1, step: 0.05 },
-        requiresReload: true,
+        default: 1,
+        range: { min: 0.3, max: 2, step: 0.05 },
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true })),
     });
 
     game.settings.register(MODULE_ID, SETTING_MIN_ZOOM_SCALE, {

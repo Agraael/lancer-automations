@@ -16,7 +16,7 @@ export const _pendingGMChoices = new Map(); // cardId â†’ { resolve, cardEl
  * @param {JQuery} cardEl
  * @param {any} item  Foundry Item document
  */
-function _bindItemChip(cardEl, item)
+export function _bindItemChip(cardEl, item)
 {
     if (!item)
         return;

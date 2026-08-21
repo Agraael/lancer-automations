@@ -713,7 +713,6 @@ const RECOMMENDED = {
     'wrecks': true,
     'wreck-cinematics': true,
     'remove-wrecks-combat': true,
-    'actor-token-sync': true,
 };
 
 const QUICK_IDS = new Set([

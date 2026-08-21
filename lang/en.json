@@ -1,0 +1,7 @@
+{
+  "TYPES": {
+    "Item": {
+      "lancer-automations.downtime": "Downtime Activity"
+    }
+  }
+}

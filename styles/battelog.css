@@ -1309,7 +1309,7 @@
 .battelog-recap-dialog .stagger {
     opacity: 0;
     animation: battelog-recap-boot-in 0.55s cubic-bezier(.2, .8, .2, 1) both;
-    animation-delay: calc(var(--i, 0) * 55ms + 0.15s);
+    animation-delay: calc(var(--i, 0) * 40ms + 0.1s);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1666,6 +1666,56 @@
     outline: none !important;
 }
 
+.battelog-recap-share {
+    flex: 0 0 auto !important;
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    margin-right: 8px !important;
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.35) !important;
+    border-radius: 3px !important;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.88) !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    transition: all 0.15s ease;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.battelog-recap-share:hover,
+.battelog-recap-share:focus {
+    border-color: #fff !important;
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.battelog-recap-share.is-busy {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.battelog-recap-share:disabled {
+    pointer-events: none;
+    opacity: 0.35;
+}
+
+.battelog-recap-share.is-busy i {
+    animation: battelog-share-spin 0.8s linear infinite;
+}
+
+@keyframes battelog-share-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .battelog-recap-theme-name {
     flex: 0 0 auto;
     display: flex;
@@ -1823,9 +1873,12 @@
     overflow-y: visible;
 }
 
-.battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.scroll) {
+.battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.scroll),
+.battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.is-focus) {
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding-top: 10px;
+    margin-top: -10px;
+    padding-bottom: 8px;
 }
 
 .battelog-recap-squad-grid {
@@ -2634,6 +2687,8 @@
 
 .battelog-pcol {
     --pcol-top-color: var(--accent, #7bd3ff);
+    /* min-width 0 lets long ribbon names ellipsize instead of widening the column */
+    min-width: 0;
     background: color-mix(in srgb, var(--la-plate), var(--la-ink) 7%);
     border: 1px solid color-mix(in srgb, var(--la-ink), transparent 86%);
     border-top: 3px solid var(--pcol-top-color);
@@ -2704,7 +2759,6 @@
     --pcol-top-color: #c62828;
     border-color: #c62828;
     box-shadow: 0 0 14px rgba(198, 40, 40, 0.24);
-    opacity: 0.9;
 }
 
 .battelog-pcol-ribbon {
@@ -2866,6 +2920,112 @@
 .battelog-pcol-portrait-tape .tape.b {
     top: 60%;
     transform: rotate(-18deg);
+}
+
+/* Focused mech view: one card + its tooltips laid out flat beside it. */
+.battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-pcol {
+    cursor: pointer;
+}
+
+.battelog-recap-squad-grid.is-focus {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    width: max-content;
+    min-width: 100%;
+}
+
+.battelog-recap-squad-grid.is-focus .battelog-pcol:not(.is-focus-target),
+.battelog-recap-squad-grid.is-focus .battelog-pcol-empty {
+    display: none;
+}
+
+.battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target {
+    width: 260px;
+    flex: 0 0 260px;
+}
+
+/* Panels are already visible on the side, so mute the card's own hover popups. */
+.battelog-pcol.is-focus-target .has-tip:hover .battelog-tip-panel {
+    opacity: 0 !important;
+    transition: none !important;
+}
+
+.battelog-focus-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.battelog-focus-cols {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+/* Parked on the card; only the flattened copy is shown. */
+.battelog-awards-tip {
+    display: none;
+}
+
+.battelog-focus-detail .battelog-awards-tip {
+    display: block;
+}
+
+.battelog-focus-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 230px;
+    flex: 0 0 auto;
+}
+
+.battelog-focus-colhead {
+    font-size: 9px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--la-ink), transparent 45%);
+    border-bottom: 1px solid color-mix(in srgb, var(--la-ink), transparent 78%);
+    padding-bottom: 3px;
+    margin-bottom: 2px;
+}
+
+/* Visibility stays un-important so the stagger animation can still drive it. */
+.battelog-focus-detail .battelog-tip-panel {
+    position: static !important;
+    width: 230px !important;
+    margin: 0;
+    pointer-events: auto;
+    opacity: 1;
+    transform: none;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.battelog-focus-detail .battelog-tip-panel.is-linked {
+    --tip-border: var(--la-amber);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--la-amber) 55%, transparent);
+    transform: scale(1.04);
+}
+
+/* Flattened, so there is nothing left for the arrow to point at. */
+.battelog-focus-detail .battelog-tip-panel::after {
+    display: none;
+}
+
+.battelog-focus-detail .battelog-scan-tip {
+    min-width: 0;
+}
+
+.battelog-focus-wide .battelog-tip-panel {
+    width: max-content !important;
+}
+
+/* hover-hold defers the lift for a card already sitting under the cursor. */
+.battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-recap-squad-grid:not(.is-focus) .battelog-pcol:hover:not(.hover-hold),
+.battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target:hover:not(.hover-hold) {
+    transform: translateY(-3px);
+    box-shadow: 0 5px 16px color-mix(in srgb, var(--la-primary) 40%, transparent);
 }
 
 .battelog-pcol-portrait-frame {
@@ -3262,8 +3422,11 @@
     transition-delay: 0.35s;
 }
 
-/* Scan tip lives in <body> to escape the tab-panel overflow. See recap.js for placement. */
+/* Lives in <body> (escapes panel overflow), so it redeclares the dialog vars for the shared skin. */
 .battelog-scan-tip {
+    --la-primary: var(--primary-color, #991e2a);
+    --la-panel-ink: #1a1a1a;
+    --tip-border: var(--la-primary);
     position: fixed !important;
     left: 0;
     top: 0;
@@ -3272,8 +3435,6 @@
     width: auto !important;
     min-width: 260px;
     padding: 0 !important;
-    background: rgba(13, 13, 13, 0.98) !important;
-    border: 1px solid #666 !important;
     font-family: var(--font-primary, "Signika", Arial, sans-serif) !important;
     text-transform: none !important;
     letter-spacing: 0 !important;
@@ -3284,27 +3445,18 @@
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
+.battelog-scan-tip .la-stat-hint-zones {
+    padding: 9px 11px;
+}
+
 .battelog-scan-tip.is-visible {
     opacity: 1;
     transform: translateY(0);
     transition-delay: 0.35s;
 }
 
-/* Arrow points at the button; direction flips with .is-left. */
 .battelog-scan-tip::after {
-    background: rgba(13, 13, 13, 0.98) !important;
-    border-right-color: #666 !important;
-    border-bottom-color: #666 !important;
-    top: 50% !important;
-    right: auto !important;
-    left: 0 !important;
-    transform: translate(-50%, -50%) rotate(135deg);
-}
-
-.battelog-scan-tip.is-left::after {
-    left: auto !important;
-    right: 0 !important;
-    transform: translate(50%, -50%) rotate(-45deg);
+    display: none;
 }
 
 /* Shared TipPanel styling (StatBox + SkillCell). */
@@ -3386,10 +3538,12 @@
 .battelog-tip-title {
     font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     font-weight: 700;
-    font-size: 10px;
+    font-size: 11px;
     letter-spacing: 1px;
     text-transform: uppercase;
     color: #fff;
+    border-bottom: 1px solid var(--tip-border);
+    padding-bottom: 4px;
     margin-bottom: 6px;
 }
 
@@ -3398,7 +3552,7 @@
     flex-direction: column;
     gap: 3px;
     font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-size: 10px;
+    font-size: 11px;
 }
 
 .battelog-tip-row {
@@ -3421,6 +3575,10 @@
     color: color-mix(in srgb, #fff 78%, transparent);
 }
 
+.battelog-tip-k i {
+    font-size: 12px;
+}
+
 .battelog-tip-v {
     color: #fff;
     font-weight: 700;
@@ -3429,8 +3587,8 @@
 
 .battelog-tip-dot {
     display: inline-block;
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 1px;
     flex: 0 0 auto;
 }
@@ -3438,8 +3596,8 @@
 /* Mask-based icon so damage rows tint via inline background-color; else defaults white. */
 .battelog-tip-k-icon {
     display: inline-block;
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     background-color: #fff;
     mask-repeat: no-repeat;
     mask-position: center;
@@ -3453,7 +3611,7 @@
 
 .battelog-tip-none {
     font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-size: 10px;
+    font-size: 11px;
     color: color-mix(in srgb, #fff 45%, transparent);
 }
 
@@ -4646,4 +4804,41 @@
     opacity: 0.6;
     text-align: center;
     padding: 12px 0;
+}
+
+/* Transform-scrolled tile, not background-position: keeps it on the compositor. */
+@keyframes battelog-grid-scroll {
+    to {
+        transform: translate3d(-100px, -100px, 0);
+    }
+}
+
+.battelog-recap-dialog .window-content {
+    position: relative;
+    isolation: isolate;
+}
+
+.battelog-recap-dialog .dialog-content,
+.battelog-recap-dialog form {
+    background: none;
+}
+
+.battelog-recap-dialog .window-content::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% + 100px);
+    height: calc(100% + 100px);
+    z-index: -1;
+    pointer-events: none;
+    background: url("/modules/lancer-automations/assets/grid.png");
+    will-change: transform;
+    animation: battelog-grid-scroll 13.33s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .battelog-recap-dialog .window-content::before {
+        animation: none;
+    }
 }

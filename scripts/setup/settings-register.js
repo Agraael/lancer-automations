@@ -103,6 +103,47 @@ export function registerSettings()
         default: true
     });
 
+    game.settings.register('lancer-automations', 'statusHalo', {
+        name: 'Status Icon Halo',
+        hint: 'Status icons circle around the token instead of stacking in a column.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register('lancer-automations', 'statusHaloRadius', {
+        name: 'Halo Radius',
+        hint: 'Ring radius as a fraction of the token size.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0.5, max: 2, step: 0.05 },
+        default: 1.15,
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register('lancer-automations', 'statusHaloStartAngle', {
+        name: 'Halo Start Angle',
+        hint: 'Angle of the first icon, in degrees counterclockwise from the token\'s right.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0, max: 360, step: 5 },
+        default: 135,
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register('lancer-automations', 'statusIconHover', {
+        name: 'Status Icon Hover Info',
+        hint: 'Hovering a status icon enlarges it and shows its name, description, duration and bonus.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register('lancer-automations', 'additionalStatuses', {
@@ -356,7 +397,7 @@ export function registerSettings()
     });
     // Per-category wreck mode + terrain.
     const wreckModeChoices = { token: 'Token', tile: 'Tile', none: 'Skip (do nothing)' };
-    for (const cat of ['mech', 'human', 'monstrosity', 'biological'])
+    for (const cat of ['mech', 'vehicle', 'human', 'monstrosity', 'biological'])
     {
         const label = cat.charAt(0).toUpperCase() + cat.slice(1);
         game.settings.register('lancer-automations', `wreckMode_${cat}`, {
@@ -374,7 +415,7 @@ export function registerSettings()
             scope: 'world',
             config: false,
             type: String,
-            default: (cat === 'mech' || cat === 'monstrosity') ? 'aura' : 'none',
+            default: (cat === 'mech' || cat === 'vehicle' || cat === 'monstrosity') ? 'aura' : 'none',
             choices: {
                 none: 'Nothing',
                 terrain: 'THT Difficult Terrain',

@@ -142,6 +142,8 @@ export function getTokenCategory(token)
         return 'pilot';
     const items = actor.items ?? [];
     const hasLid = (lid) => items.some(item => item.system?.lid === lid);
+    if (items.some(item => item.type === 'npc_template' && /vehicle/i.test(item.system?.lid ?? '')))
+        return 'vehicle';
     if (hasLid('npcc_squad'))
         return 'squad';
     if (hasLid('npcc_monstrosity'))
@@ -194,7 +196,7 @@ function getWreckTerrainMode(category)
         return 'none';
     if (raw === 'terrain' || raw === 'aura' || raw === 'none')
         return raw;
-    return (category === 'mech' || category === 'monstrosity') ? 'aura' : 'none';
+    return (category === 'mech' || category === 'vehicle' || category === 'monstrosity') ? 'aura' : 'none';
 }
 
 function buildWreckAuraFlag()
@@ -260,8 +262,12 @@ const CATEGORY_FALLBACKS = {
     pilot: ['human', 'biological'],
     biological: ['biological'],
     monstrosity: ['monstrosity', 'biological'],
+    vehicle: ['vehicle'],
     mech: [],
 };
+
+// these fall back to the bare mech pool when their own folders are empty
+const BARE_FALLBACK_CATEGORIES = new Set(['mech', 'vehicle']);
 
 function isSquad(token)
 {
@@ -313,12 +319,19 @@ async function _resolveAssetWithFallback(subDir, category)
         if (files.length > 0)
             return _randomFile(files);
     }
-    if (category === 'mech')
+    if (BARE_FALLBACK_CATEGORIES.has(category))
     {
         const fallback = await _browseFiles(`${basePath}/${subDir}`);
         return _randomFile(fallback);
     }
     return null;
+}
+
+async function _resolveMaybeFolder(path)
+{
+    if (!path || /\.[a-z0-9]{2,5}$/i.test(path))
+        return path;
+    return _randomFile(await _browseFiles(path)) || path;
 }
 
 async function getCorpseImage(category, size = 1)
@@ -542,9 +555,9 @@ async function wreckIt(token)
     const shouldSpawnTerrain = terrainMode === 'terrain';
     const shouldAttachAura = terrainMode === 'aura';
 
-    const imagePath = token.document.getFlag(MODULE_ID, 'wreckImgPath');
-    const effectPath = token.document.getFlag(MODULE_ID, 'wreckEffectPath');
-    const soundPath = token.document.getFlag(MODULE_ID, 'wreckSoundPath');
+    const imagePath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckImgPath'));
+    const effectPath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckEffectPath'));
+    const soundPath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckSoundPath'));
     const wreckScale = token.document.getFlag(MODULE_ID, 'wreckScale') ?? 1;
 
     const tokenWreckMode = token.document.getFlag(MODULE_ID, 'wreckMode');
@@ -867,6 +880,23 @@ function _renderWreckTab(app, html, data)
     if (resourcesTab)
         resourcesTab.insertAdjacentHTML('afterend', tabHtml);
 
+    for (const btn of rootEl.querySelectorAll('button.la-pick-folder'))
+    {
+        btn.addEventListener('click', (event) =>
+        {
+            event.preventDefault();
+            const picker = rootEl.querySelector(`file-picker[name="${btn.dataset.for}"]`);
+            new FilePicker({
+                type: 'folder',
+                current: picker?.value || '',
+                callback: (path) =>
+                {
+                    picker.value = path;
+                }
+            }).render(true);
+        });
+    }
+
     if (game.user?.isGM)
         _wireScanControls(rootEl, tokenDoc, app);
 
@@ -915,18 +945,21 @@ function _buildWreckSectionHtml(flags)
             <label>Wreck Image Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckImgPath" value="${imgPath}"></file-picker>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckImgPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">
             <label>Wreck Effect Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effectPath}"></file-picker>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckEffectPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">
             <label>Wreck Sound Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${soundPath}"></file-picker>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckSoundPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">

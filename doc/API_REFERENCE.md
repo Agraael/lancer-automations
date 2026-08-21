@@ -1,4 +1,4 @@
-# Lancer Automations - API Reference
+# API Reference
 
 [← Back to Home](index.md)
 
@@ -132,7 +132,7 @@ changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?,
 
 ### Trigger Types & Data
 
-Every trigger passes a data object. All objects receive `distanceToTrigger` and `canTriggerReaction` (reactor to triggering token), plus `_cancelledBy` on cancellable triggers.
+Every trigger passes a data object. All objects receive `distanceToTrigger` and `canTriggerReaction` (reactor to triggering token), plus `_cancelledBy` on cancellable triggers. Attack-carrying triggers also get `isRangedAttack()`: item-less basic attacks report Melee, so past 1 hex from every target they count as ranged.
 
 `Tag` is `{ lid: string, val?: string }`. `ActionData` and `FlowState` are defined above.
 
@@ -800,6 +800,8 @@ Shared params: `triggerType: TriggerType`, `triggerData: TriggerData`, `reactorT
 Console-logs everything the current callback received, including the helper functions the trigger provides. Available in `evaluate` and `activationCode`.
 - **Returns**: `Object` - the same content as a summary.
 - API form: `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?: string)` → `Object`.
+
+Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
 
 ---
 

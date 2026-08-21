@@ -187,7 +187,7 @@ export async function pushEffect(targetID, effect, duration, note, originID)
     }
 }
 
-const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew']);
+const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew', 'refresh']);
 
 // True if all extraOptions identity keys match the existing effect's flags (mismatches = distinct effect, no stacking)
 function _sameIdentity(extraOptions, existingEffect)
@@ -199,6 +199,18 @@ function _sameIdentity(extraOptions, existingEffect)
     return identityKeys.every(key => storedFlags[key] === extraOptions[key]);
 }
 
+// refresh mode: reset the effect's duration in place, stack untouched
+async function _refreshEffectDuration(existingEffect, duration, note, originID)
+{
+    await existingEffect.update(/** @type {any} */ ({
+        "flags.lancer-automations.duration": duration,
+        "flags.lancer-automations.note": note,
+        "flags.lancer-automations.originID": originID,
+        "flags.lancer-automations.appliedRound": game.combat?.round || 0,
+        "flags.lancer-automations.-=durationEntries": null
+    }));
+}
+
 /** @returns {Promise<void>} */
 export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {})
 {
@@ -206,6 +218,16 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     const target = canvas.tokens.placeables.find(token => token.id === targetID);
     if (!target)
         return;
+
+    if (extraOptions.refresh && extraOptions.linkedBonusId)
+    {
+        const linkedExisting = /** @type {any} */ (target.actor).effects.find(/** @param {any} effect */ effect => effect.flags?.['lancer-automations']?.linkedBonusId === extraOptions.linkedBonusId);
+        if (linkedExisting)
+        {
+            await _refreshEffectDuration(linkedExisting, duration, note, originID);
+            return;
+        }
+    }
 
     let effectNameForLog = typeof effectOrData === 'string' ? effectOrData : effectOrData.name;
     const isCustomRequest = (typeof effectOrData === 'object' && effectOrData.isCustom);
@@ -248,6 +270,11 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
             if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect))
             {
+                if (extraOptions.refresh)
+                {
+                    await _refreshEffectDuration(existingEffect, duration, note, originID);
+                    return;
+                }
                 const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
 
@@ -401,6 +428,11 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect))
         {
+            if (extraOptions.refresh)
+            {
+                await _refreshEffectDuration(existingEffect, duration, note, originID);
+                return;
+            }
             const currentStack = (game.modules.get('statuscounter')?.active ? existingEffect.getFlag('statuscounter', 'value') : (existingEffect.flags?.statuscounter?.value)) || 1;
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
@@ -558,8 +590,12 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         note = "",
         duration = {},
         checkEffectCallback = null,
-        notify = true
+        notify = true,
+        refresh = false
     } = /** @type {any} */ (options);
+
+    if (refresh)
+        extraOptions = { ...extraOptions, refresh: true };
 
     // 'unlimited' is the retired synonym of 'indefinite'
     if (duration?.label === 'unlimited')
@@ -626,7 +662,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
 
             if (checkEffectCallback)
                 hasEffect = checkEffectCallback(token, resolvedEffectData);
-            else if (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId)
+            else if (!extraOptions?.refresh && (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId))
             {
                 // only flag duplicate when groupId or linkedBonusId matches; different sources coexist
                 const groupId = extraOptions.consumption?.groupId;
@@ -674,7 +710,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                     const allowStack = extraOptions?.allowStack;
                     const hasConsumption = extraOptions?.consumption;
 
-                    if (!allowStack && !hasConsumption)
+                    if (!allowStack && !hasConsumption && !extraOptions?.refresh)
                         hasEffect = true; // Block stacking
                 }
             }
@@ -1131,9 +1167,7 @@ export async function clearMarks(sourceToken, effectName, options = /** @type {a
     const { flagKey = 'markSourceId' } = /** @type {any} */ (options);
     const marked = findMarkedTokens(sourceToken, effectName, options);
     if (marked.length)
-    {
         await removeEffectsByNameFromTokens({ tokens: marked, effectNames: [effectName], extraFlags: { [flagKey]: sourceToken.id } });
-    }
     return marked;
 }
 
@@ -1731,22 +1765,245 @@ export function initCollapseHook()
     libWrapper.register('lancer-automations', 'Token.prototype._refreshEffects',
         function (wrapped, ...args)
         {
-            // PRE: destroy duplicate sprites before _refreshEffects positions them.
-            _collapseRemoveDuplicates(this);
-            // FoundryVTT lays out the remaining sprites compactly; statuscounter adds its badges.
-            wrapped(...args);
-            // Only shrink icons when the custom stat bar is active.
-            if (_isStatBarActive())
+            // concurrent _drawEffects runs can destroy sprites under us; core's
+            // sizing in wrapped() must always run or late-added icons stay native-size
+            try
+            {
+                _collapseRemoveDuplicates(this);
+            }
+            catch (err)
+            {
+                console.error('lancer-automations | effect collapse failed', err);
+            }
+            const result = wrapped(...args);
+            try
+            {
+                const pairs = _matchCounterPairs(this);
+                _layoutHaloIcons(this);
                 _shrinkEffectIcons(this);
-            // POST: add count badges for each collapsed group.
-            _collapseAddBadges(this);
+                _repaintHaloBg(this);
+                _applyCounterPairs(pairs);
+                _collapseAddBadges(this);
+                _drawDurationBadges(this);
+            }
+            catch (err)
+            {
+                console.error('lancer-automations | effect refresh step failed', err);
+            }
+            return result;
         }, 'WRAPPER');
+
+    // circular icon mask, halo style (after status-halo by mxzf, MIT), for when the module is absent
+    libWrapper.register('lancer-automations', 'Token.prototype._drawOverlay',
+        async function (wrapped, ...args)
+        {
+            this._laDrawingOverlay = true;
+            try
+            {
+                return await wrapped(...args);
+            }
+            finally
+            {
+                this._laDrawingOverlay = false;
+            }
+        }, 'WRAPPER');
+    libWrapper.register('lancer-automations', 'Token.prototype._drawEffect',
+        async function (wrapped, ...args)
+        {
+            const icon = await wrapped(...args);
+            // sized at add: perf-optim can bake the container before any refresh runs
+            if (icon && !icon.destroyed && !this._laDrawingOverlay)
+            {
+                const targetSize = _effectIconTargetSize();
+                const textureWidth = icon.texture?.orig?.width || icon.texture?.width || targetSize;
+                const textureHeight = icon.texture?.orig?.height || icon.texture?.height || targetSize;
+                icon.scale.set(targetSize / textureWidth, targetSize / textureHeight);
+                this.renderFlags.set({ refreshEffects: true });
+            }
+            if (!icon || icon.destroyed || icon.mask || this._laDrawingOverlay || !_haloActive())
+                return icon;
+            icon.anchor.set(0.5);
+            const radius = Math.min(icon.texture?.orig?.width ?? icon.width, icon.texture?.orig?.height ?? icon.height) / 2;
+            const mask = new PIXI.Graphics().beginFill(0xffffff).drawCircle(0, 0, radius).endFill();
+            icon.addChild(mask);
+            icon.mask = mask;
+            return icon;
+        }, 'WRAPPER');
+
+    // the first canvas draw predates these wrappers
+    canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }));
+}
+
+function _haloActive()
+{
+    if (game.modules.get('status-halo')?.active)
+        return true;
+    try
+    {
+        return !!game.settings.get('lancer-automations', 'statusHalo');
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+function _haloSprites(token)
+{
+    const bg = token.effects?.bg;
+    const overlay = token.effects?.overlay;
+    return (token.effects?.children ?? []).filter(child => child !== bg && child !== overlay && child instanceof PIXI.Sprite && !child.destroyed);
+}
+
+/**
+ * Ring layout fitted to the token: icons on an ellipse around the actual token bounds.
+ * @param {Token} token
+ */
+function _layoutHaloIcons(token)
+{
+    if (!_haloActive())
+        return;
+    const sprites = _haloSprites(token);
+    if (!sprites.length)
+        return;
+    const width = token.w ?? 0;
+    const height = token.h ?? 0;
+    let radiusFactor = 1.15;
+    let startAngle = 135;
+    try
+    {
+        radiusFactor = Number(game.settings.get('lancer-automations', 'statusHaloRadius')) || 1.15;
+        startAngle = Number(game.settings.get('lancer-automations', 'statusHaloStartAngle'));
+    }
+    catch
+    {
+        // settings not registered yet
+    }
+    const radiusX = width / 2 * radiusFactor;
+    const radiusY = height / 2 * radiusFactor;
+    const slots = Math.max(sprites.length, Math.min(Math.ceil(Math.min(width, height) / (canvas.dimensions?.size ?? 100) * 15), 40));
+    const initial = (Number.isFinite(startAngle) ? startAngle : 135) * Math.PI / 180;
+    for (let index = 0; index < sprites.length; index++)
+    {
+        const angle = initial + (index / slots) * 2 * Math.PI;
+        sprites[index].anchor?.set(0.5);
+        sprites[index].position.set(
+            width / 2 + radiusX * Math.cos(angle),
+            height / 2 - radiusY * Math.sin(angle)
+        );
+    }
+}
+
+/**
+ * Dark repaint of status-halo's circle backgrounds.
+ * @param {Token} token
+ */
+function _repaintHaloBg(token)
+{
+    if (!_haloActive())
+        return;
+    const bg = token.effects?.bg;
+    if (!bg)
+        return;
+    const sprites = _haloSprites(token);
+    if (!sprites.length)
+        return;
+    const gridScale = (canvas.dimensions?.size ?? 100) / 100;
+    bg.clear();
+    for (const sprite of sprites)
+    {
+        const radius = Math.max(sprite.width, sprite.height) / 2 + gridScale;
+        bg.lineStyle(gridScale / 2, 0x000000, 1, 0);
+        bg.drawCircle(sprite.position.x, sprite.position.y, radius);
+        bg.beginFill(0x333333);
+        bg.drawCircle(sprite.position.x, sprite.position.y, radius);
+        bg.endFill();
+    }
+}
+
+/**
+ * Pair statuscounter's texts with their icons by inverting its placement formula,
+ * before anything moves or resizes the sprites.
+ * @param {Token} token
+ * @returns {Array<{text: any, sprite: any, kind: string}>}
+ */
+function _matchCounterPairs(token)
+{
+    const counters = token.effectCounters?.children;
+    if (!counters?.length)
+        return [];
+    const sprites = _haloSprites(token);
+    const pairs = [];
+    for (const text of counters)
+    {
+        for (const sprite of sprites)
+        {
+            const anchorX = sprite.anchor?.x ?? 0;
+            const anchorY = sprite.anchor?.y ?? 0;
+            if (!anchorX && !anchorY)
+                continue;
+            const sizeRatio = sprite.height / 20;
+            if (text.anchor?.x === 1
+                && Math.abs(sprite.x + sprite.width + sizeRatio - text.x) < 0.5
+                && Math.abs(sprite.y + sprite.height + 4 * sizeRatio - text.y) < 0.5)
+            {
+                pairs.push({ text, sprite, kind: 'value' });
+                break;
+            }
+            if (text.anchor?.x === 0
+                && Math.abs(sprite.x - sizeRatio - text.x) < 0.5
+                && Math.abs(sprite.y - 5.5 * sizeRatio - text.y) < 0.5)
+            {
+                pairs.push({ text, sprite, kind: 'duration' });
+                break;
+            }
+        }
+    }
+    return pairs;
+}
+
+/** Place paired counter texts from their icon's final position and size. */
+function _applyCounterPairs(pairs)
+{
+    for (const { text, sprite, kind } of pairs)
+    {
+        const anchorX = sprite.anchor?.x ?? 0;
+        const anchorY = sprite.anchor?.y ?? 0;
+        const left = sprite.x - anchorX * sprite.width;
+        const top = sprite.y - anchorY * sprite.height;
+        const sizeRatio = sprite.height / 20;
+        if (kind === 'value')
+        {
+            text.x = left + sprite.width * 1.3;
+            text.y = top + sprite.height * 1.3;
+        }
+        else
+        {
+            text.x = left - sizeRatio;
+            text.y = top - 5.5 * sizeRatio;
+        }
+    }
 }
 
 /**
  * Shrink effect icons and re-lay them out at the smaller size.
  * @param {Token} token
  */
+function _effectIconTargetSize()
+{
+    let scale = 1;
+    try
+    {
+        scale = Number(game.settings.get('lancer-automations', 'statBarEffectIconScale')) || 1;
+    }
+    catch
+    { /* not registered */ }
+    const gridPx = canvas.dimensions?.size ?? 100;
+    const shrunk = gridPx * 0.1;
+    const natural = gridPx * 0.2;
+    return Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
+}
+
 function _shrinkEffectIcons(token)
 {
     const bg = token.effects?.bg;
@@ -1760,19 +2017,27 @@ function _shrinkEffectIcons(token)
     }
     catch
     { /* not registered */ }
-    if (scale >= 1)
-        return;
 
-    const sprites = token.effects.children.filter(child => child !== bg && child instanceof PIXI.Sprite);
+    const overlay = token.effects.overlay;
+    const sprites = /** @type {any[]} */ (token.effects.children.filter(child => child !== bg && child !== overlay && child instanceof PIXI.Sprite && !child.destroyed));
     if (sprites.length === 0)
         return;
 
-    const gridPx = canvas.dimensions?.size ?? 100;
-    const shrunk = gridPx * 0.1;
-    const natural = gridPx * 0.2;
-    const targetSize = Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
+    const targetSize = _effectIconTargetSize();
 
-    if (sprites[0].width === targetSize && sprites[0].height === targetSize)
+    // halo owns the positions: only resize
+    if (_haloActive())
+    {
+        for (const sprite of sprites)
+        {
+            const textureWidth = sprite.texture?.orig?.width || sprite.texture?.width || targetSize;
+            const textureHeight = sprite.texture?.orig?.height || sprite.texture?.height || targetSize;
+            sprite.scale.set(targetSize / textureWidth, targetSize / textureHeight);
+        }
+        return;
+    }
+
+    if (scale === 1 && sprites.every(sprite => sprite.width === targetSize && sprite.height === targetSize))
         return;
 
     const rows = Math.floor(token.document.height * 5);
@@ -1839,7 +2104,7 @@ function _collapseRemoveDuplicates(token)
         if (seenPrimary.has(name))
         {
             const sprite = spriteMap.get(effect.id);
-            if (sprite.parent === token.effects)
+            if (sprite.parent === token.effects && !sprite.destroyed)
             {
                 token.effects.removeChild(sprite);
                 sprite.destroy();
@@ -1851,10 +2116,7 @@ function _collapseRemoveDuplicates(token)
 }
 
 /**
- * POST-phase: after _refreshEffects and statuscounter have run with the compacted sprite list,
- * add numeric count badges on primary sprites for each collapsed group.
- * Counts ALL effects by name from actor data, so the badge shows the true total even when
- * duplicate sprites have already been removed.
+ * Count badges per collapsed group, counted by name from actor data.
  * @param {Token} token
  */
 function _collapseAddBadges(token)
@@ -1903,7 +2165,12 @@ function _collapseAddBadges(token)
         if (!primaryEffect)
             continue;
         const sprite = spriteMap.get(primaryEffect.id);
-        const entry = { posX: sprite.x, posY: sprite.y, width: sprite.width, height: sprite.height };
+        const entry = {
+            posX: sprite.x - (sprite.anchor?.x ?? 0) * sprite.width,
+            posY: sprite.y - (sprite.anchor?.y ?? 0) * sprite.height,
+            width: sprite.width,
+            height: sprite.height
+        };
         _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, count);
     }
 }
@@ -1919,8 +2186,8 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count)
 
     // statuscounter always clears effectCounters before our POST runs, so we always create fresh.
     const sizeRatio = entry.height / 20;
-    const badgeX = entry.posX + offsetX + entry.width + 1 * sizeRatio;
-    const badgeY = entry.posY + offsetY + entry.height + 4 * sizeRatio;
+    const badgeX = entry.posX + offsetX + entry.width * 1.3;
+    const badgeY = entry.posY + offsetY + entry.height * 1.3;
     const style = new PIXI.TextStyle({
         fontFamily: 'Signika, sans-serif',
         fontSize: Math.max(9, Math.round(12 * sizeRatio)),
@@ -1935,6 +2202,84 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count)
     text.y = badgeY;
     text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
     token.effectCounters.addChild(text);
+}
+
+/**
+ * Yellow remaining-turns number at the icon's top-left, mirroring the count badge corner.
+ * Reads LA duration flags; effects without a turn duration get nothing.
+ * @param {Token} token
+ */
+function _drawDurationBadges(token)
+{
+    const container = token.effectCounters;
+    if (container)
+    {
+        for (const child of [...container.children])
+        {
+            if (child._laDuration)
+            {
+                container.removeChild(child);
+                child.destroy();
+            }
+        }
+    }
+    const temporaryEffects = token.actor?.temporaryEffects;
+    if (!temporaryEffects?.length)
+        return;
+
+    const bg = token.effects?.bg;
+    const spriteMap = new Map();
+    for (const child of token.effects?.children ?? [])
+    {
+        if (child !== bg && child.zIndex >= 0 && child.zIndex < temporaryEffects.length)
+            spriteMap.set(child.zIndex, child);
+    }
+
+    for (const [index, effect] of temporaryEffects.entries())
+    {
+        const flags = effect.flags?.['lancer-automations'];
+        if (!flags)
+            continue;
+        const candidates = [];
+        const single = flags.duration;
+        if ((single?.label === 'end' || single?.label === 'start') && Number(single.turns) > 0)
+            candidates.push(Number(single.turns));
+        for (const entry of flags.durationEntries ?? [])
+        {
+            if ((entry?.label === 'end' || entry?.label === 'start') && Number(entry.turns) > 0)
+                candidates.push(Number(entry.turns));
+        }
+        if (!candidates.length)
+            continue;
+        const sprite = spriteMap.get(index);
+        if (!sprite)
+            continue;
+
+        if (!token.effectCounters)
+        {
+            const fresh = new PIXI.Container();
+            fresh.name = "effectCounters";
+            token.effectCounters = token.addChild(fresh);
+        }
+        const sizeRatio = sprite.height / 20;
+        const left = sprite.x - (sprite.anchor?.x ?? 0) * sprite.width;
+        const top = sprite.y - (sprite.anchor?.y ?? 0) * sprite.height;
+        const style = new PIXI.TextStyle({
+            fontFamily: 'Signika, sans-serif',
+            fontSize: Math.max(9, Math.round(12 * sizeRatio)),
+            fill: '#ffd700',
+            stroke: '#000000',
+            strokeThickness: Math.max(1, Math.round(2 * sizeRatio)),
+            fontWeight: 'bold'
+        });
+        const text = new PIXI.Text(String(Math.min(...candidates)), style);
+        text.anchor.set(0, 0);
+        text.x = left - sprite.width * 0.3;
+        text.y = top - sprite.height * 0.3;
+        text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
+        text._laDuration = true;
+        token.effectCounters.addChild(text);
+    }
 }
 
 /**

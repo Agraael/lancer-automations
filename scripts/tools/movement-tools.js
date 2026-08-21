@@ -52,6 +52,31 @@ export async function executeStandingUp(token)
     });
 }
 
+/**
+ * Activates the general Boost action, then opens a ruler move of the token's speed
+ * using its current movement action.
+ * @param {Token} token
+ * @param {Object} [options] Passed to moveTokenRuler (title, description, urgent, ...)
+ * @returns {Promise<TokenDocument|null>} The moved doc, or null if the move was cancelled
+ */
+export async function boostMove(token, options = {})
+{
+    if (!token?.actor)
+        return null;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api)
+        return null;
+    const activation = await api.activateGeneralAction(token, "Boost");
+    if (!activation?.completed)
+        return null;
+    return api.moveTokenRuler(token, {
+        range: token.actor.system.speed,
+        title: "BOOST",
+        description: "Move up to your speed.",
+        ...options
+    });
+}
+
 /** @returns {Promise<void>} */
 export async function executeTeleport(token, cost)
 {

@@ -404,7 +404,7 @@ export function wrapApplySelfHeat(flowSteps)
         if (hasResistance)
         {
             const roll = await new Roll(state.data.self_heat).evaluate();
-            const halved = Math.floor(roll.total / 2);
+            const halved = Math.ceil(roll.total / 2);
             state.data.self_heat_result = { roll, tt: await roll.getTooltip() };
 
             const automationSettings = game.settings.get(game.system.id, "automationOptions");
@@ -451,7 +451,7 @@ export function wrapUpdateOverchargeActor(flowSteps)
         const heatEnabled = game.settings.get(game.system.id, "automationOptions")?.overcharge_heat;
         if (heatEnabled)
         {
-            const applied = immune ? 0 : Math.floor(rollTotal / 2);
+            const applied = immune ? 0 : Math.ceil(rollTotal / 2);
             await actor.update(/** @type {any}*/({ "system.heat.value": actor.system.heat.value + applied }));
         }
         return true;
@@ -491,7 +491,7 @@ export function wrapApplyOverkillHeat(flowSteps)
 
         if ((actor.is_mech?.() || actor.is_npc?.() || actor.is_deployable?.()) && (actor.system.heat?.max ?? 0) > 0)
         {
-            const applied = immune ? 0 : Math.floor(overkillHeat / 2);
+            const applied = immune ? 0 : Math.ceil(overkillHeat / 2);
             await actor.update(/** @type {any}*/({ "system.heat.value": (Number(actor.system.heat.value) || 0) + applied }));
         }
         return true;

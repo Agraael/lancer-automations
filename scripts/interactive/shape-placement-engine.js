@@ -10,7 +10,7 @@ import {
     pointerToWorld, suppressTokenLayerClick, createPickerSession, createCursorPreview,
     addGraphicsBelowTokens, addGraphicsAboveTokens, destroyGraphics, _paintCells, createMultiPlusIndicator,
     gridLineWidth, makeText, TG, paintWithHalo,
-    suppressEvent,
+    suppressEvent, isShiftDown,
 } from "./canvas-helpers.js";
 import { computeArea, rotationStepsFor } from "./area-geometry.js";
 import { playUiSound, playTargetingMove } from "../tah/sound.js";
@@ -477,7 +477,7 @@ export function createShapePlacement(options = {})
         const { x: tx, y: ty } = pointerToWorld(event);
         lastCursor = { x: tx, y: ty };
         drawAt(tx, ty);
-        plus.move(multiStack && !!event?.data?.originalEvent?.shiftKey, tx, ty);
+        plus.move(multiStack && isShiftDown(event), tx, ty);
         if (soundOn())
         {
             const offset = pixelToOffset(tx, ty);
@@ -489,7 +489,7 @@ export function createShapePlacement(options = {})
     {
         if (onClickCapture(event))
             return;
-        const shift = !!event?.data?.originalEvent?.shiftKey;
+        const shift = isShiftDown(event);
         const { x: tx, y: ty } = pointerToWorld(event);
         const result = computeAt(tx, ty);
         if (!result)

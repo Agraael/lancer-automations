@@ -66,6 +66,32 @@ function compileCachedLambda(src, cache, argNames, preamble)
 }
 
 /**
+ * Serialize function-valued `condition` / `applyToCondition` into `@@fn:` source strings, including
+ * on `multi` sub-bonuses. Bonus data is persisted in document flags as JSON, which drops functions.
+ * Must be called by every entry point that writes bonusData to a flag.
+ * @param {any} bonusData
+ * @returns {any} the original object, or a copy with the lambdas serialized
+ */
+function serializeBonusLambdas(bonusData)
+{
+    if (!bonusData)
+        return bonusData;
+    const serializeOne = (data) =>
+    {
+        let out = data;
+        if (typeof out?.condition === 'function')
+            out = { ...out, condition: '@@fn:' + out.condition.toString() };
+        if (typeof out?.applyToCondition === 'function')
+            out = { ...out, applyToCondition: '@@fn:' + out.applyToCondition.toString() };
+        return out;
+    };
+    let serialized = serializeOne(bonusData);
+    if (serialized.type === 'multi' && Array.isArray(serialized.bonuses))
+        serialized = { ...serialized, bonuses: serialized.bonuses.map(serializeOne) };
+    return serialized;
+}
+
+/**
  * Resolve the reactor token for a bonus. Prefers `bonus.context.ownerTokenId`, falls back to
  * `state.actor`'s first active token. Used to provide `reactorToken` inside condition lambdas.
  */
@@ -850,9 +876,23 @@ function createGenericBonusStep(flowType)
                     const $allCards = $form.find('.accdiff-target');
                     const multiTarget = $allCards.length > 1;
 
+                    // render a mod only when a card target matches its applyTo and passes its applyToCondition
+                    const cardMods = attackMods.filter(mod =>
+                    {
+                        const relevantTargets = (state.data.acc_diff?.targets || []).filter(entry =>
+                        {
+                            const targetId = accDiffTargetToken(entry)?.id;
+                            return !Array.isArray(mod.applyTo) || mod.applyTo.length === 0 || mod.applyTo.includes(targetId);
+                        });
+                        if (!relevantTargets.length)
+                            return false;
+                        const reactorToken = resolveReactorToken(mod, state);
+                        return relevantTargets.some(entry => evaluateApplyToCondition(mod, entry, state, reactorToken));
+                    });
+
                     // Split: global mods (no applyTo) vs per-target mods (applyTo + multi-target)
-                    const globalMods = attackMods.filter(m => !Array.isArray(m.applyTo) || m.applyTo.length === 0 || !multiTarget);
-                    const perTargetMods = multiTarget ? attackMods.filter(m => Array.isArray(m.applyTo) && m.applyTo.length > 0) : [];
+                    const globalMods = cardMods.filter(mod => !Array.isArray(mod.applyTo) || mod.applyTo.length === 0 || !multiTarget);
+                    const perTargetMods = multiTarget ? cardMods.filter(mod => Array.isArray(mod.applyTo) && mod.applyTo.length > 0) : [];
 
                     const onToggle = (modifier, isOn) =>
                     {
@@ -1221,12 +1261,12 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results)
 }
 
 /**
- * Scans for bonuses from other tokens on the active scene (applyToTargetter).
+ * Scans for bonuses from other tokens on the current scene (applyToTargetter).
  */
 async function collectTargeterBonuses(attackerTokenId, flowType, tags, state, results)
 {
     const targets = Array.from(game.user?.targets || []);
-    for (const token of (game.scenes.active?.tokens ?? []))
+    for (const token of (canvas.scene?.tokens ?? []))
     {
         if (!token.actor || token.id === attackerTokenId)
             continue;
@@ -2700,28 +2740,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
     if (!bonusData.name)
         bonusData.name = "Unnamed Bonus";
 
-    // Lambda condition support: serialize function source into the condition field
-    if (typeof bonusData.condition === 'function')
-        bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
-    if (typeof bonusData.applyToCondition === 'function')
-        bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
-
-    // Also handle lambda conditions on sub-bonuses (multi type)
-    if (bonusData.type === 'multi' && Array.isArray(bonusData.bonuses))
-    {
-        bonusData = {
-            ...bonusData,
-            bonuses: bonusData.bonuses.map(sub =>
-            {
-                let out = sub;
-                if (typeof sub.condition === 'function')
-                    out = { ...out, condition: '@@fn:' + sub.condition.toString() };
-                if (typeof sub.applyToCondition === 'function')
-                    out = { ...out, applyToCondition: '@@fn:' + sub.applyToCondition.toString() };
-                return out;
-            })
-        };
-    }
+    bonusData = serializeBonusLambdas(bonusData);
 
     const existingIdx = bonuses.findIndex(b => b.id === bonusData.id);
     if (existingIdx !== -1)
@@ -2801,6 +2820,8 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 foundry.utils.setProperty(effectData, 'flags.statuscounter.value', bonusData.uses);
                 foundry.utils.setProperty(effectData, 'flags.statuscounter.visible', bonusData.uses > 1);
             }
+            if (options.refresh && actor.effects.some(effect => effect.flags?.['lancer-automations']?.linkedBonusId === bonusData.id))
+                return;
             await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
 
             if (statDirect)
@@ -2912,6 +2933,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                     }],
                     note: `Linked to Global Bonus: ${bonusData.name}`,
                     duration: { ...durationObj, overrideTurnOriginId: options.origin?.id || options.origin || token.id },
+                    refresh: !!options.refresh
                 },
                 extraOptions
             );
@@ -3102,10 +3124,7 @@ export async function addConstantBonus(target, bonusData)
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();
 
-    if (typeof bonusData.condition === 'function')
-        bonusData = { ...bonusData, condition: '@@fn:' + bonusData.condition.toString() };
-    if (typeof bonusData.applyToCondition === 'function')
-        bonusData = { ...bonusData, applyToCondition: '@@fn:' + bonusData.applyToCondition.toString() };
+    bonusData = serializeBonusLambdas(bonusData);
 
     if (target.documentName === 'Item')
     {
@@ -3528,13 +3547,14 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
     const { items = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
     if (!bonusData)
         return [];
+    const serialized = serializeBonusLambdas(bonusData);
     const stamped = [];
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
         const templateId = foundry.utils.randomID();
-        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...bonusData }), addOptions: { ...addOptions, ...extraOptions } };
+        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { ...addOptions, ...extraOptions } };
         const existing = item.getFlag?.('lancer-automations', 'bonusTemplates') || [];
         await item.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
         stamped.push({ item, templateId });
@@ -3581,13 +3601,14 @@ export async function linkBonusToActor(options = /** @type {any} */ ({}), extraO
     const { actors = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
     if (!bonusData)
         return [];
+    const serialized = serializeBonusLambdas(bonusData);
     const stamped = [];
     for (const actor of actors)
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
         const templateId = foundry.utils.randomID();
-        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...bonusData }), addOptions: { ...addOptions, ...extraOptions } };
+        const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { ...addOptions, ...extraOptions } };
         const existing = actor.getFlag?.('lancer-automations', 'bonusTemplates') || [];
         await actor.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
         stamped.push({ actor, templateId });

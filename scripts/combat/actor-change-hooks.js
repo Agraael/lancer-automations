@@ -15,7 +15,9 @@ Hooks.on('preUpdateActor', (actor, change, _options, userId) =>
         if (game.settings.get('lancer-automations', 'syncActorImgToToken'))
         {
             const newTokenImg = foundry.utils.getProperty(change, 'prototypeToken.texture.src');
-            if (newTokenImg && change.img === undefined)
+            // actor.img is IMAGE-only, so a video token image must not be mirrored onto it.
+            const ext = String(newTokenImg ?? '').split('?')[0].split('.').pop().toLowerCase();
+            if (newTokenImg && change.img === undefined && ext in CONST.IMAGE_FILE_EXTENSIONS)
                 foundry.utils.setProperty(change, 'img', newTokenImg);
         }
     }

@@ -192,6 +192,36 @@ function _forceNextLwfxFor(actorOrToken)
     setTimeout(() => _lwfxForceActors.delete(id), 3000);
 }
 
+export const _lwfxSourceRedirects = new Map();
+
+/**
+ * One-shot: the next lwfx effect fired by this actor plays from `sourceToken` instead.
+ * Long window: attack HUDs can sit open on user input.
+ * @param {Actor|Token} actorOrToken - Whose next effect gets redirected
+ * @param {Token} sourceToken - Token the FX visually fires from
+ */
+export function redirectNextLwfxSource(actorOrToken, sourceToken)
+{
+    const id = _actorSuppressId(actorOrToken);
+    if (!id || !sourceToken)
+        return;
+    _lwfxSourceRedirects.set(id, sourceToken);
+    setTimeout(() => _lwfxSourceRedirects.delete(id), 60000);
+}
+
+// lwfx resolves FX from state.item; stubbed in after the card so no weapon-fire step sees it.
+// An explicit fxItem wins over an item already carried by the flow.
+export async function applyFxItemStub(state)
+{
+    const uuid = state.la_extraData?.fxItemUuid;
+    if (!uuid)
+        return true;
+    const item = await fromUuid(uuid);
+    if (item)
+        state.item = item;
+    return true;
+}
+
 export async function playInlineAttackFX(state)
 {
     const title = state.data?.title;
@@ -283,7 +313,7 @@ async function _playLwfxRangedDefault(actor, context)
 // Item-less basic melee attack vs a target more than 1 grid away: play lwfx's ranged default instead of its melee one.
 export async function playBasicRangedFXIfNeeded(state)
 {
-    if (state.la_extraData?.is_throw)
+    if (state.la_extraData?.is_throw || state.la_extraData?.fxItemUuid)
         return true;
     if (LA_INLINE_ATTACK_FX[state.data?.title])
         return true;

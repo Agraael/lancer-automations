@@ -8,6 +8,8 @@ import * as actionOverlays from './action-overlays.js';
 import * as combat from './combat.js';
 import * as haseContest from './tools/haseContest.js';
 import * as forceCheck from './tools/forceCheck.js';
+import * as rollCard from './tools/rollCard.js';
+import * as moveTokenRuler from './tools/moveTokenRuler.js';
 
 export * from './cards.js';
 export * from './canvas.js';
@@ -17,6 +19,8 @@ export * from './action-overlays.js';
 export * from './combat.js';
 export * from './tools/haseContest.js';
 export * from './tools/forceCheck.js';
+export * from './tools/rollCard.js';
+export * from './tools/moveTokenRuler.js';
 
 export const InteractiveAPI = {
     ...cards,
@@ -27,4 +31,6 @@ export const InteractiveAPI = {
     ...combat,
     ...haseContest,
     ...forceCheck,
+    ...rollCard,
+    ...moveTokenRuler,
 };

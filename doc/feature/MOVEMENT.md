@@ -111,3 +111,12 @@ Each token's moves are recorded during combat (distance, cost, whether dragged, 
 History clears on combat start, and you can also clear it automatically at the end of each turn (`historyClearOnTurn`) or the start of each round (`historyClearOnRound`).
 
 <br clear="right"/>
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Split Movement at Speed Tiers** | Split a drag into sub-movements where the ruler speed tier changes. |
+| **Tactical Label Position** | Draws the distance label above or below the token. Defaults to below. |
+| **Minimum Label Zoom Scale** | Below this zoom level the label keeps a constant screen size. 0 = disabled. |
+| **Elevation Step (label)** | Round the label elevation delta to the nearest multiple of this; ignored on gridless scenes. |

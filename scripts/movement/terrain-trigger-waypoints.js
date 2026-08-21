@@ -422,7 +422,7 @@ export function injectTriggerSilentsAtDrop(event)
     }
 }
 
-function _transformFoundPath(token, path)
+export function _transformFoundPath(token, path)
 {
     if (!Array.isArray(path) || path.length < 2)
         return path;

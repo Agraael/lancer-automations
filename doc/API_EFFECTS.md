@@ -4,7 +4,7 @@
 
 ---
 
-## Effect Management
+## Apply & Remove
 
 <details id="applyEffectsToTokens">
 <summary><b><code>applyEffectsToTokens</code></b> <sup>async</sup> → <code>Array&lt;Token&gt;</code></summary>
@@ -26,6 +26,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 | <kbd>duration</kbd> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | <kbd>checkEffectCallback</kbd> | `(token: Token, effectData: object) => boolean` | `null` | Dup-check predicate `(token, effectData) => boolean`. Returning `true` blocks the apply with a warning |
 | <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config `{ prefixText, source, whisper }` (or `true`) |
+| <kbd>refresh</kbd> | `boolean` | `false` | If the effect already exists, reset its duration instead of blocking. Stack untouched |
 
 **`extraOptions` Object:**
 `{ stack?: number, linkedBonusId?: string, consumption?: object, statDirect?: object, changes?: Array, ...customFlags }`
@@ -41,43 +42,6 @@ await api.applyEffectsToTokens(
 ```
 
 </details>
-
----
-
-<details id="removeEffectsByNameFromTokens">
-<summary><b><code>removeEffectsByNameFromTokens</code></b> <sup>async</sup> → <code>Array&lt;Token|TokenDocument&gt;</code></summary>
-
-<br>
-
-```js
-await api.removeEffectsByNameFromTokens(options)
-```
-
-Removes every effect matching the given name(s). Use `deleteEffect` for one specific effect by ID.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| **inside `options`** | | | |
-| <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | *required* | Tokens to remove from |
-| <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | Effect name(s) to match and remove |
-| <kbd>originId</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
-| <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
-| <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config |
-
-`originId` and `extraFlags` are independent filters, both applied when provided.
-
-**Example:**
-```js
-await api.removeEffectsByNameFromTokens({
-    tokens: [targetToken],
-    effectNames: ["Suppress", "impaired"],
-    extraFlags: { suppressSourceId: reactorToken.id }
-});
-```
-
-</details>
-
----
 
 <details id="applyMark">
 <summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>findMarkedTokens</code></b> → <code>Token[]</code><br><b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
@@ -112,8 +76,6 @@ await api.clearMarks(reactorToken, 'Suppress', { flagKey: 'suppressSourceId' });
 
 </details>
 
----
-
 <details id="removeEffectsByName">
 <summary><b><code>removeEffectsByName</code></b> <sup>async</sup> → <code>void</code></summary>
 
@@ -138,7 +100,38 @@ await api.removeEffectsByName(target.id, 'Suppress', reactorToken.id);
 
 </details>
 
----
+<details id="removeEffectsByNameFromTokens">
+<summary><b><code>removeEffectsByNameFromTokens</code></b> <sup>async</sup> → <code>Array&lt;Token|TokenDocument&gt;</code></summary>
+
+<br>
+
+```js
+await api.removeEffectsByNameFromTokens(options)
+```
+
+Removes every effect matching the given name(s). Use `deleteEffect` for one specific effect by ID.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | *required* | Tokens to remove from |
+| <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | Effect name(s) to match and remove |
+| <kbd>originId</kbd> | `string` | `null` | Only remove effects whose stored `originID` flag matches this value |
+| <kbd>extraFlags</kbd> | `Object` | `null` | Key/value pairs that must ALL match the effect's `flags['lancer-automations']` data |
+| <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config |
+
+`originId` and `extraFlags` are independent filters, both applied when provided.
+
+**Example:**
+```js
+await api.removeEffectsByNameFromTokens({
+    tokens: [targetToken],
+    effectNames: ["Suppress", "impaired"],
+    extraFlags: { suppressSourceId: reactorToken.id }
+});
+```
+
+</details>
 
 <details id="deleteEffect">
 <summary><b><code>deleteEffect</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
@@ -164,7 +157,50 @@ await api.deleteEffect(target, effects[0]);
 
 </details>
 
----
+<details id="deleteAllEffects">
+<summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.deleteAllEffects(tokens)     // Removes ALL active effects from the provided tokens
+await api.executeEffectManager(options) // Opens the Effect Manager UI
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | Tokens to clear (`deleteAllEffects`) |
+
+`executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype? }`, pre-selecting the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`).
+
+```js
+await api.deleteAllEffects([token]);
+```
+
+</details>
+
+<details id="untilEndOfTurn">
+<summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
+
+<br>
+
+```js
+api.untilEndOfTurn(token, turns = 1)      // → duration object
+api.untilStartOfTurn(token, turns = 1)
+api.currentTurnKey()                       // → "round:turn", null out of combat
+```
+
+`untilEndOfTurn` / `untilStartOfTurn` build the "until the end of *their* next turn" duration: the token becomes the turn origin, and the count is bumped by one when it is already that token's turn. Use these instead of hand-writing `{ label: 'end', turns: 1, rounds: 0 }`, which is off by one if applied on the target's own turn.
+
+`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn.
+
+```js
+await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], duration: api.untilEndOfTurn(target) });
+```
+
+</details>
+
+## Find & Query
 
 <details id="findEffectOnToken">
 <summary><b><code>findEffectOnToken</code></b> → <code>ActiveEffect | undefined</code></summary>
@@ -189,8 +225,6 @@ const mark = api.findEffectsOnToken(target, "Suppress", { extraFlags: { suppress
 ```
 
 </details>
-
----
 
 <details id="findEffectsOnToken">
 <summary><b><code>findEffectsOnToken</code></b> → <code>any[]</code></summary>
@@ -218,8 +252,6 @@ const others = api.findEffectsOnToken(token, 'Overshield', { excludeId: effect.i
 
 </details>
 
----
-
 <details id="findEffectFrom">
 <summary><b><code>findEffectFrom</code></b> → <code>ActiveEffect | undefined</code></summary>
 
@@ -242,8 +274,6 @@ const eff = api.findEffectFrom(target, 'Lock On', reactorToken);
 ```
 
 </details>
-
----
 
 <details id="hasStatus">
 <summary><b><code>hasStatus</code></b> → <code>boolean</code></summary>
@@ -270,8 +300,6 @@ if (api.hasStatus(target, 'prone', 'cover_hard', 'cover_soft'))
 
 </details>
 
----
-
 <details id="inDangerZone">
 <summary><b><code>inDangerZone</code></b> → <code>boolean</code></summary>
 
@@ -290,31 +318,6 @@ const difficulty = api.inDangerZone(target) ? 1 : 0;
 ```
 
 </details>
-
----
-
-<details id="untilEndOfTurn">
-<summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
-
-<br>
-
-```js
-api.untilEndOfTurn(token, turns = 1)      // → duration object
-api.untilStartOfTurn(token, turns = 1)
-api.currentTurnKey()                       // → "round:turn", null out of combat
-```
-
-`untilEndOfTurn` / `untilStartOfTurn` build the "until the end of *their* next turn" duration: the token becomes the turn origin, and the count is bumped by one when it is already that token's turn. Use these instead of hand-writing `{ label: 'end', turns: 1, rounds: 0 }`, which is off by one if applied on the target's own turn.
-
-`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn.
-
-```js
-await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], duration: api.untilEndOfTurn(target) });
-```
-
-</details>
-
----
 
 <details id="getAllEffects">
 <summary><b><code>getAllEffects</code></b> → <code>Array&lt;ActiveEffect&gt;</code></summary>
@@ -337,7 +340,7 @@ const names = api.getAllEffects(token).map(e => e.name);
 
 </details>
 
----
+## Charges & Immunity
 
 <details id="consumeEffectCharge">
 <summary><b><code>consumeEffectCharge</code></b> <sup>async</sup> → <code>boolean</code></summary>
@@ -363,8 +366,6 @@ if (eff) await api.consumeEffectCharge(eff);
 
 </details>
 
----
-
 <details id="triggerEffectImmunity">
 <summary><b><code>triggerEffectImmunity</code></b> <sup>async</sup> → <code>void</code></summary>
 
@@ -388,8 +389,6 @@ await api.triggerEffectImmunity(target, ['impaired'], reactorToken, true);
 ```
 
 </details>
-
----
 
 <details id="checkEffectImmunities">
 <summary><b><code>checkEffectImmunities</code></b> → <code>Array&lt;string&gt;</code></summary>
@@ -415,29 +414,6 @@ if (api.checkEffectImmunities(target.actor, 'prone')) return;
 
 </details>
 
----
-
-<details id="deleteAllEffects">
-<summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
-
-<br>
-
-```js
-await api.deleteAllEffects(tokens)     // Removes ALL active effects from the provided tokens
-await api.executeEffectManager(options) // Opens the Effect Manager UI
-```
-
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | Tokens to clear (`deleteAllEffects`) |
-
-`executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype? }`, pre-selecting the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`).
-
-```js
-await api.deleteAllEffects([token]);
-```
-
-</details>
 
 ---
 
@@ -571,9 +547,9 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 <br>
 
 **`options` Object:**
-`{ duration?: string, durationTurns?: number, origin?: Token|TokenDocument|string, consumption?: ConsumptionConfig }`
+`{ duration?: string, durationTurns?: number, origin?: Token|TokenDocument|string, consumption?: ConsumptionConfig, refresh?: boolean }`
 
-`duration` is a [duration label](API_REFERENCE.md#duration-labels). `consumption` is a [Consumption](API_REFERENCE.md#consumption) config.
+`duration` is a [duration label](API_REFERENCE.md#duration-labels). `consumption` is a [Consumption](API_REFERENCE.md#consumption) config. `refresh: true` re-adds an existing bonus id in place: values replaced, linked effect's duration reset instead of blocked.
 
 `durationTurns` counts origin turns until the effect ends:
 - `0`: next matching trigger. If applied during origin's own turn with `duration: "end"`, ends at end of that same turn. With `duration: "start"`, it ends at start of the next turn. Off-combat / off-origin's-turn, `0` clamps to `1`.
@@ -581,8 +557,6 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 - `n ≥ 2`: `n` origin turns.
 
 </details>
-
----
 
 <details id="removeGlobalBonus">
 <summary><b><code>removeGlobalBonus</code></b> <sup>async</sup> → <code>boolean</code></summary>
@@ -610,8 +584,6 @@ await api.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === reacto
 
 </details>
 
----
-
 <details id="getGlobalBonuses">
 <summary><b><code>getGlobalBonuses</code></b> → <code>any[]</code><br><b><code>getGlobalBonus</code></b> → <code>object|null</code></summary>
 
@@ -632,8 +604,6 @@ const bonus = api.getGlobalBonus(actor, 'lightning-reflexes');
 ```
 
 </details>
-
----
 
 <details id="addConstantBonus">
 <summary><b><code>addConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>getConstantBonuses</code></b> → <code>any[]</code><br><b><code>removeConstantBonus</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
@@ -700,8 +670,6 @@ await api.ensureLinkedEffect({ items: [item], effectNames: ['resistance_kinetic'
 
 </details>
 
----
-
 <details id="unlinkEffectFromItem">
 <summary><b><code>unlinkEffectFromItem</code></b><br><b><code>unlinkEffectFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
@@ -726,8 +694,6 @@ await api.unlinkEffectFromItem({ items: [item], effectName: 'resistance_kinetic'
 ```
 
 </details>
-
----
 
 <details id="linkBonusToItem">
 <summary><b><code>linkBonusToItem</code></b><br><b><code>linkBonusToActor</code></b><br><b><code>ensureLinkedBonus</code></b> <sup>async</sup> → <code>Array</code></summary>
@@ -757,8 +723,6 @@ await api.ensureLinkedBonus({ items: [item], bonusData: { id: 'smart-rounds', ty
 
 </details>
 
----
-
 <details id="unlinkBonusFromItem">
 <summary><b><code>unlinkBonusFromItem</code></b><br><b><code>unlinkBonusFromActor</code></b> <sup>async</sup> → <code>Array</code></summary>
 
@@ -783,8 +747,6 @@ await api.unlinkBonusFromItem({ items: [item], templateId: 'smart-rounds' });
 
 </details>
 
----
-
 <details id="getLinkedEffects">
 <summary><b><code>getLinkedEffects</code></b> → <code>any[]</code><br><b><code>getLinkedBonuses</code></b> → <code>any[]</code></summary>
 
@@ -804,8 +766,6 @@ const hasTemplate = api.getLinkedBonuses(item).some(t => t.id === 'smart-rounds'
 ```
 
 </details>
-
----
 
 <details>
 <summary>Manual apply / cleanup helpers <sup>all async</sup></summary>
@@ -849,8 +809,6 @@ triggerData.flowState.getFlowExtraData()             // read la_extraData
 - **`getFlowExtraData`** - Returns the `la_extraData` object attached to the current flow state.
 
 </details>
-
----
 
 <details id="injectBonusToFlowState">
 <summary><b><code>injectBonusToFlowState</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
@@ -909,8 +867,6 @@ const resist = api.checkDamageResistances(target.actor, 'Energy');
 ```
 
 </details>
-
----
 
 <details id="hasCritImmunity">
 <summary><b><code>hasCritImmunity</code></b><br><b><code>hasHitImmunity</code></b><br><b><code>hasMissImmunity</code></b> <sup>async</sup> → <code>boolean</code></summary>

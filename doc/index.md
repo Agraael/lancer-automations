@@ -37,11 +37,9 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 ---
 
-Welcome to Lancer Automations. What began as a tiny Lancer QoL tweak for my own games grew into something much bigger: a way to play Lancer on Foundry VTT with a layer of automation, UI, and quality-of-life on top.
+Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an automation engine that can drive almost any item from any LCP, plus a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
 
-It keeps growing and taking on its own identity, and one day it might even outgrow the Lancer system entirely, so think of it less as a set of toggles and more as a game engine.
-
-At its heart is an automation engine that can automate almost any item from any LCP, plus a large toolbox for picking tokens, spawning tokens, handling network messages, asking players for choices, and much more.
+What started as a tiny QoL tweak for my own games is closer to a game engine now, with its own identity. Think of it less as a set of toggles and more as the way you play.
 
 A lot of it weaves right into the interface, so if you aren't deep in the Lancer Foundry ecosystem you might assume some of these features are vanilla. They aren't, they just feel like they were always part of Lancer.
 
@@ -58,6 +56,8 @@ A heads-up: not all of it is built to be fully customizable, a lot is just how I
 > **First of all, I really recommend reading the feature guides.** I know it's a lot, a lot, but trust me, it's important.
 >
 > This is a dense, heavy module, closer to a game-system extension than a simple add-on, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well. If you're new to Foundry, get comfortable there first or you risk losing a lot of time.
+>
+> **I don't maintain compatibility with Lancer QoL anymore.** I tried for a while, so running both is up to you, I just can't promise it stays stable. The two also overlap a lot, so you probably won't need both.
 >
 > **The default setup is more than enough for most Lancer GMs.** If you write your own activations and get stuck, ask me on Discord.
 >
@@ -420,3 +420,16 @@ Inspiration, reference code, and ideas drawn from the work of:
 - [Wibble199](https://github.com/Wibble199)
 - [csmcfarland](https://gitlab.com/csmcfarland)
 - [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
+- [mxzf](https://gitlab.com/mxzf/status-halo)
+
+## Assets
+
+UI icons come from [game-icons.net](https://game-icons.net), licensed CC BY 3.0, credited to their individual authors.
+
+Sounds come from [freesound.org](https://freesound.org), where the licence is picked per sound: CC0, CC BY, or CC BY-NC.
+
+Vehicle wreck tokens are by @MachineBoot on Discord.
+
+## License
+
+Do What The Fuck You Want To Public License, version 2, by Sam Hocevar. Text at [wtfpl.net](https://www.wtfpl.net).

@@ -114,3 +114,10 @@ Move mode works for one token or a whole selection at once:
 <img src="../vid/at-measure-move.gif" width="70%"/>
 
 <img src="../vid/at-measure-move-multi.gif" width="70%"/>
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **HASE Chance Labels** | Live success % over the roller during stat rolls, saves, and contests. |
+| **Range Preview on Attack/Damage HUD** | Pulse the attacker's weapon/tech range on the canvas when an attack card prints. |

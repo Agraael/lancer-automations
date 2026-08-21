@@ -48,6 +48,10 @@ export default defineConfig([
                 hasProperty: "readonly",
                 randomID: "readonly",
                 PIXI: "readonly",
+                FilePicker: "readonly",
+                PreciseText: "readonly",
+                Handlebars: "readonly",
+                Ray: "readonly",
 
                 // lancer-automations startup scripts
                 api: "readonly",

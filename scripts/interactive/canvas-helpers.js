@@ -270,9 +270,9 @@ export function createPickerSession(label, onCrash)
     return {
         safe,
         // clickFirst preserves moveToken's click-before-pointermove attach order.
-        bind({ move, click, key, wheel = null, clickFirst = false })
+        bind({ move, click, key, wheel = null, rightClick = null, clickFirst = false })
         {
-            handlers = { move: safe(move), click: safe(click), key: safe(key), wheel: wheel ? safe(wheel) : null };
+            handlers = { move: safe(move), click: safe(click), key: safe(key), wheel: wheel ? safe(wheel) : null, rightClick: rightClick ? safe(rightClick) : null };
             if (clickFirst)
             {
                 canvas.stage.on('click', handlers.click);
@@ -283,6 +283,8 @@ export function createPickerSession(label, onCrash)
                 canvas.stage.on('pointermove', handlers.move);
                 canvas.stage.on('click', handlers.click);
             }
+            if (handlers.rightClick)
+                canvas.stage.on('rightdown', handlers.rightClick);
             document.addEventListener('keydown', handlers.key, true);
             // Capture phase + non-passive so wheel handlers can preventDefault before Foundry's canvas zoom listener.
             if (handlers.wheel)
@@ -294,6 +296,8 @@ export function createPickerSession(label, onCrash)
                 return;
             canvas.stage.off('click', handlers.click);
             canvas.stage.off('pointermove', handlers.move);
+            if (handlers.rightClick)
+                canvas.stage.off('rightdown', handlers.rightClick);
             document.removeEventListener('keydown', handlers.key, true);
             if (handlers.wheel)
                 document.removeEventListener('wheel', handlers.wheel, { capture: true });
@@ -322,9 +326,23 @@ export function createCursorPreview()
     };
 }
 
-// A small green "+" near the cursor while Shift is held, signalling multi add/select mode.
-// Call move(shiftHeld, x, y) from the picker's pointermove; it also tracks Shift keydown/keyup.
-export function createMultiPlusIndicator()
+export function isShiftDown(event = null)
+{
+    if (event?.shiftKey ?? event?.data?.originalEvent?.shiftKey)
+        return true;
+    return !!(game.keyboard?.downKeys?.has('ShiftLeft') || game.keyboard?.downKeys?.has('ShiftRight'));
+}
+
+export function isCtrlDown(event = null)
+{
+    if (event?.ctrlKey ?? event?.data?.originalEvent?.ctrlKey)
+        return true;
+    return !!(game.keyboard?.downKeys?.has('ControlLeft') || game.keyboard?.downKeys?.has('ControlRight'));
+}
+
+// A small green "+" near the cursor while the modifier is held, signalling multi add/select mode.
+// Call move(modifierHeld, x, y) from the picker's pointermove; it also tracks the modifier's keydown/keyup.
+export function createMultiPlusIndicator({ modifier = 'Shift' } = {})
 {
     const label = makeText('+', {
         fontFamily: 'Arial',
@@ -338,9 +356,9 @@ export function createMultiPlusIndicator()
     label.visible = false;
     canvas.stage.addChild(label).eventMode = 'none';
     let lastCursorPos = null;
-    const place = (shiftHeld) =>
+    const place = (modifierHeld) =>
     {
-        if (shiftHeld && lastCursorPos)
+        if (modifierHeld && lastCursorPos)
         {
             label.x = lastCursorPos.x + canvas.grid.size * 0.4;
             label.y = lastCursorPos.y - canvas.grid.size * 0.4;
@@ -351,16 +369,16 @@ export function createMultiPlusIndicator()
     };
     const onKey = (event) =>
     {
-        if (event.key === 'Shift')
+        if (event.key === modifier)
             place(event.type === 'keydown');
     };
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKey, true);
     return {
-        move(shiftHeld, x, y)
+        move(modifierHeld, x, y)
         {
             lastCursorPos = { x, y };
-            place(shiftHeld);
+            place(modifierHeld);
         },
         dispose()
         {

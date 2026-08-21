@@ -21,6 +21,7 @@ const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
 const SETTING_UNKNOWN_LABEL = 'tokenStatHintUnknownLabel';
 const SETTING_HIDE_CLASS_UNKNOWN = 'tokenStatHintHideClassWhenUnknown';
 const SETTING_HIDE_CURRENT_ON_SCAN = 'tokenStatHintHideCurrentOnScan';
+const SETTING_SHOW_HASE = 'tokenStatHintShowHase';
 
 const LABEL_ACTOR = 'actor';   // always show the token name
 const LABEL_SCAN = 'scan';     // tied to scan: name if scanned, "UNKNOWN" otherwise
@@ -406,7 +407,7 @@ function getActorSubtitleText(actor)
     return '';
 }
 
-function buildHeaderHtml(token, mode)
+function buildHeaderHtml(token, mode, titleSuffixHtml = '')
 {
     const actor = token.actor;
     const isNpc = actor?.type === 'npc';
@@ -484,10 +485,10 @@ function buildHeaderHtml(token, mode)
         if (frameName)
             titleExtra = `<span class="la-stat-hint-frame">${esc(frameName)}</span>`;
     }
-    return `<div class="la-stat-hint-header"><div class="la-stat-hint-title">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span>${titleExtra}</div>${subtitle}</div>`;
+    return `<div class="la-stat-hint-header"><div class="la-stat-hint-title">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span>${titleExtra}${titleSuffixHtml}</div>${subtitle}</div>`;
 }
 
-export function buildRevealRowsHtml(actor, stats, { maskCurrent = false } = {})
+export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCombatState = false } = {})
 {
     const burnOn = isBurnEnabled();
     const infOn = isInfectionEnabled();
@@ -507,15 +508,18 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false } = {})
         const hpFull = stats.hpNominalMax || stats.hpMax;
         const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
         parts.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
-        if (burnOn)
+        if (burnOn && !omitCombatState)
         {
             const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
             parts.push(cell(cciIcon('cci-burn', burnCol), String(stats.burn), burnCol));
         }
         if (isMechOrNpc)
             parts.push(cell(svgIcon(ICON.armor), String(stats.armor)));
-        const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
-        parts.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
+        if (!omitCombatState)
+        {
+            const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
+            parts.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
+        }
         rows.push(parts.join(''));
     }
 
@@ -542,12 +546,12 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false } = {})
             parts.push(cell(mdi('mdi-head-cog-outline', xpColor),
                 maskCurrent ? `?/${stats.pilotXpMax}` : `${stats.pilotXpVal}/${stats.pilotXpMax}`, xpColor));
         }
-        if (infOn)
+        if (infOn && !omitCombatState)
         {
             const infectionColor = stats.infection > 0 ? '#1a8a3a' : dimColor;
             parts.push(cell(glyph('☣', infectionColor, 16), String(stats.infection), infectionColor));
         }
-        if (stats.type !== 'deployable')
+        if (stats.type !== 'deployable' && !omitCombatState)
         {
             const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
             const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
@@ -606,6 +610,121 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false } = {})
         const sep = (i === 2 && rows.length > 2) ? '<div class="la-stat-hint-sep"></div>' : '';
         return sep + `<div class="la-stat-hint-row">${rowHtml}</div>`;
     }).join('');
+}
+
+/**
+ * Two-zone statline for revealed mechs and NPCs: vitals left, sheet right, HASE(+grit) under the sheet.
+ * @param {any} actor
+ * @param {any} stats getStatsForActor result
+ * @param {object} [options]
+ * @param {boolean} [options.maskCurrent] show current values as "?"
+ * @param {boolean} [options.omitCombatState] drop burn/overshield/infection/reaction (battle log)
+ * @param {boolean} [options.showHase] include the HASE row
+ * @returns {string}
+ */
+export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitCombatState = false, showHase = true } = {})
+{
+    const sys = actor?.system ?? {};
+    const dimColor = '#555';
+
+    const vitals = [];
+    if (stats.structMax > 0)
+        vitals.push(cell(cciIcon('cci-structure', '#e8d060'), `${stats.structVal}/${stats.structMax}`, '#e8d060'));
+    const hpFull = stats.hpNominalMax || stats.hpMax;
+    const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
+    vitals.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
+    if (stats.stressMax > 0)
+        vitals.push(cell(cciIcon('cci-reactor', '#e07830'), `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
+    if (stats.heatMax > 0)
+    {
+        const heatColor = maskCurrent ? heatColorCss(0, stats.heatMax) : heatColorCss(stats.heatVal, stats.heatMax);
+        vitals.push(cell(glyph('🌡', heatColor, 16), maskCurrent ? `?/${stats.heatMax}` : `${stats.heatVal}/${stats.heatMax}`, heatColor));
+    }
+    if (!omitCombatState)
+    {
+        if (isBurnEnabled())
+        {
+            const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
+            vitals.push(cell(cciIcon('cci-burn', burnCol), String(stats.burn), burnCol));
+        }
+        const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
+        vitals.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
+        if (isInfectionEnabled())
+        {
+            const infectionColor = stats.infection > 0 ? '#1a8a3a' : dimColor;
+            vitals.push(cell(glyph('☣', infectionColor, 16), String(stats.infection), infectionColor));
+        }
+        const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
+        const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
+        vitals.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
+            maskCurrent ? '?' : (stats.reaction ? '1' : '0'), reactionColor));
+    }
+
+    const sheet = [
+        cell(mdi('mdi-arrow-right-bold-hexagon-outline', '#fff'), String(stats.speed)),
+        cell(svgIcon(ICON.armor), String(stats.armor)),
+        cell(svgIcon(ICON.evasion), String(stats.evasion)),
+        cell(svgIcon(ICON.edef), String(stats.edef)),
+        cell(svgIcon(ICON.sensors), String(stats.sensors)),
+        cell(svgIcon(ICON.save), signed(stats.save)),
+    ];
+    if (stats.type === 'mech')
+    {
+        const ocSeq = typeof stats.ocSequence === 'string'
+            ? stats.ocSequence.split(',').map(step => step.trim())
+            : [];
+        if (ocSeq.length > 0)
+        {
+            const ocLabel = maskCurrent ? '?' : (ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
+            const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
+            sheet.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
+        }
+        if (stats.hasRepairs)
+        {
+            const repairsColor = maskCurrent ? '#66cc66' : (stats.repairs > 0 ? '#66cc66' : '#555');
+            const repairsLabel = maskCurrent
+                ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
+                : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
+            sheet.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
+        }
+    }
+
+    let haseHtml = '';
+    if (showHase)
+    {
+        const parts = [
+            cell(glyph('H', '#fff', 13), signed(sys.hull ?? 0)),
+            cell(glyph('A', '#fff', 13), signed(sys.agi ?? 0)),
+            cell(glyph('S', '#fff', 13), signed(sys.sys ?? 0)),
+            cell(glyph('E', '#fff', 13), signed(sys.eng ?? 0)),
+        ];
+        // The battle log has no fourth line, so grit rides inline there.
+        if (stats.type === 'mech' && omitCombatState)
+            parts.push(cell(glyph('G', '#ffaa55', 13), signed(sys.grit ?? 0)));
+        haseHtml = `<div class="la-stat-hint-hase${omitCombatState ? ' la-inline' : ''}">${parts.join('')}</div>`;
+    }
+
+    let extraLineHtml = '';
+    if (stats.type === 'mech' && !omitCombatState)
+    {
+        const parts = [];
+        if (showHase)
+            parts.push(cell(glyph('G', '#ffaa55', 13), signed(sys.grit ?? 0)));
+        if (stats.coreEnergy != null)
+        {
+            const corePwrColor = maskCurrent ? corePowerColor(1, false) : corePowerColor(stats.coreEnergy, stats.coreActive);
+            const coreLabel = maskCurrent ? '?' : (stats.coreEnergy > 0 ? (stats.coreActive ? 'ON' : '✓') : '✗');
+            parts.push(cell(svgIcon(ICON.corePwr), coreLabel, corePwrColor));
+        }
+        if (parts.length)
+            extraLineHtml = `<div class="la-stat-hint-extraline">${parts.join('')}</div>`;
+    }
+
+    return `<div class="la-stat-hint-zones">`
+        + `<div class="la-stat-hint-vitals">${vitals.join('')}</div>`
+        + `<div class="la-stat-hint-zrule"></div>`
+        + `<div class="la-stat-hint-sheet">${sheet.join('')}${haseHtml}${extraLineHtml}</div>`
+        + `</div>`;
 }
 
 // Unknown view: vitals only; HP/Heat shown as deltas so the maxes don't leak.
@@ -746,11 +865,68 @@ export function ensureStyleSheet()
     opacity: 0.85;
     margin-left: 4px;
 }
+.la-stat-hint-zones {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 6px 9px;
+    font-size: 13px;
+    line-height: 1;
+    color: #ddd;
+    font-weight: 400;
+    white-space: nowrap;
+}
+.la-stat-hint-vitals {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    column-gap: 9px;
+    row-gap: 2px;
+    align-content: center;
+}
+.la-stat-hint-zrule {
+    flex: 0 0 1px;
+    align-self: stretch;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.3);
+}
+.la-stat-hint-sheet {
+    display: grid;
+    grid-template-columns: repeat(4, max-content);
+    column-gap: 9px;
+    row-gap: 2px;
+    align-content: start;
+    justify-items: center;
+}
+.la-stat-hint-hase {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    border-top: 1px dashed rgba(255, 255, 255, 0.3);
+    padding-top: 3px;
+    margin-top: 1px;
+    display: grid;
+    grid-template-columns: subgrid;
+    justify-items: center;
+    align-items: center;
+}
+.la-stat-hint-hase.la-inline {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+.la-stat-hint-extraline {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    display: grid;
+    grid-template-columns: subgrid;
+    justify-items: center;
+    align-items: center;
+    margin-top: 2px;
+}
 .la-stat-hint-rows {
     display: grid;
     grid-template-columns: repeat(5, max-content);
-    column-gap: 14px;
-    row-gap: 4px;
+    column-gap: 9px;
+    row-gap: 2px;
     padding: 6px 9px;
     font-size: 13px;
     line-height: 1;
@@ -766,7 +942,7 @@ export function ensureStyleSheet()
 }
 .la-stat-hint-sep {
     grid-column: 1 / -1;
-    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    border-top: 1px dashed rgba(255, 255, 255, 0.22);
     margin: 2px 0 0;
     height: 0;
 }
@@ -793,20 +969,20 @@ export function ensureStyleSheet()
 }
 .la-stat-hint-cell .la-stat-hint-val { font-weight: 400; }
 .la-stat-hint-extras {
-    padding: 4px 9px 6px;
+    padding: 2px 9px 5px;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
 }
 .la-stat-hint-extras .la-stat-hint-sep {
-    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    border-top: 1px dashed rgba(255, 255, 255, 0.22);
     height: 0;
     margin: 0 0 4px;
 }
 .la-stat-hint-extra-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     font-size: 13px;
     line-height: 1.1;
     white-space: nowrap;
@@ -886,8 +1062,12 @@ function buildPopupDom(token)
     let rowsHtml = '';
     if (mode === 'gm' || mode === 'scanned')
     {
+        const isMechOrNpc = stats.type === 'mech' || stats.type === 'npc';
         headerHtml = buildHeaderHtml(token, 'reveal');
-        rowsHtml = `<div class="la-stat-hint-rows">${buildRevealRowsHtml(actor, stats, { maskCurrent })}</div>`;
+        const showHase = game.settings.get(MODULE_ID, SETTING_SHOW_HASE) === true;
+        rowsHtml = isMechOrNpc
+            ? buildTwoZoneStatsHtml(actor, stats, { maskCurrent, showHase })
+            : `<div class="la-stat-hint-rows">${buildRevealRowsHtml(actor, stats, { maskCurrent })}</div>`;
     }
     else
     {
@@ -1327,6 +1507,12 @@ export function registerTokenStatHintSettings()
         default: false,
     });
     game.settings.register(MODULE_ID, SETTING_HIDE_CURRENT_ON_SCAN, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_SHOW_HASE, {
         scope: 'world',
         config: false,
         type: Boolean,

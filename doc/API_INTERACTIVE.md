@@ -4,7 +4,7 @@
 
 ---
 
-## Interactive Player Tools
+## Selection
 
 <details id="chooseToken">
 <summary><b><code>chooseToken</code></b> <sup>async</sup> → <code>Array&lt;Token&gt; | null</code></summary>
@@ -80,7 +80,77 @@ Hidden tokens are included for GMs and excluded for players. Not an option.
 
 </details>
 
----
+<details id="pickItem">
+<summary><b><code>pickItem</code></b> <sup>async</sup> → <code>Item | null</code></summary>
+
+<br>
+
+```js
+const item = await api.pickItem(items, options)
+```
+
+Pick an item from a list via a Choice Card.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>items</kbd> | `Array<Item>` | *required* | Array of items to choose from |
+| **inside `options`** | | | |
+| <kbd>title</kbd> | `string` | `"PICK ITEM"` | Card title |
+| <kbd>description</kbd> | `string` | `"Select an item:"` | Subtitle text |
+| <kbd>icon</kbd> | `string` | `"fas fa-box"` | FontAwesome class |
+| <kbd>formatText</kbd> | `(item: Item) => string` | `null` | `(item) => item.name` |
+
+```js
+const weapon = await api.pickItem(actor.items.filter(i => i.type === 'mech_weapon'), { title: 'PICK WEAPON' });
+```
+
+</details>
+
+<details id="getWeapons">
+<summary><b><code>getWeapons</code></b> → <code>any[]</code><br><b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>findAura</code></b> → <code>object | null</code><br><b><code>getTokensInAura</code></b> → <code>Token[] | null</code><br><b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code><br><b><code>findItemByLid</code></b> → <code>any | null</code></summary>
+
+<br>
+
+```js
+api.getWeapons(entity)                                // → Array<Item> - all weapons on an actor
+await api.reloadOneWeapon(actorOrToken, name?)         // → Item|null - pick & reload a Loading weapon
+await api.rechargeSystem(actorOrToken, name?)          // → Item|null - pick & recharge a depleted system
+api.findAura(actorOrToken, auraName)                   // → object|null - find Grid-Aware Aura by name
+api.getTokensInAura(actorOrToken, auraName)            // → Token[]|null - who is standing in it
+await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - flip/set aura's enabled state
+api.findItemByLid(actorOrToken, lid)                   // → Item|null - find item by Lancer ID
+```
+
+**Params:** <kbd>actorOrToken</kbd> / <kbd>entity</kbd> `Actor|Token|TokenDocument` · <kbd>auraName</kbd> `string` · <kbd>lid</kbd> `string` · <kbd>targetName</kbd> `string` picker notification label
+
+All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSystem` open a picker (`name?` is only the notification label). `toggleAura`'s `on?` sets state (omit to flip). Full entry in [API_HOWTO](API_HOWTO.md).
+
+`getTokensInAura` reads GAA's live occupancy, so it is elevation aware and skips drag previews. `null` means it could not be resolved (GAA off, or no such aura), unlike `[]` for an empty aura.
+
+</details>
+
+<details id="getTokenOwnerUserId">
+<summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code></summary>
+
+<br>
+
+```js
+api.getTokenOwnerUserId(token)
+```
+
+Returns the user ID(s) that own a token. Checks active non-GM players first, falls back to the active GM.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>token</kbd> | `Token` | The token to check |
+
+```js
+const userId = api.getTokenOwnerUserId(target) ?? game.users.activeGM?.id;
+```
+
+</details>
+
+## Cards & Prompts
 
 <details id="openHaseContestCard">
 <summary><b><code>openHaseContestCard</code></b> <sup>async</sup> → <code>{ completed, winner, loser, winnerToken, loserToken, tie, results } | null</code></summary>
@@ -110,8 +180,6 @@ const result = await api.openHaseContestCard({ tokenA, skillA: 'HULL', tokenB, s
 
 </details>
 
----
-
 <details id="openForceCheckCard">
 <summary><b><code>openForceCheckCard</code></b> <sup>async</sup> → <code>{ completed, results } | null</code></summary>
 
@@ -140,7 +208,149 @@ const result = await api.openForceCheckCard({ tokenA: casterToken, skill: 'ENG',
 
 </details>
 
----
+<details id="startChoiceCard">
+<summary><b><code>startChoiceCard</code></b> <sup>async</sup> → <code>{ choiceIdx, responderIds } | null</code></summary>
+
+<br>
+
+```js
+await api.startChoiceCard(options)
+```
+
+Presents a choice card to the user (or GM) with custom buttons and callbacks.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>mode</kbd> | `string` | `"or"` | `"or"` (pick one), `"and"` (confirm all), `"vote"` (live tally), `"vote-hidden"` (hidden tally) |
+| <kbd>choices</kbd> | `Array<Object>` | `[]` | List of choice objects (see below) |
+| <kbd>title</kbd> | `string` | `"CHOICE"` | Card header |
+| <kbd>description</kbd> | `string` | `""` | Subtitle text |
+| <kbd>icon</kbd> | `string` | `null` | FontAwesome class |
+| <kbd>headerClass</kbd> | `string` | `""` | Optional CSS class |
+| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
+| <kbd>originToken</kbd> | `Token` | `null` | Token the card is attributed to |
+| <kbd>relatedToken</kbd> | `Token` | `null` | Second token shown on the card |
+| <kbd>item</kbd> | `Item` | `null` | Source item shown on the card |
+| <kbd>traceData</kbd> | `Object` | `null` | Trigger data carried through for tracing |
+| <kbd>forceSocket</kbd> | `boolean` | `false` | Always route through the socket, even for the local user |
+| <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
+
+**Choice Object:**
+```js
+{ text: "Label", icon: "fas fa-check", data: { id: 1 }, callback: async (data) => { ... } }
+```
+
+For vote modes, `userIdControl` must be a non-empty array of user IDs. The creator sees all votes and confirms the winner.
+
+</details>
+
+<details id="openChoiceMenu">
+<summary><b><code>openChoiceMenu</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.openChoiceMenu()
+```
+
+Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote to active users.
+
+| Mode | Behavior |
+|:-----|:---------|
+| **Vote** | Each recipient gets a vote card. GM sees live tally, picks winner. |
+| **Hidden Vote** | Same, but voters can't see each other's selections. |
+| **Pick One (OR)** | First player to click wins. Others dismissed. |
+| **Pick All (AND)** | Every recipient must confirm before flow resolves. |
+
+</details>
+
+<details id="startVoteCard">
+<summary><b><code>startVoteCard</code></b> <sup>async</sup> → <code>true | null</code></summary>
+
+<br>
+
+```js
+const done = await api.startVoteCard(options)
+```
+
+Every listed voter gets a card and casts one choice. Only the caller sees the tally and can confirm to close the vote. Resolves `true` on confirm, `null` if dismissed.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>choices</kbd> | `Array<{ text, icon?, callback?, data? }>` | `[]` | The options voters pick from |
+| <kbd>title</kbd> | `string` | card default | Card header |
+| <kbd>description</kbd> | `string` | `""` | Subtitle text |
+| <kbd>icon</kbd> | `string` | none | FontAwesome class |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
+| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | Voter user IDs |
+| <kbd>hidden</kbd> | `boolean` | `false` | Voters cannot see each other's counts |
+
+```js
+await api.startVoteCard({
+    title: 'NEXT MISSION',
+    choices: [{ text: 'Assault' }, { text: 'Recon' }],
+    userIdControl: game.users.filter(u => !u.isGM).map(u => u.id)
+});
+```
+
+</details>
+
+<details id="confirmCard">
+<summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code><br><b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code><br><b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
+
+<br>
+
+```js
+const ok = await api.confirmCard({ title, description, confirmText, confirmIcon, ... })
+const ask = await api.askCard({ title, description, yesText, noText, owner, ... })
+const entry = await api.pickCard(entries, { label, entryIcon, title, description, ... })
+```
+
+Sugar over `startChoiceCard`. Extra options (`originToken`, `relatedToken`, `item`, `userIdControl`, ...) pass through.
+
+`confirmCard` shows a single button (`confirmText`, default `"Confirm"`). Resolves `true` when clicked, `false` on dismiss.
+
+`askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). `owner` (a Token) routes control to that token's owner with active-GM fallback. An explicit `userIdControl` wins. The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
+
+`pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`).
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>confirmText</kbd> | `string` | `"Confirm"` | `confirmCard` button label |
+| <kbd>confirmIcon</kbd> | `string` | `null` | `confirmCard` button icon |
+| <kbd>yesText</kbd> / <kbd>noText</kbd> | `string` | `"Use"` / `"Skip"` | `askCard` button labels |
+| <kbd>yesIcon</kbd> / <kbd>noIcon</kbd> | `string` | `null` | `askCard` button icons |
+| <kbd>owner</kbd> | `Token` | `null` | Routes control to that token's owner, active-GM fallback. An explicit `userIdControl` wins |
+| <kbd>label</kbd> | `string\|(entry) => string` | `entry.name` | `pickCard` button text: property name or function |
+| <kbd>entryIcon</kbd> | `string\|(entry) => string` | `null` | `pickCard` button icon: fixed or per entry |
+
+```js
+const { confirmed } = await api.askCard({ title: 'BRACE?', yesText: 'Brace', noText: 'Pass', owner: reactorToken });
+```
+
+</details>
+
+<details id="rollCard">
+<summary><b><code>rollCard</code></b> <sup>async</sup> → <code>{ total, formula, roll } | null</code></summary>
+
+<br>
+
+```js
+const result = await api.rollCard({ title, roll, originToken, relatedToken, item })
+```
+
+Card with an editable roll input (preset by `roll`, default `"1d20"`); rolls to chat as `originToken`. `null` on cancel.
+
+```js
+const result = await api.rollCard({ title: "REBOUND", roll: "1d6", originToken: reactorToken, item });
+```
+
+</details>
+
+## Zones & Templates
 
 <details id="placeZone">
 <summary><b><code>placeZone</code></b> <sup>async</sup> → <code>Array&lt;MeasuredTemplate&gt;</code></summary>
@@ -214,8 +424,6 @@ api.placeZone(token, {
 
 </details>
 
----
-
 <details id="tokensInTemplate">
 <summary><b><code>tokensInTemplate</code></b> → <code>Array&lt;Token&gt;</code></summary>
 
@@ -239,7 +447,7 @@ if (targets.length) await api.executeDamageRoll(casterToken, targets, 5, "explos
 
 </details>
 
----
+## Placement & Movement
 
 <details id="placeToken">
 <summary><b><code>placeToken</code></b> <sup>async</sup> → <code>Promise&lt;Array&lt;TokenDocument&gt;|null&gt;</code></summary>
@@ -271,257 +479,6 @@ await api.placeToken({ actor: turretActor, origin: casterToken, range: 2 });
 
 </details>
 
----
-
-<details id="knockBackToken">
-<summary><b><code>knockBackToken</code></b> <sup>async</sup> → <code>Array | null</code></summary>
-
-<br>
-
-```js
-await api.knockBackToken(tokens, distance, options)
-```
-
-Interactive knockback tool. Shows movement traces and requires confirmation per token.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>tokens</kbd> | `Array<Token>` | *required* | Tokens to knock back |
-| <kbd>distance</kbd> | `number` | *required* | Knockback distance in spaces |
-
-**`options` Object:**
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| **inside `options`** | | | |
-| <kbd>title</kbd> | `string` | `"KNOCKBACK"` | Card header |
-| <kbd>description</kbd> | `string` | `"Select destination for each token."` | Card description |
-| <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
-| <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
-| <kbd>item</kbd> | `Item` | `null` | Source item |
-| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire, no `onInvoluntaryMove`). |
-| <kbd>icon</kbd> | `string` | none | FontAwesome class for the card |
-| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
-| <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
-
-```js
-await api.knockBackToken([target], 3, { triggeringToken: reactorToken });
-```
-
-</details>
-
----
-
-<details id="revertMovement">
-<summary><b><code>revertMovement</code></b> <sup>async</sup> → <code>boolean</code></summary>
-
-<br>
-
-```js
-await api.revertMovement(token, destination)
-```
-
-Reverts the token's last recorded movement. If the token has no movement history and `destination` is provided, moves there instead.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>token</kbd> | `Token` | *required* | The token to revert |
-| <kbd>destination</kbd> | `{x, y}` | `null` | Override destination (world coordinates) |
-
-```js
-await api.revertMovement(token, { x: 1200, y: 800 });
-```
-
-</details>
-
----
-
-<details id="pickItem">
-<summary><b><code>pickItem</code></b> <sup>async</sup> → <code>Item | null</code></summary>
-
-<br>
-
-```js
-const item = await api.pickItem(items, options)
-```
-
-Pick an item from a list via a Choice Card.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>items</kbd> | `Array<Item>` | *required* | Array of items to choose from |
-| **inside `options`** | | | |
-| <kbd>title</kbd> | `string` | `"PICK ITEM"` | Card title |
-| <kbd>description</kbd> | `string` | `"Select an item:"` | Subtitle text |
-| <kbd>icon</kbd> | `string` | `"fas fa-box"` | FontAwesome class |
-| <kbd>formatText</kbd> | `(item: Item) => string` | `null` | `(item) => item.name` |
-
-```js
-const weapon = await api.pickItem(actor.items.filter(i => i.type === 'mech_weapon'), { title: 'PICK WEAPON' });
-```
-
-</details>
-
----
-
-<details id="getWeapons">
-<summary><b><code>getWeapons</code></b> → <code>any[]</code><br><b><code>reloadOneWeapon</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>rechargeSystem</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code><br><b><code>findAura</code></b> → <code>object | null</code><br><b><code>getTokensInAura</code></b> → <code>Token[] | null</code><br><b><code>toggleAura</code></b> <sup>async</sup> → <code>Promise&lt;boolean|null&gt;</code><br><b><code>findItemByLid</code></b> → <code>any | null</code></summary>
-
-<br>
-
-```js
-api.getWeapons(entity)                                // → Array<Item> - all weapons on an actor
-await api.reloadOneWeapon(actorOrToken, name?)         // → Item|null - pick & reload a Loading weapon
-await api.rechargeSystem(actorOrToken, name?)          // → Item|null - pick & recharge a depleted system
-api.findAura(actorOrToken, auraName)                   // → object|null - find Grid-Aware Aura by name
-api.getTokensInAura(actorOrToken, auraName)            // → Token[]|null - who is standing in it
-await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - flip/set aura's enabled state
-api.findItemByLid(actorOrToken, lid)                   // → Item|null - find item by Lancer ID
-```
-
-**Params:** <kbd>actorOrToken</kbd> / <kbd>entity</kbd> `Actor|Token|TokenDocument` · <kbd>auraName</kbd> `string` · <kbd>lid</kbd> `string` · <kbd>targetName</kbd> `string` picker notification label
-
-All accept `Actor` | `Token` | `TokenDocument`. `reloadOneWeapon`/`rechargeSystem` open a picker (`name?` is only the notification label). `toggleAura`'s `on?` sets state (omit to flip). Full entry in [API_HOWTO](API_HOWTO.md).
-
-`getTokensInAura` reads GAA's live occupancy, so it is elevation aware and skips drag previews. `null` means it could not be resolved (GAA off, or no such aura), unlike `[]` for an empty aura.
-
-</details>
-
----
-
-<details id="startChoiceCard">
-<summary><b><code>startChoiceCard</code></b> <sup>async</sup> → <code>{ choiceIdx, responderIds } | null</code></summary>
-
-<br>
-
-```js
-await api.startChoiceCard(options)
-```
-
-Presents a choice card to the user (or GM) with custom buttons and callbacks.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| **inside `options`** | | | |
-| <kbd>mode</kbd> | `string` | `"or"` | `"or"` (pick one), `"and"` (confirm all), `"vote"` (live tally), `"vote-hidden"` (hidden tally) |
-| <kbd>choices</kbd> | `Array<Object>` | `[]` | List of choice objects (see below) |
-| <kbd>title</kbd> | `string` | `"CHOICE"` | Card header |
-| <kbd>description</kbd> | `string` | `""` | Subtitle text |
-| <kbd>icon</kbd> | `string` | `null` | FontAwesome class |
-| <kbd>headerClass</kbd> | `string` | `""` | Optional CSS class |
-| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
-| <kbd>originToken</kbd> | `Token` | `null` | Token the card is attributed to |
-| <kbd>relatedToken</kbd> | `Token` | `null` | Second token shown on the card |
-| <kbd>item</kbd> | `Item` | `null` | Source item shown on the card |
-| <kbd>traceData</kbd> | `Object` | `null` | Trigger data carried through for tracing |
-| <kbd>forceSocket</kbd> | `boolean` | `false` | Always route through the socket, even for the local user |
-| <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
-
-**Choice Object:**
-```js
-{ text: "Label", icon: "fas fa-check", data: { id: 1 }, callback: async (data) => { ... } }
-```
-
-For vote modes, `userIdControl` must be a non-empty array of user IDs. The creator sees all votes and confirms the winner.
-
-</details>
-
----
-
-<details id="confirmCard">
-<summary><b><code>confirmCard</code></b> <sup>async</sup> → <code>boolean</code><br><b><code>askCard</code></b> <sup>async</sup> → <code>{ confirmed, responderIds }</code><br><b><code>pickCard</code></b> <sup>async</sup> → <code>entry | null</code></summary>
-
-<br>
-
-```js
-const ok = await api.confirmCard({ title, description, confirmText, confirmIcon, ... })
-const ask = await api.askCard({ title, description, yesText, noText, owner, ... })
-const entry = await api.pickCard(entries, { label, entryIcon, title, description, ... })
-```
-
-Sugar over `startChoiceCard`. Extra options (`originToken`, `relatedToken`, `item`, `userIdControl`, ...) pass through.
-
-`confirmCard` shows a single button (`confirmText`, default `"Confirm"`). Resolves `true` when clicked, `false` on dismiss.
-
-`askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). `owner` (a Token) routes control to that token's owner with active-GM fallback. An explicit `userIdControl` wins. The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
-
-`pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`).
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| **inside `options`** | | | |
-| <kbd>confirmText</kbd> | `string` | `"Confirm"` | `confirmCard` button label |
-| <kbd>confirmIcon</kbd> | `string` | `null` | `confirmCard` button icon |
-| <kbd>yesText</kbd> / <kbd>noText</kbd> | `string` | `"Use"` / `"Skip"` | `askCard` button labels |
-| <kbd>yesIcon</kbd> / <kbd>noIcon</kbd> | `string` | `null` | `askCard` button icons |
-| <kbd>owner</kbd> | `Token` | `null` | Routes control to that token's owner, active-GM fallback. An explicit `userIdControl` wins |
-| <kbd>label</kbd> | `string\|(entry) => string` | `entry.name` | `pickCard` button text: property name or function |
-| <kbd>entryIcon</kbd> | `string\|(entry) => string` | `null` | `pickCard` button icon: fixed or per entry |
-
-```js
-const { confirmed } = await api.askCard({ title: 'BRACE?', yesText: 'Brace', noText: 'Pass', owner: reactorToken });
-```
-
-</details>
-
----
-
-<details id="openChoiceMenu">
-<summary><b><code>openChoiceMenu</code></b> <sup>async</sup> → <code>void</code></summary>
-
-<br>
-
-```js
-await api.openChoiceMenu()
-```
-
-Opens a GM-facing wizard dialog to configure and broadcast a choice card or vote to active users.
-
-| Mode | Behavior |
-|:-----|:---------|
-| **Vote** | Each recipient gets a vote card. GM sees live tally, picks winner. |
-| **Hidden Vote** | Same, but voters can't see each other's selections. |
-| **Pick One (OR)** | First player to click wins. Others dismissed. |
-| **Pick All (AND)** | Every recipient must confirm before flow resolves. |
-
-</details>
-
----
-
-<details id="startVoteCard">
-<summary><b><code>startVoteCard</code></b> <sup>async</sup> → <code>true | null</code></summary>
-
-<br>
-
-```js
-const done = await api.startVoteCard(options)
-```
-
-Every listed voter gets a card and casts one choice. Only the caller sees the tally and can confirm to close the vote. Resolves `true` on confirm, `null` if dismissed.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| **inside `options`** | | | |
-| <kbd>choices</kbd> | `Array<{ text, icon?, callback?, data? }>` | `[]` | The options voters pick from |
-| <kbd>title</kbd> | `string` | card default | Card header |
-| <kbd>description</kbd> | `string` | `""` | Subtitle text |
-| <kbd>icon</kbd> | `string` | none | FontAwesome class |
-| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class |
-| <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | Voter user IDs |
-| <kbd>hidden</kbd> | `boolean` | `false` | Voters cannot see each other's counts |
-
-```js
-await api.startVoteCard({
-    title: 'NEXT MISSION',
-    choices: [{ text: 'Assault' }, { text: 'Recon' }],
-    userIdControl: game.users.filter(u => !u.isGM).map(u => u.id)
-});
-```
-
-</details>
-
----
-
 <details id="moveToken">
 <summary><b><code>moveToken</code></b> <sup>async</sup> → <code>TokenDocument | null</code></summary>
 
@@ -531,16 +488,20 @@ await api.startVoteCard({
 await api.moveToken(token, options)
 ```
 
+Without `destination`, opens the drag-ruler picker: Ctrl+click waypoints, right-click removes, Confirm commits. Accepts a token array.
+
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token</kbd> | `Token` | *required* | The token to move |
 | **inside `options`** | | | |
 | <kbd>destination</kbd> | `{x: number, y: number}` | `null` | Center point (world coords), snapped to the grid. If omitted, interactive picker. |
-| <kbd>teleport</kbd> | `boolean` | `false` | Blink/teleport instead of a slide: plays teleport VFX and records it as a teleport in history. |
+| <kbd>teleport</kbd> | `boolean` | `false` | Move as the `blink` action (teleport animation, recorded as teleport) |
 | <kbd>action</kbd> | `string` | `null` | Movement action key (see below). Animates the move as that type, forced (ignores walls/cost). Takes precedence over `teleport`. |
-| <kbd>range</kbd> | `number` | `-1` | Max range highlight (interactive mode) |
-| <kbd>cost</kbd> | `number` | `null` | Movement cost in spaces |
-| <kbd>canBeBlocked</kbd> | `boolean` | `true` | Whether engagement/overwatch can intercept |
+| <kbd>range</kbd> | `number` | `-1` | Max movement budget (interactive mode), soft warning only |
+| <kbd>cost</kbd> | `number` | `null` | Fixed movement cost recorded instead of the measured one |
+| <kbd>free</kbd> | `boolean` | `false` | Interactive mode: free movement, no cap consumption, involuntary |
+| <kbd>urgent</kbd> | `boolean` | `false` | Interactive mode: jump the card queue |
+| <kbd>canBeBlocked</kbd> | `boolean` | `false` | Direct mode: stop the move before blocking token bodies |
 | <kbd>title</kbd> | `string` | `"TELEPORT"` / `"MOVE"` | Card header (interactive mode). Defaults to TELEPORT when `teleport` is on |
 | <kbd>description</kbd> | `string` | `"Select destination."` | Card description |
 | <kbd>icon</kbd> | `string` | none | FontAwesome class for the card |
@@ -567,28 +528,74 @@ await api.moveToken(token, { teleport: true, range: 5 });
 
 </details>
 
----
-
-<details id="getTokenOwnerUserId">
-<summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code></summary>
+<details id="boostMove">
+<summary><b><code>boostMove</code></b> <sup>async</sup> → <code>TokenDocument | null</code></summary>
 
 <br>
 
 ```js
-api.getTokenOwnerUserId(token)
+await api.boostMove(token, options)
 ```
 
-Returns the user ID(s) that own a token. Checks active non-GM players first, falls back to the active GM.
+Triggers the Boost action, then `moveToken` with that speed. `options` pass through.
 
-| Param | Type | Description |
-|:------|:-----|:------------|
-| <kbd>token</kbd> | `Token` | The token to check |
+</details>
+
+<details id="knockBackToken">
+<summary><b><code>knockBackToken</code></b> <sup>async</sup> → <code>Array | null</code></summary>
+
+<br>
 
 ```js
-const userId = api.getTokenOwnerUserId(target) ?? game.users.activeGM?.id;
+await api.knockBackToken(tokens, distance, options)
+```
+
+Knockback with the drag-ruler picker: plan a destination per token, Confirm commits all as forced moves (`onInvoluntaryMove` fires per token).
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>tokens</kbd> | `Token \| Token[]` | *required* | Tokens to knock back |
+| <kbd>distance</kbd> | `number` | *required* | Knockback distance in spaces (-1 = unlimited) |
+| **inside `options`** | | | |
+| <kbd>title</kbd> | `string` | `"KNOCKBACK"` | Card header |
+| <kbd>description</kbd> | `string` | `"Select destination for each token."` | Card description |
+| <kbd>triggeringToken</kbd> | `Token` | `null` | The token causing the move (for `onInvoluntaryMove` trigger) |
+| <kbd>actionName</kbd> | `string` | `""` | Source action name (enables `onlyOnSourceMatch`) |
+| <kbd>item</kbd> | `Item` | `null` | Source item |
+| <kbd>asVoluntary</kbd> | `boolean` | `false` | If true, moves go through the voluntary path (`onPreMove`/`onMove` fire, no `onInvoluntaryMove`). |
+| <kbd>setElevation</kbd> | `boolean` | `false` | Set destination elevation from the terrain under it |
+| <kbd>icon</kbd> | `string` | none | FontAwesome class for the card |
+| <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
+| <kbd>urgent</kbd> | `boolean` | `true` | Pass `false` to wait in the card queue |
+
+```js
+await api.knockBackToken([target], 3, { triggeringToken: reactorToken });
 ```
 
 </details>
+
+<details id="revertMovement">
+<summary><b><code>revertMovement</code></b> <sup>async</sup> → <code>boolean</code></summary>
+
+<br>
+
+```js
+await api.revertMovement(token, destination)
+```
+
+Reverts the token's last recorded movement. If the token has no movement history and `destination` is provided, moves there instead.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token` | *required* | The token to revert |
+| <kbd>destination</kbd> | `{x, y}` | `null` | Override destination (world coordinates) |
+
+```js
+await api.revertMovement(token, { x: 1200, y: 800 });
+```
+
+</details>
+
 
 ---
 
@@ -625,8 +632,6 @@ await api.addExtraDeploymentLids(actor, ['dep_turret_drone']);
 
 </details>
 
----
-
 <details id="getExtraDeployableOpts">
 <summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code><br><b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
@@ -650,8 +655,6 @@ await api.setExtraDeployableOpts(actor, 'dep_turret_drone', { count: 2, range: 3
 ```
 
 </details>
-
----
 
 <details id="setHidePrimaryAction">
 <summary><b><code>setHidePrimaryAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>isPrimaryActionHidden</code></b> → <code>boolean</code></summary>
@@ -678,8 +681,6 @@ await api.setHidePrimaryAction(item, true);
 
 </details>
 
----
-
 <details id="promptLinkOrUnlinkActor">
 <summary><b><code>promptLinkOrUnlinkActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
@@ -696,8 +697,6 @@ Picker that toggles the deployable-owner link flag (`ownerActorUuid` + `ownerNam
 | <kbd>ownerToken</kbd> | `Token` | Owner |
 
 </details>
-
----
 
 <details id="getItemDeployables">
 <summary><b><code>getItemDeployables</code></b> → <code>string[]</code></summary>
@@ -716,8 +715,6 @@ Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-
 | <kbd>actor</kbd> | `Actor` | Optional. Owner actor (needed for NPC tier selection) |
 
 </details>
-
----
 
 <details id="placeDeployable">
 <summary><b><code>placeDeployable</code></b> <sup>async</sup> → <code>Promise&lt;Object|null&gt;</code></summary>
@@ -750,8 +747,6 @@ await api.placeDeployable({ deployable: 'dep_turret_drone', ownerActor: actor, r
 ```
 
 </details>
-
----
 
 <details id="beginDeploymentCard">
 <summary><b><code>beginDeploymentCard</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>deployWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
@@ -791,8 +786,6 @@ await api.beginDeploymentCard({ actor, item });
 ```
 
 </details>
-
----
 
 <details id="openDeployableMenu">
 <summary><b><code>openDeployableMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>recallDeployable</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>pickupWeaponToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openThrowMenu</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>openItemBrowser</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>

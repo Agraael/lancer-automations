@@ -167,6 +167,8 @@ Pick a mech or pilot and open Rest to spend its repair pool. You can pull repair
 
 A guided downtime flow: pick the pilot, choose one of the nine downtime activities, set an objective, and roll its skill trigger (with manual-roll and accuracy/difficulty overrides for the GM). The result card shows the outcome and can be logged to a downtime journal, with activity names shown as either in-world or rulebook terms.
 
+Custom activities can be added as Downtime Activity items or imported from an LCP - see [System Additions](./SYSTEM_ADDITIONS.md#custom-downtime-activities).
+
 ---
 
 ## Reserves
@@ -176,3 +178,9 @@ A guided downtime flow: pick the pilot, choose one of the nine downtime activiti
 Add Lancer's pilot reserves and bonuses, including custom reserves, projects, and organizations, without opening the compendium. Search to filter, click to add it to the pilot.
 
 <br clear="right"/>
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Automate Knockback on Hit** | Auto-trigger the Knockback tool on hits with Knockback-tagged weapons. |

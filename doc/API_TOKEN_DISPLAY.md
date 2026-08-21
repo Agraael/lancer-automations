@@ -57,8 +57,6 @@ Entry shape (all fields optional in `partial`):
 
 </details>
 
----
-
 <details id="updateExtraBarValue">
 <summary><b><code>updateExtraBarValue</code></b> <sup>async</sup> → <code>number | null</code></summary>
 
@@ -82,8 +80,6 @@ await api.updateExtraBarValue(token, entryId, '-1');
 
 </details>
 
----
-
 <details id="removeExtraBar">
 <summary><b><code>removeExtraBar</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
@@ -105,8 +101,6 @@ await api.removeExtraBar(token, entryId);
 ```
 
 </details>
-
----
 
 <details id="getExtraBars">
 <summary><b><code>getExtraBars</code></b> → <code>Array</code></summary>

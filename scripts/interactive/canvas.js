@@ -19,7 +19,6 @@ export {
 export { chooseToken } from "./tools/chooseToken.js";
 export { placeZone, tokensInTemplate } from "./tools/placeZone.js";
 export { moveToken } from "./tools/moveToken.js";
-export { knockBackToken } from "./tools/knockBackToken.js";
 export { placeToken } from "./tools/placeToken.js";
 export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";
 export { pickTokensCardless, isCardlessTokenPickerActive, cancelCardlessTokenPicker } from "./tools/pickTokensCardless.js";

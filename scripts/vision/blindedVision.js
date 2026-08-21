@@ -40,10 +40,14 @@ function overRange(mode, target)
     return SIGHT_MODES.has(mode.id) && mode.enabled !== false && (mode.range === null || mode.range > target);
 }
 
-// range null is Foundry's unlimited, and the resting state for Lancer tokens.
+// range null is Foundry's unlimited; built from source data, prepared ranges are Infinity.
 function retunedModes(doc, range)
 {
-    return (doc.detectionModes ?? []).map(mode => SIGHT_MODES.has(mode.id) ? { ...mode, range } : { ...mode });
+    const modes = (doc._source?.detectionModes ?? []).map(mode =>
+        SIGHT_MODES.has(mode.id) ? { ...mode, range } : { ...mode });
+    if (range !== null && !modes.some(mode => mode.id === 'lightPerception'))
+        modes.push({ id: 'lightPerception', enabled: true, range });
+    return modes;
 }
 
 async function applyBlindSight(token)
@@ -84,7 +88,7 @@ async function reconcileToken(token)
         await applyBlindSight(token);
     else
         await restoreSight(token);
-    canvas.perception?.update?.({ initializeVision: true, refreshVision: true, refreshLighting: true }, true);
+    canvas.perception?.update?.({ initializeVision: true, refreshVision: true, refreshLighting: true });
 }
 
 async function reconcileActor(actor)

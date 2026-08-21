@@ -1,4 +1,4 @@
-import * as actionFX from '../fx/actionFX.js';
+﻿import * as actionFX from '../fx/actionFX.js';
 import { gainAction } from '../tools/misc-tools.js';
 import { applyStandingUp } from '../tools/movement-tools.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
@@ -467,7 +467,7 @@ export function getDefaultGeneralReactionRegistry()
             reactions: [{
                 triggers: ["onPreDamage"],
                 triggerDescription: "You are hit by an attack and damage is about to be rolled.",
-                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
+                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 actionType: "Reaction",
                 frequency: "Other",
                 isReaction: true,
@@ -527,14 +527,14 @@ export function getDefaultGeneralReactionRegistry()
                             name: "Brace",
                             activation: "Reaction",
                         },
-                        detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
+                        detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions."
                     });
                 }
             }, {
                 triggers: ["onActivation"],
                 comments: "Apply Brace Status",
                 triggerDescription: "You are hit by an attack and damage has been rolled.",
-                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
+                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 onlyOnSourceMatch: true,
                 autoActivate: true,
                 ...CODE_INSTEAD,
@@ -945,7 +945,7 @@ export function getDefaultGeneralReactionRegistry()
                         return;
 
                     await Sequencer.Preloader.preloadForClients([
-                        "modules/lancer-automations/FX/audio/activation-sound-effect.wav",
+                        "modules/lancer-automations/FX/audio/aid.wav",
                         "jb2a.healing_generic.400px.blue",
                     ]);
 
@@ -953,7 +953,7 @@ export function getDefaultGeneralReactionRegistry()
                     {
                         let sequence = new Sequence()
                             .sound()
-                            .file("modules/lancer-automations/FX/audio/activation-sound-effect.wav")
+                            .file("modules/lancer-automations/FX/audio/aid.wav")
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
                             .file("modules/lancer-automations/FX/svg/Aid.svg")
@@ -1052,7 +1052,7 @@ export function getDefaultGeneralReactionRegistry()
                     if (!chosen || chosen.length === 0)
                         return;
                     chosen[0].setTarget(true, { releaseOthers: true, groupSelection: false });
-                    await actionFX.playRamFX(reactorToken, chosen[0]);
+                    await actionFX.queueActionFx(() => actionFX.playRamFX(reactorToken, chosen[0]));
                     await api.executeBasicAttack(reactorToken.actor, {
                         title: "Ram",
                         attack_type: "Melee",
@@ -1145,7 +1145,7 @@ export function getDefaultGeneralReactionRegistry()
                                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                                         return;
 
-                                    await actionFX.playFallFX(reactorToken);
+                                    await actionFX.queueActionFx(() => actionFX.playFallFX(reactorToken));
                                 }
                             },
                             { text: "No", icon: "fas fa-times" }
@@ -1166,7 +1166,7 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
-                    await actionFX.playFallImpactFX(reactorToken);
+                    await actionFX.queueActionFx(() => actionFX.playFallImpactFX(reactorToken));
                 }
             }]
         },
@@ -1386,7 +1386,7 @@ export function getDefaultGeneralReactionRegistry()
                     effectNames: ["Disengage"],
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
-                await actionFX.playDisengageFX(reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken));
             }
         },
         "Reactor Meltdown": {
@@ -1418,7 +1418,7 @@ export function getDefaultGeneralReactionRegistry()
                         duration: { label: 'end', turns: selectedTurns, rounds: 0 }
                     });
                     if (validTokens.length > 0)
-                        ui.notifications.warn(`⚠️ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
+                        ui.notifications.warn(`âš ï¸ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
                 }
             }, {
                 triggers: ["onStatusRemoved"],
@@ -1507,7 +1507,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!placed || placed.length === 0)
                     return;
 
-                await actionFX.playEjectFX(reactorToken, placed[0]);
+                await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]));
 
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
@@ -1541,7 +1541,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
 
-                await actionFX.playShutDownFX(reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playShutDownFX(reactorToken));
             }
         },
         "Boot Up": {
@@ -1561,7 +1561,7 @@ export function getDefaultGeneralReactionRegistry()
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
                 });
-                await actionFX.playBootUpFX(reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playBootUpFX(reactorToken));
             }
         },
         "Standing Up": {
@@ -1599,7 +1599,7 @@ export function getDefaultGeneralReactionRegistry()
                     duration: { label: "indefinite" }
                 });
 
-                await actionFX.playHideFX(reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playHideFX(reactorToken));
             }
         },
         "Mine Stealth": {
@@ -1881,7 +1881,7 @@ export function getDefaultGeneralReactionRegistry()
                     description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
                 });
                 if (placed && placed.length > 0)
-                    await actionFX.playDismountFX(reactorToken);
+                    await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken));
             }
         },
         "Scan": {
@@ -1922,7 +1922,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!targets?.length)
                     return;
                 const targetToken = targets[0];
-                await actionFX.playSearchFX(reactorToken, targetToken);
+                await actionFX.queueActionFx(() => actionFX.playSearchFX(reactorToken, targetToken));
                 const checkTitle = isPilot ? "SEARCH - Skill Check" : "SEARCH - SYSTEMS vs AGILITY";
                 const result = await api.openHaseContestCard({
                     tokenA: reactorToken,
@@ -1938,10 +1938,10 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
-                    await actionFX.playSearchFoundFX(targetToken);
+                    await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken));
                 }
                 else
-                    await actionFX.playSearchFailFX(targetToken);
+                    await actionFX.queueActionFx(() => actionFX.playSearchFailFX(targetToken));
             }
         }
 
@@ -1993,7 +1993,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!mechToken)
                     return;
 
-                await actionFX.playMountFX(reactorToken, mechToken);
+                await actionFX.queueActionFx(() => actionFX.playMountFX(reactorToken, mechToken));
 
                 const isOwnMech = mechToken.actor?.system?.pilot?.value?.id === pilotActorId;
                 if (!isOwnMech)
@@ -2057,7 +2057,7 @@ export function getDefaultGeneralReactionRegistry()
             const mechToken = targets?.[0];
             if (!mechToken)
                 return;
-            await actionFX.playJockeyFX(reactorToken, mechToken);
+            await actionFX.queueActionFx(() => actionFX.playJockeyFX(reactorToken, mechToken));
 
             const result = await api.openHaseContestCard({
                 tokenA: reactorToken,
@@ -2140,7 +2140,6 @@ export function getDefaultGeneralReactionRegistry()
             api.increaseMovementCap(reactorToken, speed);
             api.recordBoostCast?.(reactorToken, speed);
             await gainAction(reactorToken, 'move');
-            await actionFX.playBoostFX(reactorToken);
         }
     };
 
@@ -2181,7 +2180,7 @@ export function getDefaultGeneralReactionRegistry()
             const currentHeat = reactorToken.actor.system?.heat?.value ?? 0;
             await reactorToken.actor.update({ "system.heat.value": currentHeat + heatGained });
 
-            await actionFX.playOverchargeNpcFX(reactorToken);
+            await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken));
         }
     };
 

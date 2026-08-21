@@ -204,3 +204,22 @@ The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry'
 ## Narrative mode
 
 With **`narrativeMode`** on, the HUD still shows when no token is selected, linked to one of your pilots (pick it from the header). Exposes the pilot-relevant categories: pilot, skills, resources, utility, macros.
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Token HUD Status Effects Button** | Foundry's default "Assign Status Effects" button on the Token HUD. |
+| **Token HUD Combat State Button** | Foundry's default "Toggle Combat State" button on the Token HUD. |
+| **Token HUD Target State Button** | Foundry's default "Toggle Target State" button on the Token HUD. |
+| **Revert Movement Button** | The Revert Last Movement / Reset Movement History button on the Token HUD. |
+| **Custom Status HUD Button** | Mirrors the Temporary Custom Statuses setting: adds its status button to the Token HUD. |
+| **Narrative TAH** | When no token is selected, show a narrative HUD linkable to a pilot. |
+| **TAH Above Actor Sheets** | Keep the TAH on top of open actor sheets. |
+| **Show Team / Disposition Indicator** | Colored stripe on the title bar: team if Token Factions advanced teams is active, otherwise disposition. |
+| **Click to Open** | Open categories on click instead of hover. |
+| **Hover Close Delay (seconds)** | How long the HUD stays open after the mouse leaves. |
+| **Max items per column** | Rows per column before it scrolls (0 = no cap, top menu never capped). |
+| **HUD Scale** | Size of the Token Action HUD and its popups. |
+| **Weapon Range Preview** | Show weapon range on the map when hovering items in the HUD. Requires Grid Aware Auras. |
+| **Aid / Handle / Interact / Squeeze Actions** | Show these actions in the Actions category. They come from PPG (Prototype Pattern Group). |

@@ -147,6 +147,11 @@
     box-sizing: border-box !important;
 }
 
+/* Fixed-size editor window: the form scrolls inside */
+#reaction-editor .window-content {
+    overflow-y: auto;
+}
+
 .lancer-reaction-editor .form-group .form-fields {
     /* Ensure the parent container constrains its children */
     min-width: 0;

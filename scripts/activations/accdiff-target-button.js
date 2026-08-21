@@ -25,16 +25,28 @@ function buildHitChanceFor(state)
         const defense = isSmart ? (Number(actor.system.edef) || 8) : (Number(actor.system.evasion) || 5);
         const targetEntry = (accDiff.targets ?? []).find(entry => entry.targetUuid === token.document?.uuid);
         let netAcc;
+        let invisible;
         if (targetEntry)
+        {
             netAcc = Number(targetEntry.total) || 0;
+            invisible = targetEntry.plugins?.invisibility
+                ? !!targetEntry.plugins.invisibility.data
+                : !!actor.statuses?.has?.('invisible');
+        }
         else
         {
             const cover = actor.statuses?.has?.('cover_hard') ? 2 : actor.statuses?.has?.('cover_soft') ? 1 : 0;
             const prone = actor.system?.statuses?.prone ? 1 : 0;
             const lockOn = actor.system?.statuses?.lockon ? 1 : 0;
             netAcc = (Number(weapon.total(cover)) || 0) + (Number(base.accuracy) || 0) - (Number(base.difficulty) || 0) + prone + lockOn;
+            invisible = !!actor.statuses?.has?.('invisible');
         }
         const result = rollHitCritChance(bonus, netAcc, defense);
+        if (invisible)
+        {
+            result.hit /= 2;
+            result.crit /= 2;
+        }
         if (weapon.tech)
             result.crit = 0;
         return result;

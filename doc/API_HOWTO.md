@@ -144,8 +144,6 @@ await api.createAura(reactorToken, {
 
 </details>
 
----
-
 <details id="ensureAura">
 <summary><b><code>ensureAura</code></b> <sup>async</sup> → <code>Promise&lt;any | null&gt;</code></summary>
 
@@ -167,8 +165,6 @@ await api.ensureAura(token, { name: 'Suppression', radius: 3 });
 ```
 
 </details>
-
----
 
 <details id="deleteAuras">
 <summary><b><code>deleteAuras</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
@@ -192,8 +188,6 @@ await api.deleteAuras(token, 'Suppression');
 ```
 
 </details>
-
----
 
 <details id="toggleAura">
 <summary><b><code>toggleAura</code></b> <sup>async</sup> → <code>boolean | null</code></summary>
@@ -219,6 +213,39 @@ Returns the new `enabled` state (`true`/`false`), or `null` if no aura with that
 await api.toggleAura(token, "Bulwark");          // flip
 await api.toggleAura(token, "Bulwark", true);    // ensure on
 await api.toggleAura(token, "Bulwark", false);   // ensure off
+```
+
+</details>
+
+---
+
+## Sequencer Presets
+
+Requires [Sequencer](https://foundryvtt.com/packages/sequencer). Used through Sequencer's `.preset()`, not through `api`.
+
+<details id="la_scaleToBurst">
+<summary><b><code>la_scaleToBurst</code></b> → <code>EffectSection</code></summary>
+
+<br>
+
+```js
+.preset("la_scaleToBurst", burst, source)
+```
+
+Sizes an effect to a Burst around its source, in grid units: `size * 2 * (burst + 1)`. `size` is the actor's Lancer size (`system.stats.size` on deployables). `.atLocation()` must come first.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>burst</kbd> | `number` | `1` | Burst value. `0` is the token itself |
+| <kbd>source</kbd> | `Token\|TokenDocument\|Actor` | `null` | Only for `atLocation(..., { cacheLocation: true })`, where the section's source is unreadable |
+
+```js
+new Sequence()
+    .effect()
+        .file("jb2a.lava_spout.001.001.complete.orangeyellow")
+        .atLocation(token)
+        .preset("la_scaleToBurst", 1)
+    .play();
 ```
 
 </details>

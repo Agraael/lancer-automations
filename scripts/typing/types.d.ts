@@ -99,6 +99,8 @@ interface TriggerDataBase {
     isTarget?: boolean;
     /** The reactor's own entry of `targets` ({ target/token, roll, crit, ... }) when the trigger carries per-target entries, else null. */
     targetEntry?: { target?: Token; token?: Token; roll?: Roll; crit?: boolean; [key: string]: any } | null;
+    /** Whether the trigger's attack is ranged. Item-less basic attacks report Melee; past 1 hex from every target they count as ranged. */
+    isRangedAttack(): boolean;
     /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */

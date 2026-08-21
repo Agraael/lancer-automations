@@ -2,6 +2,21 @@ import { playBattleLogSound, playBattleLogTheme } from '../tah/sound.js';
 
 const INTRO_SPEED = 1.95;
 
+// How early the theme comes in ahead of the result reveal, when that anchor is picked.
+const THEME_LEAD_MS = 500;
+
+function _themeStart()
+{
+    try
+    {
+        return game.settings.get('lancer-automations', 'tah.battleLog.themeStart') || 'intro';
+    }
+    catch
+    {
+        return 'intro';
+    }
+}
+
 // Letters+digits only so per-frame scramble doesn't reflow the fixed-width slot.
 const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
@@ -84,7 +99,8 @@ export function playTerminalIntro({ outcome = 'VICTORY', battle = {}, mvpId = nu
         const swapTimer = setTimeout(() =>
         {
             playBattleLogSound('fadeIn');
-            playBattleLogTheme(outcome);
+            if (_themeStart() === 'intro')
+                playBattleLogTheme(outcome);
             bgTimer = setTimeout(() =>
             {
                 bgSound = playBattleLogSound('loopBackground', { loop: true });
@@ -325,6 +341,12 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone 
         {
             setLabelText(cur, line.label, false);
             typingSound.stop();
+            // Last line: the run-out to revealFinal is fixed from here, so the theme can lead it.
+            if (cur >= lines.length - 1 && _themeStart() === 'result')
+            {
+                const toReveal = line.result ? 1120 / speed : 500 / speed;
+                later(() => playBattleLogTheme(outcome), Math.max(0, toReveal - THEME_LEAD_MS));
+            }
             if (line.result)
             {
                 later(() =>

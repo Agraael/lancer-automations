@@ -14,6 +14,8 @@ Three distance functions. All return distance in **grid spaces** (not pixels).
 | `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. Optional `includeElevation` adds elevation difference to the planar distance. |
 | `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
 
+To find the tokens themselves rather than measure a known pair, use `getTokensInRange`.
+
 <details id="getTokenDistance">
 <summary><b><code>getTokenDistance</code></b> → <code>number</code></summary>
 
@@ -37,8 +39,6 @@ if (dist > 3) return false;
 ```
 
 </details>
-
----
 
 <details id="getMinGridDistance">
 <summary><b><code>getMinGridDistance</code></b> → <code>number</code></summary>
@@ -67,8 +67,6 @@ const withElevation = api.getMinGridDistance(tokenA, tokenB, null, true);
 
 </details>
 
----
-
 <details id="getGridDistance">
 <summary><b><code>getGridDistance</code></b> → <code>number</code></summary>
 
@@ -88,6 +86,55 @@ Hex grids: cube distance. Square grids: `measurePath` rounded to grid units.
 ```js
 const spaces = api.getGridDistance(token.center, { x: 1200, y: 800 });
 ```
+
+</details>
+
+<details id="getTokensInRange">
+<summary><b><code>getTokensInRange</code></b> → <code>Token[]</code></summary>
+
+<br>
+
+```js
+api.getTokensInRange(origin, options)
+```
+
+Tokens within `range` spaces of a token or a world point, nearest first. Size-aware on both ends. `range: 1` is adjacency.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>origin</kbd> | `Token` or `{ x, y, elevation? }` | *required* | Measured from every cell of the token, or from the point's cell |
+| <kbd>range</kbd> | `number` or `'sensors'` | `1` | Spaces; `'sensors'` reads the origin actor's sensor range |
+| <kbd>disposition</kbd> | `'friendly'` \| `'hostile'` | any | Faction-correct, Token Factions aware |
+| <kbd>includeSelf</kbd> | `boolean` | `false` | |
+| <kbd>includeHidden</kbd> | `boolean` | `false` | |
+| <kbd>includeDefeated</kbd> | `boolean` | `false` | Structure or stress at 0 |
+| <kbd>includeDeployables</kbd> | `boolean` | `true` | |
+| <kbd>engageable</kbd> | `boolean` | `false` | Also apply `canEngage`: hostile, non-deployable, no `hidden`/`disengage`/`intangible`, no provoke immunity |
+| <kbd>includeElevation</kbd> | `boolean` | `count3DDistance` setting | A point origin is always elevation-aware |
+| <kbd>filter</kbd> | `(token) => boolean` | `null` | |
+
+A point origin ignores `disposition`, `engageable` and `includeSelf`.
+
+```js
+const adjacent = api.getTokensInRange(reactorToken);
+const engaged = api.getTokensInRange(reactorToken, { engageable: true });
+const allies = api.getTokensInRange(reactorToken, { range: 3, disposition: 'friendly' });
+const nearBlast = api.getTokensInRange(template.center, { range: 2 });
+```
+
+</details>
+
+<details id="getTokenPosition">
+<summary><b><code>getTokenPosition</code></b> → <code>{ x, y, elevation }</code><br><b><code>samePosition</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.getTokenPosition(tokenLike)   // → { x, y, elevation }
+api.samePosition(a, b)            // same x / y / elevation
+```
+
+Snapshot a token's position and compare it later ("has it moved since?"). `tokenLike` is a Token or TokenDocument; `a`/`b` are position objects.
 
 </details>
 
@@ -161,8 +208,6 @@ if (!api.isHostile(reactorToken, moverToken)) return false;
 
 </details>
 
----
-
 <details id="canProvokeReaction">
 <summary><b><code>canProvokeReaction</code></b> → <code>boolean</code></summary>
 
@@ -188,8 +233,6 @@ if (!api.canProvokeReaction(moverToken, reactorToken, reason))
 
 </details>
 
----
-
 <details id="isFriendly">
 <summary><b><code>isFriendly</code></b> → <code>boolean</code></summary>
 
@@ -211,8 +254,6 @@ const allies = canvas.tokens.placeables.filter(t => api.isFriendly(casterToken, 
 ```
 
 </details>
-
----
 
 <details id="getRelativeDisposition">
 <summary><b><code>getRelativeDisposition</code></b> → <code>number|null</code></summary>
@@ -259,8 +300,6 @@ const occupied = new Set(api.getTokenCells(token).map(([row, col]) => `${col},${
 
 </details>
 
----
-
 <details id="getMaxGroundHeightUnderToken">
 <summary><b><code>getMaxGroundHeightUnderToken</code></b> → <code>number</code></summary>
 
@@ -283,8 +322,6 @@ const ground = api.getMaxGroundHeightUnderToken(token, tht);
 ```
 
 </details>
-
----
 
 <details id="triggerDangerousZoneFlow">
 <summary><b><code>triggerDangerousZoneFlow</code></b> <sup>async</sup> → <code>void</code></summary>
@@ -334,8 +371,6 @@ await api.drawThreatDebug(canvas.tokens.controlled[0]);
 ```
 
 </details>
-
----
 
 <details id="drawRangeHighlight">
 <summary><b><code>drawRangeHighlight</code></b> → <code>PIXI.Graphics</code></summary>

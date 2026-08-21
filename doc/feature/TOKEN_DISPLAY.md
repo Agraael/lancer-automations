@@ -117,3 +117,38 @@ To drop the scan gate entirely, turn on **Reveal Stats Without Scanning** (**Act
 With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid space instead of being forced to a full 1×1.
 
 <br clear="right"/>
+
+---
+
+## Status icons
+
+<img align="right" src="../vid/td-status-icons.gif" width="45%"/>
+
+**Status Icon Halo** circles the icons around the token instead of stacking them in a column, with sliders for ring radius and the angle of the first icon. Inspired by [status-halo](https://gitlab.com/mxzf/status-halo); if that module is also on, you get a warning on load.
+
+**Status Icon Hover Info** enlarges the icon under the cursor and shows its name, description, duration and bonus.
+
+<br clear="right"/>
+
+## Notable options
+
+| Option | What it does |
+|:--|:--|
+| **Hide Stat Bar by Default** | Tokens without a per-token override start with the bar hidden. |
+| **Show Only In Combat by Default** | Tokens without a per-token override show the bar only in combat. |
+| **Default Row Height (px)** | Leave 0 for auto (scales with grid). |
+| **Display Pilot Stress Bar** | Bond stress on pilot tokens and sheets. When Annoying's sheet already shows one, it is recolored instead. |
+| **Visibility: Out of Combat** | Who sees stat bars outside combat: All, Owners only, Owners + scanned, or None. |
+| **Visibility: In Combat** | Who sees stat bars during combat, same four choices. |
+| **Auto-Injected Bar Color** | Default color for auto-injected bars that do not set their own. |
+| **Auto-Injected Bar Width (%)** | Default width % for auto-injected bars, each on its own line. |
+| **Auto-Injected Bar Audio/Text Feedback** | Default audio + floating text on value changes for auto-injected bars. |
+| **Auto-add Custom Flag Bars (Alt Sheets)** | With Annoying's Alternative Sheets: fraction flags render as token bars, value flags as TAH counters. |
+| **Auto-add Bond XP Bar** | Cyan XP bar on bonded pilot tokens. Not listed in the hover popup resources. |
+| **Hover Delay (ms)** | Delay before the popup appears. |
+| **Popup Scale** | Size of the popup, independent of token size and zoom. |
+| **Show for Controlled Token** | Show the popup for the token you control. |
+| **Show Only In Combat** | Popup only appears for tokens in an active combat. |
+| **Unknown Label** | Text shown for unscanned NPCs in Tied-to-scan mode. |
+| **Hide class/templates/tier when not scanned** | Also hide the class/frame subtitle and tier badge until scanned. |
+| **Hide current values without owner/observer access** | Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track. |

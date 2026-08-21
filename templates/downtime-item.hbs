@@ -1,0 +1,49 @@
+<form class="{{cssClass}}" autocomplete="off">
+  {{! Sheet Header }}
+  <header class="sheet-header card clipped-bot">
+    <h1 class="name">
+      <input
+        class="lancer-input header-field"
+        name="name"
+        type="text"
+        value="{{item.name}}"
+        placeholder="{{localize 'lancer.placeholder.name'}}"
+      >
+    </h1>
+    {{{ref-portrait-img item.img "img" item}}}
+    <div class="header-details" style="padding-left: 1em; padding-right: 1em">
+      {{{std-text-input "system.lid" label="LID"}}}
+      {{{std-checkbox "system.rollable" label="ROLLABLE"}}}
+      {{{std-checkbox "system.hidden" label="HIDDEN"}}}
+    </div>
+  </header>
+
+  {{! Sheet Body }}
+  <section class="sheet-body">
+    {{{textarea-card "DESCRIPTION" "system.description"}}}
+    <div class="card clipped">
+      <div class="lancer-header lancer-primary submajor">RESULTS</div>
+      {{#each item.system.results}}
+      <div style="display: flex; gap: 6px; align-items: flex-start; padding: 4px 8px;">
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <label style="display: flex; align-items: center; gap: 4px; font-size: 0.75em;">MIN
+            <input type="number" name="system.results.{{@index}}.min" value="{{this.min}}" title="Roll range minimum" style="width: 52px;">
+          </label>
+          <label style="display: flex; align-items: center; gap: 4px; font-size: 0.75em;">MAX
+            <input type="number" name="system.results.{{@index}}.max" value="{{this.max}}" title="Roll range maximum (0 = always applies, no roll)" style="width: 52px;">
+          </label>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+          <input type="text" name="system.results.{{@index}}.short" value="{{this.short}}" placeholder="Short outcome">
+          <textarea name="system.results.{{@index}}.long" rows="2" placeholder="Pilot flavor (journal report)">{{this.long}}</textarea>
+          <textarea name="system.results.{{@index}}.info" rows="2" placeholder="Rules outcome">{{this.info}}</textarea>
+        </div>
+        <a class="la-del-result" data-index="{{@index}}" title="Remove result"><i class="fas fa-trash"></i></a>
+      </div>
+      {{/each}}
+      <div style="padding: 4px 8px;">
+        <a class="la-add-result"><i class="fas fa-plus"></i> Add Result</a>
+      </div>
+    </div>
+  </section>
+</form>

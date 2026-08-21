@@ -116,8 +116,8 @@ export { getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow, hand
 import {
     throwChoiceStep, syncThrowToAccDiffStep,
     syncAccDiffToThrowStep, throwDeployStep, knockbackInjectStep, knockbackDamageStep,
-    playInlineAttackFX, playThrowFXIfNeeded, playBasicRangedFXIfNeeded, pullInjectedTagsFromAttack,
-    _actorSuppressId, _lwfxSuppressActors, _lwfxForceActors
+    playInlineAttackFX, playThrowFXIfNeeded, playBasicRangedFXIfNeeded, pullInjectedTagsFromAttack, applyFxItemStub,
+    _actorSuppressId, _lwfxSuppressActors, _lwfxForceActors, _lwfxSourceRedirects
 } from "./activations/flow-steps-extra.js";
 import { laStabilizePrompt, laStabilizeExtras } from "./activations/stabilize-flow.js";
 
@@ -133,6 +133,7 @@ import {
     applyActorTemplatesToTokens,
     persistRuntimeStackToTemplate,
 } from "./bonuses/flagged-effects.js";
+import { initStatusIconHover } from "./bonuses/status-icon-hover.js";
 import {
     genericBonusStepDamage,
     injectKnockbackCheckbox,
@@ -181,6 +182,7 @@ import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
 import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, consumeAction } from "./tools/misc-tools.js";
 import { DowntimeAPI } from "./tools/downtime.js";
+import { initDowntimeItems } from "./tools/downtime-item.js";
 import { RestAPI } from "./tools/rest.js";
 import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
@@ -188,7 +190,7 @@ import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTo
 
 // Setup
 import { checkModuleUpdate } from "./setup/version-check.js";
-import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData } from "./setup/lancer-modif.js";
+import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, wrapSetDamageTags, registerNonTechAttackStep } from "./setup/lancer-modif.js";
 import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
 import { registerSettings } from "./setup/settings-register.js";
 import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
@@ -350,6 +352,7 @@ function insertModuleFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
     flowSteps.set('lancer-automations:pullInjectedTagsFromAttack', pullInjectedTagsFromAttack);
     flowSteps.set('lancer-automations:stubBasicAttackItemForFx', playInlineAttackFX);
+    flowSteps.set('lancer-automations:applyFxItemStub', applyFxItemStub);
     flowSteps.set('lancer-automations:playThrowFXIfNeeded', playThrowFXIfNeeded);
     flowSteps.set('lancer-automations:playBasicRangedFXIfNeeded', playBasicRangedFXIfNeeded);
     flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
@@ -394,7 +397,8 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:hitImmunity', 'lancer-automations:onHitMiss');
     flows.get('BasicAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:stubBasicAttackItemForFx');
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:stubBasicAttackItemForFx', 'lancer-automations:playThrowFXIfNeeded');
-    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:playThrowFXIfNeeded', 'lancer-automations:playBasicRangedFXIfNeeded');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:playThrowFXIfNeeded', 'lancer-automations:applyFxItemStub');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:applyFxItemStub', 'lancer-automations:playBasicRangedFXIfNeeded');
     flows.get('WeaponAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:playThrowFXIfNeeded');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
@@ -427,6 +431,8 @@ function insertModuleFlowSteps(flowSteps, flows)
     wrapInitTechAttackData(flowSteps);
     // preserve caller-supplied title/action/effect on Ram and friends
     wrapInitAttackData(flowSteps);
+    wrapSetDamageTags(flowSteps);
+    registerNonTechAttackStep(flowSteps, flows);
     wrapExtraActionRecharge(flowSteps, flows);
 
     flows.get('StructureFlow')?.insertStepBefore('preStructureRollChecks', 'lancer-automations:onPreStructure');
@@ -506,6 +512,7 @@ function openResetMovementDialog(token)
 Hooks.on('init', () =>
 {
     console.log('lancer-automations | Init');
+    initDowntimeItems(); // Downtime activity item sub-type + sheet
     registerSettings();
     registerStatusFXSettings(); // StatusFX settings + config menu
     registerSettingsMenus(); // Grouped Activations / Combat / Deployables menus
@@ -675,6 +682,7 @@ Hooks.once('ready', async () =>
 {
     setTimeout(bindAfterFxDrain, 0);
     installJb2aHooks();
+    actionFX.registerSequencerPresets();
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();
 
@@ -750,6 +758,9 @@ Hooks.once('ready', async () =>
         registerPerFrequencyFlowSteps(game.lancer.flowSteps, game.lancer.flows);
 
     initCollapseHook();
+    initStatusIconHover();
+    if (game.modules.get('status-halo')?.active && game.settings.get('lancer-automations', 'statusHalo'))
+        ui.notifications.warn('Lancer Automations: the Status Icon Halo setting duplicates the Status Halo module. Disable one of them.');
 
     if (typeof libWrapper !== 'undefined')
     {
@@ -878,6 +889,12 @@ Hooks.once('ready', async () =>
                         {
                             _lwfxSuppressActors.delete(id);
                             return;
+                        }
+                        const redirectSource = id ? _lwfxSourceRedirects.get(id) : null;
+                        if (redirectSource && !redirectSource.destroyed)
+                        {
+                            _lwfxSourceRedirects.delete(id);
+                            flowInfo.sourceToken = redirectSource;
                         }
                     }
                 }
@@ -1388,6 +1405,14 @@ Hooks.on('deleteActiveEffect', async (effect, _options, userId) =>
 });
 
 
+// onInit automations write the same ActorDelta as the purge below; concurrent writes lose updates.
+const _tokenTemplateSyncs = new Map();
+
+function waitForTokenTemplateSync(tokenId)
+{
+    return _tokenTemplateSyncs.get(tokenId) ?? Promise.resolve();
+}
+
 // Materialize both item and actor templates when a token spawns from the actor.
 Hooks.on('createToken', async (tokenDoc, _options, userId) =>
 {
@@ -1398,6 +1423,11 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
     const token = canvas?.tokens?.get?.(tokenDoc.id);
     if (!token?.actor)
         return;
+    let syncDone;
+    _tokenTemplateSyncs.set(tokenDoc.id, new Promise(resolve =>
+    {
+        syncDone = resolve;
+    }));
     setTimeout(async () =>
     {
         try
@@ -1418,6 +1448,11 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
         catch (err)
         {
             console.warn('lancer-automations | createToken template apply failed:', err);
+        }
+        finally
+        {
+            syncDone();
+            _tokenTemplateSyncs.delete(tokenDoc.id);
         }
     }, 100);
 });
@@ -2113,8 +2148,9 @@ Hooks.on('createToken', (tokenDocument, options, userId) =>
     const token = canvas.tokens.get(tokenDocument.id);
     if (!token)
         return;
-    setTimeout(() =>
+    setTimeout(async () =>
     {
+        await waitForTokenTemplateSync(tokenDocument.id);
         checkOnInitReactions(token);
         handleManualDeployLink(tokenDocument);
         handleTrigger('onTokenCreated', { triggeringToken: token });

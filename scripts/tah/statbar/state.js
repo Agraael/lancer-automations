@@ -22,10 +22,15 @@ export const _overlayHubs = new Map();
 let _hubOverlay = null;
 export function getHubOverlay()
 {
-    if (_hubOverlay && !_hubOverlay.destroyed)
-        return _hubOverlay;
     if (!canvas?.tokens)
         return null;
+    // detached but not destroyed: re-attach, the wrappers it already holds stay valid
+    if (_hubOverlay && !_hubOverlay.destroyed)
+    {
+        if (_hubOverlay.parent !== canvas.tokens)
+            canvas.tokens.addChild(_hubOverlay);
+        return _hubOverlay;
+    }
     _hubOverlay = new PIXI.Container();
     _hubOverlay.name = 'la-stat-bar-overlay';
     _hubOverlay.sortableChildren = true;

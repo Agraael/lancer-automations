@@ -67,8 +67,6 @@ await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", la
 
 </details>
 
----
-
 <details id="consumeExtraAction">
 <summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
@@ -93,8 +91,6 @@ if (!await api.consumeExtraAction(item, 'Turret Shot')) return;
 ```
 
 </details>
-
----
 
 <details id="lockActorAction">
 <summary><b><code>lockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>unlockActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>isActionLocked</code></b> → <code>boolean</code><br><b><code>getLockedActions</code></b> → <code>string[]</code></summary>
@@ -130,8 +126,6 @@ onInit: async function (token, item, api) {
 
 </details>
 
----
-
 <details id="lockActorActionTypes">
 <summary><b><code>lockActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>unlockActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
@@ -159,8 +153,6 @@ await api.unlockActorActionTypes(actor, ['Quick', 'Full'], 'stunned');
 ```
 
 </details>
-
----
 
 <details id="disableActorAction">
 <summary><b><code>disableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>enableActorAction</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>disableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>enableActorActionTypes</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
@@ -193,8 +185,6 @@ await api.enableActorAction(actor, 'Boost', 'overheat');
 ```
 
 </details>
-
----
 
 <details id="setActionOverlay">
 <summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActionOverlay</code></b> → <code>object | null</code><br><b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code><br><b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>applyActionOverlays</code></b> → <code>object[]</code><br><b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
@@ -235,8 +225,6 @@ await api.setActionOverlay(item, "Lock On", { range: [{ type: "Range", val: 10 }
 Managed from the UI via Add Extra > Action Combat.
 
 </details>
-
----
 
 <details id="openExtrasDialog">
 <summary><b><code>openExtrasDialog</code></b> → <code>void</code></summary>

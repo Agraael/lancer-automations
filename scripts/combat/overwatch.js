@@ -4,7 +4,7 @@ import {
     isHexGrid, offsetToCube, cubeToOffset, cubeDistance,
     getHexesInRange, getHexCenter, drawHexAt,
     getOccupiedOffsets, getOccupiedCenters, getMinGridDistance,
-    measureGridDistance
+    measureGridDistance, pixelToOffset, isPositionInRange
 } from "./grid-helpers.js";
 import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js";
 
@@ -433,7 +433,7 @@ export async function drawDistanceDebug()
 
     canvas.controls.debug.lineStyle(2, 0x0066FF, 0.5);
     canvas.controls.debug.beginFill(0x0066FF, 0.15);
-    for (const offset of offsets1)
+    for (const offset of token1Offsets)
     {
         if (isHexGrid())
             drawHexAt(canvas.controls.debug, offset.col, offset.row);
@@ -447,7 +447,7 @@ export async function drawDistanceDebug()
 
     canvas.controls.debug.lineStyle(2, 0xFF6600, 0.5);
     canvas.controls.debug.beginFill(0xFF6600, 0.15);
-    for (const offset of offsets2)
+    for (const offset of token2Offsets)
     {
         if (isHexGrid())
             drawHexAt(canvas.controls.debug, offset.col, offset.row);
@@ -573,6 +573,97 @@ export function canEngage(token1, token2)
     return true;
 }
 
+const _isPoint = (origin) => !!origin && !origin.document && typeof origin.x === 'number' && typeof origin.y === 'number';
+
+// Point origin: cell-to-footprint, same measure getMinGridDistance uses per grid type.
+function _originDistance(origin, token, includeElevation)
+{
+    if (!_isPoint(origin))
+        return getMinGridDistance(origin, token, null, includeElevation);
+    const originOffset = pixelToOffset(origin.x, origin.y);
+    const originCube = isHexGrid() ? offsetToCube(originOffset.col, originOffset.row) : null;
+    let minDist = Infinity;
+    for (const offset of getOccupiedOffsets(token))
+    {
+        const dist = originCube
+            ? cubeDistance(originCube, offsetToCube(offset.col, offset.row))
+            : Math.max(Math.abs(offset.col - originOffset.col), Math.abs(offset.row - originOffset.row));
+        if (dist < minDist)
+            minDist = dist;
+    }
+    return minDist;
+}
+
+/**
+ * Tokens within `range` spaces of a token or a world position, nearest first. Default is adjacency.
+ * Option names match chooseToken's. A point origin ignores `disposition`, `engageable` and `includeSelf`.
+ * @param {Token|{x: number, y: number, elevation?: number}} origin
+ * @param {Object} [options]
+ * @param {number|'sensors'} [options.range=1] Spaces; 'sensors' reads the actor's sensor range
+ * @param {'friendly'|'hostile'} [options.disposition] Omit for any
+ * @param {boolean} [options.includeSelf=false]
+ * @param {boolean} [options.includeHidden=false]
+ * @param {boolean} [options.includeDefeated=false] Structure or stress at 0
+ * @param {boolean} [options.includeDeployables=true]
+ * @param {boolean} [options.engageable=false] Also require canEngage (hostile, non-deployable, no disengage/hidden/intangible)
+ * @param {boolean} [options.includeElevation] Overrides the count3DDistance setting; a point origin is always elevation-aware
+ * @param {(token: Token) => boolean} [options.filter]
+ * @returns {Token[]}
+ */
+export function getTokensInRange(origin, options = {})
+{
+    if (!origin)
+        return [];
+    const {
+        range = 1,
+        disposition = null,
+        includeSelf = false,
+        includeHidden = false,
+        includeDefeated = false,
+        includeDeployables = true,
+        engageable = false,
+        includeElevation = undefined,
+        filter = null,
+    } = /** @type {any} */ (options);
+
+    const fromPoint = _isPoint(origin);
+    const maxRange = range === 'sensors'
+        ? (/** @type {any} */ (origin).actor?.system?.sensor_range ?? 10)
+        : Number(range);
+
+    return (canvas.tokens?.placeables ?? [])
+        .filter(token =>
+        {
+            if (!token.actor)
+                return false;
+            if (!fromPoint && token.id === /** @type {any} */ (origin).id)
+                return includeSelf;
+            if (!includeHidden && token.document.hidden)
+                return false;
+            if (!includeDeployables && token.actor.type === 'deployable')
+                return false;
+            if (!includeDefeated && (token.actor.system?.structure?.value === 0 || token.actor.system?.stress?.value === 0))
+                return false;
+            if (!fromPoint)
+            {
+                if (disposition === 'friendly' && !isFriendly(origin, token))
+                    return false;
+                if (disposition === 'hostile' && !isHostile(origin, token))
+                    return false;
+                if (engageable && !canEngage(origin, token))
+                    return false;
+            }
+            const inRange = fromPoint
+                ? isPositionInRange(origin, token, maxRange)
+                : getMinGridDistance(origin, token, null, includeElevation) <= maxRange;
+            if (!inRange)
+                return false;
+            return !filter || filter(token);
+        })
+        .sort((tokenA, tokenB) =>
+            _originDistance(origin, tokenA, includeElevation) - _originDistance(origin, tokenB, includeElevation));
+}
+
 /** @returns {Promise<void>} */
 export async function updateAllEngagements(options = {})
 {
@@ -653,5 +744,6 @@ export const OverwatchAPI = {
     getMinGridDistance,
     canEngage,
     canProvokeReaction,
+    getTokensInRange,
     updateAllEngagements
 };

@@ -15,18 +15,41 @@ export function clearScriptCache()
     Hooks.callAll('lancer-automations.clearCaches');
 }
 
-export function stringToFunction(str, args = [], reaction = null)
+// Path-preserving: each '/' segment sanitized on its own, so devtools shows a folder tree.
+function _sanitizeSourcePath(name)
+{
+    return String(name).split('/')
+        .map(segment => segment.toLowerCase().replaceAll(/[^a-z0-9]/g, '-'))
+        .filter(Boolean)
+        .join('/');
+}
+
+export function stringToFunction(str, args = [], reaction = null, sourceName = null)
 {
     const trimmed = str.trim();
-    const cacheKey = `${trimmed}|${args.join(',')}`;
+    const cacheKey = `${trimmed}|${args.join(',')}|${sourceName ?? ''}`;
     if (scriptCache.has(cacheKey))
         return scriptCache.get(cacheKey);
 
+    let resolvedName = sourceName;
+    if (!resolvedName)
+    {
+        let contentHash = 0;
+        for (let charIndex = 0; charIndex < trimmed.length; charIndex++)
+            contentHash = (contentHash * 31 + trimmed.charCodeAt(charIndex)) | 0;
+        resolvedName = `misc/fn-${(contentHash >>> 0).toString(16)}`;
+    }
+    const sourcePath = `modules/lancer-automations/dynamic/${_sanitizeSourcePath(resolvedName)}.js`;
+    const codeWithSourceURL = trimmed + `\n\n//# sourceURL=${sourcePath}`;
+
     let fn;
     if (trimmed.startsWith('function') || trimmed.startsWith('async function') || trimmed.startsWith('async (') || trimmed.startsWith('('))
-        fn = eval(`(${trimmed})`);
+    {
+        // Closing `)` MUST be on its own line, otherwise the trailing //# sourceURL comment eats it.
+        fn = eval(`(${codeWithSourceURL}\n)`);
+    }
     else
-        fn = new Function(...args, trimmed);
+        fn = new Function(...args, codeWithSourceURL);
     if (fn.constructor.name === 'AsyncFunction')
     {
         const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck', 'cancelStructure', 'cancelStress', 'cancelStructureOutcome', 'cancelStressOutcome', 'cancelHpChange', 'cancelHeatChange', 'modifyRoll', 'modifyHpChange', 'modifyHeatChange'];
@@ -59,9 +82,7 @@ export function stringToAsyncFunction(str, args = [], name = "lancer-automations
     if (scriptCache.has(cacheKey))
         return scriptCache.get(cacheKey);
 
-    // Sanitize name for sourceURL (no spaces, alphanumeric/dashes)
-    const sanitizedName = name.toLowerCase().replaceAll(/[^a-z0-9]/g, '-');
-    const sourcePath = `modules/lancer-automations/dynamic/${sanitizedName}.js`;
+    const sourcePath = `modules/lancer-automations/dynamic/${_sanitizeSourcePath(name)}.js`;
     const codeWithSourceURL = trimmed + `\n\n//# sourceURL=${sourcePath}`;
 
     let fn;
@@ -2030,7 +2051,8 @@ export class ReactionEditor extends FormApplication
             id: "reaction-editor",
             template: `modules/lancer-automations/templates/reaction-editor.html`,
             width: 800,
-            height: "auto",
+            height: 1100,
+            resizable: true,
             closeOnSubmit: false,
             classes: ["lancer-reaction-editor", "lancer-dialog-base", "lancer-no-title"]
         });
@@ -2294,6 +2316,43 @@ export class ReactionEditor extends FormApplication
             {
                 ui.notifications.error("Failed to copy to clipboard.");
             }
+        });
+
+        // compile now under the engine's source names so devtools lists them before the first trigger
+        html.find('.debug-preload').on('click', () =>
+        {
+            const isGeneral = html.find('input[name="isGeneral"]').prop('checked');
+            const generalName = String(html.find('input[name="name"]').val() || 'activation');
+            const lid = String(html.find('input[name="lid"]').val() || '');
+            const reactionIndex = Number(html.find('input[name="reactionIndex"]').val() || 0);
+            const base = isGeneral ? generalName : `${lid || 'item'}/${reactionIndex}`;
+            const triggerArgs = ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"];
+            const sources = [
+                { code: this.evaluateEditor?.getValue(), role: 'evaluate', sync: true, args: triggerArgs },
+                { code: this.codeEditor?.getValue(), role: 'activation', sync: false, args: triggerArgs },
+                { code: this.onInitEditor?.getValue(), role: 'onInit', sync: true, args: ["token", "item", "api"] },
+                { code: this.onMessageEditor?.getValue(), role: 'onMessage', sync: false, args: ["triggerType", "data", "reactorToken", "item", "activationName", "api"] }
+            ];
+            let compiled = 0;
+            for (const entry of sources)
+            {
+                if (!entry.code?.trim())
+                    continue;
+                try
+                {
+                    if (entry.sync)
+                        stringToFunction(entry.code, entry.args, null, `${base}/${entry.role}`);
+                    else
+                        stringToAsyncFunction(entry.code, entry.args, `${base}/${entry.role}`);
+                    compiled++;
+                }
+                catch (e)
+                {
+                    ui.notifications.error(`${entry.role}: ${e.message}`);
+                }
+            }
+            if (compiled)
+                ui.notifications.info(`Compiled ${compiled} function(s) under dynamic/${base}/ - see devtools Sources.`);
         });
 
         // Clipboard paste

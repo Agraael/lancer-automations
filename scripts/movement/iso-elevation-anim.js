@@ -192,34 +192,3 @@ Hooks.once('ready', () =>
     Hooks.on('refreshToken', restore);
     Hooks.on('updateToken', (doc) => restore(doc.object));
 });
-
-// Sequencer's iso plugin re-skews isometricContainer every tick. Clamp it back per-frame.
-Hooks.on('createSequencerEffect', (effect) =>
-{
-    if (!game.modules.get(ISO_MODULE_ID)?.active)
-        return;
-    if (_isoActive(canvas.scene))
-        return;
-    const ticker = () =>
-    {
-        const isoContainer = effect?.isometricContainer;
-        if (!isoContainer || isoContainer.destroyed || !isoContainer.transform)
-        {
-            PIXI.Ticker.shared.remove(ticker);
-            return;
-        }
-        if (isoContainer.skew.x !== 0 || isoContainer.skew.y !== 0)
-            isoContainer.skew.set(0, 0);
-        if (isoContainer.scale.x !== 1 || isoContainer.scale.y !== 1)
-            isoContainer.scale.set(1, 1);
-    };
-    PIXI.Ticker.shared.add(ticker);
-    const onEnded = (endedEffect) =>
-    {
-        if (endedEffect !== effect)
-            return;
-        PIXI.Ticker.shared.remove(ticker);
-        Hooks.off('endedSequencerEffect', endedId);
-    };
-    const endedId = Hooks.on('endedSequencerEffect', onEnded);
-});

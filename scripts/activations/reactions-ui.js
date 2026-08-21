@@ -32,7 +32,12 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
                 : (typeof code === 'string'
                     ? () =>
                     {
-                        const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"]);
+                        const lid = item?.system?.lid;
+                        const registryReactions = lid ? ReactionManager.getReactions(lid)?.reactions : null;
+                        const sourceName = lid
+                            ? `${lid}/${Math.max(0, registryReactions?.indexOf(source) ?? 0)}/activation`
+                            : `${activationName || 'activation'}/activation`;
+                        const fn = stringToAsyncFunction(code, ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], sourceName);
                         return fn(triggerType, triggerData, token, item, activationName, api);
                     }
                     : null);
@@ -112,7 +117,9 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const wouldRecurse = (triggerType === 'onActivation' || triggerType === 'onInitActivation')
             && triggerData?.item?.uuid
             && triggerData.item.uuid === item?.uuid;
-        if (wouldRecurse)
+        const recurseGuardMatters = activationType === "flow"
+            || ((activationType === "macro" || activationType === "code") && activationMode !== "instead");
+        if (wouldRecurse && recurseGuardMatters)
             console.warn(`lancer-automations | Skipping itemActivation for "${item?.name}" to avoid onActivation recursion (reaction on same item). Using macro/code activation only.`);
 
         if (activationType === "none")

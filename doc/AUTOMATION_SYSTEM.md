@@ -1,4 +1,4 @@
-# Lancer Automations: How the Automation System Works
+# How the Automation System Works
 
 [Back to API Reference](API_REFERENCE.md) · Feature guide: [Automation Engine](feature/AUTOMATION_ENGINE.md)
 
@@ -19,14 +19,14 @@ For trigger payload schemas, see [API Reference](API_REFERENCE.md). For API surf
 - [2. Lifecycle of a Trigger](#2-lifecycle-of-a-trigger)
 - [3. Item vs General Activations](#3-item-vs-general-activations)
 - [4. Filters, in Order](#4-filters-in-order)
-- [5. The Four Callbacks: evaluate, activationCode, onInit, onMessage](#5-the-four-callbacks-evaluate-activationcode-oninit-onmessage)
+- [5. The Four Callbacks](#5-the-four-callbacks)
 - [6. Activation Type and Mode](#6-activation-type-and-mode)
 - [7. Auto Mode vs Popup Mode](#7-auto-mode-vs-popup-mode)
-- [8. Client Execution and Sockets](#8-client-execution-and-sockets)
-- [9. Cancel and Modify (Timing-Sensitive Triggers)](#9-cancel-and-modify-timing-sensitive-triggers)
-- [10. Reaction Economy and Frequency](#10-reaction-economy-and-frequency)
+- [8. Clients and Sockets](#8-clients-and-sockets)
+- [9. Cancel and Modify](#9-cancel-and-modify)
+- [10. Economy and Frequency](#10-economy-and-frequency)
 - [11. Flow Data Injection](#11-flow-data-injection)
-- [12. Item Paths, Extra Actions, Activated Items](#12-item-paths-extra-actions-activated-items)
+- [12. Paths and Extra Actions](#12-paths-and-extra-actions)
 - [13. Registration Paths](#13-registration-paths)
 - [14. Caches and Invalidation](#14-caches-and-invalidation)
 
@@ -93,16 +93,16 @@ What the engine does for one trigger:
 
 1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires these helpers onto `data`:
 
-   - `startRelatedFlow` / `startRelatedFlowToReactor` - launch the reacting item's own default flow, optionally on a specific user's client and with injected `extraData`. Full signatures in [section 8](#8-client-execution-and-sockets).
-   - `sendMessageToReactor` - remote RPC to an `onMessage` handler. Full signature in [section 8](#8-client-execution-and-sockets).
-   - `debugActivation(label?)` - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console (expandable) and returns a summary. Available in `evaluate` and `activationCode`, plus `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`.
+    - `startRelatedFlow` / `startRelatedFlowToReactor` - launch the reacting item's own default flow, optionally on a specific user's client and with injected `extraData`. Full signatures in [section 8](#8-clients-and-sockets).
+    - `sendMessageToReactor` - remote RPC to an `onMessage` handler. Full signature in [section 8](#8-clients-and-sockets).
+    - `debugActivation(label?)` - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console (expandable) and returns a summary. Available in `evaluate` and `activationCode`, plus `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`. Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
 
 2. **Reactor sweep.** Every token on the scene is a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
 
 3. **Distance enrichment.** For each reactor, two values are computed once and merged into a per-reactor copy of the trigger data:
 
-   - `distanceToTrigger` - distance from the reactor to the triggering token.
-   - `canTriggerReaction` - whether the trigger may provoke a reaction. It's `false` when the mover has `hidden`, `disengage`, or the `provoke` immunity, or is `intangible` while the reactor is not.
+    - `distanceToTrigger` - distance from the reactor to the triggering token.
+    - `canTriggerReaction` - whether the trigger may provoke a reaction. It's `false` when the mover has `hidden`, `disengage`, or the `provoke` immunity, or is `intangible` while the reactor is not.
 
 4. **Item reactions first.** For every item the reactor's actor owns whose LID matches a registered item activation, run the filter chain.
 
@@ -110,12 +110,12 @@ What the engine does for one trigger:
 
 6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther` / `triggerTarget`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
 
-7. **`evaluate()`** runs synchronously (see [section 5](#5-the-four-callbacks-evaluate-activationcode-oninit-onmessage)). Exceptions are caught and logged, and the activation is skipped on error.
+7. **`evaluate()`** runs synchronously (see [section 5](#5-the-four-callbacks)). Exceptions are caught and logged, and the activation is skipped on error.
 
 8. **Branch** on `autoActivate`:
 
-   - **true**: `activateReaction()` runs right away, on the local client.
-   - **false**: the entry is pushed to `reactionQueue`.
+    - **true**: `activateReaction()` runs right away, on the local client.
+    - **false**: the entry is pushed to `reactionQueue`.
 
 9. **Summary popup.** After every token is processed, if the queue is non-empty, the engine builds a summary popup, decides who sees it (per the `reactionNotificationMode` setting), and broadcasts it via socket.
 
@@ -167,12 +167,12 @@ Filters and `evaluate` run for every reactor on the scene, every time a matching
 
 - `reactionPath` selects which part of the deployable a reaction binds to:
 
-  - empty string - the top-level deploy itself (`actor.system.activation`).
-  - `"actions.<name>"` - a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern).
+    - empty string - the top-level deploy itself (`actor.system.activation`).
+    - `"actions.<name>"` - a specific entry in `actor.system.actions[]` (mirrors the `extraActions.<name>` pattern).
 
   The deployable surrogate carries the deployable actor's `system.actions[]`, so these resolve by **name** (deployable actions often have empty LIDs).
 
-#### Self-deployable: reacting to your own deploy
+#### Self-deployable
 
 The `onDeploy` trigger fires when a deployable or a thrown weapon is placed. Its payload is `{ triggeringToken, item, deployedTokens, deployType }`:
 
@@ -240,17 +240,21 @@ Fail any: that activation is silently skipped for that reactor. No popup, no log
 
 ---
 
-## 5. The Four Callbacks: evaluate, activationCode, onInit, onMessage
+## 5. The Four Callbacks
 
 All four receive `api` as the last argument. All four are wrapped in `try/catch`. Uncaught exceptions are logged to the console, never thrown to the user.
 
-### `evaluate(triggerType, triggerData, reactorToken, item, activationName, api) => boolean`
+### `evaluate`
+
+`evaluate(triggerType, triggerData, reactorToken, item, activationName, api) => boolean`
 
 The final filter. Return `true` to allow the activation, `false` to skip it.
 
-**Must be synchronous** for triggers that expose a cancel function (see [section 9](#9-cancel-and-modify-timing-sensitive-triggers)). The engine warns in the console if it detects a `Promise` returned from `evaluate` for one of those triggers.
+**Must be synchronous** for triggers that expose a cancel function (see [section 9](#9-cancel-and-modify)). The engine warns in the console if it detects a `Promise` returned from `evaluate` for one of those triggers.
 
-### `activationCode(triggerType, triggerData, reactorToken, item, activationName, api) => Promise<void>`
+### `activationCode`
+
+`activationCode(triggerType, triggerData, reactorToken, item, activationName, api) => Promise<void>`
 
 Your effect. May be async. Has full access to `api`. Runs on:
 
@@ -258,9 +262,11 @@ Your effect. May be async. Has full access to `api`. Runs on:
 
 - Whichever client clicks **Activate** in the popup (manual activations).
 
-See [section 8](#8-client-execution-and-sockets) for what that means for GM-only operations.
+See [section 8](#8-clients-and-sockets) for what that means for GM-only operations.
 
-### `onInit(token, item, api) => Promise<void>`
+### `onInit`
+
+`onInit(token, item, api) => Promise<void>`
 
 Runs once when a token (or its item) enters the scene. Used for:
 
@@ -278,7 +284,9 @@ Runs once when a token (or its item) enters the scene. Used for:
 
 For reactions that only have an `onInit` and no triggers, set `triggers: []`, `triggerSelf: false`, `triggerOther: false`, `autoActivate: false`, `activationType: "none"`.
 
-### `onMessage(triggerType, data, reactorToken, item, activationName, api) => Promise<any>`
+### `onMessage`
+
+`onMessage(triggerType, data, reactorToken, item, activationName, api) => Promise<any>`
 
 Handler for cross-client requests. Invoked when another client calls `triggerData.sendMessageToReactor(data, userId, opts)`. Runs on the **target** client (the user named by `userId`).
 
@@ -292,7 +300,7 @@ If the caller passed `wait: true`, whatever you `return` (or `resolve(...)`) fro
 
 Two independent dimensions on each reaction config:
 
-### `activationType`: *what* runs when the activation fires
+### `activationType`
 
 | Value | Effect |
 |---|---|
@@ -301,7 +309,7 @@ Two independent dimensions on each reaction config:
 | `"macro"` | Execute a Foundry macro by name (`activationMacro` field). |
 | `"none"` | Do nothing. Typically only used for `onInit`-only reactions. |
 
-### `activationMode`: does the reaction's own flow *also* fire?
+### `activationMode`
 
 Macro/code only; ignored for `"flow"` and `"none"`.
 
@@ -318,7 +326,7 @@ Macro/code only; ignored for `"flow"` and `"none"`.
 
 ## 7. Auto Mode vs Popup Mode
 
-### Auto (`autoActivate: true`)
+### Auto
 
 The activation runs immediately, on the local client, with no UI. Use this for things that should always happen:
 
@@ -328,7 +336,7 @@ The activation runs immediately, on the local client, with no UI. Use this for t
 
 - A passive that should fire silently.
 
-### Popup (`autoActivate: false`, the default)
+### Popup
 
 The activation is queued. After every reactor has been checked, all queued entries for the trigger are bundled into a single **summary popup**. Each entry shows the reactor's name and the activation's label. Clicking an entry expands its details. Clicking **Activate** runs that single entry's `activationCode`.
 
@@ -350,7 +358,7 @@ The popup is broadcast over the socket only to the recipients. Other clients see
 
 ---
 
-## 8. Client Execution and Sockets
+## 8. Clients and Sockets
 
 **`activationCode` does not always run on the GM's client.**
 
@@ -378,7 +386,7 @@ Wired onto `triggerData` for every reaction. Call from `evaluate` / `activationC
 triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
 ```
 
-`opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion. The `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit-hp1-instead-of-0).
+`opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion. The `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit).
 
 **`sendMessageToReactor(data, userId = null, opts = {})`** <sup>async</sup> → `any` - RPC to the reactor's `onMessage` (same `opts`). With `wait:true`, returns its result. Delegation primitive for GM-only work.
 
@@ -386,7 +394,7 @@ triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
 
 ---
 
-## 9. Cancel and Modify (Timing-Sensitive Triggers)
+## 9. Cancel and Modify
 
 A subset of triggers fire **before** the underlying action commits. From inside `evaluate` or `activationCode`, you can stop or modify the action.
 
@@ -479,7 +487,7 @@ async: preConfirm()    -> false: executeOriginal + return (no postChoice)
          false -> executeNew + postChoice(true)
 ```
 
-### Example: True Grit (HP=1 instead of 0)
+### Example: True Grit
 ```js
 const preConfirm = async () => {
     const ask = await api.askCard({
@@ -505,7 +513,7 @@ triggerData.modifyHpChange(
 
 ---
 
-## 10. Reaction Economy and Frequency
+## 10. Economy and Frequency
 
 The Lancer reaction economy (1 reaction per round) has two separate parts: the reaction config's `checkReaction` (default `true`) filters out a reactor with no reaction left before `evaluate` runs, and the world setting `consumeReaction`, when enabled, spends one reaction each time a `Reaction`-type action fires.
 
@@ -548,7 +556,7 @@ Use this when you need a bonus to apply *exactly to this one roll/attack/damage 
 
 ---
 
-## 12. Item Paths, Extra Actions, Activated Items
+## 12. Paths and Extra Actions
 
 Three related mechanisms for binding reactions to sub-parts of an item and for tracking whether an item is currently "on".
 
@@ -638,11 +646,11 @@ Defense Net in `startups/itemActivations.js` is the reference implementation (`o
 
 There are four ways to register an activation. They all end up in the same dispatcher.
 
-### A. The Activation Manager UI (most users)
+### A. Activation Manager UI
 
 **Module Settings > Activation Manager.** Create item or general activations through forms. Stored in `customReactions` / `generalReactions` world settings. Best for one-offs and homebrew.
 
-### B. Module-time registration (other modules / world scripts)
+### B. Module-time registration
 
 ```js
 Hooks.on("lancer-automations.ready", (api) => {
@@ -672,11 +680,11 @@ Hooks.on("lancer-automations.ready", (api) => {
 
 External registrations are merged with **last-write-wins** semantics: re-registering the same key replaces the previous entry.
 
-### C. Built-in defaults (this module's own set)
+### C. Built-in defaults
 
 The same two functions are used by `startups/itemActivations.js` for the bundled NPC/feature automations. The result is identical to B. The only difference is where it comes from.
 
-### D. Startup scripts (UI-managed code)
+### D. Startup scripts
 
 **Module Settings > Activation Manager > Startups tab.** Arbitrary code blocks run once on `ready`. Useful for registering helper functions on the API (`api.registerUserHelper("myHelper", fn)`) so your activation code can call them by name.
 
