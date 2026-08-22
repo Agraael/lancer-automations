@@ -111,6 +111,7 @@ function _emitDamageEvent(targetActor, hpLanded)
     const event = {
         type: 'damage',
         round: combat.round ?? 0,
+        turn: combat.turn ?? null,
         byId: attackerId,
         targetId: targetTokenId,
         damages: stash?.damages ?? [],

@@ -1,5 +1,6 @@
 /* global Hooks, game, console */
 
+import { battleLogEnabled } from './battelog-utils.js';
 import { mockCombatTelemetry } from './combat-telemetry-mock.js';
 import { deriveDisplayBattle } from './combat-telemetry-derive.js';
 import { openBattleLogGMCard } from './gm-card.js';
@@ -10,7 +11,6 @@ import { registerAttackCapture } from './attack-capture.js';
 import { registerStateCapture } from './state-capture.js';
 import { registerActionCapture } from './action-capture.js';
 import { registerMoveCapture } from './move-capture.js';
-import { getModuleSetting } from "../tools/settings-utils.js";
 
 registerCombatRecorder();
 registerDamageCapture();
@@ -39,16 +39,11 @@ export function openBattleLogRecapTest()
     openBattleLogRecap(battle, { outcome: battle.mission.outcome, mvpId: battle.mvpId ?? null });
 }
 
-function _battleLogEnabled()
-{
-    return getModuleSetting('battleLogEnabled');
-}
-
 Hooks.on('deleteCombat', (combat) =>
 {
     if (!game.user?.isGM)
         return;
-    if (!_battleLogEnabled())
+    if (!battleLogEnabled())
         return;
     const telemetry = consumeCombatTelemetry(combat.id);
     if (!telemetry)

@@ -1,4 +1,15 @@
 import { appendEvent, BUCKETS } from './telemetry-store.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+
+export function numOr(value, fallback = 0)
+{
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+export function battleLogEnabled()
+{
+    return getModuleSetting('battleLogEnabled');
+}
 
 function _combatantKey(combatant)
 {

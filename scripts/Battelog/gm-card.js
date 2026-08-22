@@ -33,6 +33,7 @@ export function openBattleLogGMCard(battle)
         <div class="lancer-list-item ${player.id === state.mvpId ? 'selected' : ''}" data-mvp="${player.id}">
             <div style="flex:1;font-weight:600;text-align:center;">
                 <i class="fas fa-star battelog-mvp-star"></i>${_escape(player.callsign)}
+                ${awardsDisabled ? '' : `<span style="font-weight:400;opacity:0.55;font-size:0.82em;margin-left:6px;">${player.awardPoints ?? 0} PTS</span>`}
             </div>
         </div>`;
 

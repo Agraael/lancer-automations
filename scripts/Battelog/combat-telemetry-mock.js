@@ -68,8 +68,12 @@ function freshState(actor, hpFloor, heatFloor, structMax = 4, stressMax = 4, sid
     };
 }
 
+let _turn = null;
+
 function pushEvent(log, event)
 {
+    if (_turn != null && event.round >= 1 && event.turn === undefined)
+        event.turn = _turn;
     log.events.push(event);
 }
 
@@ -431,7 +435,7 @@ function pickTargetWithState(targets)
 /**
  * @returns {import('./combat-telemetry.js').CombatTelemetry}
  */
-export function mockCombatTelemetry()
+export function mockCombatTelemetry({ small = _chance(0.5) } = {})
 {
     const mechs = game.actors?.filter(a => a.type === 'mech') ?? [];
     const excludedNpcClasses = new Set(['human', 'pilot']);
@@ -448,14 +452,14 @@ export function mockCombatTelemetry()
         name: count > 1 ? `${actor.name} ${index + 1}` : actor.name,
         events: [],
     });
-    const players = pickRandom(mechs, Math.min(mechs.length, _rand(3, 5)))
+    const players = pickRandom(mechs, Math.min(mechs.length, small ? _rand(2, 3) : _rand(3, 5)))
         .map(actor => ({ ...mockEntry(actor, 0, 1), __state: freshState(actor, PLAYER_HP_FLOOR, PLAYER_HEAT_FLOOR, 4, 4, 'player') }));
     // Bigger hostile pool + hostiles have 1 structure so ~90 % actually get killed.
     const hostiles = [];
-    const typePool = pickRandom(npcs, Math.min(npcs.length, _rand(6, 9)));
+    const typePool = pickRandom(npcs, Math.min(npcs.length, small ? _rand(2, 3) : _rand(6, 9)));
     for (const typeActor of typePool)
     {
-        const count = _rand(3, 5);
+        const count = small ? _rand(1, 2) : _rand(3, 5);
         for (let copy = 0; copy < count; copy++)
             hostiles.push({ ...mockEntry(typeActor, copy, count), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 1) });
     }
@@ -482,53 +486,89 @@ export function mockCombatTelemetry()
         const typeActor = _pick(npcs);
         secrets.push({ ...mockEntry(typeActor, 0, 1), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 2, 2, 'secret') });
     }
-    const roundCount = _rand(8, 12);
+    const roundCount = small ? _rand(3, 4) : _rand(8, 12);
 
     for (let round = 1; round <= roundCount; round++)
     {
-        for (const p of players)
+        const combatants = [...players, ...hostiles, ...friendlies, ...neutrals, ...secrets];
+        const tickAll = () =>
         {
-            if (p.__state.destroyed)
-                continue;
-            playerTurn(round, p, p.__state, hostiles.filter(h => !h.__state.destroyed));
-        }
-        for (const h of hostiles)
+            for (const combatant of combatants)
+            {
+                if (!combatant.__state.destroyed)
+                    statTick(combatant, round, combatant.__state);
+            }
+        };
+        // Mirror the real recorder: everyone ticks at every turn, so changes land mid-round.
+        let turnIdx = 0;
+        const startTurn = (combatant) =>
         {
-            if (h.__state.destroyed)
-                continue;
-            hostileTurn(round, h, h.__state, players.filter(p => !p.__state.destroyed));
-        }
-        // Friendlies act as light NPC allies against hostiles.
-        for (const f of friendlies)
+            if (combatant.__state.destroyed)
+                return false;
+            _turn = turnIdx++;
+            return true;
+        };
+        const actAlly = (ally) =>
         {
-            if (f.__state.destroyed)
-                continue;
-            hostileTurn(round, f, f.__state, hostiles.filter(h => !h.__state.destroyed));
+            if (!startTurn(ally))
+                return;
+            const targets = hostiles.filter(hostile => !hostile.__state.destroyed);
+            if (players.includes(ally))
+                playerTurn(round, ally, ally.__state, targets);
+            else
+                hostileTurn(round, ally, ally.__state, targets);
+            tickAll();
+        };
+        const actFoe = (foe) =>
+        {
+            if (!startTurn(foe))
+                return;
+            hostileTurn(round, foe, foe.__state, players.filter(player => !player.__state.destroyed));
+            tickAll();
+        };
+        // Lancer alternating activation: one ally acts, then a proportional share of hostiles.
+        const aliveAllies = [...players, ...friendlies].filter(ally => !ally.__state.destroyed);
+        const aliveFoes = hostiles.filter(foe => !foe.__state.destroyed);
+        const ratio = aliveAllies.length > 0 ? aliveFoes.length / aliveAllies.length : aliveFoes.length;
+        let foeIdx = 0;
+        let foeBudget = 0;
+        for (const ally of aliveAllies)
+        {
+            actAlly(ally);
+            foeBudget += ratio;
+            while (foeBudget >= 1 && foeIdx < aliveFoes.length)
+            {
+                actFoe(aliveFoes[foeIdx++]);
+                foeBudget -= 1;
+            }
         }
+        while (foeIdx < aliveFoes.length)
+            actFoe(aliveFoes[foeIdx++]);
         // Neutrals / secrets fire occasionally at anyone still up.
         for (const combatant of [...neutrals, ...secrets])
         {
-            if (combatant.__state.destroyed || !_chance(0.3))
+            if (!startTurn(combatant))
                 continue;
-            const anyone = [...players, ...hostiles, ...friendlies]
-                .filter(target => !target.__state.destroyed && target !== combatant);
-            if (anyone.length > 0)
-                hostileTurn(round, combatant, combatant.__state, anyone);
+            if (_chance(0.3))
+            {
+                const anyone = [...players, ...hostiles, ...friendlies]
+                    .filter(target => !target.__state.destroyed && target !== combatant);
+                if (anyone.length > 0)
+                    hostileTurn(round, combatant, combatant.__state, anyone);
+            }
+            tickAll();
         }
-        const combatants = [...players, ...hostiles, ...friendlies, ...neutrals, ...secrets];
-        for (const c of combatants)
+        // End-of-round upkeep lands on the last turn.
+        _turn = Math.max(0, turnIdx - 1);
+        for (const combatant of combatants)
         {
-            if (c.__state.destroyed)
-                continue;
-            dotTicks(round, c, c.__state);
+            if (!combatant.__state.destroyed)
+                dotTicks(round, combatant, combatant.__state);
         }
-        for (const c of combatants)
-        {
-            coolHeat(c.__state);
-            if (c.__state.destroyed)
-                continue;
-            statTick(c, round, c.__state);
-        }
+        for (const combatant of combatants)
+            coolHeat(combatant.__state);
+        tickAll();
+        _turn = null;
     }
 
     // Force exactly one player mech destroyed post-sim; Lancer death = 0 structure or 0 stress.
@@ -546,7 +586,9 @@ export function mockCombatTelemetry()
         else
             doomed.__state.stress = 0;
         doomed.__state.destroyed = true;
+        _turn = _rand(0, Math.max(0, players.length + hostiles.length - 1));
         pushEvent(doomed, { type: 'destroyed', round: lossRounds.at(-1), tokenId: doomed.tokenId });
+        _turn = null;
     }
 
     // Give each survivor a varied end state so the recap doesn't show everyone at max.
@@ -608,7 +650,9 @@ export function mockCombatTelemetry()
     for (const h of doomedHostiles)
     {
         h.__state.destroyed = true;
+        _turn = _rand(0, Math.max(0, players.length + hostiles.length - 1));
         pushEvent(h, { type: 'destroyed', round: _rand(2, roundCount), tokenId: h.tokenId });
+        _turn = null;
     }
 
     const endTime = Date.now();

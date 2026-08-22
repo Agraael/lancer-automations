@@ -36,6 +36,8 @@ const TIP_HOVER_SELECTOR = [
     '.battelog-pcol-activity-cell.has-tip',
     '.battelog-pcol-kills-block.has-tip',
     '.battelog-pcol-assists-block.has-tip',
+    '.battelog-pcol-fav.has-tip',
+    '.battelog-pcol-topact.has-tip',
     '.battelog-pcol-medal',
     '.battelog-pcol-gearlost.has-lost',
     '.battelog-hcard-scan-btn.has-tip',
@@ -95,7 +97,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 <div class="battelog-recap-meta">
                     <span class="battelog-recap-meta-item"><i class="fas fa-calendar-day"></i> ${_escape(date)}</span>
                     <span class="battelog-recap-meta-dot">·</span>
-                    <span class="battelog-recap-meta-item">${_escape(rounds)} ROUNDS</span>
+                    <span class="battelog-recap-meta-item">${_escape(rounds)} ROUNDS${mission.turns ? ` / ${_escape(mission.turns)} TURNS` : ''}</span>
                     <span class="battelog-recap-meta-dot">·</span>
                     <span class="battelog-recap-meta-item">${_escape(realtime)}</span>
                     <span class="battelog-recap-meta-dot">·</span>
@@ -862,10 +864,10 @@ function _sortPlayers(players, mvpId)
             if (b.id === mvpId && a.id !== mvpId)
                 return 1;
         }
-        const ka = a.kills ?? 0;
-        const kb = b.kills ?? 0;
-        if (kb !== ka)
-            return kb - ka;
+        const aKills = a.kills ?? 0;
+        const bKills = b.kills ?? 0;
+        if (bKills !== aKills)
+            return bKills - aKills;
         return (b.dmgDealt ?? 0) - (a.dmgDealt ?? 0);
     });
 }
@@ -1030,7 +1032,7 @@ function _killListRows(list)
         const key = String(name);
         counts.set(key, (counts.get(key) ?? 0) + 1);
     }
-    return [...counts.entries()].map(([k, count]) => ({ k, v: '×' + count }));
+    return [...counts.entries()].map(([name, count]) => ({ k: name, v: '×' + count }));
 }
 
 // Flat token-bar palette from scripts/tah/tokenStatBar.js BAR_DEFS.
@@ -1631,7 +1633,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
     const isDanger = badge === 'danger';
     const instances = group.instances ?? [];
     const count = instances.length;
-    const killedCount = instances.filter(x => x.killed !== false).length;
+    const killedCount = instances.filter(instance => instance.killed !== false).length;
     const allKilled = count > 0 && killedCount === count;
     const noneKilled = killedCount === 0;
     // Scanned = an accessible scan journal exists, or the actor is force-scanned; the mock group.scanned is ignored.
@@ -1791,7 +1793,7 @@ function _encounterInnerHtml(encounter, players, dispo)
     const total       = filtered.length;
     const killedCount = filtered.filter(entry => entry.killed !== false).length;
     // Scan intel is per actor prototype (same actorId = same sheet).
-    const uniqueActorIds = [...new Set(filtered.map(x => x.actorId))];
+    const uniqueActorIds = [...new Set(filtered.map(entry => entry.actorId))];
     const scannedTypes = uniqueActorIds.filter(id => !!_scanJournalFor(id) || _isActorForceScanned(id)).length;
     const totalTypes = uniqueActorIds.length;
     const dmgInflicted = filtered.reduce((sum, x) => sum + (x.dmgDealt ?? 0), 0);
@@ -1823,7 +1825,7 @@ function _encounterInnerHtml(encounter, players, dispo)
         if (nemesisInstance)
         {
             nemesisGroup = { ...nemesisParent, instances: [nemesisInstance] };
-            nemesisParent.instances = nemesisParent.instances.filter(x => x !== nemesisInstance);
+            nemesisParent.instances = nemesisParent.instances.filter(instance => instance !== nemesisInstance);
         }
         let dangerMax = -1;
         for (const group of groups)
@@ -1838,7 +1840,7 @@ function _encounterInnerHtml(encounter, players, dispo)
             }
         }
     }
-    const remainingGroups = groups.filter(g => (g.instances?.length ?? 0) > 0);
+    const remainingGroups = groups.filter(group => (group.instances?.length ?? 0) > 0);
 
     const scanCache = new Map();
     const isScanned = (group) =>
@@ -1908,11 +1910,19 @@ function _encounterInnerHtml(encounter, players, dispo)
 const TELEMETRY_CHART = { w: 660, h: 300, pl: 42, pr: 18, pt: 18, pb: 30 };
 
 const TELEMETRY_METRICS = [
-    { key: 'hp',    field: 'line',     label: 'HP TOTAL PER ROUND',     icon: 'fa-heart-pulse', startField: 'startHp' },
-    { key: 'heat',  field: 'heatLine', label: 'HEAT TOTAL PER ROUND',   icon: 'fa-thermometer-half', startField: 'startHeat' },
-    { key: 'dmg',   field: 'dmgLine',  label: 'DAMAGE TOTAL PER ROUND', icon: 'fa-burst',  cumulative: true },
-    { key: 'kills', field: 'killAssistLine', label: 'KILL/ASSIST TOTAL PER ROUND', icon: 'fa-skull', cumulative: true },
+    { key: 'hp',    field: 'line',     turnField: 'lineTurns',     label: 'HP TOTAL PER ROUND',     icon: 'fa-heart-pulse', startField: 'startHp' },
+    { key: 'heat',  field: 'heatLine', turnField: 'heatLineTurns', label: 'HEAT TOTAL PER ROUND',   icon: 'fa-thermometer-half', startField: 'startHeat' },
+    { key: 'dmg',   field: 'dmgLine',  turnField: 'dmgLineTurns',  label: 'DAMAGE TOTAL PER ROUND', icon: 'fa-burst',  cumulative: true },
+    { key: 'kills', field: 'killAssistLine', turnField: 'killAssistLineTurns', label: 'KILL/ASSIST TOTAL PER ROUND', icon: 'fa-skull', cumulative: true },
 ];
+
+// Turn-resolution mode: each turn is a chart column instead of each round. Dense fights fall back to rounds.
+const TELEMETRY_MAX_TURN_COLUMNS = 60;
+function _telemetryTurnAxis(battle)
+{
+    const turnAxis = battle.turnAxis ?? [];
+    return turnAxis.length >= 2 && turnAxis.length <= TELEMETRY_MAX_TURN_COLUMNS ? turnAxis : null;
+}
 
 function _telemetryMetric(view)
 {
@@ -2000,9 +2010,10 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
             <span class="battelog-telemetry-metric-label">${_escape(m.label)}</span>
         </button>
     `).join('');
+    const turns = battle.mission?.turns ?? null;
     const noteText = highlight
         ? 'ISOLATED · click again to reset'
-        : `click a name to isolate · ${rounds} ROUNDS`;
+        : `click a name to isolate · ${rounds} ROUNDS${turns ? ` · ${turns} TURNS` : ''}`;
     return `
         <div class="battelog-telemetry-metrics">${metricButtons}</div>
         <div class="battelog-telemetry-panel">
@@ -2023,9 +2034,21 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     const { pl, pr, pt, pb } = TELEMETRY_CHART;
 
     const roundCount = Math.max(5, rawRounds.length);
-    // R0 is the combat-start column: full HP, zero heat/damage/kills.
-    const columnCount = roundCount + 1;
+    const turnAxis = _telemetryTurnAxis(battle);
+    const turnMode = !!turnAxis && players.length > 0
+        && players.every(player => (player[metric.turnField]?.length ?? 0) === turnAxis.length);
+    // Column 0 is the combat-start state: full HP, zero heat/damage/kills.
+    const columnCount = (turnMode ? turnAxis.length : roundCount) + 1;
     const rounds = [0, ...Array.from({ length: roundCount }, (_, i) => rawRounds[i] ?? (i + 1))];
+    const columns = turnMode
+        ? [{ label: 'R0', tip: '0' }, ...turnAxis.map((slot, slotIdx) => ({
+            label: slotIdx === 0 || turnAxis[slotIdx - 1].round !== slot.round ? `R${slot.round}` : '',
+            tip: `${slot.round} · T${slot.turn + 1}`,
+        }))]
+        : rounds.map(roundNo => ({ label: `R${roundNo}`, tip: String(roundNo) }));
+    const dataFor = player => (turnMode ? player[metric.turnField] : player[metric.field]) ?? [];
+    const splitAFor = player => (turnMode ? player.killLineTurns : player.killLine) ?? [];
+    const splitBFor = player => (turnMode ? player.assistLineTurns : player.assistLine) ?? [];
     const measuredW = Math.max(0, chartSize?.w ?? 0);
     const measuredH = Math.max(0, chartSize?.h ?? 0);
     const w = measuredW > 0 ? measuredW : TELEMETRY_CHART.w;
@@ -2041,14 +2064,15 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         key: player.id,
         label: String(player.callsign ?? '').toUpperCase(),
         color: player.accent,
-        data: [startValue(player), ...cum(player[metric.field] ?? [])],
-        splitA: isKills ? [0, ...cum(player.killLine ?? [])] : null,
-        splitB: isKills ? [0, ...cum(player.assistLine ?? [])] : null,
+        data: [startValue(player), ...cum(dataFor(player))],
+        splitA: isKills ? [0, ...cum(splitAFor(player))] : null,
+        splitB: isKills ? [0, ...cum(splitBFor(player))] : null,
     }));
-    const totalRaw = rawRounds.map((_, i) => players.reduce((acc, player) => acc + (player[metric.field]?.[i] ?? 0), 0));
+    const dataCols = Array.from({ length: columnCount - 1 }, (_, colIdx) => colIdx);
+    const totalRaw = dataCols.map(colIdx => players.reduce((acc, player) => acc + (dataFor(player)[colIdx] ?? 0), 0));
     const totalStart = players.reduce((acc, player) => acc + startValue(player), 0);
-    const totalSplitA = isKills ? rawRounds.map((_, i) => players.reduce((acc, player) => acc + (player.killLine?.[i] ?? 0), 0)) : null;
-    const totalSplitB = isKills ? rawRounds.map((_, i) => players.reduce((acc, player) => acc + (player.assistLine?.[i] ?? 0), 0)) : null;
+    const totalSplitA = isKills ? dataCols.map(colIdx => players.reduce((acc, player) => acc + (splitAFor(player)[colIdx] ?? 0), 0)) : null;
+    const totalSplitB = isKills ? dataCols.map(colIdx => players.reduce((acc, player) => acc + (splitBFor(player)[colIdx] ?? 0), 0)) : null;
     const totalSeries = {
         key: 'total',
         label: 'TOTAL',
@@ -2060,25 +2084,81 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         thick: true,
     };
     const series = showTotal ? [...playerSeries, totalSeries] : playerSeries;
-    const visible = highlight ? series.filter(s => s.key === highlight) : series;
+    const visible = highlight ? series.filter(ser => ser.key === highlight) : series;
     // 15% headroom so the peak never touches the top edge.
-    const rawMax = Math.max(1, ...visible.flatMap(s => s.data));
+    const rawMax = Math.max(1, ...visible.flatMap(entry => entry.data));
     const yMax = Math.max(rawMax + 1, Math.ceil(rawMax * 1.15));
 
-    const xOf = idx => pl + (columnCount === 1 ? innerW / 2 : (idx / (columnCount - 1)) * innerW);
-    const yOf = v => pt + innerH - (v / yMax) * innerH;
-    const ticks = _telemetryNiceTicks(yMax);
+    // A floor far above zero (flat HP graphs) truncates the axis: 0 stays visible below a break marker.
+    const rawMin = Math.min(...visible.flatMap(entry => entry.data));
+    const truncated = rawMin > yMax * 0.35;
+    const breakZone = truncated ? 18 : 0;
+    const plotH = innerH - breakZone;
+    const yMin = truncated ? Math.max(0, Math.floor((rawMin * 0.9) / 10) * 10) : 0;
+    const baseY = pt + plotH;
 
-    const gridY = ticks.map(t => `
-        <line x1="${pl}" x2="${w - pr}" y1="${yOf(t)}" y2="${yOf(t)}" class="battelog-telemetry-grid" ${t === 0 ? '' : 'stroke-dasharray="2 3"'} />
-        <text x="${pl - 7}" y="${yOf(t) + 3}" text-anchor="end" class="battelog-telemetry-axis-text">${t}</text>
+    const xOf = idx => pl + (columnCount === 1 ? innerW / 2 : (idx / (columnCount - 1)) * innerW);
+    const yOf = value => pt + plotH - ((value - yMin) / (yMax - yMin)) * plotH;
+    let ticks = _telemetryNiceTicks(yMax).filter(tick => tick >= yMin);
+    if (truncated)
+    {
+        if (ticks.length < 3)
+            ticks = [yMin, Math.round((yMin + yMax) / 2), yMax];
+        else if (!ticks.includes(yMin))
+            ticks.unshift(yMin);
+    }
+
+    const gridY = ticks.map(tick => `
+        <line x1="${pl}" x2="${w - pr}" y1="${yOf(tick)}" y2="${yOf(tick)}" class="battelog-telemetry-grid" ${tick === yMin && !truncated ? '' : 'stroke-dasharray="2 3"'} />
+        <text x="${pl - 7}" y="${yOf(tick) + 3}" text-anchor="end" class="battelog-telemetry-axis-text">${tick}</text>
     `).join('');
-    const gridX = rounds.map((r, i) => `
-        <line x1="${xOf(i)}" x2="${xOf(i)}" y1="${pt}" y2="${pt + innerH}" class="battelog-telemetry-grid dim" stroke-dasharray="2 4" />
-        <text x="${xOf(i)}" y="${h - 10}" text-anchor="middle" class="battelog-telemetry-tick-text">R${r}</text>
+    const axisBreak = truncated ? `
+        <line x1="${pl}" x2="${w - pr}" y1="${pt + innerH}" y2="${pt + innerH}" class="battelog-telemetry-grid" />
+        <text x="${pl - 7}" y="${pt + innerH + 3}" text-anchor="end" class="battelog-telemetry-axis-text">0</text>
+        <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 12}" y2="${baseY + 6}" class="battelog-telemetry-grid" stroke-width="1.3" />
+        <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 15}" y2="${baseY + 9}" class="battelog-telemetry-grid" stroke-width="1.3" />` : '';
+    const gridX = columns.map((col, colIdx) => `
+        <line x1="${xOf(colIdx)}" x2="${xOf(colIdx)}" y1="${pt}" y2="${pt + innerH}" class="battelog-telemetry-grid dim" ${col.label ? 'stroke-dasharray="2 4"' : 'stroke-dasharray="1 6" opacity="0.35" stroke-width="0.7"'}/>
+        ${col.label ? `<text x="${xOf(colIdx)}" y="${h - 10}" text-anchor="middle" class="battelog-telemetry-tick-text">${col.label}</text>` : ''}
     `).join('');
 
     const jitterFor = (seriesIdx) => highlight ? 0 : (seriesIdx - (series.length - 1) / 2) * 1.7;
+
+    // Monotone cubic (Fritsch-Carlson): smooth curve that never overshoots the data points.
+    const smoothPathD = (pts) =>
+    {
+        if (pts.length < 2)
+            return pts.length === 1 ? `M ${pts[0][0]} ${pts[0][1]}` : '';
+        const dx = [];
+        const slope = [];
+        for (let idx = 0; idx < pts.length - 1; idx++)
+        {
+            const run = pts[idx + 1][0] - pts[idx][0];
+            dx.push(run);
+            slope.push(run !== 0 ? (pts[idx + 1][1] - pts[idx][1]) / run : 0);
+        }
+        const tangent = [slope[0]];
+        for (let idx = 1; idx < pts.length - 1; idx++)
+        {
+            if (slope[idx - 1] * slope[idx] <= 0)
+                tangent.push(0);
+            else
+            {
+                const wLeft = 2 * dx[idx] + dx[idx - 1];
+                const wRight = dx[idx] + 2 * dx[idx - 1];
+                tangent.push((wLeft + wRight) / (wLeft / slope[idx - 1] + wRight / slope[idx]));
+            }
+        }
+        tangent.push(slope.at(-1));
+        const fmt = (value) => Math.round(value * 100) / 100;
+        let pathD = `M ${fmt(pts[0][0])} ${fmt(pts[0][1])}`;
+        for (let idx = 0; idx < pts.length - 1; idx++)
+        {
+            const step = dx[idx] / 3;
+            pathD += ` C ${fmt(pts[idx][0] + step)} ${fmt(pts[idx][1] + tangent[idx] * step)}, ${fmt(pts[idx + 1][0] - step)} ${fmt(pts[idx + 1][1] - tangent[idx + 1] * step)}, ${fmt(pts[idx + 1][0])} ${fmt(pts[idx + 1][1])}`;
+        }
+        return pathD;
+    };
 
     const seriesSvg = series.map((ser, seriesIdx) =>
     {
@@ -2086,27 +2166,31 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         const emph = highlight === ser.key;
         const groupOpacity = dim ? 0.12 : 1;
         const jitter = jitterFor(seriesIdx);
-        const points = ser.data.map((v, i) => [xOf(i), yOf(v) + jitter]);
+        const points = ser.data.map((value, idx) => [xOf(idx), yOf(value) + jitter]);
         const strokeWidth = (ser.thick ? 3.4 : 2.2) + (emph ? 1.2 : 0);
-        const linePoints = points.map(p => p.join(',')).join(' ');
+        const lineD = smoothPathD(points);
         // Area fill ends at the last real data point, not the axis end, so short battles don't smear right.
         const lastX = ser.data.length > 0 ? xOf(ser.data.length - 1) : pl;
-        const areaPoly = ser.thick ? '' : `<polygon class="battelog-telemetry-area" points="${pl},${pt + innerH} ${linePoints} ${lastX},${pt + innerH}" fill="${ser.color}" pointer-events="none"/>`;
+        const areaPoly = ser.thick ? '' : `<path class="battelog-telemetry-area" d="${lineD} L ${lastX} ${baseY} L ${pl} ${baseY} Z" fill="${ser.color}" pointer-events="none"/>`;
         // Keep in sync with the CSS timings below: linear line draw makes each dot's fade finish as the polyline sweeps past it.
         const lineStartDelay = 0.04;
         const lineDuration = 0.6;
         const dotDuration = 0.1;
         const dotSpacing = points.length > 1 ? lineDuration / (points.length - 1) : 0;
-        const dots = points.map((p, i) =>
+        const dots = points.map((point, colIdx) =>
         {
-            const arrivalTime = lineStartDelay + i * dotSpacing;
+            const arrivalTime = lineStartDelay + colIdx * dotSpacing;
             const delay = (arrivalTime - dotDuration).toFixed(3);
-            return `<circle cx="${p[0]}" cy="${p[1]}" r="${ser.thick ? 3.5 : 2.8}" class="battelog-telemetry-dot" stroke="${ser.color}" stroke-width="${ser.thick ? 2.4 : 1.8}" pointer-events="none" style="animation-delay:${delay}s" />`;
+            // Turn columns are subdivisions: smaller marks than the round starts.
+            const minor = !columns[colIdx]?.label;
+            const radius = ser.thick ? (minor ? 2.1 : 3.5) : (minor ? 1.6 : 2.8);
+            const dotStroke = ser.thick ? (minor ? 1.4 : 2.4) : (minor ? 1 : 1.8);
+            return `<circle cx="${point[0]}" cy="${point[1]}" r="${radius}" class="battelog-telemetry-dot" stroke="${ser.color}" stroke-width="${dotStroke}" pointer-events="none" style="animation-delay:${delay}s" />`;
         }).join('');
         return `
             <g style="opacity:${groupOpacity};">
                 ${areaPoly}
-                <polyline class="${ser.dashed ? 'battelog-telemetry-line-dashed' : 'battelog-telemetry-line'}" points="${linePoints}" pathLength="1" fill="none" stroke="${ser.color}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" pointer-events="none" ${ser.dashed ? 'stroke-dasharray="7 4"' : ''}/>
+                <path class="${ser.dashed ? 'battelog-telemetry-line-dashed' : 'battelog-telemetry-line'}" d="${lineD}" pathLength="1" fill="none" stroke="${ser.color}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" pointer-events="none" ${ser.dashed ? 'stroke-dasharray="7 4"' : ''}/>
                 ${dots}
             </g>
         `;
@@ -2117,17 +2201,17 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         if (highlight && highlight !== ser.key)
             return [];
         const jitter = jitterFor(seriesIdx);
-        return ser.data.map((v, i) =>
+        return ser.data.map((value, i) =>
         {
-            const bucket = (highlight ? series.filter(z => z.key === highlight) : series)
-                .filter(z => z.data[i] === v)
-                .map(z => ({
-                    label: z.label,
-                    value: z.splitA ? `${z.splitA[i] ?? 0} / ${z.splitB[i] ?? 0}` : z.data[i],
-                    color: z.color,
+            const bucket = (highlight ? series.filter(entry => entry.key === highlight) : series)
+                .filter(entry => entry.data[i] === value)
+                .map(entry => ({
+                    label: entry.label,
+                    value: entry.splitA ? `${entry.splitA[i] ?? 0} / ${entry.splitB[i] ?? 0}` : entry.data[i],
+                    color: entry.color,
                 }));
-            const payload = encodeURIComponent(JSON.stringify({ round: rounds[i], items: bucket, x: xOf(i), y: yOf(v) + jitter, color: ser.color }));
-            return `<circle class="battelog-telemetry-hit" cx="${xOf(i)}" cy="${yOf(v) + jitter}" r="11" fill="transparent" data-hover="${payload}"/>`;
+            const payload = encodeURIComponent(JSON.stringify({ round: columns[i]?.tip ?? String(i), items: bucket, x: xOf(i), y: yOf(value) + jitter, color: ser.color }));
+            return `<circle class="battelog-telemetry-hit" cx="${xOf(i)}" cy="${yOf(value) + jitter}" r="11" fill="transparent" data-hover="${payload}"/>`;
         });
     }).join('');
 
@@ -2135,6 +2219,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block; width:100%; height:100%;" data-chart-w="${w}" data-chart-h="${h}" data-chart-pl="${pl}" data-chart-pr="${pr}" data-chart-pt="${pt}">
             <defs><clipPath id="battelog-telemetry-clip"><rect x="${pl}" y="${pt - 3}" width="${innerW}" height="${innerH + 6}"/></clipPath></defs>
             ${gridY}
+            ${axisBreak}
             ${gridX}
             <g clip-path="url(#battelog-telemetry-clip)">${seriesSvg}</g>
             <g class="battelog-telemetry-hits">${hitCircles}</g>
@@ -2153,7 +2238,7 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
 
     const items = players.map(player =>
     {
-        const arr = player[metric.field] ?? [];
+        const roundValues = player[metric.field] ?? [];
         let sub;
         if (isHp)
             sub = `${player.effectiveHpEnd ?? 0} / ${player.effectiveHpMax ?? 0}`;
@@ -2162,7 +2247,7 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
         else if (isKills)
             sub = `${player.kills ?? 0} / ${player.assists ?? 0}`;
         else
-            sub = String(arr.reduce((a, b) => a + b, 0));
+            sub = String(roundValues.reduce((a, b) => a + b, 0));
         const active = highlight === player.id;
         const dim = highlight && !active;
         return `
@@ -2180,24 +2265,24 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
     if (isHp)
     {
         const end = players.reduce((total, player) => total + (player.effectiveHpEnd ?? 0), 0);
-        const max = players.reduce((n, p) => n + (p.effectiveHpMax ?? 0), 0);
+        const max = players.reduce((total, player) => total + (player.effectiveHpMax ?? 0), 0);
         totalLabel = `${end} / ${max}`;
     }
     else if (isHeat)
     {
-        const end = players.reduce((n, p) => n + (p.heatConsumedEnd ?? 0), 0);
-        const max = players.reduce((n, p) => n + (p.heatCapacityMax ?? 0), 0);
+        const end = players.reduce((total, player) => total + (player.heatConsumedEnd ?? 0), 0);
+        const max = players.reduce((total, player) => total + (player.heatCapacityMax ?? 0), 0);
         totalLabel = `${end} / ${max}`;
     }
     else if (isKills)
     {
-        const k = players.reduce((n, p) => n + (p.kills ?? 0), 0);
-        const a = players.reduce((n, p) => n + (p.assists ?? 0), 0);
-        totalLabel = `${k} / ${a}`;
+        const totalKills = players.reduce((total, player) => total + (player.kills ?? 0), 0);
+        const totalAssists = players.reduce((total, player) => total + (player.assists ?? 0), 0);
+        totalLabel = `${totalKills} / ${totalAssists}`;
     }
     else
     {
-        const totalRaw = rounds.map((_, i) => players.reduce((sum, p) => sum + (p[metric.field]?.[i] ?? 0), 0));
+        const totalRaw = rounds.map((_, i) => players.reduce((sum, player) => sum + (player[metric.field]?.[i] ?? 0), 0));
         totalLabel = String(totalRaw.reduce((a, b) => a + b, 0));
     }
     const totalSub = showTotal ? totalLabel : `OFF · ${totalLabel}`;

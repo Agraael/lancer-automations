@@ -573,6 +573,36 @@ export function canEngage(token1, token2)
     return true;
 }
 
+function hasEngagedStatus(token)
+{
+    if (!token?.actor)
+        return false;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (api?.findEffectOnToken && api.findEffectOnToken(token, 'engaged'))
+        return true;
+    return !!token.actor.effects?.some(effect => effect.statuses?.has('engaged') && !effect.disabled);
+}
+
+/**
+ * The tokens `token` is engaged with. Empty unless `token` carries the `engaged` status.
+ * @param {Token} token
+ * @param {Object} [options]
+ * @param {boolean} [options.includeElevation] Overrides the count3DDistance setting
+ * @param {(token: Token) => boolean} [options.filter]
+ * @returns {Token[]}
+ */
+export function getEngagedTokens(token, { filter = null, ...options } = {})
+{
+    if (!hasEngagedStatus(token))
+        return [];
+    return getTokensInRange(token, {
+        ...options,
+        range: 1,
+        engageable: true,
+        filter: (other) => hasEngagedStatus(other) && (!filter || filter(other)),
+    });
+}
+
 const _isPoint = (origin) => !!origin && !origin.document && typeof origin.x === 'number' && typeof origin.y === 'number';
 
 // Point origin: cell-to-footprint, same measure getMinGridDistance uses per grid type.
@@ -745,5 +775,6 @@ export const OverwatchAPI = {
     canEngage,
     canProvokeReaction,
     getTokensInRange,
+    getEngagedTokens,
     updateAllEngagements
 };

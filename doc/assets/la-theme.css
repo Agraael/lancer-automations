@@ -1011,3 +1011,39 @@
     overflow: hidden;
   }
 }
+.md-typeset details[id]>summary {
+  padding-right: 3.4rem;
+}
+
+.md-typeset details[id]>summary>.la-permalink {
+  position: absolute;
+  top: 0.5rem;
+  right: 2.1rem;
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  font-family: var(--la-mono);
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--la-signal);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.md-typeset details[id]>summary>.la-permalink::before {
+  content: "#";
+}
+
+.md-typeset details[id]>summary:hover>.la-permalink,
+.md-typeset details[id]>summary>.la-permalink:focus-visible,
+.md-typeset details[id]>summary>.la-permalink.la-copied {
+  opacity: 1;
+}
+
+.md-typeset details[id]>summary>.la-permalink.la-copied::before {
+  content: "OK";
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+}

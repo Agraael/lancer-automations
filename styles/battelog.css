@@ -1477,12 +1477,12 @@
 }
 
 /* Tabs sit on the same dark chrome as the head; active = red bg + amber underline. */
-.battelog-recap-tabbar {
+.battelog-recap-dialog .battelog-recap-tabbar {
     display: flex;
     align-items: flex-end;
     gap: 4px;
     padding: 0 20px;
-    background: var(--la-panel-ink);
+    background: var(--la-panel-ink, #1a1a1a) !important;
     border-bottom: 1px solid var(--la-primary);
 }
 
@@ -4509,7 +4509,7 @@
     }
 }
 
-.battelog-telemetry-chart svg polyline.battelog-telemetry-line {
+.battelog-telemetry-chart svg .battelog-telemetry-line {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
     animation: battelog-chart-line-draw 0.6s linear forwards;
@@ -4517,13 +4517,13 @@
 }
 
 /* Dashed TOTAL line keeps its 7 4 pattern — fade it in instead of draw. */
-.battelog-telemetry-chart svg polyline.battelog-telemetry-line-dashed {
+.battelog-telemetry-chart svg .battelog-telemetry-line-dashed {
     opacity: 0;
     animation: battelog-chart-line-fade 0.6s linear forwards;
     animation-delay: 0.05s;
 }
 
-.battelog-telemetry-chart svg polygon.battelog-telemetry-area {
+.battelog-telemetry-chart svg .battelog-telemetry-area {
     opacity: 0;
     animation: battelog-chart-area-in 0.6s linear forwards;
     animation-delay: 0.05s;

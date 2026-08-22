@@ -3,6 +3,24 @@
  */
 import { hasReactionAvailable } from "./misc-tools.js";
 
+// GAA auras live in one flag array with read-modify-write updates, so concurrent
+// writers clobber each other's append unless serialized per owner document.
+const _auraWriteQueues = new Map();
+
+function _queueAuraWrite(owner, task)
+{
+    const doc = owner?.document ?? owner;
+    const key = doc?.uuid ?? 'global';
+    const chain = (_auraWriteQueues.get(key) ?? Promise.resolve()).catch(() => undefined).then(task);
+    _auraWriteQueues.set(key, chain);
+    chain.finally(() =>
+    {
+        if (_auraWriteQueues.get(key) === chain)
+            _auraWriteQueues.delete(key);
+    }).catch(() => undefined);
+    return chain;
+}
+
 export class LAAuras
 {
     /** Session cache of compiled aura macro callbacks, keyed on serialized source string. */
@@ -72,6 +90,11 @@ export class LAAuras
      * @returns {Promise<object|undefined>}
      */
     static async createAura(owner, auraConfig)
+    {
+        return _queueAuraWrite(owner, () => LAAuras._createAuraInner(owner, auraConfig));
+    }
+
+    static async _createAuraInner(owner, auraConfig)
     {
         const gridAwareAuras = game.modules.get("grid-aware-auras");
         if (!gridAwareAuras?.api?.createAura)
@@ -180,9 +203,13 @@ export class LAAuras
             console.warn("lancer-automations | ensureAura: auraConfig.name is required for dedupe.");
             return LAAuras.createAura(owner, auraConfig);
         }
-        if (LAAuras.findAura(owner, auraConfig.name))
-            return null;
-        return LAAuras.createAura(owner, auraConfig);
+        // dedupe check runs inside the queue so two same-name ensures can't both pass it
+        return _queueAuraWrite(owner, () =>
+        {
+            if (LAAuras.findAura(owner, auraConfig.name))
+                return null;
+            return LAAuras._createAuraInner(owner, auraConfig);
+        });
     }
 
     /**
@@ -195,7 +222,7 @@ export class LAAuras
         if (!gridAwareAuras?.api?.deleteAuras)
             return [];
         const opts = owner instanceof Item ? options : { includeItems: true, ...options };
-        return await gridAwareAuras.api.deleteAuras(owner, filter, opts);
+        return _queueAuraWrite(owner, () => gridAwareAuras.api.deleteAuras(owner, filter, opts));
     }
 
     /** The placeable that renders a token's or actor's auras. */

@@ -124,6 +124,32 @@ const nearBlast = api.getTokensInRange(template.center, { range: 2 });
 
 </details>
 
+<details id="getEngagedTokens">
+<summary><b><code>getEngagedTokens</code></b> → <code>Token[]</code></summary>
+
+<br>
+
+```js
+api.getEngagedTokens(token, options)
+```
+
+The tokens `token` is engaged with. Empty unless `token` itself carries the `engaged` status; the returned tokens carry it too. The status is read from both the flagged effect and the actor status, so GM-applied ones count.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>token</kbd> | `Token` | *required* | The engaged token to measure from |
+| <kbd>includeElevation</kbd> | `boolean` | `count3DDistance` setting | |
+| <kbd>filter</kbd> | `(token) => boolean` | `null` | |
+
+Range and `engageable` are fixed: engagement is adjacency plus `canEngage`, so deployables, dead mechs, and anything `hidden` / `disengage` / `intangible` never appear.
+
+```js
+const engaged = api.getEngagedTokens(targetToken);
+const others = api.getEngagedTokens(targetToken, { filter: t => t.id !== attackerToken.id });
+```
+
+</details>
+
 <details id="getTokenPosition">
 <summary><b><code>getTokenPosition</code></b> → <code>{ x, y, elevation }</code><br><b><code>samePosition</code></b> → <code>boolean</code></summary>
 

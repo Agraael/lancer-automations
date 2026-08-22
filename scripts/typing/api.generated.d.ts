@@ -21,7 +21,7 @@ interface LancerAutomationsAPI {
     applyItemBonusTemplatesToTokens(item: any, tokens: any): Promise<any>;
     applyItemTemplatesToTokens(item: any, tokens: any): Promise<any>;
     attackRollWith(weapon: any, targets?: any, options?: any): Promise<any>;
-    beginTargetSession(hitChanceFor?: any): any;
+    beginTargetSession(hitChanceFor?: any, casterToken?: any): any;
     beginWeaponAttackFlow(weapon: any, options?: any, extraData?: any): Promise<any>;
     boostMove(token: any, options?: any): Promise<any>;
     cancelAreaPicker(): any;
@@ -73,6 +73,7 @@ interface LancerAutomationsAPI {
     getDeployableInfo(lid: any, ownerActor?: any): Promise<any>;
     getDeployableInfoSync(lid: any, ownerActor?: any): any;
     getDowntimeActivities(): Promise<any>;
+    getEngagedTokens(token: any, opts?: any): any;
     getExtraBars(target: any): any;
     getGlobalBonus(actor: any, bonusId: any): any;
     getHexGroundElevation(col: any, row: any, terrainAPI?: any): any;

@@ -3,6 +3,7 @@
 // Foundry combat lifecycle wiring for Battle Log telemetry.
 // Only the GM writes; each hook is a no-op for player clients.
 
+import { battleLogEnabled } from './battelog-utils.js';
 import {
     initTelemetry,
     ensureCombatantTracked,
@@ -12,13 +13,12 @@ import {
     forgetCombat,
 } from './telemetry-store.js';
 import { reconcileCombatant, forgetCombatState } from './state-capture.js';
-import { getModuleSetting } from "../tools/settings-utils.js";
 
 // Tick every tracked combatant into a telemetry object (in place). Returns it.
 function _tickInto(telemetry, combat, round)
 {
     for (const combatant of combat.combatants ?? [])
-        reconcileCombatant(telemetry, combatant, round);
+        reconcileCombatant(telemetry, combatant, round, combat.turn ?? 0);
     if (round > (telemetry.roundCount ?? 0))
         telemetry.roundCount = round;
     return telemetry;
@@ -39,18 +39,13 @@ export function consumeCombatTelemetry(combatId)
     return telemetry;
 }
 
-function _battleLogEnabled()
-{
-    return getModuleSetting('battleLogEnabled');
-}
-
 export function registerCombatRecorder()
 {
     Hooks.on('createCombat', async (combat) =>
     {
         if (!game.user?.isGM)
             return;
-        if (!_battleLogEnabled())
+        if (!battleLogEnabled())
             return;
         await initTelemetry(combat);
     });
