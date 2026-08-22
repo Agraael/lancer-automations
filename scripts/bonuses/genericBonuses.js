@@ -76,9 +76,9 @@ function serializeBonusLambdas(bonusData)
 {
     if (!bonusData)
         return bonusData;
-    const serializeOne = (data) =>
+    const serializeOne = (bonus) =>
     {
-        let out = data;
+        let out = bonus;
         if (typeof out?.condition === 'function')
             out = { ...out, condition: '@@fn:' + out.condition.toString() };
         if (typeof out?.applyToCondition === 'function')
@@ -91,10 +91,7 @@ function serializeBonusLambdas(bonusData)
     return serialized;
 }
 
-/**
- * Resolve the reactor token for a bonus. Prefers `bonus.context.ownerTokenId`, falls back to
- * `state.actor`'s first active token. Used to provide `reactorToken` inside condition lambdas.
- */
+// Prefers bonus.context.ownerTokenId, falls back to state.actor's first token; provides reactorToken for condition lambdas.
 function resolveReactorToken(bonus, state)
 {
     const ownerTokenId = bonus?.context?.ownerTokenId;
@@ -154,32 +151,32 @@ export function flattenBonuses(bonuses)
         return [];
     const bonusArray = Array.isArray(bonuses) ? bonuses : [bonuses];
     const flattened = [];
-    for (const b of bonusArray)
+    for (const bonus of bonusArray)
     {
-        if (b.type === 'multi' && Array.isArray(b.bonuses))
+        if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
         {
-            b.bonuses.forEach((sub, idx) =>
+            bonus.bonuses.forEach((sub, idx) =>
             {
                 const flatSub = { ...sub };
                 if (!flatSub.id)
-                    flatSub.id = `${b.id || 'multi'}_sub_${idx}`;
-                if (b.applyTo && !flatSub.applyTo)
-                    flatSub.applyTo = b.applyTo;
-                if (!flatSub.source && b.source)
-                    flatSub.source = b.source;
-                if (!flatSub.name && b.name)
-                    flatSub.name = b.name;
-                if (b.context && !flatSub.context)
-                    flatSub.context = b.context;
-                if (!flatSub.context && b.context)
-                    flatSub.context = b.context;
-                if (flatSub.consumeOnUsage === undefined && b.consumeOnUsage !== undefined)
-                    flatSub.consumeOnUsage = b.consumeOnUsage;
+                    flatSub.id = `${bonus.id || 'multi'}_sub_${idx}`;
+                if (bonus.applyTo && !flatSub.applyTo)
+                    flatSub.applyTo = bonus.applyTo;
+                if (!flatSub.source && bonus.source)
+                    flatSub.source = bonus.source;
+                if (!flatSub.name && bonus.name)
+                    flatSub.name = bonus.name;
+                if (bonus.context && !flatSub.context)
+                    flatSub.context = bonus.context;
+                if (!flatSub.context && bonus.context)
+                    flatSub.context = bonus.context;
+                if (flatSub.consumeOnUsage === undefined && bonus.consumeOnUsage !== undefined)
+                    flatSub.consumeOnUsage = bonus.consumeOnUsage;
                 flattened.push(flatSub);
             });
         }
         else
-            flattened.push(b);
+            flattened.push(bonus);
     }
     return flattened;
 }
@@ -222,7 +219,6 @@ export function applyTagBonus(state, bonus)
     const existingIdx = state.data.tags.findIndex(t => t.id === tagId || t.lid === tagId);
     if (existingIdx !== -1)
     {
-        // Tag exists. Modify it.
         const tag = { ...state.data.tags[existingIdx] }; // Clone so we don't mutate the base definition
         const isOverride = bonus.tagMode === 'override';
         const val = Number.parseInt(bonus.val) || 0;
@@ -407,7 +403,6 @@ Hooks.on('updateActor', (actor, change) =>
 });
 
 /**
- * Creates a generic bonus step for a specific flow type
  * @param {string} flowType - The flow type identifier (e.g., "attack", "tech_attack", "hull", "damage")
  * @returns {Function} The flow step function
  */
@@ -1222,8 +1217,7 @@ async function processEphemeralBonuses(actor, flowType, tags, state, results)
         }
         if (await isBonusApplicable(b, tags, state))
         {
-            // Defer target_modifier bonuses whose subtype doesn't apply to the current flow type
-            // (e.g. half_damage during the attack flow) so they survive to the damage flow.
+            // Defer target_modifier bonuses for the wrong flow (e.g. half_damage during attack) so they survive to damage flow.
             if (b.type === 'target_modifier' && !targetModSubtypeMatchesFlow(b.subtype, flowType))
             {
                 remaining.push(b);
@@ -1812,7 +1806,6 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             const usesText = bonus.uses !== undefined ? ` (${bonus.uses} left)` : '';
             const targetName = bonus._targetName || null;
 
-            // Separate cards into matching and non-matching for this bonus
             const matchingCards = [];
             const nonMatchingCards = [];
             $allCards.each(function()
@@ -1845,7 +1838,6 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                     nonMatchingCards.push($card);
             });
 
-            // Only proceed if at least one card matches this bonus
             if (matchingCards.length === 0)
                 continue;
 
@@ -1937,7 +1929,6 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     // Try immediately (form may already be open)
     tryInjectTargeted();
 
-    // Observer for dynamic target changes
     const $form = $('form[id^="accdiff"]');
     const observeTarget = $form.length > 0 ? $form[0] : document.body;
     const observer = new MutationObserver(() =>
@@ -2103,7 +2094,6 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
         // Remap the header / any pre-existing children that were appended above.
         _remapSvelteScopes($myContainer, $form);
 
-        // Inject target modifier rows (global and per-target)
         const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
         const currentTargetIds = (state.data.damage_hud_data?.targets || []).map(t => accDiffTargetToken(t)?.id);
         const globalTMods = targetModifiers.filter(m =>
@@ -2150,7 +2140,6 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
             $row.find('.csm-bonus-value').css('opacity', isChecked ? '0.9' : '0.5');
         });
 
-        // Per-target modifier injection into target cards
         if (perTargetTMods.length > 0)
         {
             const $allCards = $form.find('.damage-hud-target-card');
@@ -2230,7 +2219,6 @@ function showDamageBonusNotification(bonuses, state, targetedBonuses = [], targe
                 return;
             }
 
-            // Signature change logic
             if (sig !== prevTargetSig)
             {
                 prevTargetSig = sig;
@@ -2422,11 +2410,6 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets)
     });
 }
 
-/**
- * Inject a Knockback checkbox into the damage HUD options grid.
- * Pre-fills from the weapon's knockback tag if present; otherwise unchecked but visible.
- * Stores the enabled/value state on state.data._csmKnockback for the knockback damage step.
- */
 // Each Lancer release rebuilds with a fresh svelte scope hash; detect rather than hardcode.
 function _detectSvelteScope($form, selector)
 {
@@ -2456,6 +2439,11 @@ function _remapSvelteScopes($wrapper, $form)
         $wrapper.find('.svelte-k5ear2').addClass(accdiffScope).removeClass('svelte-k5ear2');
 }
 
+/**
+ * Inject a Knockback checkbox into the damage HUD options grid.
+ * Pre-fills from the weapon's knockback tag if present; otherwise unchecked but visible.
+ * Stores the enabled/value state on state.data._csmKnockback for the knockback damage step.
+ */
 export function injectKnockbackCheckbox(state)
 {
     if (!state.data)
@@ -3314,7 +3302,7 @@ export function supportsConsumeOnUsage(type, subtype = null)
     if (['accuracy', 'difficulty', 'damage', 'target_modifier', 'reroll'].includes(type))
         return true;
     if (type === 'immunity')
-        return ['effect', 'crit', 'hit', 'miss', 'damage', 'provoke', 'terrain'].includes(subtype);
+        return ['effect', 'crit', 'hit', 'miss', 'damage', 'resistance', 'provoke', 'terrain'].includes(subtype);
     return false;
 }
 
@@ -3376,13 +3364,22 @@ export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false }
     return stored.id;
 }
 
-/** @returns {Promise<boolean>} True if a charge was spent */
-export async function consumeImmunityUse(actor, subtype, state = null)
+/**
+ * @param {string[]|null} [options.damageTypes] Only consider bonuses covering one of these damage types
+ * @returns {Promise<boolean>} True if a charge was spent
+ */
+export async function consumeImmunityUse(actor, subtype, state = null, { damageTypes = null } = {})
 {
     if (!actor)
         return false;
+    const wanted = damageTypes?.map(type => String(type).toLowerCase());
     const candidates = getImmunityBonuses(actor, subtype, state)
-        .filter(bonus => bonus.consumeOnUsage === true);
+        .filter(bonus => bonus.consumeOnUsage === true)
+        .filter(bonus => !wanted || !bonus.damageTypes || bonus.damageTypes.some(type =>
+        {
+            const lower = String(type).toLowerCase();
+            return lower === 'all' || lower === 'variable' || wanted.includes(lower);
+        }));
     for (const bonus of candidates)
     {
         if (await consumeBonusUse(actor, bonus, { removeWhenNoUses: true }))
@@ -3807,6 +3804,10 @@ export function initDamageCalcWrapper()
                     }
                 }
             }
+            // damageCalc mutates the damage record, so snapshot which bridged types actually landed first.
+            const spentOn = (options?.paracausal || this.system?.statuses?.shredded)
+                ? []
+                : bridged.filter(type => Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
             let hpLanded;
             try
             {
@@ -3817,6 +3818,8 @@ export function initDamageCalcWrapper()
                 for (const type of bridged)
                     resistances[type] = false;
             }
+            if (spentOn.length)
+                await consumeImmunityUse(this, 'resistance', null, { damageTypes: spentOn });
             Hooks.callAll('lancer-automations.battelog.damageApplied', this, hpLanded);
             return hpLanded;
         }, 'WRAPPER');

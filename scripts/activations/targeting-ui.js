@@ -7,10 +7,12 @@ import {
     clearSingleTargetShape, clearAreaTargetShape,
     rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW,
 } from '../interactive/canvas.js';
-import { firstKeyFor } from '../interactive/keybindings.js';
+import { firstKeyFor, eventMatchesKeybind } from '../interactive/keybindings.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
+import { isActorScannedForUser } from '../tools/scan-lookup.js';
 import { playUiSound } from '../tah/sound.js';
+import { setPickerTargetCursor } from '../interactive/tools/advancedMeasure.js';
 
 const AOE_TYPES = ['Blast', 'Burst', 'Cone', 'Line'];
 
@@ -27,6 +29,23 @@ export function targetInfoAllowed()
         mode = 'gm';
     }
     return mode === 'all' || (mode === 'gm' && !!game.user?.isGM);
+}
+
+// Shown in place of a stat-derived chance when the viewer hasn't scanned the target.
+export const UNKNOWN_CHANCE = { label: '??%', fill: 0x9e9e9e };
+
+// Stat-derived labels (hit %, save %, contest %) read target defenses, so players only get them on owned or scanned actors.
+export function targetInfoAllowedFor(actor)
+{
+    if (!targetInfoAllowed())
+        return false;
+    if (game.user?.isGM)
+        return true;
+    if (!actor)
+        return false;
+    if (actor.isOwner)
+        return true;
+    return isActorScannedForUser(actor, game.user);
 }
 
 export function chanceLabelsOn()
@@ -71,18 +90,18 @@ export function contestWinChance(actorA, skillA, actorB, skillB, { netAcc = 0 } 
     if (!haseSuccessChance(actorA, skillA, 10, { netAcc, applyStatuses: false })
         || !haseSuccessChance(actorB, skillB, 10, { netAcc: 0, applyStatuses: false }))
         return null;
-    const cdfA = (dc) => haseSuccessChance(actorA, skillA, dc, { netAcc, applyStatuses: false })?.hit ?? 0;
-    const cdfB = (dc) => haseSuccessChance(actorB, skillB, dc, { netAcc: 0, applyStatuses: false })?.hit ?? 0;
+    const successChanceA = (dc) => haseSuccessChance(actorA, skillA, dc, { netAcc, applyStatuses: false })?.hit ?? 0;
+    const successChanceB = (dc) => haseSuccessChance(actorB, skillB, dc, { netAcc: 0, applyStatuses: false })?.hit ?? 0;
     let win = 0;
-    // totals below the CDF floor (difficulty dice can push under 1) collapse into one bucket
-    const pLow = 1 - cdfB(1);
+    // totals below the lowest tracked DC (difficulty dice can push under 1) collapse into one bucket
+    const pLow = 1 - successChanceB(1);
     if (pLow > 0)
-        win += pLow * cdfA(1);
+        win += pLow * successChanceA(1);
     for (let total = 1; total <= 46; total++)
     {
-        const pB = cdfB(total) - cdfB(total + 1);
+        const pB = successChanceB(total) - successChanceB(total + 1);
         if (pB > 0)
-            win += pB * cdfA(total + 1);
+            win += pB * successChanceA(total + 1);
     }
     return { hit: win, crit: 0 };
 }
@@ -200,6 +219,34 @@ function ensureHint($form)
 }
 
 // AoE pattern buttons or single-target button, shape strip, Range/Threat switch, pickers, auto-start.
+let _cardToggle = null;
+
+export function toggleCardTargeting()
+{
+    if (!_cardToggle || !document.querySelector('.la-accdiff-target-button'))
+        return false;
+    _cardToggle();
+    return true;
+}
+
+// Own listener: a focused button inside the card form mutes every registered keybinding.
+let _cardKeyBound = false;
+function bindCardTargetingKey()
+{
+    if (_cardKeyBound)
+        return;
+    _cardKeyBound = true;
+    document.addEventListener('keydown', (event) =>
+    {
+        if (event.repeat || !eventMatchesKeybind(event, 'cardTargeting'))
+            return;
+        if (!toggleCardTargeting())
+            return;
+        event.preventDefault();
+        event.stopPropagation();
+    }, true);
+}
+
 export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe = [], hitChanceForFactory = () => null, hudHasTargets = null, autoStart = 'setting', pulseOwner = null } = {})
 {
     // pulseOwner: range pulse shown only while a picker from this HUD is running
@@ -476,6 +523,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
         $targetBtn.addClass('la-targeting-active');
         setPickPulse(shapeReach(shape));
+        setPickerTargetCursor(true);
         pickerRun = (async () =>
         {
             try
@@ -504,15 +552,14 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 $hint.stop(true, true).slideUp(120);
                 $targetBtn.removeClass('la-targeting-active');
                 clearPickPulse();
+                setPickerTargetCursor(false);
             }
         })();
         return pickerRun;
     };
 
-    $targetBtn.on('click', (ev) =>
+    const toggleTargeting = () =>
     {
-        ev.preventDefault();
-        ev.stopPropagation();
         playUiSound('toggle');
         if (isSingleTargetPickerActive())
             cancelSingleTargetPicker();
@@ -520,6 +567,14 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             cancelAreaPicker();
         else
             launchPicker();
+    };
+    _cardToggle = toggleTargeting;
+    bindCardTargetingKey();
+    $targetBtn.on('click', (ev) =>
+    {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleTargeting();
     });
     // The range pulse (tah/index.js) reads state.__laUseThreat and redraws on the hook; restart an open picker so its check follows.
     $switch.on('click', async (ev) =>
@@ -717,6 +772,22 @@ export function pollForForm(findForm, onFound)
         setTimeout(tick, 50);
     };
     tick();
+}
+
+/** @param {any} state @param {() => any} findForm @param {(state: any, $form: any) => any} inject @param {string} label */
+export function injectWhenReady(state, findForm, inject, label)
+{
+    pollForForm(findForm, async ($form) =>
+    {
+        try
+        {
+            await inject(state, $form);
+        }
+        catch (err)
+        {
+            console.warn(`lancer-automations | ${label} inject failed`, err);
+        }
+    });
 }
 function updateAttackShapePreview(casterToken, range)
 {

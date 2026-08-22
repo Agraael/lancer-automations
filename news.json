@@ -200,6 +200,15 @@
                 "<p>Enjoy!</p>",
                 "<p>Please make a snack and read the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-0-0-166098541\" target=\"_blank\" rel=\"noopener\">dev blog</a>, it's a lot!!!</p>"
             ]
+        },
+        {
+            "id": "2026-08-22-lancer-4-1-6-dev-blog",
+            "date": "2026-08-22",
+            "title": "Lancer Automations 4.1.6 + dev blog",
+            "body": [
+                "<p>Sorry, I forgot to mention it: there's a dev blog for the patch, with a lot more detail on what changed and why.</p>",
+                "<p>Read it on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-6-and-167229864\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
         }
     ]
 }

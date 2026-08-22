@@ -1,8 +1,10 @@
 /* global canvas, PIXI, game, Hooks, performance */
 
 import { getOccupiedOffsets } from "../combat/grid-helpers.js";
-import { gridLineWidth, makeHitLabel, gridTextResolution, applyTargetInfoLabel, TG, paintDashedFootprint } from "./canvas-helpers.js";
+import { makeHitLabel, hitLabelAnchor, gridTextResolution, applyTargetInfoLabel, TG, paintDashedFootprint } from "./canvas-helpers.js";
+import { getIsoProvider } from "../setup/iso-settings.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
+import { setMeasureDistanceReference } from "../movement/tactical-distance.js";
 
 let _persistG = null;              // Container above tokens (pulsing marks)
 let _labelG = null;                // Container above tokens (steady hit-% labels)
@@ -11,6 +13,7 @@ const _persistLabels = new Map();  // tokenId -> Text
 let _persistPulse = null;          // alpha ticker
 let _sessionActive = false;
 let _hitChanceFor = null;           // (token) => { hit, crit } | null
+let _distanceRef = null;            // caster token driving tactical-distance labels this session
 let _presenceStop = null;           // stop fn for the ghost-broadcast heartbeat
 const _customMarks = new Map();     // markId -> { token, graphic, color } - session-independent follow-marks
 const _chanceLabels = new Map();    // labelId -> { token, fn, label } - session-independent live % labels
@@ -22,12 +25,12 @@ let _customPresenceStop = null;
 function presenceData()
 {
     const placedCells = [];
-    for (const t of game.user?.targets ?? [])
+    for (const token of game.user?.targets ?? [])
     {
-        if (!t || t.document?.hidden)
+        if (!token || token.document?.hidden)
             continue;
-        for (const o of getOccupiedOffsets(t))
-            placedCells.push(`${o.col},${o.row}`);
+        for (const offset of getOccupiedOffsets(token))
+            placedCells.push(`${offset.col},${offset.row}`);
     }
     return { placedCells, placedColor: TG.placed };
 }
@@ -107,6 +110,17 @@ function drawShape(token)
     return markGraphic;
 }
 
+// Refresh-time reassert, same recipe as the stat bar and tactical labels.
+function applyIsoToLabel(label)
+{
+    const iso = getIsoProvider();
+    if (!iso)
+        return;
+    label.rotation = iso.reverseRotation;
+    label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
+    label.scale.set(iso.counterScale, 1 / iso.counterScale);
+}
+
 function updateLabel(token, label)
 {
     const hitChance = _hitChanceFor?.(token);
@@ -117,7 +131,9 @@ function updateLabel(token, label)
     }
     applyTargetInfoLabel(label, hitChance);
     label.resolution = gridTextResolution();
-    label.position.set(token.center.x, token.bounds.top - gridLineWidth(3));
+    applyIsoToLabel(label);
+    const anchor = hitLabelAnchor(token);
+    label.position.set(anchor.x, anchor.y);
     label.visible = true;
 }
 
@@ -162,28 +178,28 @@ export function syncTargetShapes()
     }
     const wantedShapes = new Set();
     const wantedLabels = new Set();
-    for (const t of game.user?.targets ?? [])
+    for (const token of game.user?.targets ?? [])
     {
-        if (!t)
+        if (!token)
             continue;
         // hit-% label: every target rolls to hit, whether or not an AoE shape covers it
         if (_hitChanceFor)
         {
-            wantedLabels.add(t.id);
-            if (!_persistLabels.has(t.id))
+            wantedLabels.add(token.id);
+            if (!_persistLabels.has(token.id))
             {
                 ensureContainer();
-                addLabel(t);
+                addLabel(token);
             }
         }
         // gold per-token marker on every target, including tokens caught by a placed AoE shape
-        wantedShapes.add(t.id);
-        if (!_persistShapes.has(t.id))
+        wantedShapes.add(token.id);
+        if (!_persistShapes.has(token.id))
         {
             ensureContainer();
-            const shape = drawShape(t);
+            const shape = drawShape(token);
             _persistG.addChild(shape);
-            _persistShapes.set(t.id, shape);
+            _persistShapes.set(token.id, shape);
         }
     }
     for (const id of [..._persistShapes.keys()])
@@ -206,10 +222,16 @@ export function isTargetSessionActive()
 }
 
 // hitChanceFor: optional (token) => { hit, crit } for live hit-% labels per target.
-export function beginTargetSession(hitChanceFor = null)
+// casterToken: optional; shows tactical-distance labels from it while the session runs.
+export function beginTargetSession(hitChanceFor = null, casterToken = null)
 {
     _sessionActive = true;
     _hitChanceFor = hitChanceFor;
+    if (casterToken && !casterToken.destroyed)
+    {
+        _distanceRef = casterToken;
+        setMeasureDistanceReference(casterToken);
+    }
     if (!_presenceStop)
         _presenceStop = startToolHeartbeat('targetShapes', () => _sessionActive ? presenceData() : null);
     syncTargetShapes();
@@ -245,6 +267,11 @@ export function clearSingleTargetShape()
 {
     _sessionActive = false;
     _hitChanceFor = null;
+    if (_distanceRef)
+    {
+        setMeasureDistanceReference(null);
+        _distanceRef = null;
+    }
     if (_presenceStop)
     {
         _presenceStop();
@@ -328,7 +355,9 @@ function updateChanceLabel(entry)
     }
     applyTargetInfoLabel(entry.label, hitChance);
     entry.label.resolution = gridTextResolution();
-    entry.label.position.set(token.center.x, token.bounds.top - gridLineWidth(3));
+    applyIsoToLabel(entry.label);
+    const anchor = hitLabelAnchor(token);
+    entry.label.position.set(anchor.x, anchor.y);
     entry.label.visible = true;
 }
 

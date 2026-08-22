@@ -7,6 +7,7 @@ import { openNewsHistory } from './news.js';
 import { openBattleLogGMCardTest, openBattleLogRecapTest } from '../Battelog/battlelog.js';
 import { openTelemetryDebugWindow } from '../Battelog/telemetry-debug.js';
 import { getFCSData, toggleFCSForce } from './fcs.js';
+import { getFCCData, getFCCModeKey, toggleFCCForce } from './fcc.js';
 import { runSettingsOnboarding } from './settings-onboarding.js';
 import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 
@@ -44,6 +45,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableDamageTargeting', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
     { key: 'haseChanceLabels', type: 'boolean', label: 'HASE Chance Labels', hint: 'Live success % over the roller during stat rolls, saves, and contests.' },
+    { key: 'clearTargetsAfterRoll', type: 'boolean', requires: ['enableAttackTargeting', 'enableDamageTargeting'] },
     { key: 'targetInfoDisplay', type: 'select', requires: ['enableAttackTargeting', 'enableDamageTargeting'] },
     { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack/Damage HUD' },
     { key: 'displayToolsToOthers', type: 'boolean', label: 'Share Interactive Tools' },
@@ -420,7 +422,7 @@ const STATUS_SFX_EVENTS = ['bonus'];
 function _toLabel(str)
 {
     return str.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1')
-        .replace(/^./, (c) => c.toUpperCase()).trim();
+        .replace(/^./, (char) => char.toUpperCase()).trim();
 }
 
 const SOUNDS_FIELDS = [
@@ -506,6 +508,7 @@ const STATUSES_FIELDS = [
 
     { type: 'section', label: 'Visual effects', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_VISUAL },
+    { key: 'weaponFxAboveTokens', type: 'boolean' },
     { key: 'guardianBulwarkAuraMode', type: 'select', label: 'Guardian / Bulwark Aura', hint: '"Only in Combat" requires the GAA Fork.' },
 
     { type: 'section', label: 'Auto-status icons', collapsible: true, collapsed: true },
@@ -671,6 +674,7 @@ const TUTORIALS_FIELDS = [
 const CONTROL_FIELDS = [
     { type: 'section', label: 'Lancer Automations' },
     laKb('resetMovement'),
+    laKb('cardTargeting'),
 
     { type: 'section', label: 'TAH Navigation', collapsible: true, collapsed: true },
     laKb('tah.toggleSearch'),
@@ -1006,10 +1010,10 @@ function _displayKey(code)
         return code.slice(3);
     return code;
 }
-function _formatBinding(b)
+function _formatBinding(binding)
 {
-    const parts = [...(b.modifiers ?? [])];
-    parts.push(_displayKey(b.key));
+    const parts = [...(binding.modifiers ?? [])];
+    parts.push(_displayKey(binding.key));
     return parts.join(' + ');
 }
 
@@ -1264,8 +1268,8 @@ function _buildItem(field)
                 return raw.map(choice => ({ ...choice, selected: choice.selected ?? (choice.value === value) }));
             if (setting.choices)
             {
-                return Object.entries(setting.choices).map(([k, v]) => ({
-                    value: k, label: v, selected: k === value,
+                return Object.entries(setting.choices).map(([choiceValue, choiceLabel]) => ({
+                    value: choiceValue, label: choiceLabel, selected: choiceValue === value,
                 }));
             }
             return [];
@@ -1344,6 +1348,43 @@ function _injectFCSLocks(html, fields, _app)
         if (['hard-client', 'soft-client'].includes(modeKey))
             $input.prop('disabled', true);
     }
+}
+
+/** @param {any} $row @param {string} modeKey */
+function _renderFCCRowLock($row, modeKey)
+{
+    $row.find('.la-fcc-lock').remove();
+    const icon = _FCS_ICONS[modeKey];
+    if (icon)
+    {
+        $row.find('> div').first().children().first().prepend($('<span>')
+            .html('&nbsp;')
+            .prop('title', game.i18n.localize(`FORCECLIENTCONTROLS.ui.${modeKey}-hint`))
+            .addClass(`fas ${icon} la-fcc-lock`)
+            .css({ cursor: 'pointer', marginRight: '4px' }));
+    }
+    $row.find('.la-kb-add, .la-kb-key, .la-kb-reset').prop('disabled', ['hard-client', 'soft-client'].includes(modeKey));
+}
+
+// FCC only decorates Foundry's own controls config, so the Control tab grows its own locks.
+/** @param {any} html */
+function _injectControlLocks(html)
+{
+    const fcc = getFCCData();
+    if (!fcc)
+        return;
+    const isGM = !!game.user?.isGM;
+    const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
+    $html.find('.la-keybinding-row').each(function ()
+    {
+        const $row = $(this);
+        const action = $row.attr('data-full-key');
+        if (!action)
+            return;
+        const modeKey = getFCCModeKey(action, fcc, isGM);
+        if (modeKey !== 'open-client')
+            _renderFCCRowLock($row, modeKey);
+    });
 }
 
 /** @param {string} key */
@@ -1786,6 +1827,16 @@ export class LancerAutomationsConfig extends FormApplication
         });
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
+        _injectControlLocks(html);
+        $html.off('click.laFccLock').on('click.laFccLock', '.la-fcc-lock', async (/** @type {any} */ ev) =>
+        {
+            ev.stopPropagation();
+            const action = $(ev.currentTarget).closest('.la-keybinding-row').attr('data-full-key');
+            if (!action || !getFCCData())
+                return;
+            await toggleFCCForce(ev, action);
+            this.render(true);
+        });
         // Delegated so the lock keeps working after the search filter rebuilds a label's HTML.
         $html.off('click.laFcsLock').on('click.laFcsLock', '.la-fcs-lock', async function ()
         {
@@ -1815,8 +1866,8 @@ export class LancerAutomationsConfig extends FormApplication
         const $searchToggle = $html.find('.la-config-search-toggle');
         const $search = $html.find('.la-config-search-input');
         const $clear = $html.find('.la-config-search-clear');
-        const escapeRe = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const escapeHtml = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escapeRe = (/** @type {string} */ str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapeHtml = (/** @type {string} */ str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const stash = (/** @type {any} */ $el) =>
         {
             if ($el.data('la-orig') === undefined)

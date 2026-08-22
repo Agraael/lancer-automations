@@ -3,7 +3,7 @@
 
 import { getInRangeOffsets } from "../../combat/grid-helpers.js";
 import {
-    destroyGraphics, gridLineWidth, makeHitLabel,
+    destroyGraphics, makeHitLabel, hitLabelAnchor,
     gridTextResolution, applyTargetInfoLabel, TG,
 } from "../canvas-helpers.js";
 import { createShapePlacement, createPlacedShapeStore, buildAreaLabels } from "../shape-placement-engine.js";
@@ -124,7 +124,8 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
                 }
                 applyTargetInfoLabel(label, chance);
                 label.resolution = gridTextResolution();
-                label.position.set(token.center.x, token.bounds.top - gridLineWidth(3));
+                const anchor = hitLabelAnchor(token);
+                label.position.set(anchor.x, anchor.y);
             }
             for (const [id, label] of hitLabels)
             {

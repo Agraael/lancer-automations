@@ -58,6 +58,7 @@ export default defineConfig([
 
                 // Common module globals
                 libWrapper: "readonly",
+                ForceClientControls: "readonly",
                 Sequencer: "readonly",
                 Sequence: "readonly",
                 MidiQOL: "readonly",

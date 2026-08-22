@@ -723,7 +723,7 @@ interface LancerAutomationsAPI {
     }): Promise<string>;
     removeGlobalBonus(actor: any, bonusId: string, skipEffectRemoval?: boolean): Promise<void>;
     consumeBonusUse(actor: any, bonus: any, opts?: { removeWhenNoUses?: boolean }): Promise<string | false>;
-    consumeImmunityUse(actor: any, subtype: string, state?: any): Promise<boolean>;
+    consumeImmunityUse(actor: any, subtype: string, state?: any, options?: { damageTypes?: string[] | null }): Promise<boolean>;
     supportsConsumeOnUsage(type: string, subtype?: string | null): boolean;
     getGlobalBonuses(actor: any): any[];
     addConstantBonus(actor: any, bonusData: object, options?: object): Promise<void>;

@@ -121,3 +121,4 @@ Each family has a master volume, and every event inside it can be muted on its o
 | **Token Feedback** | Volume of token feedback sounds (hover, select, target, drag, move, elevation key). |
 | **Damage / Stat Feedback** | Volume of damage, HP/heat/burn/overshield/infection sounds. |
 | **Item Name on Action Badges** | The action badge banner shows the item name instead of the action type. |
+| **Weapon FX Above Tokens** | Since Sequencer 4, some Lancer Weapon FX render behind tokens. This lifts them back above token art. |

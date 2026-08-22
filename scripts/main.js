@@ -556,6 +556,12 @@ Hooks.on('init', () =>
         },
         precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
     });
+    // No onDown: the card owns focus, so targeting-ui.js reads this binding from its own listener.
+    game.keybindings.register('lancer-automations', 'cardTargeting', {
+        name: 'Toggle Card Targeting',
+        hint: 'Start or cancel the targeting picker of the open attack or damage card.',
+        editable: [{ key: 'KeyT', modifiers: ['Control'] }],
+    });
     game.keybindings.register('lancer-automations', 'advancedMeasure', {
         name: 'Advanced Measure Tool',
         hint: 'Toggle the standalone measure toolbar (shapes, single marks, reference range pulse).',
@@ -683,6 +689,7 @@ Hooks.once('ready', async () =>
     setTimeout(bindAfterFxDrain, 0);
     installJb2aHooks();
     actionFX.registerSequencerPresets();
+    actionFX.registerWeaponFxAboveTokens();
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();
 
@@ -879,6 +886,13 @@ Hooks.once('ready', async () =>
                 try
                 {
                     const flowInfo = this.getFlag?.('lancer-weapon-fx', 'flowInfo');
+                    if (flowInfo || this.pack?.startsWith?.('lancer-weapon-fx.'))
+                    {
+                        const TaggedSequence = actionFX._lwfxTaggedSequence();
+                        const scope = args[0] ?? (args[0] = {});
+                        if (TaggedSequence && scope.Sequence === undefined)
+                            scope.Sequence = TaggedSequence;
+                    }
                     if (flowInfo)
                     {
                         const id = _actorSuppressId(flowInfo.sourceToken)

@@ -6,7 +6,7 @@ import {
     beginTargetSession, createTokenMark,
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
-import { buildTargetingUI, aoeRanges, clearAllAttackShapes, pollForForm, targetInfoAllowed } from './targeting-ui.js';
+import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
 
 function buildHitChanceFor(state)
 {
@@ -20,6 +20,8 @@ function buildHitChanceFor(state)
         const actor = token?.actor;
         if (!base || !weapon || typeof weapon.total !== 'function' || !actor?.system)
             return null;
+        if (!targetInfoAllowedFor(actor))
+            return UNKNOWN_CHANCE;
         const isSmart = !!weapon.smart || !!state?.data?.is_smart;
         const bonus = (Number(base.grit) || 0) + (Number(base.flatBonus) || 0);
         const defense = isSmart ? (Number(actor.system.edef) || 8) : (Number(actor.system.evasion) || 5);
@@ -51,12 +53,6 @@ function buildHitChanceFor(state)
             result.crit = 0;
         return result;
     };
-}
-
-function injectWhenReady(state)
-{
-    pollForForm(() => $('form[id^="accdiff"]'),
-        $form => injectButton(state, $form).catch(err => console.warn('lancer-automations | targeting inject failed', err)));
 }
 
 async function injectButton(state, $form)
@@ -116,11 +112,12 @@ export function registerAccDiffTargetButton()
             let attackerMark = null;
             try
             {
-                injectWhenReady(state);
+                injectWhenReady(state, () => $('form[id^="accdiff"]'), injectButton, 'targeting');
                 if (game.settings.get('lancer-automations', 'enableAttackTargeting'))
                 {
-                    beginTargetSession(buildHitChanceFor(state)); // shapes + live hit-% for targets already set before the HUD
-                    attackerMark = createTokenMark(state.actor?.getActiveTokens?.()[0] ?? null);
+                    const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
+                    beginTargetSession(buildHitChanceFor(state), attackerToken); // shapes + live hit-% + distances
+                    attackerMark = createTokenMark(attackerToken);
                 }
             }
             catch
@@ -151,6 +148,8 @@ export function registerAccDiffTargetButton()
             try
             {
                 if (!game.settings.get('lancer-automations', 'enableAttackTargeting'))
+                    return;
+                if (!game.settings.get('lancer-automations', 'clearTargetsAfterRoll'))
                     return;
             }
             catch

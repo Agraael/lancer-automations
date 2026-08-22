@@ -440,7 +440,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Stack count |
-| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 use only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/provoke/terrain). Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
+| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 use only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
 | <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |

@@ -89,6 +89,53 @@ function _lancerSize(source)
     return actor?.system?.size ?? actor?.system?.stats?.size ?? 1;
 }
 
+let _LwfxSequence = null;
+
+/**
+ * Sequence subclass stamping `moduleName`; shadows the global inside lwfx macros.
+ * @returns {any}
+ */
+export function _lwfxTaggedSequence()
+{
+    if (_LwfxSequence)
+        return _LwfxSequence;
+    if (typeof Sequence === 'undefined')
+        return null;
+    _LwfxSequence = class extends Sequence
+    {
+        constructor(options = {})
+        {
+            super({ moduleName: 'Lancer Weapon FX', ...options });
+        }
+    };
+    return _LwfxSequence;
+}
+
+/**
+ * Lift lwfx effects above token art (Sequencer 4 started honoring `.belowTokens()` on v13).
+ * @returns {void}
+ */
+export function registerWeaponFxAboveTokens()
+{
+    Hooks.on('preCreateSequencerEffect', (data) =>
+    {
+        if (data?.moduleName !== 'Lancer Weapon FX')
+            return;
+        try
+        {
+            if (!game.settings.get('lancer-automations', 'weaponFxAboveTokens'))
+                return;
+        }
+        catch
+        {
+            return;
+        }
+        if (data.screenSpace || data.screenSpaceAboveUI || data.aboveInterface)
+            return;
+        data.aboveLighting = true;
+    });
+}
+
 /**
  * `la_scaleToBurst` preset: sizes an effect to a Burst around its source, in grid units.
  * Reads the source from the section, so `.atLocation()` must come first.

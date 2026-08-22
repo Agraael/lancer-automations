@@ -5,7 +5,7 @@ import {
     clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel,
 } from '../interactive/canvas.js';
 import { createTokenTether } from '../interactive/canvas-helpers.js';
-import { targetInfoAllowed, haseSuccessChance, contestWinChance, pollForForm, chanceLabelsOn } from './targeting-ui.js';
+import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
 
 function rollerLiveChance(state)
 {
@@ -21,6 +21,8 @@ function rollerLiveChance(state)
         {
             const opponent = contest.actorUuid ? fromUuidSync(contest.actorUuid) : null;
             const oppActor = opponent?.actor ?? opponent;
+            if (oppActor && !targetInfoAllowedFor(oppActor))
+                return UNKNOWN_CHANCE;
             return oppActor ? contestWinChance(state.actor, skill, oppActor, contest.stat, { netAcc }) : null;
         }
         const preId = state.la_extraData?.targetTokenId;
@@ -28,6 +30,8 @@ function rollerLiveChance(state)
         if (hovered && hovered.actor === state.actor)
             hovered = null;
         const chosen = hovered ?? Array.from(game.user.targets ?? [])[0] ?? null;
+        if (chosen && !targetInfoAllowedFor(chosen.actor))
+            return UNKNOWN_CHANCE;
         let dc = 10;
         if (chosen)
             dc = (!hovered && preId && chosen.id === preId) ? (Number(state.la_extraData?.targetVal) || deriveTargetVal(chosen)) : deriveTargetVal(chosen);
@@ -65,11 +69,6 @@ function statRollForm()
     if (!$form.length || !$form.find('#hase-accdiff-dialog').length)
         return null;
     return $form;
-}
-
-function injectWhenReady(state)
-{
-    pollForForm(statRollForm, $form => injectButton(state, $form));
 }
 
 function injectButton(state, $form)
@@ -166,9 +165,9 @@ export function registerStatRollTargetButton()
                 {
                     seedSingleTarget(state);
                     state.data?.acc_diff?.replaceTargets?.([...(game.user.targets ?? [])].map((target) => target.document.uuid));
-                    injectWhenReady(state);
-                    beginTargetSession();
+                    injectWhenReady(state, statRollForm, injectButton, 'stat roll targeting');
                     const roller = state.actor?.getActiveTokens?.()[0] ?? null;
+                    beginTargetSession(null, roller);
                     rollerMark = createTokenMark(roller);
                     // Tether the roller to whatever it is currently saving against.
                     saveTether = createTokenTether();

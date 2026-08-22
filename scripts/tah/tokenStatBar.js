@@ -2410,15 +2410,13 @@ function drawStatHub()
     {
         if (visibleIds.has('structure') || visibleIds.has('hp'))
             rows.push([find('structure'), find('hp')]);
-        // Stress is paired with heat: if heat is hidden, drop stress too so
-        // we don't render an orphan row.
+        // Stress pairs with heat; drop both if heat is hidden to avoid an orphan row.
         if (visibleIds.has('heat'))
             rows.push([find('stress'), find('heat')]);
     }
     else
     {
-        // Pilots / deployables: full-width HP row, plus a heat row if heat
-        // somehow ended up on them (e.g. infection ticking on a deployable).
+        // Pilots/deployables: HP only; heat shown only if infection pushed it non-zero.
         if (visibleIds.has('hp'))
             rows.push([null, find('hp')]);
         if (visibleIds.has('pilotStress'))
@@ -3740,14 +3738,15 @@ export function initTokenStatBar()
             }
         }
 
-        // Status effect icons (token.effects container).
-        const effects = token.effects;
-        if (effects && !effects.destroyed)
+        // Status effect icons, plus the badge container that has to ride the same transform.
+        for (const [effects, baseKey] of [[token.effects, '_laBaseEffects'], [token.effectCounters, '_laBaseEffectCounters']])
         {
-            if (token._laBaseEffectsX === undefined)
+            if (!effects || effects.destroyed)
+                continue;
+            if (token[`${baseKey}X`] === undefined)
             {
-                token._laBaseEffectsX = effects.position.x;
-                token._laBaseEffectsY = effects.position.y;
+                token[`${baseKey}X`] = effects.position.x;
+                token[`${baseKey}Y`] = effects.position.y;
             }
             const isoFx = _getIsoState(token);
             if (isoFx && token.mesh)
@@ -3772,7 +3771,7 @@ export function initTokenStatBar()
                 effects.rotation = 0;
                 effects.skew.set(0, 0);
                 effects.scale.set(1, 1);
-                effects.position.set(token._laBaseEffectsX, token._laBaseEffectsY);
+                effects.position.set(token[`${baseKey}X`], token[`${baseKey}Y`]);
             }
         }
 

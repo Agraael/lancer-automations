@@ -682,6 +682,24 @@ export function hitLabelFontSize()
     return Math.max(12, canvas.grid.size * 0.18);
 }
 
+const ISO_HIT_LABEL_LIFT = 0.8;
+
+/** Hit-% label anchor: above the projected sprite on iso scenes, cell top otherwise. */
+export function hitLabelAnchor(token)
+{
+    const gap = gridLineWidth(3);
+    const iso = getIsoProvider();
+    const mesh = token?.mesh;
+    if (iso && mesh && !mesh.destroyed)
+    {
+        const zoom = canvas.stage.scale.x || 1;
+        const screen = canvas.stage.worldTransform.apply(new PIXI.Point(mesh.position.x, mesh.position.y));
+        screen.y -= ((token.h ?? canvas.grid.size) * ISO_HIT_LABEL_LIFT + gap) * zoom;
+        return canvas.stage.worldTransform.applyInverse(screen);
+    }
+    return { x: token.center.x, y: token.bounds.top - gap };
+}
+
 /** Hit-% text label, bottom-center anchored and non-interactive, added to the given container. */
 export function makeHitLabel(container)
 {

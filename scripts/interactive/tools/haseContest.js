@@ -5,7 +5,7 @@ import { isSingleTargetPickerActive, cancelSingleTargetPicker, createChanceLabel
 import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { TG, paintDashedFootprint, createTokenTether } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
-import { targetInfoAllowed, contestWinChance, chanceLabelsOn } from "../../activations/targeting-ui.js";
+import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, contestWinChance, chanceLabelsOn } from "../../activations/targeting-ui.js";
 
 const STAT_DEFS = [
     { value: 'HULL', key: 'hull' },
@@ -51,8 +51,9 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             const { a, b } = state;
             if (!(a.token?.actor && a.skill && b.token?.actor && b.skill))
                 return;
-            a.chance = createChanceLabel(a.token, () => contestWinChance(a.token?.actor, a.skill, b.token?.actor, b.skill, {}));
-            b.chance = createChanceLabel(b.token, () => contestWinChance(b.token?.actor, b.skill, a.token?.actor, a.skill, {}));
+            const masked = !targetInfoAllowedFor(a.token.actor) || !targetInfoAllowedFor(b.token.actor);
+            a.chance = createChanceLabel(a.token, () => masked ? UNKNOWN_CHANCE : contestWinChance(a.token?.actor, a.skill, b.token?.actor, b.skill, {}));
+            b.chance = createChanceLabel(b.token, () => masked ? UNKNOWN_CHANCE : contestWinChance(b.token?.actor, b.skill, a.token?.actor, a.skill, {}));
         };
 
         // Same gold pulsing footprint as the attack-roll smart-targeting shape (target-shapes.js).

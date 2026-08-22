@@ -5,7 +5,7 @@ import {
     beginTargetSession, createTokenMark,
     rangePulse, RANGE_PULSE_PRIORITY,
 } from "../canvas.js";
-import { buildTargetingUI, clearAllAttackShapes, targetInfoAllowed, haseSuccessChance } from "../../activations/targeting-ui.js";
+import { buildTargetingUI, clearAllAttackShapes, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance } from "../../activations/targeting-ui.js";
 import { TG, createTokenTether } from "../canvas-helpers.js";
 
 const PICK_PULSE_OWNER = 'la-forcecheck-pick';
@@ -94,7 +94,9 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         let targetHookId = null;
         const rollerTargets = () => [...(game.user.targets ?? [])].filter(token => token.id !== state.saveVs?.id);
         const successChanceFor = () => targetInfoAllowed()
-            ? (token) => haseSuccessChance(token?.actor, state.skill, state.saveVs ? deriveSaveDc(state.saveVs) : 10)
+            ? (token) => targetInfoAllowedFor(token?.actor)
+                ? haseSuccessChance(token?.actor, state.skill, state.saveVs ? deriveSaveDc(state.saveVs) : 10)
+                : UNKNOWN_CHANCE
             : null;
 
         const teardownCanvas = () =>

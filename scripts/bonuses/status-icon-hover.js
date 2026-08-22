@@ -72,6 +72,10 @@ function _hitSprite(token, world)
         return null;
     const bg = token.effects.bg;
     const overlay = token.effects.overlay;
+    token.effects.transform?.updateLocalTransform();
+    const matrix = token.effects.localTransform ?? null;
+    const scaleX = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
+    const scaleY = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
     for (const child of token.effects.children)
     {
         if (child === bg || child === overlay || !(child instanceof PIXI.Sprite))
@@ -79,21 +83,29 @@ function _hitSprite(token, world)
         const effect = temporaryEffects[child.zIndex];
         if (!effect)
             continue;
-        const center = _spriteCenterWorld(token, child);
-        const radius = Math.max(child.width, child.height) / 2;
+        const center = _spriteCenterWorld(token, child, matrix);
+        const radius = Math.max(child.width * scaleX, child.height * scaleY) / 2;
         if ((world.x - center.x) ** 2 + (world.y - center.y) ** 2 <= radius * radius)
             return { token, sprite: child, effect };
     }
     return null;
 }
 
-function _spriteCenterWorld(token, sprite)
+function _spriteCenterWorld(token, sprite, matrix)
 {
     const anchorX = sprite.anchor?.x ?? 0;
     const anchorY = sprite.anchor?.y ?? 0;
+    const localX = sprite.x + (0.5 - anchorX) * sprite.width;
+    const localY = sprite.y + (0.5 - anchorY) * sprite.height;
+    // The matrix carries the iso rotation/skew/scale; plain offsets would land off the icon.
+    if (matrix)
+    {
+        const point = matrix.apply(new PIXI.Point(localX, localY));
+        return { x: token.x + point.x, y: token.y + point.y };
+    }
     return {
-        x: token.x + (token.effects?.x ?? 0) + sprite.x + (0.5 - anchorX) * sprite.width,
-        y: token.y + (token.effects?.y ?? 0) + sprite.y + (0.5 - anchorY) * sprite.height
+        x: token.x + (token.effects?.x ?? 0) + localX,
+        y: token.y + (token.effects?.y ?? 0) + localY
     };
 }
 

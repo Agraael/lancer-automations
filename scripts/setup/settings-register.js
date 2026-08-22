@@ -253,6 +253,15 @@ export function registerSettings()
         default: true
     });
 
+    game.settings.register('lancer-automations', 'weaponFxAboveTokens', {
+        name: 'Weapon FX Above Tokens',
+        hint: 'Since Sequencer 4, some Lancer Weapon FX render behind tokens. This lifts them back above token art.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'enableAttackTargeting', {
         name: 'LA Attack Targeting',
         hint: 'Adds an LA target/range picker to the attack HUD; hold Shift to target multiple.',
@@ -269,6 +278,15 @@ export function registerSettings()
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register('lancer-automations', 'clearTargetsAfterRoll', {
+        name: 'Clear Targets After Roll',
+        hint: 'Drop targets once an attack or damage roll resolves.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
     });
 
     game.settings.register('lancer-automations', 'targetInfoDisplay', {

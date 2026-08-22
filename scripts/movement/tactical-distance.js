@@ -418,6 +418,8 @@ function positionLabel(target, label)
         const textH = label.texture?.orig?.height ?? 0;
         eye.x = -textW / 2 - 4;
         eye.y = textH * (0.5 - label.anchor.y);
+        // The eye hangs off the left, so centre the pair instead of the text alone.
+        label.pivot.x = -((eye.width ?? 0) + 4) / 2;
     }
 }
 

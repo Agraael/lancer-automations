@@ -393,9 +393,9 @@ function _readPixel(worldX, worldY)
     if (!gl)
         return null;
     const global = canvas.stage.toGlobal({ x: worldX, y: worldY });
-    const res = renderer.resolution ?? 1;
-    const px = Math.round(global.x * res);
-    const py = Math.round(renderer.height - global.y * res);
+    const resolution = renderer.resolution ?? 1;
+    const px = Math.round(global.x * resolution);
+    const py = Math.round(renderer.height - global.y * resolution);
     if (px < 0 || py < 0 || px >= renderer.width || py >= renderer.height)
         return null;
     const buf = new Uint8Array(4);
@@ -415,9 +415,9 @@ function _syncPinBreath()
             // Peaks at 0.77: measured, the interior gains a shade only across 0.78-0.85, so the sweep stays under it.
             const alpha = 0.535 + 0.235 * Math.sin(performance.now() / 280);
             _pinPix.prevAlpha = alpha;
-            for (const destroy of _pinGroups.values())
+            for (const pinHandle of _pinGroups.values())
             {
-                for (const graphic of destroy.graphics ?? [])
+                for (const graphic of pinHandle.graphics ?? [])
                 {
                     if (!graphic.destroyed)
                         graphic.alpha = alpha;
@@ -907,6 +907,17 @@ function setCanvasCursorHidden(hidden)
 {
     const view = canvas.app?.view;
     view?.classList?.toggle('la-mt-hide-cursor', hidden);
+}
+
+let _pickerCursorOn = false;
+export function setPickerTargetCursor(on)
+{
+    if (on === _pickerCursorOn)
+        return;
+    _pickerCursorOn = on;
+    const icon = on ? 'target' : desiredToolCursorIcon();
+    setCanvasCursorHidden(!!icon);
+    showToolCursor(!!icon, icon ?? 'ruler');
 }
 
 function activateRuler()
@@ -2761,7 +2772,7 @@ function paintControlIcon()
         return;
     }
     fetch(sextantIconUrl())
-        .then(res => res.text())
+        .then(response => response.text())
         .then(text =>
         {
             _sextantSvg = text;

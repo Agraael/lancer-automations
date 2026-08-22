@@ -6,7 +6,7 @@ import {
     isAreaPickerActive, cancelAreaPicker,
     beginTargetSession, isTargetSessionActive, createTokenMark,
 } from '../interactive/canvas.js';
-import { buildTargetingUI, aoeRanges, clearAllAttackShapes, pollForForm, targetInfoAllowed } from './targeting-ui.js';
+import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed } from './targeting-ui.js';
 
 const _formulaBounds = new Map();
 function formulaBounds(formula)
@@ -74,12 +74,6 @@ function damageForm()
 {
     const $form = $('form#damage-hud');
     return $form.length ? $form : null;
-}
-
-function injectWhenReady(state)
-{
-    pollForForm(damageForm,
-        $form => injectButton(state, $form).catch(err => console.warn('lancer-automations | damage targeting inject failed', err)));
 }
 
 async function injectButton(state, $form)
@@ -159,9 +153,10 @@ export function registerDamageTargetButton()
                 try
                 {
                     seedTargetsFromHitResults(state);
-                    injectWhenReady(state);
-                    beginTargetSession(damageRangeLabelFor(state));
-                    attackerMark = createTokenMark(state.actor?.getActiveTokens?.()[0] ?? null);
+                    injectWhenReady(state, damageForm, injectButton, 'damage targeting');
+                    const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
+                    beginTargetSession(damageRangeLabelFor(state), attackerToken);
+                    attackerMark = createTokenMark(attackerToken);
                 }
                 catch
                 {
@@ -198,6 +193,8 @@ export function registerDamageTargetButton()
             try
             {
                 if (!game.settings.get('lancer-automations', 'enableDamageTargeting'))
+                    return;
+                if (!game.settings.get('lancer-automations', 'clearTargetsAfterRoll'))
                     return;
             }
             catch
