@@ -1,6 +1,6 @@
 /* global game, Sequence, Sequencer, Hooks, canvas, foundry */
 
-import { isActionFXEnabled, isAttackResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
+import { isActionFXEnabled, isRollResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
 
 // Action FX sequences; every one no-ops unless Sequencer and lancer-weapon-fx are active and Action FX is enabled.
@@ -1753,7 +1753,7 @@ export const LA_INLINE_ATTACK_FX = {
             return;
         const fx = _weaponFx();
         const volume = fx?.getEffectVolume(0.7) ?? 0.7;
-        if (isAttackResultFXEnabled())
+        if (isRollResultFXEnabled())
             fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         for (const target of targetTokens)
@@ -1770,7 +1770,7 @@ export const LA_INLINE_ATTACK_FX = {
                 .atLocation(target)
                 .scaleToObject(2.5)
                 .waitUntilFinished(-500);
-            if (isAttackResultFXEnabled())
+            if (isRollResultFXEnabled())
             {
                 if (targetsMissed.has(target.id) && fx?.addMissToSequence)
                     fx.addMissToSequence(seq, target.id);
@@ -1790,7 +1790,7 @@ export const LA_INLINE_ATTACK_FX = {
             return;
         const fx = _weaponFx();
         const volume = fx?.getEffectVolume(0.7) ?? 0.7;
-        if (isAttackResultFXEnabled())
+        if (isRollResultFXEnabled())
             fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         seq.sound()
@@ -1821,7 +1821,7 @@ export const LA_INLINE_ATTACK_FX = {
                 .playbackRate(2)
                 .fadeOut(500)
                 .waitUntilFinished(-500);
-            if (isAttackResultFXEnabled())
+            if (isRollResultFXEnabled())
             {
                 if (targetsMissed.has(target.id) && fx?.addMissToSequence)
                     fx.addMissToSequence(seq, target.id);
@@ -2339,7 +2339,7 @@ const STAT_PULSE_FAIL    = 'jb2a.template_circle.radar.loop.800px.001.pulse.purp
 
 export async function playContestedOutcomeFX(winnerToken, loserToken)
 {
-    if (!isActionFXEnabled() || typeof Sequencer === 'undefined')
+    if (!isRollResultFXEnabled() || typeof Sequencer === 'undefined')
         return;
     try
     {
@@ -2398,7 +2398,7 @@ export async function playContestedOutcomeFX(winnerToken, loserToken)
 
 export async function playStatRollOutcomeFX(token, success, { waitForActiveFX = true } = {})
 {
-    if (!isActionFXEnabled() || typeof Sequencer === 'undefined' || !token)
+    if (!isRollResultFXEnabled() || typeof Sequencer === 'undefined' || !token)
         return;
     try
     {
