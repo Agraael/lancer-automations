@@ -346,7 +346,9 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
     {
         return movementPath;
     }
-    const flying = getCurrentMovementType() === 'fly';
+    const dragType = getCurrentMovementType();
+    const flying = dragType === 'fly';
+    const jumping = dragType === 'jump';
 
     const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
     const tokenZHeight = _tokenZHeight(this);
@@ -358,41 +360,70 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
     });
     const originTop = prevTop;
 
-    for (let i = 1; i < movementPath.length; i++)
+    // Pass 1: sequential gap-aware terrain top under each auto-elevating waypoint.
+    const terrainTops = [];
+    for (let idx = 1; idx < movementPath.length; idx++)
     {
-        if (!AUTO_MOVEMENT_TYPES.has(movementPath[i].action))
+        if (!AUTO_MOVEMENT_TYPES.has(movementPath[idx].action))
             continue;
-
-        const thisTop = _terrainTopMost(this, movementPath[i], {
+        const waypointTop = _terrainTopMost(this, movementPath[idx], {
             gapSearch: {
                 currentTerrainTop: prevTop,
-                currentElevationAboveTerrain: (movementPath[i].elevation ?? 0) - prevTop,
+                currentElevationAboveTerrain: (movementPath[idx].elevation ?? 0) - prevTop,
                 tokenZHeight
             }
         });
+        terrainTops.push({ idx, top: waypointTop });
+        prevTop = waypointTop;
+    }
 
-        if (movementPath[i].intermediate === true && !movementPath[i]._laElevResolved)
-            movementPath[i].elevation = originElev + (thisTop - originTop) * sceneDistance + userDelta;
-
-        if (thisTop !== prevTop)
+    // A legal vertical hop (at most 1 cell over, up to SIZE up) stays a whole jump; any other
+    // jump transition splits into a climb segment exactly like walking.
+    let jumpHop = false;
+    if (jumping && terrainTops.length)
+    {
+        let cellsMoved = 0;
+        for (let step = 1; step < movementPath.length; step++)
         {
-            if (movementPath[i - 1])
+            if (movementPath[step].x !== movementPath[step - 1].x || movementPath[step].y !== movementPath[step - 1].y)
+                cellsMoved++;
+        }
+        const rise = (terrainTops.at(-1)?.top ?? originTop) - originTop;
+        const sizeAllowance = Math.max(1, Number(this.actor?.system?.size) || 1);
+        jumpHop = cellsMoved <= 1 && rise <= sizeAllowance + 1e-9;
+    }
+
+    // Flying never descends mid-path: hold the running max altitude; only the landing waypoint drops.
+    const landingIdx = movementPath.length - 1;
+    let prevEffectiveTop = originTop;
+    for (const { idx, top: waypointTop } of terrainTops)
+    {
+        const isLanding = idx === landingIdx;
+        const effectiveTop = (flying && !isLanding) ? Math.max(waypointTop, prevEffectiveTop) : waypointTop;
+
+        // Corners and silents arrive intermediate:false but follow the profile like dense cells.
+        if (!movementPath[idx].explicit && !movementPath[idx]._laElevResolved)
+            movementPath[idx].elevation = originElev + (effectiveTop - originTop) * sceneDistance + userDelta;
+
+        if (effectiveTop !== prevEffectiveTop && !(jumping && jumpHop))
+        {
+            if (movementPath[idx - 1])
             {
-                if (!movementPath[i - 1].explicit)
-                    movementPath[i - 1]._laClimbFlip = true;
-                movementPath[i - 1].intermediate = false;
-                movementPath[i - 1].explicit = true;
+                if (!movementPath[idx - 1].explicit)
+                    movementPath[idx - 1]._laClimbFlip = true;
+                movementPath[idx - 1].intermediate = false;
+                movementPath[idx - 1].explicit = true;
             }
-            if (!movementPath[i].explicit)
-                movementPath[i]._laClimbFlip = true;
-            Object.assign(movementPath[i], {
+            if (!movementPath[idx].explicit)
+                movementPath[idx]._laClimbFlip = true;
+            Object.assign(movementPath[idx], {
                 action: flying ? 'fly' : 'climb',
                 intermediate: false,
                 explicit: true
             });
         }
 
-        prevTop = thisTop;
+        prevEffectiveTop = effectiveTop;
     }
 
     return movementPath;

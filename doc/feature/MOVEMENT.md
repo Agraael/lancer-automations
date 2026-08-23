@@ -38,7 +38,8 @@ Cost is horizontal distance plus vertical climb plus any terrain penalties:
 
 - **Difficult terrain** penalties are read from Terrain Height Tools, Grid-Aware Auras, TemplateMacro zones, and Foundry region *Modify Movement Cost* behaviors.
 - **Climbing** costs a mech extra (the first grid unit is free, then one per unit), unless it's flying, has the climber status, or has an elevation-immunity bonus.
-- **Flying** measures against the highest terrain it crosses rather than each step.
+- **Flying** measures against the highest terrain it crosses and holds altitude over dips.
+- **Jumping** bills each cell double and ignores difficult terrain under the arc. Height changes split into climb segments like walking. A 1-cell hop up to SIZE high is free. Pathfinding and reach colors use the same pricing.
 - Gridless scenes are supported, sampling penalties along the line.
 
 Elevation also feeds combat range checks (overwatch, engagement, range) if you enable **`count3DDistance`** (in the Combat Flows settings).
@@ -61,7 +62,7 @@ With Terrain Height Tools, the token also **auto-elevates** to sit on the terrai
 - **Measure ruler only** - **Disable Auto-elevation on Measure**.
 - **One token** - its own **`disableAutoTerrainElevation`** flag, or Terrain Height Tools' own `ignoreAutoElevation`.
 
-**Auto-insert Climb Waypoints** (`enableClimbWaypoints`) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb.
+**Auto-insert Climb Waypoints** (`enableClimbWaypoints`) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb. Fly only splits where it rises.
 
 <br clear="right"/>
 
@@ -71,7 +72,7 @@ With Terrain Height Tools, the token also **auto-elevates** to sit on the terrai
 
 <img align="right" src="../img/mv-wheel.png" width="45%"/>
 
-A token moves with a **movement type**: walk, fly, crawl (only while prone), forced, teleport, or ignore-elevation (skips auto-elevation). Gaining a **flying** or **hover** status switches the token to fly automatically, and back to walk when it's removed.
+A token moves with a **movement type**: walk, fly, jump, crawl (only while prone), forced, teleport, or ignore-elevation (skips auto-elevation). Gaining a **flying** or **hover** status switches the token to fly automatically, and back to walk when it's removed.
 
 Press **M** for the **movement wheel**: outside a drag it opens a radial picker. During a drag it cycles the active type without moving the token.
 

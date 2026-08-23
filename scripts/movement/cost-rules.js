@@ -327,6 +327,18 @@ function lancerSpeed(tokenDoc)
     return speed;
 }
 
+/** Vertical-jump allowance in grid units (SIZE, min 1). */
+function jumpSize(tokenDoc)
+{
+    return Math.max(1, Number(tokenDoc?.actor?.system?.size) || 1);
+}
+
+// Rise is capped at SIZE on a 1-cell hop, zero beyond.
+function isLegalJump(tokenDoc, horizontalCells, ascentUnits)
+{
+    return horizontalCells <= 1 ? ascentUnits <= jumpSize(tokenDoc) + 1e-9 : ascentUnits <= 1e-9;
+}
+
 /**
  * Sample the token's full footprint when its center sits on the given path cell.
  * Returns the unique set of THT shapes across all occupied hexes and the MAX solid top.
@@ -569,11 +581,28 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result)
         // First grid-unit of climb is free, the rest 1:1.
         let climbMalus = noClimbMalus ? 0 : Math.max(0, vertical - sceneDistance);
 
-        let segCost = horizontal + vertical + penaltyCost + climbMalus;
         const { base: segBase, free: segFree } = parseAction(toWp.action);
         const forcedSeg = segBase === 'forced';
+        const jumpingSeg = segBase === 'jump' || (segBase == null && dragType === 'jump');
+        let segCost = horizontal + vertical + penaltyCost + climbMalus;
         let segVertical = vertical;
         let segPenalty = penaltyCost;
+        // Legal jump: 2x horizontal, ascent free, only the landing zone bills. Illegal jumps keep the walk bill.
+        const jumpAscent = Math.max(0, (toWp.elevation ?? 0) - (fromWp.elevation ?? 0));
+        const legalJumpSeg = jumpingSeg && isLegalJump(tokenDoc, horizontal / sceneDistance, jumpAscent / sceneDistance);
+        if (legalJumpSeg)
+        {
+            segVertical = 0;
+            climbMalus = 0;
+            segPenalty = 0;
+            for (const zone of zones)
+            {
+                if (zone.template.shape?.contains?.(toCenter.x - zone.template.x, toCenter.y - zone.template.y))
+                    segPenalty = Math.max(segPenalty, zone.penalty * sceneDistance);
+            }
+            penaltyMarkers.length = 0;
+            segCost = horizontal * 2 + segPenalty;
+        }
         if (forcedSeg || segFree || isForceFreeMovement())
         {
             segCost = 0;
@@ -597,13 +626,15 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result)
         {
             seg.to.distance = cumDistance;
             seg.to.cost = cumCost;
-            seg.to.lancerTerrainPenalty = penaltyCost;
+            seg.to.lancerTerrainPenalty = segPenalty;
             seg.to.lancerClimbMalus = climbMalus;
             seg.to.lancerVerticalCost = totalVertical;
             seg.to.lancerClimbCells = climbMarkers;
             seg.to.lancerTerrainCells = penaltyMarkers;
             seg.to.lancerStepCentroids = gridlessLineCentroids(fromCenter, toCenter, segCost);
             seg.to.lancerPenaltyZone = penaltyZone;
+            if (jumpingSeg && !legalJumpSeg)
+                seg.to.lancerJumpIllegal = true;
         }
     }
 
@@ -683,6 +714,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
     const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
     const dragType = getCurrentMovementType();
     const defaultFlying = dragType === 'fly';
+    const defaultJump = dragType === 'jump';
     const defaultIgnoreElev = dragType === 'ignore';
     // Global "no auto-elevation": terrain contributes zero elevation to the drag, whatever the action.
     const ignoreTerrainElev = _autoElevDisabled();
@@ -754,9 +786,15 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
 
         const { base: segAction, free: segFree } = parseAction(toWp.action);
         const flying = segAction === 'fly' || (segAction == null && defaultFlying);
+        const jumping = segAction === 'jump' || (segAction == null && defaultJump);
         const noTerrainClimb = ignoreTerrainElev || segAction === 'ignore' || (segAction == null && defaultIgnoreElev);
 
         const isLastSegment = (keepIdxPos === keepIdx.length - 2);
+        const segStartElev = tokenElev;
+        let segMaxElev = tokenElev;
+        let segWalkCumCost = 0;
+        let landingTerrainCost = 0;
+        let landingTerrainCell = null;
         let horizontalCost = 0;
         let terrainCost = 0;
         let verticalCost = 0;
@@ -857,7 +895,11 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 verticalCost += stepClimbCost;
                 malus += stepMalus;
                 tokenElev = step.nextTokenElev;
+                if (tokenElev > segMaxElev)
+                    segMaxElev = tokenElev;
                 terrainCost += penalty * sceneDistance;
+                if (jumping && j === lastRealJ)
+                    landingTerrainCost += penalty * sceneDistance;
 
                 const cellCenter = canvas.grid.getCenterPoint(curr);
                 const currCentroid = footprintCentroid(footprint) ?? cellCenter;
@@ -868,6 +910,13 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                     const flyCellCap = tokenSpeed > 0 ? Math.max(1, Math.ceil(horizontalCells / tokenSpeed)) * tokenSpeed : 0;
                     const billedMoveCells = segClimbVerticalUnits > flyCellCap ? Math.max(horizontalCells, segClimbVerticalUnits) : horizontalCells;
                     segCumCost = billedMoveCells * sceneDistance + terrainCost;
+                }
+                else if (jumping)
+                {
+                    segWalkCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
+                    segCumCost = isLegalJump(tokenDoc, horizontalCost / sceneDistance, Math.max(0, segMaxElev - segStartElev))
+                        ? horizontalCost * 2 + landingTerrainCost
+                        : segWalkCumCost;
                 }
                 else
                     segCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
@@ -884,11 +933,14 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 }
                 if (penalty > 0)
                 {
-                    terrainCells.push({
+                    const terrainMarker = {
                         x: (prevCentroid.x + currCentroid.x) / 2,
                         y: (prevCentroid.y + currCentroid.y) / 2,
                         penalty
-                    });
+                    };
+                    terrainCells.push(terrainMarker);
+                    if (jumping && j === lastRealJ)
+                        landingTerrainCell = terrainMarker;
                 }
                 debug.push(`cell(${curr.i},${curr.j}) fp=${footprint.length} new=${newCells.length} cellTop=${cellTop} terrain=${prevTerrainTop}->${newTerrainTop} tokenE=${tokenElev} delta=${stepDelta} billed=${climbCellsBilled} penalty=${penalty}`);
                 debugMark(curr, cellCenter, penalty, tokenElev, climbCellsBilled);
@@ -917,6 +969,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
         if (horizontalCost === 0)
             horizontalCost = Number(seg.distance) || 0;
 
+        const legalJump = jumping && isLegalJump(tokenDoc, horizontalCost / sceneDistance, Math.max(0, segMaxElev - segStartElev));
         let segCost;
         if (flying)
         {
@@ -934,6 +987,16 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 verticalCost = 0;
                 segCost = horizontalCost + terrainCost;
             }
+        }
+        else if (legalJump)
+        {
+            verticalCost = 0;
+            malus = 0;
+            terrainCost = landingTerrainCost;
+            terrainCells.length = 0;
+            if (landingTerrainCell)
+                terrainCells.push(landingTerrainCell);
+            segCost = horizontalCost * 2 + terrainCost;
         }
         else
             segCost = horizontalCost + verticalCost + terrainCost + malus;
@@ -1009,6 +1072,9 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
             const subSeg = result.segments[subIdx];
             if (!subSeg)
                 continue;
+            // Illegal jumps bill as walk; the ruler reads this to render them solid too.
+            if (jumping && !legalJump && subSeg.to)
+                subSeg.to.lancerJumpIllegal = true;
             const stepShare = totalGroupSteps > 0
                 ? (segCost * (stepsPerSub[subIdx - fromIdx] ?? 0)) / totalGroupSteps
                 : (subCount > 0 ? segCost / subCount : segCost);
@@ -1050,7 +1116,9 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
     if (!userOffsetApplied && dragOffsetGrid !== 0)
     {
         const rawClimb = Math.abs(dragOffsetGrid);
-        const climbCellsBilled = Math.ceil(rawClimb - 0.5);
+        // Vertical jump: descents and hops up to SIZE are free.
+        const freeJumpHop = defaultJump && (dragOffsetGrid < 0 || rawClimb <= jumpSize(tokenDoc));
+        const climbCellsBilled = freeJumpHop ? 0 : Math.ceil(rawClimb - 0.5);
         const climbCost = climbCellsBilled * sceneDistance;
         const climbMalus = (defaultFlying || climbImmune || freeMode || climbCellsBilled === 0) ? 0
             : Math.max(0, climbCellsBilled - 1) * sceneDistance;

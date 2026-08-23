@@ -1,6 +1,7 @@
 /* global Tour, game, ui, Dialog, Hooks, FormApplication, $, fetch */
 
 import { maybeRunSettingsOnboarding } from './settings-onboarding.js';
+import { getWeapons } from '../interactive/deployables.js';
 
 const SETTING_TOUR_DONE = 'tourCompleted';
 const SETTING_MOVEMENT_WARNING_SHOWN = 'movementWarningShown';
@@ -955,7 +956,7 @@ function _waitForTokenDialog()
                     <div class="lancer-dialog-title">PLACE A TOKEN</div>
                     <div class="lancer-dialog-subtitle">The TAH tour needs a mech token.</div>
                 </div>
-                <p style="padding: 4px 6px;">Drop a player mech onto the scene and select it, then click Continue. Talents, Frame and mounts are mech-only, so an NPC won't do.</p>
+                <p style="padding: 4px 6px;">Drop a player mech onto the scene and select it, then click Continue. Talents, Frame and mounts are mech-only, so an NPC won't do, and an unequipped mech leaves the weapon steps with nothing to point at.</p>
             `,
             buttons: {
                 continue: {
@@ -979,10 +980,15 @@ function _findUsableToken()
 {
     // Mech only: the tour walks mech-specific categories (Weapons by mount, Frame, Talents) an NPC lacks.
     const isMech = (token) => token.actor?.type === 'mech';
+    const isEquipped = (token) => isMech(token) && !!getWeapons(token).length;
+    const visible = canvas.tokens.placeables.filter((token) => !token.document.hidden);
     const controlled = canvas.tokens.controlled[0];
-    if (controlled && isMech(controlled))
+    if (controlled && isEquipped(controlled))
         return controlled;
-    return canvas.tokens.placeables.find((token) => isMech(token) && !token.document.hidden) ?? null;
+    return visible.find(isEquipped)
+        ?? (controlled && isMech(controlled) ? controlled : null)
+        ?? visible.find(isMech)
+        ?? null;
 }
 
 // Spin up a demo combat so the combat bar (action economy, movement cap) renders.

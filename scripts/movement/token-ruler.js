@@ -109,6 +109,27 @@ function forceMoveColor()
     }
 }
 
+// Fly draws the short dash, blink a dot run, jump one hop per tier-color stretch, everything else solid.
+function patternForAction(action)
+{
+    const base = parseAction(action).base;
+    if (base === 'blink')
+        return 'dots';
+    if (base === 'fly')
+        return 'dash';
+    if (base === 'jump')
+        return 'arc';
+    return null;
+}
+
+// Illegal jumps bill as walk (cost-rules stamps them), so they render solid too.
+function patternForWaypoint(waypoint)
+{
+    if (waypoint?.measurement?.lancerJumpIllegal)
+        return null;
+    return patternForAction(waypoint?.action);
+}
+
 // Live drag spend per token, for the movement-reach overlay: { dragDelta, end:{x,y,elevation} }.
 export const liveDragState = new Map();
 
@@ -328,7 +349,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             const firstSeg = validSegs[0];
             const widthRef = firstSeg.style?.width ?? 4;
             const fallback = PIXI.Color.shared.setValue(firstSeg.style?.color ?? 0xffffff).toNumber();
-            const blinkKeys = new Set(validSegs.filter(s => s.isBlink).map(s => s.waypointKey));
+            const patternByKey = new Map(validSegs.filter(seg => seg.pattern).map(seg => [seg.waypointKey, seg.pattern]));
 
             // One point per waypoint, using Foundry's black-dot center calc + tier color.
             // Hex paint iterates reverse so we reverse first.
@@ -397,7 +418,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                     { /* keep fallback */ }
                 }
                 const waypointKey = `${Math.round(chainWp.x ?? 0)}|${Math.round(chainWp.y ?? 0)}|${Math.round((chainWp.elevation ?? 0) * 1000)}`;
-                renderPts.push({ x: centerPt.x, y: centerPt.y, color: color ?? fallback, waypointKey, isForce: false, isFree: false, isBlink: parseAction(chainWp.action).base === 'blink' });
+                renderPts.push({ x: centerPt.x, y: centerPt.y, color: color ?? fallback, waypointKey, isForce: false, isFree: false, pattern: patternForWaypoint(chainWp) });
             };
             const walkForward = (fromWp, toWp) =>
             {
@@ -459,7 +480,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                         }
                     }
                 }
-                renderPts.push({ x: px, y: py, color: entryColor(entry), waypointKey: entry.waypointKey, isForce: !!entry.isForce, isFree: !!entry.isFree, isBlink: !!entry.isBlink });
+                renderPts.push({ x: px, y: py, color: entryColor(entry), waypointKey: entry.waypointKey, isForce: !!entry.isForce, isFree: !!entry.isFree, pattern: entry.pattern ?? null });
                 if (entryWp)
                     lastCapturedWp = entryWp;
             }
@@ -472,35 +493,123 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             if (renderPts.length >= 2 && widthRef > 0)
             {
                 const alpha = 1;
-                const blinkDashLen = Math.max(8, Math.round(canvas.grid.size * 0.25));
-                const blinkGapLen = Math.max(6, Math.round(canvas.grid.size * 0.18));
-                const segByKey = new Map(validSegs.map(s => [s.waypointKey, s]));
-                const isBlinkPair = (pt) => pt.isBlink || blinkKeys.has(pt.waypointKey);
+                const dashLen = Math.max(8, Math.round(canvas.grid.size * 0.25));
+                const dashGapLen = Math.max(6, Math.round(canvas.grid.size * 0.18));
+                const dotSpacing = Math.max(8, Math.round(canvas.grid.size * 0.18));
+                const dotRadius = widthRef * 0.9;
+                const segByKey = new Map(validSegs.map(seg => [seg.waypointKey, seg]));
+                const patternOf = (pt) =>
+                {
+                    // hop samples are final, never re-resolved through the segment map
+                    if (pt.pattern === 'lifted')
+                        return null;
+                    return pt.pattern ?? patternByKey.get(pt.waypointKey) ?? null;
+                };
+
+                // Jump: one hop per tier-color stretch; lifted samples draw as a plain solid polyline.
+                const hopLift = (sourcePts) =>
+                {
+                    const liftedPts = [];
+                    // Hops fly the straight chord; colors follow the underlying path by fraction.
+                    const liftHop = (hopPts) =>
+                    {
+                        const cumLens = [0];
+                        let totalLen = 0;
+                        for (let segIdx = 1; segIdx < hopPts.length; segIdx++)
+                        {
+                            totalLen += Math.hypot(hopPts[segIdx].x - hopPts[segIdx - 1].x, hopPts[segIdx].y - hopPts[segIdx - 1].y);
+                            cumLens.push(totalLen);
+                        }
+                        const takeoff = hopPts[0];
+                        const landing = hopPts[hopPts.length - 1];
+                        const chordLen = Math.hypot(landing.x - takeoff.x, landing.y - takeoff.y);
+                        if (chordLen <= 0 || totalLen <= 0)
+                            return;
+                        const colorAtPathLen = (pathDist) =>
+                        {
+                            for (let segIdx = 1; segIdx < hopPts.length; segIdx++)
+                            {
+                                if (pathDist <= cumLens[segIdx] || segIdx === hopPts.length - 1)
+                                {
+                                    const spanLen = cumLens[segIdx] - cumLens[segIdx - 1];
+                                    const localFrac = spanLen > 0 ? Math.max(0, Math.min(1, (pathDist - cumLens[segIdx - 1]) / spanLen)) : 1;
+                                    return lerpColor(hopPts[segIdx - 1].color, hopPts[segIdx].color, localFrac);
+                                }
+                            }
+                            return landing.color;
+                        };
+                        const hopHeight = Math.min(canvas.grid.size * 0.5, chordLen * 0.3);
+                        const steps = Math.max(2, Math.ceil(chordLen / 8));
+                        for (let stepIdx = 1; stepIdx <= steps; stepIdx++)
+                        {
+                            const frac = stepIdx / steps;
+                            liftedPts.push({
+                                x: takeoff.x + (landing.x - takeoff.x) * frac,
+                                y: takeoff.y + (landing.y - takeoff.y) * frac - Math.sin(Math.PI * frac) * hopHeight,
+                                color: colorAtPathLen(totalLen * frac),
+                                waypointKey: landing.waypointKey,
+                                isForce: landing.isForce,
+                                isFree: landing.isFree,
+                                pattern: 'lifted'
+                            });
+                        }
+                    };
+                    let ptIdx = 0;
+                    while (ptIdx < sourcePts.length)
+                    {
+                        if (ptIdx === 0 || patternOf(sourcePts[ptIdx]) !== 'arc')
+                        {
+                            liftedPts.push(sourcePts[ptIdx]);
+                            ptIdx++;
+                            continue;
+                        }
+                        let runEnd = ptIdx;
+                        while (runEnd + 1 < sourcePts.length && patternOf(sourcePts[runEnd + 1]) === 'arc')
+                            runEnd++;
+                        const arcRun = sourcePts.slice(ptIdx - 1, runEnd + 1);
+                        let hopStartPos = 0;
+                        for (let ptPos = 1; ptPos < arcRun.length; ptPos++)
+                        {
+                            const colorEnds = ptPos === arcRun.length - 1 || arcRun[ptPos].color !== arcRun[ptPos + 1].color;
+                            if (!colorEnds)
+                                continue;
+                            liftHop(arcRun.slice(hopStartPos, ptPos + 1));
+                            hopStartPos = ptPos;
+                        }
+                        ptIdx = runEnd + 1;
+                    }
+                    return liftedPts;
+                };
+                const drawPts = hopLift(renderPts);
 
                 if (outlineThickness > 0)
                 {
                     const outlineG = new PIXI.Graphics();
-                    outlineG.lineStyle({
+                    const outlineOpts = {
                         width: widthRef + outlineThickness * 2,
                         color: outlineColor,
                         alpha,
                         join: PIXI.LINE_JOIN.ROUND,
                         cap: PIXI.LINE_CAP.ROUND
-                    });
-                    let cursor = { x: renderPts[0].x, y: renderPts[0].y };
+                    };
+                    outlineG.lineStyle(outlineOpts);
+                    let cursor = { x: drawPts[0].x, y: drawPts[0].y };
                     outlineG.moveTo(cursor.x, cursor.y);
                     let drawing = true;
-                    let remaining = blinkDashLen;
-                    for (let i = 1; i < renderPts.length; i++)
+                    let remaining = dashLen;
+                    let sinceDot = dotSpacing;
+                    for (let ptIdx = 1; ptIdx < drawPts.length; ptIdx++)
                     {
-                        const segStart = renderPts[i - 1];
-                        const segEnd = renderPts[i];
-                        if (!isBlinkPair(segEnd))
+                        const segStart = drawPts[ptIdx - 1];
+                        const segEnd = drawPts[ptIdx];
+                        const pattern = patternOf(segEnd);
+                        if (!pattern)
                         {
                             outlineG.lineTo(segEnd.x, segEnd.y);
                             cursor = { x: segEnd.x, y: segEnd.y };
                             drawing = true;
-                            remaining = blinkDashLen;
+                            remaining = dashLen;
+                            sinceDot = dotSpacing;
                             continue;
                         }
                         const deltaX = segEnd.x - segStart.x;
@@ -510,6 +619,32 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                             continue;
                         const dirX = deltaX / segDist;
                         const dirY = deltaY / segDist;
+                        if (pattern === 'dots')
+                        {
+                            let walked = 0;
+                            for (;;)
+                            {
+                                if (sinceDot >= dotSpacing - 1e-6)
+                                {
+                                    outlineG.lineStyle({ width: 0 });
+                                    outlineG.beginFill(outlineColor, alpha);
+                                    outlineG.drawCircle(segStart.x + dirX * walked, segStart.y + dirY * walked, dotRadius + outlineThickness);
+                                    outlineG.endFill();
+                                    outlineG.lineStyle(outlineOpts);
+                                    sinceDot = 0;
+                                }
+                                if (walked >= segDist)
+                                    break;
+                                const step = Math.min(segDist - walked, dotSpacing - sinceDot);
+                                walked += step;
+                                sinceDot += step;
+                            }
+                            cursor = { x: segEnd.x, y: segEnd.y };
+                            outlineG.moveTo(cursor.x, cursor.y);
+                            drawing = true;
+                            remaining = dashLen;
+                            continue;
+                        }
                         let walked = 0;
                         while (walked < segDist)
                         {
@@ -525,16 +660,17 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                             if (remaining <= 0)
                             {
                                 drawing = !drawing;
-                                remaining = drawing ? blinkDashLen : blinkGapLen;
+                                remaining = drawing ? dashLen : dashGapLen;
                             }
                         }
+                        sinceDot = dotSpacing;
                     }
                     lineLayer.addChild(outlineG);
                 }
 
                 const innerG = new PIXI.Graphics();
                 const lineOpts = { width: widthRef, alpha, join: PIXI.LINE_JOIN.ROUND, cap: PIXI.LINE_CAP.ROUND };
-                const colorForBlinkAtFrac = (segInfo, frac) =>
+                const patternColorAtFrac = (segInfo, frac) =>
                 {
                     if (segInfo?.isForce)
                         return PIXI.Color.shared.setValue(forceMoveColor()).toNumber();
@@ -546,22 +682,24 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                     return PIXI.Color.shared.setValue(tc ?? fallback).toNumber();
                 };
 
-                let cursor = { x: renderPts[0].x, y: renderPts[0].y };
+                let cursor = { x: drawPts[0].x, y: drawPts[0].y };
                 innerG.moveTo(cursor.x, cursor.y);
                 let drawing = true;
-                let remaining = blinkDashLen;
-                let currentColor = renderPts[0].color;
+                let remaining = dashLen;
+                let sinceDot = dotSpacing;
+                let currentColor = drawPts[0].color;
                 innerG.lineStyle({ ...lineOpts, color: currentColor });
-                for (let i = 1; i < renderPts.length; i++)
+                for (let ptIdx = 1; ptIdx < drawPts.length; ptIdx++)
                 {
-                    const segStart = renderPts[i - 1];
-                    const segEnd = renderPts[i];
+                    const segStart = drawPts[ptIdx - 1];
+                    const segEnd = drawPts[ptIdx];
                     const deltaX = segEnd.x - segStart.x;
                     const deltaY = segEnd.y - segStart.y;
                     const segDist = Math.hypot(deltaX, deltaY);
                     if (segDist === 0)
                         continue;
-                    if (!isBlinkPair(segEnd))
+                    const pattern = patternOf(segEnd);
+                    if (!pattern)
                     {
                         if (segStart.color === segEnd.color)
                         {
@@ -591,12 +729,45 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                         }
                         cursor = { x: segEnd.x, y: segEnd.y };
                         drawing = true;
-                        remaining = blinkDashLen;
+                        remaining = dashLen;
+                        sinceDot = dotSpacing;
                         continue;
                     }
                     const segInfo = segByKey.get(segEnd.waypointKey);
+                    // Cost-ramp color only when the pair is the whole segment (blink); per-hex points carry the tiers.
+                    const rampInfo = segInfo && (segInfo.centroids?.length ?? 0) < 2 ? segInfo : null;
+                    const colorAtFrac = (frac) => rampInfo
+                        ? patternColorAtFrac(rampInfo, frac)
+                        : lerpColor(segStart.color, segEnd.color, frac);
                     const dirX = deltaX / segDist;
                     const dirY = deltaY / segDist;
+                    if (pattern === 'dots')
+                    {
+                        let walked = 0;
+                        for (;;)
+                        {
+                            if (sinceDot >= dotSpacing - 1e-6)
+                            {
+                                const col = colorAtFrac(walked / segDist);
+                                innerG.lineStyle({ width: 0 });
+                                innerG.beginFill(col, alpha);
+                                innerG.drawCircle(segStart.x + dirX * walked, segStart.y + dirY * walked, dotRadius);
+                                innerG.endFill();
+                                innerG.lineStyle({ ...lineOpts, color: currentColor });
+                                sinceDot = 0;
+                            }
+                            if (walked >= segDist)
+                                break;
+                            const step = Math.min(segDist - walked, dotSpacing - sinceDot);
+                            walked += step;
+                            sinceDot += step;
+                        }
+                        cursor = { x: segEnd.x, y: segEnd.y };
+                        innerG.moveTo(cursor.x, cursor.y);
+                        drawing = true;
+                        remaining = dashLen;
+                        continue;
+                    }
                     let walked = 0;
                     while (walked < segDist)
                     {
@@ -605,7 +776,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                         if (drawing)
                         {
                             const frac = (walked + step / 2) / segDist;
-                            const col = colorForBlinkAtFrac(segInfo, frac);
+                            const col = colorAtFrac(frac);
                             if (col !== currentColor)
                             {
                                 innerG.lineStyle({ ...lineOpts, color: col });
@@ -621,9 +792,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                         if (remaining <= 0)
                         {
                             drawing = !drawing;
-                            remaining = drawing ? blinkDashLen : blinkGapLen;
+                            remaining = drawing ? dashLen : dashGapLen;
                         }
                     }
+                    sinceDot = dotSpacing;
                 }
                 lineLayer.addChild(innerG);
             }
@@ -843,7 +1015,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 ? (moveData.movementCost ?? 0) * sceneDistance
                 : Number(waypoint?.measurement?.backward?.cost ?? 0);
             const waypointKey = `${Math.round(waypoint.x ?? 0)}|${Math.round(waypoint.y ?? 0)}|${Math.round((waypoint.elevation ?? 0) * 1000)}`;
-            this._pendingSegmentLines.push({ centroids: hasCentroids ? centroids : [], style, baseCum, segCost, isFree, isForce, isBlink, waypointKey });
+            this._pendingSegmentLines.push({ centroids: hasCentroids ? centroids : [], style, baseCum, segCost, isFree, isForce, isBlink, pattern: patternForWaypoint(waypoint), waypointKey });
             return { ...style, width: 0 };
         }
         // No polyline to draw (e.g. gridless), so keep the native line.
@@ -926,7 +1098,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 tierColor,
                 isForce: isForcedHere,
                 isFree: isFreeHere,
-                isBlink: parseAction(waypoint.action).base === 'blink'
+                pattern: patternForWaypoint(waypoint)
             });
         }
         if (!settingOn())
@@ -1002,8 +1174,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             deltaCost = totalCost - prevTotal;
         }
 
-        // Use the landing elevation, not the raw waypoint elevation.
-        const destElev = elevationForPreview(this.token.document, waypoint);
+        // Endpoint shows the landing elevation; mid-path waypoints show their planned (held) altitude.
+        const destElev = waypoint.next
+            ? (waypoint.elevation ?? this.token.document.elevation ?? 0)
+            : elevationForPreview(this.token.document, waypoint);
         const prevElev = waypoint.previous?.elevation ?? this.token.document.elevation ?? 0;
         const elevDelta = snapElevationForDisplay(destElev - prevElev);
         const elevArrow = elevDelta > 0 ? 'fa-solid fa-arrow-up'

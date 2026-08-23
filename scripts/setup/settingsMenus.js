@@ -503,6 +503,8 @@ const STATUSES_FIELDS = [
     { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Master switch for all visual and auto-status effects.' },
     { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
+    { type: 'statusFx', sub: 'attackResultFX', label: 'Attack Result FX', hint: 'Miss and crit overlays on the target when an attack resolves.' },
+    { type: 'statusFx', sub: 'damageImpactFX', label: 'Damage Impact FX', hint: 'Impact burst on the target, one per 3 damage, coloured by damage type.' },
     { key: 'actionBadgeItemName', type: 'boolean', label: 'Item Name on Action Badges', hint: 'The action badge banner shows the item name instead of the action type.' },
     { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'Remove Statuses on Death' },
 

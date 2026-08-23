@@ -99,6 +99,8 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
 
     const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
     const flying = action === 'fly';
+    // Jump: flat steps cost double and clear terrain; height changes price as climb segments like walk.
+    const jumping = action === 'jump';
     const noTerrainClimb = action === 'ignore' || autoElevDisabled();
     const typeById = getTerrainTypeMap();
     const footprintCache = new Map();
@@ -111,7 +113,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
         climbImmune: isClimbingImmune(tokenDoc),
         freeMode: false,
         terrainImmune: isTerrainImmune(tokenDoc),
-        actionKey: flying ? 'fly' : 'walk',
+        actionKey: action,
         footprintCache,
         penaltyCache,
     };
@@ -259,7 +261,10 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
             {
                 continue;
             }
-            const edgeCost = sceneDistance + step.stepClimbCost + step.stepMalus + step.penalty * sceneDistance;
+            const walkEdgeCost = sceneDistance + step.stepClimbCost + step.stepMalus + step.penalty * sceneDistance;
+            const edgeCost = jumping
+                ? (step.rawClimb > 1e-9 ? walkEdgeCost : 2 * sceneDistance)
+                : walkEdgeCost;
             const nextCost = node.cost + edgeCost;
             if (nextCost > budget + 1e-9)
                 continue;
@@ -298,6 +303,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         return [];
 
     const flying = action === 'fly';
+    const jumping = action === 'jump';
     const noTerrainClimb = action === 'ignore' || autoElevDisabled();
     const typeById = getTerrainTypeMap();
     const footprintCache = new Map();
@@ -309,7 +315,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         climbImmune: isClimbingImmune(tokenDoc),
         freeMode: false,
         terrainImmune: isTerrainImmune(tokenDoc),
-        actionKey: flying ? 'fly' : 'walk',
+        actionKey: action,
         footprintCache,
         penaltyCache: new Map(),
     };
@@ -461,7 +467,10 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
                 continue;
             }
 
-            const edgeCost = sceneDistance + step.stepClimbCost + step.stepMalus + step.penalty * sceneDistance;
+            const walkEdgeCost = sceneDistance + step.stepClimbCost + step.stepMalus + step.penalty * sceneDistance;
+            const edgeCost = jumping
+                ? (step.rawClimb > 1e-9 ? walkEdgeCost : 2 * sceneDistance)
+                : walkEdgeCost;
             const tentativeG = node.g + edgeCost;
             if (tentativeG >= (gScore.get(nextKey) ?? Infinity))
                 continue;

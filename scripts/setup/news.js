@@ -65,6 +65,11 @@ async function _fetchReleases()
     }
 }
 
+function _sortByDateDesc(entries)
+{
+    return [...entries].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+}
+
 function _filterEntries(entries, { seen, role, version, isGM })
 {
     return entries.filter(entry =>
@@ -473,7 +478,7 @@ async function _runNews()
         return;
 
     const [payload, update] = await Promise.all([_fetchNews(), getPendingUpdate(NEWS_MODULE_ID)]);
-    const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+    const entries = _sortByDateDesc(Array.isArray(payload?.entries) ? payload.entries : []);
 
     const seenRaw = game.settings.get(NEWS_MODULE_ID, SEEN_SETTING) || [];
     const role = _getRole();
@@ -487,7 +492,7 @@ async function _runNews()
         firstRun = true;
         const allIds = entries.map(entry => entry.id).filter(Boolean);
         const visible = _filterEntries(entries, { seen: new Set(), role, version, isGM });
-        const sorted = [...visible].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+        const sorted = _sortByDateDesc(visible);
         if (sorted[0])
             news = [sorted[0]];
         if (allIds.length)
@@ -503,7 +508,7 @@ export async function openNewsHistory()
 {
     const [newsPayload, releases] = await Promise.all([_fetchNews(), _fetchReleases()]);
 
-    const newsEntries = Array.isArray(newsPayload?.entries) ? newsPayload.entries : [];
+    const newsEntries = _sortByDateDesc(Array.isArray(newsPayload?.entries) ? newsPayload.entries : []);
     const newsHtml = newsEntries.length
         ? newsEntries.map(_renderEntry).join("")
         : '<p style="padding: 10px; opacity: 0.7;">No news yet.</p>';

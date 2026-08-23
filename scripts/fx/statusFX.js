@@ -46,6 +46,10 @@ const FX_DEFAULTS = {
     auto_cascading:   true,
     // Action FX (Boost, Hide, Shut Down, Fall, Overcharge, etc.)
     actionFX:         false,
+    // Miss / crit overlays on attack rolls
+    attackResultFX:   true,
+    // Damage-type impacts on the target
+    damageImpactFX:   true,
 };
 
 function getConfig()
@@ -66,6 +70,30 @@ export function isActionFXEnabled()
     try
     {
         return getConfig().actionFX !== false;
+    }
+    catch
+    {
+        return true;
+    }
+}
+
+export function isAttackResultFXEnabled()
+{
+    try
+    {
+        return getConfig().attackResultFX !== false;
+    }
+    catch
+    {
+        return true;
+    }
+}
+
+export function isDamageImpactFXEnabled()
+{
+    try
+    {
+        return getConfig().damageImpactFX !== false;
     }
     catch
     {

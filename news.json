@@ -2,6 +2,71 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-08-22-lancer-4-1-6-dev-blog",
+            "date": "2026-08-22",
+            "title": "Lancer Automations 4.1.6 + dev blog",
+            "body": [
+                "<p>Sorry, I forgot to mention it: there's a dev blog for the patch, with a lot more detail on what changed and why.</p>",
+                "<p>Read it on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-6-and-167229864\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
+            "id": "2026-08-15-lancer-4-1-0",
+            "date": "2026-08-15",
+            "title": "Lancer Automations 4.1.0",
+            "body": [
+                "<p><b>FIX PATHFINDING, that was not active!!!</b> Plus the Workshop, Bonds in the TAH, and more.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-0-166714633\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
+            "id": "2026-08-08-lancer-4-0-0-battle-log",
+            "date": "2026-08-08",
+            "title": "Lancer Automations 4.0.0: Battle Log is out",
+            "body": [
+                "<p>Finally! After like 50 days since the feature proposal, the Battle Log is out with Lancer Automations 4.0.0.</p>",
+                "<p>And now I need some rest XD</p>",
+                "<p>Enjoy!</p>",
+                "<p>Please make a snack and read the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-0-0-166098541\" target=\"_blank\" rel=\"noopener\">dev blog</a>, it's a lot!!!</p>"
+            ]
+        },
+        {
+            "id": "2026-07-31-advance-measure-pathfinding-3-9-9",
+            "date": "2026-07-31",
+            "title": "Advanced Measuring, Pathfinding, Early 3.9.9 test",
+            "body": [
+                "<p>New update: Advanced Measure tool rework, pathfinding matching the movement-range display, and the new onboarding. An early 3.9.9 test build is up for paid members, Battle Log still cooking for 4.0.0.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advance-early-3-165292586\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
+            "id": "2026-07-23-dev-update-targeting",
+            "date": "2026-07-23",
+            "title": "Dev update: targeting tools + advanced measuring",
+            "body": [
+                "<p><img src=\"https://c10.patreonusercontent.com/4/patreon-media/p/post/164616129/b56ff64e18794dd9b802bf364f2a2eb4/eyJhIjoxLCJwIjoxfQ%3D%3D/1.png?token-hash=Xi499J_-dlg93jBCIz5LaSO8YroB60YdLoJ1M5h3ruY%3D&token-time=1786060800\" alt=\"Dev update preview\" style=\"max-width: 100%;\"/></p>",
+                "<p>New dev update on what's coming in 4.0.0: HASE Contest, new targeting tools, an advanced measuring tool bar, and no-code resource options. Previews and visuals in the post.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advanced-tool-164616129\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
+            "id": "2026-07-18-road-to-4-0-0",
+            "date": "2026-07-18",
+            "title": "Road to 4.0.0 + battle preview",
+            "body": [
+                "<p>Hey! New update on the way from the upcoming 4.0.0, plus a battle preview. Check it out, it's cool.</p>",
+                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/road-to-4-0-0-164169571\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
+            "id": "2026-07-11-battle-log-preview",
+            "date": "2026-07-11",
+            "title": "Battle Log is on the way",
+            "body": [
+                "<p>Hello! Quick little news: Battle Log is on the way. Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/little-news-163459252\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
+            ]
+        },
+        {
             "id": "2026-06-17-lancer-3-2-6-post",
             "date": "2026-06-17",
             "title": "Lancer 3.2.6 + Feature Vote #1 results",
@@ -143,71 +208,6 @@
             "body": [
                 "<p>Hi there. There are a lot of you using this module, but not a lot of bug reports or feature requests come back. Not that I'm wishing for more, I just want to make sure you know where to find me.</p>",
                 "<p>The most common spot is <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">my channel on the Lancer Discord</a>. If you support me on <a href=\"https://www.patreon.com/cw/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a>, you can DM me directly. There aren't that many of you yet, so it stays manageable.</p>"
-            ]
-        },
-        {
-            "id": "2026-07-11-battle-log-preview",
-            "date": "2026-07-11",
-            "title": "Battle Log is on the way",
-            "body": [
-                "<p>Hello! Quick little news: Battle Log is on the way. Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/little-news-163459252\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
-            ]
-        },
-        {
-            "id": "2026-07-18-road-to-4-0-0",
-            "date": "2026-07-18",
-            "title": "Road to 4.0.0 + battle preview",
-            "body": [
-                "<p>Hey! New update on the way from the upcoming 4.0.0, plus a battle preview. Check it out, it's cool.</p>",
-                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/road-to-4-0-0-164169571\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
-            ]
-        },
-        {
-            "id": "2026-07-23-dev-update-targeting",
-            "date": "2026-07-23",
-            "title": "Dev update: targeting tools + advanced measuring",
-            "body": [
-                "<p><img src=\"https://c10.patreonusercontent.com/4/patreon-media/p/post/164616129/b56ff64e18794dd9b802bf364f2a2eb4/eyJhIjoxLCJwIjoxfQ%3D%3D/1.png?token-hash=Xi499J_-dlg93jBCIz5LaSO8YroB60YdLoJ1M5h3ruY%3D&token-time=1786060800\" alt=\"Dev update preview\" style=\"max-width: 100%;\"/></p>",
-                "<p>New dev update on what's coming in 4.0.0: HASE Contest, new targeting tools, an advanced measuring tool bar, and no-code resource options. Previews and visuals in the post.</p>",
-                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advanced-tool-164616129\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
-            ]
-        },
-        {
-            "id": "2026-07-31-advance-measure-pathfinding-3-9-9",
-            "date": "2026-07-31",
-            "title": "Advanced Measuring, Pathfinding, Early 3.9.9 test",
-            "body": [
-                "<p>New update: Advanced Measure tool rework, pathfinding matching the movement-range display, and the new onboarding. An early 3.9.9 test build is up for paid members, Battle Log still cooking for 4.0.0.</p>",
-                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/advance-early-3-165292586\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
-            ]
-        },
-        {
-            "id": "2026-08-15-lancer-4-1-0",
-            "date": "2026-08-15",
-            "title": "Lancer Automations 4.1.0",
-            "body": [
-                "<p><b>FIX PATHFINDING, that was not active!!!</b> Plus the Workshop, Bonds in the TAH, and more.</p>",
-                "<p>Full details on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-0-166714633\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
-            ]
-        },
-        {
-            "id": "2026-08-08-lancer-4-0-0-battle-log",
-            "date": "2026-08-08",
-            "title": "Lancer Automations 4.0.0: Battle Log is out",
-            "body": [
-                "<p>Finally! After like 50 days since the feature proposal, the Battle Log is out with Lancer Automations 4.0.0.</p>",
-                "<p>And now I need some rest XD</p>",
-                "<p>Enjoy!</p>",
-                "<p>Please make a snack and read the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-0-0-166098541\" target=\"_blank\" rel=\"noopener\">dev blog</a>, it's a lot!!!</p>"
-            ]
-        },
-        {
-            "id": "2026-08-22-lancer-4-1-6-dev-blog",
-            "date": "2026-08-22",
-            "title": "Lancer Automations 4.1.6 + dev blog",
-            "body": [
-                "<p>Sorry, I forgot to mention it: there's a dev blog for the patch, with a lot more detail on what changed and why.</p>",
-                "<p>Read it on the <a href=\"https://www.patreon.com/LaSossis/posts/lancer-4-1-6-and-167229864\" target=\"_blank\" rel=\"noopener\">Patreon post</a>.</p>"
             ]
         }
     ]

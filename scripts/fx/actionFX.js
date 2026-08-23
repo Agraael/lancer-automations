@@ -1,6 +1,6 @@
 /* global game, Sequence, Sequencer, Hooks, canvas, foundry */
 
-import { isActionFXEnabled } from './statusFX.js';
+import { isActionFXEnabled, isAttackResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
 
 // Action FX sequences; every one no-ops unless Sequencer and lancer-weapon-fx are active and Action FX is enabled.
@@ -92,7 +92,7 @@ function _lancerSize(source)
 let _LwfxSequence = null;
 
 /**
- * Sequence subclass stamping `moduleName`; shadows the global inside lwfx macros.
+ * Sequence factory stamping `moduleName`; shadows the global inside lwfx macros.
  * @returns {any}
  */
 export function _lwfxTaggedSequence()
@@ -101,12 +101,9 @@ export function _lwfxTaggedSequence()
         return _LwfxSequence;
     if (typeof Sequence === 'undefined')
         return null;
-    _LwfxSequence = class extends Sequence
+    _LwfxSequence = function (options = {}, softFail = false)
     {
-        constructor(options = {})
-        {
-            super({ moduleName: 'Lancer Weapon FX', ...options });
-        }
+        return new Sequence(typeof options === 'string' ? options : { moduleName: 'Lancer Weapon FX', ...options }, softFail);
     };
     return _LwfxSequence;
 }
@@ -1756,7 +1753,8 @@ export const LA_INLINE_ATTACK_FX = {
             return;
         const fx = _weaponFx();
         const volume = fx?.getEffectVolume(0.7) ?? 0.7;
-        fx?.preloadMissAndCrit?.();
+        if (isAttackResultFXEnabled())
+            fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         for (const target of targetTokens)
         {
@@ -1772,10 +1770,13 @@ export const LA_INLINE_ATTACK_FX = {
                 .atLocation(target)
                 .scaleToObject(2.5)
                 .waitUntilFinished(-500);
-            if (targetsMissed.has(target.id) && fx?.addMissToSequence)
-                fx.addMissToSequence(seq, target.id);
-            if (targetsCrit.has(target.id) && fx?.addCritToSequence)
-                fx.addCritToSequence(seq, target.id);
+            if (isAttackResultFXEnabled())
+            {
+                if (targetsMissed.has(target.id) && fx?.addMissToSequence)
+                    fx.addMissToSequence(seq, target.id);
+                if (targetsCrit.has(target.id) && fx?.addCritToSequence)
+                    fx.addCritToSequence(seq, target.id);
+            }
         }
         await seq.play();
     },
@@ -1789,7 +1790,8 @@ export const LA_INLINE_ATTACK_FX = {
             return;
         const fx = _weaponFx();
         const volume = fx?.getEffectVolume(0.7) ?? 0.7;
-        fx?.preloadMissAndCrit?.();
+        if (isAttackResultFXEnabled())
+            fx?.preloadMissAndCrit?.();
         const seq = new Sequence();
         seq.sound()
             .file('modules/lancer-automations/FX/audio/grappleShot.wav')
@@ -1819,10 +1821,13 @@ export const LA_INLINE_ATTACK_FX = {
                 .playbackRate(2)
                 .fadeOut(500)
                 .waitUntilFinished(-500);
-            if (targetsMissed.has(target.id) && fx?.addMissToSequence)
-                fx.addMissToSequence(seq, target.id);
-            if (targetsCrit.has(target.id) && fx?.addCritToSequence)
-                fx.addCritToSequence(seq, target.id);
+            if (isAttackResultFXEnabled())
+            {
+                if (targetsMissed.has(target.id) && fx?.addMissToSequence)
+                    fx.addMissToSequence(seq, target.id);
+                if (targetsCrit.has(target.id) && fx?.addCritToSequence)
+                    fx.addCritToSequence(seq, target.id);
+            }
         }
         await seq.play();
     }
@@ -1945,12 +1950,10 @@ const FX_MIN_HOLD_MS = 1500;
 let _actionFxChain = Promise.resolve();
 export function queueActionFx(fn)
 {
-    const next = _actionFxChain.then(() => Promise.all([
+    _actionFxChain = _actionFxChain.then(() => Promise.all([
         Promise.resolve().then(fn),
         new Promise(resolve => setTimeout(resolve, FX_MIN_HOLD_MS))
     ])).catch(err => console.error('lancer-automations | action FX failed:', err));
-    _actionFxChain = next;
-    return next;
 }
 const _queueActionFx = queueActionFx;
 
@@ -2110,7 +2113,7 @@ export function damageImpactHits(amount)
 /** Damage-type impact at the target token: one hit per 3 damage inflicted, staggered, each at a random offset. */
 export async function playDamageImpactFX(type, target, amount = null)
 {
-    if (!_canPlay() || !target)
+    if (!isDamageImpactFXEnabled() || typeof Sequencer === 'undefined' || !target)
         return;
     const key = String(type ?? '').toLowerCase().trim();
     const file = DAMAGE_IMPACT_FX[key];

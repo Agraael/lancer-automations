@@ -796,7 +796,7 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
     const loserToken = tie ? null : (oneWins ? token2 : token1);
 
     if (winner && loser)
-        await playContestedOutcomeFX(winnerToken, loserToken).catch(e => console.error('lancer-automations | contested FX failed:', e));
+        playContestedOutcomeFX(winnerToken, loserToken).catch(e => console.error('lancer-automations | contested FX failed:', e));
 
     const row = (label, name, stat, total, isWin) => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px;${isWin ? 'background:rgba(58,158,110,0.18);border-left:3px solid #3a9e6e;' : isWin === false ? 'background:rgba(204,51,51,0.14);border-left:3px solid #c33;' : ''}">
@@ -1811,7 +1811,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
     if (sourceToken && !options.noFX)
-        await queueActionFx(() => playSkirmishFX(sourceToken));
+        queueActionFx(() => playSkirmishFX(sourceToken));
     if (sourceToken)
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
 

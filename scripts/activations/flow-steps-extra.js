@@ -245,14 +245,7 @@ export async function playThrowFXIfNeeded(state)
     if (!state.la_extraData?.is_throw)
         return true;
     _suppressNextLwfxFor(state.actor);
-    try
-    {
-        await playDefaultThrowFX(state);
-    }
-    catch (e)
-    {
-        console.error('lancer-automations | throw FX failed:', e);
-    }
+    playDefaultThrowFX(state).catch(e => console.error('lancer-automations | throw FX failed:', e));
     return true;
 }
 
