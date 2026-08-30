@@ -91,6 +91,47 @@ function _filterEntries(entries, { seen, role, version, isGM })
     });
 }
 
+function _escAttr(value)
+{
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Optional `link` / `image` / `linkLabel` / `linkNote` on an entry render a preview card.
+// A missing or expired image hides itself rather than leaving a broken thumbnail.
+function _renderLinkCard(entry)
+{
+    if (!entry?.link)
+        return "";
+    let host = "";
+    try
+    {
+        host = new URL(entry.link).hostname.replace(/^www\./, "");
+    }
+    catch
+    { /* keep it blank on a malformed url */ }
+    const href = _escAttr(entry.link);
+    const label = _escAttr(entry.linkLabel || entry.title || entry.link);
+    const note = entry.linkNote ? `<div style="font-size:0.85em; opacity:0.8; margin-top:2px;">${_escAttr(entry.linkNote)}</div>` : "";
+    const hostLine = host ? `<div style="font-size:0.78em; opacity:0.6; margin-top:3px;">${_escAttr(host)}</div>` : "";
+    const thumb = entry.image
+        ? `<img src="${_escAttr(entry.image)}" alt="" onerror="this.style.display='none'"
+                style="width:96px; height:96px; object-fit:cover; border-radius:2px; flex:0 0 auto; border:1px solid rgba(120,46,34,0.25);">`
+        : "";
+    return `
+        <a href="${href}" target="_blank" rel="noopener"
+           style="display:flex; gap:10px; align-items:center; margin-top:10px; padding:8px;
+                  border:1px solid rgba(120,46,34,0.35); border-left-width:3px; border-radius:2px;
+                  background:rgba(120,46,34,0.06); text-decoration:none; color:inherit;">
+            ${thumb}
+            <div style="min-width:0;">
+                <div style="font-weight:bold; color:#782e22;">${label}</div>
+                ${note}
+                ${hostLine}
+            </div>
+        </a>
+    `;
+}
+
 function _renderEntry(entry)
 {
     const dateLine = entry.date ? `<div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${entry.date}</div>` : "";
@@ -100,6 +141,7 @@ function _renderEntry(entry)
             <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${entry.title ?? ""}</div>
             ${dateLine}
             <div style="line-height: 1.5;">${body}</div>
+            ${_renderLinkCard(entry)}
             ${_renderPoll(entry)}
         </div>
     `;
