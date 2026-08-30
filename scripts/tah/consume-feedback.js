@@ -5,6 +5,27 @@ import { isActorScannedForUser } from '../tools/scan-lookup.js';
 
 const MODULE_ID = 'lancer-automations';
 const _lastConsume = new Map();
+const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene' };
+// Per-X fields count uses spent, so their delta is shown inverted (spend = -1).
+const USED_COUNTER_TYPES = new Set(Object.values(SUB_FIELDS));
+
+// Per-action / per-rank counters stored under the perFreqSub flag.
+function _subEntries(item)
+{
+    const map = item.getFlag?.(MODULE_ID, 'perFreqSub') ?? {};
+    const out = [];
+    for (const [subKey, entry] of Object.entries(map))
+    {
+        for (const [field, type] of Object.entries(SUB_FIELDS))
+        {
+            const raw = entry?.[field]?.value;
+            if (raw === undefined || raw === null)
+                continue;
+            out.push({ key: `${item.uuid}:sub:${subKey}:${field}`, type, subKey, value: Number(raw) });
+        }
+    }
+    return out;
+}
 
 function _readNum(root, dotPath)
 {
@@ -48,6 +69,7 @@ const RESOURCE_FIELDS = {
     charged:     { read: (item) => _readBool(item, 'system.charged'),                    get: (change) => _readBool(change, 'system.charged') },
     perTurn:     { read: (item) => _readNum(item, 'system.uses_per_turn.value'),         get: (change) => _readNum(change, 'system.uses_per_turn.value') },
     perRound:    { read: (item) => _readNum(item, 'system.uses_per_round.value'),        get: (change) => _readNum(change, 'system.uses_per_round.value') },
+    perScene:    { read: (item) => _readNum(item, 'system.uses_per_scene.value'),        get: (change) => _readNum(change, 'system.uses_per_scene.value') },
     reserveUsed: { read: (item) => _readBool(item, 'system.used'),                       get: (change) => _readBool(change, 'system.used') },
 };
 
@@ -59,8 +81,9 @@ function _formatLabel(type, pre, post)
         case 'uses':        return `Uses ${signedDelta(post - pre)}`;
         case 'loading':     return post ? 'Loaded' : 'Unloaded';
         case 'charged':     return post ? 'Charged' : 'Discharged';
-        case 'perTurn':     return `Per-Turn ${signedDelta(post - pre)}`;
-        case 'perRound':    return `Per-Round ${signedDelta(post - pre)}`;
+        case 'perTurn':     return `Per-Turn ${signedDelta(pre - post)}`;
+        case 'perRound':    return `Per-Round ${signedDelta(pre - post)}`;
+        case 'perScene':    return `Per-Scene ${signedDelta(pre - post)}`;
         case 'reserveUsed': return post ? 'Reserve Used' : 'Reserve Restored';
         default:            return '';
     }
@@ -102,7 +125,8 @@ export function spawnConsumeFeedback(actor, type, pre, post, labelOverride = nul
         const text = revealed ? (labelOverride ?? _formatLabel(type, pre, post)) : '???';
         if (!text)
             return;
-        const delta = (typeof pre === 'number' && typeof post === 'number') ? post - pre : 0;
+        const rawDelta = (typeof pre === 'number' && typeof post === 'number') ? post - pre : 0;
+        const delta = USED_COUNTER_TYPES.has(type) ? -rawDelta : rawDelta;
         if (_floatingNumbersOn() && canvas?.interface?.createScrollingText)
         {
             const fill = !revealed ? '#888888' : (delta > 0 ? '#66cc66' : (delta < 0 ? '#ff9955' : '#cccccc'));
@@ -139,6 +163,8 @@ function _snapshotItem(item)
         if (value !== undefined)
             _lastConsume.set(`${item.uuid}:${type}`, value);
     }
+    for (const entry of _subEntries(item))
+        _lastConsume.set(entry.key, entry.value);
     if (item.type === 'bond')
     {
         (item.system?.powers ?? []).forEach((/** @type {any} */ power, /** @type {number} */ powerIdx) =>
@@ -193,6 +219,17 @@ export function initConsumeFeedback()
                 if (prev === undefined || prev === post || suppressed)
                     continue;
                 spawnConsumeFeedback(actor, type, prev, post);
+            }
+            if (Object.keys(foundry.utils.flattenObject(change)).some(key => key.includes('perFreqSub')))
+            {
+                for (const entry of _subEntries(item))
+                {
+                    const prev = _lastConsume.get(entry.key);
+                    _lastConsume.set(entry.key, entry.value);
+                    if (prev === undefined || prev === entry.value || suppressed)
+                        continue;
+                    spawnConsumeFeedback(actor, entry.type, prev, entry.value);
+                }
             }
             if (item.type === 'bond' && change.system?.powers !== undefined)
             {

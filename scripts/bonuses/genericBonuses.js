@@ -1407,6 +1407,20 @@ export function getBonusDetailString(bonus)
  * @param {object} bonus
  * @returns {string} The path to the SVG icon
  */
+// Same movement glyph the combat bar, stats bar and stat hint use. It is an mdi font class,
+// so anything needing a real image goes through getBonusIconImage.
+const MOVEMENT_ICON = "mdi mdi-arrow-right-bold-hexagon-outline";
+const MOVEMENT_IMG = "modules/lancer-automations/icons/move-hexagon.svg";
+
+/** Icon for an ActiveEffect img, which cannot be a font class. */
+export function getBonusIconImage(bonus, override = null)
+{
+    const icon = override || getBonusIcon(bonus);
+    if (typeof icon === 'string' && icon.includes('/'))
+        return icon;
+    return bonus?.type === 'movement_extra' ? MOVEMENT_IMG : "modules/lancer-automations/icons/pill.svg";
+}
+
 export function getBonusIcon(bonus)
 {
     const ACC = "systems/lancer/assets/icons/white/accuracy.svg";
@@ -1416,6 +1430,8 @@ export function getBonusIcon(bonus)
     const GENERIC = "modules/lancer-automations/icons/pill.svg";
     const IMMUNITY = "modules/lancer-automations/icons/dice-shield.svg";
 
+    if (bonus.type === 'movement_extra')
+        return MOVEMENT_ICON;
     if (bonus.type === 'difficulty')
         return DIFF;
     if (bonus.type === 'range')
@@ -2748,7 +2764,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
         if (!token)
         {
             // Prototype / no scene token: write the AE straight to the actor so spawns inherit it.
-            const icon = options.icon || getBonusIcon(bonusData);
+            const icon = getBonusIconImage(bonusData, options.icon);
             const changes = [];
             let statDirect = null;
 
@@ -2843,7 +2859,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 durationObj = { label, turns, rounds: 0, _preAdjusted: true };
             }
 
-            const icon = options.icon || getBonusIcon(bonusData);
+            const icon = getBonusIconImage(bonusData, options.icon);
 
             const extraOptions = { linkedBonusId: bonusData.id };
 

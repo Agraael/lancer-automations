@@ -9,7 +9,7 @@ import { drawMovementTrace } from "./canvas.js";
 import { laDetailPopup, laRenderTextSection, laRenderActions, laRenderTags } from "./detail-renderers.js";
 
 // GM-controlled choice cards
-export const _pendingGMChoices = new Map(); // cardId â†’ { resolve, cardEl, choices, mode }
+export const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
 
 /**
  * Inserts a compact item chip into a choice card and binds a detail popup on click.
@@ -80,13 +80,13 @@ export function _bindItemChip(cardEl, item)
 }
 
 // Broadcast cards (first-to-respond wins); stores cancel() on each target client to force-dismiss.
-export const _pendingBroadcastCards = new Map(); // cardId â†’ cancel()
+export const _pendingBroadcastCards = new Map(); // cardId → cancel()
 
 // Vote cards (creator side)
-export const _pendingVoteCards = new Map(); // cardId â†’ { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
+export const _pendingVoteCards = new Map(); // cardId → { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
 
 // Vote cards (voter side)
-export const _pendingVoterCards = new Map(); // cardId â†’ { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
+export const _pendingVoterCards = new Map(); // cardId → { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
 
 /** Returns the userId of the first active GM, or null if none online. */
 export function getActiveGMId()
@@ -106,7 +106,7 @@ export function getActiveGMId()
  * @param {Item} [options.item]
  * @returns {{ remove: () => void }}
  */
-export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for responseâ€¦', originToken = null, relatedToken = null, item = null } = {})
+export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for response…', originToken = null, relatedToken = null, item = null } = {})
 {
     const waitDesc = (description ? description + '<br>' : '') +
         `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> ${waitMessage}</em>`;
@@ -211,10 +211,10 @@ export function startChoiceCard(options = {})
             if (gmId)
                 activeTargets.push(gmId);
             const fallbackName = activeTargets.length > 0 ? (game.users.get(activeTargets[0])?.name ?? activeTargets[0]) : 'local user';
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline â€” ${fallbackName} will handle the choice instead.`);
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — ${fallbackName} will handle the choice instead.`);
         }
         else
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline â€” removed from choice recipients.`);
+            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — removed from choice recipients.`);
     }
 
     // If targets were specified but all gone, fall back to GM.
@@ -351,6 +351,7 @@ export function startChoiceCard(options = {})
                     description,
                     mode,
                     relatedToken,
+                    originToken,
                     onConfirm: () =>
                     {},
                     onCancel
@@ -640,7 +641,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
 
         const cardEl = _createInfoCard("choiceCard", {
             title,
-            origin: `${requesterName} â†’ You`,
+            origin: `${requesterName} → You`,
             icon,
             headerClass,
             description,
@@ -715,7 +716,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
         _updateInfoCard(cardEl, "choiceCard", { choices, chosenSet, onChoose: handleChoose });
         _bindItemChip(cardEl, item);
         _updatePendingBadge();
-    }), `[${requesterName}â†’You] ${title}`);
+    }), `[${requesterName}→You] ${title}`);
 }
 
 /**
@@ -1221,7 +1222,7 @@ export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText })
         return;
     pending.dismissed = true;
     pending.cleanup();
-    ui.notifications.info(`Vote concluded â€” winner: ${winnerText}`);
+    ui.notifications.info(`Vote concluded — winner: ${winnerText}`);
     pending.resolve({ choiceIdx: winnerIdx, responderIds: [] });
 }
 

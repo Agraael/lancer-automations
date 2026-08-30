@@ -116,7 +116,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 <img align="right" src="../img/hud-status-panel.png" width="45%"/>
 
-Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
+Press Shift+Z (or click the Statuses row) to open it. Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
 
 - lists the token's **bonuses** (with a trash button to remove them),
 - links to the **Effect Manager** (see [Effects & Bonuses](./EFFECTS_AND_BONUSES.md)),

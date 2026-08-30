@@ -27,6 +27,7 @@ interface SequencerSection {
 }
 
 declare class Sequence {
+    constructor(options?: string | { moduleName?: string; softFail?: boolean }, softFail?: boolean);
     effect(): SequencerSection;
     sound(): SequencerSection;
     play(): Promise<void>;

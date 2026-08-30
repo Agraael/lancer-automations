@@ -234,6 +234,28 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
+    { type: 'button',
+        key: 'toggleLancerFloatingNumbers',
+        label: 'Lancer Floating Numbers',
+        hint: 'Damage and heal numbers floating over tokens, a Lancer system setting.',
+        icon: 'fas fa-arrows-alt-v',
+        clientAllowed: true,
+        state: () => (game.settings.get('lancer', 'floatingNumbers') ? 'On' : 'Off'),
+        onClick: async () =>
+        {
+            const before = !!game.settings.get('lancer', 'floatingNumbers');
+            await game.settings.set('lancer', 'floatingNumbers', !before);
+            ui.notifications?.info(`Floating Numbers: ${!before ? 'ON' : 'OFF'}`);
+        },
+    },
+
+    { type: 'section', label: 'Auto Focus', collapsible: true, collapsed: true },
+    { key: 'autoFocusDuration', type: 'slider', min: 200, max: 3000, step: 100 },
+    { key: 'autoFocusCards', type: 'boolean' },
+    { key: 'autoFocusAttack', type: 'boolean' },
+    { key: 'autoFocusDamage', type: 'boolean' },
+    { key: 'autoFocusCheck', type: 'boolean' },
+    { key: 'autoFocusActivation', type: 'boolean' },
 
     { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
@@ -385,7 +407,7 @@ const TAH_FIELDS = [
         type: 'button',
         label: 'Clear TAH Favorites',
         icon: 'fas fa-star',
-        hint: 'Remove every favorite (Ã¢Ëœâ€¦) you marked through the TAH.',
+        hint: 'Remove every favorite (★) you marked through the TAH.',
         clientAllowed: true,
         onClick: async () =>
         {
@@ -445,19 +467,6 @@ const SOUNDS_FIELDS = [
 
     { type: 'section', label: 'Stat feedback', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STAT_EVENTS.map((e) => ({ key: `tah.statSound.${e}`, label: _toLabel(e), preview: true })) },
-    { type: 'button',
-        key: 'toggleLancerFloatingNumbers',
-        label: 'Toggle Lancer Floating Numbers',
-        icon: 'fas fa-arrows-alt-v',
-        clientAllowed: true,
-        onClick: async () =>
-        {
-            const cur = !!game.settings.get('lancer', 'floatingNumbers');
-            await game.settings.set('lancer', 'floatingNumbers', !cur);
-            ui.notifications?.info(`Floating Numbers: ${!cur ? 'ON' : 'OFF'}`);
-        },
-    },
-
     { type: 'section', label: 'Status SFX', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
 
@@ -490,7 +499,7 @@ const STATUS_FX_VISUAL = [
     { sub: 'fx_corePower',   label: 'Core Power Active Bloom' },
 ];
 const STATUS_FX_AUTO = [
-    { sub: 'auto_dangerZone', label: 'Auto Danger Zone (heat Ã¢â€°Â¥ 50%)' },
+    { sub: 'auto_dangerZone', label: 'Auto Danger Zone (heat ≥ 50%)' },
     { sub: 'auto_burn',       label: 'Auto Burn icon (burn > 0)' },
     { sub: 'auto_overshield', label: 'Auto Overshield icon (OS > 0)' },
     { sub: 'auto_infection',  label: 'Auto Infection icon (infection > 0)' },
@@ -680,6 +689,8 @@ const CONTROL_FIELDS = [
 
     { type: 'section', label: 'TAH Navigation', collapsible: true, collapsed: true },
     laKb('tah.toggleSearch'),
+    laKb('tah.toggleFavorites'),
+    laKb('tah.toggleStatuses'),
     laKb('tahNavUp'),
     laKb('tahNavDown'),
     laKb('tahNavLeft'),
@@ -819,6 +830,9 @@ const COLORS_FIELDS = [
     { key: 'color.glowReach', type: 'color', label: 'Max Reach' },
     { key: 'color.glowMark', type: 'color', label: 'Mark' },
     { type: 'section', label: 'Range Pulse' },
+    { key: 'color.pulseLine', type: 'color', label: 'Line Color' },
+    { key: 'rangePulseLineOpacity', type: 'slider', label: 'Line Opacity', min: 0.1, max: 1, step: 0.05 },
+    { key: 'rangePulseWaveOpacity', type: 'slider', label: 'Wave Opacity', min: 0.1, max: 1, step: 0.05 },
     { key: 'rangePulseLineWidth', type: 'slider', label: 'Line Width', min: 1, max: 4, step: 0.25 },
     { type: 'section', label: 'Ruler Colors' },
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
@@ -870,6 +884,14 @@ const TAB_DEFS = [
     // Help & maintenance
     { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
+];
+
+const NAV_GROUPS = [
+    { label: 'Core', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'statuses'] },
+    { label: 'Canvas', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso'] },
+    { label: 'Interface', icon: 'fas fa-window-maximize', tabs: ['tah', 'control', 'colors', 'sounds'] },
+    { label: 'Extras', icon: 'fas fa-star', tabs: ['battelog', 'tools'] },
+    { label: 'Help', icon: 'fas fa-circle-question', tabs: ['tutorials', 'debug'] },
 ];
 
 // Field opt-in: `requires: 'key'` or `['a','b']`, plus `requiresAll` for AND.
@@ -977,21 +999,21 @@ export function getExportableKeybindingFields()
 }
 
 const KEY_DISPLAY = {
-    ArrowLeft: 'Ã°Å¸Â¡Â¸',
-    ArrowRight: 'Ã°Å¸Â¡Âº',
-    ArrowUp: 'Ã°Å¸Â¡Â¹',
-    ArrowDown: 'Ã°Å¸Â¡Â»',
+    ArrowLeft: 'ðŸ¡¸',
+    ArrowRight: 'ðŸ¡º',
+    ArrowUp: 'ðŸ¡¹',
+    ArrowDown: 'ðŸ¡»',
     Backquote: '`',
     Backslash: '\\',
     BracketLeft: '[',
     BracketRight: ']',
     Comma: ',',
     Equal: '=',
-    Meta: 'Ã¢Å Å¾',
-    MetaLeft: 'Ã¢Å Å¾',
-    MetaRight: 'Ã¢Å Å¾',
-    OsLeft: 'Ã¢Å Å¾',
-    OsRight: 'Ã¢Å Å¾',
+    Meta: '⊞',
+    MetaLeft: '⊞',
+    MetaRight: '⊞',
+    OsLeft: '⊞',
+    OsRight: '⊞',
     Minus: '-',
     NumpadAdd: 'Numpad+',
     NumpadSubtract: 'Numpad-',
@@ -1061,7 +1083,16 @@ function _buildItem(field)
         return { type: 'section', label: field.label, hint: field.hint ?? '', isSection: true, collapsible: field.collapsible !== false, collapsed: !!field.collapsed, isSubsection: !!field.subsection };
     }
     if (field.type === 'button')
-        return { type: 'button', isButton: true, key: field.key, label: field.label, hint: field.hint ?? '', icon: field.icon ?? '', isLocked: !game.user.isGM && !field.clientAllowed };
+    {
+        let state = null;
+        try
+        {
+            state = typeof field.state === 'function' ? field.state() : null;
+        }
+        catch
+        { /* setting not registered */ }
+        return { type: 'button', isButton: true, key: field.key, label: field.label, hint: field.hint ?? '', icon: field.icon ?? '', state, isLocked: !game.user.isGM && !field.clientAllowed };
+    }
     if (field.type === 'table')
     {
         const table = field.getTable();
@@ -1443,9 +1474,11 @@ function _readFormSettings(form)
 function _patchSettingsGet(formMap)
 {
     const original = game.settings.get.bind(game.settings);
-    game.settings.get = function(namespace, key)
+    // defineProperty, not assignment: libWrapper's accessor setter would keep this as a permanent override.
+    const patched = function(namespace, key, options)
     {
-        if (namespace === MODULE_ID && formMap.has(key))
+        // set() fetches the current document through this.get
+        if (namespace === MODULE_ID && formMap.has(key) && !options?.document)
         {
             const cfg = /** @type {any} */ (game.settings.settings.get(`${namespace}.${key}`));
             const raw = formMap.get(key);
@@ -1462,55 +1495,101 @@ function _patchSettingsGet(formMap)
             { /* fall through */ }
             return raw;
         }
-        return original(namespace, key);
+        return original(namespace, key, options);
     };
+    Object.defineProperty(game.settings, 'get', { value: patched, configurable: true, writable: true, enumerable: false });
     return () =>
     {
-        game.settings.get = original;
+        delete game.settings.get;
     };
 }
 
 /** @param {any} $header @param {boolean} collapsed @param {boolean} [animate] */
 function _toggleSection($header, collapsed, animate = false)
 {
-    $header.attr('data-collapsed', collapsed ? 'true' : 'false');
-    $header.find('.la-chevron').css('transform', collapsed ? 'rotate(-90deg)' : '');
-
-    const isSub = $header.is('h3.la-subsection-header');
-    // Subsections stop on the next header of any level; top-level sections stop only on the next top-level.
-    const stopSelector = isSub
-        ? 'h2.la-section, h3.la-subsection-header'
-        : 'h2.la-section';
-
-    const setVisible = (/** @type {any} */ $el, /** @type {boolean} */ show) =>
+    const $box = $header.closest('.la-card, .la-sub');
+    const $body = $box.children('.la-card-body, .la-sub-body').first();
+    $box.toggleClass('collapsed', collapsed);
+    $header.attr('aria-expanded', collapsed ? 'false' : 'true');
+    if (!animate)
     {
-        if (!animate)
-        {
-            $el.toggle(show);
-            return;
-        }
-        $el.stop(true, false);
-        if (show)
-            $el.slideDown(150);
-        else
-            $el.slideUp(150);
-    };
-
-    let $next = $header.next();
-    let underCollapsedSub = false;
-    while ($next.length && !$next.is(stopSelector))
-    {
-        if (collapsed)
-            setVisible($next, false);
-        else if (!isSub && $next.is('h3.la-subsection-header'))
-        {
-            setVisible($next, true);
-            underCollapsedSub = $next.attr('data-collapsed') === 'true';
-        }
-        else
-            setVisible($next, !underCollapsedSub);
-        $next = $next.next();
+        $body.toggle(!collapsed);
+        return;
     }
+    $body.stop(true, false);
+    if (collapsed)
+        $body.slideUp(150);
+    else
+        $body.slideDown(150);
+}
+
+const _slug = (/** @type {string} */ text) => String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// A section owns the rows after it, a subsection nests inside the current one.
+/** @param {string} tabId @param {any[]} items */
+function _groupSections(tabId, items)
+{
+    /** @type {any[]} */
+    const sections = [];
+    let current = null;
+    let currentSub = null;
+    const rowCount = (/** @type {any} */ item) => item.isCompactBooleans ? item.items.length : (item.isSection ? 0 : 1);
+    const ensureCard = () =>
+    {
+        if (!current)
+        {
+            current = { id: `la-sec-${tabId}-general`, label: 'General', headerless: true, collapsible: false, collapsed: false, hint: '', items: [], subs: [], count: 0 };
+            sections.push(current);
+        }
+        return current;
+    };
+    for (const item of items)
+    {
+        if (item.isSection && !item.isSubsection)
+        {
+            current = { id: `la-sec-${tabId}-${_slug(item.label)}`, label: item.label, headerless: false, collapsible: item.collapsible, collapsed: item.collapsed, hint: item.hint, items: [], subs: [], count: 0 };
+            currentSub = null;
+            sections.push(current);
+            continue;
+        }
+        if (item.isSection && item.isSubsection)
+        {
+            currentSub = { label: item.label, collapsible: item.collapsible, collapsed: item.collapsed, hint: item.hint, items: [] };
+            ensureCard().subs.push(currentSub);
+            continue;
+        }
+        (currentSub ? currentSub.items : ensureCard().items).push(item);
+        ensureCard().count += rowCount(item);
+    }
+    return sections;
+}
+
+// Players only see what they can change.
+function _dropLockedItems(items)
+{
+    if (game.user.isGM)
+        return items;
+    return items.map(item =>
+    {
+        if (item.isCompactBooleans)
+        {
+            const open = item.items.filter(entry => !entry.isLocked);
+            return open.length > 0 ? { ...item, items: open } : null;
+        }
+        if (item.isTable)
+        {
+            const rows = item.rows.filter(row => row.cells.some(cell => !cell.isLocked));
+            return rows.length > 0 ? { ...item, rows } : null;
+        }
+        return item.isLocked ? null : item;
+    }).filter(Boolean);
+}
+
+function _dropEmptySections(sections)
+{
+    for (const section of sections)
+        section.subs = section.subs.filter(sub => sub.items.length > 0);
+    return sections.filter(section => section.items.length > 0 || section.subs.length > 0);
 }
 
 let _laConfigState = null;
@@ -1521,8 +1600,10 @@ export class LancerAutomationsConfig extends FormApplication
     {
         super(...args);
         this._needsReload = false;
-        /** @type {Map<string, boolean>} label Ã¢â€ â€™ collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
+        /** @type {Map<string, boolean>} label → collapsed; survives app.render() so toggles like FCS lock don't reset open sections. */
         this._sectionStates = new Map();
+        /** @type {IntersectionObserver|null} */
+        this._stripObserver = null;
     }
 
     static get defaultOptions()
@@ -1533,11 +1614,11 @@ export class LancerAutomationsConfig extends FormApplication
             title: 'Lancer Automations Configuration',
             template: TEMPLATE_PATH,
             width: saved?.width ?? 860,
-            height: saved?.height ?? 720,
+            height: saved?.height ?? 820,
             top: saved?.top ?? undefined,
             left: saved?.left ?? undefined,
             resizable: true,
-            closeOnSubmit: true,
+            closeOnSubmit: false,
             classes: [...super.defaultOptions.classes, 'lancer-dialog-base', 'lancer-no-title'],
             tabs: [{ navSelector: '.tabs', contentSelector: '.content', initial: saved?.tab ?? 'activations' }],
         });
@@ -1545,40 +1626,78 @@ export class LancerAutomationsConfig extends FormApplication
 
     getData()
     {
-        const visible = _visibleTabs();
+        const visible = _visibleTabs().map(tab =>
+        {
+            const items = _dropLockedItems(tab.fields.map(_buildItem).filter(Boolean));
+            return { ...tab, sections: _dropEmptySections(_groupSections(tab.id, items)) };
+        }).filter(tab => tab.sections.length > 0);
         const firstEnabledIdx = visible.findIndex(tab => !tab._disabled);
-        const tabs = visible.map((tab, idx) => ({
-            id: tab.id,
-            label: tab.label,
-            icon: tab.icon,
-            active: idx === Math.max(firstEnabledIdx, 0),
-            disabled: tab._disabled,
-            disabledReason: tab._disabledReason,
-            items: tab.fields.map(_buildItem).filter(Boolean),
-        }));
-        return { tabs };
+        const tabs = visible.map((tab, idx) =>
+        {
+            const sections = tab.sections;
+            return {
+                id: tab.id,
+                label: tab.label,
+                icon: tab.icon,
+                active: idx === Math.max(firstEnabledIdx, 0),
+                disabled: tab._disabled,
+                disabledReason: tab._disabledReason,
+                sections,
+                settingCount: sections.reduce((sum, section) => sum + section.count, 0),
+                sectionCount: sections.filter(section => !section.headerless).length,
+            };
+        });
+        const tabController = this._tabs?.[0];
+        if (tabController && !tabs.some(tab => tab.id === tabController.active))
+            tabController.active = tabs.find(tab => tab.active)?.id ?? tabs[0]?.id;
+        const grouped = new Set();
+        const groups = NAV_GROUPS.map(group => ({
+            label: group.label,
+            icon: group.icon,
+            tabs: group.tabs.map(id => tabs.find(tab => tab.id === id)).filter(Boolean).map(tab => (grouped.add(tab.id), tab)),
+        })).filter(group => group.tabs.length > 0);
+        const leftover = tabs.filter(tab => !grouped.has(tab.id));
+        if (leftover.length > 0)
+            groups.push({ label: 'Other', icon: 'fas fa-ellipsis', tabs: leftover });
+        return { tabs, groups };
     }
 
     activateListeners(html)
     {
         super.activateListeners(html);
         const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
-        if (_laConfigState?.scroll != null)
+        const scroller = $html.find('.la-config-content')[0];
+        if (_laConfigState?.scroll != null && scroller)
         {
-            const scroller = $html.find('.content .tab.active')[0] ?? $html.find('.content')[0];
-            if (scroller)
+            requestAnimationFrame(() =>
             {
-                requestAnimationFrame(() =>
-                {
-                    scroller.scrollTop = _laConfigState.scroll;
-                });
-            }
+                scroller.scrollTop = _laConfigState.scroll;
+            });
         }
-        $html.find('.la-config-tabs .item.la-tab-disabled').on('click', (/** @type {any} */ ev) =>
+        $html.find('.la-config-rail .item.la-tab-disabled').on('click', (/** @type {any} */ ev) =>
         {
             ev.preventDefault();
             ev.stopImmediatePropagation();
         });
+        $html.find('.la-config-rail .item').on('click', () =>
+        {
+            if (scroller)
+                scroller.scrollTop = 0;
+        });
+        $html.find('.la-config-rail').on('keydown', (/** @type {any} */ ev) =>
+        {
+            if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp')
+                return;
+            const items = $html.find('.la-config-rail .item:not(.la-tab-disabled)').toArray();
+            const index = items.indexOf(document.activeElement);
+            if (index < 0)
+                return;
+            ev.preventDefault();
+            const next = items[(index + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length];
+            next.focus();
+            next.click();
+        });
+        $html.find('.la-config-rail .item').attr('tabindex', '0');
 
         for (const field of _fieldsWithRequirements())
         {
@@ -1675,7 +1794,7 @@ export class LancerAutomationsConfig extends FormApplication
             const original = btn.outerHTML;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a keyÃ¢â‚¬Â¦ (Esc to cancel)';
+            placeholder.textContent = 'Press a key… (Esc to cancel)';
             btn.replaceWith(placeholder);
             captureKey(async (binding) =>
             {
@@ -1724,7 +1843,7 @@ export class LancerAutomationsConfig extends FormApplication
                 return;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a keyÃ¢â‚¬Â¦ (Esc to cancel)';
+            placeholder.textContent = 'Press a key… (Esc to cancel)';
             const resetBtn = binds.querySelector('.la-kb-reset');
             binds.insertBefore(placeholder, resetBtn);
             btn.style.display = 'none';
@@ -1789,10 +1908,17 @@ export class LancerAutomationsConfig extends FormApplication
                     {
                         await matchedField.onClick();
                     }
+                    catch (error)
+                    {
+                        console.error(`lancer-automations | config button "${key}" failed:`, error);
+                        ui.notifications?.error(`"${matchedField.label}" failed, see the console.`);
+                    }
                     finally
                     {
                         restore();
                     }
+                    if (typeof matchedField.state === 'function')
+                        $(ev.currentTarget).find('.la-btn-state').text(matchedField.state());
                     return;
                 }
             }
@@ -1803,30 +1929,67 @@ export class LancerAutomationsConfig extends FormApplication
             ev.stopPropagation();
             await _previewSettingSound(ev.currentTarget.dataset.previewKey);
         });
-        const $headers = $html.find('h2.la-collapsible, h3.la-subsection-header.la-collapsible');
+        const $headers = $html.find('.la-collapsible');
+        const sectionKey = (/** @type {any} */ $h) =>
+        {
+            const $box = $h.closest('.la-card, .la-sub');
+            return `${$box.closest('.la-card').attr('id') ?? ''}:${$box.attr('data-label') ?? ''}`;
+        };
         const applySectionState = (/** @type {any} */ h) =>
         {
             const $h = $(h);
-            const label = $h.text().trim();
+            const label = sectionKey($h);
             const collapsed = this._sectionStates.has(label)
                 ? this._sectionStates.get(label)
-                : $h.attr('data-collapsed') === 'true';
+                : $h.closest('.la-card, .la-sub').hasClass('collapsed');
             _toggleSection($h, collapsed);
         };
-        // subsections first: the top-level pass reapplies their rows, so it has the last word
         const applyAllSectionStates = () =>
         {
-            $headers.filter('h3').each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
-            $headers.filter('h2').each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
+            $headers.each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
         };
         applyAllSectionStates();
         $headers.on('click', (/** @type {any} */ ev) =>
         {
             const $h = $(ev.currentTarget);
-            const next = $h.attr('data-collapsed') !== 'true';
+            const next = !$h.closest('.la-card, .la-sub').hasClass('collapsed');
             _toggleSection($h, next, true);
-            this._sectionStates.set($h.text().trim(), next);
+            this._sectionStates.set(sectionKey($h), next);
         });
+
+        $html.find('.la-chip').on('click', (/** @type {any} */ ev) =>
+        {
+            const target = $html.find(`#${ev.currentTarget.dataset.target}`);
+            if (!target.length)
+                return;
+            const $head = target.find('.la-collapsible').first();
+            if (target.hasClass('collapsed') && $head.length)
+            {
+                _toggleSection($head, false);
+                this._sectionStates.set(sectionKey($head), false);
+            }
+            target[0].scrollIntoView({ block: 'start', behavior: 'smooth' });
+        });
+        if (scroller && typeof IntersectionObserver === 'function')
+        {
+            this._stripObserver?.disconnect();
+            const visibleCards = new Set();
+            this._stripObserver = new IntersectionObserver(entries =>
+            {
+                for (const entry of entries)
+                {
+                    if (entry.isIntersecting)
+                        visibleCards.add(entry.target.id);
+                    else
+                        visibleCards.delete(entry.target.id);
+                }
+                $html.find('.la-chip').each((/** @type {number} */ _i, /** @type {any} */ chip) =>
+                {
+                    chip.classList.toggle('active', visibleCards.has(chip.dataset.target));
+                });
+            }, { root: scroller, threshold: 0.01 });
+            $html.find('.la-card').each((/** @type {number} */ _i, /** @type {any} */ card) => this._stripObserver.observe(card));
+        }
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
         _injectControlLocks(html);
@@ -1864,8 +2027,6 @@ export class LancerAutomationsConfig extends FormApplication
             $icon.closest('label').removeData('la-orig');
         });
 
-        const $searchBar = $html.find('.la-config-search');
-        const $searchToggle = $html.find('.la-config-search-toggle');
         const $search = $html.find('.la-config-search-input');
         const $clear = $html.find('.la-config-search-clear');
         const escapeRe = (/** @type {string} */ str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1911,70 +2072,63 @@ export class LancerAutomationsConfig extends FormApplication
                 node.parentNode?.replaceChild(span, node);
             }
         };
+        const ROW_SELECTOR = '.la-opt-row, .la-compact-bool, .la-keybinding-row, .la-tour-row, .la-config-table';
+        const rowText = (/** @type {any} */ $row) =>
+        {
+            const hints = $row.find('[data-tooltip]').toArray().map((/** @type {any} */ el) => el.dataset.tooltip ?? '').join(' ');
+            const own = $row.attr('data-tooltip') ?? '';
+            const names = $row.find('[name]').toArray().map((/** @type {any} */ el) => el.getAttribute('name') ?? '').join(' ');
+            return `${$row.text()} ${hints} ${own} ${names}`.toLowerCase();
+        };
         const applyFilter = (query) =>
         {
             const normalizedQuery = (query || '').trim().toLowerCase();
-            $clear.css('display', normalizedQuery ? 'inline' : 'none');
+            $clear.toggleClass('visible', !!normalizedQuery);
+            this.element.find('form.la-config-form').toggleClass('la-searching', !!normalizedQuery);
             const re = normalizedQuery ? new RegExp(escapeRe(normalizedQuery), 'gi') : null;
             $html.find('.tab').each((/** @type {number} */ _i, /** @type {any} */ tab) =>
             {
                 const $tab = $(tab);
-                const groups = $tab.find('.form-group, h2.la-section, h3.la-subsection-header');
+                const $rows = $tab.find(ROW_SELECTOR);
+                let tabHits = 0;
                 if (!normalizedQuery)
                 {
-                    groups.css('display', '');
-                    groups.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ el) => restore($(el)));
-                    return;
+                    $rows.css('display', '');
+                    $rows.find('label, .notes, .la-kb-name').each((/** @type {number} */ _k, /** @type {any} */ el) => restore($(el)));
+                    $tab.find('.la-card, .la-sub, .la-compact-bools').css('display', '');
                 }
-                let lastSection = null;
-                let sectionHasMatch = false;
-                let lastSub = null;
-                let subHasMatch = false;
-                const finalizeSub = () =>
+                else
                 {
-                    if (lastSub)
-                        lastSub.css('display', subHasMatch ? '' : 'none');
-                };
-                const finalizeSection = () =>
-                {
-                    if (lastSection)
-                        lastSection.css('display', sectionHasMatch ? '' : 'none');
-                };
-                groups.each((/** @type {number} */ _j, /** @type {any} */ el) =>
-                {
-                    const $el = $(el);
-                    if ($el.is('h2.la-section'))
+                    $rows.each((/** @type {number} */ _j, /** @type {any} */ el) =>
                     {
-                        finalizeSub();
-                        finalizeSection();
-                        lastSection = $el;
-                        sectionHasMatch = false;
-                        lastSub = null;
-                        subHasMatch = false;
-                        return;
-                    }
-                    if ($el.is('h3.la-subsection-header'))
+                        const $row = $(el);
+                        const match = rowText($row).includes(normalizedQuery);
+                        $row.css('display', match ? '' : 'none');
+                        if (match)
+                        {
+                            tabHits++;
+                            $row.find('label, .notes, .la-kb-name').each((/** @type {number} */ _k, /** @type {any} */ child) => highlightIn($(child), /** @type {RegExp} */ (re)));
+                        }
+                        else
+                            $row.find('label, .notes, .la-kb-name').each((/** @type {number} */ _k, /** @type {any} */ child) => restore($(child)));
+                    });
+                    const hasVisibleRow = (/** @type {any} */ $box) => $box.find(ROW_SELECTOR).toArray().some((/** @type {any} */ el) => el.style.display !== 'none');
+                    $tab.find('.la-compact-bools').each((/** @type {number} */ _k, /** @type {any} */ el) => $(el).css('display', hasVisibleRow($(el)) ? '' : 'none'));
+                    $tab.find('.la-sub').each((/** @type {number} */ _k, /** @type {any} */ el) => $(el).css('display', hasVisibleRow($(el)) ? '' : 'none'));
+                    $tab.find('.la-card').each((/** @type {number} */ _k, /** @type {any} */ el) =>
                     {
-                        finalizeSub();
-                        lastSub = $el;
-                        subHasMatch = false;
-                        return;
-                    }
-                    const text = ($el.text() || '').toLowerCase();
-                    const name = ($el.find('[name]').attr('name') || '').toLowerCase();
-                    const match = text.includes(normalizedQuery) || name.includes(normalizedQuery);
-                    $el.css('display', match ? '' : 'none');
-                    if (match)
-                    {
-                        sectionHasMatch = true;
-                        subHasMatch = true;
-                        $el.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ child) => highlightIn($(child), /** @type {RegExp} */ (re)));
-                    }
-                    else
-                        $el.find('label, .notes').each((/** @type {number} */ _k, /** @type {any} */ child) => restore($(child)));
-                });
-                finalizeSub();
-                finalizeSection();
+                        const $card = $(el);
+                        $card.css('display', hasVisibleRow($card) ? '' : 'none');
+                        $card.removeClass('collapsed').children('.la-card-body').css('display', '');
+                        $card.find('.la-sub').removeClass('collapsed').children('.la-sub-body').css('display', '');
+                    });
+                }
+                $tab.toggleClass('la-no-hits', !!normalizedQuery && tabHits === 0);
+                const $navItem = $html.find(`.la-config-rail .item[data-tab="${$tab.data('tab')}"]`);
+                const $badge = $navItem.find('.la-rail-badge');
+                $badge.text(normalizedQuery ? tabHits : ($badge.attr('data-count') ?? ''));
+                $badge.toggleClass('hit', !!normalizedQuery && tabHits > 0);
+                $navItem.toggleClass('la-dim', !!normalizedQuery && tabHits === 0);
             });
             if (!normalizedQuery)
                 applyAllSectionStates();
@@ -1989,41 +2143,28 @@ export class LancerAutomationsConfig extends FormApplication
             }
         };
         $search.on('input', (/** @type {any} */ ev) => applyFilter(ev.currentTarget.value));
-        $clear.on('click', () =>
+        $search.on('keydown', (/** @type {any} */ ev) =>
         {
-            $search.val(''); applyFilter('');
-        });
-
-        const idleStyle    = { color: 'var(--primary-color)', 'border-color': 'var(--primary-color)', background: 'rgba(255,255,255,0.5)' };
-        const hoverStyle   = { color: '#fff',                 'border-color': 'var(--primary-color)', background: 'var(--primary-color)' };
-        const activeStyle  = { color: '#fff',                 'border-color': 'var(--primary-color)', background: 'var(--primary-color)' };
-        const applyToggle = (style) =>
-        {
-            $searchToggle.css(style);
-            $searchToggle.find('i').css('color', style.color);
-        };
-        applyToggle(idleStyle);
-        $searchToggle.on('mouseenter', () => applyToggle(hoverStyle));
-        $searchToggle.on('mouseleave', () =>
-        {
-            const open = $searchBar.css('display') !== 'none';
-            applyToggle(open ? activeStyle : idleStyle);
-        });
-        $searchToggle.on('click', () =>
-        {
-            const open = $searchBar.css('display') !== 'none';
-            if (open)
+            if (ev.key === 'Escape' && $search.val())
             {
-                $searchBar.css('display', 'none');
+                ev.stopPropagation();
                 $search.val('');
                 applyFilter('');
-                applyToggle(idleStyle);
             }
-            else
+        });
+        $clear.on('click', () =>
+        {
+            $search.val('');
+            applyFilter('');
+            $search.trigger('focus');
+        });
+        $html.on('keydown', (/** @type {any} */ ev) =>
+        {
+            if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'f')
             {
-                $searchBar.css('display', 'flex');
-                applyToggle(activeStyle);
-                setTimeout(() => $search.trigger('focus'), 10);
+                ev.preventDefault();
+                $search.trigger('focus');
+                $search.trigger('select');
             }
         });
     }
@@ -2208,6 +2349,23 @@ export class LancerAutomationsConfig extends FormApplication
             }
         }
         ui.notifications.info('Lancer Automations configuration saved.');
+        await this._promptReload();
+    }
+
+    async _promptReload()
+    {
+        if (!this._needsReload)
+            return;
+        this._needsReload = false;
+        const reload = await Dialog.confirm({
+            title: 'Reload Required',
+            content: '<p>One or more changes require a reload to take effect. Reload now?</p>',
+            yes: () => true,
+            no: () => false,
+            defaultYes: true,
+        });
+        if (reload)
+            foundry.utils.debouncedReload();
     }
 
     async close(options)
@@ -2216,7 +2374,8 @@ export class LancerAutomationsConfig extends FormApplication
         {
             const root = this.element?.[0];
             const activeNav = /** @type {any} */ (root?.querySelector('.tabs .item.active'));
-            const scroller = root?.querySelector('.content .tab.active') ?? root?.querySelector('.content');
+            const scroller = root?.querySelector('.la-config-content');
+            this._stripObserver?.disconnect();
             const pos = /** @type {any} */ (this.position ?? {});
             _laConfigState = {
                 tab: activeNav?.dataset?.tab ?? null,
@@ -2230,19 +2389,7 @@ export class LancerAutomationsConfig extends FormApplication
         catch
         { /* ignore */ }
         const closeResult = await super.close(options);
-        if (this._needsReload)
-        {
-            this._needsReload = false;
-            const reload = await Dialog.confirm({
-                title: 'Reload Required',
-                content: '<p>One or more changes require a reload to take effect. Reload now?</p>',
-                yes: () => true,
-                no: () => false,
-                defaultYes: true,
-            });
-            if (reload)
-                foundry.utils.debouncedReload();
-        }
+        await this._promptReload();
         return closeResult;
     }
 }

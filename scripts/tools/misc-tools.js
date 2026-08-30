@@ -500,11 +500,13 @@ export function inDangerZone(tokenOrActor)
  * Execute a Lancer stat roll (hull, agi, sys, eng, grit) via StatRollFlow.
  * `extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD,
  * the same way a weapon's tags pre-fill an attack. The player can still change them.
+ * `extraData.sourceItemUuid` / `extraData.sourceAction` attribute the roll, surfacing as
+ * `item` / `actionName` on onInitCheck and onCheck.
  * @param {Actor} actor - The rolling actor.
  * @param {string} stat - Stat key: "hull", "agi", "sys", "eng", or "grit".
  * @param {string} title - Chat card title (defaults to "<STAT> Check" or "<STAT> Save").
  * @param {number|"token"|Token|TokenDocument} [target=10] - Difficulty value, "token" to let the user pick, or a Token/TokenDocument to auto-derive difficulty from.
- * @param {{ targetStat?: string, [key: string]: any }} [extraData={}] - Extra state passed to the flow. `targetStat` overrides which stat is read from a mech target.
+ * @param {{ targetStat?: string, sourceItemUuid?: string, sourceAction?: string, [key: string]: any }} [extraData={}] - Extra state passed to the flow. `targetStat` overrides which stat is read from a mech target.
  * @returns {Promise<{ completed: boolean, [key: string]: any }>}
  */
 export async function executeStatRoll(actor, stat, title, target = 10, extraData = {})
@@ -742,6 +744,9 @@ export async function executeSaveVsEffect(targets, options = /** @type {any} */ 
  * @param {Object} [options]
  * @param {string} [options.title="Contested Check"] Title shown on each roll
  * @param {boolean} [options.sendToOwner=false]      Route each roll to the actor's owning player
+ * @param {any} [options.sourceItem]                 Item the check belongs to, surfaced as `item` on onCheck
+ * @param {string} [options.sourceAction]            Action the check belongs to, surfaced as `actionName`
+ * @param {Object} [options.extraData]               Extra keys merged into both rolls' la_extraData
  * @returns {Promise<any>}
  */
 export async function executeContestedCheck(input1, stat1, input2, stat2, options = {})
@@ -760,9 +765,15 @@ export async function executeContestedCheck(input1, stat1, input2, stat2, option
     const {
         title = "Contested Check", sendToOwner = true,
         accuracy1 = 0, difficulty1 = 0, flatModifier1 = 0,
-        accuracy2 = 0, difficulty2 = 0, flatModifier2 = 0
+        accuracy2 = 0, difficulty2 = 0, flatModifier2 = 0,
+        sourceItem = null, sourceAction = null, extraData = null
     } = /** @type {any} */ (options);
-    const suppressedRollOpts = { suppressStatFX: true, sendToOwner };
+    const attribution = {
+        ...(extraData ?? {}),
+        ...(sourceItem ? { sourceItemUuid: sourceItem.uuid ?? sourceItem } : {}),
+        ...(sourceAction ? { sourceAction } : {})
+    };
+    const suppressedRollOpts = { suppressStatFX: true, sendToOwner, ...attribution };
     const statLabel1 = stat1.toUpperCase();
     const statLabel2 = stat2.toUpperCase();
     const actorName1 = actor1?.name ?? "?";
@@ -1811,7 +1822,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
     if (sourceToken && !options.noFX)
-        queueActionFx(() => playSkirmishFX(sourceToken));
+        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken);
     if (sourceToken)
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
 
@@ -1914,7 +1925,7 @@ export async function executeFight(actorOrToken, bypassWeapon = null)
     );
     if (sourceToken)
     {
-        queueActionFx(() => playFightFX(sourceToken));
+        queueActionFx(() => playFightFX(sourceToken), sourceToken);
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'FIGHT', actionType: 'Quick' });
     }
 
@@ -1957,7 +1968,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     );
     if (sourceToken)
     {
-        queueActionFx(() => playBarrageFX(sourceToken));
+        queueActionFx(() => playBarrageFX(sourceToken), sourceToken);
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'BARRAGE', actionType: 'Full' });
     }
 

@@ -199,7 +199,9 @@ Use this when an item or deployable LID is too broad: a LID-keyed reaction fires
 
 - `onlyOnSourceMatch: true` also compares the triggering token's `actor.uuid` against the registered key (alongside item and deployable LIDs), so a UUID reaction with source-match only fires when that actor was the source of the event.
 
-- In the Activation Manager, paste the Actor UUID into the LID field. The deployable browser can pick an actor and fill it in for you.
+- In the Activation Manager, paste the Actor UUID into the LID field, or use the Actor Finder to fill it in.
+
+- A world actor's UUID (`Actor.<id>`, the prototype) matches every token spawned from it, linked or not. An unlinked token's own `actor.uuid` (`Scene.<id>.Token.<id>.Actor.<id>`) matches that one placed token only.
 
 ### Picking one
 
@@ -211,6 +213,7 @@ Use this when an item or deployable LID is too broad: a LID-keyed reaction fires
 | Build a one-off rule that applies to all tokens | General |
 | React on a specific deployable's action (or its deploy) | Deployable LID (`actor.system.lid`), with `onlyOnSourceMatch: true` |
 | React only as one specific actor or deployable instance | Actor UUID (`actor.uuid`) in the LID field, with `onlyOnSourceMatch: true` |
+| React once per event as the scene, not per token | General with `sceneReactor: "add"` or `"only"`, `sceneId` to limit it to one scene |
 | React when you deploy something yourself | Item LID that grants the deployable, `triggers: ["onDeploy"]`, `triggerSelf: true` |
 
 <br>
@@ -234,7 +237,7 @@ Filters short-circuit. The order matters because earlier filters are cheaper:
 
 Fail any: that activation is silently skipped for that reactor. No popup, no log entry.
 
-**The three identities.** An actor does a thing, everyone may react. `triggerSelf` = the one doing it. `triggerTarget` = the one it is done TO. `triggerOther` = anyone else - and for compatibility it still includes targets, so `triggerTarget` matters when `triggerOther` is off ("target only": Self off, Other off, Target on). It only works on triggers whose payload carries targets (attacks, tech, damage, `onRoll`, `onCheck`, `onInvoluntaryMove`); the editor greys the rest. Target-reactors get `isTarget: true` and `targetEntry` (their own roll/crit on hit/miss triggers), and they still fire when the attacker is hidden - being attacked is knowable. A target-side reaction that cancels (`cancelAttack`, `cancelDamage`) must be `autoActivate`: manual popups routed to another client receive serialized data without the cancel functions.
+**The three identities.** An actor does a thing, everyone may react. `triggerSelf` = the one doing it. `triggerTarget` = the one it is done TO. `triggerOther` = anyone else - and for compatibility it still includes targets, so `triggerTarget` matters when `triggerOther` is off ("target only": Self off, Other off, Target on). It only works on triggers whose payload carries targets (attacks, tech, damage, `onRoll`, `onCheck`, `onInvoluntaryMove`). The editor greys the rest. Target-reactors get `isTarget: true` and `targetEntry` (their own roll/crit on hit/miss triggers), and they still fire when the attacker is hidden - being attacked is knowable. A target-side reaction that cancels (`cancelAttack`, `cancelDamage`) must be `autoActivate`: manual popups routed to another client receive serialized data without the cancel functions.
 
 <br>
 
@@ -276,6 +279,8 @@ Runs once when a token (or its item) enters the scene. Used for:
 
 - Adding extra actions with `api.addExtraActions(...)`.
 
+For a scene reactor (`sceneReactor` on) it also runs on scene load, see [`sceneReactor`](#scenereactor).
+
 **`onInit` is not a trigger.** Do not put `"onInit"` in the `triggers` array. The engine looks for the `onInit` *field* on the reaction config and calls it directly when:
 
 - A token is created on the canvas (after a 100 ms delay so the canvas object exists), or
@@ -305,20 +310,36 @@ Two independent dimensions on each reaction config:
 | Value | Effect |
 |---|---|
 | `"code"` | Run your `activationCode` function. The most common choice. |
-| `"flow"` | Launch the reaction's own flow: the `reactionPath` action, else the item's first Reaction action, else the system flow, else a generic chat card (weapons get this; it never rolls an attack). General reactions post a trigger/effect card. |
+| `"flow"` | Launch the reaction's own flow: the `reactionPath` action, else the item's first Reaction action, else the system flow, else a generic chat card (weapons get this, and it never rolls an attack). General reactions post a trigger/effect card. |
 | `"macro"` | Execute a Foundry macro by name (`activationMacro` field). |
 | `"none"` | Do nothing. Typically only used for `onInit`-only reactions. |
 
 ### `activationMode`
 
-Macro/code only; ignored for `"flow"` and `"none"`.
+Macro/code only. Ignored for `"flow"` and `"none"`.
 
 | Value | Effect |
 |---|---|
 | `"instead"` | Your code runs alone. Default for item reactions. |
 | `"after"` | The reaction's own flow/card fires alongside your code. Default for general reactions. |
 
-> `activationMode` never touches the flow you are *reacting to*; that runs regardless. And `"after"` is not ordered: both run together via `Promise.all`. For strict ordering use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
+> `activationMode` never touches the flow you are *reacting to*. That one runs regardless. And `"after"` is not ordered: both run together via `Promise.all`. For strict ordering use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
+
+### `sceneReactor`
+
+General activations only. Default `"off"`.
+
+| Value | Effect |
+|---|---|
+| `"off"` | Per-token evaluation as usual. |
+| `"add"` | Also evaluated once as the active scene, on top of the per-token passes. |
+| `"only"` | Evaluated once as the active scene, never per token. |
+
+The scene pass runs on the GM client only, before the token passes, with `reactorToken` set to a scene stand-in (`isSceneReactor: true`, `.scene`, `.name`, `.document.texture.src`, `actor: null`). Token gates (`triggerSelf` / `triggerOther` / `triggerTarget`, `checkReaction`, `dispositionFilter`, `requireCanProvoke`) do not apply, `outOfCombat` and `evaluate` do. `triggerData` carries `isSceneReactor: true` and `scene`. Use `activationType: "code"` or `"none"`, a flow needs an actor. With `onlyOnSourceMatch` the activation still fires once as the scene, on the action whose name matches.
+
+`sceneId` (the Scene select in the editor) limits the whole activation, token passes included, to one scene. Empty means every scene.
+
+`onInit` on a scene reactor also runs when a matching scene loads (`canvasReady`, or once the module is ready on first load), GM only, with the scene stand-in as `token` and `item` null. Use it for "when this map opens, set up X".
 
 <br>
 
@@ -673,7 +694,7 @@ Hooks.on("lancer-automations.ready", (api) => {
     });
 
     api.registerDefaultGeneralReactions({
-        "My General Reaction": { reactions: [/* ... */] }
+        "My General Reaction": { reactions: [] }
     });
 });
 ```

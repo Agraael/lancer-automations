@@ -27,7 +27,7 @@ import {
     _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack,
     clearMoveData, undoMoveData, getCumulativeMoveData, getIntentionalMoveData,
     getMovementCap, getMoveDataList, getMovementHistory,
-    initMovementCap, increaseMovementCap, recordBoostCast, _rulerMove
+    initMovementCap, increaseMovementCap, recordBoostCast, recordMovementExtra, getMovementBands, _rulerMove
 } from "./movement/move-tracking.js";
 export { _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack, _rulerMove };
 
@@ -187,6 +187,8 @@ import { RestAPI } from "./tools/rest.js";
 import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
+import { initAutoFocus, registerCardFocusFlags } from "./tools/auto-focus.js";
+import { dedupeWorldSettings } from "./setup/settings-dedupe.js";
 
 // Setup
 import { checkModuleUpdate } from "./setup/version-check.js";
@@ -522,6 +524,7 @@ Hooks.on('init', () =>
     registerTokenStatHintSettings(); // Hover stat-hint popup
     registerIsoSettings(); // Isometric-perspective compat toggles
     registerFlowStatePersistence();
+    registerCardFocusFlags();
 
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
@@ -1157,8 +1160,10 @@ Hooks.on('ready', async () =>
         getMovementHistory,
         getMoveDataList,
         getMovementCap,
+        getMovementBands,
         increaseMovementCap,
         recordBoostCast,
+        recordMovementExtra,
         initMovementCap,
         actionFX,
         processEffectConsumption,
@@ -1190,6 +1195,8 @@ Hooks.on('ready', async () =>
         }
     });
     initSocket();
+    initAutoFocus();
+    dedupeWorldSettings().catch(error => console.error('lancer-automations | world settings dedupe failed:', error));
     // Refresh every placed token's ruler so free-move trails pick up the actor tier once the api is live.
     for (const token of canvas.tokens?.placeables ?? [])
         token.renderFlags?.set?.({ refreshRuler: true });
@@ -1494,10 +1501,12 @@ function _laSheetCounts(target)
     const extraDepCount = (target?.getFlag?.('lancer-automations', 'extraDeployableActorsViaUI') || []).length
         + (target?.getFlag?.('lancer-automations', 'extraDeployableLidsViaUI') || []).length;
     const extraBarCount = (target?.getFlag?.('lancer-automations', 'extraBarTemplates') || []).length;
-    const extraConfigConfigured = target?.documentName === 'Item'
-        ? (((target?.getFlag?.('lancer-automations', 'extraConfig')?.autoConsumeDisabled?.length ?? 0) > 0
-            || target?.getFlag?.('lancer-automations', 'hidePrimaryAction')) ? 1 : 0)
-        : 0;
+    const extraCfg = target?.documentName === 'Item' ? (target?.getFlag?.('lancer-automations', 'extraConfig') ?? {}) : null;
+    const extraConfigConfigured = extraCfg && (
+        (extraCfg.autoConsumeDisabled?.length ?? 0) > 0
+        || Object.values(extraCfg.subAutoConsumeDisabled ?? {}).some(list => list?.length)
+        || Object.keys(extraCfg.consumeOn ?? {}).length > 0
+        || target?.getFlag?.('lancer-automations', 'hidePrimaryAction')) ? 1 : 0;
     return { bonusCount, statusCount, extraActionCount, extraDepCount, extraBarCount, extraConfigConfigured };
 }
 

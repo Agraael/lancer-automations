@@ -124,16 +124,27 @@ async function getItemMaxReach(item, actor)
     return Math.max(0, ...ALL_TYPES.map(rangeType => ranges[rangeType] ?? 0));
 }
 
-async function computePreviewRange(category, actionName, actor, item, profile, deployLid)
+async function computePreviewRange(category, action, actor, item, profile, deployLid)
 {
-    const base = await computePreviewRangeBase(category, actionName, actor, item, profile, deployLid);
+    const actionName = action?.name;
+    const base = await computePreviewRangeBase(category, action ?? null, actor, item, profile, deployLid);
     // item rows carry no action; their own activation is named after the item
     const grantName = actionName ?? item?.name;
     return grantName ? resolveGrantedActionRange(actor, grantName, base) : base;
 }
 
-async function computePreviewRangeBase(category, actionName, actor, item, profile, deployLid)
+function pulseRangeOf(rangeEntries)
 {
+    const ranges = {};
+    for (const { type, val: value } of rangeEntries)
+        ranges[type] = Math.max(ranges[type] ?? 0, Number(value) || 0);
+    const max = weaponPulseRange(ranges);
+    return max > 0 ? Math.max(1, max) : null;
+}
+
+async function computePreviewRangeBase(category, action, actor, item, profile, deployLid)
+{
+    const actionName = action?.name;
     if (category === 'Deployables')
     {
         if (deployLid)
@@ -141,15 +152,17 @@ async function computePreviewRangeBase(category, actionName, actor, item, profil
         const deployRange = item?.getFlag?.('lancer-automations', 'deployRange') ?? 1;
         return Math.max(1, deployRange);
     }
-    if (profile?.range?.length)
+    if (action?.range?.length)
     {
-        const ranges = {};
-        for (const { type, val: value } of profile.range)
-            ranges[type] = Math.max(ranges[type] ?? 0, Number(value) || 0);
-        const max = weaponPulseRange(ranges);
-        return max > 0 ? Math.max(1, max) : null;
+        const ownRange = pulseRangeOf(action.range);
+        if (ownRange != null)
+            return ownRange;
     }
-    if (item)
+    if (profile?.range?.length)
+        return pulseRangeOf(profile.range);
+    // A weapon's nested action (real activation, not the attack rows) never inherits the weapon's reach.
+    const nestedWeaponAction = !!action?.activation && isWeaponItem(item);
+    if (item && !nestedWeaponAction)
     {
         const reach = await getItemMaxReach(item, actor);
         if (reach > 0)
@@ -194,7 +207,7 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
     }
     if (isEntering)
     {
-        const range = await computePreviewRange(category, action?.name, actor, item ?? null, profile ?? null, deployLid);
+        const range = await computePreviewRange(category, action ?? null, actor, item ?? null, profile ?? null, deployLid);
         if (range != null)
             await activateRangePreview(token, range, el, getRangeGlowForAction(category, action?.name, item ?? null));
     }

@@ -1,192 +1,210 @@
+{{#*inline "laConfigItem"}}
+{{#if this.isCompactBooleans}}
+<div class="la-compact-bools">
+    {{#each this.items}}
+    <div class="la-compact-bool {{#if this.isLocked}}la-gm-locked{{/if}}" {{#if this.hint}}data-tooltip="{{this.hint}}"{{/if}}>
+        <label>
+            <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
+            <span class="la-compact-label">{{this.label}}</span>
+            {{#if this.isLocked}}<span class="la-gm-tag">GM</span>{{/if}}
+        </label>
+        {{#if this.preview}}
+        <button type="button" class="la-preview-btn" data-preview-key="{{this.key}}" title="Preview"><i class="fas fa-volume-up"></i></button>
+        {{/if}}
+    </div>
+    {{/each}}
+</div>
+{{else if this.isButton}}
+<div class="form-group la-opt-row la-btn-row {{#if this.isLocked}}la-gm-locked{{/if}}">
+    <button type="button" class="la-config-btn lancer-action-btn" data-action-key="{{this.key}}" {{#if this.isLocked}}disabled{{/if}} {{#if this.hint}}data-tooltip="{{this.hint}}"{{/if}}>
+        {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}{{#if this.state}}<span class="la-btn-state">{{this.state}}</span>{{/if}}
+    </button>
+    {{#if this.isLocked}}<span class="la-gm-tag">GM</span>{{/if}}
+</div>
+{{else if this.isKeybinding}}
+<div class="la-keybinding-row" data-full-key="{{this.fullKey}}">
+    <div class="la-kb-text">
+        <div class="la-kb-name">{{this.name}}</div>
+        {{#if this.hint}}<div class="la-kb-hint">{{this.hint}}</div>{{/if}}
+    </div>
+    <div class="la-kb-binds">
+        <button type="button" class="la-kb-add" title="Add binding"><i class="fas fa-plus"></i></button>
+        {{#each this.bindings}}
+        <button type="button" class="la-kb-key" data-idx="{{@index}}" title="Click to rebind. Right-click to remove.">{{this.display}}</button>
+        {{/each}}
+        <button type="button" class="la-kb-reset" title="Reset to default"><i class="fas fa-undo"></i></button>
+    </div>
+</div>
+{{else if this.isTour}}
+<div class="la-tour-row" data-full-key="{{this.fullKey}}">
+    <div class="la-kb-text">
+        <div class="la-kb-name">{{this.title}}{{#if this.stepCount}}<span class="la-tour-steps">{{this.stepCount}} steps</span>{{/if}}</div>
+        {{#if this.description}}<div class="la-kb-hint">{{this.description}}</div>{{/if}}
+    </div>
+    <button type="button" class="la-tour-play lancer-action-btn la-primary" title="Start tour"><i class="fas fa-play"></i> Play</button>
+</div>
+{{else if this.isTable}}
+<table class="la-config-table">
+    <thead>
+        <tr>
+            {{#each this.columns}}
+            <th>{{this}}</th>
+            {{/each}}
+        </tr>
+    </thead>
+    <tbody>
+        {{#each this.rows}}
+        <tr>
+            <td class="la-table-label">{{this.label}}</td>
+            {{#each this.cells}}
+            <td class="{{#if this.isLocked}}la-gm-locked{{/if}}">
+                {{#if this.isSelect}}
+                <select name="{{this.name}}" {{#if this.isLocked}}disabled{{/if}}>
+                    {{#each this.choices}}
+                    <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                    {{/each}}
+                </select>
+                {{/if}}
+                {{#if this.isBoolean}}
+                <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
+                {{/if}}
+                {{#if this.isColor}}
+                <input type="color" name="{{this.name}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} />
+                {{/if}}
+                {{#if this.isNumber}}
+                <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" {{#if this.isLocked}}disabled{{/if}} />
+                {{/if}}
+            </td>
+            {{/each}}
+        </tr>
+        {{/each}}
+    </tbody>
+</table>
+{{else}}
+<div class="form-group la-opt-row {{#if this.isColor}}la-color-row{{/if}} {{#if this.isLocked}}la-gm-locked{{/if}}">
+    <label>
+        <span class="la-opt-label">{{this.label}}</span>
+        {{#if this.hint}}<i class="fas fa-circle-question la-hint" data-tooltip="{{this.hint}}"></i>{{/if}}
+        {{#if this.isLocked}}<span class="la-gm-tag">GM</span>{{/if}}
+    </label>
+    <div class="la-opt-control">
+        {{#if this.isBoolean}}
+        <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
+        {{/if}}
+        {{#if this.isNumber}}
+        <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} />
+        {{/if}}
+        {{#if this.isString}}
+        <input type="text" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} />
+        {{/if}}
+        {{#if this.isFolder}}
+        <file-picker name="{{this.key}}" type="folder" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
+        {{/if}}
+        {{#if this.isAudio}}
+        <file-picker name="{{this.key}}" type="audio" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
+        {{/if}}
+        {{#if this.isColor}}
+        <input type="color" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} />
+        {{/if}}
+        {{#if this.isSlider}}
+        <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" {{#if this.isLocked}}disabled{{/if}} oninput="this.nextElementSibling.textContent=this.value" />
+        <span class="la-slider-value">{{this.value}}</span>
+        {{/if}}
+        {{#if this.isSelect}}
+        <select name="{{this.key}}" {{#if this.isLocked}}disabled{{/if}}>
+            {{#each this.choices}}
+            <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+            {{/each}}
+        </select>
+        {{/if}}
+    </div>
+</div>
+{{/if}}
+{{/inline}}
 <form class="lancer-dialog-base la-config-form" autocomplete="off">
-    <style>
-        .la-config-links a { display: inline-flex; align-items: center; gap: 5px; color: #fff; font-size: 0.85em; text-decoration: none; opacity: 0.85; transition: opacity 0.15s; }
-        .la-config-links a:hover { opacity: 1; text-shadow: 0 0 6px rgba(255, 255, 255, 0.6); }
-        .la-config-links i { font-size: 0.95em; }
-        :root.la-dark .la-config-form .la-section,
-        :root.la-dark .la-config-form .la-subsection-header { color: var(--la-accent) !important; border-bottom-color: var(--la-accent) !important; }
-    </style>
-    <header class="lancer-dialog-header" style="margin-bottom: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
-        <div>
+    <header class="lancer-dialog-header la-config-banner">
+        <div class="la-banner-title">
             <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
             <div class="lancer-dialog-subtitle">Module configuration</div>
         </div>
-        <nav class="la-config-links" aria-label="Module links" style="display: flex; gap: 16px; align-items: center; flex-shrink: 0; margin-top: 6px;">
+        <label class="la-config-search">
+            <i class="fas fa-search"></i>
+            <input type="text" class="la-config-search-input" placeholder="Search settings" aria-label="Search settings" />
+            <kbd>Ctrl F</kbd>
+            <span class="la-config-search-clear" title="Clear"><i class="fas fa-times"></i></span>
+        </label>
+        <nav class="la-config-links" aria-label="Module links">
             <a href="https://agraael.github.io/lancer-automations/" target="_blank" rel="noopener" title="Documentation"><i class="fab fa-github"></i>Doc</a>
             <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener" title="Contact me (Discord)"><i class="fab fa-discord"></i>Contact me</a>
             <a href="https://www.patreon.com/c/LaSossis" target="_blank" rel="noopener" title="Support on Patreon"><i class="fab fa-patreon"></i>Patreon</a>
         </nav>
     </header>
 
-    <nav class="sheet-tabs tabs la-config-tabs" data-group="primary" style="flex-wrap: wrap; position: relative; padding-right: 32px;">
-        {{#each tabs}}
-        <a class="item {{#if this.active}}active{{/if}} {{#if this.disabled}}la-tab-disabled{{/if}}" data-tab="{{this.id}}" data-group="primary" {{#if this.disabled}}title="{{this.disabledReason}}" aria-disabled="true"{{/if}}>
-            <i class="{{this.icon}}"></i> {{this.label}}
-        </a>
-        {{/each}}
-        <a class="la-config-search-toggle" title="Search settings" style="position: absolute; top: 50%; right: 6px; transform: translateY(-50%); padding: 4px 9px; cursor: pointer; color: var(--primary-color, #782e22); font-size: 1.05em; border: 1px solid var(--primary-color, #782e22); background: rgba(255,255,255,0.5); transition: color 0.15s, border-color 0.15s, background 0.15s;">
-            <i class="fas fa-search"></i>
-        </a>
-    </nav>
-
-    <div class="la-config-search" style="display: none; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 2px solid var(--primary-color, #782e22);">
-        <i class="fas fa-search" style="color: var(--primary-color, #782e22); font-size: 0.9em;"></i>
-        <input type="text" class="la-config-search-input" placeholder="Search settings…" style="flex: 1; background: rgba(255,255,255,0.6); color: #2b2b2b; border: 1px solid var(--primary-color, #782e22); padding: 4px 8px; font-family: inherit; font-size: 0.9em; outline: none;" />
-        <span class="la-config-search-clear" style="cursor: pointer; color: var(--primary-color, #782e22); font-size: 0.9em; display: none; padding: 0 4px;" title="Clear"><i class="fas fa-times"></i></span>
-    </div>
-
-    <div class="content la-config-content" style="padding: 6px 12px;">
-        {{#each tabs}}
-        <div class="tab {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
-            {{#each this.items}}
-            {{#if this.isSection}}
-            {{#if this.isSubsection}}
-            {{#if this.collapsible}}
-            <h3 class="la-subsection-header la-collapsible" data-collapsed="{{#if this.collapsed}}true{{else}}false{{/if}}" style="border-bottom: 1px dashed color-mix(in srgb, var(--primary-color, #782e22) 50%, transparent); margin: 8px 0 4px 16px; padding-left: 8px; font-size: 0.88em; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; color: var(--primary-color, #5a3a30);">
-                <i class="fas fa-chevron-down la-chevron" style="font-size: 0.7em; transition: transform 0.15s;"></i>{{this.label}}
-            </h3>
-            {{else}}
-            <h3 class="la-subsection-header" data-collapsed="false" style="border-bottom: 1px dashed color-mix(in srgb, var(--primary-color, #782e22) 50%, transparent); margin: 8px 0 4px 16px; padding-left: 8px; font-size: 0.88em; color: var(--primary-color, #5a3a30);">{{this.label}}</h3>
-            {{/if}}
-            {{else}}
-            {{#if this.collapsible}}
-            <h2 class="la-section la-collapsible" data-collapsed="{{#if this.collapsed}}true{{else}}false{{/if}}" style="border-bottom: 1px solid var(--primary-color, #782e22); margin: 12px 0 6px; font-size: 1em; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px;">
-                <i class="fas fa-chevron-down la-chevron" style="font-size: 0.75em; transition: transform 0.15s;"></i>{{this.label}}
-            </h2>
-            {{else}}
-            <h2 class="la-section" data-collapsed="false" style="border-bottom: 1px solid var(--primary-color, #782e22); margin: 12px 0 6px; font-size: 1em;">{{this.label}}</h2>
-            {{/if}}
-            {{/if}}
-            {{#if this.hint}}<p class="notes la-section-hint" style="margin: -2px 0 6px; font-size: 0.82em; opacity: 0.8; line-height: 1.4;">{{{this.hint}}}</p>{{/if}}
-            {{else if this.isCompactBooleans}}
-            <div class="la-compact-bools la-section-body" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 12px; margin: 4px 0 6px;">
-                {{#each this.items}}
-                <div class="la-compact-bool" style="display: flex; align-items: center; gap: 4px; padding: 2px 4px; font-size: 0.88em; border-radius: 2px; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{else if this.hint}}title="{{this.hint}}"{{/if}}>
-                    <label style="display: flex; align-items: center; gap: 6px; flex: 1; {{#unless this.isLocked}}cursor: pointer;{{/unless}} min-width: 0;">
-                        <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} style="margin: 0; flex-shrink: 0;" />
-                        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{this.label}}{{#if this.isLocked}} 🔒{{/if}}</span>
-                    </label>
-                    {{#if this.preview}}
-                    <button type="button" class="la-preview-btn" data-preview-key="{{this.key}}" title="Preview" style="flex-shrink: 0; width: 22px; height: 20px; padding: 0; line-height: 1; font-size: 0.7em; cursor: pointer;">
-                        <i class="fas fa-volume-up"></i>
-                    </button>
-                    {{/if}}
-                </div>
+    <div class="la-config-body">
+        <nav class="tabs la-config-rail" data-group="primary" aria-label="Settings pages">
+            {{#each groups}}
+            <div class="la-rail-group">
+                <div class="la-rail-label"><i class="{{this.icon}}"></i>{{this.label}}</div>
+                {{#each this.tabs}}
+                <a class="item {{#if this.active}}active{{/if}} {{#if this.disabled}}la-tab-disabled{{/if}}" data-tab="{{this.id}}" data-group="primary" {{#if this.disabled}}data-tooltip="{{this.disabledReason}}" aria-disabled="true"{{/if}}>
+                    <i class="{{this.icon}}"></i><span class="la-rail-text">{{this.label}}</span><span class="la-rail-badge" data-count="{{this.settingCount}}">{{this.settingCount}}</span>
+                </a>
                 {{/each}}
             </div>
-            {{else if this.isButton}}
-            <div class="form-group la-opt-row" style="margin: 6px 0; {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
-                <button type="button" class="la-config-btn" data-action-key="{{this.key}}" {{#if this.isLocked}}disabled{{/if}} style="width:100%;">
-                    {{#if this.icon}}<i class="{{this.icon}}"></i> {{/if}}{{this.label}}{{#if this.isLocked}} 🔒{{/if}}
-                </button>
-                {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{this.hint}}</p>{{/if}}
-            </div>
-            {{else if this.isKeybinding}}
-            <div class="la-keybinding-row" data-full-key="{{this.fullKey}}" style="display:flex; align-items:center; gap:10px; margin:2px 0; padding:4px 8px; border-bottom:1px dotted color-mix(in srgb, var(--primary-color, #782e22) 25%, transparent);">
-                <div style="flex:1; min-width:0;">
-                    <div style="font-weight:bold; font-size:0.9em; color:var(--la-ink); line-height:1.2;">{{this.name}}</div>
-                    {{#if this.hint}}<div style="font-size:0.74em; color:var(--la-ink-dim); line-height:1.25; margin-top:1px;">{{this.hint}}</div>{{/if}}
-                </div>
-                <div class="la-kb-binds" style="display:flex; flex-direction:row; flex-wrap:nowrap; gap:4px; align-items:center; flex-shrink:0; line-height:1;">
-                    <button type="button" class="la-kb-add" title="Add binding" style="width:16px; height:16px; flex:0 0 auto; padding:0; line-height:1; border:1px solid var(--primary-color, #991e2a); background:var(--primary-color, #991e2a); color:#fff; cursor:pointer; border-radius:50%; font-size:0.6em; margin:0;"><i class="fas fa-plus"></i></button>
-                    {{#each this.bindings}}
-                    <button type="button" class="la-kb-key" data-idx="{{@index}}" title="Click to rebind. Right-click to remove." style="width:auto; flex:0 0 auto; padding:2px 8px; height:24px; line-height:20px; border:1px solid #999; background:#fff; color:#2b2b2b; border-radius:3px; font-family:monospace; font-size:0.82em; cursor:pointer; box-shadow:0 1px 0 #888; margin:0;">{{this.display}}</button>
-                    {{/each}}
-                    <button type="button" class="la-kb-reset" title="Reset to default" style="width:24px; height:24px; flex:0 0 auto; padding:0; line-height:1; border:1px solid var(--la-edge); background:rgba(0,0,0,0.04); color:var(--la-ink-dim); cursor:pointer; border-radius:3px; font-size:0.75em; margin:0;"><i class="fas fa-undo"></i></button>
-                </div>
-            </div>
-            {{else if this.isTour}}
-            <div class="la-tour-row" data-full-key="{{this.fullKey}}" style="display:flex; align-items:center; gap:10px; margin:2px 0; padding:6px 8px; border-bottom:1px dotted color-mix(in srgb, var(--primary-color, #782e22) 25%, transparent);">
-                <div style="flex:1; min-width:0;">
-                    <div style="font-weight:bold; font-size:0.9em; color:var(--la-ink); line-height:1.2;">{{this.title}}{{#if this.stepCount}}<span style="font-weight:normal; color:var(--la-ink-dim); font-size:0.85em; margin-left:6px;">· {{this.stepCount}} steps</span>{{/if}}</div>
-                    {{#if this.description}}<div style="font-size:0.78em; color:var(--la-ink-dim); line-height:1.3; margin-top:2px;">{{this.description}}</div>{{/if}}
-                </div>
-                <button type="button" class="la-tour-play" title="Start tour" style="width:auto; flex:0 0 auto; padding:4px 14px; height:26px; line-height:18px; border:1px solid var(--primary-color, #991e2a); background:var(--primary-color, #991e2a); color:#fff; cursor:pointer; border-radius:3px; font-size:0.85em; font-weight:bold; margin:0; white-space:nowrap;"><i class="fas fa-play"></i> Play</button>
-            </div>
-            {{else if this.isTable}}
-            <table style="width:100%; border-collapse:collapse; margin: 6px 0;">
-                <thead>
-                    <tr>
-                        {{#each this.columns}}
-                        <th style="text-align:left; padding:3px 6px; border-bottom:1px solid var(--primary-color, #782e22); font-size:0.85em; font-weight:bold;">{{this}}</th>
+            {{/each}}
+        </nav>
+
+        <div class="content la-config-content">
+            {{#each tabs}}
+            <div class="tab {{#if this.active}}active{{/if}}" data-tab="{{this.id}}" data-group="primary">
+                <div class="la-page-top">
+                    <div class="la-page-head">
+                        <h1><i class="{{this.icon}}"></i>{{this.label}}</h1>
+                        <span class="la-page-meta">{{this.settingCount}} settings · {{this.sectionCount}} sections</span>
+                    </div>
+                    <div class="la-strip">
+                        {{#each this.sections}}
+                        {{#unless this.headerless}}<button type="button" class="la-chip lancer-action-btn" data-target="{{this.id}}">{{this.label}}</button>{{/unless}}
                         {{/each}}
-                    </tr>
-                </thead>
-                <tbody>
-                    {{#each this.rows}}
-                    <tr style="border-bottom:1px solid rgba(0,0,0,0.08);">
-                        <td style="padding:3px 6px; font-weight:bold;">{{this.label}}</td>
-                        {{#each this.cells}}
-                        <td style="padding:3px 6px; {{#if this.isLocked}}opacity:0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
-                            {{#if this.isSelect}}
-                            <select name="{{this.name}}" {{#if this.isLocked}}disabled{{/if}} style="width:100%;">
-                                {{#each this.choices}}
-                                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-                                {{/each}}
-                            </select>
-                            {{/if}}
-                            {{#if this.isBoolean}}
-                            <input type="checkbox" name="{{this.name}}" {{#if this.checked}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
-                            {{/if}}
-                            {{#if this.isColor}}
-                            <input type="color" name="{{this.name}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width:36px;height:24px;padding:1px;cursor:pointer;" />
-                            {{/if}}
-                            {{#if this.isNumber}}
-                            <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" {{#if this.isLocked}}disabled{{/if}} style="width:50px;" />
-                            {{/if}}
-                        </td>
-                        {{/each}}
-                    </tr>
-                    {{/each}}
-                </tbody>
-            </table>
-            {{else}}
-            <div class="form-group la-opt-row" style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.08); {{#if this.isLocked}}opacity: 0.55;{{/if}}" {{#if this.isLocked}}title="GM only"{{/if}}>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <label style="font-weight: bold; flex: 1;">{{this.label}}{{#if this.isLocked}} 🔒{{/if}}</label>
-                    <div style="flex-shrink: 0; margin-left: 8px;">
-                        {{#if this.isBoolean}}
-                            <input type="checkbox" name="{{this.key}}" {{#if this.value}}checked{{/if}} {{#if this.isLocked}}disabled{{/if}} />
-                        {{/if}}
-                        {{#if this.isNumber}}
-                            <input type="number" step="any" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 80px;" />
-                        {{/if}}
-                        {{#if this.isString}}
-                            <input type="text" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 200px;" />
-                        {{/if}}
-                        {{#if this.isFolder}}
-                            <file-picker name="{{this.key}}" type="folder" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
-                        {{/if}}
-                        {{#if this.isAudio}}
-                            <file-picker name="{{this.key}}" type="audio" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}}></file-picker>
-                        {{/if}}
-                        {{#if this.isColor}}
-                            <input type="color" name="{{this.key}}" value="{{this.value}}" {{#if this.isLocked}}disabled{{/if}} style="width: 50px; height: 28px; padding: 1px; cursor: pointer;" />
-                        {{/if}}
-                        {{#if this.isSlider}}
-                            <div style="display:flex;align-items:center;gap:6px;">
-                                <input type="range" name="{{this.key}}" value="{{this.value}}" min="{{this.sliderMin}}" max="{{this.sliderMax}}" step="{{this.sliderStep}}" {{#if this.isLocked}}disabled{{/if}} style="width:120px;" oninput="this.nextElementSibling.textContent=this.value" />
-                                <span style="min-width:28px;text-align:center;font-size:0.9em;">{{this.value}}</span>
-                            </div>
-                        {{/if}}
-                        {{#if this.isSelect}}
-                            <select name="{{this.key}}" {{#if this.isLocked}}disabled{{/if}}>
-                                {{#each this.choices}}
-                                <option value="{{this.value}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-                                {{/each}}
-                            </select>
-                        {{/if}}
                     </div>
                 </div>
-                {{#if this.hint}}<p class="notes" style="margin: 2px 0 0; font-size: 0.82em; opacity: 0.75;">{{this.hint}}</p>{{/if}}
+                <div class="la-cards">
+                    {{#each this.sections}}
+                    <section class="la-card lancer-item-card {{#if this.collapsed}}collapsed{{/if}}" id="{{this.id}}" data-label="{{this.label}}">
+                        {{#unless this.headerless}}
+                        {{#if this.collapsible}}
+                        <button type="button" class="la-card-head la-collapsible" aria-expanded="{{#if this.collapsed}}false{{else}}true{{/if}}"><i class="fas fa-chevron-down la-chevron"></i>{{this.label}}<span class="la-card-count">{{this.count}}</span></button>
+                        {{else}}
+                        <div class="la-card-head">{{this.label}}<span class="la-card-count">{{this.count}}</span></div>
+                        {{/if}}
+                        {{/unless}}
+                        <div class="la-card-body">
+                            {{#if this.hint}}<p class="notes la-section-hint">{{{this.hint}}}</p>{{/if}}
+                            {{#each this.items}}{{> laConfigItem this}}{{/each}}
+                            {{#each this.subs}}
+                            <div class="la-sub {{#if this.collapsed}}collapsed{{/if}}" data-label="{{this.label}}">
+                                {{#if this.collapsible}}
+                                <button type="button" class="la-sub-head la-collapsible" aria-expanded="{{#if this.collapsed}}false{{else}}true{{/if}}"><i class="fas fa-chevron-down la-chevron"></i>{{this.label}}</button>
+                                {{else}}
+                                <div class="la-sub-head">{{this.label}}</div>
+                                {{/if}}
+                                <div class="la-sub-body">
+                                    {{#if this.hint}}<p class="notes la-section-hint">{{{this.hint}}}</p>{{/if}}
+                                    {{#each this.items}}{{> laConfigItem this}}{{/each}}
+                                </div>
+                            </div>
+                            {{/each}}
+                        </div>
+                    </section>
+                    {{/each}}
+                </div>
             </div>
-            {{/if}}
             {{/each}}
         </div>
-        {{/each}}
     </div>
 
     <footer class="la-config-footer">
-        <button type="submit" class="la-config-save"><i class="fas fa-save"></i> Save</button>
+        <span class="la-footer-note">Changes apply on save. Some settings ask for a reload.</span>
+        <button type="submit" class="la-config-save lancer-action-btn la-primary"><i class="fas fa-save"></i> Save</button>
     </footer>
 </form>

@@ -26,7 +26,7 @@ import {
     FLASH_HOLD_MS, FLASH_SHRINK_MS, FLASH_TOTAL_MS, FLASH_LINGER_MS,
     MAX_BAR_WIDTH, REF_GRID_SIZE, REF_ROW_HEIGHT,
     ISO_SETTING_STATBAR, ISO_SETTING_RETICLE, ISO_SETTING_HITZONE,
-    FLAG_HIDDEN, FLAG_COMBAT_ONLY, FLAG_ROW_HEIGHT, FLAG_VIS_OUT_OF_COMBAT, FLAG_VIS_IN_COMBAT,
+    FLAG_HIDDEN, FLAG_DISABLED, FLAG_COMBAT_ONLY, FLAG_ROW_HEIGHT, FLAG_VIS_OUT_OF_COMBAT, FLAG_VIS_IN_COMBAT,
     FLAG_PILOT_STRESS, FLAG_EXTRAS, FLAG_AUTO_KEYS, FLAG_TEMPLATES,
     DEFAULT_EXTRA_BAR_ICON,
 } from './statbar/config.js';
@@ -193,6 +193,10 @@ function statBarHidden(tokenDoc)
 {
     return tokenBoolFlag(tokenDoc, FLAG_HIDDEN, SETTING_DEFAULT_HIDDEN);
 }
+function statBarDisabled(tokenDoc)
+{
+    return tokenDoc?.getFlag?.(MODULE_ID, FLAG_DISABLED) === true;
+}
 function statBarCombatOnly(tokenDoc)
 {
     return tokenBoolFlag(tokenDoc, FLAG_COMBAT_ONLY, SETTING_DEFAULT_COMBAT_ONLY);
@@ -225,6 +229,8 @@ function resolveVisibilityMode(tokenDoc, inCombat)
 function shouldShowBars(token)
 {
     if (!token)
+        return false;
+    if (statBarDisabled(token.document))
         return false;
     if (statBarHidden(token.document))
         return false;
@@ -332,8 +338,8 @@ function _parseHex(hex)
 
 // Path resolver: supports normal actor-rooted paths plus two special prefixes
 // used by auto-injected counter bars:
-//   "items.{id}.{rest}"        â†’ walks actor.items.get(id) (e.g. frame on a mech)
-//   "pilotItems.{id}.{rest}"   â†’ walks actor.system.pilot.value.items.get(id) when
+//   "items.{id}.{rest}"        → walks actor.items.get(id) (e.g. frame on a mech)
+//   "pilotItems.{id}.{rest}"   → walks actor.system.pilot.value.items.get(id) when
 //                                 the actor is a mech, otherwise falls back to actor.items
 //                                 (talents live on the pilot for mechs, on the pilot actor itself otherwise)
 function _readActorPath(actor, path)
@@ -742,7 +748,7 @@ export function _defaultExtraBar()
     };
 }
 
-// Polymorphic target: Token / Item / Actor / uuid / id â†’ { kind, doc } or null.
+// Polymorphic target: Token / Item / Actor / uuid / id → { kind, doc } or null.
 async function _resolveTarget(target)
 {
     if (!target)
@@ -922,7 +928,7 @@ export async function removeExtraBar(target, entryId)
     return _removeExtraBarFromTemplate(resolved.doc, entryId);
 }
 
-// Token â†’ statBarExtras entries. Item/Actor â†’ template records [{ id, entry }].
+// Token → statBarExtras entries. Item/Actor → template records [{ id, entry }].
 /** @returns {Array<any>} Extra bar entries on the document */
 export function getExtraBars(target)
 {
@@ -1171,7 +1177,7 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed)
     return `
         <div class="la-extra-bar-row${collapsed ? ' collapsed' : ''}" data-idx="${idx}" data-id="${entry.id}">
             <div class="la-extra-bar-header">
-                <span class="la-extra-bar-drag" draggable="true" title="Drag to reorder">â‰¡</span>
+                <span class="la-extra-bar-drag" draggable="true" title="Drag to reorder">≡</span>
                 <button type="button" class="la-extra-bar-toggle" title="${collapsed ? 'Expand' : 'Collapse'}">
                     <i class="fas fa-chevron-${collapsed ? 'right' : 'down'}"></i>
                 </button>
@@ -1405,7 +1411,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 rerender();
             });
 
-            // Icon path â†’ live-update the preview img on input.
+            // Icon path → live-update the preview img on input.
             const iconInput = /** @type {any} */ (rowEl.querySelector('input[data-field="icon"]'));
             const iconPreview = /** @type {any} */ (rowEl.querySelector('.la-extra-bar-icon-preview'));
             iconInput?.addEventListener('input', () =>
@@ -1417,7 +1423,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 }
             });
 
-            // Icon picker button â†’ open Foundry's FilePicker rooted in modules/lancer-automations/icons.
+            // Icon picker button → open Foundry's FilePicker rooted in modules/lancer-automations/icons.
             rowEl.querySelector('.la-extra-bar-icon-pick')?.addEventListener('click', () =>
             {
                 const current = (entry.icon || DEFAULT_EXTRA_BAR_ICON);
@@ -1439,7 +1445,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 fp.browse();
             });
 
-            // Item picker â†’ choose an Item from the actor (or any actor) to link.
+            // Item picker → choose an Item from the actor (or any actor) to link.
             rowEl.querySelector('.la-extra-bar-item-pick')?.addEventListener('click', async () =>
             {
                 const actor = tokenDoc?.actor ?? tokenDoc?.parent?.actor;
@@ -2094,7 +2100,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
         runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) =>
         {
             const remainingW = initialFlashW * (1 - eased);
-            // Damage: pips drain from the right â†’ flash shrinks from the left.
+            // Damage: pips drain from the right → flash shrinks from the left.
             const drawX = isDamage
                 ? flashStartX
                 : flashStartX + (initialFlashW - remainingW);
@@ -2170,7 +2176,7 @@ function bakeGraphicsToTexture(gfx, resolution = BAKE_RESOLUTION)
             region,
             multisample: PIXI.MSAA_QUALITY?.HIGH ?? 4,
         });
-        // Mipmaps: GPU uses pre-filtered downsamples instead of 1-of-N nearest sampling (the moirÃ© source).
+        // Mipmaps: GPU uses pre-filtered downsamples instead of 1-of-N nearest sampling (the moiré source).
         if (tex.baseTexture)
         {
             tex.baseTexture.mipmap = PIXI.MIPMAP_MODES?.ON ?? 1;
@@ -2493,7 +2499,7 @@ function drawStatHub()
         wrapper.position.set(token.mesh.position.x, token.mesh.position.y);
         wrapper.rotation = iso.reverseRotation;
         wrapper.skew.set(iso.reverseSkewX, iso.reverseSkewY);
-        // K = 1/sqrt(sqrt(3)) â‰ˆ 0.76 cancels the True Iso aspect change.
+        // K = 1/sqrt(sqrt(3)) ≈ 0.76 cancels the True Iso aspect change.
         const isoScale = 0.76;
         wrapper.scale.set(isoScale, 1 / isoScale);
         container.position.set(-width / 2, (token.h / 2) + 3 - rowHeight);
@@ -3006,7 +3012,7 @@ function drawElevationBadge(token)
 
     if (isPositive)
     {
-        // â–² arrow then dark cell
+        // ▲ arrow then dark cell
         gfx.beginFill(arrowColor, 1);
         gfx.moveTo(halfW, 0);
         gfx.lineTo(cellW, arrowH);
@@ -3023,7 +3029,7 @@ function drawElevationBadge(token)
     }
     else
     {
-        // Dark cell then â–¼ arrow
+        // Dark cell then ▼ arrow
         gfx.beginFill(0x111111, 0.9);
         gfx.drawRect(0, 0, cellW, cellH);
         gfx.endFill();
@@ -3463,6 +3469,8 @@ export async function applyDefaultsToCurrentScene()
 // Fade a token's bars back out once the flash-linger window elapses, unless it should still show.
 function scheduleFlashFade(tok)
 {
+    if (statBarDisabled(tok?.document))
+        return;
     _flashingTokens.add(tok.id);
     const fadeTarget = _getFadeTarget(tok);
     if (fadeTarget)
@@ -3500,7 +3508,7 @@ export function initTokenStatBar()
     // Skip if Bar Brawl is active.
     if (game.modules.get('barbrawl')?.active)
     {
-        console.log(`${MODULE_ID} | Bar Brawl detected â€” skipping custom token stat bar registration.`);
+        console.log(`${MODULE_ID} | Bar Brawl detected — skipping custom token stat bar registration.`);
         return;
     }
 
@@ -4082,6 +4090,7 @@ export function initTokenStatBar()
         if (!tab)
             return;
         const hidden = statBarHidden(tokenDoc);
+        const disabled = statBarDisabled(tokenDoc);
         const combatOnly = statBarCombatOnly(tokenDoc);
         const rowHeight = statBarRowHeight(tokenDoc);
         const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
@@ -4110,7 +4119,12 @@ export function initTokenStatBar()
             <div class="form-group">
                 <label>Hide Stat Bar</label>
                 <input type="checkbox" name="flags.${MODULE_ID}.${FLAG_HIDDEN}" ${hidden ? 'checked' : ''}/>
-                <p class="notes">Completely hide the stat bar hub for this token.</p>
+                <p class="notes">Hide the stat bar hub for this token. It still flashes briefly when a value changes.</p>
+            </div>
+            <div class="form-group">
+                <label>Disable Stat Bar</label>
+                <input type="checkbox" name="flags.${MODULE_ID}.${FLAG_DISABLED}" ${disabled ? 'checked' : ''}/>
+                <p class="notes">Never show the hub for this token, not even on value changes.</p>
             </div>
             <div class="form-group">
                 <label>Show Only In Combat</label>
@@ -4209,7 +4223,7 @@ export function initTokenStatBar()
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
     });
 
-    // Combat lifecycle â†’ refresh combat-only tokens.
+    // Combat lifecycle → refresh combat-only tokens.
     const refreshAllForCombat = () =>
     {
         if (!isEnabled())

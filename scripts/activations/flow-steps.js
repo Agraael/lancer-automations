@@ -7,10 +7,21 @@ import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
 import { hasReactionAvailable, executeExtraActionCombat } from '../tools/misc-tools.js';
+import { broadcastFocus } from '../tools/auto-focus.js';
 import { getActionOverlay } from '../interactive/action-overlays.js';
 import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
+
+// Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
+function checkAttribution(state)
+{
+    const uuid = state.la_extraData?.sourceItemUuid;
+    return {
+        item: uuid ? fromUuidSync(uuid) : null,
+        actionName: state.la_extraData?.sourceAction ?? null
+    };
+}
 
 function attackActionData(state, weapon)
 {
@@ -51,6 +62,7 @@ export async function onAttackStep(state)
     const weapon = item;
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
+    broadcastFocus('attack', [token, ...targets]);
 
     const actionData = attackActionData(state, weapon);
 
@@ -228,6 +240,7 @@ export async function onDamageStep(state)
 
     const damageResults = state.data?.damage_results || [];
     const targets = state.data?.targets || [];
+    broadcastFocus('damage', [token, ...targets.map(targetInfo => targetInfo.target)]);
 
     const actionData = attackActionData(state, weapon);
 
@@ -372,6 +385,7 @@ export async function onTechAttackStep(state)
     const techItem = item;
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
+    broadcastFocus('attack', [token, ...targets]);
 
     const actionData = techActionData(state, techItem);
 
@@ -473,6 +487,7 @@ export async function onCheckStep(state)
 
     const targetTokenId = state.la_extraData?.targetTokenId;
     const checkAgainstToken = targetTokenId ? canvas.tokens.get(targetTokenId) : null;
+    broadcastFocus('check', [token, checkAgainstToken]);
 
     await handleTrigger('onCheck', {
         triggeringToken: token,
@@ -482,6 +497,7 @@ export async function onCheckStep(state)
         success,
         checkAgainstToken: checkAgainstToken,
         targetVal: targetVal,
+        ...checkAttribution(state),
         flowState: state
     });
     await burnBonusUsageForFlow(state);
@@ -520,7 +536,7 @@ function _relaunchIgnore(state)
  * @param {Object} opts
  * @param {() => void} opts.setFlag
  * @param {any[]} opts.cancelledBy
- * @param {() => (() => Promise<void>)} opts.getIgnoreCallback - Returns the "ignore" action; called lazily.
+ * @param {() => (() => Promise<void>)} opts.getIgnoreCallback - Returns the "ignore" action, called lazily.
  * @param {string} opts.defaultReason
  * @param {string} opts.defaultTitle
  * @param {string} [opts.choice1Text]
@@ -686,7 +702,7 @@ export async function stunnedAutoFailStep(state)
     await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ token: token.document }),
         content: `<div class="lancer-chat-message"><b>${statLabel}</b><br>`
-            + `<span style="color:#c0392b;font-weight:bold;">AUTOMATIC FAILURE</span> &mdash; ${token.name} is <b>Stunned</b> and automatically fails ${statLabel} checks and saves.</div>`
+            + `<span style="color:#c0392b;font-weight:bold;">AUTOMATIC FAILURE</span>: ${token.name} is <b>Stunned</b> and automatically fails ${statLabel} checks and saves.</div>`
     });
 
     return true;
@@ -706,7 +722,8 @@ export async function onInitCheckStep(state)
         data: {
             statName: state.data?.title || 'Unknown',
             checkAgainstToken: state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null,
-            targetVal: state.la_extraData?.targetVal ?? 10
+            targetVal: state.la_extraData?.targetVal ?? 10,
+            ...checkAttribution(state)
         }
     });
     if (!proceed)
@@ -785,8 +802,7 @@ export async function onActivationStep(state)
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     let item = state.item;
 
-    // Resolve source item for extra actions (SimpleActivationFlow has no item by default).
-    // _sourceItemId is stamped by addExtraActions; the item ref is also passed from TAH.
+    // SimpleActivationFlow carries no item, addExtraActions stamps _sourceItemId so extras can resolve theirs.
     if (!item && state.data?.action?._sourceItemId && actor)
     {
         item = actor.items.get(state.data.action._sourceItemId) ?? null;
@@ -867,7 +883,7 @@ export async function onActivationStep(state)
     };
 
     let reactionJustConsumed = false;
-    if (actionType === 'Reaction' && token && game.settings.get('lancer-automations', 'consumeReaction'))
+    if (actionType === 'Reaction' && token?.actor && game.settings.get('lancer-automations', 'consumeReaction'))
     {
         if (hasReactionAvailable(token))
         {
@@ -902,7 +918,7 @@ export async function onActivationStep(state)
     if (token)
     {
         state.actor = token.actor;
-        // Advance move stack post-effects; fire-and-forget.
+        // Advance move stack post-effects, fire-and-forget.
         _advanceMoveStack('awaitActivation', token.id, false, { actionName });
     }
 
@@ -1029,7 +1045,7 @@ export async function onInitActivationStep(state)
         defaultTitle: "ACTIVATION CANCELED",
     });
 
-    // Called WITHOUT await; only synchronous evaluate functions work correctly with cancelAction.
+    // Called without await, only synchronous evaluate functions work with cancelAction.
     handleTrigger('onInitActivation', {
         triggeringToken: token,
         actionType,

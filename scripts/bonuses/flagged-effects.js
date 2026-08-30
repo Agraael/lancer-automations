@@ -79,13 +79,14 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
     if (!notifyOptions)
         return;
     const tokenObj = /** @type {any} */ (token).object || token;
+    const hiddenToken = !!(tokenObj.document ?? tokenObj).hidden;
     notificationQueue.push({
         token: tokenObj,
-        effectName,
+        effectName: effectName ? game.i18n.localize(String(effectName)) : effectName,
         prefix: notifyOptions.prefixText || defaultPrefix,
         source: notifyOptions.source,
         icon,
-        whisper: notifyOptions.whisper === true || isInOnInitTriggerContext()
+        whisper: notifyOptions.whisper === true || isInOnInitTriggerContext() || hiddenToken
     });
 
     if (notificationTimer)

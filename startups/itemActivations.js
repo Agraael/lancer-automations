@@ -1920,6 +1920,315 @@ const focusDownAutomation = {
     ]
 };
 
+const submachineGunAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onInitAttack"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            return !!triggerData.flowState?.data?.acc_diff?.weapon?.engaged;
+        },
+        activationCode: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            triggerData.flowState.data.acc_diff.weapon.engaged = false;
+        }
+    }]
+};
+
+const flankerAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onTurnStart"],
+        triggerSelf: true,
+        triggerOther: false,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const unseen = canvas.tokens.placeables.filter(other => other.id !== reactorToken.id
+                && api.isHostile(reactorToken, other)
+                && !api.hasLineOfSight(reactorToken, other));
+            if (!unseen.length)
+                return;
+            await api.addGlobalBonus(reactorToken.actor, {
+                id: `flanker-${item.id}`,
+                name: "Flanker",
+                type: "accuracy",
+                val: 1,
+                rollTypes: ["attack", "tech_attack"],
+                applyTo: unseen.map(target => target.id)
+            }, { duration: "end", origin: reactorToken });
+        }
+    }]
+};
+
+const thunderboltJumpjetsAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData)
+        {
+            return triggerData.actionName === "Boost";
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            await api.applyEffectsToTokens({
+                tokens: [reactorToken],
+                effectNames: ['flying'],
+                note: "Thunderbolt Jumpjets",
+                duration: api.untilEndOfTurn(reactorToken)
+            });
+            await api.addGlobalBonus(reactorToken.actor, {
+                id: `thunderbolt-jumpjets-${item.id}`,
+                name: "Thunderbolt Jumpjets",
+                type: "difficulty",
+                val: 1,
+                applyToTargetter: true,
+                rollTypes: ["attack"]
+            }, { duration: "end", origin: reactorToken });
+        }
+    }]
+};
+
+const stormfallAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const caught = await api.chooseToken(reactorToken, {
+                title: "STORMFALL",
+                description: "Burst 2 pulse of disrupting electricity.",
+                pattern: 'burst',
+                areaRange: 2,
+                disposition: 'hostile',
+                filterWarning: "Not an enemy",
+                count: -1,
+                allowEmptyConfirm: true
+            });
+            if (!caught?.length)
+                return;
+            const results = await api.executeSaveVsEffect(caught, {
+                stat: "SYS",
+                title: "Stormfall",
+                origin: reactorToken,
+                cardTitle: "STORMFALL - SYSTEMS SAVE",
+                cardDescription: (target) => `<b>${target.name}</b> must pass a Systems save or take energy damage and be <b>Impaired</b>.`,
+                onFail: (target) => api.applyEffectsToTokens({
+                    tokens: [target], effectNames: ['impaired'], note: "Stormfall", duration: api.untilEndOfTurn(target)
+                })
+            });
+            const failed = results.filter(entry => !entry.passed).map(entry => entry.target);
+            if (failed.length)
+                await api.executeDamageRoll(reactorToken, failed, api.tierValue(reactorToken, [1, 2, 3]), "Energy", "Stormfall");
+        }
+    }]
+};
+
+const fullSpectrumOverloadAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onTechHit"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const targets = triggerData.hitTokens ?? [];
+            if (!targets.length)
+                return;
+            api.afterFx(async () =>
+            {
+                await api.executeDamageRoll(reactorToken, targets, api.tierValue(reactorToken, [2, 3, 4]), "Heat", "Full-Spectrum Overload");
+                for (const target of targets)
+                {
+                    await api.applyEffectsToTokens({
+                        tokens: [target],
+                        effectNames: [{ name: "No Reactions", isCustom: true, icon: whiteIcon("systems/lancer/assets/icons/reaction.svg") }],
+                        note: "Full-Spectrum Overload",
+                        duration: api.untilEndOfTurn(target)
+                    }, {
+                        changes: [{ key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" }]
+                    });
+                }
+            });
+        }
+    }]
+};
+
+const smokeChargesAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            await api.placeZone(reactorToken, {
+                range: 5,
+                size: 2,
+                type: "Blast",
+                fillColor: "#808080",
+                borderColor: "#ffffff",
+                statusEffects: ["cover_soft"],
+                title: "SMOKE CHARGES",
+                description: "Place a Blast 2 smoke zone within Range 5.",
+                icon: "fas fa-smog",
+                centerLabel: "Smoke",
+                expires: { on: 'ownerTurnEnd', turns: 2 }
+            });
+        }
+    }]
+};
+
+const harpyTurbojetsAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onActivation"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item)
+        {
+            return triggerData.actionName === "Boost" && item.system?.charged !== false;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const ask = await api.askCard({
+                title: "HARPY TURBOJETS",
+                description: "Use <b>Harpy Turbojets</b>?",
+                item,
+                originToken: reactorToken,
+                owner: reactorToken
+            });
+            if (!ask.confirmed)
+                return;
+            await triggerData.startRelatedFlow();
+            api.recordMovementExtra(reactorToken, reactorToken.actor.system.speed ?? 0, { leg: 'boost' });
+        }
+    }]
+};
+
+const weatherProofingAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.ensureLinkedEffect({
+                items: [item],
+                effectNames: ['surefoot'],
+                note: item.name,
+                duration: { label: 'permanent' }
+            });
+        }
+    }]
+};
+
+const perceptiveAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.ensureLinkedBonus({
+                items: [item],
+                bonusData: {
+                    id: `perceptive-${item.id}`,
+                    name: "Perceptive",
+                    type: "accuracy",
+                    val: 1,
+                    rollTypes: ["stat_roll"],
+                    condition: (state) => state?.la_extraData?.sourceAction === "Search"
+                },
+                addOptions: { duration: 'constant' }
+            });
+        }
+    }]
+};
+
+const guerillaWarfareAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onAttack"],
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: false,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            return !!triggerData.weapon && api.hasStatus(reactorToken, 'hidden');
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            if (!await api.consumeOncePerRound(reactorToken, 'guerilla_warfare'))
+                return;
+            await api.injectBonusToFlowState(triggerData.flowState, {
+                name: "Guerilla Warfare",
+                type: "damage",
+                damage: [{ val: "1d6", type: "Kinetic" }]
+            });
+        }
+    }]
+};
+
 // Terrain Printer waypoint hook: friendly token in the zone may spend 1 movement to travel to the twin waypoint.
 async function _terrainPrinterHookFn(template, scene, token)
 {
@@ -4562,6 +4871,16 @@ api.registerDefaultItemReactions({
     "npc-rebake_npcf_emergency_vent_scourer": emergencyVentAutomation,
     "npc-rebake_npcf_pulse_laser_scourer": pulseLaserAutomation,
     "npc-rebake_npcf_melt_scourer": meltAutomation,
+    "ubrg_npcf_submachine_gun_stormwing": submachineGunAutomation,
+    "ubrg_npcf_flanker_stormwing": flankerAutomation,
+    "ubrg_npcf_thunderbolt_jumpjets_stormwing": thunderboltJumpjetsAutomation,
+    "ubrg_npcf_stormfall_stormwing": stormfallAutomation,
+    "ubrg_npcf_full_spectrum_overload_stormwing": fullSpectrumOverloadAutomation,
+    "ubrg_npcf_smoke_charges_stormwing": smokeChargesAutomation,
+    "ubrg_npcf_harpy_turbojets_stormwing": harpyTurbojetsAutomation,
+    "npcf_weather_proofing_ranger_maxt": weatherProofingAutomation,
+    "npcf_perceptive_ranger_maxt": perceptiveAutomation,
+    "npcf_guerilla_warfare_ranger_maxt": guerillaWarfareAutomation,
     "npc-rebake_npcf_guardian_bastion": guardianTraitAutomation,
     "npc-rebake_npcf_guardian_sentinel": guardianTraitAutomation,
     "nrfaw-npc-rebake_npcf_guardian_spite": guardianTraitAutomation,
@@ -5615,9 +5934,9 @@ api.registerDefaultGeneralReactions({
         outOfCombat: true,
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            const speed = (reactorToken.actor?.system?.speed ?? 0) * canvas.grid.distance;
+            const speed = reactorToken.actor?.system?.speed ?? 0;
             if (speed > 0)
-                api.increaseMovementCap(reactorToken, speed);
+                api.recordBoostCast(reactorToken, speed);
             await api.actionFX?.playBoostFX?.(reactorToken);
         }
     }

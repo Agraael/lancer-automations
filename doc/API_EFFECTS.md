@@ -437,7 +437,7 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 |:---------|:-----|:------------|
 | <kbd>id</kbd> | `string` | Optional custom ID |
 | <kbd>name</kbd> | `string` | Display name |
-| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"` |
+| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"`, `"movement_extra"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Stack count |
 | <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 use only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
@@ -459,6 +459,21 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 
 `"provoke"` acts like permanent DISENGAGE. No extra fields required.
+
+</details>
+
+<details>
+<summary>Movement extra fields (type: "movement_extra")</summary>
+
+| Property | Type | Description |
+|:---------|:-----|:------------|
+| <kbd>subtype</kbd> | `string` | `"boost"` (default) lengthens every Boost, `"standard"` lengthens the Standard Move |
+| <kbd>val</kbd> | `number` | Spaces added to each matching move |
+
+Feeds both the ruler bands and the movement cap through
+[`getMovementBands`](API_MOVEMENT.md#getMovementBands). Use it for standing effects ("your boosts are longer");
+for a one-shot on a single move use `recordMovementExtra` instead. The legacy type id `speed_boost_extra` is
+read as `movement_extra` with `subtype: "boost"`.
 
 </details>
 

@@ -73,9 +73,8 @@ const DEFS = [
     },
     {
         key: ISO_SETTINGS.effectAspect,
-        name: 'Sequencer Effect Aspect',
-        hint: 'Counter-scale upright Sequencer effects so they keep their shape, like the stat bars.',
-        defaultValue: false,
+        name: 'Sequencer Effect Shape',
+        hint: 'Un-squash upright effects on iso scenes and keep beams flat on non-iso scenes.',
     },
     {
         key: ISO_SETTINGS.debugSelectionOverlay,
@@ -525,6 +524,58 @@ Hooks.once('ready', () =>
             return this.setTargets(targets, { mode: (opts.releaseOthers ?? true) ? 'replace' : 'acquire' });
         }, 'MIXED');
 });
+
+// Sequencer's iso plugin skews stretchTo/overlay effects without checking the scene flag.
+// CanvasEffect isn't exported, so patch its prototype off the first effect we see.
+let _flatScenePatched = false;
+function _effectOnFlatScene(effect)
+{
+    if (!isIsoFeatureEnabled(ISO_SETTINGS.effectAspect))
+        return false;
+    const scene = game.scenes.get(effect?.data?.sceneId) ?? canvas.scene;
+    return !getIsoProvider(scene);
+}
+function _flattenIsoContainer(effect)
+{
+    const container = effect?.isometricContainer;
+    if (!container || container.destroyed || !_effectOnFlatScene(effect))
+        return;
+    container.skew.set(0, 0);
+    container.scale.set(1, 1);
+    container.rotation = 0;
+}
+function _patchSequencerFlatScenes(effect)
+{
+    if (_flatScenePatched)
+        return;
+    let proto = Object.getPrototypeOf(effect);
+    while (proto && !Object.hasOwn(proto, '_transformSprite'))
+        proto = Object.getPrototypeOf(proto);
+    if (!proto)
+        return;
+    _flatScenePatched = true;
+    for (const name of ['_transformSprite', '_rotateTowards', '_transformAttachedNoStretchSprite'])
+    {
+        const original = proto[name];
+        if (typeof original !== 'function')
+            continue;
+        proto[name] = function (...args)
+        {
+            const result = original.apply(this, args);
+            if (result instanceof Promise)
+            {
+                return result.then((value) =>
+                {
+                    _flattenIsoContainer(this);
+                    return value;
+                });
+            }
+            _flattenIsoContainer(this);
+            return result;
+        };
+    }
+}
+Hooks.on('createSequencerEffect', _patchSequencerFlatScenes);
 
 // Sequencer's iso plugin stands effects up (45deg on isometricContainer) but skips the aspect
 // counter-scale, so billboarded FX render squashed. Overlay and beam effects use other paths.

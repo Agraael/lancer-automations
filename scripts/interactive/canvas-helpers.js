@@ -82,6 +82,7 @@ const _PALETTE_DEFS = [
     ['color.glowWeapon', RANGE_GLOW, 'weapon', 'Weapon'],
     ['color.glowReach', RANGE_GLOW, 'reach', 'Max Reach'],
     ['color.glowMark', RANGE_GLOW, 'mark', 'Mark'],
+    ['color.pulseLine', RANGE_PULSE_STYLE, 'lineColor', 'Pulse Line'],
 ];
 
 // Ruler speed-tier color keys; listed here so Colors-tab reset covers them too.
@@ -810,6 +811,20 @@ function _rangePulseWidthMul()
     }
 }
 
+// Colors tab opacity sliders.
+function _rangePulseOpacity(settingKey)
+{
+    try
+    {
+        const opacity = Number(game.settings.get('lancer-automations', settingKey));
+        return Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
+
 /** Wave-pulse tick for canvas.app.ticker.add(...). */
 export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
 {
@@ -837,6 +852,7 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const periodMs = rawPeriod / Math.max(0.01, RANGE_PULSE_STYLE.pulseSpeed);
     const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
     const widthMul = _rangePulseWidthMul();
+    const opacityMul = _rangePulseOpacity('rangePulseWaveOpacity');
     const lineW = Math.max(1, lineWidth * gridScale * widthMul);
     const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
     const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
@@ -882,7 +898,7 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     };
     const setRingAlpha = (ringG, waveAlpha) =>
     {
-        const alpha = Math.min(1, baseAlpha + baseLineAlpha + waveAlpha * lineAlphaMul);
+        const alpha = Math.min(1, baseAlpha + baseLineAlpha + waveAlpha * lineAlphaMul) * opacityMul;
         ringG.alpha = alpha;
         ringG.visible = alpha > 0.001;
     };
@@ -1041,6 +1057,7 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
         return;
     const gridScale = canvas.grid.size / 100;
     const widthMul = _rangePulseWidthMul();
+    lineAlpha *= _rangePulseOpacity('rangePulseLineOpacity');
     const lineW = Math.max(1, lineWidth * gridScale * widthMul);
     const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
     const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);

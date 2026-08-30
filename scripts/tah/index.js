@@ -117,6 +117,34 @@ Hooks.on('init', () =>
         },
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
+    game.keybindings.register(MODULE, 'tah.toggleFavorites', {
+        name: 'TAH: Toggle Favorites',
+        hint: 'Open or close the Token Action HUD favorites column.',
+        editable: [{ key: 'KeyX', modifiers: ['Shift'] }],
+        onDown: () =>
+        {
+            if (!enabled())
+                return false;
+            if (!hud.toggleFavorites())
+                return false;
+            return true;
+        },
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
+    });
+    game.keybindings.register(MODULE, 'tah.toggleStatuses', {
+        name: 'TAH: Toggle Statuses',
+        hint: 'Open or close the Token Action HUD statuses panel.',
+        editable: [{ key: 'KeyZ', modifiers: ['Shift'] }],
+        onDown: () =>
+        {
+            if (!enabled())
+                return false;
+            if (!hud.toggleStatuses())
+                return false;
+            return true;
+        },
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
+    });
     game.settings.register(MODULE, 'tah.clickToOpen', {
         name: 'Click to Open',
         hint: 'Open categories on click instead of hover.',

@@ -13,8 +13,8 @@ import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, getActionLockInfo, getStatusLockedFields, getFieldLockingStatuses, lockEntryLabel } from '../combat/action-limits.js';
-import { laHudRenderIcon, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
-import { isAutoConsumeDisabled } from '../interactive/extra-config.js';
+import { laHudRenderIcon, laHudSizeMark, weaponSizeLevel, weaponTypeIcon, HUD_ICON_SIZE, HUD_WEAPON_ICON_SIZE, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
+import { isAutoConsumeDisabled, renderConsumeStatusHtml } from '../interactive/extra-config.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
 import {
@@ -354,6 +354,43 @@ export class LancerHUD
         return true;
     }
 
+    toggleFavorites()
+    {
+        if (!this._el || !this._toggleFavorites)
+            return false;
+        this._toggleFavorites();
+        return true;
+    }
+
+    toggleStatuses()
+    {
+        if (!this._el)
+            return false;
+        if (this._statusPanelInstance?.isVisible)
+        {
+            this._statusPanelInstance.close();
+            this._clearC1Active?.();
+            return true;
+        }
+        const catIdx = (this._categories ?? []).findIndex(cat => cat.isStatusPanel);
+        if (catIdx < 0)
+            return false;
+        const row = this._el.children().first().find('.la-hud-row').eq(catIdx);
+        if (!row.length)
+            return false;
+        let clickToOpen = false;
+        try
+        {
+            clickToOpen = !!game.settings.get('lancer-automations', 'tah.clickToOpen');
+        }
+        catch
+        {
+            clickToOpen = false;
+        }
+        row.trigger(clickToOpen ? 'click' : 'mouseenter');
+        return true;
+    }
+
     unbind()
     {
         this._bindGen++;
@@ -380,6 +417,7 @@ export class LancerHUD
         clearTimeout(this._kbResetTimer);
         this._favResizeObserver?.disconnect();
         this._favResizeObserver = null;
+        this._toggleFavorites = null;
         if (this._favDocHandlers)
         {
             document.removeEventListener('mousemove', this._favDocHandlers.move);
@@ -895,6 +933,8 @@ export class LancerHUD
             {
                 if (this._searchActive || this._pickerSuppress)
                     return;
+                if (c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites')
+                    return;
                 closeCol(c2);
                 closeCol(c3);
                 closeCol(c4);
@@ -1102,6 +1142,17 @@ export class LancerHUD
         };
         const favIconInner = favIcon.find('.la-hud-fav-icon');
         const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites';
+        this._toggleFavorites = () =>
+        {
+            if (isFavoritesOpen())
+            {
+                closeCol(c2, 80);
+                this._c2Category = null;
+                this._c2AnchorRow = null;
+                return;
+            }
+            openFavorites();
+        };
         let favHovering = false;
         const applyFavStyle = () =>
         {
@@ -1514,7 +1565,7 @@ export class LancerHUD
             const rawChildren = item.getChildren ? item.getChildren() : null;
             const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel || !!item.isBondPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
-            const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount);
+            const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount, item.sizeLevel ?? null);
             if (item.onBadgeClick)
             {
                 row.find('.la-hud-badge').css('cursor', 'pointer').on('click', (ev) =>
@@ -1870,10 +1921,19 @@ export class LancerHUD
                         this._openChildCol(this._c3, this._c4, item, freshChildren, row);
                     }
                 };
-                if (this._clickToOpen)
+                if (!this._clickToOpen)
+                    row.on('mouseenter', openChild);
+                else if (!item.onClick)
                     row.on('click', openChild);
                 else
-                    row.on('mouseenter', openChild);
+                {
+                    // Row click fires the action, only the arrow drills in.
+                    row.find('.la-hud-arrow').addClass('la-hud-arrow--split').on('click', (ev) =>
+                    {
+                        ev.stopPropagation();
+                        openChild();
+                    });
+                }
             }
 
             col.append(row);
@@ -3150,10 +3210,6 @@ export class LancerHUD
         const children = [];
         const activationTag = (sys.tags ?? []).find(/** @type {any} */ t => ACTIVATION_TAGS.includes(t.lid));
         const sysActions = sys.actions ?? [];
-        const status = getItemStatus(item);
-        const childBadge = status.badge ?? null;
-        const childBadgeColor = status.badgeColor ?? null;
-        const childStatusKind = status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null;
         const hidePrimary = isPrimaryActionHidden(item);
         if (!hidePrimary && sysActions.length <= 1)
         {
@@ -3161,12 +3217,9 @@ export class LancerHUD
             const actStr = single?.activation ?? (activationTag ? activationTag.lid.replace('tg_', '').replace('_action', ' action') : 'Activation');
             children.push(this._itemRow(item, {
                 label: single?.name ?? item.name,
-                action: { name: item.name, activation: actStr },
+                action: single ?? { name: item.name, activation: actStr },
                 category: 'Systems',
                 icon: single ? getActivationIcon(single) : (activationTag ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg'),
-                badge: childBadge,
-                badgeColor: childBadgeColor,
-                statusKind: childStatusKind,
                 onClick: single ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0') : () => /** @type {any} */ (item).beginSystemFlow(),
                 onRightClick: single ? ap(single)
                     : activationTag ? (/** @type {any} */ row) =>
@@ -3186,9 +3239,6 @@ export class LancerHUD
                     action,
                     category: 'Systems',
                     icon: getActivationIcon(action),
-                    badge: childBadge,
-                    badgeColor: childBadgeColor,
-                    statusKind: childStatusKind,
                     onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
                     onRightClick: ap(action),
                 }));
@@ -3756,10 +3806,6 @@ export class LancerHUD
         const sys = item.system;
         const ap = act => this._actionPopup(act, item);
         const sysActions = applyActionOverlays(item, sys.actions ?? []);
-        const status = getItemStatus(item);
-        const childBadge = status.badge ?? null;
-        const childBadgeColor = status.badgeColor ?? null;
-        const childStatusKind = status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null;
 
         if (sysActions.length <= 1)
         {
@@ -3770,9 +3816,6 @@ export class LancerHUD
                 action: single ?? { name: item.name, activation: actStr },
                 category: 'Gear',
                 icon: single ? getActivationIcon(single) : 'systems/lancer/assets/icons/activate.svg',
-                badge: childBadge,
-                badgeColor: childBadgeColor,
-                statusKind: childStatusKind,
                 onClick: single
                     ? () => /** @type {any} */ (item).beginActivationFlow('system.actions.0')
                     : () => executeSimpleActivation(actor, { title: item.name, action: { name: item.name, activation: actStr }, detail: sys.effect ?? '' }, { item }),
@@ -3787,9 +3830,6 @@ export class LancerHUD
             action,
             category: 'Gear',
             icon: getActivationIcon(action),
-            badge: childBadge,
-            badgeColor: childBadgeColor,
-            statusKind: childStatusKind,
             onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
             onRightClick: ap(action),
         }));
@@ -4002,10 +4042,6 @@ export class LancerHUD
                             this._showItemPopup({ cssClass: 'la-hud-popup la-hud-npcsys-popup', dataKey: 'npcsys-id', dataValue: item.id, title: item.name, subtitle: this._joinSubtitle(actLabel ?? sys.type, origin), bodyHtml, theme: activation ? activationTheme(activation) : 'system', item, row });
                         };
                         const baseRows = [];
-                        const npcStatus = getItemStatus(item);
-                        const childBadge = npcStatus.badge ?? null;
-                        const childBadgeColor = npcStatus.badgeColor ?? null;
-                        const childStatusKind = npcStatus.destroyed ? 'destroyed' : npcStatus.unavailable ? 'unavailable' : null;
                         const hidePrimary = isPrimaryActionHidden(item);
                         if (!hidePrimary && sysActions.length <= 1)
                         {
@@ -4016,9 +4052,6 @@ export class LancerHUD
                                 action: { name: item.name, activation: actStr },
                                 category: 'Systems',
                                 icon: (single || activation) ? getActivationIcon({ ...(single ?? {}), name: item.name, activation: actStr }) : 'systems/lancer/assets/icons/activate.svg',
-                                badge: childBadge,
-                                badgeColor: childBadgeColor,
-                                statusKind: childStatusKind,
                                 onClick: () => /** @type {any} */ (item).beginSystemFlow(),
                                 onRightClick: npcRightClick,
                             }));
@@ -4030,9 +4063,6 @@ export class LancerHUD
                                 action,
                                 category: 'Systems',
                                 icon: getActivationIcon(action),
-                                badge: childBadge,
-                                badgeColor: childBadgeColor,
-                                statusKind: childStatusKind,
                                 onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
                                 onRightClick: npcRightClick,
                             })));
@@ -4198,7 +4228,9 @@ export class LancerHUD
             {
                 rows.push({
                     label: passiveName,
-                    icon: 'systems/lancer/assets/icons/core_bonus.svg',
+                    icon: 'mdi mdi-circle-expand',
+                    hoverData: { actor, item: frame, action: { name: passiveName, activation: 'Passive' }, category: 'Frame' },
+                    onClick: () => executeSimpleActivation(actor, { title: passiveName, action: { name: passiveName, activation: 'Passive' }, detail: coreSystem?.passive_effect ?? '' }, { item: frame }),
                     onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-passive', dataValue: frame.id, title: passiveName, subtitle: `${frame.name} · Core Passive`, bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${laFormatDetailHtml(coreSystem?.passive_effect ?? '')}</div>${laRenderActions(coreSystem?.passive_actions ?? [])}`, theme: 'frame', item: frame, row }),
                 });
             }
@@ -5058,6 +5090,8 @@ export class LancerHUD
     _weaponItem(weapon, modItem, mount = null)
     {
         const row = this._itemRow(weapon, {
+            icon: weaponTypeIcon(weapon) ?? 'mdi mdi-help-rhombus-outline',
+            sizeLevel: weaponSizeLevel(weapon),
             category: 'Weapons',
             childColLabel: weapon.name,
             getChildren: () => this._weaponChildren(weapon, modItem, mount),
@@ -5113,6 +5147,14 @@ export class LancerHUD
                 this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle: weaponSubtitle(), bodyHtml: this._actionLockReasonHtml(weapon.name) + `<div class="la-weapon-body">${buildBody()}</div>`, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks(), postRender: bindProfileSwitch });
             },
         });
+        const attack = this._lockable({
+            onClick: () => weapon.beginWeaponAttackFlow(),
+            broadcastFn: (token, otherActor) => /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid)?.beginWeaponAttackFlow(),
+        }, weapon.name);
+        row.onClick = attack.onClick;
+        row.broadcastFn = attack.broadcastFn;
+        if (attack.statusKind)
+            row.statusKind = attack.statusKind;
         const lockInfo = getActionLockInfo(this._actor, weapon.name);
         if (lockInfo.itemLocks.length || lockInfo.sources.length)
             row.softDisabled = true;
@@ -5231,28 +5273,16 @@ export class LancerHUD
                 defaultActions: [
                     {
                         label: 'FIGHT',
+                        favKey: `${weapon.uuid}|FIGHT`,
                         icon: 'systems/lancer/assets/icons/white/melee.svg',
                         onClick: () => executeFight(actor, weapon),
-                        broadcastFn: (t, a) =>
-                        {
-                            const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); executeFight(a, w);
-                        },
-                    },
-                    {
-                        label: 'ATTACK',
-                        icon: 'mdi mdi-target',
-                        onClick: () => weapon.beginWeaponAttackFlow(),
-                        broadcastFn: (t, a) =>
-                        {
-                            const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
-                                (w).beginWeaponAttackFlow();
-                        },
-                        onRightClick: this._actionPopup({ name: 'Attack', activation: 'Tool', detail: `Tool: attack with only ${weapon.name}. Prefer Skirmish or Barrage for play.` }, null, 'weapon'),
+                        broadcastFn: (token, otherActor) => executeFight(otherActor, /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid)),
                     },
                 ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
                 modItem,
                 showPopup: (popup, row) => this._showPopupAt(popup, row),
                 onActivate,
+                actionPopup: (action, source) => this._actionPopup(action, source ?? weapon),
             })), 'FIGHT', { slots: [{ weapon: { value: weapon } }] }), ...rangeToggle()], buildPilot);
             return buildPilot();
         }
@@ -5265,33 +5295,24 @@ export class LancerHUD
             defaultActions: [
                 {
                     label: attackLabel,
+                    favKey: `${weapon.uuid}|${attackLabel}`,
                     icon: isSuperHeavy
                         ? 'mdi mdi-hexagon-slice-6'
                         : 'mdi mdi-hexagon-slice-3',
                     onClick: () => isSuperHeavy
                         ? executeBarrage(actor, bypassMount)
                         : executeSkirmish(actor, bypassMount),
-                    broadcastFn: (t, a) =>
+                    broadcastFn: (token, otherActor) =>
                     {
-                        const bm = { slots: [{ weapon: { value: /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid) } }] };
-                        return isSuperHeavy ? executeBarrage(a, bm) : executeSkirmish(a, bm);
+                        const otherMount = { slots: [{ weapon: { value: /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid) } }] };
+                        return isSuperHeavy ? executeBarrage(otherActor, otherMount) : executeSkirmish(otherActor, otherMount);
                     },
-                },
-                {
-                    label: 'ATTACK',
-                    icon: 'mdi mdi-target',
-                    onClick: () => weapon.beginWeaponAttackFlow(),
-                    broadcastFn: (t, a) =>
-                    {
-                        const w = /** @type {any} */ (a).items.find(i => i.system?.lid === weapon.system?.lid); if (w) /** @type {any} */
-                            (w).beginWeaponAttackFlow();
-                    },
-                    onRightClick: this._actionPopup({ name: 'Attack', activation: 'Tool', detail: `Tool: attack with only ${weapon.name}. Prefer Skirmish or Barrage for play.` }, null, 'weapon'),
                 },
             ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
             modItem,
             showPopup: (popup, row) => this._showPopupAt(popup, row),
             onActivate,
+            actionPopup: (action, source) => this._actionPopup(action, source ?? weapon),
         })), attackLabel, bypassMount), ...rangeToggle()], buildMech);
         return buildMech();
     }
@@ -5362,7 +5383,8 @@ export class LancerHUD
             const blockHtml = blockReason
                 ? `<p class="la-hud-action-locked-reason" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(160,119,68,0.18);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Blocked:</strong> ${blockReason}</p>`
                 : '';
-            const bodyHtml = blockHtml + this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null, action.activation) + laRenderActionDetail(action, { tier });
+            const consumeHtml = source?.documentName === 'Item' ? renderConsumeStatusHtml(source, action) : '';
+            const bodyHtml = blockHtml + this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null, action.activation) + laRenderActionDetail(action, { tier }) + consumeHtml;
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
@@ -5782,7 +5804,9 @@ export class LancerHUD
     _kbDeeper()
     {
         const currentRow = this._kbRows(this._kbCol).eq(this._kbIdx);
-        if (currentRow.length)
+        if (currentRow.length && this._clickToOpen && !currentRow.hasClass('la-hud-active'))
+            currentRow.find('.la-hud-arrow').trigger('click');
+        else if (currentRow.length)
             currentRow.triggerHandler('mouseenter');
         const childDepth = this._kbCol + 1;
         if (childDepth > 4 || !this._kbRows(childDepth).length)
@@ -5815,6 +5839,60 @@ export class LancerHUD
             }
         });
         this._kbFocusRow(parentDepth, bestIdx);
+    }
+    _kbResultsLabel()
+    {
+        return this._c2 && this._c2.is(':visible') ? this._c2.find('.la-hud-col-label').text() : '';
+    }
+    _kbInResults()
+    {
+        const label = this._kbResultsLabel();
+        return this._kbCol === 2 && (label === 'Favorites' || label === 'Results');
+    }
+    // Above the top of the tree: an open search wins, then open results/favorites, else open favorites.
+    _kbTopJump()
+    {
+        const clearOrigin = () =>
+        {
+            const originRow = this._kbRows(this._kbCol).eq(this._kbIdx);
+            originRow.removeClass('la-hud-active');
+            this._kbRestore(originRow);
+            this._clearC1Active?.();
+        };
+        let label = this._kbResultsLabel();
+        if (label !== 'Results' && this._searchBar && this._searchBar.is(':visible'))
+        {
+            if (!String(this._searchBar.val()).trim())
+            {
+                clearOrigin();
+                this._kbClearFocusMark();
+                this._searchBar.trigger('focus');
+                return true;
+            }
+            this._searchBar.trigger('input');
+            label = this._kbResultsLabel();
+        }
+        if (label !== 'Favorites' && label !== 'Results')
+        {
+            if (!this._toggleFavorites)
+                return false;
+            this._toggleFavorites();
+        }
+        clearOrigin();
+        if (!this._kbRows(2).length)
+        {
+            this._kbClearFocusMark();
+            return true;
+        }
+        this._kbFocusRow(2, 0);
+        return true;
+    }
+    // Leaving favorites / search results: close favorites and hand the cursor back to the first category.
+    _kbExitResults()
+    {
+        if (this._kbResultsLabel() === 'Favorites')
+            this._toggleFavorites?.();
+        this._kbFocusRow(1, 0);
     }
     // At a column edge, continue into the child column of the sibling above/below the origin row.
     _kbEdgeJump(down)
@@ -5932,20 +6010,29 @@ export class LancerHUD
         this._cancelCollapse?.();
         if (!this._kbEnsureFocus())
         {
-            this._kbFocusRow(this._kbCol, this._kbIdx);
+            // Fresh cursor with favorites or search results already open: enter that column first.
+            const label = this._kbResultsLabel();
+            if ((label === 'Favorites' || label === 'Results') && this._kbRows(2).length)
+                this._kbFocusRow(2, 0);
+            else
+                this._kbFocusRow(this._kbCol, this._kbIdx);
             this._kbArmInactivityReset();
             return;
         }
         if (action === 'up')
         {
-            if (this._kbIdx <= 0)
-                this._kbEdgeJump(false);
-            else
+            if (this._kbIdx > 0)
                 this._kbFocusRow(this._kbCol, this._kbIdx - 1);
+            else if (this._kbInResults())
+            { /* top of favorites: stay */ }
+            else if (this._kbCol === 1 || !this._kbEdgeJump(false))
+                this._kbTopJump();
         }
         else if (action === 'down')
         {
-            if (this._kbIdx >= this._kbRows(this._kbCol).length - 1)
+            if (this._kbInResults() && this._kbIdx >= this._kbRows(2).length - 1)
+                this._kbExitResults();
+            else if (this._kbIdx >= this._kbRows(this._kbCol).length - 1)
                 this._kbEdgeJump(true);
             else
                 this._kbFocusRow(this._kbCol, this._kbIdx + 1);
@@ -5953,7 +6040,12 @@ export class LancerHUD
         else if (action === 'right')
             this._kbDeeper();
         else if (action === 'left')
-            this._kbBack();
+        {
+            if (this._kbInResults())
+                this._kbExitResults();
+            else
+                this._kbBack();
+        }
         else if (action === 'click')
             this._kbActivate(false);
         else if (action === 'context')
@@ -5966,9 +6058,12 @@ export class LancerHUD
         return $(`<div class="la-hud-col lancer-scroll"><div class="la-hud-col-label">${label}</div></div>`);
     }
 
-    _makeRow(label, hasArrow, icon = null, activation = null, badge = null, badgeColor = null, count = 0)
+    _makeRow(label, hasArrow, icon = null, activation = null, badge = null, badgeColor = null, count = 0, sizeLevel = null)
     {
-        const iconHtml = icon ? laHudRenderIcon(icon) : '';
+        const mark = laHudSizeMark(sizeLevel);
+        let iconHtml = icon ? laHudRenderIcon(icon, sizeLevel == null ? HUD_ICON_SIZE : HUD_WEAPON_ICON_SIZE) : '';
+        if (mark)
+            iconHtml = `<span class="la-hud-glyph${icon ? '' : ' la-hud-glyph--bare'}">${mark}${iconHtml}</span>`;
         const countHtml = hasArrow && count > 0 ? `<span class="la-hud-count">${count}</span>` : '';
         const arrow = hasArrow ? `<span class="la-hud-arrow">▶</span>` : '';
         const actHtml = activation ? `<span class="la-hud-activation">[${activation}]</span>` : '';
@@ -6067,7 +6162,7 @@ export class LancerHUD
 
     _favKey(item)
     {
-        return item?.hoverData?.item?.uuid ?? item?.label ?? null;
+        return item?.favKey ?? item?.hoverData?.item?.uuid ?? item?.label ?? null;
     }
 
     _isFavorite(item)

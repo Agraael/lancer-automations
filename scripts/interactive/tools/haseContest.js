@@ -24,7 +24,8 @@ function contestStats(actor)
 
 // Two-token / two-stat HASE contest card. Any of tokenA/skillA/tokenB/skillB can be pre-set.
 export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = null, skillB = null, title = 'HASE Contest', sendToOwner = true,
-    accuracy1 = 0, difficulty1 = 0, flatModifier1 = 0, accuracy2 = 0, difficulty2 = 0, flatModifier2 = 0 } = {})
+    accuracy1 = 0, difficulty1 = 0, flatModifier1 = 0, accuracy2 = 0, difficulty2 = 0, flatModifier2 = 0,
+    sourceItem = null, sourceAction = null, extraData = null } = {})
 {
     return _queueCard(() => new Promise((resolve) =>
     {
@@ -256,7 +257,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 return;
             cleanup();
             const result = await api?.executeContestedCheck?.(a.token, a.skill, b.token, b.skill,
-                { title, sendToOwner: state.sendToOwner, accuracy1, difficulty1, flatModifier1, accuracy2, difficulty2, flatModifier2 });
+                { title, sendToOwner: state.sendToOwner, accuracy1, difficulty1, flatModifier1, accuracy2, difficulty2, flatModifier2, sourceItem, sourceAction, extraData });
             resolve(result ?? null);
         });
 

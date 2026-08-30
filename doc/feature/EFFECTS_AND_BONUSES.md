@@ -85,7 +85,7 @@ Full API (every type, immunity queries, flow injection) is in [Effects API](../A
 
 ### Bonus types
 
-<img align="right" src="../img/em-bonus-roll.png" width="53%"/>
+<img src="../img/em-bonus-roll.png" width="70%"/>
 
 | Type | What it does |
 |------|--------------|
@@ -100,7 +100,7 @@ Full API (every type, immunity queries, flow injection) is in [Effects API](../A
 
 Accuracy and difficulty bonuses show up in the roll HUD before you confirm. Damage bonuses appear in the damage output.
 
-<br clear="right"/>
+Subtype lists per type are in [`addGlobalBonus`](../API_EFFECTS.md#addGlobalBonus), immunity ones in [Immunity subtypes](../API_REFERENCE.md#immunity-subtypes).
 
 ### Tuning a bonus
 

@@ -1948,10 +1948,18 @@ const _TITLES_WITH_SPECIFIC_FX = new Set([
 // Sequencer's play() resolves early for effects, so each entry also holds a minimum time
 const FX_MIN_HOLD_MS = 1500;
 let _actionFxChain = Promise.resolve();
-export function queueActionFx(fn)
+// Play functions are async, a bare undefined means no FX (title handled elsewhere).
+export function queueActionFx(fn, sourceToken = null)
 {
+    const play = () =>
+    {
+        const result = fn();
+        if (result && sourceToken)
+            Hooks.callAll('lancer-automations.actionFx', sourceToken);
+        return result;
+    };
     _actionFxChain = _actionFxChain.then(() => Promise.all([
-        Promise.resolve().then(fn),
+        Promise.resolve().then(play),
         new Promise(resolve => setTimeout(resolve, FX_MIN_HOLD_MS))
     ])).catch(err => console.error('lancer-automations | action FX failed:', err));
 }
@@ -1959,7 +1967,7 @@ const _queueActionFx = queueActionFx;
 
 export function playActionFxByActivation(activation, token, title, { nameOnBadge = true } = {})
 {
-    _queueActionFx(() => _playActionFxForActivation(activation, token, title, nameOnBadge));
+    _queueActionFx(() => _playActionFxForActivation(activation, token, title, nameOnBadge), token);
 }
 function _playActionFxForActivation(activation, token, title, nameOnBadge = true)
 {
@@ -2013,10 +2021,10 @@ Hooks.on('lancer.preFlow.TechAttackFlow', (flow) =>
     if (flow.state.data?.invade)
     {
         const title = _flowTitle(flow);
-        _queueActionFx(() => playInvadeFX(token, title && title !== 'Invade' ? title : null));
+        _queueActionFx(() => playInvadeFX(token, title && title !== 'Invade' ? title : null), token);
         return;
     }
-    _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
+    _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)), token);
 });
 
 /** Fires Core Power FX when a CoreActiveFlow starts. Skipped when no core energy remains (Lancer aborts at checkCorePower). */
@@ -2027,7 +2035,7 @@ Hooks.on('lancer.preFlow.CoreActiveFlow', (flow) =>
         return;
     if (token.actor?.system?.core_energy === 0)
         return;
-    _queueActionFx(() => playCorePowerFX(token, _flowTitle(flow)));
+    _queueActionFx(() => playCorePowerFX(token, _flowTitle(flow)), token);
 });
 
 /** Fires Quick/Full Tech or generic Quick FX when ActivationFlow/SystemFlow starts. */
@@ -2035,13 +2043,13 @@ Hooks.on('lancer.preFlow.ActivationFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
+        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)), token);
 });
 Hooks.on('lancer.preFlow.SystemFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)));
+        _queueActionFx(() => _playActionFxForActivation(_flowResolveActivationLabel(flow), token, _flowTitle(flow)), token);
 });
 
 /** Fires the generic activation FX when a BondPowerFlow starts. */
@@ -2049,7 +2057,7 @@ Hooks.on('lancer.preFlow.BondPowerFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)));
+        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)), token);
 });
 
 /** Fires the generic activation FX when a TalentFlow prints a rank card. */
@@ -2057,7 +2065,7 @@ Hooks.on('lancer.preFlow.TalentFlow', (flow) =>
 {
     const token = _flowSourceToken(flow);
     if (token)
-        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)));
+        _queueActionFx(() => playActivationFX(token, undefined, _flowTitle(flow)), token);
 });
 
 /** Fires named action FX when a SimpleActivationFlow starts with a matching title. */
@@ -2076,7 +2084,7 @@ Hooks.on('lancer.preFlow.SimpleActivationFlow', (flow) =>
         if (title === 'Prepare')
             return playPrepareFX(token);
         return _playActionFxForActivation(_flowResolveActivationLabel(flow), token, title);
-    });
+    }, token);
 });
 
 function _playGenericPrintActivationFX(flow)
@@ -2085,7 +2093,7 @@ function _playGenericPrintActivationFX(flow)
         return;
     const token = _flowSourceToken(flow);
     if (token)
-        _queueActionFx(() => playActivationFX(token));
+        _queueActionFx(() => playActivationFX(token), token);
 }
 Hooks.on('lancer.preFlow.SimpleHTMLFlow', _playGenericPrintActivationFX);
 Hooks.on('lancer.preFlow.SendUnknownToChat', _playGenericPrintActivationFX);

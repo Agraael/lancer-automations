@@ -31,7 +31,7 @@
         </div>
     </div>
 
-    <!-- Activation Name \u0026 Comments (General only) -->
+    <!-- Activation Name & Comments (General only) -->
     <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
         <div class="form-fields flexrow" style="gap: 10px;">
             <div style="flex: 2;">
@@ -61,13 +61,32 @@
         </p>
     </div>
 
-    <!-- Item LID \u0026 Comments (Item-based only) -->
+    <!-- Scene Reactor (General only) -->
+    <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
+        <label>Scene Reactor / Scene</label>
+        <div class="form-fields" style="display: flex; gap: 8px;">
+            <select name="sceneReactor" id="sceneReactor" style="flex: 1;">
+                <option value="off" {{#if (eq sceneReactor "off" )}}selected{{/if}}>Off</option>
+                <option value="add" {{#if (eq sceneReactor "add" )}}selected{{/if}}>Add (scene and tokens)</option>
+                <option value="only" {{#if (eq sceneReactor "only" )}}selected{{/if}}>Only (scene, no tokens)</option>
+            </select>
+            <select name="sceneId" id="sceneId" style="flex: 1;">
+                <option value="" {{#unless sceneId}}selected{{/unless}}>Any scene</option>
+                {{#each sceneOptions}}
+                <option value="{{this.id}}" {{#if (eq ../sceneId this.id)}}selected{{/if}}>{{this.name}}</option>
+                {{/each}}
+            </select>
+        </div>
+        <p class="notes">Scene Reactor evaluates once as the viewed scene, on the GM client. Add keeps the per-token passes, Only replaces them. Scene limits the whole activation to one scene.</p>
+    </div>
+
+    <!-- Item LID & Comments (Item-based only) -->
     <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
-        <div class="form-fields flexrow" style="gap: 10px;">
+        <div class="form-fields flexrow" style="gap: 10px; align-items: flex-start;">
             <div style="flex: 2;">
                 <label style="font-weight: bold;">Item LID / Deployable LID / Actor UUID</label>
                 <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
-                <p class="notes">Matches an item's `system.lid`, a deployable actor's LID, or an actor by UUID.</p>
+                <p class="notes">Item `system.lid`, deployable LID, or actor UUID.</p>
             </div>
             <div style="flex: 3;">
                 <label style="font-weight: bold;">Comments <span class=\"optional\">(optional)</span></label>
@@ -81,7 +100,7 @@
     <div class="form-group item-only item-preview-container"
         style="{{#if isGeneral}}display:none{{/if}}; background: rgba(0,150,0,0.1); padding: 4px 10px; border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
         <span style="font-size: 0.85em;">
-            <span id="preview-item-name">{{#if foundItemName}}<strong>Item:</strong> {{foundItemName}}{{else}}<em>No
+            <span id="preview-item-name">{{#if foundItemName}}<strong>{{foundItemKind}}:</strong> {{foundItemName}}{{else}}<em>No
                     item found</em>{{/if}}</span>
             <!-- {{#if foundActionName}}<span id="preview-action-name" style="margin-left: 8px;"><strong>Action:</strong>
                 {{foundActionName}}</span>
@@ -98,6 +117,10 @@
         <a class="find-deployable-btn" title="Find Deployable LID"
             style="color: var(--la-accent); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
             <i class="fas fa-rocket"></i> Deployable Finder
+        </a>
+        <a class="find-document-btn" title="Find Actor UUID"
+            style="color: var(--la-accent); cursor: pointer; font-size: 0.85em; white-space: nowrap; margin-left: 12px;">
+            <i class="fas fa-user"></i> Actor Finder
         </a>
     </div>
 
@@ -147,11 +170,7 @@
         </div>
     </details>
 
-    <!-- Is Reaction Toggle -->
-    <!-- Action Type & Consumption -->
-    <!-- Action Type, Frequency & Consumption -->
-    <!-- Action Type, Frequency, Consumption & Trigger Options -->
-    <!-- 2-Column Layout for Configuration & Triggers -->
+    <!-- Configuration & Triggers -->
     <div class="reaction-columns">
         <!-- Left Column: Configuration -->
         <div class="column-left">
@@ -348,7 +367,7 @@
             alone, or alongside this reaction's own flow/card.</p>
         <p id="activation-after-warning" class="notes" style="display:none; color:#b60; margin-top:4px;">
             <i class="fas fa-info-circle"></i> <b>Alongside flow</b> also fires this reaction's own flow / chat card.
-            It does not delay your code until after the triggering action; both run together. The action you are
+            It does not delay your code until after the triggering action, both run together. The action you are
             reacting to always runs either way.
         </p>
         <p id="activation-recursion-warning" class="notes" style="display:none; color:#c00; margin-top:4px;">
@@ -392,7 +411,7 @@
             <div class="form-fields">
                 <textarea name="onInit" rows="6" style="font-family: monospace; white-space: pre;">{{onInit}}</textarea>
             </div>
-            <p class="notes">Runs when a token enters the scene. Variables: <code>token</code>, <code>item</code>,
+            <p class="notes">Runs when a token enters the scene, or when the scene loads for a scene reactor. Variables: <code>token</code>, <code>item</code>,
                 <code>api</code>
             </p>
         </div>
@@ -425,7 +444,7 @@
 </form>
 
 <style>
-    /* ===== Window Chrome ===== */
+    /* Window Chrome */
     #reaction-editor {
         background: var(--primary-color);
     }
@@ -436,7 +455,7 @@
         border-bottom: none;
     }
 
-    /* ===== Collapsible Code Sections ===== */
+    /* Collapsible Code Sections */
     .code-section {
         margin-bottom: 6px;
         border: 1px solid rgba(120, 46, 34, 0.2);
@@ -509,7 +528,7 @@
         padding: 10px;
     }
 
-    /* ===== Layout ===== */
+    /* Layout */
     .reaction-columns {
         display: flex;
         gap: 15px;
@@ -529,7 +548,7 @@
         flex-direction: column;
     }
 
-    /* ===== Panels ===== */
+    /* Panels */
     .panel-section {
         background: var(--la-plate);
         border: 1px solid #ccc;
@@ -554,7 +573,7 @@
         letter-spacing: 0.5px;
     }
 
-    /* ===== Form Grids ===== */
+    /* Form Grids */
     .form-grid-2col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -582,7 +601,7 @@
         gap: 6px;
     }
 
-    /* ===== Triggers ===== */
+    /* Triggers */
     .trigger-groups-container {
         flex: 1;
         max-height: 240px;
@@ -661,7 +680,7 @@
         accent-color: var(--primary-color);
     }
 
-    /* ===== Form Inputs ===== */
+    /* Form Inputs */
     #reaction-editor input[type="text"],
     #reaction-editor select,
     #reaction-editor textarea {
@@ -683,7 +702,7 @@
         accent-color: var(--primary-color);
     }
 
-    /* ===== Labels & Notes ===== */
+    /* Labels & Notes */
     #reaction-editor label {
         color: var(--la-ink);
     }
@@ -700,7 +719,7 @@
         font-size: 0.9em;
     }
 
-    /* ===== Footer Buttons ===== */
+    /* Footer Buttons */
     .sheet-footer {
         position: sticky;
         bottom: 0;
@@ -745,7 +764,7 @@
         font-weight: 700;
     }
 
-    /* ===== Utility ===== */
+    /* Utility */
     .optional {
         font-weight: normal;
         font-size: 0.8em;

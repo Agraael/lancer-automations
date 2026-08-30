@@ -82,7 +82,7 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten }
     {
         for (const item of results)
         {
-            const row = makeRow(item.label, false, item.icon ?? 'fas fa-circle-dot', item.activation ?? null, item.badge ?? null, item.badgeColor ?? null);
+            const row = makeRow(item.label, false, item.icon ?? 'fas fa-circle-dot', item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, 0, item.sizeLevel ?? null);
             if (item.highlightBg)
             {
                 const borderColor = item.highlightBorderColor ?? item.highlightBg;

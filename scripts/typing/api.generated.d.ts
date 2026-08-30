@@ -83,6 +83,7 @@ interface LancerAutomationsAPI {
     getLinkedDeployables(source: any): any;
     getLinkedEffects(source: any): any;
     getMoveDataList(tokenOrId: any): any;
+    getMovementBands(tokenOrId: any): any;
     getRelativeDisposition(viewer: any, other: any): any;
     getTokenFlags(tokenOrDoc: any, flagName?: any): any;
     getTokenPosition(tokenLike: any): any;
@@ -100,6 +101,7 @@ interface LancerAutomationsAPI {
     hitWith(weapon: any, targets: any, options?: any): Promise<any>;
     importDowntimeActionsJson(text: any): Promise<any>;
     inDangerZone(tokenOrActor: any): any;
+    increaseMovementCap(tokenOrId: any, value: any): any;
     initAdvancedMeasureAutoClose(): any;
     isAdvancedMeasureActive(): any;
     isAreaPickerActive(): any;
@@ -121,6 +123,7 @@ interface LancerAutomationsAPI {
     moveTokenRuler(tokenOrTokens: any, options?: any): Promise<any>;
     openAdvancedMeasure(options: any): any;
     openDeployablePicker(opts?: any): Promise<any>;
+    openDocumentPicker(opts?: any): Promise<any>;
     openDowntimeImportDialog(): any;
     openEndActivationMenu(token: any): Promise<any>;
     openExtrasDialog(target: any): any;
@@ -136,7 +139,7 @@ interface LancerAutomationsAPI {
     pushFlaggedEffect(...args: any[]): any;
     rangePulse: any;
     receiveVoteSubmission(opts?: any): any;
-    recordBoostCast(tokenOrId: any, speed: any): any;
+    recordMovementExtra(tokenOrId: any, value: any, options?: any): any;
     registerDefaultGeneralReactions(opts?: any): any;
     registerDefaultItemReactions: any;
     registerUserHelper(name: any, fn: any): any;

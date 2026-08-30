@@ -2,9 +2,9 @@
  * Type declarations for lancer-automations internal API.
  */
 
-// ─── Base trigger data ────────────────────────────────────────────────────────
+// Base trigger data
 
-/** Opts accepted by every cancel/modify helper; controls which documents the confirm card shows. */
+/** Opts accepted by every cancel/modify helper, controls which documents the confirm card shows. */
 interface CancelCardOpts {
     item?: any;
     originToken?: Token | null;
@@ -12,7 +12,7 @@ interface CancelCardOpts {
 }
 
 /**
- * Blocks the pending action. Calling it aborts immediately (the flag is set synchronously);
+ * Blocks the pending action. Calling it aborts immediately (the flag is set synchronously).
  * `preConfirm` returning false takes the ignore path, which redoes the original action.
  */
 interface CancelFunction {
@@ -99,7 +99,7 @@ interface TriggerDataBase {
     isTarget?: boolean;
     /** The reactor's own entry of `targets` ({ target/token, roll, crit, ... }) when the trigger carries per-target entries, else null. */
     targetEntry?: { target?: Token; token?: Token; roll?: Roll; crit?: boolean; [key: string]: any } | null;
-    /** Whether the trigger's attack is ranged. Item-less basic attacks report Melee; past 1 hex from every target they count as ranged. */
+    /** Whether the trigger's attack is ranged. Item-less basic attacks report Melee, past 1 hex from every target they count as ranged. */
     isRangedAttack(): boolean;
     /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
     startRelatedFlow(): Promise<void>;
@@ -107,12 +107,12 @@ interface TriggerDataBase {
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
     /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). */
     sendMessageToReactor(data: any, userId?: string | null): Promise<void>;
-    /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console; returns a summary. */
+    /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console and returns a summary. */
     debugActivation(label?: string): any;
     [key: string]: any;
 }
 
-// ─── Move history types ───────────────────────────────────────────────────────
+// Move history types
 
 interface MoveHistoryEntry {
     distanceMoved: number;
@@ -155,7 +155,7 @@ interface MoveSummary {
     cost: number;
 }
 
-// ─── Shared subtypes ─────────────────────────────────────────────────────────
+// Shared subtypes
 
 interface FlowState {
     injectFlowExtraData(extraData: object): void;
@@ -199,7 +199,7 @@ interface AttackMissEntry {
     roll: Roll;
 }
 
-// ─── TriggerData per trigger type ────────────────────────────────────────────
+// TriggerData per trigger type
 
 interface TriggerDataOnMove extends TriggerDataBase {
     triggeringToken: Token;
@@ -376,6 +376,10 @@ interface TriggerDataOnCheck extends TriggerDataBase {
     success: boolean;
     checkAgainstToken: Token | null;
     targetVal: number | null;
+    /** Item the check was attributed to, null unless the caller stamped `sourceItemUuid` */
+    item: any | null;
+    /** Action the check was attributed to, null unless the caller stamped `sourceAction` */
+    actionName: string | null;
     distanceToTrigger: number | null;
     canTriggerReaction?: boolean;
 }
@@ -385,6 +389,10 @@ interface TriggerDataOnInitCheck extends TriggerDataBase {
     statName: string;
     checkAgainstToken: Token | null;
     targetVal: number | null;
+    /** Item the check was attributed to, null unless the caller stamped `sourceItemUuid` */
+    item: any | null;
+    /** Action the check was attributed to, null unless the caller stamped `sourceAction` */
+    actionName: string | null;
     cancelCheck: (reason?: string, title?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => void;
     distanceToTrigger: number | null;
     canTriggerReaction?: boolean;
@@ -491,7 +499,7 @@ interface TriggerDataonHpGain extends TriggerDataBase {
 interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 interface TriggerDataOnStructure extends TriggerDataBase { triggeringToken: Token; remainingStructure: number; rollResult: number; rollDice: number[]; cancelStructureOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; canTriggerReaction?: boolean; }
 
-/** Fired after a roll resolves, before the card prints. `reroll()` re-runs the Lancer roll step; `changeRoll(newTotal)` sets the total. Both cascade — re-fires onRoll so later reactions see the new result. */
+/** Fired after a roll resolves, before the card prints. `reroll()` re-runs the Lancer roll step, `changeRoll(newTotal)` sets the total. Both cascade, re-firing onRoll so later reactions see the new result. */
 interface TriggerDataOnRoll extends TriggerDataBase {
     triggeringToken: Token;
     rollType: "attackRoll" | "techAttackRoll" | "damageRoll" | "skillRoll" | "structureRoll" | "stressRoll";
@@ -503,10 +511,8 @@ interface TriggerDataOnRoll extends TriggerDataBase {
     isReroll: boolean;
     rerollCount: number;
     /**
-     * Re-run the underlying roll step, optionally with subtype-aware resolution.
-     * - `subtype: "retry"` (default) — alt replaces the original.
-     * - `subtype: "highest"` / `"lowest"` — auto-keep the better/worse total.
-     * - `subtype: "choose"` — second card asks the user to pick Original vs Alt.
+     * Re-run the underlying roll step. `subtype` "retry" (default) replaces the original,
+     * "highest" / "lowest" auto-keep the better/worse total, "choose" asks the user to pick Original vs Alt.
      * `allowConfirm: false` skips the "USE REROLL?" prompt and runs silently.
      * `opts` may carry `{ item, originToken, relatedToken, preConfirm, postChoice }` and is auto-defaulted from the reactor context.
      */
@@ -525,7 +531,7 @@ interface TriggerDataOnRoll extends TriggerDataBase {
         }
     ) => Promise<void>;
     /**
-     * Set the roll total directly (recomputes hit/crit for attack flows; structure/stress only update `_total`).
+     * Set the roll total directly (recomputes hit/crit for attack flows, structure/stress only update `_total`).
      * `allowConfirm: false` skips the "CHANGE ROLL?" prompt.
      */
     changeRoll: (
@@ -607,7 +613,7 @@ type TriggerType =
     | "onEnterCombat" | "onExitCombat"
     | "onUpdate";
 
-// ─── Shared subtypes ─────────────────────────────────────────────────────────
+// Shared subtypes
 
 interface ConsumptionConfig {
     trigger?: TriggerType | TriggerType[];
@@ -627,12 +633,12 @@ interface ConsumptionConfig {
     [key: string]: any;
 }
 
-// ─── Module API ───────────────────────────────────────────────────────────────
+// Module API
 
 interface LancerAutomationsAPI {
-    // ── OverwatchAPI ──────────────────────────────────────────────────────────
+    // OverwatchAPI
 
-    // ── ReactionsAPI ──────────────────────────────────────────────────────────
+    // ReactionsAPI
     executeSimpleActivation(actor: any, options: object, extraData?: object): Promise<{ completed: boolean; flow: any }>;
     playMineDetonationFX(mineToken: Token): Promise<void>;
     /** Register item-based reactions keyed by item LID */
@@ -644,7 +650,7 @@ interface LancerAutomationsAPI {
     /** Retrieve a registered user helper by name */
     getUserHelper(name: string): Function | null;
 
-    // ── EffectsAPI ────────────────────────────────────────────────────────────
+    // EffectsAPI
     /** @deprecated Use findEffectOnToken */
     findFlaggedEffectOnToken(token: Token, identifier: string | ((e: any) => boolean)): any | undefined;
     findEffectOnToken(token: Token, identifier: string | ((e: any) => boolean)): any | undefined;
@@ -690,7 +696,7 @@ interface LancerAutomationsAPI {
     processEffectConsumption(triggerType: TriggerType, triggerData: TriggerData): Promise<void>;
     executeEffectManager(options?: object): Promise<void>;
 
-    // ── BonusesAPI ────────────────────────────────────────────────────────────
+    // BonusesAPI
     addGlobalBonus(actor: any, bonusData: {
         id?: string;
         name?: string;
@@ -736,7 +742,7 @@ interface LancerAutomationsAPI {
     hasHitImmunity(actor: any, attackerActor?: any): Promise<boolean>;
     hasMissImmunity(actor: any, attackerActor?: any): Promise<boolean>;
 
-    // ── InteractiveAPI ────────────────────────────────────────────────────────
+    // InteractiveAPI
     chooseToken(sourceToken: Token, options?: {
         range?: number | "sensors";
         count?: number;
@@ -819,11 +825,12 @@ interface LancerAutomationsAPI {
     revertMovement(token: Token): Promise<void>;
     clearMovementHistory(token: Token): void;
     clearMoveData(tokenOrId: Token | string): void;
+    /** Shorthand for recordMovementExtra on the leg currently being spent. */
     increaseMovementCap(tokenOrId: Token | string, value: number): void;
     getActiveGMId(): string | null;
     getTokenOwnerUserId(token: Token): string[];
 
-    // ── Spatial & Distance ────────────────────────────────────────────────────
+    // Spatial & Distance
     getTokenDistance(t1: Token, t2: Token, includeElevation?: boolean): number;
     getMinGridDistance(t1: Token, t2: Token, overridePos1?: { x: number; y: number }, includeElevation?: boolean): number;
     getGridDistance(p1: { x: number; y: number }, p2: { x: number; y: number }): number;
@@ -842,7 +849,7 @@ interface LancerAutomationsAPI {
     drawDistanceDebug(): void;
     drawRangeHighlight(token: Token, range: number, color?: number, alpha?: number): any;
 
-    // ── MiscAPI ───────────────────────────────────────────────────────────────
+    // MiscAPI
     findItemByLid(actor: any, lid: string): any | null;
     getWeapons(token: Token | any): any[];
     updateTokenSystem(token: Token, data: object): Promise<void>;
@@ -851,16 +858,16 @@ interface LancerAutomationsAPI {
     findAura(actorOrToken: Token | any, auraName: string): object | null;
     getTokensInAura(actorOrToken: Token | any, auraName: string): Token[] | null;
 
-    // ── Weapon & Item Details ─────────────────────────────────────────────────
+    // Weapon & Item Details
     getActorMaxThreat(actor: any): number;
     getMaxWeaponRanges_WithBonus(input: any | any[]): Record<string, number>;
     getMaxWeaponReach_WithBonus(input: any | any[]): Promise<number>;
 
-    // ── Resource Management ───────────────────────────────────────────────────
+    // Resource Management
     setReaction(actorOrToken: Token | any, value: boolean): Promise<void>;
     setItemResource(item: any, nb: number | boolean, counterIndex?: number): Promise<void>;
 
-    // ── Deployment & Thrown Weapons ───────────────────────────────────────────
+    // Deployment & Thrown Weapons
     addItemFlags(item: any, flags: Record<string, any>): Promise<any>;
     getItemFlags(item: any, flagName?: string): any;
     addExtraDeploymentLids(target: any, lids: string | Array<string | { lid: string; tier?: number; range?: number; count?: number }>): Promise<any>;
@@ -921,19 +928,19 @@ interface LancerAutomationsAPI {
     addItemTag(item: any, tagData: { id: string; val?: any;[key: string]: any }): Promise<any>;
     removeItemTag(item: any, tagId: string): Promise<any>;
 
-    // ── AurasAPI ──────────────────────────────────────────────────────────────
+    // AurasAPI
     createAura(owner: Token | TokenDocument | Item | any, auraConfig: object): Promise<any>;
     ensureAura(owner: Token | TokenDocument | Item | Actor | any, auraConfig: object): Promise<any | null>;
     deleteAuras(owner: Token | any, filter: string | object, options?: object): Promise<void>;
 
-    // ── ScanAPI ───────────────────────────────────────────────────────────────
+    // ScanAPI
 
-    // ── TerrainAPI ────────────────────────────────────────────────────────────
+    // TerrainAPI
 
-    // ── DowntimeAPI ───────────────────────────────────────────────────────────
+    // DowntimeAPI
     executeDowntime(): Promise<void>;
 
-    // ── Main helpers ──────────────────────────────────────────────────────────
+    // Main helpers
     handleTrigger(triggerType: TriggerType, data: object): Promise<void>;
     getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;
@@ -974,10 +981,10 @@ interface LancerAutomationsAPI {
         }
     ): Promise<{ completed: boolean; flow?: any }>;
 
-    // ── ExtraBarsAPI ──
+    // ExtraBarsAPI
     /**
      * Update an extra-bar value. Token target: manual entry only. Item/Actor target:
-     * manual templates mutate + reinject; path templates write through .update().
+     * manual templates mutate + reinject, path templates write through .update().
      */
     updateExtraBarValue(
         target: Token | TokenDocument | Item | Actor | string,
@@ -1004,7 +1011,7 @@ interface LancerAutomationsAPI {
      */
     getExtraBars(target: Token | TokenDocument | Item | Actor): Array<any>;
 
-    // ── ExtraConfigAPI ──
+    // ExtraConfigAPI
     setItemAutoConsumeDisabled(
         item: Item,
         type: 'uses' | 'loading' | 'charged' | 'perTurn' | 'perRound' | 'reserveUsed',
@@ -1013,6 +1020,10 @@ interface LancerAutomationsAPI {
     setItemAutoConsumeDisabledAll(item: Item, disabled: boolean): Promise<string[]>;
     isAutoConsumeDisabled(item: Item, type: string): boolean;
     getAutoConsumeDisabled(item: Item): Set<string>;
+    getSubAutoConsumeDisabled(item: Item, subKey: string): Set<string>;
+    setSubAutoConsumeDisabled(item: Item, subKey: string, type: 'perTurn' | 'perRound' | 'perScene', disabled: boolean): Promise<string[]>;
+    getConsumeOn(item: Item, type: 'perTurn' | 'perRound' | 'perScene'): 'auto' | 'activation' | 'hit';
+    setConsumeOn(item: Item, type: 'perTurn' | 'perRound' | 'perScene', mode: 'auto' | 'activation' | 'hit'): Promise<Record<string, string>>;
     consumeItemResource(
         item: Item,
         type: 'uses' | 'loading' | 'charged' | 'perTurn' | 'perRound' | 'reserveUsed',
@@ -1026,20 +1037,25 @@ interface LancerAutomationsAPI {
     configureItemExtraConfig(item: Item, patch: object): Promise<object>;
     getExtraConfig(item: Item): object | null;
 
-    // ══ Public API — hand-typed (previously loose `any` in api.generated.d.ts) ══
+    // Public API
 
-    // ── Overwatch / engagement (sync) ──
+    // Overwatch / engagement (sync)
     canEngage(token1: Token, token2: Token): boolean;
     canProvokeReaction(triggering: Token, reactor: Token): boolean;
     checkOverwatchCondition(reactor: Token, mover: Token, startPos: { x: number; y: number }): boolean;
     updateAllEngagements(options?: object): Promise<void>;
 
-    // ── Movement cap (sync) ──
+    // Movement cap (sync). Derived from the granted bands, never below what is already spent.
     getMovementCap(tokenOrId: Token | TokenDocument | string): number;
+    /** Ordered movement legs for this turn. `granted` legs are paid for; the rest are previews. */
+    getMovementBands(tokenOrId: Token | TokenDocument | string): Array<{ name: string; size: number; max: number; granted: boolean }>;
+    /** Add spaces to one leg. `current` picks the granted leg the spent distance sits in. */
+    recordMovementExtra(tokenOrId: Token | TokenDocument | string, value: number, options?: { leg?: 'standard' | 'boost' | 'current' }): void;
+    recordBoostCast(tokenOrId: Token | TokenDocument | string, speed: number): void;
     initMovementCap(token: Token | TokenDocument | string): void;
     undoMoveData(tokenOrId: Token | TokenDocument | string, distance?: number): void;
 
-    // ── Action / flow execution ──
+    // Action / flow execution
     executeBarrage(actorOrToken: any, bypassMount?: any, preTarget?: Token | null): Promise<void>;
     executeInvade(actorOrToken: any, bypassChoice?: any): Promise<void>;
     executeItemActivation(item: any, options?: { path?: string; flowName?: string }, extraData?: object): Promise<{ completed: boolean; flow?: any }>;
@@ -1055,18 +1071,18 @@ interface LancerAutomationsAPI {
     executeGenericBonusMenu(actor?: any): void;
     executeDowntime(): Promise<void>;
 
-    // ── Scan ──
+    // Scan
     executeGenerateScan(targetsArg: any): Promise<void>;
     executeScanOnActivation(reactorToken: Token): Promise<void>;
     regenerateScans(opts?: object): Promise<{ updated: string[]; missing: string[]; skipped: string[] }>;
 
-    // ── Pilot reserves ──
+    // Pilot reserves
     openAddReserveDialog(tokenOrActor: any): Promise<void>;
 
-    // ── Throw flow ──
+    // Throw flow
     beginWeaponThrowFlow(weapon: any, options: object, extraData?: object): Promise<{ completed: boolean; flow?: object }>;
 
-    // ── Item queries (sync unless noted) ──
+    // Item queries (sync unless noted)
     getItemType(item: any): string;
     getWeaponType(item: any): string;
     getWeaponProfiles_WithBonus(weapon: any, actor: any): any[];
@@ -1080,7 +1096,7 @@ interface LancerAutomationsAPI {
     setItemDisabled(item: any, disabled: boolean): Promise<any>;
     getActivationIcon(actionOrActivation: object | string): string | null;
 
-    // ── Bonus injection ──
+    // Bonus injection
     injectBonusToFlowState(state: object, bonus: object): Promise<void>;
 
     [key: string]: any;
@@ -1088,7 +1104,7 @@ interface LancerAutomationsAPI {
 
 
 
-// ─── ReactionConfig ───────────────────────────────────────────────────────────
+// ReactionConfig
 
 type ReactionCallback = (
     triggerType: TriggerType,
@@ -1118,6 +1134,10 @@ interface ReactionConfig {
     frequency?: string;
     activationType?: "code" | "macro" | "flow" | "none";
     activationMode?: "instead" | "after";
+    /** General only. Evaluate once as the active scene on the GM client. "add" keeps the per-token passes, "only" replaces them. */
+    sceneReactor?: "off" | "add" | "only";
+    /** General only. Limit the activation to this scene id, empty for every scene. */
+    sceneId?: string;
     reactionPath?: string;
     dispositionFilter?: string[];
     onInit?: ((token: Token, item: any, api: LancerAutomationsAPI) => Promise<void>) | string;
@@ -1138,13 +1158,13 @@ interface ReactionGroup {
     [key: string]: any;
 }
 
-// ─── Module augmentation ─────────────────────────────────────────────────────
+// Module augmentation
 
 interface Module {
     api?: LancerAutomationsAPI;
 }
 
-// ─── Effect Flags ─────────────────────────────────────────────────────────────
+// Effect Flags
 
 interface DurationEntry {
     label: string;

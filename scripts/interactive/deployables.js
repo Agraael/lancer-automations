@@ -369,7 +369,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor)
     for (const pack of game.packs.filter(pack => pack.documentName === 'Actor'))
     {
         const index = await pack.getIndex();
-        const entry = index.find(e => e.system?.lid === lid);
+        const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
 
         if (entry)
         {
@@ -383,9 +383,9 @@ export async function resolveDeployable(deployableOrLid, ownerActor)
 }
 
 /**
- * Compendium-only deployable finder. Skips world actors entirely; useful for callers
- * that need the canonical template rather than an existing instance.
- * Cached for the session; cleared on the `lancer-automations.clearCaches` hook.
+ * Compendium-only deployable finder. Skips world actors, for callers that need the
+ * canonical template rather than an existing instance.
+ * Cached for the session, cleared on the `lancer-automations.clearCaches` hook.
  * @param {string} lid e.g. "dep_moonlight_drone"
  * @returns {Promise<Actor|null>}
  */
@@ -399,7 +399,7 @@ export async function findDeployableInCompendium(lid)
     for (const pack of game.packs.filter(pack => pack.documentName === 'Actor'))
     {
         const index = await pack.getIndex();
-        const entry = index.find(e => e.system?.lid === lid);
+        const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
         if (!entry)
             continue;
         const doc = await pack.getDocument(entry._id);
@@ -435,19 +435,19 @@ async function stampDeployableSource(tokens, sourceItem)
         {
             await doc.update({ 'flags.lancer-automations.sourceItemUuid': uuid });
         }
-        catch (e)
+        catch (error)
         {
-            console.warn('lancer-automations | stampDeployableSource failed:', e);
+            console.warn('lancer-automations | stampDeployableSource failed:', error);
         }
     }
 }
 
 /**
  * Resolve the item that a deployable actor originated from. Walks the owner actor's
- * items for one whose `system.deployables[]` contains the deployable LID; falls back
- * to scanning Item compendiums (npc_feature, mech_system, weapon_mod, frame).
- * Frames are special: also walks `core_system.deployables` and `traits[].deployables`.
- * Cached by deployable LID; cleared on `lancer-automations.clearCaches`.
+ * items for one whose `system.deployables[]` contains the deployable LID, then falls
+ * back to scanning Item compendiums (npc_feature, mech_system, weapon_mod, frame).
+ * Frames also walk `core_system.deployables` and `traits[].deployables`.
+ * Cached by deployable LID, cleared on `lancer-automations.clearCaches`.
  * @param {Actor} deployableActor
  * @returns {Promise<Item|null>}
  */
@@ -475,7 +475,7 @@ export async function resolveDeployableSourceItem(deployableActor)
             }
         }
     }
-    catch (e)
+    catch (error)
     { /* fall through */ }
 
     const itemHasDeployable = (item) =>
@@ -495,7 +495,6 @@ export async function resolveDeployableSourceItem(deployableActor)
         return false;
     };
 
-    // Owner-actor walk first.
     try
     {
         const ownerVal = deployableActor.system?.owner;
@@ -513,7 +512,7 @@ export async function resolveDeployableSourceItem(deployableActor)
             }
         }
     }
-    catch (e)
+    catch (error)
     { /* fall through */ }
 
     if (_sourceItemCache.has(lid))
@@ -524,10 +523,10 @@ export async function resolveDeployableSourceItem(deployableActor)
     for (const pack of game.packs.filter(pack => pack.documentName === 'Item'))
     {
         const idx = await pack.getIndex({ fields: ['type', 'system.deployables', 'system.core_system.deployables', 'system.traits'] });
-        const entry = idx.find(e => interestingTypes.has(e.type) && (
-            (Array.isArray(e.system?.deployables) && e.system.deployables.includes(lid))
-            || (Array.isArray(e.system?.core_system?.deployables) && e.system.core_system.deployables.includes(lid))
-            || (Array.isArray(e.system?.traits) && e.system.traits.some(tr => Array.isArray(tr?.deployables) && tr.deployables.includes(lid)))
+        const entry = idx.find(indexEntry => interestingTypes.has(indexEntry.type) && (
+            (Array.isArray(indexEntry.system?.deployables) && indexEntry.system.deployables.includes(lid))
+            || (Array.isArray(indexEntry.system?.core_system?.deployables) && indexEntry.system.core_system.deployables.includes(lid))
+            || (Array.isArray(indexEntry.system?.traits) && indexEntry.system.traits.some(tr => Array.isArray(tr?.deployables) && tr.deployables.includes(lid)))
         ));
         if (entry)
         {
@@ -550,8 +549,7 @@ Hooks.on('lancer-automations.clearCaches', () =>
 });
 
 /**
- * Module-level cache: lid → { name, img }.
- * Populated lazily by `getDeployableInfo`. Benefits the whole module.
+ * Cache lid -> { name, img }, filled lazily by `getDeployableInfo`.
  * @type {Map<string, { name: string, img: string, activation: string | null } | null>}
  */
 const _deployableInfoCache = new Map();
@@ -574,7 +572,7 @@ function _findWorldDeployable(lid, ownerActor)
 
 /**
  * Synchronous read from the deployable info cache (populated by `getDeployableInfo`).
- * Returns null if not yet cached; call `getDeployableInfo` first to warm the cache.
+ * Returns null if not yet cached, call `getDeployableInfo` first to warm it.
  * @param {string} lid
  * @returns {{ name: string, img: string, activation: string | null } | null}
  */
@@ -680,7 +678,6 @@ export async function placeDeployable(options = /** @type {any} */({}))
         team: teamOpt = null
     } = /** @type {any} */(options);
 
-    // Read deploy flags from systemItem if not explicitly provided in options
     const itemFlags = systemItem ? getItemFlags(systemItem) : {};
     const range = rangeOpt ?? itemFlags.deployRange ?? 1;
     const count = countOpt ?? itemFlags.deployCount ?? 1;
@@ -738,7 +735,6 @@ export async function placeDeployable(options = /** @type {any} */({}))
             actorData.folder = ownerActor.folder?.id;
             actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
 
-            // Inherit disposition and team for the new actor
             actorData.prototypeToken = actorData.prototypeToken || {};
             actorData.prototypeToken.disposition = disposition;
             if (team !== null)
@@ -791,7 +787,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
         return null;
     }
 
-    // Single deployable → pass actor directly; multiple → pass array for actor selector
+    // One deployable passes the actor directly, several pass the array so placeToken shows the actor selector.
     const actorParam = actorEntries.length === 1
         ? actorEntries[0].actor
         : actorEntries;
@@ -857,10 +853,10 @@ export async function placeDeployable(options = /** @type {any} */({}))
     if (result && originToken)
     {
         const deployedTokens = Array.isArray(result) ? result : [result];
-        for (const t of deployedTokens)
+        for (const deployedToken of deployedTokens)
         {
-            if (t)
-                playDeployableFX(t);
+            if (deployedToken)
+                playDeployableFX(deployedToken);
         }
     }
 
@@ -895,7 +891,7 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
     const depInfo = getDeployableInfoSync(deployableLid, actor);
     const sceneId = canvas?.scene?.id;
     const tokens = actor.getActiveTokens?.() || [];
-    const sourceToken = tokens.find(t => t?.scene?.id === sceneId) || tokens[0] || null;
+    const sourceToken = tokens.find(token => token?.scene?.id === sceneId) || tokens[0] || null;
     if (sourceToken && depInfo?.activation)
         playActionFxByActivation(depInfo.activation, sourceToken, stripDeployOwner(depInfo.name));
     await _printDeployableCard(parentItem);
@@ -937,9 +933,9 @@ async function _printDeployableCard(parentItem)
     {
         await begin(parentItem, {});
     }
-    catch (e)
+    catch (error)
     {
-        console.warn('lancer-automations | Could not print deployable card:', e);
+        console.warn('lancer-automations | Could not print deployable card:', error);
     }
 }
 
@@ -997,8 +993,8 @@ export async function addActorFlags(actor, flags)
         ui.notifications.error("addActorFlags: actor and flags object are required.");
         return null;
     }
-    for (const [key, val] of Object.entries(flags))
-        await setActorFlag(actor, 'lancer-automations', key, val);
+    for (const [key, value] of Object.entries(flags))
+        await setActorFlag(actor, 'lancer-automations', key, value);
     return actor;
 }
 
@@ -1033,8 +1029,8 @@ export async function addTokenFlags(tokenOrDoc, flags)
         ui.notifications.error("addTokenFlags: token and flags object are required.");
         return null;
     }
-    for (const [key, val] of Object.entries(flags))
-        await setTokenFlag(td, 'lancer-automations', key, val);
+    for (const [key, value] of Object.entries(flags))
+        await setTokenFlag(td, 'lancer-automations', key, value);
     return td;
 }
 
@@ -1177,7 +1173,7 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
     return actor;
 }
 
-/** Inverse of lockActorActionTypes. Item target drops the item's lock; actor target unlocks by sourceId. */
+/** Inverse of lockActorActionTypes. Item target drops the item's lock, actor target unlocks by sourceId. */
 export async function unlockActorActionTypes(target, activationTypes = null, sourceId = null, kind = null)
 {
     const types = activationTypes
@@ -1222,7 +1218,7 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
     return actor;
 }
 
-/** Inverse of lockActorAction. Item target drops the item's lock; actor target unlocks by sourceId. */
+/** Inverse of lockActorAction. Item target drops the item's lock, actor target unlocks by sourceId. */
 export async function unlockActorAction(target, actionName, sourceId = null, kind = null)
 {
     if (target?.documentName === 'Item')
@@ -1426,11 +1422,11 @@ export async function openEndActivationMenu(token)
         title: "END ITEM ACTIVATION",
         description: `Select an activated item to end for ${token.name}:`,
         icon: "fas fa-power-off",
-        formatText: (w) =>
+        formatText: (activatedItem) =>
         {
-            const flags = getItemFlags(w);
+            const flags = getItemFlags(activatedItem);
             const actionText = flags?.activeStateData?.endAction ? ` [${flags.activeStateData.endAction}]` : "";
-            return `${flags?.activeStateData?.endActionDescription || `End ${w.name}`}${actionText}`;
+            return `${flags?.activeStateData?.endActionDescription || `End ${activatedItem.name}`}${actionText}`;
         }
     });
 
@@ -1463,7 +1459,7 @@ export function getItemActions(item, opts = {})
     const systemActions = applyActionOverlays(item, item.system?.actions ?? []);
     // Multi-profile weapons (e.g. Dynamo Blade) keep per-profile actions here.
     const profileActions = applyActionOverlays(item, item.system?.active_profile?.actions ?? []);
-    // Some weapons list the same action in both system.actions and the active profile; drop exact dupes.
+    // Some weapons list the same action in both system.actions and the active profile, drop exact dupes.
     const seen = new Set();
     return [...systemActions, ...profileActions, ...extraActions].filter(action =>
     {
@@ -1499,7 +1495,7 @@ export async function addExtraActions(target, actions)
     if (newActions.length === 0)
         return null;
 
-    // Items store on themselves; tokens/actors use their actor doc.
+    // Items store on themselves, tokens/actors use their actor doc.
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
 
@@ -1532,7 +1528,7 @@ export async function addExtraActions(target, actions)
                     return true;
                 });
                 if (dropped.length)
-                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}; removed from extra action "${actionAny.name}".`);
+                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}, removed from extra action "${actionAny.name}".`);
             }
         }
         for (const action of newActions)
@@ -1553,9 +1549,8 @@ export async function addExtraActions(target, actions)
 
 /**
  * Get extra actions stored on an item, token, or actor via addExtraActions.
- * For items, reads from the item itself (items store their own extras); for tokens/actors,
- * reads from the actor. Mirrors addExtraActions's item-first resolution so the getter and
- * setter agree on which doc holds the flag.
+ * Reads from the item itself, or from the actor for tokens/actors, mirroring
+ * addExtraActions so getter and setter agree on which doc holds the flag.
  * @param {Item|Token|Actor} target
  * @returns {Array<Object>}
  */
@@ -1600,8 +1595,7 @@ export async function removeExtraActions(target, filter = null)
     await doc.setFlag('lancer-automations', 'extraActions', kept);
 }
 
-// Decrement / mark-spent the consumable state on an actor-level extra action. Returns true if
-// the caller can proceed to execute, false if the action is depleted (caller should bail out).
+// Spend the consumable state on an actor-level extra action. Returns false when depleted so the caller bails.
 export async function consumeExtraAction(actor, actionName)
 {
     if (!actor)
@@ -1727,7 +1721,7 @@ export async function reloadExtraAction(actor, actionName)
     }
 }
 
-// Encode dots in LID/UUID keys; Foundry setFlag treats dot-separated keys as nested paths.
+// Encode dots in LID/UUID keys, Foundry setFlag treats dot-separated keys as nested paths.
 function _encodeOptsKey(key)
 {
     return String(key).replace(/\./g, '$DOT$');
@@ -1752,12 +1746,12 @@ export async function setExtraDeployableOpts(target, key, opts)
     const map = { ...(doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {}) };
     const encoded = _encodeOptsKey(key);
     const cur = { ...map[encoded] };
-    for (const [k, optValue] of Object.entries(opts || {}))
+    for (const [optKey, optValue] of Object.entries(opts || {}))
     {
         if (optValue == null || optValue === '')
-            delete cur[k];
+            delete cur[optKey];
         else
-            cur[k] = optValue;
+            cur[optKey] = optValue;
     }
     if (Object.keys(cur).length === 0)
         delete map[encoded];
@@ -1816,7 +1810,7 @@ export async function setHidePrimaryAction(itemOrUuid, hidden = true)
     return item;
 }
 
-// Roll 1d6 recharge for uncharged tg_recharge extra actions on actor and items; charged if roll >= entry.recharge.
+// Roll 1d6 recharge for uncharged tg_recharge extra actions on actor and items, charged if roll >= entry.recharge.
 export async function rechargeExtraActionsForActor(actor)
 {
     if (!actor)
@@ -2047,7 +2041,7 @@ export async function addExtraDeploymentActor(target, actors)
 
 /**
  * Searchable picker for deployable actors across all Actor compendia.
- * onPick receives the picked entry; return 'keep-open' to prevent auto-close.
+ * onPick receives the picked entry, return 'keep-open' to prevent auto-close.
  * @param {{ title?: string, onPick?: (entry: {lid: string, uuid: string, name: string, img: string, pack: string, type: string}) => any }} [opts]
  */
 export async function openDeployablePicker({ title = 'Find Deployable', onPick = null } = {})
@@ -2075,7 +2069,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
             });
         }
     }
-    deployables.sort((a, b) => a.name.localeCompare(b.name));
+    deployables.sort((left, right) => left.name.localeCompare(right.name));
     const MAX_RESULTS = 50;
     const canPick = !!onPick;
     const subtitle = canPick
@@ -2131,7 +2125,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                     listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search deployables…</div>');
                     return;
                 }
-                const matched = deployables.filter(d => !query || d.name.toLowerCase().includes(query) || d.lid.toLowerCase().includes(query));
+                const matched = deployables.filter(deployable => !query || deployable.name.toLowerCase().includes(query) || deployable.lid.toLowerCase().includes(query));
                 if (matched.length === 0)
                 {
                     listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No deployables found.</div>');
@@ -2141,7 +2135,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                 const more = matched.length - slice.length;
                 let resultHtml = slice.map(buildEntry).join('');
                 if (more > 0)
-                    resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more — keep typing or check 'Show all'</div>`;
+                    resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more, keep typing or check 'Show all'</div>`;
                 listContainer.html(resultHtml);
             };
 
@@ -2172,7 +2166,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                     ev.preventDefault();
                     ev.stopPropagation();
                     const lid = $(ev.currentTarget).data('lid');
-                    const entry = deployables.find(d => d.lid === lid);
+                    const entry = deployables.find(deployable => deployable.lid === lid);
                     if (!entry)
                         return;
                     const result = await onPick(entry);
@@ -2183,13 +2177,155 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
             listContainer.on('contextmenu', '.deployable-entry', async function (ev)
             {
                 ev.preventDefault();
-                const entry = deployables.find(d => d.lid === $(this).data('lid'));
+                const entry = deployables.find(deployable => deployable.lid === $(this).data('lid'));
                 if (entry)
                 {
                     const actor = /** @type {any} */ (await fromUuid(entry.uuid));
                     if (actor)
                         actor.sheet.render(true);
                 }
+            });
+            setTimeout(() => searchInput.focus(), 50);
+        },
+    }, { width: 600, height: 580, classes: ['lancer-dialog-base', 'lancer-item-browser-dialog', 'lancer-no-title'] });
+    dlg.render(true);
+}
+
+/**
+ * Search dialog over world actors and scenes.
+ * @param {{ title?: string, onPick?: (entry: { uuid: string, id: string, name: string, documentName: string }) => Promise<any> }} [opts]
+ */
+export async function openDocumentPicker({ title = 'Find Actor or Scene', documentTypes = ['Actor', 'Scene'], onPick = null } = {})
+{
+    const entries = [];
+    if (documentTypes.includes('Actor'))
+    {
+        entries.push(...game.actors.map(actor => ({
+            uuid: actor.uuid,
+            id: actor.id,
+            name: actor.name,
+            documentName: 'Actor',
+            details: actor.folder ? `${actor.type} | ${actor.folder.name}` : actor.type,
+            icon: 'fa-user',
+        })));
+    }
+    if (documentTypes.includes('Scene'))
+    {
+        entries.push(...game.scenes.map(scene => ({
+            uuid: scene.uuid,
+            id: scene.id,
+            name: scene.name,
+            documentName: 'Scene',
+            details: 'Scene',
+            icon: 'fa-map',
+        })));
+    }
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    const MAX_RESULTS = 50;
+    const canPick = !!onPick;
+    const subtitle = canPick
+        ? 'Search by name or UUID. Click an entry to pick it.'
+        : 'Search by name or UUID. Click <i class="fas fa-copy"></i> to copy.';
+
+    const buildEntry = (entry) => `
+        <div class="lancer-item-card document-entry" data-uuid="${entry.uuid}" style="margin-bottom:6px;padding:10px;${canPick ? '' : 'cursor:default;'}">
+            <div class="lancer-item-icon"><i class="fas ${entry.icon}"></i></div>
+            <div class="lancer-item-content" style="flex:1;min-width:0;">
+                <div class="lancer-item-name">${entry.name}</div>
+                <div class="lancer-item-details">${entry.details} | ${entry.uuid}</div>
+            </div>
+            <a class="copy-uuid-btn" title="Copy UUID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;flex:0 0 auto;padding:0 4px;"><i class="fas fa-copy"></i></a>
+        </div>`;
+    const emptyHint = '<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search…</div>';
+
+    let dlg = null;
+    dlg = new Dialog({
+        title,
+        content: `
+            <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
+                <h1 class="lancer-dialog-title">${title}</h1>
+                <p class="lancer-dialog-subtitle">${subtitle}</p>
+            </div>
+            <div class="lancer-search-container" style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
+                <div style="flex:1;position:relative;">
+                    <i class="fas fa-search lancer-search-icon"></i>
+                    <input type="text" id="document-search" placeholder="Search by name or UUID..." style="padding-left:35px;">
+                </div>
+                <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:0.85em;cursor:pointer;">
+                    <input type="checkbox" id="document-show-all"> Show all
+                </label>
+            </div>
+            <div id="document-list" style="height:400px;overflow-y:auto;padding:4px;border:1px solid #ddd;background:#fafafa;border-radius:4px;">${emptyHint}</div>
+        `,
+        buttons: { close: { label: '<i class="fas fa-times"></i> Close' } },
+        render: (html) =>
+        {
+            const searchInput = html.find('#document-search');
+            const showAllCb = html.find('#document-show-all');
+            const listContainer = html.find('#document-list');
+
+            const updateList = () =>
+            {
+                const query = String(searchInput.val() || '').toLowerCase().trim();
+                const showAll = showAllCb.is(':checked');
+                if (!query && !showAll)
+                {
+                    listContainer.html(emptyHint);
+                    return;
+                }
+                const matched = entries.filter(entry => !query || entry.name.toLowerCase().includes(query) || entry.uuid.toLowerCase().includes(query));
+                if (matched.length === 0)
+                {
+                    listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No match.</div>');
+                    return;
+                }
+                const slice = showAll ? matched : matched.slice(0, MAX_RESULTS);
+                const more = matched.length - slice.length;
+                let resultHtml = slice.map(buildEntry).join('');
+                if (more > 0)
+                    resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more, keep typing or check 'Show all'</div>`;
+                listContainer.html(resultHtml);
+            };
+
+            let timer;
+            searchInput.on('input', () =>
+            {
+                clearTimeout(timer); timer = setTimeout(updateList, 200);
+            });
+            showAllCb.on('change', updateList);
+
+            listContainer.on('click', '.copy-uuid-btn', async function (ev)
+            {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const uuid = $(this).closest('.document-entry').data('uuid');
+                if (uuid)
+                {
+                    await navigator.clipboard.writeText(uuid);
+                    ui.notifications.info(`Copied UUID: ${uuid}`);
+                }
+            });
+            if (canPick)
+            {
+                listContainer.on('click', '.document-entry', async (ev) =>
+                {
+                    if ($(ev.target).closest('.copy-uuid-btn').length)
+                        return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    const entry = entries.find(candidate => candidate.uuid === $(ev.currentTarget).data('uuid'));
+                    if (!entry)
+                        return;
+                    const result = await onPick(entry);
+                    if (result !== 'keep-open')
+                        dlg?.close();
+                });
+            }
+            listContainer.on('contextmenu', '.document-entry', async function (ev)
+            {
+                ev.preventDefault();
+                const doc = await fromUuid($(this).data('uuid'));
+                doc?.sheet?.render(true);
             });
             setTimeout(() => searchInput.focus(), 50);
         },
@@ -2220,13 +2356,13 @@ export async function removeExtraDeploymentActor(target, actors)
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
 
     const existing = doc.getFlag('lancer-automations', 'extraDeployableActors') || [];
-    const kept = existing.filter(u => !removeSet.has(u));
+    const kept = existing.filter(uuid => !removeSet.has(uuid));
     let mutated = kept.length !== existing.length;
     if (mutated)
         await doc.setFlag('lancer-automations', 'extraDeployableActors', kept);
 
     const uiMarkers = doc.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
-    const keptMarkers = uiMarkers.filter(u => !removeSet.has(u));
+    const keptMarkers = uiMarkers.filter(uuid => !removeSet.has(uuid));
     if (keptMarkers.length !== uiMarkers.length)
     {
         await doc.setFlag('lancer-automations', 'extraDeployableActorsViaUI', keptMarkers);
@@ -2255,8 +2391,8 @@ export async function promptLinkOrUnlinkActor(ownerToken)
         return;
     }
     const ownerUuid = owner.uuid;
-    const isLinkedToOwner = (/** @type {any} */ t) =>
-        t?.document?.getFlag?.('lancer-automations', 'ownerActorUuid') === ownerUuid;
+    const isLinkedToOwner = (/** @type {any} */ token) =>
+        token?.document?.getFlag?.('lancer-automations', 'ownerActorUuid') === ownerUuid;
 
     const picked = await chooseToken(ownerToken, {
         count: 1,
@@ -2264,8 +2400,8 @@ export async function promptLinkOrUnlinkActor(ownerToken)
         title: 'LINK / UNLINK ACTOR',
         description: 'Pick a token to link. Already-linked tokens will be unlinked.',
         icon: 'cci cci-deployable',
-        filter: (/** @type {any} */ t) => !isLinkedToOwner(t),
-        filterWarning: 'Already linked — click to UNLINK',
+        filter: (/** @type {any} */ token) => !isLinkedToOwner(token),
+        filterWarning: 'Already linked, click to UNLINK',
     });
     const target = picked?.[0];
     if (!target?.document)
@@ -2305,7 +2441,7 @@ export function getActorDeployables(tokenOrActor)
 
 /**
  * Read extra actions attached to an item, actor, or token (from `flags.extraActions`).
- * Only the linked extras - does not merge `system.actions`. Use `getItemActions` for the merge.
+ * Only the linked extras, does not merge `system.actions`. Use `getItemActions` for the merge.
  * Symmetric with `getLinkedBonuses` / `getLinkedEffects`.
  * @param {Item|Actor|Token} source
  * @returns {any[]}
@@ -2339,7 +2475,7 @@ export function getLinkedDeployables(source)
     ];
 }
 
-// NPC tier honoring tier_override; null for non-NPC / unowned (never tier-gated).
+// NPC tier honoring tier_override, null for non-NPC / unowned (never tier-gated).
 export function getOwnerTier(ownerActor, item = null)
 {
     if (ownerActor?.type !== 'npc')
@@ -2361,7 +2497,7 @@ export function linkTierGate(entry, ownerActor, item = null)
     return gate === ownerTier;
 }
 
-// Explicit per-entry tier wins; else legacy positional slice (1 or 3 = tier) so old content works.
+// Explicit per-entry tier wins, else legacy positional slice (1 or 3 = tier) so old content works.
 export function sliceDeployablesForTier(combined, ownerActor, optsSource, item = null)
 {
     if (!Array.isArray(combined) || combined.length <= 1)
@@ -2391,7 +2527,7 @@ export function getAllItemDeployables(item)
 
 /**
  * Effective deployable LIDs for an item: system.deployables + extraDeployables flag, then the NPC tier gate.
- * Explicit per-deployable tier (extraDeployableOpts[key].tier) wins; else the legacy positional 1-or-3 slice.
+ * Explicit per-deployable tier (extraDeployableOpts[key].tier) wins, else the legacy positional 1-or-3 slice.
  * @param {Item} item    The item document
  * @param {Actor} [actor] The owner actor (needed for NPC tier selection)
  * @returns {string[]} Array of deployable LID strings
@@ -2464,7 +2600,6 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
         return null;
     }
 
-    // Get deployable LIDs (handles system.deployables + extra flags + NPC tier selection)
     const deployablesArray = getItemDeployables(item, actor);
 
     if (deployablesArray.length === 0)
@@ -2497,11 +2632,10 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
         }
     }
 
-    // Collect all deployable LIDs (duplicates allowed)
     const allLids = [];
     let totalCount = 0;
 
-    // First range wins, counts sum; per-deployable extra opts are the next fallback.
+    // First range wins, counts sum. Per-deployable extra opts are the next fallback.
     let rangeOpt = null;
     for (let i = 0; i < deployablesArray.length; i++)
     {
@@ -2842,7 +2976,7 @@ export async function openDeployableMenu(actor)
                 label: "Deploy",
                 callback: async () =>
                 {
-                    const item = items.find(i => i.id === selectedId);
+                    const item = items.find(candidate => candidate.id === selectedId);
                     if (!item || item.disabled || !item.deployableId)
                         return;
                     const system = item.systemId ? actor.items.get(item.systemId) : null;
@@ -2885,11 +3019,11 @@ export async function openDeployableMenu(actor)
                 html.closest('.dialog').find('.dialog-button.deploy').click();
             });
 
-            html.find('.lancer-item-generate').on('click', async function (e)
+            html.find('.lancer-item-generate').on('click', async function (event)
             {
-                e.stopPropagation();
+                event.stopPropagation();
                 const itemId = $(this).data('item-id');
-                const item = items.find(i => i.id === itemId);
+                const item = items.find(candidate => candidate.id === itemId);
 
                 if (!item?.deployableData || !game.user.isGM)
                     return;
@@ -2906,7 +3040,6 @@ export async function openDeployableMenu(actor)
                 actorData.folder = actor.folder?.id;
                 actorData.ownership = foundry.utils.duplicate(actor.ownership);
 
-                // Inherit disposition and team for the new actor
                 actorData.prototypeToken = actorData.prototypeToken || {};
                 actorData.prototypeToken.disposition = actor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
                 const actorTeam = game.modules.get('token-factions')?.active ? actor.getFlag('token-factions', 'team') : null;
@@ -3094,10 +3227,10 @@ export function getWeapons(entity)
     if (!actor?.items)
         return [];
 
-    return actor.items.filter(i =>
-        i.type === 'mech_weapon' ||
-        i.type === 'pilot_weapon' ||
-        (i.system?.type?.toLowerCase() === 'weapon')
+    return actor.items.filter(item =>
+        item.type === 'mech_weapon' ||
+        item.type === 'pilot_weapon' ||
+        (item.system?.type?.toLowerCase() === 'weapon')
     );
 }
 
@@ -3112,7 +3245,7 @@ export function findItemByLid(actorOrToken, lid)
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor?.items)
         return null;
-    return actor.items.find(i => i.system?.lid === lid) || null;
+    return actor.items.find(item => item.system?.lid === lid) || null;
 }
 
 /**
@@ -3130,7 +3263,7 @@ export function hasItem(actorOrToken, lidOrLids)
     const lids = Array.isArray(lidOrLids) ? lidOrLids : [lidOrLids];
     if (lids.length === 0)
         return false;
-    return actor.items.some(i => lids.includes(i.system?.lid));
+    return actor.items.some(item => lids.includes(item.system?.lid));
 }
 
 /**
@@ -3167,7 +3300,7 @@ export async function reloadOneWeapon(actorOrToken, targetName)
         title: "CHOOSE WEAPON TO RELOAD",
         description: `Select which of ${name}'s weapons to reload:`,
         icon: "fas fa-sync",
-        formatText: (w) => `Reload ${w.name}`
+        formatText: (weapon) => `Reload ${weapon.name}`
     });
 
     if (chosenWeapon)
@@ -3260,12 +3393,9 @@ export async function rechargeSystem(actorOrToken, targetName)
 }
 
 /**
- * Called from the createToken hook for every newly placed token.
- * When the "Link Manually Placed Deployables" setting is on, detects deployable tokens
- * placed by hand (no existing lancer-automations owner flag), finds candidate owner tokens,
- * and either auto-links (single candidate or all linked actors) or prompts via chooseToken
- * (multiple candidates where any owner actor is unlinked).
- * After linking, fires the onDeploy trigger.
+ * createToken hook handler. With the linkManualDeploy setting on, links a hand-placed
+ * deployable token to its owner (auto with one candidate, chooseToken prompt otherwise),
+ * then fires onDeploy.
  * @param {TokenDocument} tokenDocument
  */
 export async function handleManualDeployLink(tokenDocument, { force = false } = {})
@@ -3287,7 +3417,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
     let ownerToken = null;
     let ownerActor = null;
 
-    // For mech/pilot deployables: use the deployable's system.owner to find the owning actor directly
+    // Mech/pilot deployables carry their owner in system.owner.
     const ownerUuidRaw = deployableActor.system?.owner;
     const ownerUuid = typeof ownerUuidRaw === 'string'
         ? ownerUuidRaw

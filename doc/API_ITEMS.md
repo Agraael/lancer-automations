@@ -327,7 +327,9 @@ await api.updateTokenSystem(target, { 'system.burn': 0 });
 
 Per-item config controlling Lancer's automation of the item. Currently: opt out of auto-consuming specific resource types on activation. Stored at `item.flags['lancer-automations'].extraConfig`.
 
-Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `reserveUsed`.
+Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `perScene`, `reserveUsed`.
+
+Nested actions with their own `N/round` frequency have a separate counter, addressed by a sub key: `a{N}` for `system.actions[N]`, `p{P}a{N}` for a weapon profile action, `r{N}` for a talent rank.
 
 <details id="setItemAutoConsumeDisabled">
 <summary><b><code>setItemAutoConsumeDisabled</code></b> <sup>async</sup> → <code>string[]</code></summary>
@@ -361,7 +363,37 @@ await api.setItemAutoConsumeDisabledAll(item, true);  // disable every resource 
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>disabled</kbd> `boolean`
 
-Mass-toggle: apply opt-out to every resource type the item has (or clear all).
+Mass-toggle: apply opt-out to every resource type the item has (or clear all), nested action counters included.
+
+</details>
+
+<details id="setSubAutoConsumeDisabled">
+<summary><b><code>setSubAutoConsumeDisabled</code></b> <sup>async</sup> → <code>string[]</code></summary>
+
+<br>
+
+```js
+await api.setSubAutoConsumeDisabled(item, 'a0', 'perRound', true);
+```
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>subKey</kbd> `string` · <kbd>type</kbd> `'perTurn'|'perRound'|'perScene'` · <kbd>disabled</kbd> `boolean`
+
+Opt-out for one nested action's own counter. `getSubAutoConsumeDisabled(item, subKey)` returns the current `Set`.
+
+</details>
+
+<details id="setConsumeOn">
+<summary><b><code>setConsumeOn</code></b> <sup>async</sup> → <code>Object</code></summary>
+
+<br>
+
+```js
+await api.setConsumeOn(item, 'perRound', 'hit');
+```
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `'perTurn'|'perRound'|'perScene'` · <kbd>mode</kbd> `'auto'|'activation'|'hit'`
+
+When a weapon attack spends the counter. `auto` detects it from the text (`N/round` in `on_hit` / `on_crit` = on hit). `getConsumeOn(item, type)` returns the current mode.
 
 </details>
 

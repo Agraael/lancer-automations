@@ -86,13 +86,13 @@ changeTriggeredMove(position: {x: number, y: number}, extraData?, reasonText?, a
 
 ```ts
 modifyHpChange(newValue: number, reasonText?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
-modifyHeatChange(newValue: number, ...same)          // .wait() on both
-modifyRoll(newTotal: number) => void                 // structure/stress, no card
+modifyHeatChange(newValue: number, ...same)
+modifyRoll(newTotal: number) => void
 reroll(reasonText?, subtype?, title?, allowConfirm?, userIdControl?, opts?)
 changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
 ```
 
-`subtype` defaults to `'retry'`. Trailing params behave as on `CancelFunction`.
+`modifyHpChange` and `modifyHeatChange` both expose `.wait()`. `modifyRoll` is structure/stress only and shows no card. `subtype` defaults to `'retry'`. Trailing params behave as on `CancelFunction`.
 
 </details>
 
@@ -400,7 +400,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     triggeringToken: Token,
     item: Item,
     deployedTokens: Array<TokenDocument>,
-    deployType: string, // "deployable" | "throw"
+    deployType: "deployable" | "throw",
     distanceToTrigger: number,
     canTriggerReaction?: boolean
 }
@@ -711,9 +711,13 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     statName: string,
     checkAgainstToken: Token,
     targetVal: number,
+    item: Item | null,
+    actionName: string | null,
     cancelCheck: CancelFunction
 }
 ```
+
+`item` / `actionName` are null unless the caller stamped `sourceItemUuid` / `sourceAction`.
 
 </details>
 
@@ -727,7 +731,9 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     total: number,
     success: boolean,
     checkAgainstToken: Token,
-    targetVal: number
+    targetVal: number,
+    item: Item | null,
+    actionName: string | null
 }
 ```
 
@@ -932,11 +938,13 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print` |
 | <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Must be synchronous on cancellable triggers |
 | <kbd>activationType</kbd> | `"code" \| "macro" \| "flow" \| "none"` | `"flow"` | What runs |
-| <kbd>activationMode</kbd> | `"instead" \| "after"` | item: `"instead"`, general: `"after"` | `after` also fires the reaction's own flow/card; macro/code only |
+| <kbd>activationMode</kbd> | `"instead" \| "after"` | item: `"instead"`, general: `"after"` | `after` also fires the reaction's own flow/card. Macro/code only |
+| <kbd>sceneReactor</kbd> | `"off" \| "add" \| "only"` | `"off"` | General only. Evaluate once as the active scene on the GM client. `add` keeps the per-token passes, `only` replaces them |
+| <kbd>sceneId</kbd> | `string` | `""` | General only. Limit the activation to this scene id, empty for every scene |
 | <kbd>activationCode</kbd> | `ActivationCallback \| string` | - | The body, for `activationType: "code"` |
 | <kbd>activationMacro</kbd> | `string` | `""` | Macro name, for `activationType: "macro"` |
 | <kbd>autoActivate</kbd> | `boolean` | `false` | Skip the popup and run immediately |
-| <kbd>onInit</kbd> | `((token, item, api) => Promise<void>) \| string` | - | Runs on token creation |
+| <kbd>onInit</kbd> | `((token, item, api) => Promise<void>) \| string` | - | Runs on token creation. Scene reactors: also on scene load, `token` is the scene stand-in |
 | <kbd>onMessage</kbd> | `((triggerType, data, reactorToken, item, activationName, api) => Promise<void>) \| string` | - | Runs on the client targeted by `sendMessageToReactor` |
 
 The group wrapper (`ReactionGroup`) is `{ category?: string, itemType?: string, enabled?: boolean, reactions: ReactionConfig[] }`.
@@ -950,13 +958,13 @@ api.registerDefaultItemReactions({
         itemType: "npc_feature",
         reactions: [{
             triggers: ["onActivation"],
-            onlyOnSourceMatch: true,     // only when THIS feature is used
+            onlyOnSourceMatch: true,
             triggerSelf: true,
-            autoActivate: true,          // no popup
+            autoActivate: true,
             outOfCombat: true,
             actionType: "Quick Action",
             activationType: "code",
-            activationMode: "instead",   // replace the item's own flow
+            activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
                 const targets = await api.chooseToken(reactorToken, { range: 10, count: 1 });
                 if (targets?.length)

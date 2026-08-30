@@ -16,6 +16,7 @@ import { isLancerRulerActive } from "../../movement/cost-rules.js";
 import { getActorMaxThreat, getWeaponProfiles_WithBonus, weaponPulseRange } from "../../tools/misc-tools.js";
 import { getActorMaxReach_WithBonus } from "../../tools/weapon-bonus-utils.js";
 import { getWeapons } from "../deployables.js";
+import { weaponTypeIcon } from "../../tah/item-helpers.js";
 import { isActorRevealedToUser, getUnknownLabel } from "../../tah/tokenStatHint.js";
 import { setMeasureDistanceReference, setMeasureDistancePoint } from "../../movement/tactical-distance.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
@@ -981,6 +982,11 @@ Hooks.once('init', () =>
         onChange: () => refreshGlobalRulerDecoration(),
     });
 });
+// While a token drag is live, Ctrl belongs to Foundry's waypoint placement.
+function tokenDragActive()
+{
+    return !!canvas.tokens?.preview?.children?.length;
+}
 function ctrlRulerMode()
 {
     try
@@ -1061,6 +1067,8 @@ function onDistanceKey(event)
     const down = event.type === 'keydown';
     if (down === _ctrlDistanceHeld)
         return;
+    if (down && tokenDragActive())
+        return;
     _ctrlDistanceHeld = down;
     playUiSound('toggle');
     if (down)
@@ -1118,6 +1126,8 @@ function onGlobalCtrlKey(event)
         return;
     const down = event.type === 'keydown';
     if (down === _gCtrlHeld)
+        return;
+    if (down && tokenDragActive())
         return;
     _gCtrlHeld = down;
     if (down)
@@ -1534,7 +1544,8 @@ function injectStyles()
         #la-measure-toolbar .la-mt-dd-item.active .la-hud-fav-mark { color: var(--light-text, #fff) !important; }
         #la-measure-toolbar .la-mt-dd-item.active .la-mt-weap-r { color: var(--light-text, #fff); }
         #la-measure-toolbar .la-mt-dd-item:disabled { opacity: 0.4; cursor: default; }
-        #la-measure-toolbar .la-mt-weap-row { justify-content: space-between; gap: 16px; }
+        #la-measure-toolbar .la-mt-weap-row { justify-content: flex-start; gap: 9px; }
+        #la-measure-toolbar .la-mt-weap-n { flex: 1 1 auto; }
         #la-measure-toolbar .la-mt-weap-r { color: var(--la-accent); font-variant-numeric: tabular-nums; }
         #la-measure-toolbar .la-mt-anchor { position: relative; }
         #la-measure-toolbar .la-mt-pop { position: absolute; bottom: calc(100% + 10px); left: 50%; z-index: 72; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px; opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(8px); transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -2112,6 +2123,7 @@ function renderWeaponPopover(refToken)
         row.className = 'la-mt-dd-item la-mt-weap-row';
         row.title = weapon.name;
         const name = document.createElement('span');
+        name.className = 'la-mt-weap-n';
         name.textContent = weapon.name;
         const rng = document.createElement('span');
         rng.className = 'la-mt-weap-r';
@@ -2121,7 +2133,7 @@ function renderWeaponPopover(refToken)
         star.textContent = '★';
         star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
         row.style.position = 'relative';
-        row.append(name, rng, star);
+        row.append(makeIcon(weaponTypeIcon(weapon) ?? 'mdi mdi-help-rhombus-outline'), name, rng, star);
         if (_saved.weaponItemId === weapon.id)
             row.classList.add('active');
         row.addEventListener('mouseenter', () => playUiSound('statusHover'));

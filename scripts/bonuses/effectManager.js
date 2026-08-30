@@ -1407,6 +1407,7 @@ export async function executeEffectManager(options = {})
                         <option value="immunity">Immunity</option>
                         <option value="target_modifier">Target Modifier</option>
                         <option value="reroll">Reroll</option>
+                        <option value="movement_extra">Movement Extra</option>
                     </select>
                 </div>
                 <div class="form-group" style="flex:1; margin:0;">
@@ -1689,6 +1690,21 @@ export async function executeEffectManager(options = {})
                             <label><input type="checkbox" value="structureRoll"> Structure Roll</label>
                             <label><input type="checkbox" value="stressRoll"> Stress Roll</label>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div id="bonus-type-movement_extra" style="display:none;">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="form-group" style="flex:1; margin:0;">
+                        <label>Applies to:</label>
+                        <select name="movement-extra-subtype" id="bonus-movement-extra-subtype">
+                            <option value="boost">Boost</option>
+                            <option value="standard">Standard Move</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:0 0 auto; margin:0;">
+                        <label>Spaces:</label>
+                        <input type="number" id="bonus-movement-extra-val" value="1" style="width:60px; text-align:center;" title="Added to each Standard Move or Boost.">
                     </div>
                 </div>
             </div>
@@ -3291,6 +3307,11 @@ export async function executeEffectManager(options = {})
                 }
                 else if (type === 'target_modifier')
                     bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
+                else if (type === 'movement_extra')
+                {
+                    bonusData.subtype = html.find('#bonus-movement-extra-subtype').val() || 'boost';
+                    bonusData.val = html.find('#bonus-movement-extra-val').val() || "1";
+                }
                 else if (type === 'reroll')
                 {
                     const list = $('#bonus-reroll-rollTypes input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
@@ -3424,7 +3445,7 @@ export async function executeEffectManager(options = {})
             html.find('#bonus-type').on('change', function ()
             {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement_extra').hide();
                 html.find(`#bonus-type-${type}`).show();
                 updateConsumeUsageRow();
 

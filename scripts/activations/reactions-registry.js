@@ -232,6 +232,52 @@ export function getDefaultItemReactionRegistry()
     };
     builtInDefaults["npcf_limited_handling_vehicle"] = limitedHandling;
 
+    const _veterancyBonuses = (item, api) => api.getLinkedBonuses(item).filter(template => template.addOptions?.veterancyBonus === true);
+
+    const _clearVeterancy = async (item, api) =>
+    {
+        for (const template of _veterancyBonuses(item, api))
+            await api.unlinkBonusFromItem({ items: [item], templateId: template.id });
+    };
+
+    const _pickVeterancy = async (reactorToken, item, api, current) =>
+    {
+        const skills = [
+            { text: "Hull", icon: "cci cci-hull", rollType: "hull" },
+            { text: "Agility", icon: "cci cci-agility", rollType: "agility" },
+            { text: "Systems", icon: "cci cci-systems", rollType: "systems" },
+            { text: "Engineering", icon: "cci cci-engineering", rollType: "engineering" }
+        ];
+        const choices = skills.map(skill => ({
+            text: skill.text,
+            icon: skill.icon,
+            callback: async () =>
+            {
+                await _clearVeterancy(item, api);
+                await api.linkBonusToItem({
+                    items: [item],
+                    bonusData: {
+                        name: `Veterancy (${skill.text})`,
+                        val: 1,
+                        type: "accuracy",
+                        rollTypes: [skill.rollType]
+                    },
+                    addOptions: { duration: 'constant', veterancyBonus: true, veterancySkill: skill.text }
+                });
+            }
+        }));
+        await api.startChoiceCard({
+            title: "VETERANCY",
+            description: current
+                ? `Currently <b>${current}</b>. Choose a new skill for ${reactorToken.name}:`
+                : `Choose a skill for ${reactorToken.name}:`,
+            choices,
+            originToken: reactorToken,
+            item,
+            icon: "cci cci-rank-veteran"
+        });
+    };
+
     /** @type {ReactionGroup} */
     const veterancyVeteran = {
         category: "NPC",
@@ -244,42 +290,24 @@ export function getDefaultItemReactionRegistry()
             ...CODE_INSTEAD,
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                const templates = api.getLinkedBonuses(item);
-                return !templates.some(template => template.addOptions?.veterancyBonus === true);
+                return !_veterancyBonuses(item, api).length;
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                if (!api || !item)
-                    return;
-                const skills = [
-                    { text: "Hull", icon: "cci cci-hull", rollType: "hull" },
-                    { text: "Agility", icon: "cci cci-agility", rollType: "agility" },
-                    { text: "Systems", icon: "cci cci-systems", rollType: "systems" },
-                    { text: "Engineering", icon: "cci cci-engineering", rollType: "engineering" }
-                ];
-                const choices = skills.map(skill => ({
-                    text: skill.text,
-                    icon: skill.icon,
-                    callback: async () =>
-                    {
-                        await api.linkBonusToItem({
-                            items: [item],
-                            bonusData: {
-                                name: `Veterancy (${skill.text})`,
-                                val: 1,
-                                type: "accuracy",
-                                rollTypes: [skill.rollType]
-                            },
-                            addOptions: { duration: 'constant', veterancyBonus: true }
-                        });
-                    }
-                }));
-                await api.startChoiceCard({
-                    title: "VETERANCY",
-                    description: `Choose a skill for ${reactorToken.name}:`,
-                    choices,
-                    icon: "cci cci-rank-veteran"
-                });
+                await _pickVeterancy(reactorToken, item, api, null);
+            }
+        }, {
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            autoActivate: true,
+            ...CODE_INSTEAD,
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                const current = _veterancyBonuses(item, api)[0]?.addOptions?.veterancySkill ?? null;
+                await _pickVeterancy(reactorToken, item, api, current);
             }
         }, {
             triggers: ["onExitCombat"],
@@ -289,14 +317,7 @@ export function getDefaultItemReactionRegistry()
             ...CODE_INSTEAD,
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                if (!api || !item)
-                    return;
-                const templates = api.getLinkedBonuses(item);
-                for (const template of templates)
-                {
-                    if (template.addOptions?.veterancyBonus === true)
-                        await api.unlinkBonusFromItem({ items: [item], templateId: template.id });
-                }
+                await _clearVeterancy(item, api);
             }
         }]
     };
@@ -467,7 +488,7 @@ export function getDefaultGeneralReactionRegistry()
             reactions: [{
                 triggers: ["onPreDamage"],
                 triggerDescription: "You are hit by an attack and damage is about to be rolled.",
-                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
+                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 actionType: "Reaction",
                 frequency: "Other",
                 isReaction: true,
@@ -527,14 +548,14 @@ export function getDefaultGeneralReactionRegistry()
                             name: "Brace",
                             activation: "Reaction",
                         },
-                        detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions."
+                        detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
                     });
                 }
             }, {
                 triggers: ["onActivation"],
                 comments: "Apply Brace Status",
                 triggerDescription: "You are hit by an attack and damage has been rolled.",
-                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action â€“ you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
+                effectDescription: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions.",
                 onlyOnSourceMatch: true,
                 autoActivate: true,
                 ...CODE_INSTEAD,
@@ -728,7 +749,7 @@ export function getDefaultGeneralReactionRegistry()
                                 icon: "fas fa-dice-d20",
                                 callback: async () =>
                                 {
-                                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`);
+                                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`, 10, { sourceAction: "Flying" });
                                     if (result.completed && !result.passed)
                                         await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                                 }
@@ -1052,7 +1073,7 @@ export function getDefaultGeneralReactionRegistry()
                     if (!chosen || chosen.length === 0)
                         return;
                     chosen[0].setTarget(true, { releaseOthers: true, groupSelection: false });
-                    await actionFX.queueActionFx(() => actionFX.playRamFX(reactorToken, chosen[0]));
+                    await actionFX.queueActionFx(() => actionFX.playRamFX(reactorToken, chosen[0]), reactorToken);
                     await api.executeBasicAttack(reactorToken.actor, {
                         title: "Ram",
                         attack_type: "Melee",
@@ -1145,7 +1166,7 @@ export function getDefaultGeneralReactionRegistry()
                                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                                         return;
 
-                                    await actionFX.queueActionFx(() => actionFX.playFallFX(reactorToken));
+                                    await actionFX.queueActionFx(() => actionFX.playFallFX(reactorToken), reactorToken);
                                 }
                             },
                             { text: "No", icon: "fas fa-times" }
@@ -1166,7 +1187,7 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
-                    await actionFX.queueActionFx(() => actionFX.playFallImpactFX(reactorToken));
+                    await actionFX.queueActionFx(() => actionFX.playFallImpactFX(reactorToken), reactorToken);
                 }
             }]
         },
@@ -1386,7 +1407,7 @@ export function getDefaultGeneralReactionRegistry()
                     effectNames: ["Disengage"],
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
-                await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken));
+                await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken), reactorToken);
             }
         },
         "Reactor Meltdown": {
@@ -1418,7 +1439,7 @@ export function getDefaultGeneralReactionRegistry()
                         duration: { label: 'end', turns: selectedTurns, rounds: 0 }
                     });
                     if (validTokens.length > 0)
-                        ui.notifications.warn(`âš ï¸ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
+                        ui.notifications.warn(`⚠️ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
                 }
             }, {
                 triggers: ["onStatusRemoved"],
@@ -1507,7 +1528,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!placed || placed.length === 0)
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]));
+                await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]), reactorToken);
 
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
@@ -1541,7 +1562,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playShutDownFX(reactorToken));
+                await actionFX.queueActionFx(() => actionFX.playShutDownFX(reactorToken), reactorToken);
             }
         },
         "Boot Up": {
@@ -1561,7 +1582,7 @@ export function getDefaultGeneralReactionRegistry()
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
                 });
-                await actionFX.queueActionFx(() => actionFX.playBootUpFX(reactorToken));
+                await actionFX.queueActionFx(() => actionFX.playBootUpFX(reactorToken), reactorToken);
             }
         },
         "Standing Up": {
@@ -1599,7 +1620,7 @@ export function getDefaultGeneralReactionRegistry()
                     duration: { label: "indefinite" }
                 });
 
-                await actionFX.queueActionFx(() => actionFX.playHideFX(reactorToken));
+                await actionFX.queueActionFx(() => actionFX.playHideFX(reactorToken), reactorToken);
             }
         },
         "Mine Stealth": {
@@ -1750,7 +1771,7 @@ export function getDefaultGeneralReactionRegistry()
                                                         "SYS",
                                                         "DISARM " + mine.name,
                                                         10,
-                                                        { sendToOwner: true }
+                                                        { sendToOwner: true, sourceAction: "Disarm" }
                                                     );
                                                     if (result?.passed)
                                                     {
@@ -1881,7 +1902,7 @@ export function getDefaultGeneralReactionRegistry()
                     description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
                 });
                 if (placed && placed.length > 0)
-                    await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken));
+                    await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken), reactorToken);
             }
         },
         "Scan": {
@@ -1922,7 +1943,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!targets?.length)
                     return;
                 const targetToken = targets[0];
-                await actionFX.queueActionFx(() => actionFX.playSearchFX(reactorToken, targetToken));
+                await actionFX.queueActionFx(() => actionFX.playSearchFX(reactorToken, targetToken), reactorToken);
                 const checkTitle = isPilot ? "SEARCH - Skill Check" : "SEARCH - SYSTEMS vs AGILITY";
                 const result = await api.openHaseContestCard({
                     tokenA: reactorToken,
@@ -1931,6 +1952,7 @@ export function getDefaultGeneralReactionRegistry()
                     skillB: "AGI",
                     title: checkTitle,
                     sendToOwner: true,
+                    sourceAction: "Search",
                 });
                 if (!result?.completed)
                     return;
@@ -1938,10 +1960,10 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
-                    await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken));
+                    await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken), targetToken);
                 }
                 else
-                    await actionFX.queueActionFx(() => actionFX.playSearchFailFX(targetToken));
+                    await actionFX.queueActionFx(() => actionFX.playSearchFailFX(targetToken), targetToken);
             }
         }
 
@@ -1993,7 +2015,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!mechToken)
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playMountFX(reactorToken, mechToken));
+                await actionFX.queueActionFx(() => actionFX.playMountFX(reactorToken, mechToken), reactorToken);
 
                 const isOwnMech = mechToken.actor?.system?.pilot?.value?.id === pilotActorId;
                 if (!isOwnMech)
@@ -2057,7 +2079,7 @@ export function getDefaultGeneralReactionRegistry()
             const mechToken = targets?.[0];
             if (!mechToken)
                 return;
-            await actionFX.queueActionFx(() => actionFX.playJockeyFX(reactorToken, mechToken));
+            await actionFX.queueActionFx(() => actionFX.playJockeyFX(reactorToken, mechToken), reactorToken);
 
             const result = await api.openHaseContestCard({
                 tokenA: reactorToken,
@@ -2066,6 +2088,7 @@ export function getDefaultGeneralReactionRegistry()
                 skillB: "HULL",
                 title: "JOCKEY - GRIT vs HULL",
                 sendToOwner: true,
+                sourceAction: "Jockey",
             });
             if (!result?.completed)
                 return;
@@ -2137,7 +2160,6 @@ export function getDefaultGeneralReactionRegistry()
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
             const speed = reactorToken.actor?.system?.speed ?? 0;
-            api.increaseMovementCap(reactorToken, speed);
             api.recordBoostCast?.(reactorToken, speed);
             await gainAction(reactorToken, 'move');
         }
@@ -2180,7 +2202,7 @@ export function getDefaultGeneralReactionRegistry()
             const currentHeat = reactorToken.actor.system?.heat?.value ?? 0;
             await reactorToken.actor.update({ "system.heat.value": currentHeat + heatGained });
 
-            await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken));
+            await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken), reactorToken);
         }
     };
 

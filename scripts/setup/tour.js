@@ -249,9 +249,9 @@ const CONFIG_STEPS = [
     },
     {
         id: 'tabs',
-        title: 'Tabs',
-        content: "Each tab groups related stuff. Click around.",
-        selector: `${ROOT} .sheet-tabs`,
+        title: 'Pages',
+        content: "Every page groups related stuff, sorted by family on the left. The search box up top looks through all of them at once.",
+        selector: `${ROOT} .la-config-rail`,
     },
     {
         id: 'activations',
@@ -1169,7 +1169,7 @@ class _RootTour extends Tour
         const step = /** @type {any} */ (this.currentStep);
         if (step?.tab)
         {
-            const tab = document.querySelector(`${this._root} nav.sheet-tabs a[data-tab="${step.tab}"]`);
+            const tab = document.querySelector(`${this._root} nav.tabs a[data-tab="${step.tab}"]`);
             if (tab instanceof HTMLElement)
                 tab.click();
         }

@@ -333,7 +333,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                 icon: "cci cci-reticule",
                                 callback: async () =>
                                 {
-                                    await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken));
+                                    await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken), reactorToken);
                                     await api.executeBasicAttack(reactorToken.actor, {
                                         title: "Grapple",
                                         attack_type: "Melee"
@@ -652,6 +652,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                                 skillB: "HULL",
                                                 title: "GRAPPLE CONTEST - HULL vs HULL",
                                                 sendToOwner: true,
+                                                sourceAction: "Grapple",
                                             });
                                             if (!result?.completed)
                                                 return;
@@ -763,6 +764,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     skillB: "HULL",
                     title: "BREAK FREE - HULL vs HULL",
                     sendToOwner: true,
+                    sourceAction: "Break Free",
                 });
                 if (!result?.completed)
                     return;

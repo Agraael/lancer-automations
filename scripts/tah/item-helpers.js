@@ -5,7 +5,7 @@ import { playUiSound } from './sound.js';
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 import { getActivationIcon } from '../tools/misc-tools.js';
-import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags } from '../combat/per-frequency-tags.js';
+import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits } from '../combat/per-frequency-tags.js';
 import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
@@ -14,6 +14,7 @@ const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
 
 // Row icon size (px). Drives both svg images and mdi font glyphs so they match.
 export const HUD_ICON_SIZE = 20;
+export const HUD_WEAPON_ICON_SIZE = 30;
 
 export const rechargeIcon = (/** @type {boolean} */ charged) =>
     `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
@@ -34,6 +35,21 @@ export function activationTheme(/** @type {string|null|undefined} */ activation)
     if (normalized === 'quick' || normalized === 'quick_action' || normalized === 'full' || normalized === 'full_action')
         return 'action';
     return 'weapon';
+}
+
+// Counter an action row reads: the action's own sub counter if it carries a frequency, else the item's.
+function resolveActionScope(item, action, subKey = null)
+{
+    if (!action)
+        return { sub: null, key: null };
+    if (subKey)
+        return { sub: action, key: subKey };
+    const key = actionSubKey(item, action);
+    if (key)
+        return { sub: action, key };
+    if (subHasLimits(action) || action._addedViaExtrasUI || item?.type === 'frame')
+        return { sub: action, key: null };
+    return { sub: null, key: null };
 }
 
 /**
@@ -129,7 +145,9 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         pushUses(sys.uses);
     if (perFreqOn)
     {
-        const freqSub = extraAction ?? (isItem ? null : sys);
+        const scoped = isItem ? resolveActionScope(itemOrAction, extraAction, subKey) : { sub: extraAction ?? sys, key: null };
+        const freqSub = scoped.sub;
+        const freqKey = scoped.key;
         const perRound = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), freqSub ? getPerRoundLimitFromSub(freqSub) : getPerRoundLimit(itemOrAction));
         const perTurn = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), freqSub ? getPerTurnLimitFromSub(freqSub) : getPerTurnLimit(itemOrAction));
         let perScene = 0;
@@ -137,8 +155,8 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
             perScene = getPerSceneLimitFromSub(freqSub);
         else if (isItem && itemOrAction.type !== 'frame')
             perScene = getPerSceneLimit(itemOrAction);
-        const freqUsed = (field) => subKey && isItem
-            ? getSubUsed(itemOrAction, subKey, field)
+        const freqUsed = (field) => freqKey && isItem
+            ? getSubUsed(itemOrAction, freqKey, field)
             : Number(sys[field]?.value ?? 0);
         if (perRound > 0)
             pushPerFreq(perRound, freqUsed('uses_per_round'), 'mdi-restart', 'mdi-restart-off');
@@ -182,7 +200,7 @@ export function tahScale()
     }
 }
 
-export function laHudRenderIcon(icon)
+export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
 {
     if (!icon)
         return '';
@@ -193,9 +211,74 @@ export function laHudRenderIcon(icon)
         const cls = isWhite ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
         // LA icons fill their viewBox edge-to-edge; system icons ship with whitespace. Pad to match.
         const pad = icon.includes('modules/lancer-automations/') ? 'padding:2px;box-sizing:border-box;' : '';
-        return `<img class="${cls}" src="${icon}" style="width:${HUD_ICON_SIZE}px;height:${HUD_ICON_SIZE}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+        return `<img class="${cls}" src="${icon}" style="width:${size}px;height:${size}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
-    return `<i class="${icon} la-hud-icon" style="font-size:${HUD_ICON_SIZE}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+    return `<i class="${icon} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+}
+
+const WEAPON_SIZE_LEVEL = { aux: 0, auxiliary: 0, main: 1, heavy: 2, superheavy: 3 };
+
+/** 0-3 for Aux / Main / Heavy / Superheavy, else null. NPC features carry it in weapon_type. */
+export function weaponSizeLevel(weapon)
+{
+    const sys = weapon?.system;
+    if (!sys)
+        return null;
+    const direct = String(sys.size ?? sys.type ?? '').toLowerCase().trim();
+    if (direct in WEAPON_SIZE_LEVEL)
+        return WEAPON_SIZE_LEVEL[direct];
+    const npcType = String(sys.weapon_type ?? '').toLowerCase().trim();
+    for (const key of ['superheavy', 'heavy', 'main', 'auxiliary', 'aux'])
+    {
+        if (npcType.startsWith(key))
+            return WEAPON_SIZE_LEVEL[key];
+    }
+    return null;
+}
+
+const LA_WEAPON_ICONS = 'modules/lancer-automations/icons/weapon';
+const WEAPON_TYPE_ICON = {
+    cqb: `${LA_WEAPON_ICONS}/CQB_White.svg`,
+    cannon: `${LA_WEAPON_ICONS}/Canon_V2_White.svg`,
+    launcher: `${LA_WEAPON_ICONS}/Launcher_V2_White.svg`,
+    melee: 'systems/lancer/assets/icons/white/melee.svg',
+    nexus: `${LA_WEAPON_ICONS}/Nexus_White.svg`,
+    rifle: `${LA_WEAPON_ICONS}/Rifle_White.svg`,
+};
+
+/** Weapon-type icon path, or null. Mech weapons type per profile, NPC features fold it into weapon_type ("Main Cannon"). */
+export function weaponTypeIcon(weapon)
+{
+    const sys = weapon?.system;
+    if (!sys)
+        return null;
+    const profile = sys.active_profile ?? sys.profiles?.[sys.selected_profile_index ?? 0];
+    const words = `${profile?.type ?? ''} ${sys.weapon_type ?? ''}`.toLowerCase().split(/[^a-z]+/);
+    for (const word of words)
+    {
+        if (Object.hasOwn(WEAPON_TYPE_ICON, word))
+            return WEAPON_TYPE_ICON[word];
+    }
+    return null;
+}
+
+/** Four-segment size rule drawn left of the weapon icon, filling upward; inherits currentColor. */
+export function laHudSizeMark(level)
+{
+    if (level == null)
+        return '';
+    const length = 3.4;
+    const gap = 2;
+    const thickness = 2;
+    const total = length * 4 + gap * 3;
+    let bars = '';
+    for (let step = 0; step < 4; step++)
+    {
+        const dim = step <= level ? '' : ' opacity="0.25"';
+        const offset = total - (step + 1) * length - step * gap;
+        bars += `<rect x="0" y="${offset.toFixed(2)}" width="${thickness}" height="${length}" fill="currentColor"${dim}/>`;
+    }
+    return `<svg class="la-hud-size-mark" width="${thickness}" height="${total.toFixed(2)}" viewBox="0 0 ${thickness} ${total.toFixed(2)}" fill="none" aria-hidden="true">${bars}</svg>`;
 }
 
 export function getDeployableIcon(depInfo)
@@ -218,11 +301,12 @@ export function getDeployableIcon(depInfo)
  * @param {Item}    [opts.modItem=null]        Weapon mod item
  * @param {Function} [opts.showPopup=null]     (popup, rowEl) => void - if provided, actions get right-click detail popups
  * @param {Function} [opts.onActivate=null]   (action) => void - if provided, actions get an onClick handler
+ * @param {Function} [opts.actionPopup=null]  (action, source) => (rowEl) => void - replaces the default action right-click popup
  * @returns {Array}
  */
 export function laHudItemChildren(item, opts = {})
 {
-    const { defaultActions = [], modItem = null, showPopup = null, onActivate = null } = opts;
+    const { defaultActions = [], modItem = null, showPopup = null, onActivate = null, actionPopup = null } = opts;
     const sys = item.system;
     const profiles = sys.profiles ?? [];
     const activeIdx = sys.selected_profile_index ?? 0;
@@ -283,15 +367,19 @@ export function laHudItemChildren(item, opts = {})
     // Actions
     if (taggedActions.length)
     {
-        items.push({ label: 'ACTIONS', isSectionLabel: true });
         taggedActions.forEach(({ action, source }) =>
         {
+            const status = getItemStatus(source, action);
             const entry = {
                 label: action.name,
+                action,
                 icon: getActivationIcon(action),
+                badge: status.badge,
+                badgeColor: status.badgeColor,
+                statusKind: status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null,
                 onClick: onActivate ? () => onActivate(action, source) : null,
             };
-            entry.onRightClick = (row) =>
+            entry.onRightClick = actionPopup ? actionPopup(action, source) : (row) =>
             {
                 const bodyHtml = laRenderActionDetail(action, { sourceName: source?.name });
                 const subtitle = action.activation ?? '';
@@ -325,8 +413,11 @@ export function appendItemPips(item, popup, depthCallbacks)
 {
     const action = depthCallbacks?.action;
     const subData = depthCallbacks?.subData;
-    const subKey = depthCallbacks?.subKey ?? null;
     const isActorExtra = item?.documentName === 'Actor' && action?._addedViaExtrasUI === true;
+    const scoped = subData || isActorExtra || item?.documentName !== 'Item'
+        ? { sub: subData ?? action ?? null, key: depthCallbacks?.subKey ?? null }
+        : resolveActionScope(item, action, depthCallbacks?.subKey ?? null);
+    const subKey = scoped.key;
     const sys = item?.system;
     const allTags = isActorExtra
         ? (action?.tags ?? [])
@@ -345,7 +436,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             return false;
         }
     })();
-    const subEntry = subData ?? action;
+    const subEntry = scoped.sub;
     const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry) : getPerRoundLimit(item)) : 0;
     const perTurnMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), subEntry ? getPerTurnLimitFromSub(subEntry) : getPerTurnLimit(item)) : 0;
     const perSceneMax = !perFreqOn || isActorExtra ? 0

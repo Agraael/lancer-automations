@@ -566,47 +566,29 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 }
 
 
-.la-compact-bool:hover {
-    background: color-mix(in srgb, var(--primary-color, #782e22) 8%, transparent);
+#lancer-automations-config {
+    --la-config-signal: var(--la-signal, var(--secondary-color, #cf7b2a));
+    --la-config-rail: color-mix(in srgb, var(--la-plate, #e4dccd), var(--la-ink, #1b1b1b) 4%);
+    --la-config-card: color-mix(in srgb, var(--la-plate, #e4dccd), #fff 22%);
+    --la-config-mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+    --la-config-text-accent: var(--la-accent, var(--primary-color));
 }
 
-.la-preview-btn {
-    opacity: 0.4;
-    transition: opacity 0.15s;
-}
-
-.la-compact-bool:hover .la-preview-btn,
-.la-preview-btn:hover {
-    opacity: 1;
-}
-
-#lancer-automations-config h2.la-section {
-    font-size: 1.15em !important;
-    font-weight: 700 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--primary-color, #782e22);
-    padding: 4px 8px;
-    background: linear-gradient(to right, color-mix(in srgb, var(--primary-color, #782e22) 12%, transparent), transparent);
-    border-bottom: 2px solid var(--primary-color, #782e22) !important;
-    border-left: 3px solid var(--primary-color, #782e22);
-    margin: 16px 0 8px !important;
-}
-
-h2.la-collapsible:hover {
-    background: color-mix(in srgb, var(--primary-color, #782e22) 18%, transparent) !important;
+/* Accent text on a dark plate needs more lightness than the library's --la-accent, borders keep the library value. */
+:root.la-dark #lancer-automations-config,
+:root.la-theme-dark #lancer-automations-config {
+    --la-config-card: color-mix(in srgb, var(--la-plate, #2a2626), #fff 5%);
 }
 
 #lancer-automations-config .la-chevron {
     transition: transform 0.16s ease;
 }
 
-#lancer-automations-config .form-group.la-req-unmet > div > div {
+#lancer-automations-config .form-group.la-req-unmet .la-opt-control {
     opacity: 0.45;
 }
 
-#lancer-automations-config .form-group.la-req-unmet label,
-#lancer-automations-config .form-group.la-req-unmet .notes {
+#lancer-automations-config .form-group.la-req-unmet label {
     color: var(--la-ink-dim);
 }
 
@@ -623,8 +605,7 @@ h2.la-collapsible:hover {
     min-height: 0;
 }
 
-.la-config-form>header,
-.la-config-form>nav.tabs {
+.la-config-form>header {
     flex: 0 0 auto;
 }
 
@@ -641,15 +622,46 @@ h2.la-collapsible:hover {
     padding: 8px;
 }
 
-#reaction-manager-config .sheet-tabs,
-#lancer-automations-config .sheet-tabs {
+/* Grid backdrop, keyframes in battelog.css. */
+#lancer-automations-config .window-content {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+}
+
+/* the style library fills these with the plate, !important */
+#lancer-automations-config form.la-config-form,
+#lancer-automations-config .la-config-content {
+    background: none !important;
+}
+
+#lancer-automations-config .window-content::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: calc(100% + 100px);
+    height: calc(100% + 100px);
+    z-index: -1;
+    pointer-events: none;
+    background: url("/modules/lancer-automations/assets/grid.png");
+    will-change: transform;
+    animation: battelog-grid-scroll 13.33s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #lancer-automations-config .window-content::before {
+        animation: none;
+    }
+}
+
+#reaction-manager-config .sheet-tabs {
     margin-top: 10px;
     margin-bottom: 8px;
     border-bottom: 2px solid var(--primary-color);
 }
 
-#reaction-manager-config .sheet-tabs .item,
-#lancer-automations-config .sheet-tabs .item {
+#reaction-manager-config .sheet-tabs .item {
     padding: 6px 14px;
     border: 2px solid transparent;
     cursor: pointer;
@@ -659,14 +671,12 @@ h2.la-collapsible:hover {
     transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-#reaction-manager-config .sheet-tabs .item:hover,
-#lancer-automations-config .sheet-tabs .item:hover {
+#reaction-manager-config .sheet-tabs .item:hover {
     color: var(--la-accent, var(--primary-color));
     background: color-mix(in srgb, var(--la-accent, var(--primary-color)), transparent 95%);
 }
 
-#reaction-manager-config .sheet-tabs .item.active,
-#lancer-automations-config .sheet-tabs .item.active {
+#reaction-manager-config .sheet-tabs .item.active {
     border: 2px solid var(--la-accent, var(--primary-color));
     border-bottom: 2px solid var(--la-plate, #e4dccd);
     background: var(--la-plate, #e4dccd);
@@ -675,39 +685,229 @@ h2.la-collapsible:hover {
     text-shadow: 0 0 6px var(--la-accent, var(--primary-color)) !important;
 }
 
-#reaction-manager-config .sheet-tabs .item.active i,
-#lancer-automations-config .sheet-tabs .item.active i {
+#reaction-manager-config .sheet-tabs .item.active i {
     text-shadow: inherit !important;
 }
 
-.la-config-tabs {
+/* Banner: title, always-visible search, links. */
+#lancer-automations-config .la-config-banner {
+    margin-bottom: 0;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    align-items: stretch;
-    padding: 2px 6px;
-    gap: 2px;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
 }
 
-.la-config-tabs .item {
-    padding: 4px 6px;
+#lancer-automations-config .la-config-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 340px;
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    justify-self: center;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+#lancer-automations-config .la-config-search i {
     font-size: 0.85em;
-    white-space: nowrap;
+    opacity: 0.9;
+}
+
+#lancer-automations-config .la-config-search .la-config-search-input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background: transparent !important;
+    border: 0 !important;
+    color: #fff !important;
+    box-shadow: none;
+    outline: none;
+}
+
+#lancer-automations-config .la-config-search .la-config-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+#lancer-automations-config .la-config-search kbd {
+    font: 500 10.5px var(--la-config-mono);
+    opacity: 0.75;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    padding: 1px 5px;
+    letter-spacing: 0.04em;
+    background: none;
+    color: inherit;
+}
+
+#lancer-automations-config .la-config-search-clear {
+    display: none;
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+#lancer-automations-config .la-config-search-clear.visible {
+    display: inline;
+}
+
+#lancer-automations-config .la-searching .la-config-search kbd {
+    display: none;
+}
+
+.la-config-links {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.la-config-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #fff;
+    font-size: 0.85em;
+    text-decoration: none;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+}
+
+.la-config-links a:hover {
+    opacity: 1;
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+/* Rail + page. */
+.la-config-body {
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#lancer-automations-config nav.la-config-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    justify-content: flex-start;
+    margin: 0;
+    padding: 10px 8px 12px;
+    border: 0;
+    border-right: 1px solid var(--la-edge);
+    background: var(--la-config-rail);
+    overflow-y: auto;
+    min-height: 0;
+}
+
+#lancer-automations-config .la-rail-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+#lancer-automations-config .la-rail-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px 4px;
+    font: 600 10.5px var(--la-config-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--la-ink), var(--la-plate) 55%);
+}
+
+#lancer-automations-config .la-rail-label i {
+    font-size: 11px;
+}
+
+#lancer-automations-config nav.la-config-rail .item {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    margin: 0;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    background: none;
+    color: var(--la-ink);
+    font-size: 0.86em;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: left;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: border-left-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+#lancer-automations-config nav.la-config-rail .item i {
+    color: var(--la-ink-dim);
     text-align: center;
+    font-size: 1.05em;
+    transition: color 0.15s;
 }
 
-.la-config-tabs .item i {
-    margin-right: 3px;
+#lancer-automations-config nav.la-config-rail .item:hover {
+    background: var(--la-config-card);
+    border-left-color: color-mix(in srgb, var(--la-accent, var(--primary-color)), transparent 55%);
 }
 
-.la-config-tabs .item.la-tab-disabled {
+#lancer-automations-config nav.la-config-rail .item:hover i {
+    color: var(--la-ink);
+}
+
+#lancer-automations-config nav.la-config-rail .item.active {
+    background: var(--la-config-card);
+    border-left-color: var(--la-config-signal);
+    box-shadow: inset 0 -2px 0 0 var(--la-accent, var(--primary-color));
+    color: var(--la-config-text-accent);
+    text-shadow: none;
+}
+
+#lancer-automations-config nav.la-config-rail .item,
+#lancer-automations-config nav.la-config-rail .item.active {
+    font-weight: 600;
+}
+
+#lancer-automations-config nav.la-config-rail .item:focus {
+    outline: none;
+}
+
+#lancer-automations-config nav.la-config-rail .item:focus-visible {
+    outline: 2px solid var(--la-config-signal);
+    outline-offset: -2px;
+}
+
+#lancer-automations-config nav.la-config-rail .item.active i {
+    color: var(--la-config-text-accent);
+}
+
+#lancer-automations-config nav.la-config-rail .item.la-tab-disabled {
     opacity: 0.4;
     cursor: not-allowed;
     filter: grayscale(0.6);
 }
 
-.la-config-tabs .item.la-tab-disabled:hover {
-    text-shadow: none;
-    color: inherit;
+#lancer-automations-config nav.la-config-rail .item.la-dim {
+    opacity: 0.45;
+}
+
+#lancer-automations-config .la-rail-badge {
+    font: 500 10.5px var(--la-config-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--la-ink-dim);
+    letter-spacing: 0;
+    text-transform: none;
+    min-width: 18px;
+    text-align: right;
+}
+
+#lancer-automations-config .la-rail-badge.hit {
+    color: var(--la-config-text-accent);
+    font-weight: 700;
 }
 
 .la-config-content {
@@ -715,9 +915,9 @@ h2.la-collapsible:hover {
     overflow-y: auto;
     min-height: 0;
     scrollbar-gutter: stable;
+    padding: 0 16px 16px;
 }
 
-/* Settings inputs: field + ink text flip with the plate (light field/dark text on light, dark field/light text on dark). */
 .la-config-content input[type="text"],
 .la-config-content input[type="number"],
 .la-config-content input[type="search"],
@@ -726,22 +926,30 @@ h2.la-collapsible:hover {
     background: color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);
     color: var(--la-ink);
     border: 1px solid var(--la-edge);
+    border-radius: 0;
 }
 
-/* Regular options flow in two columns; sections, tables, keybindings, etc. span the full width. */
+.la-config-content .tab:not(.active) {
+    display: none !important;
+}
+
 .la-config-content .tab.active {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 18px;
-    align-items: start;
-    align-content: start;
-    animation: la-tab-fade 0.18s ease;
+    display: block;
 }
 
-@keyframes la-tab-fade {
+.la-config-content .tab.active .la-page-top,
+.la-config-content .tab.active .la-cards {
+    animation: la-page-in 0.22s ease-out both;
+}
+
+.la-config-content .tab.active .la-cards {
+    animation-delay: 0.06s;
+}
+
+@keyframes la-page-in {
     from {
         opacity: 0;
-        transform: translateY(4px);
+        transform: translateY(6px);
     }
 
     to {
@@ -750,92 +958,687 @@ h2.la-collapsible:hover {
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    #lancer-automations-config .la-chevron {
-        transition: none;
-    }
-
-    .la-config-content .tab.active {
-        animation: none;
-    }
+.la-searching .la-config-content .tab .la-page-top,
+.la-searching .la-config-content .tab .la-cards {
+    animation: none;
 }
 
-.la-config-content .tab:not(.active) {
+.la-searching .la-page-top {
+    position: static;
+    box-shadow: none;
+}
+
+.la-page-top {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--la-plate, #e4dccd);
+    box-shadow: 0 8px 10px -8px rgba(0, 0, 0, 0.45);
+    margin-bottom: 10px;
+}
+
+.la-page-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0 0;
+}
+
+.la-page-head h1 {
+    margin: 0;
+    padding-left: 10px;
+    border: 0;
+    border-left: 4px solid var(--la-config-signal);
+    font-size: 1.35em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--la-ink);
+}
+
+.la-page-head h1 i {
+    color: var(--la-config-text-accent);
+    font-size: 0.85em;
+}
+
+.la-page-meta {
+    font: 500 11.5px var(--la-config-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+    color: var(--la-ink-dim);
+}
+
+.la-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--la-edge);
+}
+
+.la-strip:empty {
+    display: none;
+}
+
+.la-searching .la-strip {
+    display: none;
+}
+
+#lancer-automations-config .la-chip {
+    --la-line: var(--la-edge);
+    --la-fill: var(--la-config-card);
+    --la-cut: 5px;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    height: 24px;
+    min-height: 0;
+    line-height: 1;
+    padding: 0 10px;
+    margin: 0;
+    color: var(--la-ink-dim) !important;
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: none !important;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+#lancer-automations-config .la-chip:hover {
+    --la-line: var(--la-config-signal);
+    color: var(--la-ink) !important;
+}
+
+#lancer-automations-config .la-chip.active {
+    --la-line: var(--la-config-signal);
+    --la-fill: color-mix(in srgb, var(--la-config-signal), var(--la-plate, #e4dccd) 80%);
+    color: var(--la-ink) !important;
+    font-weight: 700;
+}
+
+.la-searching .la-config-content .tab.la-no-hits {
     display: none !important;
 }
 
-.la-config-content .tab.active>* {
+.la-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Section cards: chamfer + border from the library card, fill lifted off the plate. */
+#lancer-automations-config .la-card {
+    --la-line: color-mix(in srgb, var(--la-accent, var(--primary-color)), transparent 60%);
+    --la-fill: var(--la-config-card);
+    padding: 0;
+    margin: 0;
+    display: block;
+    cursor: default;
+    transition: none;
+}
+
+#lancer-automations-config .la-card:hover {
+    --la-line: var(--la-config-signal);
+    transform: none;
+    box-shadow: none;
+}
+
+#lancer-automations-config .la-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin: 0;
+    padding: 8px 14px 7px;
+    border: 0;
+    border-bottom: 1px solid var(--la-edge);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    text-align: left;
+    font-size: 0.92em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--la-config-text-accent);
+    line-height: 1.2;
+}
+
+#lancer-automations-config button.la-card-head {
+    cursor: pointer;
+}
+
+#lancer-automations-config button.la-card-head:hover {
+    background: color-mix(in srgb, var(--la-accent, var(--primary-color)) 8%, transparent);
+}
+
+#lancer-automations-config .la-card-head .la-chevron {
+    font-size: 0.75em;
+}
+
+#lancer-automations-config .la-card.collapsed .la-card-head {
+    border-bottom: 0;
+}
+
+#lancer-automations-config .la-card.collapsed .la-chevron,
+#lancer-automations-config .la-sub.collapsed .la-chevron {
+    transform: rotate(-90deg);
+}
+
+#lancer-automations-config .la-card-count {
+    margin-left: auto;
+    font: 500 11px var(--la-config-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+    text-transform: none;
+    color: color-mix(in srgb, var(--la-ink), var(--la-plate) 55%);
+}
+
+#lancer-automations-config .la-card-body,
+#lancer-automations-config .la-sub-body {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#lancer-automations-config .la-card-body>*,
+#lancer-automations-config .la-sub-body>* {
     grid-column: 1 / -1;
 }
 
-.la-config-content .tab.active>.la-opt-row {
+/* Color pickers are short, three per line. */
+#lancer-automations-config .la-card-body>.la-color-row,
+#lancer-automations-config .la-sub-body>.la-color-row {
     grid-column: auto;
+    gap: 8px;
 }
 
-.la-config-footer {
-    flex: 0 0 auto;
+#lancer-automations-config .la-color-row+.la-color-row {
+    border-left: 1px solid var(--la-edge);
+}
+
+#lancer-automations-config .la-color-row .la-opt-control input[type="color"] {
+    width: 36px;
+}
+
+#lancer-automations-config .la-section-hint {
+    margin: 0;
+    padding: 8px 14px 4px;
+    font-size: 0.85em;
+    line-height: 1.4;
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-sub {
+    margin: 8px 12px;
+    border: 1px solid var(--la-edge);
+    border-left: 3px solid var(--la-config-signal);
+    background: color-mix(in srgb, var(--la-config-card), var(--la-ink) 3%);
+}
+
+#lancer-automations-config .la-sub-head {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    margin: 0;
+    padding: 5px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--la-edge);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--la-config-signal), transparent 88%);
+    box-shadow: none;
+    text-align: left;
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--la-ink);
+    line-height: 1.2;
+}
+
+#lancer-automations-config .la-sub.collapsed .la-sub-head {
+    border-bottom: 0;
+}
+
+#lancer-automations-config .la-sub-body>.la-opt-row {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+#lancer-automations-config button.la-sub-head {
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-sub-head .la-chevron {
+    font-size: 0.7em;
+}
+
+/* Rows: one line, hint on the (?) icon. */
+#lancer-automations-config .la-opt-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    padding: 5px 14px;
+    min-height: 34px;
+    border-bottom: 1px solid var(--la-edge);
+    transition: background 0.12s;
+}
+
+#lancer-automations-config .la-card-body>.la-opt-row:last-child,
+#lancer-automations-config .la-sub-body>.la-opt-row:last-child {
+    border-bottom: 0;
+}
+
+#lancer-automations-config .la-opt-row:hover {
+    background: color-mix(in srgb, var(--la-accent, var(--primary-color)) 8%, transparent);
+}
+
+#lancer-automations-config .la-opt-row>label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-weight: bold;
+    flex: 1;
+}
+
+#lancer-automations-config .la-opt-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#lancer-automations-config .la-hint {
+    width: 15px;
+    height: 15px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 10px;
+    color: var(--la-ink-dim);
+    cursor: help;
+    flex-shrink: 0;
+}
+
+#lancer-automations-config .la-hint:hover {
+    color: var(--la-config-text-accent);
+}
+
+#lancer-automations-config .la-opt-control {
+    display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    border-top: 1px solid var(--primary-color, #782e22);
-    background: color-mix(in srgb, var(--primary-color, #782e22) 4%, transparent);
-    margin: 0;
+    flex-shrink: 0;
 }
 
-.la-config-footer .la-config-save {
-    flex: 0 0 auto;
-    width: auto;
-    padding: 6px 22px;
-    height: auto;
-    line-height: 1.4;
-    font-size: 0.95em;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 14%) !important;
-    color: var(--la-ink) !important;
-    border: 2px solid var(--primary-color) !important;
-    border-radius: 3px;
+#lancer-automations-config .la-opt-control input[type="number"] {
+    width: 76px;
+}
+
+#lancer-automations-config .la-opt-control input[type="text"] {
+    width: 180px;
+}
+
+#lancer-automations-config .la-opt-control input[type="range"] {
+    width: 130px;
+}
+
+#lancer-automations-config .la-opt-control input[type="color"] {
+    width: 44px;
+    height: 24px;
+    padding: 1px;
     cursor: pointer;
-    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.05s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.la-config-footer .la-config-save:hover {
-    background: color-mix(in srgb, var(--la-plate), var(--primary-color) 32%) !important;
-    box-shadow: 0 0 6px color-mix(in srgb, var(--primary-color), transparent 40%);
+#lancer-automations-config .la-opt-control select {
+    max-width: 220px;
 }
 
-.la-config-footer .la-config-save:active {
-    transform: translateY(1px);
+#lancer-automations-config .la-slider-value {
+    min-width: 30px;
+    text-align: right;
+    font: 500 12px var(--la-config-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--la-ink-dim);
 }
 
-.la-config-footer .la-config-save i {
-    margin-right: 6px;
+#lancer-automations-config .la-btn-row {
+    grid-template-columns: 1fr auto;
+    padding: 6px 14px;
+}
+
+#lancer-automations-config .la-btn-row .la-config-btn {
+    width: 100%;
+    height: 28px;
+}
+
+#lancer-automations-config .la-btn-state {
+    margin-left: 8px;
+    padding: 1px 7px;
+    border: 1px solid currentColor;
+    font-size: 0.9em;
+    letter-spacing: 0.08em;
+    color: var(--la-config-text-accent);
+}
+
+/* Action buttons reuse the library chamfer, the Save / Play ones are filled primary. */
+#lancer-automations-config .lancer-action-btn {
+    --la-line: color-mix(in srgb, var(--la-accent, var(--primary-color)), transparent 40%);
+    --la-fill: color-mix(in srgb, var(--la-plate, #e4dccd), var(--la-ink) 12%);
+    color: var(--la-ink) !important;
+    padding: 0 14px;
+    min-height: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: none !important;
+    transition: none;
+}
+
+#lancer-automations-config .lancer-action-btn:hover:not(:disabled) {
+    --la-line: var(--la-config-signal);
+}
+
+#lancer-automations-config .lancer-action-btn.la-primary {
+    --la-line: var(--la-accent, var(--primary-color));
+    --la-fill: var(--la-accent, var(--primary-color));
+    color: #fff !important;
+}
+
+#lancer-automations-config .lancer-action-btn.la-primary i {
     color: inherit;
 }
 
-/* Action buttons (Apply Fixes, Export, etc.) — just a soft shadow contour so they read at rest. */
-.la-config-content .la-config-btn {
-    border-radius: 3px;
-    background: color-mix(in srgb, var(--la-plate), #fff 16%) !important;
-    color: var(--la-ink) !important;
-    border: 1px solid var(--la-edge) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-    transition: box-shadow 0.15s ease, background 0.15s ease;
+#lancer-automations-config .lancer-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
-.la-config-content .la-config-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--la-plate), #fff 24%) !important;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45) !important;
+/* GM-only rows in a player's view: hatched, no lock icon. */
+#lancer-automations-config .la-gm-tag {
+    display: none;
+    font: 500 9.5px var(--la-config-mono);
+    letter-spacing: 0.08em;
+    padding: 1px 5px;
+    border: 1px solid var(--la-edge);
+    color: var(--la-ink-dim);
+    flex-shrink: 0;
 }
 
-/* Setting hints: ink-based so they dim correctly on a dark plate (their inline opacity does the rest). */
-.la-config-content .notes,
-.la-config-content .la-section-hint {
+#lancer-automations-config .la-gm-locked {
+    background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--la-ink), transparent 92%) 6px 8px);
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-gm-locked .la-gm-tag {
+    display: inline-block;
+}
+
+#lancer-automations-config .la-gm-locked .la-fcs-lock {
+    visibility: hidden;
+}
+
+/* Compact toggle grids. */
+#lancer-automations-config .la-compact-bools {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px 10px;
+    padding: 6px 14px 8px;
+}
+
+#lancer-automations-config .la-compact-bool {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    font-size: 0.88em;
+}
+
+#lancer-automations-config .la-compact-bool:hover {
+    background: color-mix(in srgb, var(--la-accent, var(--primary-color)) 8%, transparent);
+}
+
+#lancer-automations-config .la-compact-bool label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-compact-bool input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+#lancer-automations-config .la-compact-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#lancer-automations-config .la-compact-bool .la-fcs-lock {
+    flex-shrink: 0;
+    margin-right: 0 !important;
+}
+
+#lancer-automations-config .la-preview-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 20px;
+    padding: 0;
+    line-height: 1;
+    font-size: 0.7em;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+}
+
+#lancer-automations-config .la-compact-bool:hover .la-preview-btn,
+#lancer-automations-config .la-preview-btn:hover {
+    opacity: 1;
+}
+
+/* Keybinding and tour rows. */
+#lancer-automations-config .la-keybinding-row,
+#lancer-automations-config .la-tour-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--la-edge);
+}
+
+#lancer-automations-config .la-keybinding-row:hover,
+#lancer-automations-config .la-tour-row:hover {
+    background: color-mix(in srgb, var(--la-accent, var(--primary-color)) 8%, transparent);
+}
+
+#lancer-automations-config .la-card-body>.la-keybinding-row:last-child,
+#lancer-automations-config .la-card-body>.la-tour-row:last-child {
+    border-bottom: 0;
+}
+
+#lancer-automations-config .la-kb-text {
+    flex: 1;
+    min-width: 0;
+}
+
+#lancer-automations-config .la-kb-name {
+    font-weight: bold;
+    font-size: 0.9em;
     color: var(--la-ink);
+    line-height: 1.2;
+}
+
+#lancer-automations-config .la-kb-hint {
+    font-size: 0.76em;
+    color: var(--la-ink-dim);
+    line-height: 1.25;
+    margin-top: 1px;
+}
+
+#lancer-automations-config .la-tour-steps {
+    margin-left: 6px;
+    font: 400 11px var(--la-config-mono);
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-kb-binds {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    align-items: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+#lancer-automations-config .la-kb-add {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    border: 1px solid var(--la-accent, var(--primary-color));
+    background: var(--la-accent, var(--primary-color));
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.6em;
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-kb-key {
+    width: auto;
+    height: 24px;
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    margin: 0;
+    line-height: 20px;
+    border: 1px solid var(--la-edge);
+    border-bottom-width: 2px;
+    border-radius: 0;
+    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);
+    color: var(--la-ink);
+    font: 500 0.82em var(--la-config-mono);
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-kb-reset {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    padding: 0;
+    margin: 0;
+    line-height: 1;
+    border: 1px solid var(--la-edge);
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--la-ink-dim);
+    font-size: 0.75em;
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-tour-play {
+    height: 26px;
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Tables. */
+#lancer-automations-config .la-config-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0;
+}
+
+#lancer-automations-config .la-config-table th {
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--la-accent, var(--primary-color));
+    font-size: 0.8em;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-config-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--la-edge);
+}
+
+#lancer-automations-config .la-config-table .la-table-label {
+    font-weight: bold;
+}
+
+#lancer-automations-config .la-config-table select {
+    width: 100%;
+}
+
+#lancer-automations-config .la-config-table input[type="number"] {
+    width: 56px;
+}
+
+#lancer-automations-config .la-config-table input[type="color"] {
+    width: 36px;
+    height: 24px;
+    padding: 1px;
+}
+
+/* Footer. */
+.la-config-footer {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--la-edge);
+    background: var(--la-config-rail);
+    margin: 0;
+}
+
+.la-config-footer .la-footer-note {
+    font: 500 11px var(--la-config-mono);
+    letter-spacing: 0.02em;
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-config-footer .la-config-save {
+    flex: 0 0 auto;
+    width: auto;
+    height: 30px;
+    padding: 0 26px;
+    font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    #lancer-automations-config .la-chevron,
+    #lancer-automations-config nav.la-config-rail .item,
+    #lancer-automations-config .la-opt-row {
+        transition: none;
+    }
+
+    .la-config-content .tab.active .la-page-top,
+    .la-config-content .tab.active .la-cards {
+        animation: none;
+    }
 }
 
 /* Same soft shadow contour for the Activation Manager buttons. */
@@ -2244,6 +3047,7 @@ form[id^="accdiff"] .lancer-header input,
 :root.la-dark .la-downtime img[src*="/assets/icons/"]:not([src*="accuracy"]):not([src*="difficulty"]) {
     filter: brightness(0) invert(1);
 }
+
 .la-status-tooltip {
     position: fixed;
     z-index: 1000;

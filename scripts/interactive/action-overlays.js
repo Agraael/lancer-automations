@@ -164,7 +164,7 @@ export function applyActionOverlays(item, actions)
     return actions.map(action =>
     {
         const overlay = map[_encodeKey(action?.name ?? '')];
-        if (!overlay?.laCombat)
+        if (!overlay || !Object.keys(overlay).length)
             return action;
         return { ...action, ...overlay, name: action.name, activation: action.activation, detail: action.detail, _hasOverlay: true };
     });

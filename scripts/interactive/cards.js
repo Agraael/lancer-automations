@@ -3,6 +3,7 @@
 import { firstKeyFor } from "./keybindings.js";
 import { isWhiteIcon } from "../tah/item-helpers.js";
 import { createTokenMark } from "./target-shapes.js";
+import { focusTokens } from "../tools/auto-focus.js";
 
 // Info Card Helpers (internal)
 
@@ -555,6 +556,7 @@ export function _createInfoCard(type, opts)
     if (relatedToken)
         cardEl[0]._laRelatedMark = createTokenMark(relatedToken);
     _cardVisualStack.push(cardEl);
+    focusTokens('cards', [originToken, relatedToken]);
     return cardEl;
 }
 

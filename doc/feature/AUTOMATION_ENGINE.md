@@ -69,7 +69,7 @@ Each activation is a small form. The main fields:
 |-------|--------------|
 | **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). |
 | **Mode** | How it composes with the original action: **instead of** or **after** it, and whether it **auto-activates** silently (no popup). |
-| **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, and out-of-combat. |
+| **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the activation is limited to. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type shown in the popup (Reaction / Quick / Full / ...), and frequency. |
 | **Text** | Override the trigger and effect descriptions shown in the popup. |
 
@@ -108,7 +108,7 @@ What makes it self-react on use:
 
 - **`autoActivate: true`** - runs silently, no popup.
 
-- **`activationMode: "instead"`** - your code runs alone. `"after"` also fires the reaction's own flow/card alongside it; neither touches the flow that triggered you.
+- **`activationMode: "instead"`** - your code runs alone. `"after"` also fires the reaction's own flow/card alongside it. Neither touches the flow that triggered you.
 
 - **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action. Drop `reactionPath` to bind the whole item.
 
@@ -136,11 +136,11 @@ By default `onActivation` fires when an item runs through an activation. **`trea
 
 ## Debugging an automation
 
-Three tools, from quickest to most powerful.
+Three tools, from quickest to most thorough.
 
 ### Console logging
 
-`console.log` works anywhere in your code; open the console with F12 and the logs show up as the automation runs. For a full picture of what a trigger hands you, call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
+`console.log` works anywhere in your code. Open the console with F12 and the logs show up as the automation runs. For a full picture of what a trigger hands you, call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
 
 - the trigger type, the reactor token, the item, the activation name
 - every field on `triggerData`
@@ -212,7 +212,7 @@ The registration patterns are in [API How-To](../API_HOWTO.md).
 
 **Copy** / **Paste** in the activation editor moves one activation. **Export Pack** / **Import Pack** in the Activation Manager moves a bundle of activations and startup scripts as `la-pack-<name>.json`, with a summary to pick what applies.
 
-The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share those files. The **Workshop** tab in the Activation Manager browses and imports it directly; re-importing a file updates your copy instead of duplicating it.
+The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share those files. The **Workshop** tab in the Activation Manager browses and imports it directly. Re-importing a file updates your copy instead of duplicating it.
 
 <img src="../vid/ae-workshop.gif" width="80%"/>
 

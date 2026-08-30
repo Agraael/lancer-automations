@@ -264,7 +264,7 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` |
 | <kbd>title</kbd> | `string` | auto | Roll title |
 | <kbd>target</kbd> | `number\|"token"\|Token\|TokenDocument` | `10` | Pass threshold or `"token"` for interactive choice |
-| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup |
+| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup. `sourceItemUuid` / `sourceAction` attribute the roll, surfacing as `item` / `actionName` on `onInitCheck` and `onCheck` |
 
 `extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD, the way a weapon's tags pre-fill an attack. They are added to whatever the HUD already computed and stay editable by the roller. No bonus needed for a one-off +1 Difficulty.
 
@@ -330,6 +330,9 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>accuracy1</kbd> / <kbd>accuracy2</kbd> | `number` | `0` | Accuracy dice pre-filled on that side's HASE HUD |
 | <kbd>difficulty1</kbd> / <kbd>difficulty2</kbd> | `number` | `0` | Difficulty dice pre-filled on that side's HASE HUD |
 | <kbd>flatModifier1</kbd> / <kbd>flatModifier2</kbd> | `number` | `0` | Flat modifier pre-filled on that side's HASE HUD |
+| <kbd>sourceItem</kbd> | `Item\|string` | `null` | Item the check belongs to, surfaced as `item` on `onInitCheck` / `onCheck` |
+| <kbd>sourceAction</kbd> | `string` | `null` | Action the check belongs to, surfaced as `actionName` |
+| <kbd>extraData</kbd> | `object` | `null` | Extra keys merged into both rolls' `la_extraData` |
 
 Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
 

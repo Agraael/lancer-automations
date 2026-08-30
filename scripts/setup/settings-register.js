@@ -58,6 +58,61 @@ export function registerSettings()
         default: false
     });
 
+    game.settings.register('lancer-automations', 'autoFocusDuration', {
+        name: 'Focus Pan Duration',
+        hint: 'How long the camera takes to reach the focused tokens, in milliseconds.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        range: { min: 200, max: 3000, step: 100 },
+        default: 1000
+    });
+
+    game.settings.register('lancer-automations', 'autoFocusCards', {
+        name: 'Focus on Interactive Cards',
+        hint: 'Pan the canvas to the card\'s tokens when a choice, confirm or wait card shows.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoFocusAttack', {
+        name: 'Focus on Attack Rolls',
+        hint: 'Pan the canvas to the attacker and targets when the attack rolls, or when its card reaches you.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoFocusDamage', {
+        name: 'Focus on Damage Rolls',
+        hint: 'Pan the canvas to the attacker and targets when damage rolls, or when its card reaches you.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoFocusCheck', {
+        name: 'Focus on Stat Rolls',
+        hint: 'Pan the canvas to the roller and its target when a stat roll happens, or when its card reaches you.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'autoFocusActivation', {
+        name: 'Focus on Activations',
+        hint: 'Pan the canvas to the acting token when its action FX plays.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'showBonusHudButton', {
         name: 'Token HUD Bonus Button',
         hint: 'Adds a button on the Token HUD to open the Effect Manager.',
@@ -391,6 +446,26 @@ export function registerSettings()
         config: false,
         type: Number,
         range: { min: 0, max: 1, step: 0.05 },
+        default: 1
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseLineOpacity', {
+        name: 'Range Pulse Line Opacity',
+        hint: 'Opacity of the perimeter line around the range.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        range: { min: 0.1, max: 1, step: 0.05 },
+        default: 1
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseWaveOpacity', {
+        name: 'Range Pulse Wave Opacity',
+        hint: 'Opacity of the colored wave running through the range.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        range: { min: 0.1, max: 1, step: 0.05 },
         default: 1
     });
 

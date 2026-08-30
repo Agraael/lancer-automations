@@ -318,6 +318,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             $lastActive = $activeBtn;
             $activeBtn.addClass('la-targeting-active');
             setPickPulse(shapeReach(shape));
+            setPickerTargetCursor(true);
             pickerRun = (async () =>
             {
                 try
@@ -347,15 +348,55 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                     $hint.stop(true, true).slideUp(120);
                     $activeBtn.removeClass('la-targeting-active');
                     clearPickPulse();
+                    setPickerTargetCursor(false);
                 }
             })();
             return pickerRun;
         };
 
-        for (const aoeRange of aoe)
+        const launchAoePicker = ($aoeBtn, aoeRange, keepExisting = false) =>
         {
             const pattern = aoeRange.type.toLowerCase();
+            const $hint = ensureHint($form);
+            const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
+            const tiltHint = pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
+            $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
+            $lastActive = $aoeBtn;
+            $aoeBtn.addClass('la-targeting-active');
+            setPickerTargetCursor(true);
+            pickerRun = (async () =>
+            {
+                try
+                {
+                    const castRangeVal = (await resolveWeaponRange(state)).val;
+                    const castRange = (castRangeVal + aoeRange.val) > 0 ? (castRangeVal + aoeRange.val) : -1;
+                    setPickPulse(castRange);
+                    await pickAreaTargetToggle(caster(), {
+                        pattern,
+                        areaRange: aoeRange.val,
+                        size: 1,
+                        keepExisting,
+                        getToggles: () => readToggles($form),
+                        hitChanceFor: hitChanceForFactory(state),
+                        castRange,
+                    });
+                }
+                finally
+                {
+                    $hint.stop(true, true).slideUp(120);
+                    $aoeBtn.removeClass('la-targeting-active');
+                    clearPickPulse();
+                    setPickerTargetCursor(false);
+                }
+            })();
+            return pickerRun;
+        };
+
+        const aoeButtons = [];
+        for (const aoeRange of aoe)
+        {
             const $aoeBtn = $(`<button class="range-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> ${aoeRange.type} ${aoeRange.val}</button>`);
+            aoeButtons.push({ $btn: $aoeBtn, aoeRange });
             $aoeBtn.on('click', async (ev) =>
             {
                 ev.preventDefault();
@@ -375,41 +416,33 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                     launchStripPicker($aoeBtn, ev.shiftKey);
                     return;
                 }
-                const $hint = ensureHint($form);
-                const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-                const tiltHint = pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
-                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
-                $lastActive = $aoeBtn;
-                $aoeBtn.addClass('la-targeting-active');
-                pickerRun = (async () =>
-                {
-                    try
-                    {
-                        const castRangeVal = (await resolveWeaponRange(state)).val;
-                        const castRange = (castRangeVal + aoeRange.val) > 0 ? (castRangeVal + aoeRange.val) : -1;
-                        setPickPulse(castRange);
-                        await pickAreaTargetToggle(caster(), {
-                            pattern,
-                            areaRange: aoeRange.val,
-                            size: 1,
-                            keepExisting: ev.shiftKey,
-                            getToggles: () => readToggles($form),
-                            hitChanceFor: hitChanceForFactory(state),
-                            castRange,
-                        });
-                    }
-                    finally
-                    {
-                        $hint.stop(true, true).slideUp(120);
-                        $aoeBtn.removeClass('la-targeting-active');
-                        clearPickPulse();
-                    }
-                })();
-                await pickerRun;
+                await launchAoePicker($aoeBtn, aoeRange, ev.shiftKey);
             });
             $row.append($aoeBtn);
         }
         positionShapeToggle();
+
+        // Shortcut mirrors the last used pattern button, falling back to the first.
+        _cardToggle = () =>
+        {
+            playUiSound('toggle');
+            if (isAreaPickerActive())
+            {
+                cancelAreaPicker();
+                return;
+            }
+            if (isSingleTargetPickerActive())
+            {
+                cancelSingleTargetPicker();
+                return;
+            }
+            const entry = aoeButtons.find(candidate => $lastActive && candidate.$btn.is($lastActive)) ?? aoeButtons[0];
+            if (stripDrives())
+                launchStripPicker(entry.$btn);
+            else
+                launchAoePicker(entry.$btn, entry.aoeRange);
+        };
+        bindCardTargetingKey();
 
         let restartTimer = null;
         const onShapeStripChange = () =>

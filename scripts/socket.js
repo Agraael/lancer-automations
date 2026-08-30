@@ -10,6 +10,7 @@ import {
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
 } from './interactive/index.js';
 import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
+import { handleRemoteFocus } from './tools/auto-focus.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
@@ -199,6 +200,8 @@ function emitAck(action, requestId, extra = {})
 }
 
 const HANDLERS = {
+
+    autoFocus: handleRemoteFocus,
 
     showReactionPopup: async ({ targetUserId, triggerType, reactions }) =>
     {

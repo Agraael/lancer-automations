@@ -17,7 +17,7 @@ api.getCumulativeMoveData(tokenOrId)        // all non-free movement -> { moved,
 api.getIntentionalMoveData(tokenOrId)       // player-driven drags only -> { moved, cost }
 await api.clearMovementHistory(tokens, revert)   // clear history; revert=true teleports back first
 api.getMovementHistory(tokenOrId)           // full breakdown (shape below)
-api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current turn
+api.increaseMovementCap(tokenOrId, value)   // add spaces to the leg being spent right now
 ```
 
 | Param | Type | Default | Description |
@@ -51,5 +51,35 @@ api.increaseMovementCap(tokenOrId, value)   // add to movement cap for current t
 
 - **`intentional.regular` vs `intentional.free`**: drag movement split by whether it was free. `regular` counts against the movement cap (`regularCost` is what the boost/cap detection compares against), `free` is V-key movement that ignores the cap. `total` = `regular + free`.
 - **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on. A boost is counted each time intentional cost crosses a multiple of SPEED. See [Movement Advanced](feature/MOVEMENT_ADVANCED.md).
+
+</details>
+
+<details id="getMovementBands">
+<summary><b><code>getMovementBands</code></b> → <code>Band[]</code><br><b><code>getMovementCap</code></b> → <code>number</code><br><b><code>recordMovementExtra</code></b> → <code>void</code><br><b><code>recordBoostCast</code></b> → <code>void</code></summary>
+
+<br>
+
+```js
+api.getMovementBands(tokenOrId)             // [{ name, size, max, granted }, ...]
+api.getMovementCap(tokenOrId)               // sum of granted bands, floored at what is spent
+api.recordBoostCast(tokenOrId, speed)       // a Boost happened: grants a boost leg
+api.recordMovementExtra(tokenOrId, value, { leg: 'boost' })
+```
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>value</kbd> | `number` | *required* | Spaces to add to a leg. May be negative. |
+| <kbd>leg</kbd> | `"standard" \| "boost" \| "current"` | `"current"` | Which leg receives it. |
+
+A turn's movement is a list of **legs**, returned as cumulative bands: the standard move, one per Boost actually
+taken, then previews of what is still available. `granted: true` means the token has paid for it, and only those
+count toward the cap. The boost preview is emitted only while no Boost has been taken. `size` is recomputed live from speed, statuses and standing bonuses, so a mid-turn speed
+change moves the bands and the cap together. The ruler colours and the boost/overcharge offer both read this.
+
+`recordMovementExtra` targets: `'standard'` the normal move, `'boost'` the latest granted boost leg (parked for
+the next one if no Boost has been taken yet), `'current'` whichever granted leg the spent distance sits in.
+
+Use a `movement_extra` **bonus** (`subtype: "standard" | "boost"`) instead when the effect lengthens *every* leg
+of that kind rather than one. `recordMovementExtra` is for one-shots like "double your speed for this boost".
 
 </details>

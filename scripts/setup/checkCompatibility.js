@@ -3,7 +3,7 @@
 const MODULE_ID = 'lancer-automations';
 
 /**
- * Registry default has no `enabled` field â†’ defaults to true (line 420 in reaction-manager.js).
+ * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
  * Users can disable it via the reactions UI, which stores { enabled: false } in generalReactions.
  */
 function isEngagementReactionEnabled()

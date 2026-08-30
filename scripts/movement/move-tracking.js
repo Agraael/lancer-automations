@@ -157,15 +157,202 @@ export async function clearMoveTracking(tokenOrId)
     }
 }
 
-// Tag a Boost so reverting the move it enabled refunds the cap raise.
+// Tag a Boost so reverting the move it enabled drops the leg it granted.
 export function recordBoostCast(tokenOrId, speed)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
-    if (!doc || !(speed > 0))
+    if (!doc)
         return;
     const data = doc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
-    const boostCasts = [...(data.boostCasts ?? []), { atMoveIndex: (data.moves ?? []).length, speed }];
-    _writeMoveHistory(doc, { ...data, boostCasts });
+    const pending = Number(data.pendingExtra) || 0;
+    const boostCasts = [...(data.boostCasts ?? []), { atMoveIndex: (data.moves ?? []).length, speed, extra: pending }];
+    _writeMoveHistory(doc, { ...data, boostCasts, pendingExtra: 0 });
+    _cacheMovementCap(doc);
+}
+
+/**
+ * Add movement to one leg. `leg` picks which:
+ * 'standard' the normal move, 'boost' the latest granted boost (parked for the next one if none yet),
+ * 'current' whichever granted leg the spent distance sits in.
+ * @param {Token|TokenDocument|string} tokenOrId
+ * @param {number} value - Spaces to add, may be negative.
+ * @param {{ leg?: 'standard'|'boost'|'current' }} [options]
+ */
+export function recordMovementExtra(tokenOrId, value, options = {})
+{
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    const amount = Number(value) || 0;
+    if (!doc || !amount)
+        return;
+    const leg = options.leg ?? 'current';
+    const data = doc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
+    const boostCasts = [...(data.boostCasts ?? [])];
+
+    let target = leg;
+    if (leg === 'current')
+        target = _grantedLegAt(tokenOrId, getIntentionalMoveData(tokenOrId).cost);
+
+    if (target === 'boost' && boostCasts.length)
+    {
+        const last = boostCasts.length - 1;
+        boostCasts[last] = { ...boostCasts[last], extra: (Number(boostCasts[last].extra) || 0) + amount };
+        _writeMoveHistory(doc, { ...data, boostCasts });
+    }
+    else if (target === 'boost')
+        _writeMoveHistory(doc, { ...data, pendingExtra: (Number(data.pendingExtra) || 0) + amount });
+    else
+        _writeMoveHistory(doc, { ...data, standardExtra: (Number(data.standardExtra) || 0) + amount });
+    _cacheMovementCap(doc);
+}
+
+// Which granted leg kind a distance falls in. Past the last granted leg counts as that leg.
+function _grantedLegAt(tokenOrId, distance)
+{
+    const granted = getMovementBands(tokenOrId).filter(band => band.granted);
+    if (!granted.length)
+        return 'standard';
+    const band = granted.find(entry => distance < entry.max) ?? granted[granted.length - 1];
+    return band.name === 'standard' ? 'standard' : 'boost';
+}
+
+// Both scopes in one pass: this runs per ruler waypoint, so the bonus lists are read once.
+function _standingExtras(actor)
+{
+    const totals = { standard: 0, boost: 0 };
+    if (!actor)
+        return totals;
+    totals.boost = _nerveweaveBoost(actor);
+    const api = game.modules.get('lancer-automations')?.api;
+    const all = [
+        ...(api?.getGlobalBonuses?.(actor) ?? []),
+        ...(api?.getConstantBonuses?.(actor) ?? [])
+    ];
+    for (const bonus of all)
+    {
+        const isLegacyBoost = bonus.type === 'speed_boost_extra';
+        if (!isLegacyBoost && bonus.type !== 'movement_extra')
+            continue;
+        const scope = isLegacyBoost ? 'boost' : (bonus.subtype ?? 'boost');
+        if (scope === 'standard' || scope === 'boost')
+            totals[scope] += Number(bonus.val) || 0;
+    }
+    return totals;
+}
+
+function _nerveweaveBoost(actor)
+{
+    if (!actor?.is_mech?.())
+        return 0;
+    const pilot = actor.system?.pilot?.value;
+    return pilot?.items?.some(item => item.system?.lid === 'cb_integrated_nerveweave') ? 2 : 0;
+}
+
+const LIMITLESS_LIDS = new Set([
+    'npcf_limitless_ultra',
+    'npcf_limitless_veteran',
+    'npc-rebake_npcf_limitless_ultra',
+    'npc-rebake_npcf_limitless_veteran'
+]);
+
+export function canOvercharge(actor)
+{
+    if (actor?.is_npc?.())
+    {
+        const extras = actor.getFlag?.('lancer-automations', 'extraActions') || [];
+        if (extras.some(action => action.name === 'Overcharge (NPC)'))
+            return true;
+        return !!actor.itemTypes?.npc_feature?.some(feature => LIMITLESS_LIDS.has(feature.system?.lid));
+    }
+    return !!actor?.is_mech?.();
+}
+
+const STUNNED_SET = ['stunned', 'immobilized', 'shutdown', 'downandout', 'dazed'];
+
+function _hasLiveStatus(actor, statusId)
+{
+    if (!actor?.statuses?.has(statusId))
+        return false;
+    const api = game.modules.get('lancer-automations')?.api;
+    return !api?.checkEffectImmunities?.(actor, statusId)?.length;
+}
+
+/** Speed after prone halving. */
+export function tokenSpeed(token)
+{
+    const actor = token?.actor ?? token;
+    let speed = actor?.system?.speed ?? 0;
+    if (actor?.statuses?.has('prone'))
+        speed = Math.floor(speed / 2);
+    return speed;
+}
+
+/**
+ * Spaces the next Boost would grant, 0 when boosting is not legal.
+ * @returns {number}
+ */
+export function getNextBoostSize(tokenOrId)
+{
+    const token = typeof tokenOrId === 'string' ? canvas.tokens?.get(tokenOrId) : tokenOrId;
+    const actor = token?.actor;
+    if (!actor || STUNNED_SET.some(statusId => _hasLiveStatus(actor, statusId)))
+        return 0;
+    if (_hasLiveStatus(actor, 'prone') || _hasLiveStatus(actor, 'slow'))
+        return 0;
+    const data = _getMoveHistoryData(tokenOrId);
+    return tokenSpeed(token) + _standingExtras(actor).boost + (Number(data.pendingExtra) || 0);
+}
+
+/**
+ * Every movement leg for this turn, in order, as cumulative bands.
+ * Granted legs are what the token has actually paid for; pending ones are previews.
+ * @returns {Array<{ name: string, size: number, max: number, granted: boolean }>}
+ */
+export function getMovementBands(tokenOrId)
+{
+    const token = typeof tokenOrId === 'string' ? canvas.tokens?.get(tokenOrId) : tokenOrId;
+    const actor = token?.actor;
+    if (!actor)
+        return [];
+    if (STUNNED_SET.some(statusId => _hasLiveStatus(actor, statusId)))
+        return [];
+
+    const speed = tokenSpeed(token);
+    const data = _getMoveHistoryData(tokenOrId);
+    const prone = _hasLiveStatus(actor, 'prone');
+    const startedStatuses = token.combatant?.getFlag('lancer-automations', 'speedProvider.turn-status') ?? [];
+    const startedProne = startedStatuses.some(status => typeof status === 'string' && status.endsWith('prone'));
+    const slowed = prone || _hasLiveStatus(actor, 'slow');
+
+    const bands = [];
+    let acc = 0;
+    const push = (name, size, granted) =>
+    {
+        acc += Math.max(0, size);
+        bands.push({ name, size: Math.max(0, size), max: acc, granted });
+    };
+
+    // Standing up costs the standard move, so its base is 0 then. The band is still emitted (size 0,
+    // hidden by the colour map) so granted legs are never empty and extras always have a home.
+    const standing = _standingExtras(actor);
+    const standardBase = (startedProne && !prone) ? 0 : speed + standing.standard;
+    push('standard', standardBase + (Number(data.standardExtra) || 0), true);
+
+    const boostBase = speed + standing.boost;
+    const casts = data.boostCasts ?? [];
+    for (const cast of casts)
+        push('boost', boostBase + (Number(cast.extra) || 0), true);
+
+    if (!slowed && !casts.length)
+        push('boost', boostBase + (Number(data.pendingExtra) || 0), false);
+    if (!slowed && canOvercharge(actor))
+        push('over-boost', boostBase, false);
+
+    return bands;
+}
+
+function _cacheMovementCap(tokenDoc)
+{
+    _writeMovementCap(tokenDoc, getMovementCap(tokenDoc));
 }
 
 export function undoMoveData(tokenOrId, _distance)
@@ -176,20 +363,19 @@ export function undoMoveData(tokenOrId, _distance)
     const data = doc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
     const moves = data.moves || [];
     const newLength = Math.max(0, moves.length - 1);
-    let capRefund = 0;
     const boostCasts = [];
     for (const cast of (data.boostCasts ?? []))
     {
+        // Dropping the leg is the refund: the cap is summed from what is left.
         if (moves.length > 0 && cast.atMoveIndex === newLength)
-            capRefund += cast.speed ?? 0;
-        else if (cast.atMoveIndex > newLength)
+            continue;
+        if (cast.atMoveIndex > newLength)
             boostCasts.push({ ...cast, atMoveIndex: newLength });
         else
             boostCasts.push(cast);
     }
     _writeMoveHistory(doc, { ...data, moves: moves.slice(0, -1), boostCasts });
-    if (capRefund > 0)
-        _writeMovementCap(doc, Math.max(0, getMovementCap(tokenOrId) - capRefund));
+    _cacheMovementCap(doc);
 }
 
 export function getCumulativeMoveData(tokenOrId)
@@ -210,10 +396,19 @@ export function getIntentionalMoveData(tokenOrId)
     );
 }
 
+// Derived: the granted legs, never below what was already spent.
 export function getMovementCap(tokenOrId)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
-    return doc?.getFlag('lancer-automations', 'movementCap') ?? 0;
+    if (!doc)
+        return 0;
+    // No resolvable actor (token off-canvas) leaves the cached number as the only answer.
+    if (!doc.actor)
+        return doc.getFlag('lancer-automations', 'movementCap') ?? 0;
+    const granted = getMovementBands(tokenOrId).filter(band => band.granted);
+    const total = granted.length ? granted[granted.length - 1].max : 0;
+    // Not getMovementHistory: it reports the cap, which would recurse back into here.
+    return Math.max(total, getIntentionalMoveData(tokenOrId).cost);
 }
 
 // Used by the token-ruler overlay to look up which past waypoints belong to free/debug moves.
@@ -288,6 +483,7 @@ export function getMovementHistory(tokenOrId)
     };
 }
 
+// Turn reset: legs and hand adjustments are per-turn, the cap itself is derived.
 export function initMovementCap(token)
 {
     const doc = _getMoveHistoryDoc(token);
@@ -297,17 +493,16 @@ export function initMovementCap(token)
     const isInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === tokenId);
     if (!isInCombat)
         return;
+    const data = doc.getFlag('lancer-automations', 'moveHistory');
+    if (data?.boostCasts?.length || data?.standardExtra || data?.pendingExtra)
+        _writeMoveHistory(doc, { ...data, boostCasts: [], standardExtra: 0, pendingExtra: 0 });
     const isImmobilized = !!findEffectOnToken(token, 'immobilized');
-    const speed = isImmobilized ? 0 : (token.actor?.system?.speed ?? 0);
-    _writeMovementCap(doc, speed);
+    _writeMovementCap(doc, isImmobilized ? 0 : getMovementCap(doc));
 }
 
 export function increaseMovementCap(tokenOrId, value)
 {
-    const doc = _getMoveHistoryDoc(tokenOrId);
-    if (!doc)
-        return;
-    _writeMovementCap(doc, getMovementCap(tokenOrId) + value);
+    recordMovementExtra(tokenOrId, value, { leg: 'current' });
 }
 
 function _clearCapRuler(token)
@@ -360,14 +555,18 @@ export function _handleMovementCapExceeded(token, ctx)
     }
     catch
     { /* not registered yet */ }
-    const speed = token.actor?.system?.speed ?? 0;
     const isMech = token.actor?.type === 'mech';
     const npcOvercharge = !isMech && token.actor?.type === 'npc'
-        ? (token.actor.getFlag('lancer-automations', 'extraActions') || []).find(a => a.name === 'Overcharge (NPC)')
+        ? (token.actor.getFlag('lancer-automations', 'extraActions') || []).find(action => action.name === 'Overcharge (NPC)')
         : null;
     const need = spent + moveToMovementCost;
-    const canBoost = speed > 0 && need <= (cap + speed);
-    const canOvercharge = (isMech || !!npcOvercharge) && speed > 0 && need > (cap + speed) && need <= (cap + speed * 2);
+    const overBoostBand = getMovementBands(token).find(band => !band.granted && band.name === 'over-boost');
+    const boostSize = getNextBoostSize(token);
+    const overBoostSize = overBoostBand?.size ?? 0;
+    const boostReach = cap + boostSize;
+    const canBoost = boostSize > 0 && need <= boostReach;
+    const canOvercharge = overBoostSize > 0 && (isMech || !!npcOvercharge)
+        && need > boostReach && need <= boostReach + overBoostSize;
     const overchargeActionName = isMech ? 'Overcharge' : 'Overcharge (NPC)';
 
     options.ignoreMovementCap = true;
@@ -438,7 +637,7 @@ export function _handleMovementCapExceeded(token, ctx)
                 result = await startChoiceCard({
                     title: 'BOOST & MOVE',
                     icon: 'modules/lancer-automations/icons/speedometer.svg',
-                    description: `Movement exceeds cap (${need}/${cap}). Boost adds +${speed}.`,
+                    description: `Movement exceeds cap (${need}/${cap}). Boost adds +${boostSize}.`,
                     originToken: token,
                     userIdControl: getTokenOwnerUserId(token),
                     traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null, path: origWaypoints },
@@ -493,8 +692,8 @@ export function _handleMovementCapExceeded(token, ctx)
         // 3-leg: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3; skip leg1 if cap exhausted.
         const remaining = cap - spent;
         const mid1 = remaining > 0 ? computeMid(remaining) : null;
-        const mid2 = computeMid(remaining + speed);
-        const ocLegs = splitPathAtCosts(token, origWaypoints, startPos, remaining > 0 ? [remaining, remaining + speed] : [remaining + speed], capOriginalAction);
+        const mid2 = computeMid(remaining + boostSize);
+        const ocLegs = splitPathAtCosts(token, origWaypoints, startPos, remaining > 0 ? [remaining, remaining + boostSize] : [remaining + boostSize], capOriginalAction);
         const ocSecondRaw = ocLegs ? (remaining > 0 ? ocLegs[1] : ocLegs[0]) : null;
         const ocThirdRaw = ocLegs ? (remaining > 0 ? ocLegs[2] : ocLegs[1]) : null;
         const ocPrevEnd = remaining > 0 ? (ocLegs?.[0]?.at(-1) ?? startPos) : startPos;
@@ -511,7 +710,7 @@ export function _handleMovementCapExceeded(token, ctx)
                 result = await startChoiceCard({
                     title: 'OVERCHARGE & BOOST & MOVE',
                     icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
-                    description: `Movement exceeds cap+boost (${need}/${cap + speed}). Overcharge grants an extra Boost (+${speed}).`,
+                    description: `Movement exceeds cap+boost (${need}/${boostReach}). Overcharge grants an extra Boost (+${overBoostSize}).`,
                     originToken: token,
                     userIdControl: getTokenOwnerUserId(token),
                     traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null, path: origWaypoints },

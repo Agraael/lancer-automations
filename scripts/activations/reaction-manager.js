@@ -4,7 +4,7 @@ import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } fro
 import { openItemBrowserDialog } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
-import { openDeployablePicker } from "../interactive/deployables.js";
+import { openDeployablePicker, openDocumentPicker } from "../interactive/deployables.js";
 
 const scriptCache = new Map();
 
@@ -22,6 +22,13 @@ function _sanitizeSourcePath(name)
         .map(segment => segment.toLowerCase().replaceAll(/[^a-z0-9]/g, '-'))
         .filter(Boolean)
         .join('/');
+}
+
+// "Actor.<id>" keys point at a world actor rather than a compendium item.
+function resolveKeyedDocument(lid)
+{
+    const match = /^Actor\.([A-Za-z0-9]+)$/.exec(lid ?? '');
+    return match ? (game.actors.get(match[1]) ?? null) : null;
 }
 
 export function stringToFunction(str, args = [], reaction = null, sourceName = null)
@@ -53,7 +60,7 @@ export function stringToFunction(str, args = [], reaction = null, sourceName = n
     if (fn.constructor.name === 'AsyncFunction')
     {
         const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck', 'cancelStructure', 'cancelStress', 'cancelStructureOutcome', 'cancelStressOutcome', 'cancelHpChange', 'cancelHeatChange', 'modifyRoll', 'modifyHpChange', 'modifyHeatChange'];
-        const foundKeywords = blockingKeywords.filter(k => trimmed.includes(k));
+        const foundKeywords = blockingKeywords.filter(keyword => trimmed.includes(keyword));
 
         const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
         const foundTriggers = reaction?.triggers?.filter(trigger => sensitiveTriggers.has(trigger)) || [];
@@ -101,14 +108,14 @@ export function stringToAsyncFunction(str, args = [], name = "lancer-automations
     return fn;
 }
 
-// Triggers whose payload carries targets; the only ones React as Target / consumption role can key on.
+// Triggers whose payload carries targets, the only ones React as Target / consumption role can key on.
 export const TARGET_CAPABLE_TRIGGERS = new Set([
     'onInitAttack', 'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
     'onInitTechAttack', 'onTechAttack', 'onTechHit', 'onTechMiss',
     'onRoll', 'onCheck', 'onInitCheck', 'onInvoluntaryMove'
 ]);
 
-const sameTriggerSet = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every(trigger => b.includes(trigger));
+const sameTriggerSet = (left, right) => Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every(trigger => right.includes(trigger));
 
 export class ReactionManager
 {
@@ -255,7 +262,6 @@ export class ReactionManager
     static async assignToFolder(folderName, activationKey)
     {
         const folders = ReactionManager.getFolders();
-        // Remove from any existing folder first
         for (const folder of folders)
             folder.items = folder.items.filter(itemKey => itemKey !== activationKey);
         const target = folders.find(folder => folder.name === folderName);
@@ -290,7 +296,7 @@ export class ReactionManager
                 ...def,
                 ...userEntry,
                 reactions: Array.isArray(userEntry.reactions)
-                    ? userEntry.reactions.map((userReaction, i) => ({ ...(def.reactions?.[i] ?? {}), ...(userReaction ?? {}) }))
+                    ? userEntry.reactions.map((userReaction, index) => ({ ...(def.reactions?.[index] ?? {}), ...(userReaction ?? {}) }))
                     : (def.reactions ?? []),
             };
         }
@@ -324,9 +330,9 @@ export class ReactionManager
                     : -1;
                 result[name] = {
                     ...def,
-                    reactions: def.reactions.map((subReaction, i) =>
+                    reactions: def.reactions.map((subReaction, index) =>
                     {
-                        const savedSub = savedSubs ? savedSubs[i] : (i === legacyIdx ? saved : undefined);
+                        const savedSub = savedSubs ? savedSubs[index] : (index === legacyIdx ? saved : undefined);
                         if (!savedSub)
                             return subReaction;
                         if (savedSub.triggers !== undefined)
@@ -542,9 +548,9 @@ export class ReactionManager
                     {
                         await game.settings.set(ReactionManager.ID, settingKey, data.settings[settingKey]);
                     }
-                    catch (e)
+                    catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore setting ${settingKey}:`, e);
+                        console.warn(`[lancer-automations] failed to restore setting ${settingKey}:`, error);
                     }
                 }
             }
@@ -568,9 +574,9 @@ export class ReactionManager
                     {
                         await game.settings.set(moduleId, settingKey, data.externalSettings[composite]);
                     }
-                    catch (e)
+                    catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore ${moduleId}.${settingKey}:`, e);
+                        console.warn(`[lancer-automations] failed to restore ${moduleId}.${settingKey}:`, error);
                     }
                 }
             }
@@ -595,9 +601,9 @@ export class ReactionManager
                     {
                         await game.keybindings.set(moduleId, settingKey, data.keybindings[composite]);
                     }
-                    catch (e)
+                    catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore keybinding ${moduleId}.${settingKey}:`, e);
+                        console.warn(`[lancer-automations] failed to restore keybinding ${moduleId}.${settingKey}:`, error);
                     }
                 }
             }
@@ -606,9 +612,9 @@ export class ReactionManager
             ui.notifications.info("Import applied.");
             return true;
         }
-        catch (e)
+        catch (error)
         {
-            ui.notifications.error(`Failed to apply import: ${e.message}`);
+            ui.notifications.error(`Failed to apply import: ${error.message}`);
             return false;
         }
     }
@@ -658,13 +664,12 @@ export class ReactionConfig extends FormApplication
         const allReactions = [];
 
         const midsToLookup = new Set([
-            ...Object.keys(userItemSettings).map(k => k.trim()),
-            ...Object.keys(defaultItemRegistry).map(k => k.trim())
+            ...Object.keys(userItemSettings).map(key => key.trim()),
+            ...Object.keys(defaultItemRegistry).map(key => key.trim())
         ]);
 
         const itemMap = new Map();
 
-        // 1. Check World Items (Instant)
         for (const item of game.items)
         {
             const lid = item.system?.lid;
@@ -678,10 +683,10 @@ export class ReactionConfig extends FormApplication
             }
         }
 
-        // 2. Check Compendiums in Parallel (Cold Load Optimization)
+        // Indices fetched in parallel, cold compendium loads are slow.
         if (midsToLookup.size > 0)
         {
-            const itemPacks = game.packs.filter(p => p.documentName === "Item");
+            const itemPacks = game.packs.filter(pack => pack.documentName === "Item");
             const indices = await Promise.all(itemPacks.map(pack => pack.getIndex({
                 fields: ["system.lid", "system.actions", "system.ranks", "system.profiles"]
             })));
@@ -707,7 +712,7 @@ export class ReactionConfig extends FormApplication
             }
         }
 
-        // 3. Resolve any remaining keys that look like Actor UUIDs (e.g. "Actor.abc123" or "Compendium.â€¦Actor.â€¦").
+        // Leftover keys may be Actor UUIDs rather than item LIDs.
         if (midsToLookup.size > 0)
         {
             for (const key of [...midsToLookup])
@@ -738,7 +743,7 @@ export class ReactionConfig extends FormApplication
                 return null;
             try
             {
-                const pathParts = path.split(/[.[\]]/).filter(p => p !== "");
+                const pathParts = path.split(/[.[\]]/).filter(segment => segment !== "");
                 let current = itemData;
                 for (const part of pathParts)
                 {
@@ -749,9 +754,9 @@ export class ReactionConfig extends FormApplication
                 }
                 return current?.name || null;
             }
-            catch (e)
+            catch (error)
             {
-                console.warn("lancer-automations | Error resolving action name:", e);
+                console.warn("lancer-automations | Error resolving action name:", error);
                 return null;
             }
         };
@@ -802,7 +807,7 @@ export class ReactionConfig extends FormApplication
                 if (reactionKeys.length === 1 && reactionKeys[0] === 'enabled')
                     return;
 
-                const defItem = defaultItemRegistry[lid]?.reactions?.find(r => r.name === reaction.name);
+                const defItem = defaultItemRegistry[lid]?.reactions?.find(defReaction => defReaction.name === reaction.name);
                 if (defItem && isPureDefault(reaction, defItem))
                     return;
 
@@ -869,7 +874,7 @@ export class ReactionConfig extends FormApplication
             itemConfig.reactions.forEach((reaction, index) =>
             {
                 const userEntry = userItemSettings[lid]?.reactions?.[index] ||
-                    userItemSettings[lid]?.reactions?.find(r => r.name === reaction.name);
+                    userItemSettings[lid]?.reactions?.find(userReaction => userReaction.name === reaction.name);
                 const isPure = isPureDefault(userEntry, reaction);
                 const isOverridden = !!userEntry && !isPure;
                 const enabledState = isPure ? userEntry.enabled : (userEntry?.enabled ?? reaction.enabled);
@@ -1011,7 +1016,7 @@ export class ReactionConfig extends FormApplication
                     defaultList.push(validReactions[0]);
                 else
                 {
-                    const uniqueTriggers = [...new Set(validReactions.flatMap(r => r.triggers.split(", ")))].filter(Boolean).join(", ");
+                    const uniqueTriggers = [...new Set(validReactions.flatMap(validReaction => validReaction.triggers.split(", ")))].filter(Boolean).join(", ");
                     defaultList.push({
                         name: name,
                         lid: null,
@@ -1020,7 +1025,7 @@ export class ReactionConfig extends FormApplication
                         isDefault: true,
                         isGroup: true,
                         reactions: validReactions,
-                        enabled: validReactions.every(r => r.enabled),
+                        enabled: validReactions.every(validReaction => validReaction.enabled),
                         category: reaction.category || ""
                     });
                 }
@@ -1047,11 +1052,11 @@ export class ReactionConfig extends FormApplication
             }
         }
 
-        const sorter = (a, b) =>
+        const sorter = (left, right) =>
         {
-            if (a.isGeneral !== b.isGeneral)
-                return b.isGeneral - a.isGeneral;
-            return a.name.localeCompare(b.name);
+            if (left.isGeneral !== right.isGeneral)
+                return right.isGeneral - left.isGeneral;
+            return left.name.localeCompare(right.name);
         };
 
         allReactions.sort(sorter);
@@ -1074,34 +1079,32 @@ export class ReactionConfig extends FormApplication
                 items: items
             });
         }
-        // Sort folders by name (General first)
-        defaultFolders.sort((a, b) =>
+        defaultFolders.sort((left, right) =>
         {
-            if (a.folderName === "General")
+            if (left.folderName === "General")
                 return -1;
-            if (b.folderName === "General")
+            if (right.folderName === "General")
                 return 1;
-            return a.folderName.localeCompare(b.folderName);
+            return left.folderName.localeCompare(right.folderName);
         });
 
         const folderSettings = ReactionManager.getFolders();
         const getActivationKey = (activation) => activation.isGeneral ? `general::${activation.name}` : `item::${activation.lid}`;
 
         const assignedKeys = new Set();
-        const customFolders = folderSettings.map(f =>
+        const customFolders = folderSettings.map(folder =>
         {
-            const keySet = new Set(f.items || []);
-            const folderItems = allReactions.filter(r => keySet.has(getActivationKey(r)));
-            folderItems.forEach(r => assignedKeys.add(getActivationKey(r)));
+            const keySet = new Set(folder.items || []);
+            const folderItems = allReactions.filter(reaction => keySet.has(getActivationKey(reaction)));
+            folderItems.forEach(reaction => assignedKeys.add(getActivationKey(reaction)));
             return {
-                folderName: f.name,
+                folderName: folder.name,
                 isFolder: true,
                 items: folderItems
             };
         });
 
-        // Unfiled items
-        const unfiledReactions = allReactions.filter(r => !assignedKeys.has(getActivationKey(r)));
+        const unfiledReactions = allReactions.filter(reaction => !assignedKeys.has(getActivationKey(reaction)));
 
         // Collect all unique triggers for the filter dropdown
         const allTriggerSet = new Set();
@@ -1118,11 +1121,11 @@ export class ReactionConfig extends FormApplication
                 });
             }
         }
-        const allTriggers = [...allTriggerSet].sort((a, b) => a.localeCompare(b));
+        const allTriggers = [...allTriggerSet].sort((left, right) => left.localeCompare(right));
 
         const userScripts = ReactionManager.getStartupScripts();
         const startupScripts = [
-            ...ReactionManager.builtinStartups.map(s => ({ ...s, builtin: true })),
+            ...ReactionManager.builtinStartups.map(script => ({ ...script, builtin: true })),
             ...userScripts
         ];
 
@@ -1167,7 +1170,6 @@ export class ReactionConfig extends FormApplication
         html.find('.delete-script').click(this._onDeleteScript.bind(this));
         html.find('.script-enabled').change(this._onToggleScript.bind(this));
 
-        // Group expand/collapse
         html.find('.group-header').click((ev) =>
         {
             ev.preventDefault();
@@ -1187,7 +1189,6 @@ export class ReactionConfig extends FormApplication
             }
         });
 
-        // Folder expand/collapse
         html.find('.folder-header').click((ev) =>
         {
             ev.preventDefault();
@@ -1207,7 +1208,6 @@ export class ReactionConfig extends FormApplication
             }
         });
 
-        // Search + trigger filter
         const applyFilters = (container) =>
         {
             const searchInput = container.find('.search-input');
@@ -1242,7 +1242,6 @@ export class ReactionConfig extends FormApplication
                         item.hide();
                 });
 
-                // Also check groups
                 folder.find('.reaction-group-container').each(function ()
                 {
                     const group = $(this);
@@ -1367,7 +1366,6 @@ export class ReactionConfig extends FormApplication
             }
         });
 
-        // Custom folder management
         const self = this;
         html.find('.create-folder-btn').click(async () =>
         {
@@ -1504,7 +1502,7 @@ export class ReactionConfig extends FormApplication
             if (result === "all")
             {
                 const folders = ReactionManager.getFolders();
-                const folder = folders.find(f => f.name === folderName);
+                const folder = folders.find(entry => entry.name === folderName);
                 if (folder)
                 {
                     for (const key of folder.items)
@@ -1531,7 +1529,6 @@ export class ReactionConfig extends FormApplication
             self.render();
         });
 
-        // Drag and drop for custom tab
         const customTab = html.find('[data-tab="custom"]');
 
         customTab.find('.reaction-item:not(.group-header):not(.folder-header)').attr('draggable', 'true');
@@ -1554,7 +1551,6 @@ export class ReactionConfig extends FormApplication
             customTab.find('.drag-over').removeClass('drag-over');
         });
 
-        // Drop targets: folder headers and unfiled area
         customTab.on('dragover', '.folder-header, .unfiled-header', function (ev)
         {
             ev.preventDefault();
@@ -1762,14 +1758,14 @@ export class ReactionConfig extends FormApplication
             if (!userSaved[name])
                 userSaved[name] = {};
 
-            const i = (index === undefined || index === null || index === '') ? NaN : Number.parseInt(index);
-            if (Number.isFinite(i))
+            const subIndex = (index === undefined || index === null || index === '') ? NaN : Number.parseInt(index);
+            if (Number.isFinite(subIndex))
             {
                 if (!Array.isArray(userSaved[name].reactions))
                     userSaved[name].reactions = [];
-                if (!userSaved[name].reactions[i])
-                    userSaved[name].reactions[i] = {};
-                userSaved[name].reactions[i].enabled = checked;
+                if (!userSaved[name].reactions[subIndex])
+                    userSaved[name].reactions[subIndex] = {};
+                userSaved[name].reactions[subIndex].enabled = checked;
             }
             else
                 userSaved[name].enabled = checked;
@@ -1779,8 +1775,8 @@ export class ReactionConfig extends FormApplication
         {
             const lid = li.data("lid");
             const rawIndex = li.data("index");
-            const i = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? 0 : Number.parseInt(rawIndex);
-            if (!Number.isFinite(i))
+            const reactionIndex = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? 0 : Number.parseInt(rawIndex);
+            if (!Number.isFinite(reactionIndex))
                 return;
             const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
 
@@ -1788,9 +1784,9 @@ export class ReactionConfig extends FormApplication
             {
                 if (!Array.isArray(userItemSettings[lid].reactions))
                     userItemSettings[lid].reactions = [];
-                if (!userItemSettings[lid].reactions[i])
-                    userItemSettings[lid].reactions[i] = {};
-                userItemSettings[lid].reactions[i].enabled = checked;
+                if (!userItemSettings[lid].reactions[reactionIndex])
+                    userItemSettings[lid].reactions[reactionIndex] = {};
+                userItemSettings[lid].reactions[reactionIndex].enabled = checked;
             }
             else
             {
@@ -1799,8 +1795,8 @@ export class ReactionConfig extends FormApplication
                 {
                     userItemSettings[lid] = {
                         itemType: defaults[lid].itemType,
-                        reactions: defaults[lid].reactions.map((r, idx) =>
-                            idx === i ? { enabled: checked } : { enabled: r.enabled !== false }
+                        reactions: defaults[lid].reactions.map((defaultReaction, idx) =>
+                            idx === reactionIndex ? { enabled: checked } : { enabled: defaultReaction.enabled !== false }
                         )
                     };
                 }
@@ -1822,8 +1818,8 @@ export class ReactionConfig extends FormApplication
         const li = $(event.currentTarget).closest('.script-item');
         const id = li.data('id');
         const scripts = ReactionManager.getStartupScripts();
-        const script = scripts.find(s => s.id === id)
-            || (ReactionManager.builtinStartups || []).find(s => s.id === id);
+        const script = scripts.find(entry => entry.id === id)
+            || (ReactionManager.builtinStartups || []).find(entry => entry.id === id);
         if (!script)
             return;
         this._openScriptEditor(script);
@@ -1835,7 +1831,7 @@ export class ReactionConfig extends FormApplication
         const li = $(event.currentTarget).closest('.script-item');
         const id = li.data('id');
         const scripts = ReactionManager.getStartupScripts();
-        const idx = scripts.findIndex(s => s.id === id);
+        const idx = scripts.findIndex(script => script.id === id);
         if (idx === -1)
             return;
         const confirmed = await Dialog.confirm({
@@ -1856,7 +1852,7 @@ export class ReactionConfig extends FormApplication
         const li = checkbox.closest('.script-item');
         const id = li.data('id');
         const scripts = ReactionManager.getStartupScripts();
-        const script = scripts.find(s => s.id === id);
+        const script = scripts.find(entry => entry.id === id);
         if (!script)
             return;
         script.enabled = checkbox.prop('checked');
@@ -1969,19 +1965,19 @@ export class StartupScriptEditor extends FormApplication
             {
                 if (!this._codeEditor || !host?.isConnected)
                     return;
-                const h = host.clientHeight;
-                if (h <= 0)
+                const height = host.clientHeight;
+                if (height <= 0)
                     return;
-                this._codeEditor.setSize('100%', h);
+                this._codeEditor.setSize('100%', height);
                 const cmEl = host.querySelector('.CodeMirror');
                 if (cmEl)
-                    cmEl.style.setProperty('height', h + 'px', 'important');
+                    cmEl.style.setProperty('height', height + 'px', 'important');
                 this._codeEditor.refresh();
             };
             requestAnimationFrame(() => requestAnimationFrame(fit));
-            const ro = new ResizeObserver(fit);
-            ro.observe(host);
-            this._codeEditorRO = ro;
+            const resizeObserver = new ResizeObserver(fit);
+            resizeObserver.observe(host);
+            this._codeEditorRO = resizeObserver;
         }
     }
 
@@ -2065,8 +2061,16 @@ export class ReactionEditor extends FormApplication
 
         let foundItemName = null;
         let foundItemUuid = null;
+        let foundItemKind = "Item";
 
-        if (!config.isGeneral && config.lid)
+        const keyedDoc = (!config.isGeneral && config.lid) ? resolveKeyedDocument(config.lid) : null;
+        if (keyedDoc)
+        {
+            foundItemName = keyedDoc.name;
+            foundItemUuid = keyedDoc.uuid;
+            foundItemKind = keyedDoc.documentName;
+        }
+        else if (!config.isGeneral && config.lid)
         {
             for (const pack of game.packs)
             {
@@ -2102,7 +2106,7 @@ export class ReactionEditor extends FormApplication
                         foundActionName = item.name;
                     else
                     {
-                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
+                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(segment => segment !== "");
                         for (const part of pathParts)
                         {
                             if (actionData && (typeof actionData === 'object' || Array.isArray(actionData)))
@@ -2122,9 +2126,9 @@ export class ReactionEditor extends FormApplication
                     foundEffectDescription = actionData?.effect || actionData?.on_hit || actionData?.on_crit || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
                 }
             }
-            catch (e)
+            catch (error)
             {
-                console.warn("lancer-automations | Could not load item for action name:", e);
+                console.warn("lancer-automations | Could not load item for action name:", error);
             }
         }
 
@@ -2179,6 +2183,7 @@ export class ReactionEditor extends FormApplication
             name: config.name || "",
             lid: config.lid || "",
             foundItemName: foundItemName,
+            foundItemKind,
             foundItemUuid: foundItemUuid,
             foundActionName: foundActionName,
             reactionPath: reaction.reactionPath || "",
@@ -2194,6 +2199,9 @@ export class ReactionEditor extends FormApplication
             autoActivate: reaction.autoActivate || false,
             awaitActivationCompletion: reaction.awaitActivationCompletion ?? (reaction.autoActivate ?? false),
             onlyOnSourceMatch: reaction.onlyOnSourceMatch || false,
+            sceneReactor: reaction.sceneReactor || "off",
+            sceneId: reaction.sceneId || "",
+            sceneOptions: game.scenes.map(scene => ({ id: scene.id, name: scene.name })).sort((left, right) => left.name.localeCompare(right.name)),
             triggers: this._getTriggerOptions(reaction.triggers || []),
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: this._triggerHelp,
@@ -2273,10 +2281,10 @@ export class ReactionEditor extends FormApplication
                         triggers.push($(this).attr('name').replace('trigger.', ''));
                 });
                 const dispositionFilter = [];
-                ['friendly', 'neutral', 'hostile', 'secret'].forEach(d =>
+                ['friendly', 'neutral', 'hostile', 'secret'].forEach(disposition =>
                 {
-                    if (html.find(`input[name="dispositionFilter.${d}"]`).prop('checked'))
-                        dispositionFilter.push(d);
+                    if (html.find(`input[name="dispositionFilter.${disposition}"]`).prop('checked'))
+                        dispositionFilter.push(disposition);
                 });
                 const reaction = {
                     triggers,
@@ -2295,6 +2303,8 @@ export class ReactionEditor extends FormApplication
                     triggerTarget: html.find('input[name="triggerTarget"]').prop('checked'),
                     outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
                     onlyOnSourceMatch: html.find('input[name="onlyOnSourceMatch"]').filter(':checked').length > 0,
+                    sceneReactor: String(html.find('select[name="sceneReactor"]').val() || existingReaction.sceneReactor || "off"),
+                    sceneId: String(html.find('select[name="sceneId"]').val() || ""),
                     activationType: String(html.find('select[name="activationType"]').val() || existingReaction.activationType || "flow"),
                     activationMode: String(html.find('select[name="activationMode"]').val() || existingReaction.activationMode || "instead"),
                     activationMacro: String(html.find('input[name="activationMacro"]').val() || ""),
@@ -2312,7 +2322,7 @@ export class ReactionEditor extends FormApplication
                 await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
                 ui.notifications.info("Activation copied to clipboard.");
             }
-            catch (e)
+            catch (error)
             {
                 ui.notifications.error("Failed to copy to clipboard.");
             }
@@ -2346,16 +2356,15 @@ export class ReactionEditor extends FormApplication
                         stringToAsyncFunction(entry.code, entry.args, `${base}/${entry.role}`);
                     compiled++;
                 }
-                catch (e)
+                catch (error)
                 {
-                    ui.notifications.error(`${entry.role}: ${e.message}`);
+                    ui.notifications.error(`${entry.role}: ${error.message}`);
                 }
             }
             if (compiled)
                 ui.notifications.info(`Compiled ${compiled} function(s) under dynamic/${base}/ - see devtools Sources.`);
         });
 
-        // Clipboard paste
         html.find('.clipboard-paste').on('click', async () =>
         {
             try
@@ -2370,7 +2379,7 @@ export class ReactionEditor extends FormApplication
                 this.object = { ...this.object, ...payload, name: payload.name ?? (payload.isGeneral ? payload.lid : (this.object.name ?? "")) };
                 this.render();
             }
-            catch (e)
+            catch (error)
             {
                 ui.notifications.error("Failed to load from clipboard: invalid JSON.");
             }
@@ -2514,18 +2523,29 @@ export class ReactionEditor extends FormApplication
 
             let foundItemUuid = null;
             let foundItemName = null;
+            let foundItemKind = "Item";
 
-            for (const pack of game.packs)
+            const keyedDoc = resolveKeyedDocument(lid);
+            if (keyedDoc)
             {
-                if (pack.documentName !== "Item")
-                    continue;
-                const index = await pack.getIndex({ fields: ["system.lid"] });
-                const entry = index.find(e => e.system?.lid === lid);
-                if (entry)
+                foundItemUuid = keyedDoc.uuid;
+                foundItemName = keyedDoc.name;
+                foundItemKind = keyedDoc.documentName;
+            }
+            else
+            {
+                for (const pack of game.packs)
                 {
-                    foundItemUuid = entry.uuid;
-                    foundItemName = entry.name;
-                    break;
+                    if (pack.documentName !== "Item")
+                        continue;
+                    const index = await pack.getIndex({ fields: ["system.lid"] });
+                    const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
+                    if (entry)
+                    {
+                        foundItemUuid = entry.uuid;
+                        foundItemName = entry.name;
+                        break;
+                    }
                 }
             }
 
@@ -2545,7 +2565,7 @@ export class ReactionEditor extends FormApplication
                         foundActionName = item.name;
                     else
                     {
-                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(p => p !== "");
+                        const pathParts = reactionPath.split(/\.|\[|\]/).filter(segment => segment !== "");
                         let actionData = item.system;
                         for (const part of pathParts)
                         {
@@ -2597,12 +2617,12 @@ export class ReactionEditor extends FormApplication
                     }
                 }
             }
-            catch (e)
+            catch (error)
             {
-                console.warn("lancer-automations | Error resolving action name:", e);
+                console.warn("lancer-automations | Error resolving action name:", error);
             }
 
-            previewItemName.html(`<strong>Item:</strong> ${foundItemName}`);
+            previewItemName.html(`<strong>${foundItemKind}:</strong> ${foundItemName}`);
 
             if (foundItemUuid)
             {
@@ -2816,9 +2836,15 @@ export class ReactionEditor extends FormApplication
             await this._openDeployableBrowser(lidInput, pathInput, updatePreview);
         });
 
+        html.find('.find-document-btn').on('click', async (ev) =>
+        {
+            ev.preventDefault();
+            ev.stopPropagation();
+            await this._openDocumentBrowser(lidInput, pathInput, updatePreview);
+        });
+
         html.find('.expand-editor').on('click', this._onExpandEditor.bind(this));
 
-        // Trigger group collapse/expand + count badges
         const updateGroupCounts = () =>
         {
             html.find('.trigger-group').each(function ()
@@ -2835,7 +2861,6 @@ export class ReactionEditor extends FormApplication
         html.find('.trigger-group-body input').on('change', updateGroupCounts);
         updateGroupCounts();
 
-        // Auto-collapse groups with no checked triggers
         html.find('.trigger-group').each(function ()
         {
             const checked = $(this).find('.trigger-group-body input:checked').length;
@@ -2853,7 +2878,6 @@ export class ReactionEditor extends FormApplication
             this._apiRefPopup = openApiRefPopup();
         });
 
-        // Trigger data reference popup
         html.find('#open-trigger-ref').on('click', () =>
         {
             if (this._triggerRefPopup && document.body.contains(this._triggerRefPopup))
@@ -2870,7 +2894,7 @@ export class ReactionEditor extends FormApplication
             });
 
             const rows = Object.entries(triggerHelp)
-                .sort((a, b) => a[0].localeCompare(b[0]))
+                .sort((left, right) => left[0].localeCompare(right[0]))
                 .map(([key, help]) =>
                 {
                     const isActive = checked.has(key);
@@ -2936,15 +2960,14 @@ export class ReactionEditor extends FormApplication
                 fontFamily: 'inherit'
             });
 
-            // Drag
             const header = popup.querySelector('div');
             let dragging = false, dx = 0, dy = 0;
-            header.addEventListener('mousedown', (e) =>
+            header.addEventListener('mousedown', (event) =>
             {
                 dragging = true;
-                dx = e.clientX - popup.offsetLeft;
-                dy = e.clientY - popup.offsetTop;
-                e.preventDefault();
+                dx = event.clientX - popup.offsetLeft;
+                dy = event.clientY - popup.offsetTop;
+                event.preventDefault();
             });
             const onDocMove = (event) =>
             {
@@ -3280,7 +3303,7 @@ export class ReactionEditor extends FormApplication
             if (pack.documentName !== "Item")
                 continue;
             const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
-            const entry = index.find(e => e.system?.lid === lid);
+            const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
             if (entry)
             {
                 item = await fromUuid(entry.uuid);
@@ -3296,7 +3319,7 @@ export class ReactionEditor extends FormApplication
                 if (pack.documentName !== "Actor")
                     continue;
                 const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.activation"] });
-                const entry = index.find(e => e.type === 'deployable' && e.system?.lid === lid);
+                const entry = index.find(indexEntry => indexEntry.type === 'deployable' && indexEntry.system?.lid === lid);
                 if (entry)
                 {
                     item = await fromUuid(entry.uuid);
@@ -3540,7 +3563,7 @@ export class ReactionEditor extends FormApplication
             dispositionFilter.push('secret');
 
         const isSourceMatch = Array.isArray(formData.onlyOnSourceMatch)
-            ? formData.onlyOnSourceMatch.some(v => v === true || v === "on")
+            ? formData.onlyOnSourceMatch.some(value => value === true || value === "on")
             : (formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on");
 
         if (isGeneral)
@@ -3564,6 +3587,8 @@ export class ReactionEditor extends FormApplication
                 autoActivate: formData.autoActivate === true,
                 awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
+                sceneReactor: formData.sceneReactor || "off",
+                sceneId: formData.sceneId || "",
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "instead",
                 activationMacro: formData.activationMacro || "",
@@ -3634,6 +3659,8 @@ export class ReactionEditor extends FormApplication
                 autoActivate: formData.autoActivate === true,
                 awaitActivationCompletion: formData.awaitActivationCompletion === true,
                 onlyOnSourceMatch: isSourceMatch,
+                sceneReactor: formData.sceneReactor || "off",
+                sceneId: formData.sceneId || "",
                 activationType: formData.activationType || "flow",
                 activationMode: formData.activationMode || "instead",
                 activationMacro: formData.activationMacro || "",
@@ -3686,14 +3713,14 @@ export class ReactionEditor extends FormApplication
         this._lastSaveOk = true;
         clearScriptCache();
 
-        Object.values(ui.windows).forEach(w =>
+        Object.values(ui.windows).forEach(app =>
         {
-            if (w.id === "reaction-manager-config")
-                w.render();
+            if (app.id === "reaction-manager-config")
+                app.render();
         });
     }
 
-    /** Like item browser but for deployable actors; omit lidInput for copy-only mode. */
+    /** Like item browser but for deployable actors. Omit lidInput for copy-only mode. */
     async _openDeployableBrowser(lidInput = null, pathInput = null, updatePreview = null)
     {
         await openDeployablePicker({
@@ -3712,6 +3739,26 @@ export class ReactionEditor extends FormApplication
                 if (typeof updatePreview === 'function')
                     await updatePreview();
             } : null,
+        });
+    }
+
+    async _openDocumentBrowser(lidInput, pathInput, updatePreview)
+    {
+        await openDocumentPicker({
+            title: 'Find Actor',
+            documentTypes: ['Actor'],
+            onPick: async (entry) =>
+            {
+                const actor = game.actors.get(entry.id);
+                if (!actor)
+                    return 'keep-open';
+                const selectedPath = await this._showActionSelectionDialog(actor.name, this._getItemActions(actor));
+                if (selectedPath === null)
+                    return 'keep-open';
+                lidInput.val(entry.uuid);
+                pathInput.val(selectedPath);
+                await updatePreview();
+            }
         });
     }
 }

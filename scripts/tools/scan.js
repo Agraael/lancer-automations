@@ -1086,7 +1086,7 @@ export async function executeScanOnActivation(reactorToken)
     if (reactorToken)
     {
         for (const target of targets)
-            await actionFX.queueActionFx(() => actionFX.playScanFX(reactorToken, target));
+            await actionFX.queueActionFx(() => actionFX.playScanFX(reactorToken, target), reactorToken);
     }
 
     const content = await renderTemplate(TPL.chooser, {

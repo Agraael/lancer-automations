@@ -7,6 +7,7 @@ import {
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
+import { weaponTypeIcon } from '../tah/item-helpers.js';
 
 function buildHitChanceFor(state)
 {
@@ -53,6 +54,29 @@ function buildHitChanceFor(state)
             result.crit = 0;
         return result;
     };
+}
+
+// The system header renders a generic cci-weapon glyph. Mask it with the weapon's own type icon.
+function swapHeaderIcon(state, $form)
+{
+    const icon = weaponTypeIcon(state.data?.lancerItem ?? state.item);
+    if (!icon)
+        return;
+    const $host = $form.closest('.app, .sliding-hud');
+    const $glyph = ($host.length ? $host : $form).find('i.cci-weapon').first();
+    if (!$glyph.length)
+        return;
+    const url = foundry.utils.getRoute(icon);
+    $glyph.css({
+        fontSize: 0,
+        display: 'inline-block',
+        width: '26px',
+        height: '26px',
+        verticalAlign: 'middle',
+        backgroundColor: 'currentColor',
+        webkitMask: `url("${url}") center / contain no-repeat`,
+        mask: `url("${url}") center / contain no-repeat`,
+    });
 }
 
 async function injectButton(state, $form)
@@ -113,6 +137,7 @@ export function registerAccDiffTargetButton()
             try
             {
                 injectWhenReady(state, () => $('form[id^="accdiff"]'), injectButton, 'targeting');
+                injectWhenReady(state, () => $('form[id^="accdiff"]'), swapHeaderIcon, 'weapon header icon');
                 if (game.settings.get('lancer-automations', 'enableAttackTargeting'))
                 {
                     const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;

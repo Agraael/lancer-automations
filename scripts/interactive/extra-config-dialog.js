@@ -1,12 +1,17 @@
 // Extra Config dialog for items. First feature: per-type auto-consume opt-out.
 
 import {
-    CANONICAL_TYPES, RESOURCE_LABELS,
-    _hasResource, _detectResources,
+    CANONICAL_TYPES, RESOURCE_LABELS, CONSUME_ON_MODES,
+    _hasResource, _detectResources, _subResources,
     getAutoConsumeDisabled,
     setItemAutoConsumeDisabled,
     setItemAutoConsumeDisabledAll,
+    getSubAutoConsumeDisabled,
+    setSubAutoConsumeDisabled,
+    getConsumeOn,
+    setConsumeOn,
 } from './extra-config.js';
+import { itemActionSubs, detectHitGatedScopes } from '../combat/per-frequency-tags.js';
 import { getExtraDeployableOpts, setExtraDeployableOpts, getDeployableInfoSync, isPrimaryActionHidden, setHidePrimaryAction } from './deployables.js';
 import { tierGateControl, bindTierGate, tierGateApplies } from './tier-gate.js';
 
@@ -19,6 +24,13 @@ const TYPE_DESCRIPTIONS = {
     perScene:    'Per-scene limit - increment used-this-scene counter.',
     reserveUsed: 'Reserve - mark used on activation.',
 };
+const CONSUME_ON_LABELS = { auto: 'Auto', activation: 'On attack', hit: 'On hit' };
+const PER_X_TYPES = new Set(['perTurn', 'perRound', 'perScene']);
+
+function isWeaponItem(item)
+{
+    return ['mech_weapon', 'pilot_weapon'].includes(item.type) || (item.type === 'npc_feature' && item.system?.type === 'Weapon');
+}
 
 export function openExtraConfigDialog(item)
 {
@@ -29,15 +41,30 @@ export function openExtraConfigDialog(item)
     }
 
     const present = _detectResources(item);
+    const subs = itemActionSubs(item).map(sub => ({ ...sub, types: _subResources(sub.data) })).filter(sub => sub.types.length);
+    const isWeapon = isWeaponItem(item);
 
     const renderContent = () =>
     {
         const disabled = getAutoConsumeDisabled(item);
+        const detectedHit = new Set(detectHitGatedScopes(item));
+
+        const consumeOnSelect = (type) =>
+        {
+            if (!isWeapon || !PER_X_TYPES.has(type))
+                return '';
+            const mode = getConsumeOn(item, type);
+            const autoLabel = `Auto (${detectedHit.has(type) ? 'on hit' : 'on attack'})`;
+            const options = CONSUME_ON_MODES.map(candidate =>
+                `<option value="${candidate}" ${candidate === mode ? 'selected' : ''}>${candidate === 'auto' ? autoLabel : CONSUME_ON_LABELS[candidate]}</option>`).join('');
+            return `<select class="la-ec-consume-on" data-type="${type}" title="When the attack spends this counter" style="height:22px;font-size:0.8em;">${options}</select>`;
+        };
 
         let autoConsumeHtml = '';
-        if (present.length)
+        if (present.length || subs.length)
         {
-            const allDisabled = present.every(type => disabled.has(type));
+            const allDisabled = present.every(type => disabled.has(type))
+                && subs.every(sub => sub.types.every(type => getSubAutoConsumeDisabled(item, sub.key).has(type)));
             const rows = present.map(type =>
             {
                 const isOff = disabled.has(type);
@@ -48,7 +75,23 @@ export function openExtraConfigDialog(item)
                         <div style="font-size:0.9em;color:var(--la-ink);font-weight:bold;">Auto-consume ${RESOURCE_LABELS[type]}</div>
                         <div style="font-size:0.78em;color:var(--la-ink-dim);">${TYPE_DESCRIPTIONS[type] ?? ''}</div>
                     </div>
+                    ${consumeOnSelect(type)}
                 </div>`;
+            }).join('');
+            const subBlocks = subs.map(sub =>
+            {
+                const subDisabled = getSubAutoConsumeDisabled(item, sub.key);
+                const subRows = sub.types.map(type => `
+                <div class="la-ec-row" style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--la-edge);">
+                    <input type="checkbox" class="la-ec-sub-toggle" data-sub-key="${sub.key}" data-type="${type}" ${subDisabled.has(type) ? '' : 'checked'} style="margin:0;">
+                    <div style="flex:1;">
+                        <div style="font-size:0.9em;color:var(--la-ink);font-weight:bold;">Auto-consume ${RESOURCE_LABELS[type]}</div>
+                        <div style="font-size:0.78em;color:var(--la-ink-dim);">${TYPE_DESCRIPTIONS[type] ?? ''}</div>
+                    </div>
+                </div>`).join('');
+                return `
+                <div style="margin-top:8px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Action: ${sub.name ?? sub.key}</div>
+                <div style="margin-top:4px;border:1px solid var(--la-edge);background:var(--la-plate);">${subRows}</div>`;
             }).join('');
             autoConsumeHtml = `
             <div style="margin-top:10px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Auto-Consume</div>
@@ -56,7 +99,8 @@ export function openExtraConfigDialog(item)
                 <input type="checkbox" class="la-ec-toggle-all" ${allDisabled ? 'checked' : ''} style="margin:0;">
                 <span style="flex:1;font-size:0.9em;color:var(--la-ink);font-weight:bold;">Disable ALL auto-consume</span>
             </div>
-            <div style="margin-top:4px;border:1px solid var(--la-edge);background:var(--la-plate);">${rows}</div>`;
+            ${rows ? `<div style="margin-top:4px;border:1px solid var(--la-edge);background:var(--la-plate);">${rows}</div>` : ''}
+            ${subBlocks}`;
         }
 
         const nativeLids = item.type === 'frame'
@@ -121,6 +165,24 @@ export function openExtraConfigDialog(item)
                         return;
                     const checked = ev.currentTarget.checked === true;
                     await setItemAutoConsumeDisabled(item, type, !checked);
+                    rerender();
+                });
+                html.find('.la-ec-sub-toggle').on('change', async (ev) =>
+                {
+                    const subKey = String($(ev.currentTarget).data('subKey') ?? '');
+                    const type = String($(ev.currentTarget).data('type') ?? '');
+                    if (!subKey || !PER_X_TYPES.has(type))
+                        return;
+                    await setSubAutoConsumeDisabled(item, subKey, type, ev.currentTarget.checked !== true);
+                    rerender();
+                });
+                html.find('.la-ec-consume-on').on('change', async (ev) =>
+                {
+                    const type = String($(ev.currentTarget).data('type') ?? '');
+                    const mode = String($(ev.currentTarget).val() ?? 'auto');
+                    if (!PER_X_TYPES.has(type) || !CONSUME_ON_MODES.includes(mode))
+                        return;
+                    await setConsumeOn(item, type, mode);
                     rerender();
                 });
                 html.find('.la-ec-toggle-all').on('change', async (ev) =>

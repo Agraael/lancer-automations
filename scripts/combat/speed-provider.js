@@ -6,9 +6,10 @@ const COLOR_STANDARD = 'speedProvider.colorStandard';
 const COLOR_BOOST = 'speedProvider.colorBoost';
 const COLOR_OVER_BOOST = 'speedProvider.colorOverBoost';
 
-const STUNNED_SET = ['stunned', 'immobilized', 'shutdown', 'downandout', 'dazed'];
-
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { getMovementBands } from "../movement/move-tracking.js";
+
+export { tokenSpeed } from "../movement/move-tracking.js";
 
 function isEnabled()
 {
@@ -18,83 +19,6 @@ function isEnabled()
 function conflictModuleActive()
 {
     return !!game.modules.get('lancer-speed-provider')?.active;
-}
-
-function isImmuneToStatus(actor, statusId)
-{
-    const api = game.modules.get('lancer-automations')?.api;
-    return !!api?.checkEffectImmunities?.(actor, statusId)?.length;
-}
-
-function hasActiveStatus(actor, statusId)
-{
-    if (!actor?.statuses?.has(statusId))
-        return false;
-    return !isImmuneToStatus(actor, statusId);
-}
-
-function isStunned(token)
-{
-    return STUNNED_SET.some(statusId => hasActiveStatus(token.actor, statusId));
-}
-
-/**
- * Sum of any "boost-leg only" speed bonuses from the lancer-automations bonus system.
- */
-function getBoostLegBonus(actor)
-{
-    if (!actor)
-        return 0;
-    const api = game.modules.get('lancer-automations')?.api;
-    const all = [
-        ...(api?.getGlobalBonuses?.(actor) ?? []),
-        ...(api?.getConstantBonuses?.(actor) ?? [])
-    ];
-    let bonus = nerveweaveBoostBonus(actor);
-    for (const bonusEntry of all)
-    {
-        if (bonusEntry.type === 'speed_boost_extra')
-            bonus += Number(bonusEntry.val) || 0;
-    }
-    return bonus;
-}
-
-const LIMITLESS_LIDS = new Set([
-    'npcf_limitless_ultra',
-    'npcf_limitless_veteran',
-    'npc-rebake_npcf_limitless_ultra',
-    'npc-rebake_npcf_limitless_veteran'
-]);
-
-function canOvercharge(actor)
-{
-    if (actor?.is_npc?.())
-    {
-        const extras = actor.getFlag?.('lancer-automations', 'extraActions') || [];
-        if (extras.some(action => action.name === 'Overcharge (NPC)'))
-            return true;
-        return actor.itemTypes?.npc_feature?.some(feature => LIMITLESS_LIDS.has(feature.system?.lid));
-    }
-    return !!actor?.is_mech?.();
-}
-
-function nerveweaveBoostBonus(actor)
-{
-    if (!actor?.is_mech?.())
-        return 0;
-    const pilot = actor.system?.pilot?.value;
-    if (pilot?.items?.some(item => item.system?.lid === 'cb_integrated_nerveweave'))
-        return 2;
-    return 0;
-}
-
-export function tokenSpeed(token)
-{
-    const actor = token.actor;
-    let speed = actor?.system?.speed ?? 0;
-    if (actor?.statuses?.has('prone'))
-        speed = Math.floor(speed / 2);
-    return speed;
 }
 
 function getColor(key, fallback)
@@ -116,37 +40,14 @@ function getColor(key, fallback)
  */
 export function getSpeedRanges(token)
 {
-    const actor = token?.actor;
-    if (!actor || isStunned(token))
-        return [];
-    const speed = tokenSpeed(token);
-    if (!speed)
-        return [];
-    const boost = getBoostLegBonus(actor);
-
-    const prone = hasActiveStatus(actor, 'prone');
-    const startedStatuses = token.combatant?.getFlag(MODULE_ID, 'speedProvider.turn-status') ?? [];
-    const startedProne = startedStatuses.some(status => typeof status === 'string' && status.endsWith('prone'));
-    const slowed = prone || hasActiveStatus(actor, 'slow');
-
-    const ranges = [];
-    let acc = 0;
-    if (prone || !startedProne)
-    {
-        acc += speed;
-        ranges.push({ name: 'standard', color: getColor(COLOR_STANDARD, '#1e88e5'), max: acc });
-    }
-    if (!slowed)
-    {
-        acc += speed + boost;
-        ranges.push({ name: 'boost', color: getColor(COLOR_BOOST, '#ffc107'), max: acc });
-    }
-    if (!slowed && canOvercharge(actor))
-    {
-        acc += speed + boost;
-        ranges.push({ name: 'over-boost', color: getColor(COLOR_OVER_BOOST, '#d81b60'), max: acc });
-    }
-    return ranges;
+    const colors = {
+        'standard': () => getColor(COLOR_STANDARD, '#1e88e5'),
+        'boost': () => getColor(COLOR_BOOST, '#ffc107'),
+        'over-boost': () => getColor(COLOR_OVER_BOOST, '#d81b60')
+    };
+    return getMovementBands(token)
+        .filter(band => band.size > 0)
+        .map(band => ({ name: band.name, color: colors[band.name]?.() ?? getColor(COLOR_STANDARD, '#1e88e5'), max: band.max, granted: band.granted }));
 }
 
 function registerSettings()

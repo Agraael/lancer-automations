@@ -43,9 +43,9 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
                     : null);
             if (invoke)
             {
-                return runInFlowBody(invoke).catch(e =>
+                return runInFlowBody(invoke).catch(error =>
                 {
-                    console.error(`lancer-automations | Error executing activation code:`, e);
+                    console.error(`lancer-automations | Error executing activation code:`, error);
                 });
             }
         }
@@ -162,6 +162,11 @@ export function activateReaction(triggerType, triggerData, token, item, activati
 
         const showChatActivation = async () =>
         {
+            if (!actor)
+            {
+                console.warn(`lancer-automations | "${activationName}": a scene reactor has no actor to post a flow for, use activation type code or none.`);
+                return;
+            }
             let flowData;
             if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData)
             {
@@ -269,7 +274,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     if (isGeneral)
     {
         panelActivationName = reactionData.reactionName;
-        const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName);
+        const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName) ?? reactionData.reaction ?? null;
 
         if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData)
         {
@@ -300,7 +305,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         const lid = item.system?.lid;
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
 
-        // prioritizing specific reaction provided in reactionData (from triggeredReactions)
         const specificReaction = reactionData?.reaction;
         const reactionEntry = specificReaction || reactionConfig?.reactions?.[0];
 
@@ -465,7 +469,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             reaction = specificReaction || reactionConfig?.reactions?.[0];
         }
         else
-            reaction = ReactionManager.getGeneralReaction(panelActivationName);
+            reaction = ReactionManager.getGeneralReaction(panelActivationName) ?? reactionData?.reaction ?? null;
 
         await activateReaction(popupData.triggerType, triggerData, token, item, panelActivationName, reaction, isGeneral);
 
@@ -482,13 +486,18 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     });
 }
 
+// Scene stand-ins are not on the canvas, so the popup keeps its own id-to-reactor lookup.
+const reactorsById = new Map();
+
 function renderReactionDialog(popupData)
 {
     const { triggerType, triggeredReactions } = popupData;
 
     const byToken = new Map();
+    reactorsById.clear();
     for (const entry of triggeredReactions)
     {
+        reactorsById.set(entry.token.id, entry.token);
         if (!byToken.has(entry.token.id))
         {
             byToken.set(entry.token.id, {
@@ -657,7 +666,7 @@ function renderReactionDialog(popupData)
                 const isGeneral = el.dataset.general === 'true';
                 const reactionName = el.dataset.reactionName;
 
-                const token = canvas.tokens.get(tokenId);
+                const token = canvas.tokens.get(tokenId) ?? reactorsById.get(tokenId);
 
                 let item = null;
                 let reactionData = null;
