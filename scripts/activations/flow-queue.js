@@ -1,5 +1,7 @@
 /* global game, libWrapper, document */
 
+import { playRollHudFx } from '../fx/actionFX.js';
+
 const INTER_FLOW_DELAY_MS = 400;
 let chain = Promise.resolve();
 /** @type {Array<{ label: string, queuedAt: string }>} */
@@ -209,7 +211,11 @@ export function initFlowQueue()
             continue;
         flowSteps.set(stepName, async function (state, options)
         {
-            return queue(() => original(state, options), _hudLabel(stepName, state));
+            return queue(() =>
+            {
+                playRollHudFx(stepName, state);
+                return original(state, options);
+            }, _hudLabel(stepName, state));
         });
     }
 }

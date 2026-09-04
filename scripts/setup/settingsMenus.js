@@ -10,9 +10,33 @@ import { getFCSData, toggleFCSForce } from './fcs.js';
 import { getFCCData, getFCCModeKey, toggleFCCForce } from './fcc.js';
 import { runSettingsOnboarding } from './settings-onboarding.js';
 import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
+import { importTemplateMacroPresets } from './tmac-presets.js';
 
 const MODULE_ID = 'lancer-automations';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
+
+// Per-action FX functions. Same list as the settings registered in tah/index.js.
+const ACTION_FX_KEYS = [
+    'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
+    'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
+    'protocol', 'activation', 'reaction', 'fullAction', 'quickAction', 'standingUp',
+    'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
+    'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
+    'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
+    'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation',
+    'profile', 'mod', 'attack', 'damage', 'hase', 'skill',
+];
+
+const FOCUS_ACTION_CATEGORIES = [
+    { key: 'activation', label: 'Item Activation' },
+    { key: 'attack', label: 'Attack' },
+    { key: 'damage', label: 'Damage' },
+    { key: 'hase', label: 'HASE' },
+    { key: 'skill', label: 'Skill' },
+    { key: 'profile', label: 'Weapon Profile' },
+    { key: 'mod', label: 'Mod' },
+    { key: 'tech', label: 'Tech Attack' },
+];
 
 const ACTIVATIONS_FIELDS = [
     { type: 'section', label: 'Activation Manager' },
@@ -59,7 +83,6 @@ const COMBAT_MOVEMENT_FIELDS = [
     { type: 'section', label: 'Movement & Boost', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'enableBoostOffer', type: 'boolean' },
-    { key: 'experimentalBoostDetection', type: 'boolean' },
     { key: 'count3DDistance', type: 'boolean' },
 
     { type: 'section', label: 'Structure & Damage', collapsible: true, collapsed: true },
@@ -256,6 +279,8 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'autoFocusDamage', type: 'boolean' },
     { key: 'autoFocusCheck', type: 'boolean' },
     { key: 'autoFocusActivation', type: 'boolean' },
+    { type: 'section', label: 'Focused Actions', collapsible: true, collapsed: true, subsection: true },
+    { type: 'compactBooleans', items: FOCUS_ACTION_CATEGORIES.map((category) => ({ key: `autoFocusAction.${category.key}`, label: category.label })) },
 
     { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
@@ -270,6 +295,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statusHaloRadius', type: 'slider', min: 0.5, max: 2, step: 0.05 },
     { key: 'statusHaloStartAngle', type: 'slider', min: 0, max: 360, step: 5 },
     { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale', min: 0.3, max: 2, step: 0.05 },
+    { key: 'statusIconMinZoomScale', type: 'slider', label: 'Minimum Icon Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.' },
     { key: 'statusIconHover', type: 'boolean' },
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
@@ -423,16 +449,6 @@ const TAH_FIELDS = [
         } },
 ];
 
-// Per-action FX functions. Same list as the settings registered in tah/index.js.
-const ACTION_FX_KEYS = [
-    'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
-    'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
-    'protocol', 'activation', 'reaction', 'fullAction', 'quickAction', 'standingUp',
-    'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
-    'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
-    'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-    'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation',
-];
 const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover', 'battleLogHover', 'battleLogClick'];
 const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
     'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'];
@@ -457,21 +473,21 @@ const SOUNDS_FIELDS = [
     { key: 'tah.battleLogVolume', type: 'slider', label: 'Battle Log', min: 0, max: 1.5, step: 0.05 },
 
     { type: 'section', label: 'UI sounds', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: UI_VARIANTS.map((v) => ({ key: `tah.uiSound.${v}`, label: _toLabel(v), preview: true })) },
+    { type: 'compactBooleans', items: UI_VARIANTS.map((variant) => ({ key: `tah.uiSound.${variant}`, label: _toLabel(variant), preview: true })) },
 
     { type: 'section', label: 'Token feedback', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: TOKEN_VARIANTS.map((v) => ({ key: `tah.tokenSound.${v}`, label: _toLabel(v.replace(/^token/, '')), preview: true })) },
 
     { type: 'section', label: 'Damage type sounds', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: DAMAGE_TYPES.map((t) => ({ key: `tah.damageSound.${t}`, label: _toLabel(t), preview: true })) },
+    { type: 'compactBooleans', items: DAMAGE_TYPES.map((damageType) => ({ key: `tah.damageSound.${damageType}`, label: _toLabel(damageType), preview: true })) },
 
     { type: 'section', label: 'Stat feedback', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: STAT_EVENTS.map((e) => ({ key: `tah.statSound.${e}`, label: _toLabel(e), preview: true })) },
+    { type: 'compactBooleans', items: STAT_EVENTS.map((statEvent) => ({ key: `tah.statSound.${statEvent}`, label: _toLabel(statEvent), preview: true })) },
     { type: 'section', label: 'Status SFX', collapsible: true, collapsed: true },
     { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
 
     { type: 'section', label: 'Action FX audio', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: ACTION_FX_KEYS.map((a) => ({ key: `tah.actionFxSound.${a}`, label: _toLabel(a), preview: true })) },
+    { type: 'compactBooleans', items: ACTION_FX_KEYS.map((actionKey) => ({ key: `tah.actionFxSound.${actionKey}`, label: _toLabel(actionKey), preview: true })) },
 ];
 
 // StatusFX subkeys live in the `statusFXConfig` Object setting.
@@ -528,7 +544,6 @@ const STATUSES_FIELDS = [
 
 const DEBUG_FIELDS = [
     { type: 'section', label: 'Debug Toggles' },
-    { key: 'debugBoostDetection', type: 'boolean' , requires: 'experimentalBoostDetection' },
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
     { key: 'debugForceJb2aFree', type: 'boolean' },
@@ -543,6 +558,7 @@ const VISION_FIELDS = [
     { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { key: 'lancerLos', type: 'boolean' },
+    { key: 'lancerLosHeightRule', type: 'select' },
     { key: 'lancerLosDebug', type: 'boolean' },
     { type: 'compactBooleans',
         items: [
@@ -583,6 +599,9 @@ const VISION_FIELDS = [
     { key: 'visionFromEdgeSampleOffset', type: 'number' },
     { key: 'visionFromEdgeDebug', type: 'boolean' },
 
+    { type: 'section', label: 'Range Pulse Line of Sight (experimental)', collapsible: true, collapsed: true, hint: 'Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.' },
+    { key: 'rangePulseLos', type: 'boolean', label: 'Enabled' },
+
     { type: 'section', label: 'Drag Vision', collapsible: true, collapsed: true },
     { key: 'dragVisionMode', type: 'select' },
     { key: 'dragVisionMultiplier', type: 'number' },
@@ -612,6 +631,16 @@ const TOOLS_FIELDS = [
         icon: 'fas fa-file-import',
         hint: 'Create the items from an LCP\'s downtime actions.',
         onClick: () => game.modules.get(MODULE_ID)?.api?.openDowntimeImportDialog?.(),
+    },
+
+    { type: 'section', label: 'Template Macro' },
+    { type: 'button',
+        key: 'importTmacPresets',
+        requiresModule: 'templatemacro',
+        label: 'Import LaSossis Template Presets',
+        icon: 'fas fa-shapes',
+        hint: 'Add the LaSossis zone presets to the Template Macro library.',
+        onClick: () => importTemplateMacroPresets(),
     },
 
     { type: 'section', label: 'Actor / Prototype Token sync' },
@@ -702,6 +731,7 @@ const CONTROL_FIELDS = [
     laKb('freeMovement'),
     laKb('debugMovement'),
     laKb('movementWheel'),
+    laKb('actionWheel'),
 
     { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
     laKb('advancedMeasure'),
@@ -829,11 +859,15 @@ const COLORS_FIELDS = [
     { key: 'color.glowWeapon', type: 'color', label: 'Weapon' },
     { key: 'color.glowReach', type: 'color', label: 'Max Reach' },
     { key: 'color.glowMark', type: 'color', label: 'Mark' },
+    { key: 'color.glowDeploy', type: 'color', label: 'Deploy' },
     { type: 'section', label: 'Range Pulse' },
-    { key: 'color.pulseLine', type: 'color', label: 'Line Color' },
-    { key: 'rangePulseLineOpacity', type: 'slider', label: 'Line Opacity', min: 0.1, max: 1, step: 0.05 },
+    { key: 'rangePulseStyle', type: 'select', label: 'Pulse Style', hint: 'Applies the next time a pulse is drawn.' },
+    { key: 'rangePulseMotion', type: 'select', label: 'Pulse Motion' },
+    { key: 'color.pulseLine', type: 'color', label: 'Grid Line Color' },
+    { key: 'rangePulseLineOpacity', type: 'slider', label: 'Grid Line Opacity', min: 0, max: 1, step: 0.05 },
     { key: 'rangePulseWaveOpacity', type: 'slider', label: 'Wave Opacity', min: 0.1, max: 1, step: 0.05 },
-    { key: 'rangePulseLineWidth', type: 'slider', label: 'Line Width', min: 1, max: 4, step: 0.25 },
+    { key: 'rangePulseLineWidth', type: 'slider', label: 'Wave Width', min: 1, max: 4, step: 0.25 },
+    { key: 'rangePulseSpeed', type: 'slider', label: 'Pulse Speed', min: 0.25, max: 3, step: 0.05 },
     { type: 'section', label: 'Ruler Colors' },
     { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
     { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
@@ -843,11 +877,13 @@ const COLORS_FIELDS = [
     {
         key: 'color.resetDefaults',
         type: 'button',
-        label: 'Reset Colors to Default',
+        label: 'Reset Tab to Defaults',
         icon: 'fas fa-undo',
-        hint: 'Restore every color on this tab to its default.',
+        hint: 'Restore every color, opacity and width on this tab to its default.',
         clientAllowed: true,
-        onClick: () => resetPaletteColorSettings(),
+        onClick: () => resetPaletteColorSettings(
+            COLORS_FIELDS.filter(field => field.key && !field.module && field.type !== 'button').map(field => field.key)
+        ),
     },
 ];
 
@@ -870,9 +906,9 @@ const TAB_DEFS = [
         fields: ISO_FIELDS,
         disabledReason: () =>
         {
-            const iso1 = !!game.modules.get('isometric-perspective')?.active;
-            const iso2 = !!game.modules.get('grape_juice-isometrics')?.active;
-            if (iso1 || iso2)
+            const hasIsometricPerspective = !!game.modules.get('isometric-perspective')?.active;
+            const hasGrapeJuiceIsometrics = !!game.modules.get('grape_juice-isometrics')?.active;
+            if (hasIsometricPerspective || hasGrapeJuiceIsometrics)
                 return null;
             return 'Install and enable "Isometric Perspective" or "Grape Juice Isometrics" to use these settings.';
         },
@@ -1084,6 +1120,8 @@ function _buildItem(field)
     }
     if (field.type === 'button')
     {
+        if (field.requiresModule && !game.modules.get(field.requiresModule)?.active)
+            return null;
         let state = null;
         try
         {
@@ -1350,11 +1388,12 @@ function _injectFCSLocks(html, fields, _app)
     {
         if (!f.key || f.type === 'section' || f.type === 'button' || f.type === 'table')
             continue;
-        const key = `${MODULE_ID}.${f.key}`;
+        const isExternal = f.type === 'moduleSelect' || f.type === 'moduleBoolean';
+        const key = isExternal ? `${f.module}.${f.key}` : `${MODULE_ID}.${f.key}`;
         const setting = game.settings.settings.get(key);
         if (!setting || setting.scope === 'world')
             continue;
-        const $input = $html.find(`[name="${f.key}"]`);
+        const $input = $html.find(`[name="${isExternal ? `__ext.${f.module}.${f.key}` : f.key}"]`);
         if ($input.length === 0)
             continue;
         const $label = f._inCompactGrid
@@ -1466,8 +1505,7 @@ function _readFormSettings(form)
 }
 
 /**
- * Temporarily wraps `game.settings.get` so calls for keys present in `formMap`
- * return the form's current value (with type coercion based on the registered setting type).
+ * Temporarily wraps `game.settings.get` so keys present in `formMap` return the form's current value, coerced to the registered setting type.
  * @param {Map<string, any>} formMap
  * @returns {() => void} restore function
  */
@@ -1990,6 +2028,7 @@ export class LancerAutomationsConfig extends FormApplication
             }, { root: scroller, threshold: 0.01 });
             $html.find('.la-card').each((/** @type {number} */ _i, /** @type {any} */ card) => this._stripObserver.observe(card));
         }
+        this._bindTruncatedLabels($html);
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
         _injectControlLocks(html);
@@ -2021,8 +2060,8 @@ export class LancerAutomationsConfig extends FormApplication
             const newIcon = _FCS_ICONS[newModeKey] ?? 'fa-lock-keyhole-open';
             $icon.attr('class', `fas ${newIcon} la-fcs-lock`);
             $icon.prop('title', game.i18n.localize(`FORCECLIENTSETTINGS.ui.${newModeKey}-hint`));
-            const shortKey = lockKey.slice(MODULE_ID.length + 1);
-            $html.find(`[name="${shortKey}"]`).prop('disabled', ['hard-client', 'soft-client'].includes(newModeKey));
+            const inputName = lockKey.startsWith(`${MODULE_ID}.`) ? lockKey.slice(MODULE_ID.length + 1) : `__ext.${lockKey}`;
+            $html.find(`[name="${inputName}"]`).prop('disabled', ['hard-client', 'soft-client'].includes(newModeKey));
             // drop the search cache for this label so a re-search re-stashes the new icon
             $icon.closest('label').removeData('la-orig');
         });
@@ -2169,8 +2208,59 @@ export class LancerAutomationsConfig extends FormApplication
         });
     }
 
+    // Cut-off labels put their full text at the top of the row tooltip.
+    _bindTruncatedLabels($html)
+    {
+        const measure = () =>
+        {
+            $html.find('.la-compact-label').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+            {
+                const row = el.closest('.la-compact-bool');
+                if (!row)
+                    return;
+                const full = (el.textContent ?? '').trim();
+                if (row.dataset.laHint === undefined)
+                    row.dataset.laHint = row.dataset.tooltip ?? '';
+                const hint = row.dataset.laHint;
+                const cut = el.scrollWidth > el.clientWidth + 1;
+                el.classList.toggle('is-truncated', cut);
+                const tooltip = cut ? (hint ? `<b>${full}</b><br>${hint}` : full) : hint;
+                if (tooltip)
+                    row.dataset.tooltip = tooltip;
+                else
+                    delete row.dataset.tooltip;
+            });
+        };
+        measure();
+        this._truncObserver?.disconnect();
+        if (typeof ResizeObserver !== 'function')
+            return;
+        this._truncObserver = new ResizeObserver(() => measure());
+        $html.find('.la-compact-bools').each((/** @type {number} */ _i, /** @type {any} */ el) => this._truncObserver.observe(el));
+    }
+
+    /** @param {'idle'|'saving'|'saved'} state */
+    _setSaveState(state)
+    {
+        const button = this.element?.find?.('.la-config-save');
+        if (!button?.length)
+            return;
+        clearTimeout(this._saveStateTimer);
+        button.removeClass('is-saving is-saved').prop('disabled', state === 'saving');
+        if (state === 'saving')
+            button.addClass('is-saving').html('<i class="fas fa-circle-notch fa-spin"></i> Saving');
+        else if (state === 'saved')
+        {
+            button.addClass('is-saved').html('<i class="fas fa-check"></i> Saved');
+            this._saveStateTimer = setTimeout(() => this._setSaveState('idle'), 1600);
+        }
+        else
+            button.html('<i class="fas fa-save"></i> Save');
+    }
+
     async _updateObject(_event, formData)
     {
+        this._setSaveState('saving');
         // non-GM submits skip world-scoped writes so player saves don't clobber GM values
         const isGM = !!game.user?.isGM;
         const _canWrite = (moduleId, key) =>
@@ -2349,6 +2439,7 @@ export class LancerAutomationsConfig extends FormApplication
             }
         }
         ui.notifications.info('Lancer Automations configuration saved.');
+        this._setSaveState('saved');
         await this._promptReload();
     }
 
@@ -2370,6 +2461,8 @@ export class LancerAutomationsConfig extends FormApplication
 
     async close(options)
     {
+        clearTimeout(this._saveStateTimer);
+        this._truncObserver?.disconnect();
         try
         {
             const root = this.element?.[0];

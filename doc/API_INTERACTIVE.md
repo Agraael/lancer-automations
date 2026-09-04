@@ -65,6 +65,7 @@ const selected = await api.chooseToken(ownerToken, {
 | <kbd>elevationAware</kbd> | `boolean` | setting | Area respects elevation. Falls back to the `tah.areaElevationAware` setting |
 | <kbd>autoElevation</kbd> | `boolean` | `true` | Area sits on the ground elevation under its center |
 | <kbd>propagation</kbd> | `boolean` | `false` | Area spreads cell to cell from its origin and tall terrain blocks it. Needs `elevationAware` |
+| <kbd>los</kbd> | `boolean` | `true` | Range pulse clipped by line of sight. Needs the `rangePulseLos` setting |
 | <kbd>title</kbd> | `string` | `"SELECT TARGETS"` | Card header |
 | <kbd>description</kbd> | `string` | `""` | Card description |
 | <kbd>icon</kbd> | `string` | `"fas fa-crosshairs"` | FontAwesome icon |
@@ -369,6 +370,7 @@ await api.placeZone(casterToken, options)
 | **inside `options`** | | | |
 | <kbd>range</kbd> | `number` | `null` | Max range highlight |
 | <kbd>rangeOrigin</kbd> | `{x, y}\|Token` | `null` | Override the range-measurement origin |
+| <kbd>los</kbd> | `boolean` | `true` | Range highlight clipped by line of sight. Needs the `rangePulseLos` setting |
 | <kbd>size</kbd> | `number` | `1` | Zone size |
 | <kbd>type</kbd> | `string` | `"Blast"` | `"Blast"`, `"Burst"`, `"Cone"`, `"Line"` |
 | <kbd>fillColor</kbd> | `string` | `"#ff6400"` | Template color |
@@ -380,6 +382,7 @@ await api.placeZone(casterToken, options)
 | <kbd>statusEffects</kbd> | `Array` | `[]` | Status effect IDs applied to tokens inside |
 | <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - Lancer Automations Ruler movement cost |
 | <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
+| <kbd>preset</kbd> | `string` | `null` | Template Macro library preset (name or id): its graphics and actions become the zone's base look |
 | <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
 | <kbd>expires</kbd> | `Object` | `null` | `{ on: 'ownerTurnStart'\|'ownerTurnEnd', originToken?, turns? }` - template auto-deletes on that combat event (default origin = caster, and `turns` > 1 survives that many occurrences) |
 
@@ -464,6 +467,7 @@ await api.placeToken(options)
 | **inside `options`** | | | |
 | <kbd>actor</kbd> | `Actor\|Array<Actor>\|Array<{actor, extraData}>` | `null` | Single Actor, Array of Actors, or Array of `{actor, extraData}`. Array shows selector. |
 | <kbd>range</kbd> | `number` | `null` | Placement range |
+| <kbd>los</kbd> | `boolean` | `true` | Placement range clipped and checked by line of sight. Needs the `rangePulseLos` setting |
 | <kbd>count</kbd> | `number` | `1` | Total tokens to place |
 | <kbd>extraData</kbd> | `Object` | `{}` | Default token data overrides. Flags are shallow-merged with prototype flags. |
 | <kbd>origin</kbd> | `Token\|{x: number, y: number}` | `null` | Measurement origin |

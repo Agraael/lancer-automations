@@ -1,5 +1,18 @@
 /* global game */
 
+// A setting read before its registration throws, so early hooks treat that as off.
+export function getSettingEnabled(key, moduleId = 'lancer-automations')
+{
+    try
+    {
+        return !!game.settings.get(moduleId, key);
+    }
+    catch
+    {
+        return false;
+    }
+}
+
 export function registerSettings()
 {
     // Core
@@ -176,6 +189,17 @@ export function registerSettings()
         type: Number,
         range: { min: 0.5, max: 2, step: 0.05 },
         default: 1.15,
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register('lancer-automations', 'statusIconMinZoomScale', {
+        name: 'Minimum Icon Zoom Scale',
+        hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0, max: 4, step: 0.1 },
+        default: 0,
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
@@ -381,15 +405,6 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'experimentalBoostDetection', {
-        name: 'Experimental Boost Detection (WIP)',
-        hint: 'Detects Boost when cumulative drag exceeds base speed.',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false
-    });
-
     game.settings.register('lancer-automations', 'enableMovementCapDetection', {
         name: 'Movement Cap Detection [beta]',
         hint: 'Cancel drag movement exceeding the token\'s movement cap.',
@@ -450,33 +465,78 @@ export function registerSettings()
     });
 
     game.settings.register('lancer-automations', 'rangePulseLineOpacity', {
-        name: 'Range Pulse Line Opacity',
-        hint: 'Opacity of the perimeter line around the range.',
+        name: 'Range Pulse Grid Line Opacity',
+        hint: 'Opacity of the still grid lines inside the range.',
         scope: 'client',
         config: false,
         type: Number,
-        range: { min: 0.1, max: 1, step: 0.05 },
-        default: 1
+        range: { min: 0, max: 1, step: 0.05 },
+        default: 0
     });
 
     game.settings.register('lancer-automations', 'rangePulseWaveOpacity', {
         name: 'Range Pulse Wave Opacity',
-        hint: 'Opacity of the colored wave running through the range.',
+        hint: 'Opacity of the wave running through the range and of its outline.',
         scope: 'client',
         config: false,
         type: Number,
         range: { min: 0.1, max: 1, step: 0.05 },
-        default: 1
+        default: 0.75
     });
 
     game.settings.register('lancer-automations', 'rangePulseLineWidth', {
-        name: 'Range Pulse Line Width',
-        hint: 'Thickness of the range-pulse line and its black outline. 1 = original.',
+        name: 'Range Pulse Wave Width',
+        hint: 'Thickness of the wave and its black outline. 1 = original.',
         scope: 'client',
         config: false,
         type: Number,
         range: { min: 1, max: 4, step: 0.25 },
-        default: 1.5
+        default: 1
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseLos', {
+        name: 'Range Pulse Line of Sight',
+        hint: 'Experimental. Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseSpeed', {
+        name: 'Range Pulse Speed',
+        hint: 'Speed of the wave and of the bloom. 1 = original.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        range: { min: 0.25, max: 3, step: 0.05 },
+        default: 1
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseStyle', {
+        name: 'Range Pulse Style',
+        hint: 'Shape drawn for each ring of the pulse.',
+        scope: 'client',
+        config: false,
+        type: String,
+        choices: {
+            inset: 'Inset tiles',
+            bracket: 'Corner brackets'
+        },
+        default: 'inset'
+    });
+
+    game.settings.register('lancer-automations', 'rangePulseMotion', {
+        name: 'Range Pulse Motion',
+        hint: 'A bloom outward that repeats, or a single bloom that then holds still.',
+        scope: 'client',
+        config: false,
+        type: String,
+        choices: {
+            wave: 'Repeating bloom',
+            bloom: 'One shot bloom'
+        },
+        default: 'bloom'
     });
 
     // Wreck system
@@ -668,14 +728,6 @@ export function registerSettings()
         default: false,
     });
     // Debug
-    game.settings.register('lancer-automations', 'debugBoostDetection', {
-        name: 'Debug: Boost Detection',
-        hint: 'Show UI notifications when boost detection triggers.',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false
-    });
 
     game.settings.register('lancer-automations', 'debugPathHexCalculation', {
         name: 'Debug: Path Hex Calculation',

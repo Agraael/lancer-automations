@@ -2,10 +2,12 @@ import { snapTokenCenter, getInRangeOffsets, getOccupiedOffsets, pixelToOffset, 
 import { playTargetingMove, playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from "../../tah/sound.js";
 import { _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard } from "../cards.js";
 import {
-    TG,
+    RANGE_PULSE_STYLE,
     pointerToWorld, suppressTokenLayerClick, addGraphicsBelowTokens,
     createPickerSession, createMultiPlusIndicator, isCtrlDown,
-    _paintCells, _groupCellsByDistance, _makeRangePulseTick,
+    _groupCellsByDistance, _makeRangePulseTick,
+    paintCellRegion, paintPerimeterGlow,
+    _staticGridAlpha,
     suppressEvent,
     teardownRangePulse,
     applyKnockbackMoves,
@@ -320,9 +322,13 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 build: () =>
                 {
                     const baseGraphic = new PIXI.Graphics();
-                    baseGraphic.beginFill(TG.rangeFill, 0.1);
-                    _paintCells(baseGraphic, reachableSet);
-                    baseGraphic.endFill();
+                    paintCellRegion(baseGraphic, reachableSet, {
+                        color: RANGE_PULSE_STYLE.baseColor,
+                        alpha: RANGE_PULSE_STYLE.staticFillAlpha,
+                        lineColor: RANGE_PULSE_STYLE.lineColor,
+                        lineAlpha: _staticGridAlpha(RANGE_PULSE_STYLE.staticLineAlpha),
+                    });
+                    paintPerimeterGlow(baseGraphic, reachableSet);
                     addGraphicsBelowTokens(baseGraphic);
                     const pulseGraphic = new PIXI.Graphics();
                     canvas.stage.addChild(pulseGraphic).eventMode = 'none';

@@ -17,10 +17,11 @@ import {
 import {
     TG,
     pointerToWorld, addGraphicsBelowTokens, suppressTokenInteraction, destroyGraphics,
-    createPickerSession, createCursorPreview, drawRangeHighlight,
+    createPickerSession, createCursorPreview, drawRangeHighlight, isPulseLosEnabled, makePulseCellFilter,
     _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText,
     suppressEvent,
     teardownRangePulse,
+    paintCellRegion, paintPerimeterGlow, _staticGridAlpha, resolveRangeGlow, RANGE_PULSE_STYLE, RANGE_GLOW,
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
@@ -60,11 +61,14 @@ export function placeToken(options = {})
             noCard = false,
             disposition = null,
             team = null,
-            elevation = null
+            elevation = null,
+            los: optLos = null
         } = /** @type {any} */ (options);
         // range/count are `let` so the card can edit them live.
         let range = /** @type {any} */ (options).range ?? null;
         let count = /** @type {any} */ (options).count ?? 1;
+        let losOn = optLos === null ? true : !!optLos;
+        const placeGlow = resolveRangeGlow(/** @type {any} */ (options).glow ?? /** @type {any} */ (options).glowColor, RANGE_GLOW.deploy);
 
         // Each entry: { actor, extraData, prototypeToken, texture }
         const actorEntries = [];
@@ -173,31 +177,32 @@ export function placeToken(options = {})
                 rangePulse.clear('interactive:placeToken');
                 return;
             }
-            inRangeSet = getInRangeOffsets(originForRange, range, { includeSelf: true });
+            const losFilter = makePulseCellFilter(originToken ?? null, { los: losOn });
+            inRangeSet = new Set(losFilter(getInRangeOffsets(originForRange, range, { includeSelf: true })));
             rangePulse.set('interactive:placeToken', {
                 priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
                 build: () =>
                 {
                     let rangeHighlight;
                     if (originToken)
-                        rangeHighlight = drawRangeHighlight(originToken, range, TG.rangeFill, 0.1, false);
+                    {
+                        rangeHighlight = drawRangeHighlight(originToken, range, TG.rangeFill, 0.1, false, {
+                            glowColor: placeGlow,
+                            lineColor: RANGE_PULSE_STYLE.lineColor,
+                            lineAlpha: _staticGridAlpha(RANGE_PULSE_STYLE.staticLineAlpha),
+                            los: losOn,
+                        });
+                    }
                     else
                     {
                         const highlightGraphics = new PIXI.Graphics();
-                        highlightGraphics.lineStyle(gridLineWidth(2), TG.rangeFill, 0.3);
-                        highlightGraphics.beginFill(TG.rangeFill, 0.1);
-                        for (const key of inRangeSet)
-                        {
-                            const [col, row] = key.split(',').map(Number);
-                            if (isHexGrid())
-                                drawHexAt(highlightGraphics, col, row);
-                            else
-                            {
-                                const center = getHexCenter(col, row);
-                                highlightGraphics.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
-                            }
-                        }
-                        highlightGraphics.endFill();
+                        paintCellRegion(highlightGraphics, inRangeSet, {
+                            color: TG.rangeFill,
+                            alpha: 0.1,
+                            lineColor: RANGE_PULSE_STYLE.lineColor,
+                            lineAlpha: _staticGridAlpha(RANGE_PULSE_STYLE.staticLineAlpha),
+                        });
+                        paintPerimeterGlow(highlightGraphics, inRangeSet, { glowColor: placeGlow });
                         addGraphicsBelowTokens(highlightGraphics);
                         rangeHighlight = highlightGraphics;
                     }
@@ -205,7 +210,7 @@ export function placeToken(options = {})
                     addGraphicsBelowTokens(pulseGraphic);
                     const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
                     const hexesByDist = _groupCellsByDistance(originOffsetsForPulse, inRangeSet);
-                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: originToken ?? null });
+                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: originToken ?? null, glowColor: placeGlow, los: losOn });
                     canvas.app.ticker.add(wavePulse);
                     return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                 },
@@ -461,6 +466,19 @@ export function placeToken(options = {})
             count,
             isMultiActor,
             relatedToken: originToken,
+            showLosToggle: !!originToken && isPulseLosEnabled(),
+            losOn,
+            onToggleLos: (checked) =>
+            {
+                losOn = checked;
+                rebuildRangePulse();
+                for (const placement of placements)
+                    placement.warning = checkInRange(placement.col, placement.row) ? null : 'Out of range (allowed)';
+                if (lastCursorOffset)
+                    drawCursorAt(lastCursorOffset);
+                refreshCard();
+                broadcastToolPresence('placeToken', presenceData());
+            },
             onConfirm: doConfirm,
             onRangeChange: (newRange) =>
             {

@@ -32,12 +32,41 @@ function formulaBounds(formula)
 
 // Damage min-max label on targets (the damage counterpart of the attack hit-%). Lazy: for
 // weapon flows state.data.damage stays empty until the HUD closes, so read the live HUD rows.
+function hitResultFor(state, token)
+{
+    const id = token?.document?.id ?? token?.id;
+    if (!id)
+        return null;
+    for (const result of state.data?.hit_results ?? [])
+    {
+        const target = result?.target;
+        if ((target?.document?.id ?? target?.id) === id)
+            return result;
+    }
+    return null;
+}
+
+function reliableValue(state)
+{
+    const weapon = state.data?.damage_hud_data?.weapon;
+    if (weapon && !weapon.reliable)
+        return 0;
+    return Number(weapon?.reliableValue ?? state.data?.reliable_val ?? 0) || 0;
+}
+
 function damageRangeLabelFor(state)
 {
     if (!targetInfoAllowed())
         return null;
-    return () =>
+    return (token) =>
     {
+        // A resolved miss only ever deals Reliable, so never preview the rolled range on it.
+        const result = hitResultFor(state, token);
+        if (result && !result.hit)
+        {
+            const reliable = reliableValue(state);
+            return reliable > 0 ? { label: `${reliable}`, fill: 0xb0763a } : null;
+        }
         const hud = state.data?.damage_hud_data;
         const entries = hud
             ? [...(hud.base?.damage ?? []), ...(hud.base?.bonusDamage ?? []), ...(hud.weapon?.damage ?? []), ...(hud.weapon?.bonusDamage ?? [])]

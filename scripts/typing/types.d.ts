@@ -119,7 +119,6 @@ interface MoveHistoryEntry {
     movementCost: number;
     isDrag: boolean;
     isFreeMovement: boolean;
-    boostSet: number[];
     startPos: { x: number; y: number };
 }
 
@@ -181,8 +180,8 @@ interface MoveInfo {
     isUndo?: boolean;
     isModified?: boolean;
     pathHexes: PathHexArray;
-    isBoost?: boolean;
-    boostSet?: any[];
+    isFreeMovement?: boolean;
+    movementCost?: number;
     extraData?: object;
 }
 
@@ -409,7 +408,8 @@ interface TriggerDataOnActivation extends TriggerDataBase {
      * (the parent item whose `system.deployables[]` contains this LID). */
     deployable?: { actor: any; lid: string | null } | null;
     endActivation: boolean;
-    /** Extra data injected via startRelatedFlowToReactor(userId, extraData), sourced from flow.state.la_extraData. */
+    /** Extra data injected via startRelatedFlowToReactor(userId, extraData), sourced from flow.state.la_extraData.
+     * Mod activations carry `hostWeapon` (the weapon the mod is mounted on). */
     extraData: Record<string, any>;
     distanceToTrigger: number | null;
     canTriggerReaction?: boolean;
@@ -624,7 +624,6 @@ interface ConsumptionConfig {
     itemId?: string;
     actionName?: string;
     statusId?: string;
-    isBoost?: boolean;
     minDistance?: number;
     checkType?: string;
     checkAbove?: number;
@@ -781,6 +780,10 @@ interface LancerAutomationsAPI {
         attachToToken?: TokenDocument | string;
         rangeOrigin?: { x: number; y: number } | null;
         expires?: { on: "ownerTurnStart" | "ownerTurnEnd"; originToken?: Token | string; turns?: number };
+        /** Extra templatemacro graphics flags (fill/line/texture), merged onto the template */
+        tmacGraphics?: Record<string, any>;
+        /** Template Macro library preset, by name or id */
+        preset?: string;
     }): Promise<any>;
     tokensInTemplate(templateOrResult: any): Token[];
     placeToken(options?: {
@@ -1049,6 +1052,8 @@ interface LancerAutomationsAPI {
     getMovementCap(tokenOrId: Token | TokenDocument | string): number;
     /** Ordered movement legs for this turn. `granted` legs are paid for; the rest are previews. */
     getMovementBands(tokenOrId: Token | TokenDocument | string): Array<{ name: string; size: number; max: number; granted: boolean }>;
+    /** Speed after prone halving. Prefer this over reading `actor.system.speed`. */
+    tokenSpeed(tokenOrActor: Token | TokenDocument | Actor): number;
     /** Add spaces to one leg. `current` picks the granted leg the spent distance sits in. */
     recordMovementExtra(tokenOrId: Token | TokenDocument | string, value: number, options?: { leg?: 'standard' | 'boost' | 'current' }): void;
     recordBoostCast(tokenOrId: Token | TokenDocument | string, speed: number): void;

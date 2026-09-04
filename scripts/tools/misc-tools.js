@@ -11,6 +11,24 @@ import { getMinGridDistance } from "../combat/grid-helpers.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { ReactionManager } from "../activations/reaction-manager.js";
 import { executeStandingUp, executeTeleport, executeFall, boostMove } from "./movement-tools.js";
+import { getItemStatus } from "../tah/item-helpers.js";
+import { isActionLocked } from "../interactive/deployables.js";
+
+/**
+ * Whether an item can be used right now, matching the TAH row state: not destroyed or
+ * disabled, loaded, charged, uses and per-round/turn/scene limits left, not lock-blocked.
+ * @param {Item} item
+ * @returns {boolean}
+ */
+export function isItemUsable(item)
+{
+    if (!item?.system)
+        return false;
+    const status = getItemStatus(item);
+    if (status.destroyed || status.unavailable)
+        return false;
+    return !isActionLocked(item, item.name);
+}
 import { openAddReserveDialog } from "./pilot-reserves.js";
 import {
     getWeaponProfiles_WithBonus, getItemTags_WithBonus,
@@ -27,6 +45,27 @@ export {
     getMaxWeaponReach_WithBonus, getMaxItemRanges_WithBonus,
     getSensorRange_WithBonus, weaponPulseRange
 } from "./weapon-bonus-utils.js";
+
+/**
+ * CodeMirror keeps its own height, so a resizable dialog has to push a new one on every resize.
+ * @param {number} [buttonReservedH] default 40 matches the forced CSS height on .dialog-buttons
+ * @returns {ResizeObserver|null} observer to disconnect in the dialog's close handler
+ */
+export function attachEditorResizeObserver(editor, windowEl, buttonReservedH = 40)
+{
+    if (!windowEl)
+        return null;
+    const updateSize = () =>
+    {
+        const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
+        editor.setSize(null, windowEl.offsetHeight - headerH - buttonReservedH);
+        editor.refresh();
+    };
+    setTimeout(updateSize, 50);
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(windowEl);
+    return observer;
+}
 
 /** Maps activation type strings to the NPC feature tag LID that signals that activation. */
 export const ACTIVATION_TAG_MAP = {
@@ -1701,6 +1740,21 @@ export async function executeSimpleActivation(actorOrToken, options = {}, extraD
     return { completed, flow };
 }
 
+/** Switch a weapon profile and run its activation (card, triggers, FX). */
+export async function executeProfileSwitch(weapon, profileIndex)
+{
+    const profile = weapon.system?.profiles?.[profileIndex];
+    if (!profile)
+        return { completed: false };
+    await weapon.update({ 'system.selected_profile_index': profileIndex });
+    const profileName = profile.name || `Profile ${profileIndex + 1}`;
+    return executeSimpleActivation(weapon.actor, {
+        title: profileName,
+        action: { name: profileName, activation: 'Profile' },
+        detail: profile.effect ?? ''
+    }, { item: weapon });
+}
+
 /**
  * Trigger a general action (Brace, Boost, ...) from its registry definition.
  * @param {any} actorOrToken
@@ -1799,6 +1853,34 @@ export async function updateTokenSystem(token, data)
     }
 }
 
+/** Superheavy is stored as size on mech weapons and as type on NPC features. */
+function isSuperheavyWeapon(weapon)
+{
+    const size = weapon?.system?.size || weapon?.system?.type || "";
+    return size.toLowerCase() === 'superheavy';
+}
+
+function weaponActiveProfile(weapon)
+{
+    const sys = weapon?.system;
+    return sys?.active_profile ?? sys?.profiles?.[sys?.selected_profile_index ?? 0] ?? null;
+}
+
+// Superheavies are barrage-only, unless the active profile says otherwise (Leviathan HAC).
+export function weaponSkirmishable(weapon)
+{
+    if (!isSuperheavyWeapon(weapon))
+        return true;
+    return weaponActiveProfile(weapon)?.skirmishable === true;
+}
+
+export function weaponBarrageable(weapon)
+{
+    if (!isSuperheavyWeapon(weapon))
+        return true;
+    return weaponActiveProfile(weapon)?.barrageable !== false;
+}
+
 /**
  * Executes a Skirmish action: target validation, weapon selection, and attack/damage flow.
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
@@ -1822,7 +1904,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
     if (sourceToken && !options.noFX)
-        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken);
+        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken, 'skirmish');
     if (sourceToken)
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
 
@@ -1840,8 +1922,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
         // one/mount; no superheavy; non-fitting shown disabled
         const filterPredicate = (weapon) =>
         {
-            const size = weapon.system?.size || weapon.system?.type || "";
-            if (size.toLowerCase() === 'superheavy')
+            if (!weaponSkirmishable(weapon))
                 return false;
             if (weaponFilter)
                 return weaponFilter(weapon);
@@ -1925,7 +2006,7 @@ export async function executeFight(actorOrToken, bypassWeapon = null)
     );
     if (sourceToken)
     {
-        queueActionFx(() => playFightFX(sourceToken), sourceToken);
+        queueActionFx(() => playFightFX(sourceToken), sourceToken, 'fight');
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'FIGHT', actionType: 'Quick' });
     }
 
@@ -1968,7 +2049,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     );
     if (sourceToken)
     {
-        queueActionFx(() => playBarrageFX(sourceToken), sourceToken);
+        queueActionFx(() => playBarrageFX(sourceToken), sourceToken, 'barrage');
         Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'BARRAGE', actionType: 'Full' });
     }
 
@@ -2017,7 +2098,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
 
     const choices = bypassMount
         ? [bypassMount]
-        : await choseMount(actor, 2, null, null, "BARRAGE", barrageValidator);
+        : await choseMount(actor, 2, weaponBarrageable, null, "BARRAGE", barrageValidator);
     if (!choices || choices.length === 0)
         return;
 
@@ -2117,12 +2198,6 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
 
 
 /**
- * Returns the weapon subtype string (e.g. "Superheavy Rifle", "Melee").
- * Synchronous: no bonus application.
- * @param {Item} item
- * @returns {string}
- */
-/**
  * Token position as a plain point.
  * @param {any} tokenLike - Token or TokenDocument
  * @returns {{x: number, y: number, elevation: number}}
@@ -2144,6 +2219,12 @@ export function samePosition(a, b)
     return !!a && !!b && a.x === b.x && a.y === b.y && (a.elevation ?? 0) === (b.elevation ?? 0);
 }
 
+/**
+ * Returns the weapon subtype string (e.g. "Superheavy Rifle", "Melee").
+ * Synchronous: no bonus application.
+ * @param {Item} item
+ * @returns {string}
+ */
 export function getWeaponType(item)
 {
     if (!item)
@@ -2186,7 +2267,7 @@ export async function executeInvade(actorOrToken)
     if (selected.isFragmentSignal)
     {
         await executeTechAttack(actor, {
-            title: "Fragment Signal",
+            title: selected.name,
             invade: true,
             effect: selected.detail,
             grit: actor.system.tech_attack,
@@ -2314,6 +2395,7 @@ export const MiscAPI = {
     executeItemActivation,
     activateGeneralAction,
     hasReactionAvailable,
+    isItemUsable,
     executeReactorMeltdown,
     executeReactorExplosion,
     setReaction,

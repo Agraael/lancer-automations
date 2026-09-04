@@ -2,6 +2,18 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-09-04-lancer-4-2-0",
+            "date": "2026-09-04",
+            "title": "Lancer Automations 4.2.0",
+            "body": [
+                "<p>Big one: the <b>Action Wheel</b>, a radial menu of your favorite actions around the token, and a <b>redesigned range preview</b>.</p>",
+                "<p>And <b>line of sight on range pulses</b>, experimental: ranges now stop at walls.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-2-0-168546548",
+            "linkLabel": "Lancer Automations 4.2.0 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-08-30-lancer-4-1-12-dev-blog",
             "date": "2026-08-30",
             "title": "Lancer Automations 4.1.12 + dev blog",

@@ -11,6 +11,7 @@ import {
 } from './interactive/index.js';
 import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
 import { handleRemoteFocus } from './tools/auto-focus.js';
+import { floatTokenText } from './tools/float-text.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
@@ -202,6 +203,13 @@ function emitAck(action, requestId, extra = {})
 const HANDLERS = {
 
     autoFocus: handleRemoteFocus,
+
+    floatTokenText: ({ tokenId, text, fill }) =>
+    {
+        const token = canvas.tokens.get(tokenId);
+        if (token)
+            floatTokenText(token, text, fill);
+    },
 
     showReactionPopup: async ({ targetUserId, triggerType, reactions }) =>
     {

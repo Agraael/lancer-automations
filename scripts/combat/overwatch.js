@@ -7,6 +7,7 @@ import {
     measureGridDistance, pixelToOffset, isPositionInRange
 } from "./grid-helpers.js";
 import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js";
+import { hasLineOfSight } from "../vision/lancerDetectionModes.js";
 
 export { getMinGridDistance };
 
@@ -76,6 +77,18 @@ export function checkOverwatchCondition(reactor, mover, startPos)
         return false;
 
     if (!hasReactionAvailable(reactor))
+        return false;
+
+    let losEnabled = false;
+    try
+    {
+        losEnabled = game.settings.get('lancer-automations', 'lancerLos') === true;
+    }
+    catch
+    {
+        losEnabled = false;
+    }
+    if (losEnabled && !hasLineOfSight(reactor, mover))
         return false;
 
     const auraLayer = canvas.gaaAuraLayer;

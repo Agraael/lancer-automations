@@ -14,12 +14,13 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
 import { getActorMaxThreat, getWeaponProfiles_WithBonus, weaponPulseRange } from "../../tools/misc-tools.js";
-import { getActorMaxReach_WithBonus } from "../../tools/weapon-bonus-utils.js";
+import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, weaponIgnoresLineOfSight } from "../../tools/weapon-bonus-utils.js";
 import { getWeapons } from "../deployables.js";
 import { weaponTypeIcon } from "../../tah/item-helpers.js";
 import { isActorRevealedToUser, getUnknownLabel } from "../../tah/tokenStatHint.js";
 import { setMeasureDistanceReference, setMeasureDistancePoint } from "../../movement/tactical-distance.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { getSettingEnabled } from "../../setup/settings-register.js";
 
 let _open = false;
 let _controller = null;
@@ -51,6 +52,7 @@ const _saved = {
     size: 1,
     rangeSource: 'none',
     manualRadius: 5,
+    manualLos: false,
     weaponItemId: null,
     elevationAware: true,
     autoElevation: true,
@@ -341,6 +343,29 @@ function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId 
     return _saved.manualRadius;
 }
 
+// Weapon, reach, sensor and threat ranges follow line of sight; Arcing/Seeking reach stays free.
+function losInfoForToken(token, range, source = _saved.rangeSource)
+{
+    const none = { los: false, freeRange: 0 };
+    if (source === 'manual')
+        return { los: _saved.manualLos === true, freeRange: 0 };
+    if (source === 'sensor' || source === 'threat')
+        return { los: true, freeRange: 0 };
+    if (source !== 'weapon' && source !== 'reach')
+        return none;
+    const actor = token?.actor;
+    if (!actor)
+        return none;
+    if (source === 'weapon' && token.isOwner)
+    {
+        const weapon = actor.items.get(_saved.weaponItemId) ?? getWeapons(token)[0];
+        if (weapon)
+            return { los: !weaponIgnoresLineOfSight(weapon), freeRange: 0 };
+    }
+    const freeMax = Math.min(range, getActorReachBands_WithBonus(actor).freeMax);
+    return { los: range > freeMax, freeRange: freeMax };
+}
+
 function weaponRangeMap(weapon, actor)
 {
     const profiles = getWeaponProfiles_WithBonus(weapon, actor);
@@ -375,6 +400,9 @@ function _tokenHasPin(tokenId)
 }
 
 let _pinGroups = new Map();
+// Pinned ranges hold still at their built opacity, matching the contour lines.
+const PIN_ALPHA = 1;
+
 let _pinBreathTick = null;
 let _pinPixTick = null;
 
@@ -413,8 +441,7 @@ function _syncPinBreath()
     {
         _pinBreathTick = () =>
         {
-            // Peaks at 0.77: measured, the interior gains a shade only across 0.78-0.85, so the sweep stays under it.
-            const alpha = 0.535 + 0.235 * Math.sin(performance.now() / 280);
+            const alpha = PIN_ALPHA;
             _pinPix.prevAlpha = alpha;
             for (const pinHandle of _pinGroups.values())
             {
@@ -491,7 +518,7 @@ function _rebuildPinVisuals()
             continue;
         if (!bySource.has(pin.source))
             bySource.set(pin.source, []);
-        bySource.get(pin.source).push({ token, range: pin.range });
+        bySource.get(pin.source).push({ token, range: pin.range, ...losInfoForToken(token, pin.range, pin.source) });
         if (!_pinPix.sample)
             _pinPix.sample = { x: token.center.x + canvas.grid.size, y: token.center.y };
     }
@@ -608,7 +635,7 @@ function rebuildPulse()
     {
         const range = computeRadiusForToken(token);
         if (range > 0)
-            entries.push({ token, range });
+            entries.push({ token, range, ...losInfoForToken(token, range) });
     }
     if (_saved.rangeSource === 'manual' && _saved.manualRadius > 0)
     {
@@ -624,7 +651,7 @@ function rebuildPulse()
         return;
     }
     const glowColor = RANGE_GLOW[_saved.rangeSource] ?? RANGE_GLOW.manual;
-    const signature = `${_saved.rangeSource}|` + entries.map(entry => entry.token ? `${entry.token.document.id}:${entry.range}` : `c:${entry.point.x},${entry.point.y}:${entry.range}`).sort().join('|');
+    const signature = `${_saved.rangeSource}|` + entries.map(entry => entry.token ? `${entry.token.document.id}:${entry.range}:${entry.los === true}:${entry.freeRange ?? 0}` : `c:${entry.point.x},${entry.point.y}:${entry.range}`).sort().join('|');
     const hadPulse = rangePulse.has('advanced-measure');
     rangePulse.set('advanced-measure', {
         priority: RANGE_PULSE_PRIORITY.MEASURE,
@@ -2096,6 +2123,29 @@ function renderManualPopover()
         _saved.manualRadius = next;
         rebuildPulse();
     });
+    if (getSettingEnabled('rangePulseLos'))
+    {
+        const losButton = makeIconButton('fa-solid fa-eye', 'Manual range follows line of sight', () =>
+        {
+            _saved.manualLos = !_saved.manualLos;
+            applyLosState();
+            rebuildPulse();
+        });
+        const applyLosState = () =>
+        {
+            if (_saved.manualLos)
+            {
+                markActive(losButton, false);
+            }
+            else
+            {
+                losButton.classList.remove('la-mt-active');
+                losButton.style.removeProperty('color');
+            }
+        };
+        applyLosState();
+        row.appendChild(losButton);
+    }
     pop.appendChild(row);
     return pop;
 }
@@ -2133,7 +2183,7 @@ function renderWeaponPopover(refToken)
         star.textContent = '★';
         star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
         row.style.position = 'relative';
-        row.append(makeIcon(weaponTypeIcon(weapon) ?? 'mdi mdi-help-rhombus-outline'), name, rng, star);
+        row.append(makeIcon(weaponTypeIcon(weapon)), name, rng, star);
         if (_saved.weaponItemId === weapon.id)
             row.classList.add('active');
         row.addEventListener('mouseenter', () => playUiSound('statusHover'));
@@ -2578,13 +2628,14 @@ export function getAdvancedMeasureState()
         areaRange: _saved.areaRange,
         rangeSource: _saved.rangeSource,
         manualRadius: _saved.manualRadius,
+        manualLos: _saved.manualLos,
         weaponItemId: _saved.weaponItemId,
         pulseEnabled: _saved.pulseEnabled,
         movementReachEnabled: _saved.movementReachEnabled,
     };
 }
 
-const _STATE_KEYS = new Set(['mode', 'pattern', 'areaRange', 'rangeSource', 'manualRadius', 'weaponItemId', 'pulseEnabled', 'movementReachEnabled']);
+const _STATE_KEYS = new Set(['mode', 'pattern', 'areaRange', 'rangeSource', 'manualRadius', 'manualLos', 'weaponItemId', 'pulseEnabled', 'movementReachEnabled']);
 
 export async function setAdvancedMeasureState(patch)
 {
@@ -2639,6 +2690,7 @@ export function resetAdvancedMeasureState()
     _saved.size = 1;
     _saved.rangeSource = 'none';
     _saved.manualRadius = 5;
+    _saved.manualLos = false;
     _saved.weaponItemId = null;
     _saved.elevationAware = true;
     _saved.autoElevation = true;

@@ -2,6 +2,7 @@
 
 import { isHexGrid, getHexCenter, drawHexAt, getOccupiedOffsets } from "../combat/grid-helpers.js";
 import { addGraphicsBelowTokens, destroyGraphics, gridLineWidth, makeText } from "./canvas-helpers.js";
+import { getSettingEnabled } from "../setup/settings-register.js";
 
 // Live overlay of other clients' interactive tools, same colours but dimmer (remote ghost).
 
@@ -10,14 +11,7 @@ const STALE_MS = 2500;
 
 function enabled()
 {
-    try
-    {
-        return !!game.settings.get('lancer-automations', 'displayToolsToOthers');
-    }
-    catch
-    {
-        return false;
-    }
+    return getSettingEnabled('displayToolsToOthers');
 }
 
 function drawCell(g, col, row)

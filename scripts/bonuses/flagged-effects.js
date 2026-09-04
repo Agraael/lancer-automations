@@ -636,7 +636,6 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
             let existingEffect = null;
             let effectNameForLog = typeof effect === 'string' ? effect : effect.name;
 
-            // Auto-detect if "string" effect is an existing custom effect
             let resolvedEffectData = effect;
             if (typeof effect === 'string')
             {
@@ -748,7 +747,6 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
             adjustedDuration.turns = 2;
         delete adjustedDuration._preAdjusted;
 
-        // Apply
         const canApplyDirectly = game.user.isGM || token.document?.isOwner;
         for (const effect of effectsToApplyToToken)
         {
@@ -1881,7 +1879,8 @@ function _layoutHaloIcons(token)
     }
     const radiusX = width / 2 * radiusFactor;
     const radiusY = height / 2 * radiusFactor;
-    const slots = Math.max(sprites.length, Math.min(Math.ceil(Math.min(width, height) / (canvas.dimensions?.size ?? 100) * 15), 40));
+    const perimeter = Math.PI * (radiusX + radiusY);
+    const slots = Math.max(sprites.length, Math.min(Math.floor(perimeter / _effectIconTargetSize()), 40));
     const initial = (Number.isFinite(startAngle) ? startAngle : 135) * Math.PI / 180;
     for (let index = 0; index < sprites.length; index++)
     {
@@ -1985,8 +1984,24 @@ function _applyCounterPairs(pairs)
     }
 }
 
-/** Returns the target icon size in pixels. */
-function _effectIconTargetSize()
+// Growth that holds the icons at a constant screen size once zoom drops below the setting.
+function _effectIconZoomBoost()
+{
+    let minZoom = 0;
+    try
+    {
+        minZoom = Number(game.settings.get('lancer-automations', 'statusIconMinZoomScale')) || 0;
+    }
+    catch
+    { /* not registered */ }
+    if (minZoom <= 0)
+        return 1;
+    const zoom = canvas.stage?.scale?.x || 1;
+    return Math.max(1, minZoom / zoom);
+}
+
+/** Icon size in pixels before any zoom compensation. */
+function _effectIconBaseSize()
 {
     let scale = 1;
     try
@@ -2000,6 +2015,31 @@ function _effectIconTargetSize()
     const natural = gridPx * 0.2;
     return Math.max(8, Math.round(shrunk + (natural - shrunk) * ((scale - 0.3) / 0.7)));
 }
+
+/** Returns the target icon size in pixels. */
+function _effectIconTargetSize()
+{
+    return Math.max(8, Math.round(_effectIconBaseSize() * _effectIconZoomBoost()));
+}
+
+// _refreshEffects only fires on effect changes, so zoom has to poke it, quantised to dodge a reflow per wheel notch.
+let _lastZoomBoost = 1;
+Hooks.on('canvasPan', () =>
+{
+    const boost = Math.round(_effectIconZoomBoost() * 20) / 20;
+    if (boost === _lastZoomBoost)
+        return;
+    _lastZoomBoost = boost;
+    for (const token of canvas.tokens?.placeables ?? [])
+    {
+        if (token.effects?.children?.length)
+            token.renderFlags.set({ refreshEffects: true });
+    }
+});
+Hooks.on('canvasReady', () =>
+{
+    _lastZoomBoost = Math.round(_effectIconZoomBoost() * 20) / 20;
+});
 
 function _shrinkEffectIcons(token)
 {

@@ -1066,6 +1066,7 @@ export async function executeScanOnActivation(reactorToken)
         const sensorRange = reactorToken.actor?.system?.sensor_range ?? 10;
         const chosen = await api.chooseToken(reactorToken, {
             range: sensorRange,
+            glow: 'sensor',
             count: 1,
             title: 'SCAN — Select Target',
             description: `Choose a target within Sensors (${sensorRange})`,
@@ -1086,7 +1087,7 @@ export async function executeScanOnActivation(reactorToken)
     if (reactorToken)
     {
         for (const target of targets)
-            await actionFX.queueActionFx(() => actionFX.playScanFX(reactorToken, target), reactorToken);
+            await actionFX.queueActionFx(() => actionFX.playScanFX(reactorToken, target), reactorToken, 'scan');
     }
 
     const content = await renderTemplate(TPL.chooser, {

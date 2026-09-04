@@ -14,7 +14,6 @@ async function addVirtualMovement(token, cost)
         movementCost: cost,
         isDrag: true,
         isFreeMovement: false,
-        boostSet: [],
         startPos: { x: tokenDoc.x, y: tokenDoc.y },
     });
     await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } });

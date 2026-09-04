@@ -100,12 +100,14 @@ interface LancerAutomationsAPI {
     hasTallerSolidAdjacent(token: any, terrainAPI?: any): any;
     hitWith(weapon: any, targets: any, options?: any): Promise<any>;
     importDowntimeActionsJson(text: any): Promise<any>;
+    importTemplateMacroPresets(): Promise<any>;
     inDangerZone(tokenOrActor: any): any;
     increaseMovementCap(tokenOrId: any, value: any): any;
     initAdvancedMeasureAutoClose(): any;
     isAdvancedMeasureActive(): any;
     isAreaPickerActive(): any;
     isCardlessTokenPickerActive(): any;
+    isItemUsable(item: any): any;
     isLancerActor(actor: any): any;
     isSingleTargetPickerActive(): any;
     isTargetSessionActive(): any;
@@ -170,6 +172,7 @@ interface LancerAutomationsAPI {
     showUserIdControlledChoiceCard(opts?: any): Promise<any>;
     showVoteCardOnVoter(opts?: any): Promise<any>;
     sliceDeployablesForTier(combined: any, ownerActor: any, optsSource: any, item?: any): any;
+    smokeZoneGraphics(): any;
     spawnHardCover(originToken: any, options?: any): Promise<any>;
     startActivationManagerTour(): Promise<any>;
     startConfigTour(): Promise<any>;
@@ -178,6 +181,7 @@ interface LancerAutomationsAPI {
     templateToEffectDescriptor(template: any): any;
     toggleAdvancedMeasure(): any;
     toggleAura(actorOrToken: any, auraName: any, on: any): Promise<any>;
+    tokenSpeed(token: any): any;
     triggerDangerousZoneFlow(token: any, damageType?: any, damageValue?: any): Promise<any>;
     triggerFlaggedEffectImmunity(...args: any[]): any;
     unlinkBonusFromActor(options?: any): Promise<any>;

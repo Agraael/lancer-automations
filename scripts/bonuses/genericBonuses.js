@@ -1,10 +1,11 @@
-import { applyEffectsToTokens } from "./flagged-effects.js";
+import { applyEffectsToTokens, consumeEffectCharge } from "./flagged-effects.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "../activations/reaction-manager.js";
 import { getWeaponType } from "../tools/misc-tools.js";
 import { playBonusAddedFX } from "../fx/actionFX.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
 import { linkTierGate } from "../interactive/deployables.js";
+import { broadcastFloatTokenText } from "../tools/float-text.js";
 
 // Re-inject our row when Svelte re-renders a roll HUD. formWasSeen stops it disconnecting on mutations that land before the HUD exists.
 function observeHudReinject(formSelector, rowSelector, doInject, onStillPresent = null)
@@ -227,7 +228,6 @@ export function applyTagBonus(state, bonus)
             tag.val = String(val);
         else
         {
-            // Add
             const currentVal = Number.parseInt(tag.val) || Number.parseInt(tag.num_val) || 0;
             tag.val = String(currentVal + val);
         }
@@ -2811,7 +2811,6 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                     itemLid: options.consumption.itemLid || null,
                     itemId: options.consumption.itemId || null,
                     actionName: options.consumption.actionName || null,
-                    isBoost: options.consumption.isBoost ?? null,
                     minDistance: options.consumption.minDistance ?? null,
                     checkType: options.consumption.checkType || null,
                     checkAbove: options.consumption.checkAbove ?? null,
@@ -2878,7 +2877,6 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                     itemLid: options.consumption.itemLid || null,
                     itemId: options.consumption.itemId || null,
                     actionName: options.consumption.actionName || null,
-                    isBoost: options.consumption.isBoost ?? null,
                     minDistance: options.consumption.minDistance ?? null,
                     checkType: options.consumption.checkType || null,
                     checkAbove: options.consumption.checkAbove ?? null,
@@ -3117,6 +3115,33 @@ export async function injectBonusToFlowState(state, bonus)
         state.la_extraData.flow_bonus = [];
 
     state.la_extraData.flow_bonus.push(bonus);
+}
+
+// Constant stat bonuses carry no effect, so they are folded into derived data instead.
+// Current resources are excluded: rewriting them each prepare would undo damage.
+export function initConstantStatHooks()
+{
+    if (typeof libWrapper === 'undefined')
+        return;
+    libWrapper.register('lancer-automations', 'CONFIG.Actor.documentClass.prototype.prepareDerivedData',
+        function (wrapped)
+        {
+            wrapped();
+            const bonuses = this.flags?.['lancer-automations']?.constant_bonuses;
+            if (!bonuses?.length)
+                return;
+            for (const bonus of bonuses)
+            {
+                if (bonus?.type !== 'stat' || !bonus.stat || CURRENT_RESOURCE_STATS.has(bonus.stat))
+                    continue;
+                if (!linkTierGate(bonus, this))
+                    continue;
+                const raw = Number.parseInt(bonus.val) || 0;
+                const current = Number(foundry.utils.getProperty(this, bonus.stat)) || 0;
+                const next = (bonus.statMode || 'add') === 'replace' ? raw : current + raw;
+                foundry.utils.setProperty(this, bonus.stat, next);
+            }
+        }, 'WRAPPER');
 }
 
 /** @returns {Promise<void>} */
@@ -3777,6 +3802,40 @@ export function checkDamageResistances(actor, damageType)
         .map(b => b.source || b.name || "Unknown Resistance");
 }
 
+// Resistance effects consumed on damage burn at apply time, after the halving they granted.
+const _deferredResistanceConsumption = new Map();
+
+export function deferResistanceEffectConsumption(actor, effect)
+{
+    if (!actor?.uuid || !effect?.id)
+        return;
+    const pending = _deferredResistanceConsumption.get(actor.uuid) ?? new Set();
+    pending.add(effect.id);
+    _deferredResistanceConsumption.set(actor.uuid, pending);
+}
+
+async function _consumeDeferredResistanceEffects(actor, damage, options)
+{
+    const pending = _deferredResistanceConsumption.get(actor.uuid);
+    if (!pending)
+        return;
+    _deferredResistanceConsumption.delete(actor.uuid);
+    if (options?.paracausal || actor.system?.statuses?.shredded)
+        return;
+    for (const effectId of pending)
+    {
+        const effect = actor.effects.get(effectId);
+        if (!effect)
+            continue;
+        const coveredTypes = (effect.changes ?? [])
+            .filter(change => change.key?.startsWith('system.resistances.'))
+            .map(change => change.key.split('.').pop());
+        const landed = coveredTypes.some(type => Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
+        if (landed)
+            await consumeEffectCharge(effect);
+    }
+}
+
 // Bridges bonus-based resistances into damageCalc, which only reads system.resistances.
 let _pendingApplyHalvedActorUuid = null;
 export function initDamageCalcWrapper()
@@ -3821,9 +3880,17 @@ export function initDamageCalcWrapper()
                 }
             }
             // damageCalc mutates the damage record, so snapshot which bridged types actually landed first.
-            const spentOn = (options?.paracausal || this.system?.statuses?.shredded)
+            const mitigationBlocked = options?.paracausal || this.system?.statuses?.shredded;
+            const spentOn = mitigationBlocked
                 ? []
                 : bridged.filter(type => Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
+            const resistedTypes = mitigationBlocked
+                ? []
+                : ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat']
+                    .filter(type => resistances?.[type] && Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
+            const anyDamageRolled = ['Kinetic', 'Energy', 'Explosive', 'Variable', 'Burn', 'Heat']
+                .some(type => Number(damage?.[type]) > 0);
+            const showResisted = !mitigationBlocked && (resistedTypes.length > 0 || (options?.multiple === 0.5 && anyDamageRolled));
             let hpLanded;
             try
             {
@@ -3836,6 +3903,13 @@ export function initDamageCalcWrapper()
             }
             if (spentOn.length)
                 await consumeImmunityUse(this, 'resistance', null, { damageTypes: spentOn });
+            await _consumeDeferredResistanceEffects(this, damage, options);
+            if (showResisted)
+            {
+                const floatToken = this.getActiveTokens?.()?.[0];
+                if (floatToken)
+                    broadcastFloatTokenText(floatToken, 'Resisted', 0x4da6ff);
+            }
             Hooks.callAll('lancer-automations.battelog.damageApplied', this, hpLanded);
             return hpLanded;
         }, 'WRAPPER');

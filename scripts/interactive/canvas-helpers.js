@@ -1,12 +1,16 @@
-/* global canvas, PIXI, game, ui, Hooks, document */
+/* global canvas, PIXI, game, ui, Hooks, document, CONST, ClipperLib, performance */
 
 import {
     isHexGrid, offsetToCube, cubeDistance,
     getHexCenter, pixelToOffset, getHexVertices,
     drawHexAt, getOccupiedOffsets,
-    getInRangeOffsets, isPositionInRange
+    getInRangeOffsets, isPositionInRange, neighborKeys
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester } from "../vision/lancerDetectionModes.js";
+import { getShapeSamplePoints, getTokenVisionLOS } from "../vision/visionFromEdge.js";
+import { getSettingEnabled } from "../setup/settings-register.js";
+import { blindedVisionEnabled } from "../vision/blindedVision.js";
 import { getIsoProvider } from "../setup/iso-settings.js";
 import { _rulerMove } from "../main.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "./presence.js";
@@ -47,10 +51,35 @@ export const RANGE_GLOW = {
     weapon: 0xfe9e43,
     reach: 0xff4747,
     mark: 0xffffff,
+    deploy: 0x74e08a,
 };
+
+/** Resolves a glow key ('sensor') or a raw color to a RANGE_GLOW value. */
+export function resolveRangeGlow(glow, fallback = RANGE_GLOW.manual)
+{
+    if (typeof glow === 'number')
+        return glow;
+    if (typeof glow === 'string' && glow in RANGE_GLOW)
+        return RANGE_GLOW[glow];
+    return fallback;
+}
 
 // debug: outline-only range pulse, no fill/grid/wave.
 const _OUTLINE_ONLY = false;
+
+const INSET_TILE_SCALE = 0.8;
+const BRACKET_TICK_FRACTION = 0.26;
+const BLOOM_STEP_MS = 90;
+const BLOOM_RISE_MS = 420;
+// Crest shine: the resting core is pulled toward the source color, a wider white core fades in at peak.
+const HOT_CORE_COOL_MIX = 0.55;
+const HOT_CORE_WIDTH_MUL = 1.8;
+const HOT_CORE_CURVE = 1.7;
+const BLOOM_REST_LEVEL = 0.34;
+const BLOOM_CREST = 0.55;
+// The repeating motion waits this long after a bloom finishes before starting the next one.
+const WAVE_REST_MS = 1000;
+const FLASH_MAX_ALPHA = 1;
 
 // Shared range-pulse styling. Tune here; used by every range-pulse builder + the picker.
 export const RANGE_PULSE_STYLE = {
@@ -82,6 +111,7 @@ const _PALETTE_DEFS = [
     ['color.glowWeapon', RANGE_GLOW, 'weapon', 'Weapon'],
     ['color.glowReach', RANGE_GLOW, 'reach', 'Max Reach'],
     ['color.glowMark', RANGE_GLOW, 'mark', 'Mark'],
+    ['color.glowDeploy', RANGE_GLOW, 'deploy', 'Deploy'],
     ['color.pulseLine', RANGE_PULSE_STYLE, 'lineColor', 'Pulse Line'],
 ];
 
@@ -112,20 +142,27 @@ function applyPaletteColorSettings()
     }
 }
 
-// Restore every palette color (and the ruler colors) to its registered default, mirroring onto any open color inputs.
-export async function resetPaletteColorSettings()
+/**
+ * Restore the palette colors, the ruler colors and any extra keys to their registered defaults,
+ * mirroring onto whatever inputs the settings menu currently has open.
+ * @param {string[]} [extraKeys] Additional setting keys on the same tab (sliders, selects).
+ */
+export async function resetPaletteColorSettings(extraKeys = [])
 {
-    const keys = [..._PALETTE_DEFS.map(([key]) => key), ...RULER_COLOR_KEYS];
+    const keys = [...new Set([..._PALETTE_DEFS.map(([key]) => key), ...RULER_COLOR_KEYS, ...extraKeys])];
     for (const key of keys)
     {
         const registered = game.settings.settings.get(`lancer-automations.${key}`);
-        const defaultHex = registered?.default;
-        if (defaultHex == null)
+        const defaultValue = registered?.default;
+        if (defaultValue == null)
             continue;
-        await game.settings.set('lancer-automations', key, defaultHex);
-        const input = /** @type {HTMLInputElement|null} */ (document.querySelector(`input[type="color"][name="${key}"]`));
-        if (input)
-            input.value = defaultHex;
+        await game.settings.set('lancer-automations', key, defaultValue);
+        const input = /** @type {HTMLInputElement|null} */ (document.querySelector(`[name="${key}"]`));
+        if (!input)
+            continue;
+        input.value = String(defaultValue);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 }
 
@@ -217,7 +254,10 @@ export function destroyGraphics(graphic)
 export function teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic)
 {
     if (wavePulse)
+    {
         canvas.app.ticker.remove(wavePulse);
+        wavePulse.dispose?.();
+    }
     destroyGraphics(rangeHighlight);
     destroyGraphics(pulseGraphic);
 }
@@ -798,12 +838,702 @@ export function _groupCellsByDistance(originOffsets, cellKeys)
     return byDist;
 }
 
-// Client-tunable thickness multiplier for the range-pulse line + its black outline (Colors tab).
+// Client-tunable thickness multiplier for the wave line + its black outline (Colors tab).
 function _rangePulseWidthMul()
 {
     try
     {
         return Number(game.settings.get('lancer-automations', 'rangePulseLineWidth')) || 1;
+    }
+    catch
+    {
+        return 1;
+    }
+}
+
+function _rangePulseSetting(settingKey, fallback)
+{
+    try
+    {
+        return String(game.settings.get('lancer-automations', settingKey) || fallback);
+    }
+    catch
+    {
+        return fallback;
+    }
+}
+
+function _cellCorners(col, row)
+{
+    if (isHexGrid())
+        return getHexVertices(col, row);
+    const center = getHexCenter(col, row);
+    const half = canvas.grid.size / 2;
+    return [
+        { x: center.x - half, y: center.y - half },
+        { x: center.x + half, y: center.y - half },
+        { x: center.x + half, y: center.y + half },
+        { x: center.x - half, y: center.y + half },
+    ];
+}
+
+function _cellColRow(cell)
+{
+    if (typeof cell === 'string')
+    {
+        const parts = cell.split(',');
+        return { col: Number(parts[0]), row: Number(parts[1]) };
+    }
+    return { col: cell.col, row: cell.row };
+}
+
+// Cells shrunk toward their own center, so neighbours stop sharing edges.
+function _paintCellsInset(graphic, cells, scale)
+{
+    for (const cell of cells)
+    {
+        const { col, row } = _cellColRow(cell);
+        const center = getHexCenter(col, row);
+        const points = [];
+        for (const vertex of _cellCorners(col, row))
+            points.push(center.x + (vertex.x - center.x) * scale, center.y + (vertex.y - center.y) * scale);
+        graphic.drawPolygon(points);
+    }
+}
+
+// Short ticks at each cell corner, the honeycomb read on a fraction of the ink.
+function _paintCellBrackets(graphic, cells, frac)
+{
+    for (const cell of cells)
+    {
+        const { col, row } = _cellColRow(cell);
+        const corners = _cellCorners(col, row);
+        for (let index = 0; index < corners.length; index++)
+        {
+            const start = corners[index];
+            const end = corners[(index + 1) % corners.length];
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            graphic.moveTo(start.x, start.y);
+            graphic.lineTo(start.x + dx * frac, start.y + dy * frac);
+            graphic.moveTo(end.x, end.y);
+            graphic.lineTo(end.x - dx * frac, end.y - dy * frac);
+        }
+    }
+}
+
+// The baked static alpha is near zero, so the slider is the grid line alpha itself.
+export function _staticGridAlpha(baseAlpha)
+{
+    return baseAlpha ? _rangePulseOpacity('rangePulseLineOpacity') : 0;
+}
+
+function _pulseLosEnabled()
+{
+    return getSettingEnabled('rangePulseLos');
+}
+
+export function isPulseLosEnabled()
+{
+    return _pulseLosEnabled();
+}
+
+// A cell counts while its center is on the map, so hexes at least half inside stay valid.
+function _cellOnMap(col, row, rect)
+{
+    if (!rect)
+        return true;
+    const center = getHexCenter(col, row);
+    return center.x >= rect.x && center.x <= rect.x + rect.width
+        && center.y >= rect.y && center.y <= rect.y + rect.height;
+}
+
+// Centre plus slightly inset corners, so a hex partially peeking past a wall still counts.
+function _hexTestPoints(col, row)
+{
+    const center = getHexCenter(col, row);
+    const points = [center];
+    for (const corner of _cellCorners(col, row))
+        points.push({ x: center.x + (corner.x - center.x) * 0.9, y: center.y + (corner.y - center.y) * 0.9 });
+    return points;
+}
+
+/** Foundry sweeps from the token's shape corner samples plus its center, one sweep per origin. */
+function _visibilityTester(originToken)
+{
+    try
+    {
+        let origins;
+        try
+        {
+            origins = getShapeSamplePoints(originToken);
+        }
+        catch
+        {
+            origins = null;
+        }
+        origins = [...(origins ?? []), originToken.center];
+        const eyeElevation = originToken.losHeight ?? getTokenVisionLOS(originToken);
+        // without a vision source (uncontrolled token), wall-height's edge filter needs an object carrying b/t
+        const sourceOpt = originToken.vision
+            ? { source: originToken.vision }
+            : { source: { object: { b: eyeElevation, t: eyeElevation } }, b: eyeElevation, t: eyeElevation };
+        const built = origins.map(point => ({
+            origin: point,
+            sweep: CONFIG.Canvas.polygonBackends.sight.create({ x: point.x, y: point.y, elevation: eyeElevation }, { type: 'sight', ...sourceOpt }),
+        }));
+        const tester = (x, y) => built.some(entry => entry.sweep.contains(x, y));
+        tester.built = built;
+        return tester;
+    }
+    catch (err)
+    {
+        console.warn('lancer-automations | LOS tester failed:', err);
+        return null;
+    }
+}
+
+function _isBlinded(token)
+{
+    try
+    {
+        return blindedVisionEnabled() && token?.actor?.statuses?.has?.('blinded') === true;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+// Each shape corner traces its tangent skim line: perpendicular to the center-to-corner axis, through the corner, extended both ways.
+function _skimWalks(origin)
+{
+    const shapePoints = origin.getShape?.()?.points;
+    if (!shapePoints?.length)
+        return [];
+    const center = origin.center;
+    const walks = [];
+    for (let idx = 0; idx < shapePoints.length; idx += 2)
+    {
+        const vertex = { x: shapePoints[idx] + origin.x, y: shapePoints[idx + 1] + origin.y };
+        const radX = vertex.x - center.x;
+        const radY = vertex.y - center.y;
+        const len = Math.hypot(radX, radY);
+        if (!len)
+            continue;
+        walks.push({ vertex, dirX: -radY / len, dirY: radX / len });
+        walks.push({ vertex, dirX: radY / len, dirY: -radX / len });
+    }
+    return walks;
+}
+
+const _SKIM_PERP = 5;
+
+// The card's green line: tangent walks from the corners while the ray stays clear, each step's side points nominating hexes granted only when their centers pass the same rules.
+function _skimLineCells(origin)
+{
+    const caster = makeSkimRayCaster(origin);
+    if (!caster)
+        return null;
+    const eyeEdges = getEyeWallSegments(origin);
+    const inEyeSolid = makeEyeSolidTester(origin) ?? (() => false);
+    const centerReachable = (fromPoint, centerPoint) =>
+        !inEyeSolid(centerPoint)
+        && !eyeEdges.some(seg => foundry.utils.lineSegmentIntersects(fromPoint, centerPoint, seg.a, seg.b));
+    const cells = new Set();
+    const step = canvas.grid.size / 2;
+    const maxDist = canvas.grid.size * 25;
+    const sceneRect = canvas.dimensions?.sceneRect ?? null;
+    for (const walk of _skimWalks(origin))
+    {
+        // a single blocked step is a graze artifact of the sampling; a real crossing blocks every step after it
+        let misses = 0;
+        for (let dist = 0; dist <= maxDist; dist += step)
+        {
+            const to = { x: walk.vertex.x + walk.dirX * dist, y: walk.vertex.y + walk.dirY * dist };
+            if (sceneRect && (to.x < sceneRect.x || to.x > sceneRect.x + sceneRect.width || to.y < sceneRect.y || to.y > sceneRect.y + sceneRect.height))
+                break;
+            if (dist > 0 && !caster(walk.vertex, to))
+            {
+                misses += 1;
+                if (misses >= 2)
+                    break;
+                continue;
+            }
+            misses = 0;
+            const sideA = { x: to.x - walk.dirY * _SKIM_PERP, y: to.y + walk.dirX * _SKIM_PERP };
+            const sideB = { x: to.x + walk.dirY * _SKIM_PERP, y: to.y - walk.dirX * _SKIM_PERP };
+            // the walk earns the cell; the raw crossing test only refuses centers behind a wall (the corner loophole)
+            for (const sidePoint of [sideA, sideB])
+            {
+                const cell = pixelToOffset(sidePoint.x, sidePoint.y);
+                const cellCenter = getHexCenter(cell.col, cell.row);
+                if (centerReachable(sidePoint, cellCenter))
+                    cells.add(`${cell.col},${cell.row}`);
+            }
+        }
+    }
+    return cells;
+}
+
+// Debug: laSkimDraw() overlays the skim walks for the controlled token; green = clear walk, ticks = perpendicular casts (green grants, red blocked), red dot = stop.
+globalThis.laSkimDraw = () =>
+{
+    const existing = /** @type {any} */ (globalThis)._laSkimGfx;
+    if (existing && !existing.destroyed)
+    {
+        existing.destroy({ children: true });
+        /** @type {any} */ (globalThis)._laSkimGfx = null;
+        return 'skim debug off';
+    }
+    const origin = canvas.tokens.controlled[0] ?? null;
+    if (!origin)
+    {
+        console.warn('laSkimDraw: select a token');
+        return null;
+    }
+    const caster = makeSkimRayCaster(origin);
+    if (!caster)
+        return null;
+    const eyeEdges = getEyeWallSegments(origin);
+    const inEyeSolid = makeEyeSolidTester(origin) ?? (() => false);
+    const centerReachable = (fromPoint, centerPoint) =>
+        !inEyeSolid(centerPoint)
+        && !eyeEdges.some(seg => foundry.utils.lineSegmentIntersects(fromPoint, centerPoint, seg.a, seg.b));
+    const gfx = new PIXI.Graphics();
+    canvas.stage.addChild(gfx).eventMode = 'none';
+    /** @type {any} */ (globalThis)._laSkimGfx = gfx;
+    const step = canvas.grid.size / 2;
+    const maxDist = canvas.grid.size * 25;
+    const sceneRect = canvas.dimensions?.sceneRect ?? null;
+    const litCells = new Set();
+    const tickRows = [];
+    for (const walk of _skimWalks(origin))
+    {
+        let prev = walk.vertex;
+        let misses = 0;
+        for (let dist = 0; dist <= maxDist; dist += step)
+        {
+            const to = { x: walk.vertex.x + walk.dirX * dist, y: walk.vertex.y + walk.dirY * dist };
+            if (sceneRect && (to.x < sceneRect.x || to.x > sceneRect.x + sceneRect.width || to.y < sceneRect.y || to.y > sceneRect.y + sceneRect.height))
+                break;
+            if (dist > 0)
+            {
+                if (!caster(walk.vertex, to))
+                {
+                    misses += 1;
+                    if (misses >= 2)
+                    {
+                        gfx.lineStyle(2, 0xff3333, 0.9);
+                        gfx.moveTo(prev.x, prev.y);
+                        gfx.lineTo(to.x, to.y);
+                        gfx.beginFill(0xff3333, 1).drawCircle(to.x, to.y, 4).endFill();
+                        const reasonText = new PIXI.Text(/** @type {any} */ (caster).ctx?.lastReason ?? '?', {
+                            fontFamily: 'monospace', fontSize: 11, fill: 0xff5555, stroke: 0x000000, strokeThickness: 3,
+                        });
+                        reasonText.anchor.set(0.5, 1.2);
+                        reasonText.position.set(to.x, to.y);
+                        gfx.addChild(reasonText);
+                        break;
+                    }
+                    continue;
+                }
+                misses = 0;
+                gfx.lineStyle(2, 0x33ff66, 0.9);
+                gfx.moveTo(prev.x, prev.y);
+                gfx.lineTo(to.x, to.y);
+            }
+            for (const side of [
+                { x: to.x - walk.dirY * _SKIM_PERP, y: to.y + walk.dirX * _SKIM_PERP },
+                { x: to.x + walk.dirY * _SKIM_PERP, y: to.y - walk.dirX * _SKIM_PERP },
+            ])
+            {
+                const cell = pixelToOffset(side.x, side.y);
+                const cellCenter = getHexCenter(cell.col, cell.row);
+                const open = centerReachable(side, cellCenter);
+                gfx.lineStyle(1, open ? 0x33ff66 : 0xff3333, 0.9);
+                gfx.moveTo(to.x, to.y);
+                gfx.lineTo(side.x, side.y);
+                if (open)
+                    litCells.add(`${cell.col},${cell.row}`);
+                else
+                {
+                    tickRows.push({
+                        x: Math.round(to.x), y: Math.round(to.y),
+                        reason: 'crossed',
+                    });
+                }
+            }
+            prev = to;
+        }
+    }
+    gfx.lineStyle(0);
+    gfx.beginFill(0x33ff66, 0.15);
+    for (const keyStr of litCells)
+    {
+        const [col, row] = keyStr.split(',').map(Number);
+        gfx.drawPolygon(_cellCorners(col, row).flatMap(corner => [corner.x, corner.y]));
+    }
+    gfx.endFill();
+    console.log(`laSkimDraw: ${litCells.size} cells lit by skim lines`);
+    if (tickRows.length)
+        console.table(tickRows);
+    return litCells;
+};
+
+// Debug: laAreaDraw(range) measures how much of each refused hex is really lit, per eye, via Clipper.
+// Amber = a real band the pulse is missing, red = a sliver it is right to refuse. Grants nothing.
+globalThis.laAreaDraw = (range = 10) =>
+{
+    const existing = /** @type {any} */ (globalThis)._laAreaGfx;
+    if (existing && !existing.destroyed)
+    {
+        existing.destroy({ children: true });
+        /** @type {any} */ (globalThis)._laAreaGfx = null;
+        return 'area debug off';
+    }
+    const origin = canvas.tokens.controlled[0] ?? null;
+    if (!origin)
+    {
+        console.warn('laAreaDraw: select a token');
+        return null;
+    }
+    const visible = _visibilityTester(origin);
+    const built = /** @type {any} */ (visible)?.built ?? [];
+    if (!built.length)
+        return null;
+    const scale = CONST.CLIPPER_SCALING_FACTOR;
+    const clipPaths = built.map(entry => entry.sweep.toClipperPoints({ scalingFactor: scale }));
+    const gfx = new PIXI.Graphics();
+    canvas.stage.addChild(gfx).eventMode = 'none';
+    /** @type {any} */ (globalThis)._laAreaGfx = gfx;
+    const started = performance.now();
+    const rows = [];
+    // Foundry's own vision polygon for the same token, to tell "we sample coarsely" from "we see less than Foundry"
+    const foundryLos = /** @type {any} */ (origin).vision?.los ?? null;
+    let mismatches = 0;
+    // the real pulse verdict, so the overlay can never disagree with what the pulse actually draws
+    const inRange = getInRangeOffsets(origin, range, { includeSelf: true });
+    const pulseKeys = new Set(makePulseCellFilter(origin, { los: true })(inRange).map(cell =>
+    {
+        const offset = _cellColRow(cell);
+        return `${offset.col},${offset.row}`;
+    }));
+    for (const cell of inRange)
+    {
+        const { col, row } = _cellColRow(cell);
+        const granted = pulseKeys.has(`${col},${row}`);
+        const flat = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
+        const hexPolygon = new PIXI.Polygon(flat);
+        const hexArea = Math.abs(hexPolygon.signedArea());
+        if (!hexArea)
+            continue;
+        // per eye, never the union: one eye seeing a real band is the claim, seven slivers is the artifact
+        let best = 0;
+        let bestEye = -1;
+        for (let index = 0; index < clipPaths.length; index++)
+        {
+            const solution = hexPolygon.intersectClipper(clipPaths[index], { scalingFactor: scale });
+            const lit = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
+            if (lit > best)
+            {
+                best = lit;
+                bestEye = index;
+            }
+        }
+        const percent = Math.round((best / hexArea) * 1000) / 10;
+        const center = getHexCenter(col, row);
+        const foundrySees = foundryLos ? foundryLos.contains(center.x, center.y) : false;
+        const band = percent >= 20;
+        gfx.lineStyle(0).beginFill(granted ? 0x33ff66 : (band ? 0xffaa22 : 0xff3333), granted ? 0.13 : 0.22);
+        gfx.drawPolygon(flat);
+        gfx.endFill();
+        if (foundrySees && !granted)
+        {
+            mismatches++;
+            gfx.lineStyle(3, 0x33aaff, 0.9);
+            gfx.drawPolygon(flat);
+            gfx.lineStyle(0);
+        }
+        const label = new PIXI.Text(`${percent}%`, {
+            fontFamily: 'monospace', fontSize: 12,
+            fill: granted ? 0x99ffbb : (band ? 0xffcc55 : 0xff6666), stroke: 0x000000, strokeThickness: 3,
+        });
+        label.anchor.set(0.5);
+        label.position.copyFrom(center);
+        gfx.addChild(label);
+        rows.push({ col, row, percent, granted, foundrySees, eye: bestEye });
+    }
+    rows.sort((first, second) => second.percent - first.percent);
+    const grantedCount = rows.filter(entry => entry.granted).length;
+    console.log(`laAreaDraw: ${rows.length} cells, ${grantedCount} granted (green), ${mismatches} refused but inside Foundry's own vision (blue outline), ${Math.round(performance.now() - started)} ms`);
+    if (rows.length)
+        console.table(rows);
+    return rows;
+};
+
+// The Lancer token test wins both ways: a seen token keeps its cells, an unseen one voids them.
+function _tokenCellKeys(originToken)
+{
+    const seen = new Set();
+    const blocked = new Set();
+    for (const token of canvas.tokens?.placeables ?? [])
+    {
+        if (token === originToken || token.document?.id === originToken.document?.id)
+            continue;
+        let visible;
+        try
+        {
+            visible = hasLineOfSight(originToken, token);
+        }
+        catch
+        {
+            continue;
+        }
+        const target = visible ? seen : blocked;
+        for (const offset of getOccupiedOffsets(token))
+            target.add(`${offset.col},${offset.row}`);
+    }
+    return { seen, blocked };
+}
+
+// A shadow line can cut at most 3.5% off a hex without touching one of the 7 test points, so a refused
+// hex above this carries a real band of light, not a graze.
+const AREA_GRANT_FRACTION = 0.10;
+
+// Lit fraction of one hex, measured per eye. Never the union: one eye seeing a band is the claim,
+// several eyes each grazing a sliver is the artifact.
+function _hexLitFraction(col, row, clipPaths, scale)
+{
+    const flat = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
+    const hexPolygon = new PIXI.Polygon(flat);
+    const hexArea = Math.abs(hexPolygon.signedArea());
+    if (!hexArea)
+        return 0;
+    let best = 0;
+    for (const path of clipPaths)
+    {
+        const solution = hexPolygon.intersectClipper(path, { scalingFactor: scale });
+        const lit = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
+        if (lit > best)
+            best = lit;
+    }
+    return best / hexArea;
+}
+
+// One build pass shares its cell filters: the static highlight and the wave rings ask for the same
+// origin with the same options, and nothing between them moves a token, a wall or a setting.
+let _pulseFilterScope = null;
+
+/**
+ * Runs `build` with cell filter sharing on. The body must stay synchronous: _visibilityTester branches
+ * on origin.vision, which flips on control with no invalidation.
+ * @template T
+ * @param {() => T} build
+ * @returns {T}
+ */
+export function withPulseFilterScope(build)
+{
+    const previousScope = _pulseFilterScope;
+    _pulseFilterScope = previousScope ?? new Map();
+    try
+    {
+        return build();
+    }
+    finally
+    {
+        _pulseFilterScope = previousScope;
+    }
+}
+
+/**
+ * Cell gate for every range pulse. Off-map cells always drop. Line of sight only applies
+ * when the caller asked for it and the experimental setting is on.
+ * `freeRange` is the reach of the best weapon that needs no line of sight (Arcing / Seeking):
+ * cells inside it always pass, so a merged reach only tests the hexes beyond it.
+ * @param {any} originToken
+ * @param {{ los?: boolean, freeRange?: number }} [options]
+ * @returns {(cells: any[]) => any[]}
+ */
+export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } = {})
+{
+    const origin = _effectiveOrigin(originToken);
+    const scope = _pulseFilterScope;
+    let freeMap = null;
+    if (scope)
+    {
+        let losMap = scope.get(origin);
+        if (!losMap)
+        {
+            losMap = new Map();
+            scope.set(origin, losMap);
+        }
+        freeMap = losMap.get(los);
+        if (!freeMap)
+        {
+            freeMap = new Map();
+            losMap.set(los, freeMap);
+        }
+        const shared = freeMap.get(freeRange);
+        if (shared)
+            return shared;
+    }
+    const rect = canvas.dimensions?.sceneRect ?? null;
+    const useLos = los && _pulseLosEnabled() && !!origin?.document;
+    const freeCells = useLos && freeRange > 0
+        ? new Set(getInRangeOffsets(origin, freeRange, { includeSelf: true }))
+        : null;
+    // Blinded cuts line of sight to 1, so nothing beyond the adjacent ring is reachable at all.
+    const blindedCells = useLos && _isBlinded(origin)
+        ? new Set(getInRangeOffsets(origin, 1, { includeSelf: true }))
+        : null;
+    const visible = useLos && !blindedCells ? _visibilityTester(origin) : null;
+    const tokenCells = useLos && visible ? _tokenCellKeys(origin) : null;
+    const skimCells = useLos && visible ? _skimLineCells(origin) : null;
+    const clipPaths = visible?.built
+        ? visible.built.map(entry => entry.sweep.toClipperPoints({ scalingFactor: CONST.CLIPPER_SCALING_FACTOR }))
+        : null;
+    const areaCache = new Map();
+    // A band always connects to what it comes from, so a refused hex is only measured next to a lit one.
+    const areaGrants = (col, row, key, litKeys) =>
+    {
+        let nextToLit = false;
+        for (const neighborKey of neighborKeys(key))
+        {
+            if (litKeys.has(neighborKey))
+            {
+                nextToLit = true;
+                break;
+            }
+        }
+        if (!nextToLit)
+            return false;
+        // only the measurement is cached; the frontier check above changes as cells light up
+        let fraction = areaCache.get(key);
+        if (fraction === undefined)
+        {
+            fraction = _hexLitFraction(col, row, clipPaths, CONST.CLIPPER_SCALING_FACTOR);
+            areaCache.set(key, fraction);
+        }
+        return fraction >= AREA_GRANT_FRACTION;
+    };
+    // cells arrive as {col,row} objects from the ring builder and as "col,row" strings from getInRangeOffsets
+    // The glow pass re-filters the same disc, so a cell is judged once per filter. 1 = kept, 0 = dropped.
+    const verdicts = new Map();
+    const litKeys = new Set();
+    const cellFilter = (cells) =>
+    {
+        const kept = [];
+        const deferred = [];
+        for (const cell of cells)
+        {
+            const { col, row } = _cellColRow(cell);
+            if (!Number.isFinite(col) || !Number.isFinite(row))
+                continue;
+            if (!_cellOnMap(col, row, rect))
+                continue;
+            const key = `${col},${row}`;
+            const seen = verdicts.get(key);
+            if (seen !== undefined)
+            {
+                if (seen === 1)
+                    kept.push(cell);
+                else if (seen === 2)
+                    deferred.push({ cell, col, row, key });
+                continue;
+            }
+            if (freeCells?.has(key))
+            {
+                verdicts.set(key, 1);
+                kept.push(cell);
+                continue;
+            }
+            if (blindedCells)
+            {
+                const inRing = blindedCells.has(key);
+                verdicts.set(key, inRing ? 1 : 0);
+                if (inRing)
+                    kept.push(cell);
+                continue;
+            }
+            if (!visible)
+            {
+                verdicts.set(key, 1);
+                kept.push(cell);
+                continue;
+            }
+            if (tokenCells?.seen.has(key))
+            {
+                verdicts.set(key, 1);
+                kept.push(cell);
+                continue;
+            }
+            if (tokenCells?.blocked.has(key))
+            {
+                verdicts.set(key, 0);
+                continue;
+            }
+            if (_hexTestPoints(col, row).some(point => visible(point.x, point.y)))
+            {
+                verdicts.set(key, 1);
+                kept.push(cell);
+                litKeys.add(key);
+                continue;
+            }
+            if (skimCells?.has(key))
+            {
+                verdicts.set(key, 1);
+                kept.push(cell);
+                litKeys.add(key);
+                continue;
+            }
+            if (clipPaths)
+            {
+                verdicts.set(key, 2);
+                deferred.push({ cell, col, row, key });
+                continue;
+            }
+            verdicts.set(key, 0);
+        }
+        // a band spreads from what is already lit, so sweep the frontier until it stops growing
+        let grew = deferred.length > 0;
+        while (grew)
+        {
+            grew = false;
+            for (let index = deferred.length - 1; index >= 0; index--)
+            {
+                const pending = deferred[index];
+                if (!areaGrants(pending.col, pending.row, pending.key, litKeys))
+                    continue;
+                verdicts.set(pending.key, 1);
+                kept.push(pending.cell);
+                litKeys.add(pending.key);
+                deferred.splice(index, 1);
+                grew = true;
+            }
+        }
+        return kept;
+    };
+    freeMap?.set(freeRange, cellFilter);
+    return cellFilter;
+}
+
+/** Blend two packed hex colors, k = 0 keeps `from`, k = 1 gives `to`. */
+function _mixColor(from, to, k)
+{
+    const red = Math.round(((from >> 16) & 0xff) + ((((to >> 16) & 0xff)) - ((from >> 16) & 0xff)) * k);
+    const green = Math.round(((from >> 8) & 0xff) + ((((to >> 8) & 0xff)) - ((from >> 8) & 0xff)) * k);
+    const blue = Math.round((from & 0xff) + ((to & 0xff) - (from & 0xff)) * k);
+    return (red << 16) | (green << 8) | blue;
+}
+
+/** Speed multiplier shared by the continuous wave and the one shot bloom. */
+function _rangePulseSpeed()
+{
+    try
+    {
+        const speed = Number(game.settings.get('lancer-automations', 'rangePulseSpeed'));
+        return Number.isFinite(speed) && speed > 0 ? speed : 1;
     }
     catch
     {
@@ -843,36 +1573,100 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         lineAlphaMul = 6,
         originToken = null,
         glowColor = RANGE_GLOW.manual,
+        los = false,
+        freeRange = 0,
     } = opts;
     // keep the bands narrower than the range, else they cover every ring at once and it all lights together
     const leadWidth = Math.min(ringWidth, Math.max(1, range === 2 ? 2 : range - 1));
     const tailWidth = Math.min(trailWidth, Math.max(1, range === 2 ? 2 : range - 1));
     const basePeriod = msPerCell * (range + 1 + tailWidth);
     const rawPeriod = opts.periodMs ?? (range < slowRangeThreshold ? Math.max(slowFloorMs, basePeriod) : basePeriod);
-    const periodMs = rawPeriod / Math.max(0.01, RANGE_PULSE_STYLE.pulseSpeed);
+    const speedMul = _rangePulseSpeed();
+    const periodMs = rawPeriod / Math.max(0.01, RANGE_PULSE_STYLE.pulseSpeed * speedMul);
     const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
     const widthMul = _rangePulseWidthMul();
     const opacityMul = _rangePulseOpacity('rangePulseWaveOpacity');
+    const pulseStyle = _rangePulseSetting('rangePulseStyle', 'inset');
+    const pulseMotion = _rangePulseSetting('rangePulseMotion', 'bloom');
+    const bloomStagger = BLOOM_STEP_MS / speedMul;
+    const bloomRise = BLOOM_RISE_MS / speedMul;
+    const coolCoreColor = glowColor === null ? lineColor : _mixColor(lineColor, glowColor, HOT_CORE_COOL_MIX);
+    let bloomStart = performance.now();
+    let maxRingDist = 0;
+    // Additive copy of the token art: tint only multiplies, so brightening to white needs its own sprite.
+    const flashLayer = new PIXI.Container();
+    addGraphicsAboveTokens(flashLayer);
+    const flashes = [];
+    const clearFlashes = () =>
+    {
+        for (const flash of flashes)
+            destroyGraphics(flash.sprite);
+        flashes.length = 0;
+    };
+    const buildFlashes = (ringOfCell) =>
+    {
+        clearFlashes();
+        for (const token of canvas.tokens?.placeables ?? [])
+        {
+            const texture = token.mesh?.texture;
+            if (!texture || !token.visible)
+                continue;
+            let ringDist = null;
+            for (const offset of getOccupiedOffsets(token))
+            {
+                const cellRing = ringOfCell.get(`${offset.col},${offset.row}`);
+                if (cellRing !== undefined && (ringDist === null || cellRing < ringDist))
+                    ringDist = cellRing;
+            }
+            if (ringDist === null)
+                continue;
+            const sprite = new PIXI.Sprite(texture);
+            sprite.eventMode = 'none';
+            sprite.blendMode = PIXI.BLEND_MODES.ADD;
+            sprite.alpha = 0;
+            sprite.visible = false;
+            flashLayer.addChild(sprite);
+            flashes.push({ token, sprite, ringDist });
+        }
+    };
     const lineW = Math.max(1, lineWidth * gridScale * widthMul);
     const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
     const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
     // Rings prepainted once into child Graphics; per-frame work is alpha-only (no re-tessellation).
     const ringGraphics = new Map();
+    // Brackets are open paths, so they can't be filled.
+    const closedShape = pulseStyle !== 'bracket';
+    const paintShape = (ringG, ringCells) =>
+    {
+        if (pulseStyle === 'bracket')
+            _paintCellBrackets(ringG, ringCells, BRACKET_TICK_FRACTION);
+        else
+            _paintCellsInset(ringG, ringCells, INSET_TILE_SCALE);
+    };
     const paintRingGraphic = (ringCells) =>
     {
         const ringG = new PIXI.Graphics();
         // dark halo under the bright pulse line so the wave reads on light + dark maps
         ringG.lineStyle(haloW, 0x000000, 1);
-        _paintCells(ringG, ringCells);
+        paintShape(ringG, ringCells);
         if (glowColor !== null)
         {
             ringG.lineStyle(glowW, glowColor, 1);
-            _paintCells(ringG, ringCells);
+            paintShape(ringG, ringCells);
         }
-        ringG.lineStyle(lineW, lineColor, 1);
-        ringG.beginFill(color, 1 / Math.max(1, lineAlphaMul));
-        _paintCells(ringG, ringCells);
-        ringG.endFill();
+        ringG.lineStyle(lineW, coolCoreColor, 1);
+        if (closedShape)
+            ringG.beginFill(color, 1 / Math.max(1, lineAlphaMul));
+        paintShape(ringG, ringCells);
+        if (closedShape)
+            ringG.endFill();
+        // Second core, cross-faded in at the crest, so the line runs white hot without a repaint.
+        const hotG = new PIXI.Graphics();
+        hotG.lineStyle(lineW * HOT_CORE_WIDTH_MUL, lineColor, 1);
+        paintShape(hotG, ringCells);
+        hotG.alpha = 0;
+        ringG.addChild(hotG);
+        ringG.laHotCore = hotG;
         ringG.alpha = 0;
         ringG.visible = false;
         pulseGraphic.addChild(ringG);
@@ -881,39 +1675,76 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const buildRings = (rings) =>
     {
         for (const child of pulseGraphic.removeChildren())
-            child.destroy();
+            child.destroy({ children: true });
         ringGraphics.clear();
+        clearFlashes();
+        bloomStart = performance.now();
+        maxRingDist = 0;
         if (_OUTLINE_ONLY)
             return;
+        // rebuilt per pass so a moved origin re-tests against fresh vision
+        const cellFilter = makePulseCellFilter(originToken, { los, freeRange });
+        const ringOfCell = new Map();
+        const recordCells = (cells, ringDist) =>
+        {
+            for (const cell of cells)
+            {
+                const { col, row } = _cellColRow(cell);
+                ringOfCell.set(`${col},${row}`, ringDist);
+            }
+        };
         if (range <= 1)
         {
             const ringCells = [];
             for (const cells of rings.values())
                 ringCells.push(...cells);
-            ringGraphics.set(0, paintRingGraphic(ringCells));
+            const kept = cellFilter(ringCells);
+            if (kept.length)
+            {
+                ringGraphics.set(0, paintRingGraphic(kept));
+                recordCells(kept, 0);
+            }
+            buildFlashes(ringOfCell);
             return;
         }
         for (const [ringDist, ringCells] of rings)
-            ringGraphics.set(ringDist, paintRingGraphic(ringCells));
+        {
+            const kept = cellFilter(ringCells);
+            if (kept.length)
+            {
+                ringGraphics.set(ringDist, paintRingGraphic(kept));
+                recordCells(kept, ringDist);
+                if (ringDist > maxRingDist)
+                    maxRingDist = ringDist;
+            }
+        }
+        buildFlashes(ringOfCell);
     };
-    const setRingAlpha = (ringG, waveAlpha) =>
+    const setRingAlpha = (ringG, waveAlpha, heat = 0) =>
     {
         const alpha = Math.min(1, baseAlpha + baseLineAlpha + waveAlpha * lineAlphaMul) * opacityMul;
         ringG.alpha = alpha;
         ringG.visible = alpha > 0.001;
+        if (ringG.laHotCore && !ringG.laHotCore.destroyed)
+            ringG.laHotCore.alpha = Math.pow(Math.max(0, Math.min(1, heat)), HOT_CORE_CURVE);
     };
     buildRings(hexesByDist);
     let lastKey = _originPosKey(originToken);
-    return () =>
+    const motionGate = _makeMotionGate();
+    const tick = () =>
     {
         if (pulseGraphic.destroyed)
+        {
+            clearFlashes();
+            destroyGraphics(flashLayer);
             return;
+        }
         if (_OUTLINE_ONLY)
             return;
         if (lastKey !== null)
         {
             const key = _originPosKey(originToken);
-            if (key !== lastKey)
+            if (key !== lastKey && motionGate.ready())
             {
                 lastKey = key;
                 const effectiveOrigin = _effectiveOrigin(originToken);
@@ -921,44 +1752,61 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
                     getOccupiedOffsets(effectiveOrigin),
                     getInRangeOffsets(effectiveOrigin, range, { includeSelf: true })
                 ));
+                _scheduleSettledRebuild(originToken, () =>
+                {
+                    lastKey = '__resettle__';
+                    motionGate.forceNext();
+                });
             }
         }
         const now = performance.now();
-        const phase = (now % periodMs) / periodMs;
-        // range 1 has no distance to travel: breathe the whole adjacent ring as one heartbeat
-        if (range <= 1)
-        {
-            const ringG = ringGraphics.get(0);
-            if (ringG && !ringG.destroyed)
-            {
-                const beat = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
-                setRingAlpha(ringG, peakAlpha * beat);
-            }
-            return;
-        }
-        // continuous cosine ring wave; wavefronts repeat every wavelength so the loop is seamless
-        const wavelength = range + tailWidth;
-        const wavePos = phase * wavelength;
+        // rings rise from the origin outward and stay up; 'bloom' crests once, the repeat mode crests again after a rest
+        const elapsed = now - bloomStart;
+        const sweepMs = maxRingDist * bloomStagger + bloomRise;
+        const crestElapsed = pulseMotion === 'bloom'
+            ? elapsed
+            : elapsed % (sweepMs + WAVE_REST_MS / speedMul);
         for (const [ringDist, ringG] of ringGraphics)
         {
             if (ringG.destroyed)
                 continue;
-            const local = (((ringDist - wavePos) % wavelength) + wavelength) % wavelength;
-            let norm;
-            if (local <= leadWidth)
-                norm = local / leadWidth;              // ahead of a front, pre-fading in
-            else if (local >= wavelength - tailWidth)
-                norm = (wavelength - local) / tailWidth; // behind the front, in the tail
-            else
+            const ringStart = ringDist * bloomStagger;
+            const risen = Math.max(0, Math.min(1, (elapsed - ringStart) / bloomRise));
+            const eased = risen * risen * (3 - 2 * risen);
+            const crestPhase = Math.max(0, Math.min(1, (crestElapsed - ringStart) / bloomRise));
+            const crest = Math.sin(crestPhase * Math.PI) * BLOOM_CREST;
+            setRingAlpha(ringG, peakAlpha * (eased * BLOOM_REST_LEVEL + crest), crest / BLOOM_CREST);
+        }
+        for (const { token, sprite, ringDist } of flashes)
+        {
+            if (sprite.destroyed)
+                continue;
+            const mesh = token.mesh;
+            if (!mesh || token.destroyed || !token.visible)
             {
-                ringG.alpha = 0;
-                ringG.visible = false;
+                sprite.visible = false;
                 continue;
             }
-            const falloff = 0.5 * (1 + Math.cos(norm * Math.PI));
-            setRingAlpha(ringG, peakAlpha * falloff);
+            const crestPhase = Math.max(0, Math.min(1, (crestElapsed - ringDist * bloomStagger) / bloomRise));
+            const strength = Math.sin(crestPhase * Math.PI) * FLASH_MAX_ALPHA;
+            sprite.alpha = strength;
+            sprite.visible = strength > 0.001;
+            if (!sprite.visible)
+                continue;
+            // copy the mesh transform verbatim: same texture, so anchor and signed scale line it up exactly
+            sprite.position.set(mesh.position.x, mesh.position.y);
+            sprite.anchor.set(mesh.anchor?.x ?? 0.5, mesh.anchor?.y ?? 0.5);
+            sprite.rotation = mesh.rotation ?? 0;
+            sprite.scale.set(mesh.scale?.x ?? 1, mesh.scale?.y ?? 1);
         }
     };
+    // the ticker is removed before the graphic is destroyed, so the flashes need their own teardown
+    tick.dispose = () =>
+    {
+        clearFlashes();
+        destroyGraphics(flashLayer);
+    };
+    return tick;
 }
 
 // The drag-preview clone while the origin is being dragged, else the origin itself.
@@ -975,11 +1823,47 @@ function _effectiveOrigin(origin)
     return origin;
 }
 
-// Position key (drag preview if dragging); null for a point origin.
+// End-of-move caches settle after the last animation frame; force one rebuild past that point.
+function _scheduleSettledRebuild(origin, forceRebuild)
+{
+    const doc = _effectiveOrigin(origin)?.document;
+    if (!doc)
+        return;
+    if (!doc.object?.movementAnimationPromise && doc.movement?.state !== 'pending')
+        return;
+    awaitMovementSettled(doc).then(forceRebuild);
+}
+
+const MOTION_REBUILD_FRAMES = 15;
+
+// A rebuild mid-drag costs a full LOS pass, so gate them; the settled rebuild still lands the final position.
+function _makeMotionGate()
+{
+    let frames = MOTION_REBUILD_FRAMES;
+    return {
+        ready()
+        {
+            frames++;
+            if (frames < MOTION_REBUILD_FRAMES)
+                return false;
+            frames = 0;
+            return true;
+        },
+        forceNext()
+        {
+            frames = MOTION_REBUILD_FRAMES;
+        },
+    };
+}
+
+// Center position key (drag preview if dragging); null for a point origin. Any movement rebuilds.
 function _originPosKey(origin)
 {
     const effectiveOrigin = _effectiveOrigin(origin);
-    return effectiveOrigin?.document ? `${effectiveOrigin.document.x},${effectiveOrigin.document.y}` : null;
+    if (!effectiveOrigin?.document)
+        return null;
+    const center = effectiveOrigin.center ?? { x: effectiveOrigin.document.x, y: effectiveOrigin.document.y };
+    return `${Math.round(center.x)},${Math.round(center.y)}`;
 }
 
 // Dark halo + bright line + fill over a set/array of "col,row" cells. Line width calibrated on a 100px grid.
@@ -1057,7 +1941,7 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
         return;
     const gridScale = canvas.grid.size / 100;
     const widthMul = _rangePulseWidthMul();
-    lineAlpha *= _rangePulseOpacity('rangePulseLineOpacity');
+    lineAlpha *= _rangePulseOpacity('rangePulseWaveOpacity');
     const lineW = Math.max(1, lineWidth * gridScale * widthMul);
     const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
     const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
@@ -1081,13 +1965,14 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
 export function paintRangeHighlight(highlight, casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false, opts = {})
 {
     highlight.clear();
-    const inRange = getInRangeOffsets(casterToken, range, { includeSelf });
+    const cellFilter = makePulseCellFilter(casterToken, { los: opts.los === true, freeRange: opts.freeRange ?? 0 });
+    const inRange = cellFilter(getInRangeOffsets(casterToken, range, { includeSelf }));
     if (!_OUTLINE_ONLY)
         paintCellRegion(highlight, inRange, { color, alpha, lineAlpha: opts.lineAlpha, lineColor: opts.lineColor, lineWidth: opts.lineWidth });
     if (opts.glowColor != null)
     {
         // boundary from the includeSelf set so the origin never leaves an inner hole in the outline
-        const boundaryCells = getInRangeOffsets(casterToken, range, { includeSelf: true });
+        const boundaryCells = cellFilter(getInRangeOffsets(casterToken, range, { includeSelf: true }));
         paintPerimeterGlow(highlight, boundaryCells, { glowColor: opts.glowColor, lineColor: opts.lineColor ?? 0xFFFFFF, ...(opts.perimeterAlpha !== undefined ? { lineAlpha: opts.perimeterAlpha } : {}) });
     }
 }
@@ -1141,6 +2026,7 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
     let lastKey = _originPosKey(casterToken);
     if (lastKey !== null)
     {
+        const motionGate = _makeMotionGate();
         const followTick = () =>
         {
             if (!highlight || highlight.destroyed)
@@ -1149,10 +2035,15 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
                 return;
             }
             const key = _originPosKey(casterToken);
-            if (key !== lastKey)
+            if (key !== lastKey && motionGate.ready())
             {
                 lastKey = key;
                 paintRangeHighlight(highlight, _effectiveOrigin(casterToken), range, color, alpha, includeSelf, opts);
+                _scheduleSettledRebuild(casterToken, () =>
+                {
+                    lastKey = '__resettle__';
+                    motionGate.forceNext();
+                });
             }
         };
         canvas.app.ticker.add(followTick);
@@ -1220,19 +2111,23 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
 }
 
 // Gray range highlight with an animated wave pulse from one origin. Returns a destroy() fn.
-export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha, fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual } = {})
+export function createPulsingRangeHighlight(casterToken, range, { includeSelf = false, staticFillAlpha = RANGE_PULSE_STYLE.staticFillAlpha, staticLineAlpha = RANGE_PULSE_STYLE.staticLineAlpha, fadeInMs = 180, fadeOutMs = 180, glowColor = RANGE_GLOW.manual, los = false, freeRange = 0 } = {})
 {
-    const rangeHighlight = drawRangeHighlight(casterToken, range, RANGE_PULSE_STYLE.baseColor, staticFillAlpha, includeSelf, { lineAlpha: staticLineAlpha, lineColor: RANGE_PULSE_STYLE.lineColor, glowColor });
-    const pulseGraphic = new PIXI.Graphics();
-    addGraphicsBelowTokens(pulseGraphic);
-    const hexesByDist = _groupCellsByDistance(
-        getOccupiedOffsets(casterToken),
-        getInRangeOffsets(casterToken, range, { includeSelf: true })
-    );
-    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken, glowColor });
-    canvas.app.ticker.add(wavePulse);
-    return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs },
-        () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic));
+    // the static highlight and the wave rings filter the same reach, so they build the filter once
+    return withPulseFilterScope(() =>
+    {
+        const rangeHighlight = drawRangeHighlight(casterToken, range, RANGE_PULSE_STYLE.baseColor, staticFillAlpha, includeSelf, { lineAlpha: _staticGridAlpha(staticLineAlpha), lineColor: RANGE_PULSE_STYLE.lineColor, glowColor, los, freeRange });
+        const pulseGraphic = new PIXI.Graphics();
+        addGraphicsBelowTokens(pulseGraphic);
+        const hexesByDist = _groupCellsByDistance(
+            getOccupiedOffsets(casterToken),
+            getInRangeOffsets(casterToken, range, { includeSelf: true })
+        );
+        const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken, glowColor, los, freeRange });
+        canvas.app.ticker.add(wavePulse);
+        return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs },
+            () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic));
+    });
 }
 
 // Union of all-entry in-range cells, wave from nearest origin; returns destroy().
@@ -1257,6 +2152,7 @@ export function createMergedRangeHighlight(entries, {
         {
             const origin = entry.point ?? _effectiveOrigin(entry.token);
             const range = entry.range;
+            const cellFilter = makePulseCellFilter(entry.token ?? null, { los: entry.los === true, freeRange: entry.freeRange ?? 0 });
             for (const offset of originOffsetsFor(entry))
             {
                 const key = `${offset.col},${offset.row}`;
@@ -1266,9 +2162,9 @@ export function createMergedRangeHighlight(entries, {
                     unionOrigins.push(offset);
                 }
             }
-            for (const key of getInRangeOffsets(origin, range, { includeSelf }))
+            for (const key of cellFilter(getInRangeOffsets(origin, range, { includeSelf })))
                 unionStatic.add(key);
-            for (const key of getInRangeOffsets(origin, range, { includeSelf: true }))
+            for (const key of cellFilter(getInRangeOffsets(origin, range, { includeSelf: true })))
                 unionWave.add(key);
         }
         return { unionOrigins, unionStatic, unionWave };
@@ -1286,7 +2182,7 @@ export function createMergedRangeHighlight(entries, {
         const { unionOrigins, unionStatic, unionWave } = buildUnions();
         rangeHighlight.clear();
         if (!_OUTLINE_ONLY)
-            paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: staticLineAlpha, lineColor: RANGE_PULSE_STYLE.lineColor });
+            paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: _staticGridAlpha(staticLineAlpha), lineColor: RANGE_PULSE_STYLE.lineColor });
         if (perimeter)
         {
             paintPerimeterGlow(rangeHighlight, unionWave, {
@@ -1299,7 +2195,10 @@ export function createMergedRangeHighlight(entries, {
             return;
         const hexesByDist = _groupCellsByDistance(unionOrigins, unionWave);
         if (wavePulse)
+        {
             canvas.app.ticker.remove(wavePulse);
+            wavePulse.dispose?.();
+        }
         wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, waveRange, { originToken: null, glowColor });
         canvas.app.ticker.add(wavePulse);
     };
@@ -1307,6 +2206,7 @@ export function createMergedRangeHighlight(entries, {
 
     const posKey = () => entries.map(entry => entry.point ? `pt:${entry.point.x},${entry.point.y}` : (_originPosKey(entry.token) ?? 'pt')).join('|');
     let lastKey = posKey();
+    const motionGate = _makeMotionGate();
     const followTick = () =>
     {
         if (rangeHighlight.destroyed)
@@ -1315,10 +2215,21 @@ export function createMergedRangeHighlight(entries, {
             return;
         }
         const key = posKey();
-        if (key !== lastKey)
+        if (key !== lastKey && motionGate.ready())
         {
             lastKey = key;
             rebuild();
+            for (const entry of entries)
+            {
+                if (entry.token)
+                {
+                    _scheduleSettledRebuild(entry.token, () =>
+                    {
+                        lastKey = '__resettle__';
+                        motionGate.forceNext();
+                    });
+                }
+            }
         }
     };
     canvas.app.ticker.add(followTick);
@@ -1589,7 +2500,7 @@ export function cancelRulerDrag(token, _moveInfo = null)
  * @param {Item} [item=null] - Source item, if any.
  * @param {Object} [options]
  * @param {boolean} [options.asVoluntary=false] - If true, skip the `onInvoluntaryMove` trigger and the
- *   `forceUnintentional` move flag (treat the displacement as a voluntary move).
+ *   `action: 'forced'` move flag (treat the displacement as a voluntary move).
  * @param {boolean} [options.setElevation=false] - If true (and Terrain Height Tools is active), snap each
  *   token to the max solid-terrain height under its destination footprint. Off by default.
  * @returns {Promise<void>}

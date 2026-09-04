@@ -359,8 +359,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
         isInvoluntary: boolean,
         isTeleport: boolean,
         pathHexes: Array<Object>,
-        isBoost: boolean,
-        boostSet: Array<number>,
+        isFreeMovement: boolean,
+        movementCost: number,
         isModified: boolean,
         extraData: Record<string, any>
     }
@@ -758,7 +758,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 <details id="onActivation"><summary><b><code>onActivation</code></b> - item/action fired</summary>
 
-`extraData` carries anything injected via `startRelatedFlowToReactor` / flow-state injection.
+`extraData` carries anything injected via `startRelatedFlowToReactor` / flow-state injection. Profile switches fire it with the profile name; mod activations carry `extraData.hostWeapon`.
 
 ```js
 {
@@ -829,8 +829,7 @@ Charge-consumption config attached to an effect. Set it via `extraOptions.consum
 | <kbd>groupId</kbd> | `string` | auto | Shared counter id across calls |
 | <kbd>evaluate</kbd> | `(triggerType: TriggerType, data: TriggerData, token: Token, effect: ActiveEffect) => boolean` | `null` | Extra gate |
 | <kbd>itemLid</kbd> | `string` | - | Only consume for this item source |
-| <kbd>actionName</kbd> | `string` | - | Only consume for this action name |
-| <kbd>isBoost</kbd> | `boolean` | `false` | Consume only on boost movement |
+| <kbd>actionName</kbd> | `string` | - | Only consume for this action name, e.g. `"Boost"` |
 | <kbd>minDistance</kbd> | `number` | - | Distance filter |
 | <kbd>checkType</kbd> | `string` | - | Stat filter, e.g. `"Agility"` |
 | <kbd>checkAbove</kbd> | `number` | - | Only consume if the roll is above this |

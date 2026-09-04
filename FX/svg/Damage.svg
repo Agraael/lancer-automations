@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="600mm"
+   height="60.528mm"
+   viewBox="0 0 599.99999 60.528"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   inkscape:export-filename="Stabilize.svg"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   sodipodi:docname="Damage.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.32829115"
+     inkscape:cx="1864.1989"
+     inkscape:cy="50.260264"
+     inkscape:window-width="1500"
+     inkscape:window-height="895"
+     inkscape:window-x="2088"
+     inkscape:window-y="150"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1-1" /><defs
+     id="defs1"><rect
+       x="398"
+       y="10"
+       width="1194"
+       height="398"
+       id="rect3" /><style
+       id="style1">
+      .cls-1 {
+        
+      }
+    </style></defs><g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(42.994079,-122.0623)"><g
+       inkscape:label="Layer 1"
+       id="layer1-1"
+       transform="translate(47.778387,0.58467694)"
+       style="fill:#ededed;fill-opacity:1"><text
+         xml:space="preserve"
+         transform="matrix(1.0460111,0,0,1.0460111,-426.28922,123.66129)"
+         id="text2"
+         style="font-weight:bold;font-size:74.1972px;line-height:0.6;font-family:Arial;-inkscape-font-specification:'Arial, Bold';font-variant-caps:small-caps;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect3);display:inline;fill:#ff5555;fill-opacity:1;stroke:#ffffff;stroke-width:0.0377953;stroke-miterlimit:3.3"><tspan
+           x="398"
+           y="52.719365"
+           id="tspan1">Damage          </tspan></text></g><path
+       d="M -18.282105,150.88627 H -33.8566 v 5.19143 h 15.574495 v -5.19143 m 5.632817,-8.41023 -5.503023,-5.50302 -3.659978,3.65998 5.503018,5.50302 3.659983,-3.65998 m 9.9416783,-17.54733 h -5.191432 v 15.5745 h 5.191432 v -15.5745 m 13.9132477,15.70429 -3.6599827,-3.65998 -5.503018,5.50302 3.659982,3.65998 5.5030187,-5.50302 m -3.5301847,10.25327 v 5.19143 H 23.249948 v -5.19143 H 7.6754533 m -12.978779,-5.19153 a 7.7872475,7.7872475 0 0 0 -7.7872473,7.78725 7.7872475,7.7872475 0 0 0 7.7872473,7.78724 7.7872475,7.7872475 0 0 0 7.787248,-7.78724 7.7872475,7.7872475 0 0 0 -7.787248,-7.78725 m 7.345963,18.79319 5.503018,5.50302 3.6599827,-3.65998 -5.5030187,-5.50302 -3.659982,3.65998 m -23.8549263,1.84304 3.659978,3.65998 5.503023,-5.50302 -3.659983,-3.65998 -5.503018,5.50302 m 13.9132473,15.70429 h 5.191432 v -15.5745 h -5.191432 z"
+       id="path1"
+       style="fill:#ff5555;stroke-width:2.59574" /></g></svg>

@@ -591,6 +591,7 @@ export function getDefaultGeneralReactionRegistry()
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
                             .file("jb2a.shield.01.intro.blue")
+                            .xray(true)
                             .scaleToObject(2)
                             .filter("Glow", { color: 0x4169E1 })
                             .playbackRate(1.3)
@@ -598,6 +599,7 @@ export function getDefaultGeneralReactionRegistry()
                             .waitUntilFinished(-400)
                             .effect()
                             .file("modules/lancer-automations/FX/svg/Brace.svg")
+                            .xray(true)
                             .attachTo(token, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)
@@ -777,6 +779,7 @@ export function getDefaultGeneralReactionRegistry()
                 const sensorRange = resolveGrantedActionRange(reactorToken?.actor, 'Lock On', sensors) ?? sensors;
                 const targets = await api.chooseToken(reactorToken, {
                     range: sensorRange,
+                    glow: 'sensor',
                     count: 1,
                     title: 'LOCK ON - Select Target',
                     description: sensorRange !== sensors ? `Choose a target within Range ${sensorRange}` : `Choose a target within Sensors (${sensorRange})`,
@@ -809,6 +812,7 @@ export function getDefaultGeneralReactionRegistry()
                         .volume(weaponFx.api.getEffectVolume(0.8))
                         .effect()
                         .file("modules/lancer-automations/FX/svg/Lockon.svg")
+                        .xray(true)
                         .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                         .scaleIn(0.01, 500)
                         .scale(0.09)
@@ -820,6 +824,7 @@ export function getDefaultGeneralReactionRegistry()
                         .fadeOut(800)
                         .effect()
                         .file("jb2a.zoning.inward.square.once.redyellow.01.01")
+                        .xray(true)
                         .atLocation(target)
                         .scaleToObject(1.6);
                     sequence.play();
@@ -844,7 +849,8 @@ export function getDefaultGeneralReactionRegistry()
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: reactorToken.actor.system.sensor_range,
-                        filter: (t) => !api.findEffectOnToken(t, "bolster")
+                        glow: 'sensor',
+                        filter: (target) => !api.findEffectOnToken(target, "bolster")
                     });
                     if (!chosen || chosen.length === 0)
                         return;
@@ -877,6 +883,7 @@ export function getDefaultGeneralReactionRegistry()
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
                             .file("modules/lancer-automations/FX/svg/Bolster.svg")
+                            .xray(true)
                             .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)
@@ -888,6 +895,7 @@ export function getDefaultGeneralReactionRegistry()
                             .fadeOut(800)
                             .effect()
                             .file("jb2a.zoning.inward.circle.once.bluegreen.01.01")
+                            .xray(true)
                             .scaleToObject(1.5)
                             .filter("Glow", { color: 0x36c11a })
                             .playbackRate(1.3)
@@ -978,6 +986,7 @@ export function getDefaultGeneralReactionRegistry()
                             .volume(weaponFx.api.getEffectVolume(0.7))
                             .effect()
                             .file("modules/lancer-automations/FX/svg/Aid.svg")
+                            .xray(true)
                             .attachTo(target, { align: "bottom-left", edge: "inner", offset: { x: -0.07, y: -0.07 }, gridUnits: true })
                             .scaleIn(0.01, 500)
                             .scale(0.09)
@@ -989,6 +998,7 @@ export function getDefaultGeneralReactionRegistry()
                             .fadeOut(800)
                             .effect()
                             .file("jb2a.healing_generic.400px.blue")
+                            .xray(true)
                             .scaleToObject(1.5)
                             .playbackRate(1.3)
                             .atLocation(target)
@@ -1073,7 +1083,7 @@ export function getDefaultGeneralReactionRegistry()
                     if (!chosen || chosen.length === 0)
                         return;
                     chosen[0].setTarget(true, { releaseOthers: true, groupSelection: false });
-                    await actionFX.queueActionFx(() => actionFX.playRamFX(reactorToken, chosen[0]), reactorToken);
+                    await actionFX.queueActionFx(() => actionFX.playRamFX(reactorToken, chosen[0]), reactorToken, 'ram');
                     await api.executeBasicAttack(reactorToken.actor, {
                         title: "Ram",
                         attack_type: "Melee",
@@ -1166,7 +1176,7 @@ export function getDefaultGeneralReactionRegistry()
                                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
                                         return;
 
-                                    await actionFX.queueActionFx(() => actionFX.playFallFX(reactorToken), reactorToken);
+                                    await actionFX.queueActionFx(() => actionFX.playFallFX(reactorToken), reactorToken, 'fall');
                                 }
                             },
                             { text: "No", icon: "fas fa-times" }
@@ -1187,7 +1197,7 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     reactorToken.setTarget(false, { releaseOthers: true, groupSelection: false });
 
-                    await actionFX.queueActionFx(() => actionFX.playFallImpactFX(reactorToken), reactorToken);
+                    await actionFX.queueActionFx(() => actionFX.playFallImpactFX(reactorToken), reactorToken, 'fallImpact');
                 }
             }]
         },
@@ -1407,7 +1417,7 @@ export function getDefaultGeneralReactionRegistry()
                     effectNames: ["Disengage"],
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
-                await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken), reactorToken, 'disengage');
             }
         },
         "Reactor Meltdown": {
@@ -1528,7 +1538,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!placed || placed.length === 0)
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]), reactorToken, 'eject');
 
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
@@ -1562,7 +1572,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!weaponFx?.active || typeof Sequencer === 'undefined')
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playShutDownFX(reactorToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playShutDownFX(reactorToken), reactorToken, 'shutDown');
             }
         },
         "Boot Up": {
@@ -1582,7 +1592,7 @@ export function getDefaultGeneralReactionRegistry()
                     tokens: [reactorToken],
                     effectNames: ["shutdown", "stunned"]
                 });
-                await actionFX.queueActionFx(() => actionFX.playBootUpFX(reactorToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playBootUpFX(reactorToken), reactorToken, 'bootUp');
             }
         },
         "Standing Up": {
@@ -1620,7 +1630,7 @@ export function getDefaultGeneralReactionRegistry()
                     duration: { label: "indefinite" }
                 });
 
-                await actionFX.queueActionFx(() => actionFX.playHideFX(reactorToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playHideFX(reactorToken), reactorToken, 'hide');
             }
         },
         "Mine Stealth": {
@@ -1902,7 +1912,7 @@ export function getDefaultGeneralReactionRegistry()
                     description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
                 });
                 if (placed && placed.length > 0)
-                    await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken), reactorToken);
+                    await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken), reactorToken, 'dismount');
             }
         },
         "Scan": {
@@ -1943,7 +1953,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!targets?.length)
                     return;
                 const targetToken = targets[0];
-                await actionFX.queueActionFx(() => actionFX.playSearchFX(reactorToken, targetToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playSearchFX(reactorToken, targetToken), reactorToken, 'search');
                 const checkTitle = isPilot ? "SEARCH - Skill Check" : "SEARCH - SYSTEMS vs AGILITY";
                 const result = await api.openHaseContestCard({
                     tokenA: reactorToken,
@@ -1960,10 +1970,10 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
                     ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
-                    await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken), targetToken);
+                    await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken), targetToken, 'search');
                 }
                 else
-                    await actionFX.queueActionFx(() => actionFX.playSearchFailFX(targetToken), targetToken);
+                    await actionFX.queueActionFx(() => actionFX.playSearchFailFX(targetToken), targetToken, 'search');
             }
         }
 
@@ -2015,7 +2025,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!mechToken)
                     return;
 
-                await actionFX.queueActionFx(() => actionFX.playMountFX(reactorToken, mechToken), reactorToken);
+                await actionFX.queueActionFx(() => actionFX.playMountFX(reactorToken, mechToken), reactorToken, 'mount');
 
                 const isOwnMech = mechToken.actor?.system?.pilot?.value?.id === pilotActorId;
                 if (!isOwnMech)
@@ -2079,7 +2089,7 @@ export function getDefaultGeneralReactionRegistry()
             const mechToken = targets?.[0];
             if (!mechToken)
                 return;
-            await actionFX.queueActionFx(() => actionFX.playJockeyFX(reactorToken, mechToken), reactorToken);
+            await actionFX.queueActionFx(() => actionFX.playJockeyFX(reactorToken, mechToken), reactorToken, 'jockey');
 
             const result = await api.openHaseContestCard({
                 tokenA: reactorToken,
@@ -2181,6 +2191,8 @@ export function getDefaultGeneralReactionRegistry()
         }
     };
 
+    builtInDefaults["Fragment Signal (NPC)"] = builtInDefaults["Fragment Signal"];
+
     builtInDefaults["Overcharge (NPC)"] = {
         category: "General",
         triggers: ["onActivation"],
@@ -2202,7 +2214,7 @@ export function getDefaultGeneralReactionRegistry()
             const currentHeat = reactorToken.actor.system?.heat?.value ?? 0;
             await reactorToken.actor.update({ "system.heat.value": currentHeat + heatGained });
 
-            await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken), reactorToken);
+            await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken), reactorToken, 'overchargeNpc');
         }
     };
 

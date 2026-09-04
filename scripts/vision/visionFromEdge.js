@@ -1,4 +1,4 @@
-/* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI */
+                                                                                                                                                                                        /* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI */
 
 /*
    Lancer-style vision: see from the token's perimeter, not its center.
@@ -58,6 +58,28 @@ function _getSampleCount(tokenDoc)
 export function getEdgeSamplePoints(token)
 {
     return _getSamplePoints(token);
+}
+
+// Convex token-shape corner samples, fixed 1px inside the outline, independent of the vision sample settings.
+export function getShapeSamplePoints(token)
+{
+    const center = token.center;
+    const hull = _convexShapeVertices(token, center, -1);
+    if (!hull?.length)
+        return null;
+    return hull.map(point => _nudgePastWall(point, center, token));
+}
+
+function _withMidpoints(points)
+{
+    const doubled = [];
+    for (let idx = 0; idx < points.length; idx++)
+    {
+        const current = points[idx];
+        const next = points[(idx + 1) % points.length];
+        doubled.push(current, { x: (current.x + next.x) / 2, y: (current.y + next.y) / 2 });
+    }
+    return doubled;
 }
 
 // Tangents touch a convex shape at a vertex, so reflex corners never shape the shadow.
@@ -137,11 +159,15 @@ function _getSamplePoints(token)
     const bottom = boxBottom + offset;
     const center = { x: centerX, y: centerY };
 
-    if (game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE) === 'silhouette')
+    const mode = game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE);
+    if (mode === 'silhouette' || mode === 'silhouette2')
     {
         const hull = _convexShapeVertices(token, center, offset - 2);
         if (hull?.length)
-            return hull.map(point => _nudgePastWall(point, center, token));
+        {
+            const points = mode === 'silhouette2' ? _withMidpoints(hull) : hull;
+            return points.map(point => _nudgePastWall(point, center, token));
+        }
     }
 
     const samples = [
@@ -266,6 +292,28 @@ function _nudgePastWall(sample, center, token)
 function _edgeSourceId(token, idx)
 {
     return `${token.sourceId}.${SOURCE_ID_PART}.${idx}`;
+}
+
+/**
+ * The token's own vision source plus the per-edge sources this module spawns for it.
+ * Together they cover the Lancer rule of seeing from any point of your own space.
+ * @param {any} token
+ * @returns {any[]} live vision sources, empty when the token has no vision
+ */
+export function getTokenVisionSources(token)
+{
+    const sources = [];
+    if (token?.vision && !token.vision.disabled)
+        sources.push(token.vision);
+    if (!canvas?.effects?.visionSources || !token?.sourceId)
+        return sources;
+    const prefix = `${token.sourceId}.${SOURCE_ID_PART}.`;
+    for (const [id, source] of canvas.effects.visionSources)
+    {
+        if (id.startsWith(prefix) && source && !source.disabled)
+            sources.push(source);
+    }
+    return sources;
 }
 
 function _destroyEdgeSources(token)
@@ -630,10 +678,11 @@ export function initVisionFromEdge()
             corners4: '4 (corners only)',
             perimeter8: '8 (corners + edge midpoints)',
             perimeter16: '16 (dense perimeter)',
-            silhouette: 'Token shape corners',
-            adaptive: 'Adaptive (recommended)'
+            silhouette: 'Token shape corners (recommended)',
+            silhouette2: 'Token shape corners x2',
+            adaptive: 'Adaptive'
         },
-        default: 'adaptive',
+        default: 'silhouette',
         onChange: () => _rebuildAll()
     });
 

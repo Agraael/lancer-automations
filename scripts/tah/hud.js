@@ -1,7 +1,7 @@
 /* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog, FilePicker */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup, stripDeployOwner } from '../interactive/detail-renderers.js';
-import { executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
+import { weaponSkirmishable, executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeProfileSwitch, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { getPerSceneLimitFromSub, getPerRoundLimitFromSub, getPerTurnLimitFromSub, rankSubKey, getSubUsed } from '../combat/per-frequency-tags.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
@@ -13,7 +13,7 @@ import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, getActionLockInfo, getStatusLockedFields, getFieldLockingStatuses, lockEntryLabel } from '../combat/action-limits.js';
-import { laHudRenderIcon, laHudSizeMark, weaponSizeLevel, weaponTypeIcon, HUD_ICON_SIZE, HUD_WEAPON_ICON_SIZE, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
+import { laHudRenderIcon, laHudSizeMark, laHudStripeStyle, weaponSizeLevel, weaponTypeIcon, HUD_ICON_SIZE, HUD_WEAPON_ICON_SIZE, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
 import { isAutoConsumeDisabled, renderConsumeStatusHtml } from '../interactive/extra-config.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
@@ -362,6 +362,22 @@ export class LancerHUD
         return true;
     }
 
+    getFavorites()
+    {
+        return this._el ? this._collectFavorites() : null;
+    }
+
+    openFavoritesColumn()
+    {
+        if (!this._el || !this._openFavorites)
+            return false;
+        this._openFavorites();
+        // Opened from outside the HUD: collapse on its own unless the mouse comes in.
+        this._collapseBonusMs = 2000;
+        this._scheduleCollapse?.();
+        return true;
+    }
+
     toggleStatuses()
     {
         if (!this._el)
@@ -418,6 +434,7 @@ export class LancerHUD
         this._favResizeObserver?.disconnect();
         this._favResizeObserver = null;
         this._toggleFavorites = null;
+        this._openFavorites = null;
         if (this._favDocHandlers)
         {
             document.removeEventListener('mousemove', this._favDocHandlers.move);
@@ -927,13 +944,11 @@ export class LancerHUD
         const _scheduleCollapse = () =>
         {
             clearTimeout(_leaveTimer);
-            const delay = hoverCloseDelay + this._collapseBonusMs;
+            const collapseDelay = hoverCloseDelay + this._collapseBonusMs;
             this._collapseBonusMs = 0;
             _leaveTimer = setTimeout(() =>
             {
                 if (this._searchActive || this._pickerSuppress)
-                    return;
-                if (c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites')
                     return;
                 closeCol(c2);
                 closeCol(c3);
@@ -947,7 +962,7 @@ export class LancerHUD
                 {
                     $(this).remove();
                 });
-            }, hoverCloseDelay);
+            }, collapseDelay);
         };
         const _cancelCollapse = () => clearTimeout(_leaveTimer);
         this._scheduleCollapse = _scheduleCollapse;
@@ -1137,9 +1152,25 @@ export class LancerHUD
             this._c2Category = null; this._c2AnchorRow = null;
             this._c3SourceItem = null; this._c4SourceItem = null;
             closeCol(c3, 80); closeCol(c4, 80);
-            openSearchResults(c2, this._collectFavorites(), { el: this._el, makeRow: (...a) => this._makeRow(...a), token: this._token, brighten });
-            c2.find('.la-hud-col-label').text('Favorites');
+            const listFavorites = () =>
+            {
+                openSearchResults(c2, this._collectFavorites(), {
+                    el: this._el,
+                    makeRow: (...a) => this._makeRow(...a),
+                    token: this._token,
+                    brighten,
+                    onCtrlRightClick: async (item) =>
+                    {
+                        await this._toggleFavorite(item);
+                        playUiSound('toggle');
+                        listFavorites();
+                    }
+                });
+                c2.find('.la-hud-col-label').text('Favorites');
+            };
+            listFavorites();
         };
+        this._openFavorites = openFavorites;
         const favIconInner = favIcon.find('.la-hud-fav-icon');
         const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites';
         this._toggleFavorites = () =>
@@ -1599,50 +1630,7 @@ export class LancerHUD
             // if (hasChildren && rawChildren !== null && !rawChildren.length)
             //     row.css({ opacity: 0.9 });
 
-            const _stripeStyle = (() =>
-            {
-                if (item.stripeStyle)
-                    return item.stripeStyle;
-                if (item.softDisabled)
-                {
-                    return document.documentElement.classList.contains('la-dark')
-                        ? {
-                            bg: 'repeating-linear-gradient(45deg, #707070 0 6px, #5c5c5c 6px 12px)',
-                            hoverBg: 'repeating-linear-gradient(45deg, #858585 0 6px, #6e6e6e 6px 12px)',
-                            border: '#8f8f8f',
-                            color: '#eee',
-                            hoverColor: '#fff'
-                        }
-                        : {
-                            bg: 'repeating-linear-gradient(45deg, #3a3a3a 0 6px, #2f2f2f 6px 12px)',
-                            hoverBg: 'repeating-linear-gradient(45deg, #555 0 6px, #444 6px 12px)',
-                            border: '#666',
-                            color: '#bbb',
-                            hoverColor: '#ddd'
-                        };
-                }
-                if (item.statusKind === 'destroyed')
-                {
-                    return {
-                        bg: 'repeating-linear-gradient(45deg, #5a2222 0 6px, #4a1c1c 6px 12px)',
-                        hoverBg: 'repeating-linear-gradient(45deg, #7a3535 0 6px, #6a2828 6px 12px)',
-                        border: '#a04444',
-                        color: '#e0b0b0',
-                        hoverColor: '#f0c8c8'
-                    };
-                }
-                if (item.statusKind === 'unavailable')
-                {
-                    return {
-                        bg: 'repeating-linear-gradient(45deg, #5a4422 0 6px, #4a3818 6px 12px)',
-                        hoverBg: 'repeating-linear-gradient(45deg, #7a5c30 0 6px, #6a4c25 6px 12px)',
-                        border: '#a07744',
-                        color: '#e0c8a0',
-                        hoverColor: '#f0d8b8'
-                    };
-                }
-                return null;
-            })();
+            const _stripeStyle = laHudStripeStyle(item);
             if (_stripeStyle)
             {
                 row.data('restingBg', _stripeStyle.bg);
@@ -1651,10 +1639,11 @@ export class LancerHUD
                 row.data('restingColor', _stripeStyle.color);
                 row.data('hoverColor', _stripeStyle.hoverColor);
                 row.css({ background: _stripeStyle.bg, borderLeftColor: _stripeStyle.border, color: _stripeStyle.color });
+                row.find('.la-hud-fav-mark').css('color', '#fff');
                 if (item.softDisabled)
                     row.css({ cursor: 'not-allowed' });
                 // Keep leading icon visible on dark stripes: flip whatever invert state laHudRenderIcon left.
-                const _leadingIcon = row.children('img').first();
+                const _leadingIcon = row.find('img.la-hud-icon').first();
                 if (_leadingIcon.length)
                 {
                     const _styleAttr = _leadingIcon.attr('style') || '';
@@ -1807,7 +1796,7 @@ export class LancerHUD
             {
                 row.on('click', async () =>
                 {
-                    playUiSound('open');
+                    playUiSound(item.clickSound ?? 'open');
                     for (const t of this._tokens ?? [])
                         deactivateRangePreview(t);
                     if (!item.keepOpen)
@@ -2371,10 +2360,10 @@ export class LancerHUD
             colLabel: 'Attacks',
             getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    this._lockable({ label: 'Skirmish',          icon: 'mdi mdi-hexagon-slice-3', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish', 'Quick'),
-                    this._lockable({ label: 'Barrage',           icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage', 'Full'),
-                    this._simpleItem('Ram',     'mdi mdi-hexagon-slice-3', { name: 'Ram',     activation: 'Quick' }, 'When you RAM, you make a melee attack with the aim of knocking a target down or back. \r \n To RAM, make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
-                    this._simpleItem('Grapple', 'mdi mdi-hexagon-slice-3', { name: 'Grapple', activation: 'Quick' }, 'When you GRAPPLE, you grab hold of a target to overpower them. \r \n To GRAPPLE, choose an adjacent character and make a melee attack. On a hit: \r &bull; both characters become ENGAGED; \r &bull; neither can BOOST or take reactions while grappled; \r &bull; the smaller becomes IMMOBILIZED and is dragged when the larger moves. If same SIZE, contested HULL check at start of turn decides who is larger. \r \n A GRAPPLE ends when adjacency breaks, the attacker ends it as a free action, or the defender wins a contested HULL check as a quick action.'),
+                    this._lockable({ label: 'Skirmish',          icon: 'modules/lancer-automations/icons/skirmish.svg', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish', 'Quick'),
+                    this._lockable({ label: 'Barrage',           icon: 'modules/lancer-automations/icons/barrage.svg', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage', 'Full'),
+                    this._simpleItem('Ram',     'modules/lancer-automations/icons/ram.svg', { name: 'Ram',     activation: 'Quick' }, 'When you RAM, you make a melee attack with the aim of knocking a target down or back. \r \n To RAM, make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
+                    this._simpleItem('Grapple', 'modules/lancer-automations/icons/grappling.svg', { name: 'Grapple', activation: 'Quick' }, 'When you GRAPPLE, you grab hold of a target to overpower them. \r \n To GRAPPLE, choose an adjacent character and make a melee attack. On a hit: \r &bull; both characters become ENGAGED; \r &bull; neither can BOOST or take reactions while grappled; \r &bull; the smaller becomes IMMOBILIZED and is dragged when the larger moves. If same SIZE, contested HULL check at start of turn decides who is larger. \r \n A GRAPPLE ends when adjacency breaks, the attacker ends it as a free action, or the defender wins a contested HULL check as a quick action.'),
                     this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: actionPopup({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack', 'Full'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
@@ -5090,7 +5079,7 @@ export class LancerHUD
     _weaponItem(weapon, modItem, mount = null)
     {
         const row = this._itemRow(weapon, {
-            icon: weaponTypeIcon(weapon) ?? 'mdi mdi-help-rhombus-outline',
+            icon: weaponTypeIcon(weapon),
             sizeLevel: weaponSizeLevel(weapon),
             category: 'Weapons',
             childColLabel: weapon.name,
@@ -5141,7 +5130,7 @@ export class LancerHUD
                         if (idx === (weapon.system?.selected_profile_index ?? 0))
                             return;
                         playUiSound('toggle');
-                        await weapon.update({ 'system.selected_profile_index': idx });
+                        await executeProfileSwitch(weapon, idx);
                     });
                 };
                 this._showItemPopup({ cssClass: 'la-hud-popup la-hud-weapon-popup', dataKey: 'weapon-id', dataValue: weapon.id, title: weapon.name, subtitle: weaponSubtitle(), bodyHtml: this._actionLockReasonHtml(weapon.name) + `<div class="la-weapon-body">${buildBody()}</div>`, theme: 'weapon', item: weapon, row, pipsArgs: this._depthCallbacks(), postRender: bindProfileSwitch });
@@ -5274,7 +5263,7 @@ export class LancerHUD
                     {
                         label: 'FIGHT',
                         favKey: `${weapon.uuid}|FIGHT`,
-                        icon: 'systems/lancer/assets/icons/white/melee.svg',
+                        icon: 'modules/lancer-automations/icons/crossed-slashes.svg',
                         onClick: () => executeFight(actor, weapon),
                         broadcastFn: (token, otherActor) => executeFight(otherActor, /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid)),
                     },
@@ -5287,33 +5276,39 @@ export class LancerHUD
             return buildPilot();
         }
         // Mech: sys.size === "Superheavy". NPC weapons store it in sys.weapon_type ("Superheavy Rifle", etc.).
-        const isSuperHeavy = (sys.size || sys.type || '').toLowerCase() === 'superheavy'
-            || String(sys.weapon_type || '').toLowerCase().startsWith('superheavy');
+        // Re-read per build: a profile switch can flip a superheavy between BARRAGE and SKIRMISH (Leviathan HAC).
+        const isSuperHeavy = () => ((sys.size || sys.type || '').toLowerCase() === 'superheavy'
+            || String(sys.weapon_type || '').toLowerCase().startsWith('superheavy'))
+            && !weaponSkirmishable(weapon);
         const bypassMount = mount ?? { slots: [{ weapon: { value: weapon } }] };
-        const attackLabel = isSuperHeavy ? 'BARRAGE' : 'SKIRMISH';
-        const buildMech = () => patchProfileRefresh([...addRightClicks(addHover(laHudItemChildren(weapon, {
-            defaultActions: [
-                {
-                    label: attackLabel,
-                    favKey: `${weapon.uuid}|${attackLabel}`,
-                    icon: isSuperHeavy
-                        ? 'mdi mdi-hexagon-slice-6'
-                        : 'mdi mdi-hexagon-slice-3',
-                    onClick: () => isSuperHeavy
-                        ? executeBarrage(actor, bypassMount)
-                        : executeSkirmish(actor, bypassMount),
-                    broadcastFn: (token, otherActor) =>
+        const buildMech = () =>
+        {
+            const superHeavy = isSuperHeavy();
+            const attackLabel = superHeavy ? 'BARRAGE' : 'SKIRMISH';
+            return patchProfileRefresh([...addRightClicks(addHover(laHudItemChildren(weapon, {
+                defaultActions: [
                     {
-                        const otherMount = { slots: [{ weapon: { value: /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid) } }] };
-                        return isSuperHeavy ? executeBarrage(otherActor, otherMount) : executeSkirmish(otherActor, otherMount);
+                        label: attackLabel,
+                        favKey: `${weapon.uuid}|${attackLabel}`,
+                        icon: superHeavy
+                            ? 'modules/lancer-automations/icons/barrage.svg'
+                            : 'modules/lancer-automations/icons/skirmish.svg',
+                        onClick: () => superHeavy
+                            ? executeBarrage(actor, bypassMount)
+                            : executeSkirmish(actor, bypassMount),
+                        broadcastFn: (token, otherActor) =>
+                        {
+                            const otherMount = { slots: [{ weapon: { value: /** @type {any} */ (otherActor).items.find(candidate => candidate.system?.lid === weapon.system?.lid) } }] };
+                            return superHeavy ? executeBarrage(otherActor, otherMount) : executeSkirmish(otherActor, otherMount);
+                        },
                     },
-                },
-            ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
-            modItem,
-            showPopup: (popup, row) => this._showPopupAt(popup, row),
-            onActivate,
-            actionPopup: (action, source) => this._actionPopup(action, source ?? weapon),
-        })), attackLabel, bypassMount), ...rangeToggle()], buildMech);
+                ].map(actionRow => this._lockableAttack(actionRow, weapon.name)),
+                modItem,
+                showPopup: (popup, row) => this._showPopupAt(popup, row),
+                onActivate,
+                actionPopup: (action, source) => this._actionPopup(action, source ?? weapon),
+            })), attackLabel, bypassMount), ...rangeToggle()], buildMech);
+        };
         return buildMech();
     }
 
@@ -5326,7 +5321,7 @@ export class LancerHUD
             ? 'Deal 2 heat. Target becomes IMPAIRED until the end of their next turn.'
             : 'Deal 2 heat. Target becomes IMPAIRED and SLOWED until the end of their next turn.';
         const invades = (actor.type === 'deployable' || actor.type === 'pilot') ? [] : [{
-            name: 'Fragment Signal',
+            name: isNPC ? 'Fragment Signal (NPC)' : 'Fragment Signal',
             detail: fragDetail,
             item: null,
             action: null,
@@ -6123,7 +6118,7 @@ export class LancerHUD
                     if (key && favSet.has(key) && !seen.has(key))
                     {
                         seen.add(key);
-                        results.push({ ...item, _catLabel: catLabel });
+                        results.push({ ...item, _catLabel: catLabel, favKey: key });
                     }
                 }
                 if (item.getChildren)
@@ -6153,6 +6148,9 @@ export class LancerHUD
         row.css({ position: 'relative' });
         row.find('.la-hud-fav-mark').remove();
         row.append('<span class="la-hud-fav-mark">★</span>');
+        // Striped rows are dark, the default dark star vanishes on them.
+        if (row.data('restingBg'))
+            row.find('.la-hud-fav-mark').css('color', '#fff');
     }
 
     _clearFavStyle(row)
@@ -6162,7 +6160,16 @@ export class LancerHUD
 
     _favKey(item)
     {
-        return item?.favKey ?? item?.hoverData?.item?.uuid ?? item?.label ?? null;
+        if (item?.favKey)
+            return item.favKey;
+        const sourceUuid = item?.hoverData?.item?.uuid;
+        if (sourceUuid)
+        {
+            // Rows for an action ON the item key separately from the item row itself.
+            const actionName = item.hoverData.action?.name;
+            return actionName ? `${sourceUuid}|${actionName}` : sourceUuid;
+        }
+        return item?.label ?? null;
     }
 
     _isFavorite(item)

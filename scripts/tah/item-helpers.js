@@ -4,7 +4,7 @@ import { playUiSound } from './sound.js';
 
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
-import { getActivationIcon } from '../tools/misc-tools.js';
+import { getActivationIcon, executeProfileSwitch, executeSimpleActivation } from '../tools/misc-tools.js';
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits } from '../combat/per-frequency-tags.js';
 import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
@@ -210,10 +210,56 @@ export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
         const filter = isWhite ? 'invert(1)' : 'none';
         const cls = isWhite ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
         // LA icons fill their viewBox edge-to-edge; system icons ship with whitespace. Pad to match.
-        const pad = icon.includes('modules/lancer-automations/') ? 'padding:2px;box-sizing:border-box;' : '';
+        const pad = icon.includes('modules/lancer-automations/') ? 'padding:0.8px;box-sizing:border-box;' : '';
         return `<img class="${cls}" src="${icon}" style="width:${size}px;height:${size}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
     return `<i class="${icon} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+}
+
+/** Stripe palette for blocked / destroyed / unavailable rows. */
+export function laHudStripeStyle(item)
+{
+    if (item.stripeStyle)
+        return item.stripeStyle;
+    if (item.softDisabled)
+    {
+        return document.documentElement.classList.contains('la-dark')
+            ? {
+                bg: 'repeating-linear-gradient(45deg, #707070 0 6px, #5c5c5c 6px 12px)',
+                hoverBg: 'repeating-linear-gradient(45deg, #858585 0 6px, #6e6e6e 6px 12px)',
+                border: '#8f8f8f',
+                color: '#eee',
+                hoverColor: '#fff'
+            }
+            : {
+                bg: 'repeating-linear-gradient(45deg, #3a3a3a 0 6px, #2f2f2f 6px 12px)',
+                hoverBg: 'repeating-linear-gradient(45deg, #555 0 6px, #444 6px 12px)',
+                border: '#666',
+                color: '#bbb',
+                hoverColor: '#ddd'
+            };
+    }
+    if (item.statusKind === 'destroyed')
+    {
+        return {
+            bg: 'repeating-linear-gradient(45deg, #5a2222 0 6px, #4a1c1c 6px 12px)',
+            hoverBg: 'repeating-linear-gradient(45deg, #7a3535 0 6px, #6a2828 6px 12px)',
+            border: '#a04444',
+            color: '#e0b0b0',
+            hoverColor: '#f0c8c8'
+        };
+    }
+    if (item.statusKind === 'unavailable')
+    {
+        return {
+            bg: 'repeating-linear-gradient(45deg, #5a4422 0 6px, #4a3818 6px 12px)',
+            hoverBg: 'repeating-linear-gradient(45deg, #7a5c30 0 6px, #6a4c25 6px 12px)',
+            border: '#a07744',
+            color: '#e0c8a0',
+            hoverColor: '#f0d8b8'
+        };
+    }
+    return null;
 }
 
 const WEAPON_SIZE_LEVEL = { aux: 0, auxiliary: 0, main: 1, heavy: 2, superheavy: 3 };
@@ -246,12 +292,14 @@ const WEAPON_TYPE_ICON = {
     rifle: `${LA_WEAPON_ICONS}/Rifle_White.svg`,
 };
 
-/** Weapon-type icon path, or null. Mech weapons type per profile, NPC features fold it into weapon_type ("Main Cannon"). */
+const WEAPON_TYPE_ICON_FALLBACK = 'systems/lancer/assets/icons/white/mech_weapon.svg';
+
+/** Weapon-type icon path. Mech weapons type per profile, NPC features fold it into weapon_type ("Main Cannon"). */
 export function weaponTypeIcon(weapon)
 {
     const sys = weapon?.system;
     if (!sys)
-        return null;
+        return WEAPON_TYPE_ICON_FALLBACK;
     const profile = sys.active_profile ?? sys.profiles?.[sys.selected_profile_index ?? 0];
     const words = `${profile?.type ?? ''} ${sys.weapon_type ?? ''}`.toLowerCase().split(/[^a-z]+/);
     for (const word of words)
@@ -259,7 +307,7 @@ export function weaponTypeIcon(weapon)
         if (Object.hasOwn(WEAPON_TYPE_ICON, word))
             return WEAPON_TYPE_ICON[word];
     }
-    return null;
+    return WEAPON_TYPE_ICON_FALLBACK;
 }
 
 /** Four-segment size rule drawn left of the weapon icon, filling upward; inherits currentColor. */
@@ -331,39 +379,6 @@ export function laHudItemChildren(item, opts = {})
     taggedActions.push(..._dedupedActions);
     const items = [...defaultActions];
 
-    // Profiles
-    if (profiles.length > 1)
-    {
-        items.push({ label: 'PROFILES', isSectionLabel: true });
-        profiles.forEach((profile, idx) =>
-        {
-            const isActive = idx === activeIdx;
-            const profileName = profile.name || `Profile ${idx + 1}`;
-            items.push({
-                label: (isActive ? '● ' : '○ ') + profileName,
-                icon: ICON_PROFILE,
-                stripeStyle: isActive ? {
-                    bg: 'repeating-linear-gradient(45deg, #2e5a80 0 6px, #26496a 6px 12px)',
-                    hoverBg: 'repeating-linear-gradient(45deg, #3f74a3 0 6px, #356088 6px 12px)',
-                    border: '#5b9bd5',
-                    color: '#d8ebfb',
-                    hoverColor: '#ecf5fd'
-                } : null,
-                keepOpen: true,
-                _profile: profile,
-                onClick: isActive ? null : async () => item.update({ 'system.selected_profile_index': idx }),
-                refreshCol4: () => laHudItemChildren(item, opts),
-                onRightClick: showPopup ? (row) =>
-                {
-                    const bodyHtml = laRenderWeaponProfile(profile, false);
-                    const subtitle = [profile.type, isActive ? 'Active' : null].filter(Boolean).join(' · ');
-                    const popup = laDetailPopup('la-hud-popup la-hud-profile-popup', profileName, subtitle, bodyHtml, 'weapon');
-                    showPopup(popup, row);
-                } : null,
-            });
-        });
-    }
-
     // Actions
     if (taggedActions.length)
     {
@@ -391,11 +406,57 @@ export function laHudItemChildren(item, opts = {})
         });
     }
 
+    // Profiles
+    if (profiles.length > 1)
+    {
+        items.push({ label: 'PROFILES', isSectionLabel: true });
+        profiles.forEach((profile, idx) =>
+        {
+            const isActive = idx === activeIdx;
+            const profileName = profile.name || `Profile ${idx + 1}`;
+            items.push({
+                label: (isActive ? '● ' : '○ ') + profileName,
+                icon: ICON_PROFILE,
+                stripeStyle: isActive ? {
+                    bg: 'repeating-linear-gradient(45deg, #2e5a80 0 6px, #26496a 6px 12px)',
+                    hoverBg: 'repeating-linear-gradient(45deg, #3f74a3 0 6px, #356088 6px 12px)',
+                    border: '#5b9bd5',
+                    color: '#d8ebfb',
+                    hoverColor: '#ecf5fd'
+                } : null,
+                keepOpen: true,
+                clickSound: 'toggle',
+                _profile: profile,
+                favKey: `${item.uuid ?? item.id}|profile-${idx}`,
+                onClick: isActive
+                    ? () => ui.notifications.info(`${profileName} is already the active profile.`)
+                    : () => executeProfileSwitch(item, idx),
+                refreshCol4: () => laHudItemChildren(item, opts),
+                onRightClick: showPopup ? (row) =>
+                {
+                    const bodyHtml = laRenderWeaponProfile(profile, false);
+                    const subtitle = [profile.type, item.name, isActive ? 'Active' : null].filter(Boolean).join(' · ');
+                    const popup = laDetailPopup('la-hud-popup la-hud-profile-popup', profileName, subtitle, bodyHtml, 'weapon');
+                    showPopup(popup, row);
+                } : null,
+            });
+        });
+    }
+
     // Mod
     if (modItem)
     {
         items.push({ label: 'MOD', isSectionLabel: true });
-        items.push({ label: modItem.name, icon: ICON_MOD });
+        items.push({
+            label: modItem.name,
+            icon: ICON_MOD,
+            favKey: `${modItem.uuid ?? modItem.id}|mod`,
+            onClick: () => executeSimpleActivation(item.actor, {
+                title: modItem.name,
+                action: { name: modItem.name, activation: 'Mod' },
+                detail: modItem.system?.effect ?? ''
+            }, { item: modItem, hostWeapon: item }),
+        });
     }
 
     return items;
@@ -597,14 +658,13 @@ export function appendItemPips(item, popup, depthCallbacks)
     };
     rebuild();
 
-    // Item-attached extras-UI action: render a second pip row whose tags are disjoint from the
-    // item's (dedup guaranteed at add-time). State reads/writes go to the flag entry by name.
+    // Item-attached extras-UI action: a second pip row whose tags are disjoint from the item's (deduped at add-time), state living on the flag entry by name.
     const isItemDoc = item?.documentName === 'Item';
     if (isItemDoc && action?._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length)
     {
-        const actionHasLoading  = action.tags.some(t => t.lid === 'tg_loading');
-        const actionHasRecharge = action.tags.some(t => t.lid === 'tg_recharge');
-        const actionHasLimited  = action.tags.some(t => t.lid === 'tg_limited');
+        const actionHasLoading  = action.tags.some(tag => tag.lid === 'tg_loading');
+        const actionHasRecharge = action.tags.some(tag => tag.lid === 'tg_recharge');
+        const actionHasLimited  = action.tags.some(tag => tag.lid === 'tg_limited');
         if (actionHasLoading || actionHasRecharge || actionHasLimited)
         {
             const readActionState = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
@@ -674,8 +734,7 @@ export function appendItemPips(item, popup, depthCallbacks)
         }
     }
 
-    // Extra-action recharge pip (action-level, not item-level).
-    // Uses the same "Charged" label + ▣/□ pip style as native tg_recharge items.
+    // Extra-action recharge pip (action-level, not item-level), same "Charged" label and ▣/□ style as native tg_recharge items.
     const extraAction = depthCallbacks?.action;
     if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI)
     {

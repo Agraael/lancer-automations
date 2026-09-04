@@ -115,6 +115,19 @@ await api.removeItemTag(item, "tg_heat_self")                   // removes tag b
 
 </details>
 
+<details id="isItemUsable">
+<summary><b><code>isItemUsable</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.isItemUsable(item)
+```
+
+Whether the item can be used right now, matching the TAH row state: false when destroyed, disabled, unloaded, uncharged, out of uses or per-round/turn/scene limits, or lock-blocked.
+
+</details>
+
 ---
 
 ## Activated Items

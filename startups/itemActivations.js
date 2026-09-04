@@ -516,7 +516,7 @@ const baserunnerDefenseAutomation = {
         activationMode: "instead",
         evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            return !item.system?.destroyed;
+            return api.isItemUsable(item);
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
@@ -2034,6 +2034,15 @@ const stormfallAutomation = {
             });
             if (!caught?.length)
                 return;
+            new Sequence()
+                .sound()
+                .file("modules/lancer-automations/FX/audio/extra/stormfall.wav")
+                .volume(0.75)
+                .effect()
+                .file("jb2a.impact.011.orange")
+                .atLocation(reactorToken)
+                .preset("la_scaleToBurst", 2)
+                .play();
             const results = await api.executeSaveVsEffect(caught, {
                 stat: "SYS",
                 title: "Stormfall",
@@ -2106,8 +2115,7 @@ const smokeChargesAutomation = {
                 range: 5,
                 size: 2,
                 type: "Blast",
-                fillColor: "#808080",
-                borderColor: "#ffffff",
+                tmacGraphics: api.smokeZoneGraphics(),
                 statusEffects: ["cover_soft"],
                 title: "SMOKE CHARGES",
                 description: "Place a Blast 2 smoke zone within Range 5.",
@@ -2131,9 +2139,9 @@ const harpyTurbojetsAutomation = {
         awaitActivationCompletion: true,
         activationType: "code",
         activationMode: "instead",
-        evaluate: function (triggerType, triggerData, reactorToken, item)
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            return triggerData.actionName === "Boost" && item.system?.charged !== false;
+            return triggerData.actionName === "Boost" && api.isItemUsable(item);
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
@@ -2147,7 +2155,7 @@ const harpyTurbojetsAutomation = {
             if (!ask.confirmed)
                 return;
             await triggerData.startRelatedFlow();
-            api.recordMovementExtra(reactorToken, reactorToken.actor.system.speed ?? 0, { leg: 'boost' });
+            api.recordMovementExtra(reactorToken, api.tokenSpeed(reactorToken), { leg: 'boost' });
         }
     }]
 };
@@ -3502,8 +3510,7 @@ api.registerDefaultItemReactions({
                     range: 5,
                     size: 1,
                     type: "Blast",
-                    fillColor: "#808080",
-                    borderColor: "#ffffff",
+                    tmacGraphics: api.smokeZoneGraphics(),
                     statusEffects: ["cover_soft"],
                     title: "SMOKE GRENADE",
                     description: "Place a Blast 1 smoke zone within Range 5.",
@@ -3710,8 +3717,7 @@ api.registerDefaultItemReactions({
                         size: 2,
                         count: 2,
                         type: "Blast",
-                        fillColor: "#808080",
-                        borderColor: "#ffffff",
+                        tmacGraphics: api.smokeZoneGraphics(),
                         statusEffects: ["cover_soft"],
                         title: "SMOKE LAUNCHERS",
                         description: "Place one or two Blast 2 smoke zones within Range 5.",
@@ -5710,7 +5716,7 @@ api.registerDefaultItemReactions({
                     const attacker = attackerId ? canvas.tokens.get(attackerId) : null;
 
                     const weapons = api.getWeapons(reactorToken)
-                        .filter(w => !w.system?.destroyed && !w.system?.disabled);
+                        .filter(weapon => api.isItemUsable(weapon));
                     const weapon = await api.pickItem(weapons, {
                         title: "PRESS THE ATTACK - Choose Weapon",
                         description: attacker

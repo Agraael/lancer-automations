@@ -8,6 +8,7 @@ import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
 import { hasReactionAvailable, executeExtraActionCombat } from '../tools/misc-tools.js';
 import { broadcastFocus } from '../tools/auto-focus.js';
+import { broadcastFloatTokenText } from '../tools/float-text.js';
 import { getActionOverlay } from '../interactive/action-overlays.js';
 import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
@@ -256,7 +257,10 @@ export async function onDamageStep(state)
             targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state);
             const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             if (postTotal < preTotal)
+            {
                 await consumeImmunityUse(targetToken.actor, 'damage', state);
+                broadcastFloatTokenText(targetToken, 'Immune', 0xcccccc);
+            }
             targetInfo.damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.damage);
         }
         if (Array.isArray(targetInfo.bonus_damage) && targetToken.actor)
@@ -908,8 +912,7 @@ export async function onActivationStep(state)
         flowState: state
     });
 
-    // Gated on the overlay flag, not action.laCombat, so extras don't double-roll. Deployables
-    // keep their actions on the actor, hence the second lookup.
+    // Gated on the overlay flag, not action.laCombat, so extras don't double-roll; deployables keep their actions on the actor.
     const overlayActor = token?.actor ?? actor;
     const overlay = (item ? getActionOverlay(item, actionName) : null) ?? getActionOverlay(overlayActor, actionName);
     if (overlay?.laCombat)

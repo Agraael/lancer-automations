@@ -1428,6 +1428,10 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     white-space: nowrap;
 }
 
+#lancer-automations-config .la-compact-label.is-truncated {
+    cursor: help;
+}
+
 #lancer-automations-config .la-compact-bool .la-fcs-lock {
     flex-shrink: 0;
     margin-right: 0 !important;
@@ -1625,6 +1629,39 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     height: 30px;
     padding: 0 26px;
     font-size: 12px;
+    min-width: 112px;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+#lancer-automations-config .la-config-footer .la-config-save.is-saving {
+    opacity: 0.75;
+    cursor: progress;
+}
+
+#lancer-automations-config .la-config-footer .la-config-save.is-saved {
+    background: var(--la-ok, #3d7a4a);
+    border-color: var(--la-ok, #3d7a4a);
+}
+
+#lancer-automations-config .la-config-footer .la-config-save.is-saved i {
+    animation: la-save-pop 0.3s ease;
+}
+
+@keyframes la-save-pop {
+
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+
+    60% {
+        transform: scale(1.18);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1636,7 +1673,9 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     }
 
     .la-config-content .tab.active .la-page-top,
-    .la-config-content .tab.active .la-cards {
+    .la-config-content .tab.active .la-cards,
+    #lancer-automations-config .la-config-save.is-saved i,
+    #lancer-automations-config .la-config-save.is-saving i {
         animation: none;
     }
 }
@@ -2855,8 +2894,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     background: color-mix(in srgb, var(--primary-color), white 20%);
 }
 
-/* ===== Movement Type Wheel ===== */
-.lancer-movement-wheel {
+/* ===== Radial wheels (movement + action) ===== */
+.lancer-radial-wheel {
     position: fixed;
     width: 0;
     height: 0;
@@ -2866,7 +2905,7 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     transform-origin: 0 0;
 }
 
-.lancer-movement-wheel.closing {
+.lancer-radial-wheel.closing {
     animation: lancer-mw-pop-out 0.12s ease-in forwards;
 }
 
@@ -2920,6 +2959,7 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     background: var(--button-hover-background-color);
     color: var(--button-hover-text-color);
     border-color: var(--button-hover-border-color);
+    z-index: 2;
 }
 
 .lancer-mw-btn.current {
@@ -2969,6 +3009,51 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 
 .lancer-mw-btn.current .lancer-mw-icon {
     background-color: #ffd166;
+}
+
+/* ===== Action Wheel ===== */
+.lancer-aw-btn .la-hud-icon {
+    margin: 0 !important;
+}
+
+/* laHudRenderIcon inverts for the light HUD rows, flip both back on the dark button */
+.lancer-aw-btn .la-hud-icon--dark {
+    filter: invert(1) !important;
+}
+
+.lancer-aw-btn .la-hud-icon--white {
+    filter: none !important;
+}
+
+.lancer-aw-btn.striped {
+    background: var(--aw-bg);
+    border-color: var(--aw-border);
+    color: var(--aw-color);
+}
+
+.lancer-aw-btn.striped.hover {
+    background: var(--aw-hover-bg);
+    color: var(--aw-hover-color);
+}
+
+.lancer-rw-name-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: max-content;
+    box-sizing: border-box;
+    transform: translate(-50%, -50%);
+    padding: 3px 10px;
+    border-radius: 3px;
+    background: rgba(20, 20, 30, 0.92);
+    border: 1px solid #888;
+    color: #ddd;
+    font-size: 12px;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+    pointer-events: none;
 }
 
 .la-per-frequency-row {

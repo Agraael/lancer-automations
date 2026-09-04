@@ -658,7 +658,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const hasWeapon = weaponData.length > 0;
             // A mount is destroyed only if ALL weapons are destroyed
             const allDestroyed = hasWeapon && weaponData.every(weapon => weapon.destroyed);
-            // selectable only if every weapon passes the filter
+            // selectable needs every weapon to pass the filter, none destroyed, and at least one present
             const allFitFilter = weaponData.every(weapon => weapon.fitsFilter);
 
             return {
@@ -1213,7 +1213,7 @@ export async function chooseInvade(actorOrToken)
         ? "Target becomes IMPAIRED until the end of their next turn."
         : "Target becomes IMPAIRED and SLOWED until the end of their next turn.";
     invades.push({
-        name: "Fragment Signal",
+        name: isNPC ? "Fragment Signal (NPC)" : "Fragment Signal",
         detail: fragDetail,
         item: null,
         action: null,
@@ -1359,7 +1359,7 @@ export async function executeInvade(actorOrToken, bypassChoice = null)
     if (selected.isFragmentSignal)
     {
         const flow = new TechAttackFlow(actor.uuid, {
-            title: "Fragment Signal",
+            title: selected.name,
             invade: true,
             effect: selected.detail,
             attack_type: "Tech"

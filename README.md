@@ -40,18 +40,6 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an automation engine that can drive almost any item from any LCP, plus a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
 
-What started as a tiny QoL tweak for my own games is closer to a game engine now, with its own identity. Think of it less as a set of toggles and more as the way you play.
-
-A lot of it weaves right into the interface, so if you aren't deep in the Lancer Foundry ecosystem you might assume some of these features are vanilla. They aren't, they just feel like they were always part of Lancer.
-
-<p align="center">
-  <img src="doc/vid/battlelog.gif" width="85%"/>
-</p>
-
-A heads-up: not all of it is built to be fully customizable, a lot is just how I see the game. A game for everyone is a game for no one, and Lancer Automations will shape how you play. Once you're in, it's hard to leave, so be careful.
-
----
-
 ## 📘 [Installation and full documentation →](https://agraael.github.io/lancer-automations/)
 
 ---

@@ -2,6 +2,8 @@
 // Single-active, priority-arbitrated owner of the gray range pulse: only the highest-priority request renders. style:ignore
 
 import { createPulsingRangeHighlight } from "./canvas-helpers.js";
+import { awaitMovementSettled } from "../movement/move-api.js";
+import { invalidateLosCaches } from "../vision/lancerDetectionModes.js";
 
 export const RANGE_PULSE_PRIORITY = Object.freeze({
     INTERACTIVE: 60,
@@ -82,7 +84,7 @@ export const rangePulse = {
     },
     setRange(ownerId, { token = null, range = 0, priority = 0, includeSelf = false, glowColor = undefined, ...opts } = {})
     {
-        const signature = `${token?.document?.id ?? "pt"}|${range}|${includeSelf}|${glowColor ?? ""}`;
+        const signature = `${token?.document?.id ?? "pt"}|${range}|${includeSelf}|${glowColor ?? ""}|${opts.los === true}|${opts.freeRange ?? 0}`;
         this.set(ownerId, {
             priority,
             signature,
@@ -110,3 +112,22 @@ export const rangePulse = {
 };
 
 Hooks.on("canvasTearDown", () => rangePulse.clearAll());
+
+// A settled move gets the same treatment as a re-toggle: destroy the active build, create it fresh.
+Hooks.on("updateToken", (tokenDoc, changes) =>
+{
+    if (!("x" in changes) && !("y" in changes))
+        return;
+    if (!requests.size)
+        return;
+    awaitMovementSettled(tokenDoc)
+        .then(() => new Promise(resolve => setTimeout(resolve, 100)))
+        .then(() =>
+        {
+            if (!requests.size)
+                return;
+            invalidateLosCaches();
+            destroyActive();
+            reconcile();
+        });
+});

@@ -9,6 +9,7 @@ import "./movement/cost-rules.js";
 import "./movement/vision-throttle.js";
 import "./movement/movement-actions.js";
 import "./movement/movement-wheel.js";
+import "./tah/action-wheel.js";
 import "./interactive/overlap-picker.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
@@ -27,7 +28,7 @@ import {
     _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack,
     clearMoveData, undoMoveData, getCumulativeMoveData, getIntentionalMoveData,
     getMovementCap, getMoveDataList, getMovementHistory,
-    initMovementCap, increaseMovementCap, recordBoostCast, recordMovementExtra, getMovementBands, _rulerMove
+    initMovementCap, increaseMovementCap, recordBoostCast, recordMovementExtra, getMovementBands, tokenSpeed, _rulerMove
 } from "./movement/move-tracking.js";
 export { _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack, _rulerMove };
 
@@ -48,6 +49,7 @@ import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
+import { smokeZoneGraphics, importTemplateMacroPresets } from "./setup/tmac-presets.js";
 import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
 
 // Interactive
@@ -150,6 +152,7 @@ import {
     executeGenericBonusMenu,
 
     flattenBonuses,
+    initConstantStatHooks,
     getConstantBonuses,
     getGlobalBonuses,
     isBonusApplicable,
@@ -1161,6 +1164,9 @@ Hooks.on('ready', async () =>
         getMoveDataList,
         getMovementCap,
         getMovementBands,
+        tokenSpeed,
+        smokeZoneGraphics,
+        importTemplateMacroPresets,
         increaseMovementCap,
         recordBoostCast,
         recordMovementExtra,
@@ -1222,6 +1228,7 @@ Hooks.on('ready', async () =>
     initDamageCalcWrapper();
     if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
         initInfectionHooks();
+    initConstantStatHooks();
     initPerFrequencyHooks();
     initWreckTokenConfig();
 
@@ -1645,83 +1652,87 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
     bindChatMessageStateInterceptor(app, html);
     if (html.find('.lancer-damage-targets').length)
     {
-        const damageTypes = html.find('.lancer-dice-formula i.cci[class*="damage--"]')
-            .map((_, el) => Array.from(el.classList)
-                .find(cls => cls.startsWith('damage--'))
-                ?.replace('damage--', '')
-            ).get();
-
-        if (damageTypes.length)
+        html.find('.lancer-damage-target').each((_, targetEl) =>
         {
-            html.find('.lancer-damage-target').each((_, targetEl) =>
+            const target = $(targetEl);
+            const uuid = target.data('uuid');
+            if (!uuid)
+                return;
+
+            const actor = /** @type {Actor} */ (/** @type {any} */ (fromUuidSync(uuid))?.actor || fromUuidSync(uuid));
+            if (!actor)
+                return;
+
+            let tagsContainer = target.find('.lancer-damage-tags');
+            let tagsContainerCreated = false;
+            if (!tagsContainer.length)
             {
-                const target = $(targetEl);
-                const uuid = target.data('uuid');
-                if (!uuid)
-                    return;
+                tagsContainer = $('<div class="lancer-damage-tags"></div>');
+                tagsContainerCreated = true;
+            }
 
-                const actor = /** @type {Actor} */ (/** @type {any} */ (fromUuidSync(uuid))?.actor || fromUuidSync(uuid));
-                if (!actor)
-                    return;
+            let tagsHtml = '';
 
-                let tagsContainer = target.find('.lancer-damage-tags');
-                let tagsContainerCreated = false;
-                if (!tagsContainer.length)
-                {
-                    tagsContainer = $('<div class="lancer-damage-tags"></div>');
-                    tagsContainerCreated = true;
-                }
+            const CONCRETE_DMG_TYPES = ['kinetic', 'energy', 'explosive', 'burn', 'heat'];
+            const capitalize = (type) => type.charAt(0).toUpperCase() + type.slice(1);
+            const chip = (tooltip, icon) => tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length
+                ? ''
+                : `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="${icon} i--xs"></i></span>`;
 
-                let tagsHtml = '';
+            const immuneTypes = new Set();
+            getImmunityBonuses(actor, "damage").forEach(bonus =>
+            {
+                bonus.damageTypes?.forEach(damageType => immuneTypes.add(damageType.toLowerCase()));
+            });
 
-                const immuneTypes = new Set();
-                getImmunityBonuses(actor, "damage").forEach(bonus =>
-                {
-                    bonus.damageTypes?.forEach(damageType => immuneTypes.add(damageType.toLowerCase()));
-                });
-
+            if (immuneTypes.has('all') || immuneTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => immuneTypes.has(type)))
+                tagsHtml += chip('Immune to All', 'mdi mdi-shield');
+            else
+            {
                 immuneTypes.forEach(damageType =>
                 {
-                    if (damageType === 'variable' || damageType === 'all')
-                        return;
-                    const capitalizedType = damageType.charAt(0).toUpperCase() + damageType.slice(1);
-                    const tooltip = `Immune to ${capitalizedType}`;
-                    if (!tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length)
-                        tagsHtml += `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="mdi mdi-shield i--xs"></i></span>`;
+                    tagsHtml += chip(`Immune to ${capitalize(damageType)}`, 'mdi mdi-shield');
                 });
+            }
 
-                const resistTypes = new Set();
-                getImmunityBonuses(actor, "resistance").forEach(bonus =>
-                {
-                    bonus.damageTypes?.forEach(damageType => resistTypes.add(damageType.toLowerCase()));
-                });
+            const resistTypes = new Set();
+            for (const type of [...CONCRETE_DMG_TYPES, 'infection'])
+            {
+                if (actor.system?.resistances?.[type])
+                    resistTypes.add(type);
+            }
+            getImmunityBonuses(actor, "resistance").forEach(bonus =>
+            {
+                bonus.damageTypes?.forEach(damageType => resistTypes.add(damageType.toLowerCase()));
+            });
 
+            if (resistTypes.has('all') || resistTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => resistTypes.has(type)))
+                tagsHtml += chip('Resist All', 'mdi mdi-shield-half-full');
+            else
+            {
                 resistTypes.forEach(damageType =>
                 {
-                    if (damageType === 'variable' || damageType === 'all')
-                        return;
-                    const capitalizedType = damageType.charAt(0).toUpperCase() + damageType.slice(1);
-                    const tooltip = `Resist ${capitalizedType}`;
-                    if (!tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length && !tagsContainer.find(`span[data-tooltip="Resistance to ${capitalizedType}"]`).length)
-                        tagsHtml += `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="mdi mdi-shield-half-full i--xs"></i></span>`;
+                    const capitalizedType = capitalize(damageType);
+                    if (!tagsContainer.find(`span[data-tooltip="Resistance to ${capitalizedType}"]`).length)
+                        tagsHtml += chip(`Resist ${capitalizedType}`, 'mdi mdi-shield-half-full');
                 });
+            }
 
-                if (tagsHtml)
+            if (tagsHtml)
+            {
+                if (tagsContainerCreated)
                 {
-                    if (tagsContainerCreated)
-                    {
-                        const rollsTags = target.find('.lancer-damage-rolls-tags');
-                        if (rollsTags.length)
-                        {
-                            tagsContainer.append(tagsHtml);
-                            rollsTags.append(tagsContainer);
-                        }
-                    }
+                    tagsContainer.append(tagsHtml);
+                    const rollsTags = target.find('.lancer-damage-rolls-tags');
+                    if (rollsTags.length)
+                        rollsTags.append(tagsContainer);
                     else
-                        tagsContainer.append(tagsHtml);
+                        target.append(tagsContainer);
                 }
-            });
-        }
+                else
+                    tagsContainer.append(tagsHtml);
+            }
+        });
     }
 
     // crit-immune: a "hit" chip on a 20+ roll means a crit was downgraded; recolor it

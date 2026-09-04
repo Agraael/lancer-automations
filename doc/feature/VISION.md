@@ -28,6 +28,12 @@ From code, [`hasLineOfSight`](../API_SPATIAL.md#line-of-sight) runs the same tes
 
 ---
 
+## Range pulse line of sight
+
+**`rangePulseLos`** clips every range pulse (targeting, pickers, deploy, zones, Advanced Measure, hover previews) to what its origin token can see, with the same wall rules as Lancer line of sight. Arcing / Seeking weapons stay unclipped. Each pulse gets a **Line of sight** toggle; the interactive tools take a `los` option.
+
+---
+
 ## Vision from edge
 
 <img align="right" src="../img/vis-from-edge.png" width="45%"/>

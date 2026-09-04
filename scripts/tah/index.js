@@ -3,15 +3,17 @@
 import { LancerHUD } from './hud.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from './sound.js';
 import { forceHideStatHint } from './tokenStatHint.js';
+import { getSettingEnabled } from '../setup/settings-register.js';
 
 const MODULE = 'lancer-automations';
 const SETTING = 'tahEnabled';
 
 const hud = new LancerHUD();
+export { hud };
 
 function enabled()
 {
-    return game.settings.get(MODULE, SETTING);
+    return getSettingEnabled(SETTING, MODULE);
 }
 
 /** True if actor is any bound token's actor OR its linked pilot. */
@@ -410,10 +412,17 @@ Hooks.on('init', () =>
         'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
         'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
         'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-        'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation'])
+        'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation',
+        'profile', 'mod', 'attack', 'damage', 'hase', 'skill'])
     {
         game.settings.register(MODULE, `tah.actionFxSound.${actionKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,
+        });
+    }
+    for (const focusKey of ['activation', 'attack', 'damage', 'hase', 'skill', 'profile', 'mod', 'tech'])
+    {
+        game.settings.register(MODULE, `autoFocusAction.${focusKey}`, {
+            scope: 'client', config: false, type: Boolean, default: focusKey !== 'profile',
         });
     }
     game.settings.register(MODULE, 'tah.showDisposition', {
@@ -778,7 +787,7 @@ Hooks.on('deleteCombat', () =>
         hud.scheduleRefresh();
 });
 
-import { activateRangePreview, deactivateRangePreview, getAttackRange, getRangeGlowForAction, FIXED_MELEE_ACTIONS } from './hover.js';
+import { activateRangePreview, deactivateRangePreview, getAttackRange, getRangeGlowForAction, usesLineOfSight, FIXED_MELEE_ACTIONS } from './hover.js';
 import { getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 
@@ -939,7 +948,7 @@ Hooks.once('ready', () =>
         {
             const range = await _computeAttackHudRange(state);
             if (range != null && range > 0)
-                rangePulse.setRange('tah-attack-card', { token, range, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: _computeAttackHudGlow(state) });
+                rangePulse.setRange('tah-attack-card', { token, range, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: _computeAttackHudGlow(state), los: state.__laLosPulse !== false && usesLineOfSight(null, state.item ?? null, null) });
             else
                 rangePulse.clear('tah-attack-card');
         };

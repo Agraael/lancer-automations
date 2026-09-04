@@ -1,7 +1,7 @@
 /**
  * Custom TokenMagic filters (fracture, chains). FilterType isn't exported from the v13 bundle, so we
- * dynamic-import TokenMagic's source at 'ready' (not 'init'): re-importing it at init would re-run its
- * init hook and crash on a duplicate libWrapper.register.
+ * dynamic-import TokenMagic's source instead of re-importing the module, which would re-run its init
+ * hook and crash on a duplicate libWrapper.register.
  */
 let FilterType = null;
 
@@ -650,12 +650,8 @@ FilterChains.defaults = {
     blend: 2,
 };
 
-/**
- * Register fracture/chains on TokenMagic's FilterType. Patches two objects: the source module's
- * FilterType (so the effect renders) and the bundle's internal one (so TokenMagic's updateToken
- * reconstruction doesn't error). webpack minifies the bundle export name, so we find it by shape.
- */
-Hooks.once('ready', async () =>
+// Register fracture/chains on both TMFX FilterType objects (source + minified bundle, found by shape), at init because TokenMagic rebuilds from flags on the first canvasReady.
+Hooks.once('init', async () =>
 {
     if (!game.modules.get('tokenmagic')?.active)
         return;

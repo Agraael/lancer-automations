@@ -531,8 +531,7 @@ export async function handleNoStressRemaining(state)
     else if (remStress === 0)
         pushEmbedButton(state, { flowType: 'CriticalMeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'CRITICAL MELTDOWN' });
 
-    if (!(actor.is_npc() && actor.system.stress.max === 1))
-        await actor.update({ "system.heat.value": 0 });
+    // the system's preOverheatRollChecks already set heat to the overflow remainder; zeroing it here would eat the overflow
 
     return true;
 }

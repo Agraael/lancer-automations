@@ -87,7 +87,7 @@ import {
     supportsConsumeOnUsage,
     getBonusDetailString,
 } from "./genericBonuses.js";
-import { openItemBrowserDialog } from "../tools/misc-tools.js";
+import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
 import { TG } from "../interactive/canvas-helpers.js";
@@ -402,17 +402,7 @@ function openCodeFieldDialog(html, fieldId, title, defaultCode = '')
             });
             installLancerHints(editor, 'evaluate');
             const windowEl = dlgHtml.closest('.window-app')[0];
-            const updateSize = () =>
-            {
-                if (!windowEl)
-                    return;
-                const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
-                editor.setSize(null, windowEl.offsetHeight - headerH - 40);
-                editor.refresh();
-            };
-            setTimeout(updateSize, 50);
-            resizeObserver = new ResizeObserver(updateSize);
-            resizeObserver.observe(windowEl);
+            resizeObserver = attachEditorResizeObserver(editor, windowEl);
         },
         close: () =>
         {
@@ -624,8 +614,8 @@ const CONSUMPTION_FILTER_MAP = {
     onDamage: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
     onTechAttack: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
     onTechHit: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onMove: ['cfilter-boost'],
-    onPreMove: ['cfilter-boost'],
+    onMove: [],
+    onPreMove: [],
     onInitActivation: ['cfilter-actionName'],
     onActivation: ['cfilter-actionName'],
     onDeploy: ['cfilter-itemLid', 'cfilter-itemId'],
@@ -679,11 +669,8 @@ function triggerFieldsHtml(prefix, tokensHtml)
                 </div>
             </div>
             <div class="form-group cfilter-actionName" style="display:none;">
-                <label data-tooltip="Only consume a charge when this specific action is activated.">Consume on action:</label>
-                <input type="text" id="${prefix}-filter-actionName" placeholder="e.g. Stabilize">
-            </div>
-            <div class="form-group cfilter-boost" style="display:none;">
-                <label><input type="checkbox" id="${prefix}-filter-isBoost"> Boost only</label>
+                <label data-tooltip="Only consume a charge when this specific action is activated, e.g. Boost.">Consume on action:</label>
+                <input type="text" id="${prefix}-filter-actionName" placeholder="e.g. Boost">
             </div>
             <div class="form-group cfilter-check" style="display:none;">
                 <label>Check:</label>
@@ -827,9 +814,7 @@ function setupTriggerUI(html, prefix)
     });
 }
 
-/**
- * Collect trigger/consumption config from form fields (no more 'uses')
- */
+/** Collect trigger/consumption config from form fields. */
 function getTriggerConfig(html, prefix)
 {
     const triggers = html.find(`#${prefix}-trigger input:checked`)
@@ -853,9 +838,6 @@ function getTriggerConfig(html, prefix)
     const actionName = html.find(`#${prefix}-filter-actionName`).val()?.trim();
     if (actionName)
         consumption.actionName = actionName;
-    const isBoost = html.find(`#${prefix}-filter-isBoost`).is(':checked');
-    if (isBoost)
-        consumption.isBoost = true;
     const checkType = html.find(`#${prefix}-filter-checkType`).val()?.trim();
     if (checkType)
         consumption.checkType = checkType;
@@ -1095,6 +1077,8 @@ export async function executeEffectManager(options = {})
         { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
         { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
     ];
+    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+        damageTypes.push({ name: 'Infection', icon: 'modules/lancer-automations/icons/infection.svg' });
     const damageTypeIconsHtml = damageTypes.map(dmgType => `
         <div class="bonus-immunity-damage-option te-icon-option" data-type="${dmgType.name}" title="${dmgType.name}">
             <img src="${dmgType.icon}" width="24" height="24">
@@ -1449,7 +1433,7 @@ export async function executeEffectManager(options = {})
                 </div>
                 <div class="form-group bonus-filter-actionName" style="display:none;">
                     <label data-tooltip="Only consume a charge when this specific action is activated.">Consume on action:</label>
-                    <input type="text" id="bonus-filter-actionName" placeholder="e.g. Stabilize">
+                    <input type="text" id="bonus-filter-actionName" placeholder="e.g. Boost">
                 </div>
                 <div class="form-group bonus-filter-statusId" style="display:none;">
                     <label data-tooltip="Only consume when one of these statuses is applied or removed (comma-separated).">Status:</label>
@@ -1457,9 +1441,6 @@ export async function executeEffectManager(options = {})
                         <input type="text" id="bonus-filter-statusId" placeholder="e.g. lockon, shredded" style="flex:1;">
                         <button type="button" class="bonus-status-picker-btn" data-target="bonus-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
                     </div>
-                </div>
-                <div class="form-group bonus-filter-boost" style="display:none;">
-                    <label><input type="checkbox" id="bonus-filter-isBoost"> Boost only</label>
                 </div>
                 <div class="form-group bonus-filter-role" style="display:none;">
                     <label data-tooltip="Consume when the bearer did the action, or was targeted by it.">Consume as:</label>
@@ -2035,10 +2016,10 @@ export async function executeEffectManager(options = {})
 
             const _findStatusDesc = (id) =>
             {
-                const s = (CONFIG.statusEffects ?? []).find(se => se.id === id || se.name === id);
-                if (!s)
+                const statusEffect = (CONFIG.statusEffects ?? []).find(se => se.id === id || se.name === id);
+                if (!statusEffect)
                     return '';
-                const desc = /** @type {any} */ (s).description;
+                const desc = /** @type {any} */ (statusEffect).description;
                 return typeof desc === 'string' && desc.trim() ? desc : '';
             };
             let _laHoverTip = null;
@@ -2383,11 +2364,18 @@ export async function executeEffectManager(options = {})
                 return out;
             };
 
+            // "roll" is a UI grouping; the stored type is the acc/diff sub-select.
+            const selectedBonusType = () =>
+            {
+                const type = String(html.find('#bonus-type').val());
+                return type === 'roll' ? String(html.find('#bonus-rollType').val()) : type;
+            };
+
             const buildExtractedCode = (tab) =>
             {
                 if (tab === 'bonus')
                 {
-                    const type = String(html.find('#bonus-type').val());
+                    const type = selectedBonusType();
                     const { bonusData, addOptions, duration } = gatherBonusFormData(type);
                     const prunedBonus = pruneSnippet(bonusData);
                     if (duration === 'constant')
@@ -2493,17 +2481,7 @@ export async function executeEffectManager(options = {})
                             scrollbarStyle: "native"
                         });
                         const windowEl = dlgHtml.closest('.window-app')[0];
-                        const updateSize = () =>
-                        {
-                            if (!windowEl)
-                                return;
-                            const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
-                            editor.setSize(null, windowEl.offsetHeight - headerH - 40);
-                            editor.refresh();
-                        };
-                        setTimeout(updateSize, 50);
-                        resizeObserver = new ResizeObserver(updateSize);
-                        resizeObserver.observe(windowEl);
+                        resizeObserver = attachEditorResizeObserver(editor, windowEl);
                     },
                     close: () =>
                     {
@@ -3341,9 +3319,9 @@ export async function executeEffectManager(options = {})
                     const consumption = {
                         trigger: consumptionTriggers.length === 1 ? consumptionTriggers[0] : consumptionTriggers
                     };
-                    const cOrigin = html.find('#bonus-trigger-origin').val();
-                    if (cOrigin)
-                        consumption.originId = cOrigin;
+                    const consumptionOrigin = html.find('#bonus-trigger-origin').val();
+                    if (consumptionOrigin)
+                        consumption.originId = consumptionOrigin;
                     const filterItemLid = String(html.find('#bonus-filter-itemLid').val())?.trim();
                     if (filterItemLid)
                         consumption.itemLid = filterItemLid;
@@ -3353,9 +3331,6 @@ export async function executeEffectManager(options = {})
                     const filterActionName = String(html.find('#bonus-filter-actionName').val())?.trim();
                     if (filterActionName)
                         consumption.actionName = filterActionName;
-                    const filterIsBoost = html.find('#bonus-filter-isBoost').is(':checked');
-                    if (filterIsBoost)
-                        consumption.isBoost = true;
                     const filterMinDistance = String(html.find('#bonus-filter-minDistance').val());
                     if (filterMinDistance)
                         consumption.minDistance = Number.parseInt(filterMinDistance);
@@ -3521,14 +3496,7 @@ export async function executeEffectManager(options = {})
             initLaMultiSelect(html, 'bonus-rollTypes-damage');
             initLaMultiSelect(html, 'bonus-reroll-rollTypes');
 
-            html.find('#bonus-add').click(() =>
-            {
-                const type = html.find('#bonus-type').val();
-                if (type === 'roll')
-                    addBonusFromTab(html.find('#bonus-rollType').val());
-                else
-                    addBonusFromTab(type);
-            });
+            html.find('#bonus-add').click(() => addBonusFromTab(selectedBonusType()));
 
             // Dynamic damage entries
             let bonusDmgEntryCounter = 1;

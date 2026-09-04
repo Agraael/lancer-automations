@@ -249,6 +249,11 @@ export function _createInfoCard(type, opts)
         const showRotateHint = opts.pattern === 'cone' || opts.pattern === 'line';
         const showTiltHint = opts.pattern === 'line';
         const elevKeys = _elevationKeyLabels();
+        const losToggleHtml = opts.showLosToggle ? `
+            <label data-role="los-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Range shown with line of sight">
+                <input type="checkbox" data-role="los-toggle" ${opts.losOn === false ? '' : 'checked'} style="margin:0;">
+                <span>Line of sight</span>
+            </label>` : '';
         const blastSection = isAreaPattern ? `
             <h3 class="la-section-header lancer-border-primary">Placed Areas</h3>
             <div class="la-area-modes" data-role="area-modes" style="display:flex;gap:14px;align-items:center;padding:4px 4px 6px 4px;border-bottom:1px solid #ccc;margin-bottom:6px;color:#fff;font-size:11.5px;flex-wrap:wrap;">
@@ -264,6 +269,7 @@ export function _createInfoCard(type, opts)
                     <input type="checkbox" data-role="propagation-toggle" style="margin:0;">
                     <span>Propagation</span>
                 </label>
+                ${losToggleHtml}
                 ${showQEHint ? `<span style="margin-left:auto;color:#666;font-size:10.5px;font-style:italic;">${elevKeys.down}/${elevKeys.up}: shift elevation</span>` : ''}
                 ${showRotateHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">Ctrl+wheel: rotate</span>` : ''}
                 ${showTiltHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">${elevKeys.tiltDown}/${elevKeys.tiltUp}: tilt</span>` : ''}
@@ -271,9 +277,13 @@ export function _createInfoCard(type, opts)
             <div class="la-placed-areas" data-role="area-list">
                 <div class="la-empty-state">No areas placed</div>
             </div>` : '';
+        const losRowHtml = (!isAreaPattern && losToggleHtml)
+            ? `<div style="display:flex;gap:12px;align-items:center;color:#fff;font-size:11.5px;margin-bottom:4px;">${losToggleHtml}</div>`
+            : '';
         dynamicHtml = `
             ${selectionCheckbox}
             ${blastSection}
+            ${losRowHtml}
             <h3 class="la-section-header lancer-border-primary">Selected Targets</h3>
             <div class="la-selected-targets" data-role="target-list">
                 <div class="la-empty-state">No targets selected</div>
@@ -284,7 +294,6 @@ export function _createInfoCard(type, opts)
         dynamicHtml = `
             <h3 class="la-section-header lancer-border-primary">Tokens to Move</h3>
             <div class="la-knockback-list" data-role="knockback-list">
-                <!-- Populated dynamically -->
             </div>`;
     }
     else if (type === "placeToken")
@@ -297,6 +306,7 @@ export function _createInfoCard(type, opts)
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
             <div style="font-size:0.78em; opacity:0.85; margin:-4px 0 4px 0; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" data-role="placetoken-auto-elev" style="margin:0;"> Auto elevation</label>
+                ${opts.showLosToggle ? `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;" title="Placement range shown and checked with line of sight"><input type="checkbox" data-role="placetoken-los" ${opts.losOn === false ? '' : 'checked'} style="margin:0;"> Line of sight</label>` : ''}
                 <span style="opacity:0.75;">Use <kbd>${_elevationKeyLabels().down}</kbd> / <kbd>${_elevationKeyLabels().up}</kbd> to offset before placing.</span>
             </div>
             <div style="font-size:0.78em; opacity:0.9; margin:0 0 4px 0; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -430,6 +440,10 @@ export function _createInfoCard(type, opts)
                     <input type="checkbox" data-role="zone-auto-elev" ${opts.autoElevation === false ? '' : 'checked'} style="margin:0;">
                     <span>Auto elevation</span>
                 </label>
+                ${opts.showLosToggle ? `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Cast range shown with line of sight">
+                    <input type="checkbox" data-role="zone-los-toggle" ${opts.losOn === false ? '' : 'checked'} style="margin:0;">
+                    <span>Line of sight</span>
+                </label>` : ''}
             </div>
             <div style="font-size:0.75em;opacity:0.8;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
                 <span data-role="zone-elev-readout">Elevation: auto</span>
@@ -522,6 +536,10 @@ export function _createInfoCard(type, opts)
     {
         const raw = String($(ev.currentTarget).val() ?? '').trim();
         opts.onCountChange?.(raw === '' ? -1 : Number(raw));
+    });
+    cardEl.find('[data-role="placetoken-los"]').on('change', function ()
+    {
+        opts.onToggleLos?.(/** @type {HTMLInputElement} */ (this).checked);
     });
     if (originToken)
     {
@@ -686,7 +704,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                 const warns = cardState.warnings?.[token.id] ?? [];
                 const warnHtml = warns.length > 0
                     ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
-                           ${warns.map(w => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${w}</div>`).join('')}
+                           ${warns.map(warn => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${warn}</div>`).join('')}
                        </div>`
                     : '';
                 listEl.append(`
@@ -806,7 +824,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                 const warns = cardState.warnings?.[idx] ?? [];
                 const warnHtml = warns.length > 0
                     ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
-                           ${warns.map(w => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${w}</div>`).join('')}
+                           ${warns.map(warn => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${warn}</div>`).join('')}
                        </div>`
                     : '';
                 const elev = typeof placement.elevation === 'number' ? placement.elevation : 0;

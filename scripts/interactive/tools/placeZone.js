@@ -10,14 +10,14 @@ import {
 } from "../cards.js";
 
 import {
-    TG,
-    addGraphicsBelowTokens, suppressTokenLayerClick, destroyGraphics,
-    drawRangeHighlight, _groupCellsByDistance, _makeRangePulseTick, pointerToWorld,
-    teardownRangePulse,
+    suppressTokenLayerClick, pointerToWorld,
+    createMergedRangeHighlight, isPulseLosEnabled,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+
+const ZONE_TEXTURE_DRIFT = { x: 15, y: 15 };
 
 /**
  * Tokens currently inside a placed template, ready to pass to executeDamageRoll.
@@ -104,6 +104,17 @@ async function _placeZoneInner(casterToken, options = {})
 {
     const _opts = /** @type {any} */ (options);
 
+    // Library preset (name or id) as base graphics; explicit options win.
+    if (_opts.preset)
+    {
+        const library = /** @type {any[]} */ (game.settings.get('templatemacro', 'templateLibrary') ?? []);
+        const entry = library.find(candidate => candidate.id === _opts.preset || candidate.name === _opts.preset);
+        if (entry?.graphicsState)
+            _opts.tmacGraphics = { ...foundry.utils.deepClone(entry.graphicsState), ..._opts.tmacGraphics };
+        else
+            ui.notifications.warn(`placeZone: template preset "${_opts.preset}" not found.`);
+    }
+
     // Place zones in templatemacro's Advanced Mode (custom render) unless explicitly opted out.
     if (_opts.useCustomRender !== false)
         _opts.tmacGraphics = { ..._opts.tmacGraphics, useCustomRender: true };
@@ -113,6 +124,10 @@ async function _placeZoneInner(casterToken, options = {})
 
     // elevationGated makes templatemacro's findContained ignore tokens outside the zone's elevation band.
     _opts.tmacGraphics = { ..._opts.tmacGraphics, elevationGated: _opts.elevationAware !== false };
+
+    // Drifting texture fill, overridable per call. Inert on zones with no fill texture.
+    if (_opts.tmacGraphics.fillTextureOffsetAnimation === undefined)
+        _opts.tmacGraphics = { ..._opts.tmacGraphics, fillTextureOffsetAnimation: ZONE_TEXTURE_DRIFT };
 
     // Direct placement: bypass interactive card when coordinates are provided
     if (_opts.x !== undefined && _opts.y !== undefined)
@@ -169,7 +184,8 @@ async function _placeZoneInner(casterToken, options = {})
             headerClass = "",
             rangeOrigin = null,
             elevationAware = true,
-            autoElevation = true
+            autoElevation = true,
+            los: optLos = null
         } = /** @type {any} */ (options);
 
         const placedZones = [];
@@ -188,28 +204,22 @@ async function _placeZoneInner(casterToken, options = {})
         const zoneElevation = (x, y) => (autoElev ? groundAt(x, y) : casterElev);
 
         // rangeOrigin can be a {x, y} point to override the default casterToken origin
-        if (range !== null && (casterToken || rangeOrigin))
+        const rangeAnchor = rangeOrigin || casterToken;
+        const anchorIsPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
+        let losOn = optLos === null ? true : !!optLos;
+        const rebuildZonePulse = () =>
         {
-            const rangeAnchor = rangeOrigin || casterToken;
+            if (range === null || !rangeAnchor)
+                return;
             rangePulse.set('interactive:placeZone', {
                 priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
-                build: () =>
-                {
-                    const rangeHighlight = drawRangeHighlight(rangeAnchor, range, TG.rangeFill, 0.1, false);
-                    const pulseGraphic = new PIXI.Graphics();
-                    addGraphicsBelowTokens(pulseGraphic);
-                    const isPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
-                    const originOffsets = isPoint ? [pixelToOffset(rangeAnchor.x, rangeAnchor.y)] : getOccupiedOffsets(rangeAnchor);
-                    const hexesByDist = _groupCellsByDistance(
-                        originOffsets,
-                        getInRangeOffsets(rangeAnchor, range, { includeSelf: true })
-                    );
-                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: rangeAnchor?.document ? rangeAnchor : null });
-                    canvas.app.ticker.add(wavePulse);
-                    return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
-                },
+                build: () => createMergedRangeHighlight(
+                    [anchorIsPoint ? { point: rangeAnchor, range } : { token: rangeAnchor, range, los: losOn }],
+                    { includeSelf: false }
+                ),
             });
-        }
+        };
+        rebuildZonePulse();
 
         const restoreLayerClick = suppressTokenLayerClick();
 
@@ -241,6 +251,8 @@ async function _placeZoneInner(casterToken, options = {})
             zoneType: type,
             zoneSize: size,
             elevationAware,
+            showLosToggle: range !== null && !!rangeAnchor && !anchorIsPoint && isPulseLosEnabled(),
+            losOn,
             relatedToken: casterToken,
             onConfirm: () =>
             {
@@ -260,6 +272,11 @@ async function _placeZoneInner(casterToken, options = {})
         {
             autoElev = this.checked;
             refreshElevReadout();
+        });
+        cardEl.find('[data-role="zone-los-toggle"]').on('change', function ()
+        {
+            losOn = this.checked;
+            rebuildZonePulse();
         });
         refreshElevReadout();
 

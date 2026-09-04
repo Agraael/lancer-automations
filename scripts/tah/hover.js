@@ -2,7 +2,7 @@
 // (Persistent GAA-based range auras were removed; range toggles now proxy the Advanced Measure tool.)
 
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
-import { getActorMaxReach_WithBonus } from '../tools/weapon-bonus-utils.js';
+import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 import { resolveDeployRangeCount } from '../interactive/deployables.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
@@ -10,12 +10,12 @@ import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
 const _rangePreviewOwnerByTokenId = new Map();
 const hoverPulseOwner = tokenId => `tah-hover:${tokenId}`;
 
-export async function activateRangePreview(token, range, ownerEl = null, glowColor = RANGE_GLOW.manual)
+export async function activateRangePreview(token, range, ownerEl = null, glowColor = RANGE_GLOW.manual, los = false, freeRange = 0)
 {
     if (!token || range == null)
         return;
     const radius = Math.max(1, range);
-    rangePulse.setRange(hoverPulseOwner(token.id), { token, range: radius, includeSelf: false, priority: RANGE_PULSE_PRIORITY.HOVER, glowColor });
+    rangePulse.setRange(hoverPulseOwner(token.id), { token, range: radius, includeSelf: false, priority: RANGE_PULSE_PRIORITY.HOVER, glowColor, los, freeRange });
     if (ownerEl)
         _rangePreviewOwnerByTokenId.set(token.id, ownerEl);
 }
@@ -106,6 +106,8 @@ export function getRangeGlowForAction(category, actionName, item)
     const name = (actionName ?? '').toLowerCase().trim();
     if (name === 'overwatch')
         return RANGE_GLOW.threat;
+    if (category === 'Deployables')
+        return RANGE_GLOW.deploy;
     if (category === 'Tech')
         return RANGE_GLOW.sensor;
     if (FIXED_MELEE_ACTIONS.has(name) || name === 'thrown' || name === 'throw')
@@ -115,6 +117,31 @@ export function getRangeGlowForAction(category, actionName, item)
     if (name === 'skirmish' || name === 'barrage')
         return RANGE_GLOW.reach;
     return RANGE_GLOW.manual;
+}
+
+/**
+ * Every range is bound by line of sight; only Arcing and Seeking weapons lift that.
+ * @returns {boolean}
+ */
+export function usesLineOfSight(category, item, profile)
+{
+    const tags = [...(item?.system?.tags ?? []), ...(profile?.tags ?? []), ...(item?.currentProfile?.tags ?? [])];
+    return !tags.some(tag => tag?.lid === 'tg_arcing' || tag?.lid === 'tg_seeking');
+}
+
+/**
+ * A merged reach only needs sight beyond its best Arcing/Seeking weapon.
+ * @returns {{ los: boolean, freeRange: number }}
+ */
+export function getPreviewLosInfo(category, action, actor, item, profile)
+{
+    const name = (action?.name ?? '').toLowerCase().trim();
+    if (name === 'skirmish' || name === 'barrage')
+    {
+        const { max, freeMax } = getActorReachBands_WithBonus(item ?? actor);
+        return { los: max > freeMax, freeRange: freeMax };
+    }
+    return { los: usesLineOfSight(category, item, profile), freeRange: 0 };
 }
 
 async function getItemMaxReach(item, actor)
@@ -209,7 +236,10 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
     {
         const range = await computePreviewRange(category, action ?? null, actor, item ?? null, profile ?? null, deployLid);
         if (range != null)
-            await activateRangePreview(token, range, el, getRangeGlowForAction(category, action?.name, item ?? null));
+        {
+            const losInfo = getPreviewLosInfo(category, action ?? null, actor, item ?? null, profile ?? null);
+            await activateRangePreview(token, range, el, getRangeGlowForAction(category, action?.name, item ?? null), losInfo.los, losInfo.freeRange);
+        }
     }
     else
         deactivateRangePreview(token);

@@ -90,6 +90,73 @@ await api.applyEffectsToTokens({
 
 ---
 
+### How-To: Bonus on One Action's Check
+
+A stat roll is built on an actor, so it carries no item of its own. Stamp the action that caused it, then gate a
+bonus on that stamp. The bonus only ever applies to that check, so a cancelled roll leaves nothing behind.
+
+**Stamp the roll:**
+```javascript
+await api.openHaseContestCard({
+    tokenA: reactorToken,
+    skillA: "SYS",
+    tokenB: targetToken,
+    skillB: "AGI",
+    title: "SEARCH - SYSTEMS vs AGILITY",
+    sourceAction: "Search"
+});
+```
+
+**Gate the bonus on it:**
+```javascript
+onInit: async function (token, item, api) {
+    await api.ensureLinkedBonus({
+        items: [item],
+        bonusData: {
+            id: `perceptive-${item.id}`,
+            name: "Perceptive",
+            type: "accuracy",
+            val: 1,
+            rollTypes: ["stat_roll"],
+            condition: (state) => state?.la_extraData?.sourceAction === "Search"
+        },
+        addOptions: { duration: 'constant' }
+    });
+}
+```
+
+`executeStatRoll`, `executeContestedCheck` and `openHaseContestCard` all take `sourceItem` / `sourceAction`, and
+both surface on `onInitCheck` / `onCheck` as `item` / `actionName`.
+
+---
+
+### How-To: Extra Movement
+
+Two shapes, and picking the wrong one leaks. A **standing** bonus lengthens every move of that kind for as long
+as it exists:
+
+```javascript
+await api.addConstantBonus(actor, {
+    id: `nerveweave-${item.id}`,
+    name: "Nerveweave",
+    type: "movement_extra",
+    subtype: "boost",
+    val: 2
+});
+```
+
+A **one-shot** binds to a single move, so boosting twice does not repeat it:
+
+```javascript
+api.recordMovementExtra(reactorToken, api.tokenSpeed(reactorToken), { leg: 'boost' });
+```
+
+`leg` is `'standard'`, `'boost'` or `'current'`. `'boost'` lands on the Boost already taken this turn, or waits
+for the next one if none has been. Both feed the ruler bands and the movement cap, so the yellow band and the
+cap move together.
+
+---
+
 ## Grid-Aware Auras Wrapper
 
 Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) module (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)).

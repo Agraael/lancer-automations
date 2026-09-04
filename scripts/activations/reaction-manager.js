@@ -1,7 +1,7 @@
 ﻿/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, CodeMirror */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
-import { openItemBrowserDialog } from "../tools/misc-tools.js";
+import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
 import { openDeployablePicker, openDocumentPicker } from "../interactive/deployables.js";
@@ -775,7 +775,7 @@ export class ReactionConfig extends FormApplication
             const savedKeys = Object.keys(saved);
             if (savedKeys.length === 1 && savedKeys[0] === 'enabled')
                 return true;
-            // Pure enable-toggle: saved has only 'enabled' and/or 'reactions' whose entries only toggle 'enabled'.
+            // Pure enable-toggle: saved keys are only 'enabled', 'reactions' and/or 'workshopId'.
             if (savedKeys.every(savedKey => savedKey === 'enabled' || savedKey === 'reactions' || savedKey === 'workshopId'))
             {
                 const reacts = saved.reactions;
@@ -1106,7 +1106,7 @@ export class ReactionConfig extends FormApplication
 
         const unfiledReactions = allReactions.filter(reaction => !assignedKeys.has(getActivationKey(reaction)));
 
-        // Collect all unique triggers for the filter dropdown
+        // for the trigger filter dropdown
         const allTriggerSet = new Set();
         for (const activation of [...allReactions, ...defaultList])
         {
@@ -2139,7 +2139,7 @@ export class ReactionEditor extends FormApplication
             onPreDamage: "{ triggeringToken, weapon, targets, hitTokens, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
             onDamage: "{ triggeringToken, weapon, target, hitTokens, damages, types, isCrit, isHit, attackType, actionName, tags, actionData, flowState, distanceToTrigger, canTriggerReaction}",
             onPreMove: "{ triggeringToken, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, isUndo, isModified, pathHexes }, cancel(), cancelTriggeredMove(reasonText, allowConfirm, userIdControl, preConfirm, postChoice), changeTriggeredMove(position, extraData, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
-            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isBoost, boostSet, isModified, extraData }, distanceToTrigger, canTriggerReaction}",
+            onMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isFreeMovement, movementCost, isModified, extraData }, distanceToTrigger, canTriggerReaction}",
             onTurnStart: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTurnEnd: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onRoundStart: "{ combat, round, canTriggerReaction}",
@@ -3240,19 +3240,7 @@ export class ReactionEditor extends FormApplication
                 installLancerHints(expandedEditor, targetName);
 
                 const windowEl = html.closest('.window-app')[0];
-                const updateSize = () =>
-                {
-                    if (!windowEl)
-                        return;
-                    const headerH = /** @type {HTMLElement | null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
-                    const buttonH = 40; // fixed: matches forced CSS height on .dialog-buttons
-                    expandedEditor.setSize(null, windowEl.offsetHeight - headerH - buttonH);
-                    expandedEditor.refresh();
-                };
-
-                setTimeout(updateSize, 50);
-                resizeObserver = new ResizeObserver(updateSize);
-                resizeObserver.observe(windowEl);
+                resizeObserver = attachEditorResizeObserver(expandedEditor, windowEl);
             },
             close: () =>
             {
@@ -3406,6 +3394,10 @@ export class ReactionEditor extends FormApplication
             {
                 item.system.profiles.forEach((profile, pIdx) =>
                 {
+                    actions.push({
+                        name: `${profile.name || `Profile ${pIdx + 1}`} (profile)`,
+                        path: `profiles[${pIdx}]`
+                    });
                     if (profile.actions)
                     {
                         profile.actions.forEach((action, aIdx) =>

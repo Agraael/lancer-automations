@@ -103,7 +103,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 |--------|-------------|
 | [Lancer System](https://foundryvtt.com/packages/lancer) | The Lancer RPG system for FoundryVTT, v3.0.0 or newer |
 | FoundryVTT v13.351+ | The version I'm currently working on |
-| [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling |
+| [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling, v1.2.0 or newer |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
 | [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required for API hooks |
 | [Socketlib](https://foundryvtt.com/packages/socketlib) | Required for API hooks |
@@ -229,7 +229,7 @@ Lancer Automations ships its own Lancer ruler, built to be as detailed as possib
 
 There's still more work to do, but if you want accurate, detailed information about movement in Lancer, this ruler is for you.
 
-The same system powers boost detection, cancelling movement through engagement, and more, all wired into the automation engine.
+The same system powers cancelling movement through engagement, the boost offer, and more, all wired into the automation engine.
 
 → Full guide: [Movement](feature/MOVEMENT.md) ・ advanced/beta: [Movement Advanced](feature/MOVEMENT_ADVANCED.md)
 

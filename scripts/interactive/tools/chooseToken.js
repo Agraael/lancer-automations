@@ -15,8 +15,9 @@ import {
 
 import {
     pointerToWorld, addGraphicsBelowTokens, addGraphicsAboveTokens, suppressTokenInteraction, destroyGraphics,
-    createPickerSession, createCursorPreview, drawRangeHighlight,
+    createPickerSession, createCursorPreview, drawRangeHighlight, isPulseLosEnabled,
     _paintCells, _groupCellsByDistance, _makeRangePulseTick, gridLineWidth, makeText, TG, paintWithHalo, RANGE_GLOW, RANGE_PULSE_STYLE,
+    _staticGridAlpha, resolveRangeGlow,
     suppressEvent, showOverlapStackPicker,
     teardownRangePulse,
 } from "../canvas-helpers.js";
@@ -35,6 +36,8 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 export function chooseToken(casterToken, options = {})
 {
     const _opts = /** @type {any} */ (options);
+    // A sensors range colors itself, anything else can name a glow or pass a raw color.
+    const pickerGlow = resolveRangeGlow(_opts.glow ?? _opts.glowColor, _opts.range === 'sensors' ? RANGE_GLOW.sensor : RANGE_GLOW.manual);
     if (_opts.range === 'sensors')
         options = { ..._opts, range: casterToken?.actor?.system?.sensor_range ?? 10 };
     const disposition = /** @type {any} */ (options).disposition;
@@ -69,6 +72,7 @@ export function chooseToken(casterToken, options = {})
             elevationAware: optElevationAware = null,
             autoElevation: optAutoElevation = null,
             propagation: optPropagation = null,
+            los: optLos = null,
             size = 1,
             allowEmptyConfirm = false,
             autoConfirm = false,
@@ -100,6 +104,7 @@ export function chooseToken(casterToken, options = {})
             : !!optAutoElevation;
         // Spread the area cell-to-cell from its origin; tall terrain blocks it. Needs elevationAware.
         let propagation = !!optPropagation;
+        let losOn = (optLos === null || optLos === undefined) ? true : !!optLos;
 
         let selectionOnly = !!selection;
         const selectedTokens = new Set();
@@ -177,25 +182,33 @@ export function chooseToken(casterToken, options = {})
             return [`${offset.col},${offset.row}`];
         };
 
-        if (range !== null && casterToken)
+        const setPickerRangePulse = () =>
         {
+            if (range === null || !casterToken)
+                return;
             rangePulse.set('interactive:chooseToken', {
                 priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
                 build: () =>
                 {
-                    const rangeHighlight = drawRangeHighlight(casterToken, range, RANGE_PULSE_STYLE.baseColor, RANGE_PULSE_STYLE.staticFillAlpha, includeSelf, { glowColor: RANGE_GLOW.manual });
+                    const rangeHighlight = drawRangeHighlight(casterToken, range, RANGE_PULSE_STYLE.baseColor, RANGE_PULSE_STYLE.staticFillAlpha, includeSelf, {
+                        glowColor: pickerGlow,
+                        lineColor: RANGE_PULSE_STYLE.lineColor,
+                        lineAlpha: _staticGridAlpha(RANGE_PULSE_STYLE.staticLineAlpha),
+                        los: losOn,
+                    });
                     const pulseGraphic = new PIXI.Graphics();
                     addGraphicsBelowTokens(pulseGraphic);
                     const hexesByDist = _groupCellsByDistance(
                         getOccupiedOffsets(casterToken),
                         getInRangeOffsets(casterToken, range, { includeSelf: true })
                     );
-                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken });
+                    const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken, glowColor: pickerGlow, los: losOn });
                     canvas.app.ticker.add(wavePulse);
                     return () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
                 },
             });
-        }
+        };
+        setPickerRangePulse();
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
 
@@ -318,7 +331,7 @@ export function chooseToken(casterToken, options = {})
         {
             if (!includeSelf && token.id === casterToken?.id)
                 return false;
-            if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+            if (token.document.hidden && !game.user.isGM)
                 return false;
             if (!soft && filter && !filter(token))
                 return false;
@@ -458,7 +471,7 @@ export function chooseToken(casterToken, options = {})
             {
                 if (skipId && token.id === skipId)
                     continue;
-                if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+                if (token.document.hidden && !game.user.isGM)
                     continue;
                 if (!includeSelf && casterToken && token.id === casterToken.id)
                     continue;
@@ -1176,11 +1189,19 @@ export function chooseToken(casterToken, options = {})
             range,
             count,
             hasSelection: !!selection,
+            showLosToggle: range !== null && !!casterToken && isPulseLosEnabled(),
+            losOn,
             pattern,
             areaRange,
             areaCount: effectiveAreaCount,
             onConfirm: doConfirm,
             onCancel: doCancel
+        });
+
+        cardEl.find('[data-role="los-toggle"]').on('change', function ()
+        {
+            losOn = /** @type {HTMLInputElement} */ (this).checked;
+            setPickerRangePulse();
         });
 
         if (selection)
@@ -1365,7 +1386,7 @@ export function chooseToken(casterToken, options = {})
         // Burst cursor: when over a token, preview burst centered on that token; else show a small marker.
         const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(token =>
         {
-            if (token.document.hidden && !game.user.isGM) // hidden tokens: GM-only
+            if (token.document.hidden && !game.user.isGM)
                 return false;
             if (!includeSelf && casterToken && token.id === casterToken.id)
                 return false;

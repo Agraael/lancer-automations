@@ -593,6 +593,8 @@ Common forms:
 
 - `"ranks[2]"` - rank-3 of a talent
 
+- `"profiles[0]"` - a weapon profile, fires when switched to
+
 At evaluation time the engine walks the path into `item.system` (or the `extraActions` flag), pulls the `name` off the action found there, and uses it as `activationName`. If `onlyOnSourceMatch` is set, the activation only fires when the triggering action's name matches the one at the path.
 
 This is how one item can have multiple independent activations (different sub-actions, different talent ranks) without colliding.

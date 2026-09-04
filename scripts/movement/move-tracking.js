@@ -331,8 +331,7 @@ export function getMovementBands(tokenOrId)
         bands.push({ name, size: Math.max(0, size), max: acc, granted });
     };
 
-    // Standing up costs the standard move, so its base is 0 then. The band is still emitted (size 0,
-    // hidden by the colour map) so granted legs are never empty and extras always have a home.
+    // Standing up costs the standard move, so its base is 0 then; the band is still emitted (size 0, hidden by the colour map) so extras always have a home.
     const standing = _standingExtras(actor);
     const standardBase = (startedProne && !prone) ? 0 : speed + standing.standard;
     push('standard', standardBase + (Number(data.standardExtra) || 0), true);
@@ -432,7 +431,6 @@ export function getMovementHistory(tokenOrId)
     let intentionalFreeCost = 0;
     let unintentionalMoved = 0;
     let unintentionalCost = 0;
-    let boostCount = 0;
     const startPosition = moves[0].startPos;
 
     for (const move of moves)
@@ -453,8 +451,6 @@ export function getMovementHistory(tokenOrId)
                 intentionalRegularMoved += moved;
                 intentionalRegularCost += cost;
             }
-            if (move.boostSet && move.boostSet.length > 0)
-                boostCount += move.boostSet.length;
         }
         else
         {
@@ -477,7 +473,7 @@ export function getMovementHistory(tokenOrId)
         },
         unintentional: unintentionalMoved,
         unintentionalCost,
-        nbBoostUsed: boostCount,
+        nbBoostUsed: (data.boostCasts ?? []).length,
         startPosition,
         movementCap: getMovementCap(tokenOrId)
     };
@@ -965,27 +961,6 @@ export async function handleTokenMove(document, change, options, userId)
         .filter(m => m.isDrag && !m.isFreeMovement && !m.isForceMovement)
         .reduce((acc, m) => acc + (m.movementCost ?? m.distanceMoved), 0);
 
-    if (game.settings.get('lancer-automations', 'experimentalBoostDetection') && isDrag && !isFreeMovement)
-    {
-        const speed = token.actor?.system?.speed || 0;
-        const currentIntentional = prevIntentional + movementCost;
-
-        const boostSet = [];
-        if (speed > 0)
-        {
-            // Boost N is consumed when intentional cost crosses N*speed.
-            const prevBoostCount = prevIntentional > 0 ? Math.floor((prevIntentional - 1) / speed) : 0;
-            const newBoostCount = currentIntentional > 0 ? Math.floor((currentIntentional - 1) / speed) : 0;
-            for (let boostNumber = prevBoostCount + 1; boostNumber <= newBoostCount; boostNumber++)
-                boostSet.push(boostNumber);
-        }
-        moveInfo.boostSet = boostSet;
-        moveInfo.isBoost = boostSet.length > 0;
-
-        if (game.settings.get('lancer-automations', 'debugBoostDetection'))
-            ui.notifications.info(`${token.name}: moved ${distanceMoved} (cost ${movementCost}), intentional ${prevIntentional + movementCost}/${speed} | isBoost: ${moveInfo.isBoost}, boostSet: [${boostSet.join(',')}]`);
-    }
-
     // id from the live movement op; updateToken stamps the fallback.
     const newData = {
         ...existingData,
@@ -997,7 +972,6 @@ export async function handleTokenMove(document, change, options, userId)
             isFreeMovement,
             isForceMovement,
             costOverridden: costOverridden === true,
-            boostSet: moveInfo.boostSet || [],
             startPos
         }]
     };
@@ -1017,6 +991,8 @@ export async function handleTokenMove(document, change, options, userId)
     if (!isDrag || options.IgnoreOnMove)
         return;
 
+    moveInfo.isFreeMovement = isFreeMovement;
+    moveInfo.movementCost = movementCost;
     await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
 
     const pendingWaypointCount = options._movement?.[token.id]?.pending?.waypoints?.length ?? 0;

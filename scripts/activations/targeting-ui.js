@@ -12,6 +12,8 @@ import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
 import { playUiSound } from '../tah/sound.js';
+import { usesLineOfSight } from '../tah/hover.js';
+import { getSettingEnabled } from '../setup/settings-register.js';
 import { setPickerTargetCursor } from '../interactive/tools/advancedMeasure.js';
 
 const AOE_TYPES = ['Blast', 'Burst', 'Cone', 'Line'];
@@ -183,6 +185,7 @@ function readToggles($form)
         elevationAware: $form.find('.la-tg-elev').prop('checked') !== false,
         autoElevation: $form.find('.la-tg-autoelev').prop('checked') !== false,
         propagation: !!$form.find('.la-tg-prop').prop('checked'),
+        los: $form.find('.la-tg-los').prop('checked') !== false,
     };
 }
 
@@ -190,10 +193,14 @@ function injectToggleRow($form)
 {
     if ($form.find('.la-accdiff-area-toggles').length)
         return;
+    const losToggle = getSettingEnabled('rangePulseLos')
+        ? `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-los" checked> Line of sight</label>`
+        : '';
     const $toggleRow = $(`<div class="la-accdiff-area-toggles flexrow" style="gap:12px;justify-content:center;padding:4px 0 2px;font-size:11px;color:var(--dark-text, #fff);flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-elev" checked> Elevation aware</label>
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-autoelev" checked> Auto elevation</label>
         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-prop" checked> Propagation</label>
+        ${losToggle}
     </div>`);
     const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
     if ($section.length)
@@ -218,7 +225,6 @@ function ensureHint($form)
     return $hint;
 }
 
-// AoE pattern buttons or single-target button, shape strip, Range/Threat switch, pickers, auto-start.
 let _cardToggle = null;
 
 export function toggleCardTargeting()
@@ -250,13 +256,15 @@ function bindCardTargetingKey()
 export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe = [], hitChanceForFactory = () => null, hudHasTargets = null, autoStart = 'setting', pulseOwner = null } = {})
 {
     // pulseOwner: range pulse shown only while a picker from this HUD is running
+    let lastPickRange = 0;
     const setPickPulse = (rangeVal) =>
     {
         if (!pulseOwner)
             return;
+        lastPickRange = rangeVal;
         const token = state.actor?.getActiveTokens?.()[0] ?? null;
         if (token && rangeVal > 0)
-            rangePulse.setRange(pulseOwner, { token, range: rangeVal, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: weapon ? RANGE_GLOW.weapon : RANGE_GLOW.manual });
+            rangePulse.setRange(pulseOwner, { token, range: rangeVal, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: weapon ? RANGE_GLOW.weapon : RANGE_GLOW.manual, los: usesLineOfSight(null, weapon, null) && readToggles($form).los });
         else
             rangePulse.clear(pulseOwner);
     };
@@ -485,6 +493,13 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 strip.$strip.stop(true, true).slideUp(120);
         });
         injectToggleRow($form);
+        $form.find('.la-tg-los').prop('checked', state.__laLosPulse !== false).on('change', function ()
+        {
+            state.__laLosPulse = /** @type {HTMLInputElement} */ (this).checked;
+            Hooks.callAll('lancer-automations.attackRangeMode', state);
+            if (pulseOwner && rangePulse.has(pulseOwner))
+                setPickPulse(lastPickRange);
+        });
         maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
         return;
     }

@@ -50,18 +50,19 @@ api.increaseMovementCap(tokenOrId, value)   // add spaces to the leg being spent
 ```
 
 - **`intentional.regular` vs `intentional.free`**: drag movement split by whether it was free. `regular` counts against the movement cap (`regularCost` is what the boost/cap detection compares against), `free` is V-key movement that ignores the cap. `total` = `regular + free`.
-- **`nbBoostUsed`**: number of Boosts detected across drag moves (sum of each move's `boostSet`). Only populated when the **experimental boost detection** setting is on. A boost is counted each time intentional cost crosses a multiple of SPEED. See [Movement Advanced](feature/MOVEMENT_ADVANCED.md).
+- **`nbBoostUsed`**: number of Boost actions recorded this turn.
 
 </details>
 
 <details id="getMovementBands">
-<summary><b><code>getMovementBands</code></b> → <code>Band[]</code><br><b><code>getMovementCap</code></b> → <code>number</code><br><b><code>recordMovementExtra</code></b> → <code>void</code><br><b><code>recordBoostCast</code></b> → <code>void</code></summary>
+<summary><b><code>getMovementBands</code></b> → <code>Band[]</code><br><b><code>getMovementCap</code></b> → <code>number</code><br><b><code>tokenSpeed</code></b> → <code>number</code><br><b><code>recordMovementExtra</code></b> → <code>void</code><br><b><code>recordBoostCast</code></b> → <code>void</code></summary>
 
 <br>
 
 ```js
 api.getMovementBands(tokenOrId)             // [{ name, size, max, granted }, ...]
 api.getMovementCap(tokenOrId)               // sum of granted bands, floored at what is spent
+api.tokenSpeed(tokenOrActor)                // speed after prone halving
 api.recordBoostCast(tokenOrId, speed)       // a Boost happened: grants a boost leg
 api.recordMovementExtra(tokenOrId, value, { leg: 'boost' })
 ```

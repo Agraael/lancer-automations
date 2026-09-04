@@ -20,7 +20,7 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 <img align="right" src="../img/at-buttons.png" width="45%"/>
 
-When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a tech attack gets **Sensors N**, and an AoE weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation aware / Auto elevation / Propagation** toggle row below them.
+When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a tech attack gets **Sensors N**, and an AoE weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation aware / Auto elevation / Propagation** toggle row below them (plus **Line of sight** when [range pulse LOS](./VISION.md#range-pulse-line-of-sight) is on).
 
 Click a button to start picking, click it again (or Esc) to stop.
 
@@ -100,7 +100,7 @@ Press **Shift+R** to toggle a standalone measure toolbar, docked above the macro
 - **Free** - move and drag tokens as usual.
 - **Shapes** - place a **Blast / Burst / Cone / Line** at a chosen size. Click to drop, click (or right-click) again to remove.
 - **Mark** - drop single markers on the grid. Click or right-click one to remove it.
-- **Range** - pulse the reference token's range on the canvas: threat, sensors, reach, weapon, or a manual radius. The reference is whatever you have selected.
+- **Range** - pulse the reference token's range on the canvas: threat, sensors, reach, weapon, or a manual radius. The reference is whatever you have selected. [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips it, with an eye toggle on the manual radius.
 - **Move** - the reference token's movement reach, in the ruler's speed tiers.
 
 The **ruler** button toggles distance labels from the reference token, with a [line-of-sight](./VISION.md#lancer-line-of-sight) eye when Lancer LOS is on.

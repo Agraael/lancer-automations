@@ -157,6 +157,12 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
+<img align="right" src="../vid/hud-action-wheel.gif" width="35%"/>
+
+**Action Wheel** - press **F** on a selected token to get your favorites as a wheel around it. Click to use, right-click for details, hover for the range preview.
+
+<br clear="right"/>
+
 <img align="right" src="../img/hud-macro-slot.png" width="45%"/>
 
 **Macro slots** - right-click a slot in the Macros row to open its edit dialog, then drop a macro from the hotbar onto the drop zone to assign it.

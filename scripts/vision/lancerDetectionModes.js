@@ -7,7 +7,9 @@ import { blindedVisionEnabled } from "./blindedVision.js";
 const MODULE_ID = 'lancer-automations';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
 const SETTING_LOS = 'lancerLos';
+const SETTING_LOS_HEIGHT_RULE = 'lancerLosHeightRule';
 const SETTING_LOS_DEBUG = 'lancerLosDebug';
+const SETTING_SILH_FILTER_TEST = 'lancerSilhFilterTest';
 const SETTING_SENSOR_COMBAT_ONLY = 'lancerSensorCombatOnly';
 const SETTING_AWARENESS_COMBAT_ONLY = 'lancerAwarenessCombatOnly';
 const SETTING_SENSOR_USE_MODE_RANGE = 'lancerSensorUseModeRange';
@@ -85,12 +87,21 @@ let _losEdgeCache = null;
 let _losVertexMap = null;
 let _losPolyMap = null;
 const _losPairCache = new Map();
+// Banded wall polygons per eye height, each with its bbox. Same lifetime as the edge cache.
+let _eyeSolidCache = null;
+
+/** Drops the cached sight edges and pair results so the next LOS query recollects them. */
+export function invalidateLosCaches()
+{
+    _losInvalidate();
+}
 
 function _losInvalidate()
 {
     _losEdgeCache = null;
     _losVertexMap = null;
     _losPolyMap = null;
+    _eyeSolidCache = null;
     _losPairCache.clear();
 }
 
@@ -155,16 +166,84 @@ function _pointInWall(px, py, record)
     if (!polyRecords)
         return false;
     let inside = false;
-    for (const rec of polyRecords)
+    for (const record of polyRecords)
     {
-        const ax = rec.edge.a.x;
-        const ay = rec.edge.a.y;
-        const bx = rec.edge.b.x;
-        const by = rec.edge.b.y;
+        const ax = record.edge.a.x;
+        const ay = record.edge.a.y;
+        const bx = record.edge.b.x;
+        const by = record.edge.b.y;
         if ((ay > py) !== (by > py) && px < ax + ((py - ay) / (by - ay)) * (bx - ax))
             inside = !inside;
     }
     return inside;
+}
+
+// Keyed on height alone: this test does not skip the origin's own la-block-los edges, so the token is not an input.
+function _eyeSolidPolys(height)
+{
+    if (!_eyeSolidCache)
+        _eyeSolidCache = new Map();
+    const cached = _eyeSolidCache.get(height);
+    if (cached)
+        return cached;
+    const polys = [];
+    const seenPolys = new Set();
+    for (const record of _collectSightEdges())
+    {
+        if (record.bottom > height || height > record.top)
+            continue;
+        const polyId = record.id.replace(/-\d+$/, '');
+        if (seenPolys.has(polyId))
+            continue;
+        seenPolys.add(polyId);
+        const polyRecords = _losPolyMap?.get(polyId);
+        if (!polyRecords)
+            continue;
+        let minX = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+        for (const polyRecord of polyRecords)
+        {
+            if (polyRecord.minX < minX)
+                minX = polyRecord.minX;
+            if (polyRecord.maxX > maxX)
+                maxX = polyRecord.maxX;
+            if (polyRecord.minY < minY)
+                minY = polyRecord.minY;
+            if (polyRecord.maxY > maxY)
+                maxY = polyRecord.maxY;
+        }
+        polys.push({ records: polyRecords, minX, maxX, minY, maxY });
+    }
+    _eyeSolidCache.set(height, polys);
+    return polys;
+}
+
+// Margin covers the x-intersect overshoot past maxX (measured 1.16e-10 at 1e6 coords); 0 flips verdicts.
+const _EYE_SOLID_X_MARGIN = 1e-6;
+
+// The crossing ray points in -X, so a poly off the y-span or entirely right of the point counts zero.
+function _pointInEyePolys(polys, px, py)
+{
+    for (const poly of polys)
+    {
+        if (py < poly.minY || py > poly.maxY || px > poly.maxX + _EYE_SOLID_X_MARGIN)
+            continue;
+        let inside = false;
+        for (const record of poly.records)
+        {
+            const ax = record.edge.a.x;
+            const ay = record.edge.a.y;
+            const bx = record.edge.b.x;
+            const by = record.edge.b.y;
+            if ((ay > py) !== (by > py) && px < ax + ((py - ay) / (by - ay)) * (bx - ax))
+                inside = !inside;
+        }
+        if (inside)
+            return true;
+    }
+    return false;
 }
 
 function _vertexKey(x, y)
@@ -199,12 +278,14 @@ function _skimsVertex(origin, dest, edge, vx, vy)
 }
 
 // A ray collinear with a wall face must be judged like a crossing, not slip along the lattice line.
-function _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, tol)
+function _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, tol, rayLen = Math.sqrt(rayLenSq))
 {
-    const rayLen = Math.sqrt(rayLenSq);
+    const tolLen = tol * rayLen;
     const crossA = Math.abs(((edge.a.x - origin.x) * rayDirY) - ((edge.a.y - origin.y) * rayDirX));
+    if (crossA > tolLen)
+        return false;
     const crossB = Math.abs(((edge.b.x - origin.x) * rayDirY) - ((edge.b.y - origin.y) * rayDirX));
-    if (crossA > tol * rayLen || crossB > tol * rayLen)
+    if (crossB > tolLen)
         return false;
     const alongA = (((edge.a.x - origin.x) * rayDirX) + ((edge.a.y - origin.y) * rayDirY)) / rayLenSq;
     const alongB = (((edge.b.x - origin.x) * rayDirX) + ((edge.b.y - origin.y) * rayDirY)) / rayLenSq;
@@ -230,9 +311,12 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
     ctx.blockPoint = null;
     ctx.skimPos = false;
     ctx.skimNeg = false;
+    const trigHeightRule = _getSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
     const rayDirX = dest.x - origin.x;
     const rayDirY = dest.y - origin.y;
     const rayLenSq = ((rayDirX * rayDirX) + (rayDirY * rayDirY)) || 1;
+    const rayLen = Math.sqrt(rayLenSq);
+    const endpointTol = canvas.grid.size * 0.02;
     const segMinX = Math.min(origin.x, dest.x);
     const segMaxX = Math.max(origin.x, dest.x);
     const segMinY = Math.min(origin.y, dest.y);
@@ -244,21 +328,29 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
         if (record.id && (record.id.startsWith(skipPrefixA) || record.id.startsWith(skipPrefixB)))
             continue;
         const edge = record.edge;
+        const crosses = foundry.utils.lineSegmentIntersects(origin, dest, edge.a, edge.b);
         // A ray endpoint sitting exactly on a wall vertex is a real touch that lineSegmentIntersects misses.
-        const endpointTol = canvas.grid.size * 0.02;
-        const originOn = _pointToSegmentDist(origin.x, origin.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
-        const destOn = _pointToSegmentDist(dest.x, dest.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
+        const originOn = origin.x >= record.minX - endpointTol && origin.x <= record.maxX + endpointTol
+            && origin.y >= record.minY - endpointTol && origin.y <= record.maxY + endpointTol
+            && _pointToSegmentDist(origin.x, origin.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
+        const destOn = dest.x >= record.minX - endpointTol && dest.x <= record.maxX + endpointTol
+            && dest.y >= record.minY - endpointTol && dest.y <= record.maxY + endpointTol
+            && _pointToSegmentDist(dest.x, dest.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
         const touchesEnd = originOn || destOn;
-        const alongWall = _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol);
+        let alongWall = false;
+        if (!crosses && !touchesEnd)
+        {
+            alongWall = _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen);
+            if (!alongWall)
+                continue;
+        }
         const side = edge.orientPoint?.(origin) ?? 1;
-        if (!side && !touchesEnd && !alongWall)
+        if (!side && !touchesEnd && !alongWall
+            && !_runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen))
             continue;
         if (edge.direction && side === edge.direction)
             continue;
         if (edge.applyThreshold?.('sight', origin))
-            continue;
-        const crosses = foundry.utils.lineSegmentIntersects(origin, dest, edge.a, edge.b);
-        if (!crosses && !touchesEnd && !alongWall)
             continue;
         const hit = foundry.utils.lineLineIntersection(origin, dest, edge.a, edge.b) ?? { x: origin.x, y: origin.y, t0: 0 };
         const originOver = originHeight > record.top;
@@ -268,15 +360,42 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             ctx.lastReason = 'over2';
             continue;
         }
-        // The height rule outranks endpoint and tip grazes, so a corner-touching line cannot dodge the adjacent shadow.
-        if (originOver !== destOver)
+        if (originOver !== destOver && !trigHeightRule)
         {
+            // the corner peek is height-independent: a vertex graze skims here exactly as at ground level
+            const grazeTol = canvas.grid.size * 0.05;
+            const grazeDistA = Math.hypot(hit.x - edge.a.x, hit.y - edge.a.y);
+            const grazeDistB = Math.hypot(hit.x - edge.b.x, hit.y - edge.b.y);
+            let grazedVertex = null;
+            if (grazeDistA <= grazeTol && grazeDistA <= grazeDistB)
+                grazedVertex = edge.a;
+            else if (grazeDistB <= grazeTol)
+                grazedVertex = edge.b;
+            if (grazedVertex)
+            {
+                const skimSide = _skimsVertex(origin, dest, edge, grazedVertex.x, grazedVertex.y);
+                if (skimSide !== false)
+                {
+                    if (skimSide < 0)
+                        ctx.skimNeg = true;
+                    else if (skimSide > 0)
+                        ctx.skimPos = true;
+                    if (ctx.skimNeg && ctx.skimPos)
+                    {
+                        ctx.lastReason = 'pinch';
+                        ctx.blockPoint = { x: hit.x, y: hit.y };
+                        return true;
+                    }
+                    ctx.lastReason = 'skim';
+                    continue;
+                }
+            }
             const shorterCenter = originOver ? centerB : centerA;
             const shorterRadius = originOver ? radiusB : radiusA;
-            const viewerEye = originOver ? originHeight : destHeight;
             const dist = _pointToSegmentDist(shorterCenter.x, shorterCenter.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y);
             const shorterAdj = (dist - shorterRadius) <= adjacentSlack;
-            if (shorterAdj && viewerEye < record.top + 1)
+            // hiding flush behind a taller wall is absolute: no viewer height exemption
+            if (shorterAdj)
             {
                 ctx.lastReason = 'adj';
                 ctx.blockPoint = { x: hit.x, y: hit.y };
@@ -289,6 +408,46 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
         {
             const startPt = originOn ? origin : dest;
             const otherPt = originOn ? dest : origin;
+            // vertex-touch corner peek; skim casters only get it at their own origin corner, or walk steps slip through foreign wall corners
+            const touchTol = (ctx.noPinch && !originOn) ? -1 : canvas.grid.size * 0.05;
+            const touchDistA = Math.hypot(startPt.x - edge.a.x, startPt.y - edge.a.y);
+            const touchDistB = Math.hypot(startPt.x - edge.b.x, startPt.y - edge.b.y);
+            let touchedVertex = null;
+            if (touchDistA <= touchTol && touchDistA <= touchDistB)
+                touchedVertex = edge.a;
+            else if (touchDistB <= touchTol)
+                touchedVertex = edge.b;
+            if (touchedVertex)
+            {
+                const skimSide = _skimsVertex(origin, dest, edge, touchedVertex.x, touchedVertex.y);
+                if (skimSide !== false)
+                {
+                    if (skimSide < 0)
+                        ctx.skimNeg = true;
+                    else if (skimSide > 0)
+                        ctx.skimPos = true;
+                    if (ctx.skimNeg && ctx.skimPos && !ctx.noPinch)
+                    {
+                        ctx.lastReason = 'pinch';
+                        ctx.blockPoint = { x: startPt.x, y: startPt.y };
+                        return true;
+                    }
+                    ctx.lastReason = 'skim';
+                    continue;
+                }
+            }
+            // touching a wall never grants shots through it: block when the far end is across it
+            const anchor = originOn ? centerA : centerB;
+            const toucherHeight = originOn ? originHeight : destHeight;
+            const sideOther = edge.orientPoint?.(otherPt) ?? 0;
+            const sideAnchor = edge.orientPoint?.(anchor) ?? 0;
+            if (sideOther && sideAnchor && sideOther !== sideAnchor
+                && toucherHeight >= record.bottom && toucherHeight <= record.top)
+            {
+                ctx.lastReason = 'through-touch';
+                ctx.blockPoint = { x: startPt.x, y: startPt.y };
+                return true;
+            }
             const stepLen = Math.hypot(otherPt.x - startPt.x, otherPt.y - startPt.y) || 1;
             const sampleX = startPt.x + ((otherPt.x - startPt.x) / stepLen) * 2;
             const sampleY = startPt.y + ((otherPt.y - startPt.y) / stepLen) * 2;
@@ -315,7 +474,7 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                     else if (skimSide > 0)
                         ctx.skimPos = true;
                     // opposite-side skims pinch the line: tilting off one corner lands on the other
-                    if (ctx.skimNeg && ctx.skimPos)
+                    if (ctx.skimNeg && ctx.skimPos && !ctx.noPinch)
                     {
                         ctx.lastReason = 'pinch';
                         ctx.blockPoint = { x: hit.x, y: hit.y };
@@ -493,20 +652,112 @@ export function lancerHasLineOfSight(tokenA, tokenB)
     // The 3 sampled rays can miss a clear line threading a gap; only on failure, test every vertex pair.
     if (!result)
         result = _denseLosClear(tokenA, tokenB, heightA, heightB, edges, ctx);
+    // LOS is reciprocal: some per-segment rules read the origin end, so a pair sees together or not at all.
+    if (!result)
+    {
+        const ctxReverse = {
+            skipPrefixA: ctx.skipPrefixB,
+            skipPrefixB: ctx.skipPrefixA,
+            centerA: centerB,
+            centerB: centerA,
+            radiusA: ctx.radiusB,
+            radiusB: ctx.radiusA,
+        };
+        result = _denseLosClear(tokenB, tokenA, heightB, heightA, edges, ctxReverse);
+    }
     _losPairCache.set(pairKey, result);
     return result;
+}
+
+/**
+ * Ray caster for the pulse's skim lines: tests one segment from a point of the origin token
+ * under the full Lancer rules (skim, graze, heights), both ends at the origin's LOS height.
+ * @param {any} originToken
+ * @returns {((from: {x: number, y: number}, to: {x: number, y: number}) => boolean)|null} true = clear
+ */
+export function makeSkimRayCaster(originToken)
+{
+    const doc = originToken?.document;
+    if (!doc || _isDestroyed(originToken))
+        return null;
+    const height = getTokenVisionLOS(originToken);
+    const center = originToken.center;
+    const edges = _collectSightEdges();
+    const ctx = {
+        skipPrefixA: `la-block-los-${doc.id}-`,
+        skipPrefixB: `la-block-los-${doc.id}-`,
+        centerA: center,
+        centerB: center,
+        radiusA: Math.max(originToken.w ?? 0, originToken.h ?? 0) / 2,
+        radiusB: 0,
+        // the skim line rides corners on both sides; the perpendicular casts decide what lights
+        noPinch: true,
+    };
+    const test = (from, to) =>
+    {
+        ctx.centerB = to;
+        return !_segmentBlocked(from, height, to, height, edges, ctx);
+    };
+    test.ctx = ctx;
+    return test;
+}
+
+/**
+ * Wall segments that block at the origin's eye height, for the pulse's skim lines.
+ * @param {any} originToken
+ * @returns {{a: {x: number, y: number}, b: {x: number, y: number}}[]}
+ */
+export function getEyeWallSegments(originToken)
+{
+    const doc = originToken?.document;
+    if (!doc || _isDestroyed(originToken))
+        return [];
+    const height = getTokenVisionLOS(originToken);
+    return _collectSightEdges()
+        .filter(record => record.bottom <= height && height <= record.top)
+        .map(record => ({
+            a: { x: record.edge.a.x, y: record.edge.a.y },
+            b: { x: record.edge.b.x, y: record.edge.b.y },
+        }));
+}
+
+/** True when the point sits inside a wall polygon whose height band contains the token's eye. */
+export function isPointInEyeSolid(originToken, point)
+{
+    const doc = originToken?.document;
+    if (!doc || _isDestroyed(originToken))
+        return false;
+    return _pointInEyePolys(_eyeSolidPolys(getTokenVisionLOS(originToken)), point.x, point.y);
+}
+
+/**
+ * Same test with the origin's banded polygons resolved once, for per-point loops.
+ * @param {any} originToken
+ * @returns {((point: {x: number, y: number}) => boolean)|null}
+ */
+export function makeEyeSolidTester(originToken)
+{
+    const doc = originToken?.document;
+    if (!doc || _isDestroyed(originToken))
+        return null;
+    const polys = _eyeSolidPolys(getTokenVisionLOS(originToken));
+    return (point) => _pointInEyePolys(polys, point.x, point.y);
 }
 
 function _denseLosClear(tokenA, tokenB, heightA, heightB, edges, ctx)
 {
     const pointsA = _tokenSamplePoints(tokenA);
     const pointsB = _tokenSamplePoints(tokenB);
+    ctx.denseWitness = null;
     for (const pointA of pointsA)
     {
         for (const pointB of pointsB)
         {
             if (!_segmentBlocked(pointA, heightA, pointB, heightB, edges, ctx))
+            {
+                ctx.denseWitness = { from: { x: Math.round(pointA.x), y: Math.round(pointA.y) }, to: { x: Math.round(pointB.x), y: Math.round(pointB.y) }, reason: ctx.lastReason };
                 return true;
+            }
         }
     }
     return false;
@@ -603,6 +854,7 @@ function _dumpLos()
             return { name: ['centre', 'left', 'right'][index] ?? index, origin: _roundPoint(origin), dest: _roundPoint(pointsT[index]), clear, reason: ctx.lastReason };
         });
         const denseForward = _denseLosClear(viewer, target, heightV, heightT, edges, ctx);
+        const denseForwardWitness = ctx.denseWitness;
         const ctxReverse = {
             skipPrefixA: ctx.skipPrefixB,
             skipPrefixB: ctx.skipPrefixA,
@@ -619,6 +871,7 @@ function _dumpLos()
             return { name: ['centre', 'left', 'right'][index] ?? index, origin: _roundPoint(origin), dest: _roundPoint(pointsVRev[index]), clear, reason: ctxReverse.lastReason };
         });
         const denseReverse = _denseLosClear(target, viewer, heightT, heightV, edges, ctxReverse);
+        const denseReverseWitness = ctxReverse.denseWitness;
         const keyV = _losPosKey(viewer.document);
         const keyT = _losPosKey(target.document);
         const pairKey = keyV < keyT ? `${keyV}|${keyT}` : `${keyT}|${keyV}`;
@@ -627,7 +880,7 @@ function _dumpLos()
             .filter(record => !(record.maxX < minX || record.minX > maxX || record.maxY < minY || record.minY > maxY))
             .map(record => ({ id: record.id, a: _roundPoint(record.edge.a), b: _roundPoint(record.edge.b), top: record.top }));
         dump.push({ viewer: viewer.document.name, viewerEye: heightV, target: target.document.name, targetEye: heightT, grid: canvas.grid.size,
-            forward: { rays, dense: denseForward }, reverse: { rays: raysReverse, dense: denseReverse }, cachedRenderValue: cached, nearEdges });
+            forward: { rays, dense: denseForward, denseWitness: denseForwardWitness }, reverse: { rays: raysReverse, dense: denseReverse, denseWitness: denseReverseWitness }, cachedRenderValue: cached, nearEdges });
     }
     console.log('LANCER_LOS_DUMP\n' + JSON.stringify(dump, null, 1));
     return dump;
@@ -956,6 +1209,8 @@ class DetectionModeLancerLosShadow extends DetectionMode
             return false;
         if (!_fovContains(visionSource, target))
             return false;
+        if (_sensorCanDetect(visionSource, target))
+            return false;
         return _losVetoed(visionSource, target);
     }
 
@@ -1117,6 +1372,18 @@ function _registerVisionSettings()
         if (canvas?.perception)
             canvas.perception.update({ refreshVision: true });
     };
+    game.settings.register(MODULE_ID, SETTING_SILH_FILTER_TEST, {
+        name: 'TEST: filter-based awareness silhouette (filterArea bypass)',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () =>
+        {
+            _markOverlayDirty();
+            refreshPerception();
+        }
+    });
     game.settings.register(MODULE_ID, SETTING_AUTO_ADD, {
         name: 'Auto-add Lancer detection modes on token creation',
         hint: 'Add Lancer Sensors and Battlefield Awareness to newly placed tokens.',
@@ -1168,6 +1435,19 @@ function _registerVisionSettings()
         config: false,
         type: Boolean,
         default: true,
+        onChange: refreshPerception
+    });
+    game.settings.register(MODULE_ID, SETTING_LOS_HEIGHT_RULE, {
+        name: 'Lancer Line of Sight: height rule',
+        hint: 'Discrete follows the size rules. Trigonometric follows the real sightline, so peeks over walls fade with distance.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: {
+            discrete: 'Discrete (size rules)',
+            trig: 'Trigonometric (true sightline)'
+        },
+        default: 'discrete',
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_LOS_DEBUG, {
@@ -1409,11 +1689,63 @@ function _patchRenderDetectionFilter()
 {
     const proto = /** @type {any} */ (Token.prototype);
     const orig = proto._renderDetectionFilter;
+    const frameRect = new PIXI.Rectangle();
+    const chainFilters = [];
+    // fresh bounds (not the cached getBounds(true)), mesh filters kept so displacement FX carry over
+    const renderWithMeshFilters = (token, renderer) =>
+    {
+        const mesh = token.mesh;
+        if (!mesh)
+            return;
+        frameRect.copyFrom(mesh.getBounds(false));
+        frameRect.pad(0.1 * Math.max(frameRect.width, frameRect.height));
+        const originalFilters = mesh.filters;
+        const originalTint = mesh.tint;
+        const originalAlpha = mesh.worldAlpha;
+        chainFilters.length = 0;
+        for (const filter of originalFilters ?? [])
+        {
+            if (filter?.constructor?.name === 'FilterTransform')
+                chainFilters.push(filter);
+        }
+        chainFilters.push(token.detectionFilter);
+        mesh.filterArea = frameRect;
+        mesh.filters = chainFilters;
+        mesh.tint = 0xFFFFFF;
+        mesh.worldAlpha = 1;
+        mesh.pluginName = 'batch';
+        try
+        {
+            mesh.render(renderer);
+        }
+        finally
+        {
+            mesh.filters = originalFilters;
+            mesh.tint = originalTint;
+            mesh.worldAlpha = originalAlpha;
+            mesh.pluginName = null;
+            mesh.filterArea = null;
+        }
+    };
     proto._renderDetectionFilter = function(renderer)
     {
         const filterName = this.detectionFilter?.constructor?.name;
         if (filterName === 'SilhouetteOutlineFilter')
+        {
+            if (_getSetting(SETTING_SILH_FILTER_TEST))
+                renderWithMeshFilters(this, renderer);
             return;
+        }
+        if (filterName === 'ScanlineOutlineFilter')
+        {
+            renderWithMeshFilters(this, renderer);
+            return;
+        }
+        if (filterName === 'PlainVisionFilter' || filterName === 'ShadowVisionFilter')
+        {
+            this.mesh?.render(renderer);
+            return;
+        }
         return orig.call(this, renderer);
     };
 }
@@ -1498,7 +1830,6 @@ function _makeSilhouetteMesh(token, color)
     });
     const mesh = new PIXI.Mesh(geometry, shader);
     mesh.name = _OVERLAY_NAME;
-    mesh.zIndex = 500;
     return mesh;
 }
 
@@ -1541,6 +1872,8 @@ function _getOverlayConfig(token)
 {
     const filterName = token.detectionFilter?.constructor?.name;
     if (filterName !== 'SilhouetteOutlineFilter')
+        return null;
+    if (_getSetting(SETTING_SILH_FILTER_TEST))
         return null;
     const mode = token.document?.getFlag?.(MODULE_ID, 'awarenessMode') ?? 'default';
     if (mode === 'ignore' || mode === 'visible')
@@ -1621,8 +1954,12 @@ function _refreshOverlayState()
             mesh = _makeSilhouetteMesh(token, overlayConfig.color);
             if (!mesh)
                 continue;
-            token.addChild(mesh);
-            token.sortableChildren = true;
+            // above the token base layers, below bars / status icons / nameplate
+            const uiIndex = token.children.indexOf(token.bars);
+            if (uiIndex >= 0)
+                token.addChildAt(mesh, uiIndex);
+            else
+                token.addChild(mesh);
         }
         mesh.shader.uniforms.outlineColor = overlayConfig.color;
         mesh.shader.uniforms.simpleMode = overlayConfig.simple ? 1 : 0;

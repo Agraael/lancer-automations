@@ -1,6 +1,7 @@
 /* global game, CONFIG, Hooks, foundry, ui */
 
 import { getAutoConsumeDisabled, getSubAutoConsumeDisabled, getConsumeOn } from '../interactive/extra-config.js';
+import { getSettingEnabled } from '../setup/settings-register.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_KEY = 'enablePerRoundTurnTags';
@@ -8,14 +9,7 @@ const TARGET_FLOWS = ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow', '
 
 function enabled()
 {
-    try
-    {
-        return !!game.settings.get(MODULE_ID, SETTING_KEY);
-    }
-    catch
-    {
-        return false;
-    }
+    return getSettingEnabled(SETTING_KEY, MODULE_ID);
 }
 
 function inCombat()

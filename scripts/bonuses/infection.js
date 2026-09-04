@@ -13,6 +13,9 @@
  *   - Stabilize and Full Repair also clear Infection.
  */
 
+import { checkDamageResistances, consumeImmunityUse } from './genericBonuses.js';
+import { broadcastFloatTokenText } from '../tools/float-text.js';
+
 const MODULE_ID = 'lancer-automations';
 
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
@@ -600,8 +603,15 @@ export function initInfectionHooks()
             // Run after the system's jQuery click handler.
             setTimeout(async () =>
             {
-                const resistant = actor.system?.resistances?.infection;
+                const shredded = actor.system?.statuses?.shredded;
+                const nativeResist = !shredded && actor.system?.resistances?.infection;
+                const bonusResist = !shredded && !nativeResist && checkDamageResistances(actor, 'infection').length > 0;
+                const resistant = nativeResist || bonusResist;
                 const finalInfection = resistant ? Math.ceil(scaledInfection / 2) : scaledInfection;
+                if (bonusResist)
+                    await consumeImmunityUse(actor, 'resistance', null, { damageTypes: ['infection'] });
+                if (resistant)
+                    broadcastFloatTokenText(target?.object ?? actor.getActiveTokens?.()?.[0], 'Resisted', 0x4da6ff);
 
                 const currentInfection = actor.system?.infection ?? 0;
                 const updates = { 'system.infection': currentInfection + finalInfection };
@@ -665,7 +675,7 @@ export function initInfectionHooks()
             ui.notifications.info(`${tokenName} took ${heat} Heat from Infection.`);
         });
 
-        console.log(`${MODULE_ID} | Wrapped damageCalc for Infection handling`);
+        console.log(`${MODULE_ID} | Infection damage-apply handlers registered`);
     }
 
     console.log(`${MODULE_ID} | Infection hooks initialized`);

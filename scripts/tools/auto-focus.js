@@ -98,10 +98,37 @@ export function handleRemoteFocus({ kind, sceneId, tokenIds } = {})
     focusTokenIds(kind, tokenIds);
 }
 
-// One pan per FX burst.
-function focusActivationToken(token)
+// Everything not listed counts as an item activation.
+const FOCUS_CATEGORY_BY_FX = {
+    attack: 'attack',
+    damage: 'damage',
+    hase: 'hase',
+    skill: 'skill',
+    profile: 'profile',
+    mod: 'mod',
+    quickTech: 'tech',
+    fullTech: 'tech',
+    invade: 'tech',
+};
+
+function isActionFocusEnabled(actionKey)
 {
-    if (!token?.id)
+    if (!actionKey)
+        return true;
+    try
+    {
+        return game.settings.get(MODULE_ID, `autoFocusAction.${FOCUS_CATEGORY_BY_FX[actionKey] ?? 'activation'}`) !== false;
+    }
+    catch
+    {
+        return true;
+    }
+}
+
+// One pan per FX burst.
+function focusActivationToken(token, actionKey = null)
+{
+    if (!token?.id || !isActionFocusEnabled(actionKey))
         return;
     const now = Date.now();
     if ((lastActivationFocus.get(token.id) ?? 0) > now - ACTIVATION_DEBOUNCE_MS)

@@ -366,3 +366,29 @@ export function getActorMaxReach_WithBonus(input)
     }
     return max;
 }
+
+/** @returns {boolean} true when the weapon's active profile carries Arcing or Seeking */
+export function weaponIgnoresLineOfSight(item)
+{
+    if (!item)
+        return false;
+    const { tags } = _getItemBaseData(item);
+    return tags.some(tag => (tag.lid ?? tag.id) === 'tg_arcing' || (tag.lid ?? tag.id) === 'tg_seeking');
+}
+
+/** @returns {{ max: number, freeMax: number }} total reach and the reach not bound by line of sight */
+export function getActorReachBands_WithBonus(input)
+{
+    const { weapons, actor } = _resolveWeaponsAndActor(input);
+    let max = 0;
+    let freeMax = 0;
+    for (const weapon of weapons)
+    {
+        const reach = getWeaponReachRange(weapon, actor);
+        if (reach > max)
+            max = reach;
+        if (reach > freeMax && weaponIgnoresLineOfSight(weapon))
+            freeMax = reach;
+    }
+    return { max, freeMax };
+}

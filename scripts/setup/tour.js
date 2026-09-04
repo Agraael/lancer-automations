@@ -768,6 +768,29 @@ const TAH_STEPS = [
         content: 'Ctrl+Right-click any action to mark as favorite. Hover the star tab to open the list.',
         selector: `${TAH_ROOT} .la-hud-fav-icon`,
     },
+    {
+        id: 'action-wheel',
+        title: 'Action Wheel',
+        content: 'Press <b>F</b> on a selected token: your favorites form a wheel around it. Click an icon to use it, right-click for its details, hover for the range preview.',
+        selector: 'body',
+        allowCanvas: true,
+        action: async () =>
+        {
+            if (!canvas.tokens.controlled[0])
+                canvas.tokens.placeables.find((token) => token.actor && !token.document.hidden)?.control({ releaseOthers: true });
+            const { toggleActionWheel } = await import('../tah/action-wheel.js');
+            if (!document.querySelector('.lancer-action-wheel'))
+                await toggleActionWheel();
+        },
+        cleanup: async () =>
+        {
+            if (document.querySelector('.lancer-action-wheel'))
+            {
+                const { closeRadialWheel } = await import('../tools/radial-wheel.js');
+                closeRadialWheel({ silent: true });
+            }
+        },
+    },
     _tahCategoryStep('Actions', "Your actions, grouped by activation: Basic, Attacks, Quick, Full, Reactions and more."),
     _tahDrillStep('actions-basic', 'Basic', "The common actions, split into Quick and Full sections.", ['actions'], 'basic'),
     _tahDrillStep('actions-attacks', 'Attacks', "Skirmish, Barrage, Fight.", ['actions'], 'attacks'),

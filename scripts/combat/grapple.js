@@ -333,7 +333,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                 icon: "cci cci-reticule",
                                 callback: async () =>
                                 {
-                                    await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken), reactorToken);
+                                    await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken), reactorToken, 'grapple');
                                     await api.executeBasicAttack(reactorToken.actor, {
                                         title: "Grapple",
                                         attack_type: "Melee"

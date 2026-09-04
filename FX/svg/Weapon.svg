@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="600mm"
+   height="60.528mm"
+   viewBox="0 0 599.99999 60.528"
+   version="1.1"
+   id="svg1"
+   xml:space="preserve"
+   inkscape:export-filename="Stabilize.svg"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96"
+   sodipodi:docname="Weapon.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="0.32829115"
+     inkscape:cx="2043.9174"
+     inkscape:cy="-147.73472"
+     inkscape:window-width="1500"
+     inkscape:window-height="895"
+     inkscape:window-x="2088"
+     inkscape:window-y="169"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1-1" /><defs
+     id="defs1"><rect
+       x="398"
+       y="10"
+       width="1194"
+       height="398"
+       id="rect3" /><style
+       id="style1">
+      .cls-1 {
+        
+      }
+    </style></defs><g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(42.994079,-122.0623)"><g
+       inkscape:label="Layer 1"
+       id="layer1-1"
+       transform="translate(47.778387,0.58467694)"
+       style="fill:#f9f9f9;fill-opacity:1"><text
+         xml:space="preserve"
+         transform="matrix(1.0460111,0,0,1.0460111,-426.28922,123.66129)"
+         id="text2"
+         style="font-weight:bold;font-size:74.1972px;line-height:0.6;font-family:Arial;-inkscape-font-specification:'Arial, Bold';font-variant-caps:small-caps;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect3);display:inline;fill:#f9f9f9;fill-opacity:1;stroke:#ffffff;stroke-width:0.0377953;stroke-miterlimit:3.3"><tspan
+           x="398"
+           y="52.719365"
+           id="tspan1">Weapon         </tspan></text></g><image
+       id="Nexus-1"
+       x="-31.59885"
+       y="123.49496"
+       width="57.865223"
+       height="57.865223"
+       xlink:href="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjxzdmcKICAgdmVyc2lvbj0iMS4xIgogICB2aWV3Qm94PSIwIC02NCAxMDI0IDEwMjQiCiAgIHdpZHRoPSI1MTIiCiAgIGhlaWdodD0iNTEyIgogICBpZD0ic3ZnMSIKICAgc29kaXBvZGk6ZG9jbmFtZT0ibWVjaF93ZWFwb24uc3ZnIgogICBpbmtzY2FwZTp2ZXJzaW9uPSIxLjIuMiAoNzMyYTAxZGE2MywgMjAyMi0xMi0wOSkiCiAgIHhtbG5zOmlua3NjYXBlPSJodHRwOi8vd3d3Lmlua3NjYXBlLm9yZy9uYW1lc3BhY2VzL2lua3NjYXBlIgogICB4bWxuczpzb2RpcG9kaT0iaHR0cDovL3NvZGlwb2RpLnNvdXJjZWZvcmdlLm5ldC9EVEQvc29kaXBvZGktMC5kdGQiCiAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKICAgeG1sbnM6c3ZnPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGRlZnMKICAgICBpZD0iZGVmczEiIC8+CiAgPHNvZGlwb2RpOm5hbWVkdmlldwogICAgIGlkPSJuYW1lZHZpZXcxIgogICAgIHBhZ2Vjb2xvcj0iI2ZmZmZmZiIKICAgICBib3JkZXJjb2xvcj0iIzAwMDAwMCIKICAgICBib3JkZXJvcGFjaXR5PSIwLjI1IgogICAgIGlua3NjYXBlOnNob3dwYWdlc2hhZG93PSIyIgogICAgIGlua3NjYXBlOnBhZ2VvcGFjaXR5PSIwLjAiCiAgICAgaW5rc2NhcGU6cGFnZWNoZWNrZXJib2FyZD0iMCIKICAgICBpbmtzY2FwZTpkZXNrY29sb3I9IiNkMWQxZDEiCiAgICAgaW5rc2NhcGU6em9vbT0iMS41NzQyMTg4IgogICAgIGlua3NjYXBlOmN4PSIyMzUuOTkwMDciCiAgICAgaW5rc2NhcGU6Y3k9IjI1NS45OTk5OSIKICAgICBpbmtzY2FwZTp3aW5kb3ctd2lkdGg9IjE5MjAiCiAgICAgaW5rc2NhcGU6d2luZG93LWhlaWdodD0iMTAwOSIKICAgICBpbmtzY2FwZTp3aW5kb3cteD0iLTgiCiAgICAgaW5rc2NhcGU6d2luZG93LXk9Ii04IgogICAgIGlua3NjYXBlOndpbmRvdy1tYXhpbWl6ZWQ9IjEiCiAgICAgaW5rc2NhcGU6Y3VycmVudC1sYXllcj0ic3ZnMSIKICAgICBzaG93Z3JpZD0iZmFsc2UiIC8+CiAgPGcKICAgICB0cmFuc2Zvcm09Im1hdHJpeCgxLDAsMCwtMSwwLDg5NikiCiAgICAgaWQ9ImcxIgogICAgIHN0eWxlPSJmaWxsOiNmZmZmZmYiPgogICAgPHBhdGgKICAgICAgIGZpbGw9ImN1cnJlbnRDb2xvciIKICAgICAgIGQ9Ik0gODUzLDc1NSA2MzYsNjgzIFYgNTg2IEwgMjM5LDE4OSB2IC00OCBoIDQ4IGwgMzk3LDM5NyBoIDk3IHogbSAtNjgyLDAgNzIsLTIxNyBoIDk3IGwgODAsLTgwIDQ4LDQ4IC04MCw4MCB2IDk3IHogTSA2MDQsMzcwIDU1NiwzMjIgNzM3LDE0MSBoIDQ4IHYgNDggeiIKICAgICAgIGlkPSJwYXRoMSIKICAgICAgIHN0eWxlPSJmaWxsOiNmZmZmZmYiIC8+CiAgPC9nPgo8L3N2Zz4K"
+       style="mix-blend-mode:multiply;fill:#000000;fill-opacity:0;stroke:#ffffff;stroke-opacity:1"
+       transform="matrix(1.1679702,0,0,1.2124005,3.2928092,-33.282374)" /></g></svg>

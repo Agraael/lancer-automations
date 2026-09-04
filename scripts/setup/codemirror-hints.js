@@ -106,7 +106,7 @@ const TRIGGER_MANIFEST = [
     { name: 'distance', returns: 'number' },
     { name: 'destination', returns: '{ x, y }' },
     { name: 'isDrag', returns: 'boolean' },
-    { name: 'moveInfo', returns: '{ isInvoluntary, isTeleport, isUndo, isModified, pathHexes, isBoost?, boostSet?, extraData? }' },
+    { name: 'moveInfo', returns: '{ isInvoluntary, isTeleport, isUndo, isModified, pathHexes, isFreeMovement?, movementCost?, extraData? }' },
     { name: 'combat', returns: 'Combat' },
     { name: 'round', returns: 'number' },
     { name: 'isHidden', returns: 'boolean' },
@@ -337,7 +337,7 @@ const HAND_OPTION_SCHEMAS = {
         ['durationTurns', 'number'],
         ['origin', 'Token | string'],
         ['icon', 'string'],
-        ['consumption', '{ trigger, originId?, groupId?, evaluate?, itemLid?, itemId?, actionName?, isBoost?, minDistance?, checkType?, checkAbove?, checkBelow? }'],
+        ['consumption', '{ trigger, originId?, groupId?, evaluate?, itemLid?, itemId?, actionName?, minDistance?, checkType?, checkAbove?, checkBelow? }'],
     ],
     'executeEffectManager.options': [
         ['initialTab', '"bonus" | "manage" | string'],

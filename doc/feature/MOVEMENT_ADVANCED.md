@@ -9,19 +9,6 @@ In the **Combat & Movement** tab: boost detection, the movement cap, the boost o
 
 ---
 
-## Boost detection
-
-**`experimentalBoostDetection`** tracks the cumulative cost of a token's intentional (dragged) movement and works out when it crosses a boost threshold. Boost N is counted once the running cost passes N times the token's speed.
-
-When it fires, the `onMove` trigger data carries:
-
-- `moveInfo.isBoost` - this move crossed a threshold
-- `moveInfo.boostSet` - which boost numbers were crossed
-
-Cumulative movement resets when the move history clears (combat start, or per turn/round if you enabled those). **`debugBoostDetection`** shows a notification with the numbers each time it triggers.
-
----
-
 ## Movement cap and the offer cards
 
 <img align="right" src="../img/mv-boost-offer.png" width="45%"/>
@@ -96,5 +83,4 @@ Keep the original final `else` and closing brace as-is.
 ## Debug
 
 - **`debugMovement`** logs the per-cell cost calculation and draws terrain/climb/penalty overlays on the canvas during a move.
-- **`debugBoostDetection`** notifies on each boost detection (see above).
 - **`debugPathHexCalculation`** highlights the calculated path cells.

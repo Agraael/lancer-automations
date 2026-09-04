@@ -3,6 +3,7 @@ import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { consumeEffectCharge, runInOnInitTriggerContext } from "../bonuses/flagged-effects.js";
+import { deferResistanceEffectConsumption } from "../bonuses/genericBonuses.js";
 import { getTokenDistance } from "../combat/overwatch.js";
 import { getItemLID, isItemAvailable, hasReactionAvailable, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
@@ -16,7 +17,7 @@ const cachedNonActionReactionsByTrigger = new Map();
 /** @type {Map<string, Array>} triggerType to general reactions with sceneReactor on, evaluated once as the scene */
 const cachedSceneReactionsByTrigger = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart']);
-const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "npc_feature", "pilot_gear", "talent", "bond"]);
+const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "weapon_mod", "npc_feature", "pilot_gear", "talent", "bond"]);
 const sceneReactorMode = reaction => reaction.sceneReactor || 'off';
 const onViewedScene = reaction => !reaction.sceneId || reaction.sceneId === canvas.scene?.id;
 
@@ -637,6 +638,11 @@ export function _buildStartRelatedFlow(token, item, reaction, activationName, ex
             const reactionPath = reaction?.reactionPath;
             if (reactionPath)
             {
+                if (/^(?:system\.)?profiles\[\d+\]$/.test(reactionPath))
+                {
+                    console.warn(`lancer-automations | activation type "flow" cannot start a profile path (${reactionPath}), use code or none`);
+                    return false;
+                }
                 const activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
                 return _beginFlow("ActivationFlow", item, { action_path: activationPath }, extraData);
             }
@@ -1462,8 +1468,7 @@ async function checkReactions(triggerType, data)
     }, REACTION_DEBOUNCE_MS);
 }
 
-// Origin can appear as triggering token, single target, or in targets array.
-// role: 'source' = origin caused the event, 'target' = origin is one of its targets, else either side.
+// originId may be the triggering token, a single target, or inside targets[]; role 'source' = caused it, 'target' = was hit by it, else either side.
 function isOriginInvolved(originId, role, data)
 {
     const isSource = data.triggeringToken?.id === originId;
@@ -1500,11 +1505,6 @@ function passesBuiltInFilters(consumption, triggerType, data)
     if (consumption.actionName)
     {
         if (data.actionName !== consumption.actionName)
-            return false;
-    }
-    if (consumption.isBoost !== undefined && consumption.isBoost !== null)
-    {
-        if (data.moveInfo?.isBoost !== consumption.isBoost)
             return false;
     }
     if (consumption.minDistance !== undefined && consumption.minDistance !== null)
@@ -1603,6 +1603,11 @@ export async function processEffectConsumption(triggerType, data)
                     }
                 }
 
+                if (triggerType === 'onDamage' && effect.changes?.some(change => change.key?.startsWith('system.resistances.')))
+                {
+                    deferResistanceEffectConsumption(token.actor, effect);
+                    return;
+                }
                 console.log(`lancer-automations | Consuming charge on ${effect.name} (trigger: ${triggerType})`);
                 if (consumption.groupId)
                     consumedGroups.add(consumption.groupId);
