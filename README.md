@@ -40,6 +40,10 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an automation engine that can drive almost any item from any LCP, plus a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
 
+<p align="center">
+  <img src="doc/vid/battlelog.gif" width="85%"/>
+</p>
+
 ## 📘 [Installation and full documentation →](https://agraael.github.io/lancer-automations/)
 
 ---
