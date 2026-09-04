@@ -1209,10 +1209,10 @@ globalThis.laAreaDraw = (range = 10) =>
     /** @type {any} */ (globalThis)._laAreaGfx = gfx;
     const started = performance.now();
     const rows = [];
-    // Foundry's own vision polygon for the same token, to tell "we sample coarsely" from "we see less than Foundry"
+    // Foundry's own polygon, to separate coarse sampling from actually seeing less
     const foundryLos = /** @type {any} */ (origin).vision?.los ?? null;
     let mismatches = 0;
-    // the real pulse verdict, so the overlay can never disagree with what the pulse actually draws
+    // the real filter, so the overlay can never disagree with the pulse
     const inRange = getInRangeOffsets(origin, range, { includeSelf: true });
     const pulseKeys = new Set(makePulseCellFilter(origin, { los: true })(inRange).map(cell =>
     {
@@ -1223,36 +1223,36 @@ globalThis.laAreaDraw = (range = 10) =>
     {
         const { col, row } = _cellColRow(cell);
         const granted = pulseKeys.has(`${col},${row}`);
-        const flat = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
-        const hexPolygon = new PIXI.Polygon(flat);
+        const hexPoints = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
+        const hexPolygon = new PIXI.Polygon(hexPoints);
         const hexArea = Math.abs(hexPolygon.signedArea());
         if (!hexArea)
             continue;
-        // per eye, never the union: one eye seeing a real band is the claim, seven slivers is the artifact
-        let best = 0;
+        // per eye, never the union
+        let bestLit = 0;
         let bestEye = -1;
         for (let index = 0; index < clipPaths.length; index++)
         {
             const solution = hexPolygon.intersectClipper(clipPaths[index], { scalingFactor: scale });
-            const lit = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
-            if (lit > best)
+            const litArea = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
+            if (litArea > bestLit)
             {
-                best = lit;
+                bestLit = litArea;
                 bestEye = index;
             }
         }
-        const percent = Math.round((best / hexArea) * 1000) / 10;
+        const percent = Math.round((bestLit / hexArea) * 1000) / 10;
         const center = getHexCenter(col, row);
         const foundrySees = foundryLos ? foundryLos.contains(center.x, center.y) : false;
         const band = percent >= 20;
         gfx.lineStyle(0).beginFill(granted ? 0x33ff66 : (band ? 0xffaa22 : 0xff3333), granted ? 0.13 : 0.22);
-        gfx.drawPolygon(flat);
+        gfx.drawPolygon(hexPoints);
         gfx.endFill();
         if (foundrySees && !granted)
         {
             mismatches++;
             gfx.lineStyle(3, 0x33aaff, 0.9);
-            gfx.drawPolygon(flat);
+            gfx.drawPolygon(hexPoints);
             gfx.lineStyle(0);
         }
         const label = new PIXI.Text(`${percent}%`, {
@@ -1297,37 +1297,34 @@ function _tokenCellKeys(originToken)
     return { seen, blocked };
 }
 
-// A shadow line can cut at most 3.5% off a hex without touching one of the 7 test points, so a refused
-// hex above this carries a real band of light, not a graze.
+// Below 3.5% a shadow line would have touched one of the 7 test points, so above it is a real band.
 const AREA_GRANT_FRACTION = 0.10;
 
-// Lit fraction of one hex, measured per eye. Never the union: one eye seeing a band is the claim,
-// several eyes each grazing a sliver is the artifact.
+// Per eye, never the union: one eye seeing a band is the claim, several eyes grazing a sliver is not.
 function _hexLitFraction(col, row, clipPaths, scale)
 {
-    const flat = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
-    const hexPolygon = new PIXI.Polygon(flat);
+    const hexPoints = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
+    const hexPolygon = new PIXI.Polygon(hexPoints);
     const hexArea = Math.abs(hexPolygon.signedArea());
     if (!hexArea)
         return 0;
-    let best = 0;
-    for (const path of clipPaths)
+    let bestLit = 0;
+    for (const clipPath of clipPaths)
     {
-        const solution = hexPolygon.intersectClipper(path, { scalingFactor: scale });
-        const lit = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
-        if (lit > best)
-            best = lit;
+        const solution = hexPolygon.intersectClipper(clipPath, { scalingFactor: scale });
+        const litArea = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
+        if (litArea > bestLit)
+            bestLit = litArea;
     }
-    return best / hexArea;
+    return bestLit / hexArea;
 }
 
-// One build pass shares its cell filters: the static highlight and the wave rings ask for the same
-// origin with the same options, and nothing between them moves a token, a wall or a setting.
+// The highlight and the wave rings ask for the same origin and options, so one build shares the filter.
 let _pulseFilterScope = null;
 
 /**
- * Runs `build` with cell filter sharing on. The body must stay synchronous: _visibilityTester branches
- * on origin.vision, which flips on control with no invalidation.
+ * Shares cell filters across one build. Must stay synchronous: _visibilityTester reads origin.vision,
+ * which flips on control with no invalidation.
  * @template T
  * @param {() => T} build
  * @returns {T}
@@ -1394,7 +1391,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
         ? visible.built.map(entry => entry.sweep.toClipperPoints({ scalingFactor: CONST.CLIPPER_SCALING_FACTOR }))
         : null;
     const areaCache = new Map();
-    // A band always connects to what it comes from, so a refused hex is only measured next to a lit one.
+    // a band always touches what it comes from, so measure only next to a lit cell
     const areaGrants = (col, row, key, litKeys) =>
     {
         let nextToLit = false;
@@ -1408,7 +1405,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
         }
         if (!nextToLit)
             return false;
-        // only the measurement is cached; the frontier check above changes as cells light up
+        // cache the measurement only: the frontier check above changes as cells light up
         let fraction = areaCache.get(key);
         if (fraction === undefined)
         {
@@ -1418,7 +1415,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
         return fraction >= AREA_GRANT_FRACTION;
     };
     // cells arrive as {col,row} objects from the ring builder and as "col,row" strings from getInRangeOffsets
-    // The glow pass re-filters the same disc, so a cell is judged once per filter. 1 = kept, 0 = dropped.
+    // the glow pass re-filters the same disc; 1 = kept, 0 = dropped, 2 = waiting on the area pass
     const verdicts = new Map();
     const litKeys = new Set();
     const cellFilter = (cells) =>
@@ -1433,12 +1430,12 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
             if (!_cellOnMap(col, row, rect))
                 continue;
             const key = `${col},${row}`;
-            const seen = verdicts.get(key);
-            if (seen !== undefined)
+            const cachedVerdict = verdicts.get(key);
+            if (cachedVerdict !== undefined)
             {
-                if (seen === 1)
+                if (cachedVerdict === 1)
                     kept.push(cell);
-                else if (seen === 2)
+                else if (cachedVerdict === 2)
                     deferred.push({ cell, col, row, key });
                 continue;
             }
@@ -1495,7 +1492,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
             }
             verdicts.set(key, 0);
         }
-        // a band spreads from what is already lit, so sweep the frontier until it stops growing
+        // sweep the frontier until it stops growing
         let grew = deferred.length > 0;
         while (grew)
         {
@@ -1962,6 +1959,56 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
         strokeBoundary(lineW, lineColor, lineAlpha);
 }
 
+const BLOCKED_CONTOUR_ALPHA = 0.35;
+
+// Dashed ghost of the true flat reach over whatever the filter dropped; edges shared with the lit contour are skipped.
+export function paintBlockedRangeContour(graphic, fullCells, litCells, { glowColor = RANGE_GLOW.manual, lineAlpha = BLOCKED_CONTOUR_ALPHA } = {})
+{
+    const round = (value) => Math.round(value * 10) / 10;
+    const edgeKeyOf = (edge) =>
+    {
+        const aKey = `${round(edge.ax)},${round(edge.ay)}`;
+        const bKey = `${round(edge.bx)},${round(edge.by)}`;
+        return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+    };
+    // tied to the canvas: the ghost stops at the scene edge like the lit reach does
+    const rect = canvas.dimensions?.sceneRect ?? null;
+    const onMapCells = [];
+    for (const cell of fullCells)
+    {
+        const { col, row } = _cellColRow(cell);
+        if (_cellOnMap(col, row, rect))
+            onMapCells.push(cell);
+    }
+    const litEdgeKeys = new Set(_perimeterEdges(litCells).map(edgeKeyOf));
+    const edges = [];
+    for (const edge of _perimeterEdges(onMapCells))
+    {
+        if (!litEdgeKeys.has(edgeKeyOf(edge)))
+            edges.push([{ x: edge.ax, y: edge.ay }, { x: edge.bx, y: edge.by }]);
+    }
+    if (!edges.length)
+        return;
+    const gridScale = canvas.grid.size / 100;
+    const widthMul = _rangePulseWidthMul();
+    const alpha = lineAlpha * _rangePulseOpacity('rangePulseWaveOpacity');
+    const dashLen = canvas.grid.size * 0.16;
+    const gapLen = dashLen * 0.75;
+    // same halo + glow + core stack as paintPerimeterGlow, dashed and dimmer
+    const lineW = Math.max(1, 1.2 * gridScale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
+    graphic.lineStyle(haloW, 0x000000, alpha);
+    drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
+    if (glowColor !== null)
+    {
+        graphic.lineStyle(glowW, glowColor, alpha);
+        drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
+    }
+    graphic.lineStyle(lineW, RANGE_PULSE_STYLE.lineColor, alpha);
+    drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
+}
+
 export function paintRangeHighlight(highlight, casterToken, range, color = 0x00ff00, alpha = 0.2, includeSelf = false, opts = {})
 {
     highlight.clear();
@@ -1974,6 +2021,10 @@ export function paintRangeHighlight(highlight, casterToken, range, color = 0x00f
         // boundary from the includeSelf set so the origin never leaves an inner hole in the outline
         const boundaryCells = cellFilter(getInRangeOffsets(casterToken, range, { includeSelf: true }));
         paintPerimeterGlow(highlight, boundaryCells, { glowColor: opts.glowColor, lineColor: opts.lineColor ?? 0xFFFFFF, ...(opts.perimeterAlpha !== undefined ? { lineAlpha: opts.perimeterAlpha } : {}) });
+        // ghost measured against the flat reach, so elevation cuts read like wall cuts
+        const trueReach = getInRangeOffsets(casterToken, range, { includeSelf: true, elevationAware: false });
+        if (boundaryCells.length !== trueReach.size)
+            paintBlockedRangeContour(highlight, trueReach, boundaryCells, { glowColor: opts.glowColor });
     }
 }
 
@@ -2148,6 +2199,7 @@ export function createMergedRangeHighlight(entries, {
         const unionOrigins = [];
         const unionStatic = new Set();
         const unionWave = new Set();
+        const unionFullWave = new Set();
         for (const entry of entries)
         {
             const origin = entry.point ?? _effectiveOrigin(entry.token);
@@ -2166,8 +2218,10 @@ export function createMergedRangeHighlight(entries, {
                 unionStatic.add(key);
             for (const key of cellFilter(getInRangeOffsets(origin, range, { includeSelf: true })))
                 unionWave.add(key);
+            for (const key of getInRangeOffsets(origin, range, { includeSelf: true, elevationAware: false }))
+                unionFullWave.add(key);
         }
-        return { unionOrigins, unionStatic, unionWave };
+        return { unionOrigins, unionStatic, unionWave, unionFullWave };
     };
 
     const rangeHighlight = new PIXI.Graphics();
@@ -2179,7 +2233,7 @@ export function createMergedRangeHighlight(entries, {
     let wavePulse = null;
     const rebuild = () =>
     {
-        const { unionOrigins, unionStatic, unionWave } = buildUnions();
+        const { unionOrigins, unionStatic, unionWave, unionFullWave } = buildUnions();
         rangeHighlight.clear();
         if (!_OUTLINE_ONLY)
             paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: _staticGridAlpha(staticLineAlpha), lineColor: RANGE_PULSE_STYLE.lineColor });
@@ -2190,6 +2244,8 @@ export function createMergedRangeHighlight(entries, {
                 halo: perimeterHalo,
                 ...(perimeterAlpha !== undefined ? { lineAlpha: perimeterAlpha } : {}),
             });
+            if (unionFullWave.size !== unionWave.size)
+                paintBlockedRangeContour(rangeHighlight, unionFullWave, unionWave, { glowColor });
         }
         if (!pulseGraphic)
             return;

@@ -52,7 +52,7 @@ const _saved = {
     size: 1,
     rangeSource: 'none',
     manualRadius: 5,
-    manualLos: false,
+    losBySource: {},
     weaponItemId: null,
     elevationAware: true,
     autoElevation: true,
@@ -343,12 +343,29 @@ function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId 
     return _saved.manualRadius;
 }
 
+// Untouched sources keep their own rule: a weapon's Arcing/Seeking tags, reach's free band.
+function losStateFor(source)
+{
+    const stored = _saved.losBySource?.[source];
+    return typeof stored === 'boolean' ? stored : source !== 'manual';
+}
+
+function toggleLosState(source)
+{
+    _saved.losBySource = { ..._saved.losBySource, [source]: !losStateFor(source) };
+}
+
 // Weapon, reach, sensor and threat ranges follow line of sight; Arcing/Seeking reach stays free.
 function losInfoForToken(token, range, source = _saved.rangeSource)
 {
     const none = { los: false, freeRange: 0 };
+    const stored = _saved.losBySource?.[source];
+    if (stored === false)
+        return none;
+    if (stored === true)
+        return { los: true, freeRange: 0 };
     if (source === 'manual')
-        return { los: _saved.manualLos === true, freeRange: 0 };
+        return none;
     if (source === 'sensor' || source === 'threat')
         return { los: true, freeRange: 0 };
     if (source !== 'weapon' && source !== 'reach')
@@ -1569,6 +1586,16 @@ function injectStyles()
         #la-measure-toolbar .la-mt-dd-item.active i { color: var(--light-text, #fff); }
         #la-measure-toolbar .la-mt-dd-item.active .la-mt-svg-icon { background-color: var(--light-text, #fff); }
         #la-measure-toolbar .la-mt-dd-item.active .la-hud-fav-mark { color: var(--light-text, #fff) !important; }
+        #la-measure-toolbar .la-mt-dd-entry { display: flex; align-items: stretch; }
+        #la-measure-toolbar .la-mt-dd-entry .la-mt-dd-item:not(.la-mt-dd-eye) { flex: 1 1 auto; }
+        #la-measure-toolbar .la-mt-dd-entry.active { background: var(--primary-color, #ff6400); }
+        #la-measure-toolbar .la-mt-dd-entry.active .la-mt-dd-item.active { background: transparent; }
+        #la-measure-toolbar .la-mt-dd-eye { flex: 0 0 auto; width: 32px; padding: 6px 0; justify-content: center; gap: 0; opacity: 0.7; }
+        #la-measure-toolbar .la-mt-dd-eye i { width: 13px; font-size: 12px; }
+        #la-measure-toolbar .la-mt-dd-eye:hover:not(:disabled) { opacity: 1; }
+        #la-measure-toolbar .la-mt-dd-eye-on { opacity: 1; }
+        #la-measure-toolbar .la-mt-dd-eye-on i { color: var(--la-accent) !important; }
+        #la-measure-toolbar .la-mt-dd-entry.active .la-mt-dd-eye i { color: var(--light-text, #fff) !important; }
         #la-measure-toolbar .la-mt-dd-item.active .la-mt-weap-r { color: var(--light-text, #fff); }
         #la-measure-toolbar .la-mt-dd-item:disabled { opacity: 0.4; cursor: default; }
         #la-measure-toolbar .la-mt-weap-row { justify-content: flex-start; gap: 9px; }
@@ -1660,13 +1687,24 @@ const SHAPE_BUTTONS = [
     { pattern: 'line', label: 'Line', icon: 'cci cci-line' },
 ];
 
-function makeIconDropdown(current, items, onSelect, onContext = null, isPinned = null)
+function makeIconDropdown(current, items, onSelect, onContext = null, isPinned = null, losControl = null)
 {
     const starFor = new Map();
     const refreshStars = () =>
     {
         for (const [value, star] of starFor)
             star.style.display = isPinned?.(value) ? '' : 'none';
+    };
+    const eyeFor = new Map();
+    const refreshEyes = () =>
+    {
+        for (const [value, eye] of eyeFor)
+        {
+            const on = losControl.stateOf(value);
+            eye.className = `la-mt-dd-item la-mt-dd-eye${on ? ' la-mt-dd-eye-on' : ''}`;
+            eye.title = on ? 'Line of sight on' : 'Line of sight off';
+            eye.firstChild.className = on ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+        }
     };
     const wrap = document.createElement('div');
     wrap.className = 'la-mt-dd';
@@ -1750,8 +1788,30 @@ function makeIconDropdown(current, items, onSelect, onContext = null, isPinned =
                 refreshStars();
             });
         }
+        // sibling button, never nested: the row button owns its whole hit area
+        if (losControl?.applies(item.value) && !item.disabled)
+        {
+            const entry = document.createElement('div');
+            entry.className = item.value === current ? 'la-mt-dd-entry active' : 'la-mt-dd-entry';
+            const eye = document.createElement('button');
+            eye.type = 'button';
+            eye.appendChild(document.createElement('i'));
+            eye.addEventListener('click', (event) =>
+            {
+                suppressEvent(event);
+                playUiSound('toggle');
+                losControl.cycle(item.value);
+                refreshEyes();
+            });
+            eyeFor.set(item.value, eye);
+            entry.append(row, eye);
+            panel.appendChild(entry);
+            continue;
+        }
         panel.appendChild(row);
     }
+    if (eyeFor.size)
+        refreshEyes();
     trigger.addEventListener('mouseenter', () => playUiSound('statusHover'));
     trigger.addEventListener('click', () =>
     {
@@ -2088,7 +2148,16 @@ function renderRangeControls()
     {
         const tokens = getReferenceTokens();
         return tokens.length > 0 && tokens.every(pinToken => hasRangePin(pinToken, value));
-    });
+    }, getSettingEnabled('rangePulseLos') ? {
+        applies: (value) => value !== 'none',
+        stateOf: losStateFor,
+        cycle: (value) =>
+        {
+            toggleLosState(value);
+            rebuildPulse();
+            _emitStateChange();
+        },
+    } : null);
     group.appendChild(dropdown);
 
     const statSource = _saved.rangeSource !== 'manual' && _saved.rangeSource !== 'none';
@@ -2123,29 +2192,6 @@ function renderManualPopover()
         _saved.manualRadius = next;
         rebuildPulse();
     });
-    if (getSettingEnabled('rangePulseLos'))
-    {
-        const losButton = makeIconButton('fa-solid fa-eye', 'Manual range follows line of sight', () =>
-        {
-            _saved.manualLos = !_saved.manualLos;
-            applyLosState();
-            rebuildPulse();
-        });
-        const applyLosState = () =>
-        {
-            if (_saved.manualLos)
-            {
-                markActive(losButton, false);
-            }
-            else
-            {
-                losButton.classList.remove('la-mt-active');
-                losButton.style.removeProperty('color');
-            }
-        };
-        applyLosState();
-        row.appendChild(losButton);
-    }
     pop.appendChild(row);
     return pop;
 }
@@ -2628,14 +2674,14 @@ export function getAdvancedMeasureState()
         areaRange: _saved.areaRange,
         rangeSource: _saved.rangeSource,
         manualRadius: _saved.manualRadius,
-        manualLos: _saved.manualLos,
+        losBySource: { ..._saved.losBySource },
         weaponItemId: _saved.weaponItemId,
         pulseEnabled: _saved.pulseEnabled,
         movementReachEnabled: _saved.movementReachEnabled,
     };
 }
 
-const _STATE_KEYS = new Set(['mode', 'pattern', 'areaRange', 'rangeSource', 'manualRadius', 'manualLos', 'weaponItemId', 'pulseEnabled', 'movementReachEnabled']);
+const _STATE_KEYS = new Set(['mode', 'pattern', 'areaRange', 'rangeSource', 'manualRadius', 'losBySource', 'weaponItemId', 'pulseEnabled', 'movementReachEnabled']);
 
 export async function setAdvancedMeasureState(patch)
 {
@@ -2690,7 +2736,7 @@ export function resetAdvancedMeasureState()
     _saved.size = 1;
     _saved.rangeSource = 'none';
     _saved.manualRadius = 5;
-    _saved.manualLos = false;
+    _saved.losBySource = {};
     _saved.weaponItemId = null;
     _saved.elevationAware = true;
     _saved.autoElevation = true;
