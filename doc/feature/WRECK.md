@@ -28,11 +28,13 @@ When a token's structure hits 0, the module drops its wreck in place and clears 
 
 The dead token is sorted into an auto-detected category, **Mech**, **Vehicle** (any NPC carrying a VEHICLE template), **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. Each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, set in the per-category table along with its on-wreck terrain.
 
+**Token** mode uses a world actor named **Template Wreck**, a deployable the module creates by itself the first time it needs one. Nothing to set up.
+
 ---
 
 ## Wreck terrain
 
-A wreck can leave something on its footprint: **THT difficult terrain** (needs Terrain Height Tools, painting the type set by **`wreckTerrainType`**) or a **movement +1 aura** (needs the GAA fork). It's set per category, so mech hulls can clog the field while corpses don't.
+A wreck can leave something on its footprint: **THT difficult terrain** (needs Terrain Height Tools, painting the type set by **`wreckTerrainType`**) or a **movement +1 aura**. The aura itself draws on stock Grid-Aware Auras, only its movement penalty needs the GAA fork. It's set per category, so mech hulls can clog the field while corpses don't.
 
 ---
 
@@ -48,7 +50,7 @@ The image, effect, and sound fields also accept a **folder** path: a random file
 
 ## Resurrect
 
-Wreck **tiles** get a **Resurrect** button in their token HUD that brings the original token back, fully restored, and deletes the tile. Token wrecks are resurrected from a macro or the API.
+Wreck **tiles** get a **Resurrect** button in the **Tile HUD** that brings the original token back, fully restored, and deletes the tile. Wreck **tokens** get a **Resurrect** entry in the LA token HUD, under **Utility → Gameplay**, which does the same. No macro needed either way.
 
 ---
 
@@ -64,19 +66,25 @@ The explosion animation and sound are **`enableWreckAnimation`** and **`enableWr
 
 ```
 <wreckAssetsPath>/
-├── s1/                 # wreck images for size-1 tokens; mech images go HERE, not in a subfolder
+├── s1/
 │   ├── vehicle/
 │   ├── human/
 │   ├── squad/
 │   ├── monstrosity/
 │   └── biological/
-├── s2/                 # size-2 tokens (same subfolders); size 4+ uses s3
-├── s3/                 # size-3 tokens (same subfolders)
-├── effects/            # explosion animations; mech ones directly here
+├── s2/
 │   └── ... same subfolders
-└── audio/              # explosion sounds; mech ones directly here
+├── s3/
+│   └── ... same subfolders
+├── effects/
+│   └── ... same subfolders
+└── audio/
     └── ... same subfolders
 ```
+
+`s1`, `s2` and `s3` hold the wreck images for size-1, size-2 and size-3 tokens, and size 4+ falls back to `s3`. `effects` holds the explosion animations and `audio` the explosion sounds, both with the same category subfolders.
+
+**Mech assets go directly in the parent folder, not in a subfolder**: mech images in `s1` / `s2` / `s3`, mech effects in `effects`, mech sounds in `audio`.
 
 <img src="../img/wr-folders.png" width="70%"/>
 
@@ -90,4 +98,4 @@ A per-token image, effect, or sound set in the Token Config L.A tab overrides al
 |:--|:--|
 | **Wreck Automation** | Automate wrecking on structure reaching 0. |
 | **Wreck Aura Color** | Line and fill color of the aura left on a wreck. Applies to new wrecks. |
-| **Wreck Aura Opacity** | Fill opacity of the wreck aura; the outline scales with it. |
+| **Wreck Aura Opacity** | Fill opacity of the wreck aura, the outline scales with it. |

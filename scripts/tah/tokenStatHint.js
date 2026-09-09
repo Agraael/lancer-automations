@@ -122,8 +122,21 @@ function getLabelMode()
     { /* ignore */ }
     return LABEL_SCAN;
 }
-export function getUnknownLabel()
+// Per-token tri-state override ('on'/'off'), null = use the global setting.
+function _hintFlagTriState(tokenDoc, key)
 {
+    const raw = tokenDoc?.getFlag?.(MODULE_ID, key);
+    if (raw === 'on')
+        return true;
+    if (raw === 'off')
+        return false;
+    return null;
+}
+export function getUnknownLabel(tokenDoc)
+{
+    const perToken = tokenDoc?.getFlag?.(MODULE_ID, 'statHintUnknownLabel');
+    if (typeof perToken === 'string' && perToken.trim().length > 0)
+        return perToken;
     try
     {
         const raw = game.settings.get(MODULE_ID, SETTING_UNKNOWN_LABEL);
@@ -134,8 +147,11 @@ export function getUnknownLabel()
     { /* ignore */ }
     return 'UNKNOWN';
 }
-function hideClassWhenUnknown()
+function hideClassWhenUnknown(tokenDoc)
 {
+    const override = _hintFlagTriState(tokenDoc, 'statHintHideClass');
+    if (override !== null)
+        return override;
     try
     {
         return game.settings.get(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN) === true;
@@ -219,12 +235,15 @@ function hasObserverAccess(actor)
 }
 
 // No ownership/observer permission (scan-only or unknown) with the hide-current option on.
-function masksCurrentStats(actor, mode)
+function masksCurrentStats(actor, mode, tokenDoc)
 {
     if (mode === 'gm')
         return false;
     if (mode === 'scanned' && hasObserverAccess(actor))
         return false;
+    const override = _hintFlagTriState(tokenDoc, 'statHintHideCurrent');
+    if (override !== null)
+        return override;
     try
     {
         return game.settings.get(MODULE_ID, SETTING_HIDE_CURRENT_ON_SCAN) === true;
@@ -410,6 +429,7 @@ function getActorSubtitleText(actor)
 function buildHeaderHtml(token, mode, titleSuffixHtml = '')
 {
     const actor = token.actor;
+    const tokenDoc = token?.document ?? token;
     const isNpc = actor?.type === 'npc';
     const isOwnSide = actor?.type === 'pilot' || actor?.type === 'mech';
     const labelMode = getLabelMode();
@@ -422,9 +442,9 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
     {
         // SCAN-tied mode reveals nothing about NPC/deployable until scanned.
         if (!isOwnSide && labelMode === LABEL_SCAN)
-            label = getUnknownLabel();
+            label = getUnknownLabel(tokenDoc);
         let unknownTier = '';
-        if (!hideClassWhenUnknown())
+        if (!hideClassWhenUnknown(tokenDoc))
         {
             if (isNpc)
             {
@@ -447,7 +467,7 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
         let unknownSub = '';
         let unknownInline = '';
         const subText = getActorSubtitleText(actor);
-        if (subText && !hideClassWhenUnknown())
+        if (subText && !hideClassWhenUnknown(tokenDoc))
         {
             if (actor?.type === 'mech')
                 unknownInline = `<span class="la-stat-hint-frame">${esc(subText)}</span>`;
@@ -1055,7 +1075,7 @@ function buildPopupDom(token)
         return null;
     const mode = resolveViewMode(actor);
     const stats = getStatsForActor(actor);
-    const maskCurrent = masksCurrentStats(actor, mode);
+    const maskCurrent = masksCurrentStats(actor, mode, token?.document ?? token);
 
     let viewMode = mode;
     let headerHtml;

@@ -45,6 +45,17 @@ declare namespace Sequencer {
     };
 }
 
+// ─── Module registry: game.modules.get('lancer-automations').api ─────────────
+interface ModuleConfig {
+    "lancer-automations": {
+        api: LancerAutomationsAPI;
+    };
+}
+
+interface RequiredModules {
+    "lancer-automations": true;
+}
+
 // ─── Foundry FlagConfig augmentation ─────────────────────────────────────────
 interface FlagConfig {
     Actor: {

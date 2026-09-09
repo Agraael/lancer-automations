@@ -42,12 +42,29 @@ const isOverheated = api.getUserHelper('isOverheated');
 <br>
 
 ```js
-api.registerDefaultItemReactions(reactions)     // object mapping LIDs to activation objects
-api.registerDefaultGeneralReactions(reactions)   // object mapping names to activation objects
+api.registerDefaultItemReactions(reactions)      // object mapping item LIDs to activation groups
+api.registerDefaultGeneralReactions(reactions)   // object mapping names to groups or single entries
 ```
 
-- **Item reactions** are tied to specific item LIDs - the reaction only fires for tokens that have that item.
-- **General reactions** are global - they fire for all tokens regardless of items.
+Item reactions only fire for tokens carrying that LID. General reactions fire for every token.
+
+Item entries must be **groups**, `{ reactions: [ ... ] }`. The engine reads `entry.reactions` without a guard,
+so a bare activation object throws. General entries may be flat.
+
+```js
+api.registerDefaultItemReactions({
+    "mw_my_weapon": {
+        category: "System",
+        itemType: "mech_weapon",
+        reactions: [{
+            name: "My Reaction",
+            triggers: ["onActivation"],
+            activationType: "code",
+            activationCode: async (triggerType, data, reactor, item, activationName, api) => { }
+        }]
+    }
+});
+```
 
 </details>
 
@@ -92,8 +109,8 @@ await api.applyEffectsToTokens({
 
 ### How-To: Bonus on One Action's Check
 
-A stat roll is built on an actor, so it carries no item of its own. Stamp the action that caused it, then gate a
-bonus on that stamp. The bonus only ever applies to that check, so a cancelled roll leaves nothing behind.
+The bonus only ever applies to one check, so a cancelled roll leaves nothing behind. A stat roll is built on an
+actor and carries no item of its own, so stamp the action that caused it, then gate the bonus on that stamp.
 
 **Stamp the roll:**
 ```javascript
@@ -125,7 +142,8 @@ onInit: async function (token, item, api) {
 }
 ```
 
-`executeStatRoll`, `executeContestedCheck` and `openHaseContestCard` all take `sourceItem` / `sourceAction`, and
+`executeContestedCheck` and `openHaseContestCard` take `sourceItem` / `sourceAction` in their options.
+`executeStatRoll` takes `sourceItemUuid` / `sourceAction` inside its `extraData` argument instead. Either way
 both surface on `onInitCheck` / `onCheck` as `item` / `actionName`.
 
 ---
@@ -151,9 +169,9 @@ A **one-shot** binds to a single move, so boosting twice does not repeat it:
 api.recordMovementExtra(reactorToken, api.tokenSpeed(reactorToken), { leg: 'boost' });
 ```
 
-`leg` is `'standard'`, `'boost'` or `'current'`. `'boost'` lands on the Boost already taken this turn, or waits
-for the next one if none has been. Both feed the ruler bands and the movement cap, so the yellow band and the
-cap move together.
+`leg` is `'standard'`, `'boost'` or `'current'`, and defaults to `'current'`, the granted leg the spent distance
+sits in. `'boost'` lands on the Boost already taken this turn, or waits for the next one if none has been. Both
+feed the ruler bands and the movement cap, so the yellow band and the cap move together.
 
 ---
 
@@ -170,14 +188,21 @@ Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Awa
 await api.createAura(owner, auraConfig)
 ```
 
-Wrapper accepts a JS `function` in place of a macro ID.
+Wrapper accepts a JS `function` in place of a macro ID. That form needs libWrapper installed and active. Without
+it the callback silently never runs.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura. An Item owner ties the aura to the item's lifetime |
 | <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
 
-See `ensureAura` below for the idempotent form.
+Whenever an owning actor and token can be resolved, the wrapper deep-merges a default config underneath yours, so
+a five-line call still comes out looking like the module's own auras. The defaults: one `unified` aura named
+`lancer-automations-aura`, an animated dashed stroke (`lineType: 2`, width 2, 5/5 dashes), a `fillType: 2` fill at
+`fillOpacity: 0.15` with the templatemacro hatching texture when that module is installed, owner visibility on,
+and non-owner visibility on only when the owner's disposition is FRIENDLY. `fillColor` comes from token-factions,
+or failing that the actor's folder color, and only while the owner still has a reaction available. Otherwise it
+stays white. Any key you pass wins over its default.
 
 **`macros` Function Example:**
 ```javascript
@@ -220,7 +245,7 @@ await api.createAura(reactorToken, {
 await api.ensureAura(owner, auraConfig)
 ```
 
-`createAura` that no-ops when the owner already has an aura with that `name`, returning `null` instead of a second copy. The `onInit` way to add an aura: safe to run on every init without a hand-written guard. `auraConfig.name` is required for the dedupe.
+`createAura` that no-ops when the owner already has an aura with that `name`, returning `null` instead of a second copy. The `onInit` way to add an aura: safe to run on every init without a hand-written guard.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -248,7 +273,9 @@ Deletes the owner's auras and their function callbacks.
 |:------|:-----|:--------|:------------|
 | <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | *required* | The document that owns the auras |
 | <kbd>filter</kbd> | `string\|Object` | *required* | String ID, name, or Object filter |
-| <kbd>options</kbd> | `Object` | `{}` | Internal Grid-Aware Auras delete options |
+| <kbd>options</kbd> | `Object` | see below | Internal Grid-Aware Auras delete options |
+
+A non-Item owner defaults to `{ includeItems: true }`, so the sweep also removes auras owned by that actor's items. An Item owner defaults to `{}`. Anything you pass overrides the default.
 
 ```js
 await api.deleteAuras(token, 'Suppression');
@@ -275,11 +302,35 @@ Flips or sets the `enabled` flag in the actor's `grid-aware-auras.auras` flag. D
 
 Returns the new `enabled` state (`true`/`false`), or `null` if no aura with that name exists on the actor.
 
+Only the actor flag is read, so an aura created with an Item owner is invisible here and always returns `null`. Delete and recreate those instead.
+
 **Examples:**
 ```js
-await api.toggleAura(token, "Bulwark");          // flip
-await api.toggleAura(token, "Bulwark", true);    // ensure on
-await api.toggleAura(token, "Bulwark", false);   // ensure off
+await api.toggleAura(token, "Bulwark");
+await api.toggleAura(token, "Bulwark", true);
+await api.toggleAura(token, "Bulwark", false);
+```
+
+</details>
+
+<details id="gridScale">
+<summary><b><code>gridScale</code></b> → <code>number</code><br><b><code>scaleAuraStroke</code></b> → <code>object</code></summary>
+
+<br>
+
+```js
+api.gridScale()             // scene grid size relative to a 100 px baseline
+api.scaleAuraStroke(aura)   // scales the config's stroke fields in place, returns it
+```
+
+Aura widths are in pixels, so a config authored on a 100 px grid draws too thin on a larger one. `scaleAuraStroke` multiplies `lineWidth`, `lineDashSize`, `lineGapSize` and `fillTextureScale` by `gridScale()`, with a floor of 1.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>aura</kbd> | `Object` | Aura config. Mutated, and returned for chaining |
+
+```js
+await api.createAura(token, api.scaleAuraStroke({ name: 'Suppression', radius: 3, lineWidth: 3 }));
 ```
 
 </details>

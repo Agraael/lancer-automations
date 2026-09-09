@@ -13,15 +13,21 @@ const LABEL_MIN_WIDTH = 170;
 const LABEL_PADDING = 22;
 const SHORT_CLICK_MS = 300;
 const SHORT_CLICK_DIST = 6;
+const PAGE_CHIP_OFFSET = 40;
 
 let _wheelEl = null;
 let _labelEl = null;
+let _chipsEl = null;
+let _pageCount = 1;
+let _page = 1;
+let _onPageChange = null;
 let _buttons = [];
 let _positions = [];
 let _items = [];
 let _center = null;
 let _boundRadius = 0;
 let _token = null;
+let _anchor = null;
 let _hoverIndex = -1;
 let _rightPress = null;
 let _onKey = null;
@@ -46,6 +52,10 @@ export function closeRadialWheel({ silent = false } = {})
     setTimeout(() => el.remove(), 120);
     _wheelEl = null;
     _labelEl = null;
+    _chipsEl = null;
+    _pageCount = 1;
+    _page = 1;
+    _onPageChange = null;
     if (_onKey)
         document.removeEventListener('keydown', _onKey, true);
     if (_onClickOutside)
@@ -67,6 +77,7 @@ export function closeRadialWheel({ silent = false } = {})
     _center = null;
     _boundRadius = 0;
     _token = null;
+    _anchor = null;
     _hoverIndex = -1;
     _rightPress = null;
     const closeCb = _onCloseCb;
@@ -85,12 +96,14 @@ function tokenScreenCenter(token)
 // Positions root and buttons from the token's current screen spot, rerun on pan / zoom.
 function layoutWheel()
 {
-    if (!_wheelEl || !_token)
+    if (!_wheelEl || (!_token && !_anchor))
         return;
-    const { x: centerX, y: centerY } = tokenScreenCenter(_token);
+    const { x: centerX, y: centerY } = _token ? tokenScreenCenter(_token) : _anchor;
     const scale = canvas.stage.scale.x || 1;
-    const tokenDim = Math.max(_token.w ?? 0, _token.h ?? 0) * scale;
-    const innerRadius = Math.min(160, Math.max(70, tokenDim / 2 + 36));
+    const tokenDim = _token ? Math.max(_token.w ?? 0, _token.h ?? 0) * scale : 0;
+    // Offset lands after the clamp, so it still moves the ring on tokens already at the ceiling.
+    const offset = Number(game.settings.get('lancer-automations', 'tah.wheelRadiusOffset')) || 0;
+    const innerRadius = Math.max(BUTTON_SIZE, Math.min(160, Math.max(70, tokenDim / 2 + 36)) + offset);
     const outerCount = Math.max(0, _items.length - INNER_RING_MAX);
     const outerRadius = innerRadius + OUTER_RING_OFFSET;
     _wheelEl.style.left = `${centerX}px`;
@@ -110,9 +123,33 @@ function layoutWheel()
         button.style.transform = `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%))`;
         _positions.push({ x: offsetX, y: offsetY });
     });
-    _boundRadius = ((outerCount > 0 ? outerRadius : innerRadius) + SELECT_BOUND_EXTRA) * SELECT_BOUND_SCALE;
+    const ringRadius = outerCount > 0 ? outerRadius : innerRadius;
+    _boundRadius = (ringRadius + SELECT_BOUND_EXTRA) * SELECT_BOUND_SCALE;
     if (_labelEl)
         _labelEl.style.maxWidth = `${Math.max(LABEL_MIN_WIDTH, (innerRadius - LABEL_SIDE_MARGIN) * 2)}px`;
+    // Rides the outermost ring so it clears the buttons whatever the wheel grows to.
+    if (_chipsEl)
+        _chipsEl.style.transform = `translate(-50%, calc(${ringRadius + PAGE_CHIP_OFFSET}px - 50%))`;
+}
+
+// No chips on a single page: one wheel means the counter says nothing.
+function buildChips()
+{
+    _chipsEl?.remove();
+    _chipsEl = null;
+    if (!_wheelEl || _pageCount < 2)
+        return;
+    const chips = document.createElement('div');
+    chips.className = 'lancer-rw-pages';
+    for (let page = 1; page <= _pageCount; page++)
+    {
+        const chip = document.createElement('i');
+        if (page === _page)
+            chip.className = 'on';
+        chips.appendChild(chip);
+    }
+    _wheelEl.appendChild(chips);
+    _chipsEl = chips;
 }
 
 function setHover(index)
@@ -155,6 +192,12 @@ function commitItem(index)
         return;
     playUiSound('toggle');
     _buttons[index]?.classList.add('validated');
+    // Wheels of toggles stay up so a handful can be set in one open.
+    if (item.keepOpen)
+    {
+        item.onSelect();
+        return;
+    }
     setTimeout(() =>
     {
         closeRadialWheel({ silent: true });
@@ -172,14 +215,27 @@ function rightClickItem(index)
     item.onRightClick(_buttons[index]);
 }
 
+// Everything an item contributes to a button, so a button can be handed a different item.
+function paintButton(button, item)
+{
+    button.className = `lancer-mw-btn${item.current ? ' current' : ''}`;
+    if (item.customTooltip)
+    {
+        button.removeAttribute('title');
+        button.removeAttribute('data-tooltip');
+    }
+    else
+        button.title = item.title ?? '';
+    button.replaceChildren();
+    item.buildContent?.(button);
+    item.styleButton?.(button);
+}
+
 function createButton(item, flatIndex)
 {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `lancer-mw-btn${item.current ? ' current' : ''}`;
-    button.title = item.title ?? '';
-    item.buildContent?.(button);
-    item.styleButton?.(button);
+    paintButton(button, item);
     button.addEventListener('click', (event) =>
     {
         event.preventDefault();
@@ -199,7 +255,7 @@ function createButton(item, flatIndex)
 }
 
 // Rebuilds the open wheel in place, no sound or animation.
-export function refreshRadialWheel(items)
+export function refreshRadialWheel(items, { page = null, pageCount = null } = {})
 {
     if (!_wheelEl)
         return;
@@ -208,30 +264,52 @@ export function refreshRadialWheel(items)
         closeRadialWheel();
         return;
     }
+    if (pageCount !== null)
+        _pageCount = pageCount;
+    if (page !== null)
+        _page = page;
+    if (page !== null || pageCount !== null)
+        buildChips();
+    const previousHover = _hoverIndex;
     _items[_hoverIndex]?.onHoverChange?.(false);
-    for (const button of _buttons)
-        button.remove();
-    _buttons = [];
-    _items = items;
-    _hoverIndex = -1;
-    items.forEach((item, flatIndex) =>
+    // Existing buttons are repainted rather than replaced: fresh nodes replay the wheel's entry
+    // animation and a refresh would look like a reopen.
+    while (_buttons.length > items.length)
+        _buttons.pop().remove();
+    while (_buttons.length < items.length)
     {
-        const button = createButton(item, flatIndex);
+        const button = createButton(items[_buttons.length], _buttons.length);
         _buttons.push(button);
         if (_labelEl)
             _wheelEl.insertBefore(button, _labelEl);
         else
             _wheelEl.appendChild(button);
-    });
+    }
+    _items = items;
+    _hoverIndex = -1;
+    _buttons.forEach((button, flatIndex) => paintButton(button, items[flatIndex]));
     if (_labelEl)
         _labelEl.style.display = 'none';
     layoutWheel();
+    if (previousHover >= 0 && previousHover < _items.length)
+    {
+        _hoverIndex = previousHover;
+        _buttons[previousHover].classList.add('hover');
+        _items[previousHover]?.onHoverChange?.(true);
+        if (_labelEl)
+        {
+            _labelEl.textContent = _items[previousHover]?.title ?? '';
+            _labelEl.style.display = '';
+            shrinkLabelToLines();
+        }
+    }
 }
 
-export function openRadialWheel({ token, items, rootClass = '', showLabel = false, onClose = null })
+export function openRadialWheel({ token, anchor = null, items, rootClass = '', showLabel = false, onClose = null,
+    pageCount = 1, page = 1, onPageChange = null })
 {
     closeRadialWheel({ silent: true });
-    if (!token || !items?.length)
+    if ((!token && !anchor) || !items?.length)
         return;
 
     const root = document.createElement('div');
@@ -256,9 +334,14 @@ export function openRadialWheel({ token, items, rootClass = '', showLabel = fals
     document.body.appendChild(root);
     _wheelEl = root;
     _items = items;
-    _token = token;
+    _token = token ?? null;
+    _anchor = anchor;
     _hoverIndex = items.findIndex(item => item.current);
     _onCloseCb = onClose;
+    _pageCount = pageCount;
+    _page = page;
+    _onPageChange = onPageChange;
+    buildChips();
     layoutWheel();
     playUiSound('details');
 
@@ -270,7 +353,15 @@ export function openRadialWheel({ token, items, rootClass = '', showLabel = fals
         {
             if (event.key === 'Escape')
             {
-                event.preventDefault(); closeRadialWheel();
+                event.preventDefault(); closeRadialWheel(); return;
+            }
+            // Tab belongs to the wheel for as long as it is open, so token cycling never sees it.
+            if (event.key === 'Tab')
+            {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (_pageCount > 1)
+                    _onPageChange?.(_page % _pageCount + 1);
             }
         };
         _onClickOutside = (event) =>

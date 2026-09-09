@@ -8,7 +8,7 @@ Lancer Automations runs the procedural parts of play for you: combat actions and
 
 ## Settings
 
-**Combat & Movement → Combat Flows**, and **Activations → Scan**.
+Most of what this page covers sits on the **Combat & Movement** tab, under **Targeting**, **Attacks**, **Movement & Boost**, **Structure & Damage**, and **Turns & Actions**. The rest is on the **Activations** tab, under **Activation Manager** and **Scan**.
 
 <img src="../img/ga-settings.png" width="70%"/>
 
@@ -25,6 +25,8 @@ Almost all of Lancer's actions and reactions are automated here. These aren't ne
   <img src="../img/ga-eject.png" width="38%"/>
 </p>
 
+### Checks and combat flows
+
 Search, Break Free, and Lancer's other opposed checks are rolled for you as **stat contests**, and you can trigger one from code with **`executeContestedCheck(tokenA, statA, tokenB, statB)`**, which returns the winner.
 
 **Force Check** (TAH Skills, or **`executeForceCheck`**) sends a HASE check to picked tokens, each rolled by its owner. Give it a save target and it becomes a save vs that actor's SAVE, pre-targeted in the roller's HUD.
@@ -39,12 +41,12 @@ With **`autoDamageRoll`** on, the damage roll opens on its own after an attack, 
 
 <img align="right" src="../img/ga-overwatch.png" width="45%"/>
 
-Overwatch is automated two ways. Pick one in the Activation Manager.
+Overwatch is automated two ways, and **both ship disabled**. Enable one in the Activation Manager, or answer the **Movement: Interrupts** step of the setup wizard.
 
-- **Alert (default)**: when a hostile moves through your threat range, a prompt lists which of your tokens could react. Click one to select and pan to it. It flags the chance but doesn't stop the move.
-- **Interrupt (v2)**: pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues. Off by default. Enable it and disable the alert in the Activation Manager.
+- **Notify after move (v1)**: after a hostile moves inside your threat, an Overwatch activation card prints for the reacting token, with the trigger and effect text. It flags the chance but doesn't stop the move.
+- **Interrupt before move (v2)**: pauses the move and asks the owner to **Fire** or **Let pass**, resolving the Skirmish before the move continues.
 
-Threat range reads from Grid-Aware-Auras threat auras when present, otherwise from the actor's weapon threat.
+The wizard enables the one you pick and turns the other off. Threat range reads from Grid-Aware-Auras threat auras when present, otherwise from the actor's weapon threat.
 
 <br clear="right"/>
 
@@ -74,7 +76,7 @@ A target immune to Grappled is skipped, and there's a Grapple macro too.
 
 <img align="right" src="../img/ga-stabilize.png" width="45%"/>
 
-Stabilize gets a clearer dialog for its two choices. An NPC only cools and reloads. Whether it spends a Full action is set by **`consumeAction`** (Activation Manager tab), and with infection integration on, clearing burn also clears [infection](./INFECTION.md).
+Stabilize gets a clearer dialog for its two choices. An NPC only cools and reloads. Whether it spends a Full action is set by **Consume Action on Activation** (`consumeAction`), a world setting under **Activations → Activation Manager** that is on by default and covers every activation flow. With infection integration on, clearing burn also clears [infection](./INFECTION.md).
 
 <br clear="right"/>
 
@@ -84,9 +86,9 @@ Stabilize gets a clearer dialog for its two choices. An NPC only cools and reloa
 
 <img align="right" src="../img/ga-usage.png" width="45%"/>
 
-Beyond Lancer's own limited and recharge tracking, weapons and systems tagged **per round**, **per turn**, or **per scene** get their own pip counters injected straight onto their cards in the actor sheet. Spending the action ticks a pip, the action is blocked once they run out, and they reset at the matching boundary: the start of a round, your turn, or a new scene.
+Beyond Lancer's own limited and recharge tracking, weapons and systems tagged **per round**, **per turn**, or **per scene** get their own pip counters injected straight onto their cards in the actor sheet. Firing the tagged weapon or system ticks a pip, it is blocked once the pips run out, and they reset at the matching boundary: the start of a round, the start of your turn, or a new combat encounter. Per-scene counters reset per encounter, when a combat starts and when it is deleted, not when you change scene.
 
-Turn this on with **`enablePerRoundTurnTags`** (needs a reload).
+Turn this on with **Per-Round / Per-Turn / Per-Scene Enforcement** (`enablePerRoundTurnTags`, needs a reload).
 
 <br clear="right"/>
 
@@ -130,11 +132,11 @@ When the round arrives, an **NPCs Arriving** dialog lists the due tokens with a 
 
 ## Alt structure & stress
 
-Off by default, **`enableAltStruct`** swaps Lancer's structure and overheat rolls for the alternative ruleset, my implementation of BadIdeasBureau and Kaffo's [LANCER Alternative Structure](https://github.com/BadIdeasBureau/lancer-alt-structure).
+Off by default, **Maria's Alternate Structure & Stress Rules** (`enableAltStruct`, needs a reload) swaps Lancer's structure and overheat rolls for the alternative ruleset, my implementation of BadIdeasBureau and Kaffo's [LANCER Alternative Structure](https://github.com/BadIdeasBureau/lancer-alt-structure). It refuses to load while the standalone `lancer-alt-structure` module is active, so run one or the other.
 
 Both are rolled on keep-lowest tables: structure outcomes run from a glancing blow up to a crushing hit, with **HULL** checks and a system-trauma dialog where you tear off a weapon or system. Stress outcomes cover power failure, emergency shunt, and reactor meltdown, gated by **ENGINEERING** checks and a meltdown countdown.
 
-**`enableOneStructNpc`** simplifies NPCs down to a single structure or stress: they're destroyed or Exposed outright instead of rolling.
+**One-Structure NPC Auto-Destroy** (`enableOneStructNpc`) only touches NPCs that already have a max structure of 1: they skip the structure table and are destroyed on the first structure hit. It changes nothing about stress. The matching stress rule, an NPC with max stress 1 going Exposed instead of rolling, is separate and always on.
 
 ---
 
@@ -184,3 +186,13 @@ Add Lancer's pilot reserves and bonuses, including custom reserves, projects, an
 | Option | What it does |
 |:--|:--|
 | **Automate Knockback on Hit** | Auto-trigger the Knockback tool on hits with Knockback-tagged weapons. |
+| **Automate Throw Choice for Thrown Weapons** | Attacking with a throwable weapon first asks whether to attack or throw. |
+| **Auto Damage Roll** | The damage roll opens on its own after an attack. |
+| **Auto Apply Damage** | The rolled damage is applied to the targets. |
+| **Per-Round / Per-Turn / Per-Scene Enforcement** | Pip counters for per-round, per-turn, and per-scene tags, blocking use at the limit. Needs a reload. |
+| **Maria's Alternate Structure & Stress Rules** | Alternative structure and overheat tables. Needs a reload, and conflicts with the standalone `lancer-alt-structure` module. |
+| **One-Structure NPC Auto-Destroy** | NPCs with max structure 1 skip the structure table and are destroyed on the first structure hit. |
+| **Consume Action on Activation** | Auto-spend the token's Quick or Full action when an activation flow succeeds. |
+| **Scan journal source** | Which scan produces the result: the native Lancer journal or the LA legacy template. |
+| **Player Ownership** | Who gets scan ownership when a player runs a scan. GM scans always grant to all players. |
+| **Reveal Stats Without Scanning** | Every actor reads as scanned, so stats show without anyone running a scan. |

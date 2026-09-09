@@ -12,6 +12,7 @@ import {
 import { setTokenFlag } from '../socket.js';
 import { playStatsSound } from './sound.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
+import { escapeAttr as _escAttr } from '../tools/misc-tools.js';
 import { linkTierGate } from '../interactive/deployables.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 
@@ -1162,11 +1163,6 @@ async function _removeExtraBarFromTemplate(sourceDoc, templateId)
 }
 
 export const ExtraBarsAPI = { updateExtraBarValue, addExtraBar, removeExtraBar, getExtraBars };
-
-function _escAttr(str)
-{
-    return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 function _renderExtraBarRowHtml(entry, idx, overflow, collapsed)
 {

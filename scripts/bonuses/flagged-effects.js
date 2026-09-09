@@ -4,6 +4,7 @@ import { socketRequestWithAck } from '../socket.js';
 import { linkTierGate } from '../interactive/deployables.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 import { untilEndOfTurn, untilStartOfTurn, currentTurnKey } from './duration-widget.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 function log(...args)
 {
@@ -78,6 +79,9 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
 {
     if (!notifyOptions)
         return;
+    const mode = getModuleSetting('effectNotificationMode', 'public');
+    if (mode === 'off')
+        return;
     const tokenObj = /** @type {any} */ (token).object || token;
     const hiddenToken = !!(tokenObj.document ?? tokenObj).hidden;
     notificationQueue.push({
@@ -86,7 +90,7 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
         prefix: notifyOptions.prefixText || defaultPrefix,
         source: notifyOptions.source,
         icon,
-        whisper: notifyOptions.whisper === true || isInOnInitTriggerContext() || hiddenToken
+        whisper: mode === 'whisper' || notifyOptions.whisper === true || isInOnInitTriggerContext() || hiddenToken
     });
 
     if (notificationTimer)
@@ -664,13 +668,14 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                 hasEffect = checkEffectCallback(token, resolvedEffectData);
             else if (!extraOptions?.refresh && (extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId))
             {
-                // only flag duplicate when groupId or linkedBonusId matches; different sources coexist
+                // duplicate = same effect re-applied (groupId + name) or same linked bonus, new members can join an existing group
                 const groupId = extraOptions.consumption?.groupId;
                 const bonusId = extraOptions.linkedBonusId;
                 hasEffect = token.actor?.effects.some(actorEffect =>
                 {
                     const flags = /** @type {SetEffectOptions} */ (actorEffect.flags?.['lancer-automations'] || {});
-                    if (groupId && flags.consumption?.groupId === groupId)
+                    if (groupId && flags.consumption?.groupId === groupId &&
+                        (actorEffect.name === effectNameForLog || flags.effect === effectNameForLog))
                         return true;
                     if (bonusId && flags.linkedBonusId === bonusId)
                         return true;
@@ -741,10 +746,9 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         const tokenID = token.id;
         const originID = duration?.overrideTurnOriginId ?? token.id;
 
-        // External callers passing raw turns=1 on the origin's turn need +1; _preAdjusted (effect manager submit paths) skips this.
         let adjustedDuration = { ...duration };
-        if (!duration._preAdjusted && game.combat?.current?.tokenId === originID && duration.turns === 1)
-            adjustedDuration.turns = 2;
+        if (!duration._preAdjusted && game.combat?.current?.tokenId === originID && duration.turns >= 1)
+            adjustedDuration.turns = duration.turns + 1;
         delete adjustedDuration._preAdjusted;
 
         const canApplyDirectly = game.user.isGM || token.document?.isOwner;
@@ -1961,7 +1965,7 @@ function _matchCounterPairs(token)
     return pairs;
 }
 
-/** Place paired counter texts from their icon's final position and size. */
+/** Place and size paired counter texts from their icon's final geometry, so they match our own badges. */
 function _applyCounterPairs(pairs)
 {
     for (const { text, sprite, kind } of pairs)
@@ -1971,6 +1975,12 @@ function _applyCounterPairs(pairs)
         const left = sprite.x - anchorX * sprite.width;
         const top = sprite.y - anchorY * sprite.height;
         const sizeRatio = sprite.height / 20;
+        if (text.style)
+        {
+            text.style.fontSize = Math.max(9, Math.round(12 * sizeRatio));
+            text.style.strokeThickness = Math.max(1, Math.round(2 * sizeRatio));
+            text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
+        }
         if (kind === 'value')
         {
             text.x = left + sprite.width * 1.3;
@@ -2236,7 +2246,6 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count)
     }
     _syncCountersToEffects(token);
 
-    // statuscounter always clears effectCounters before our POST runs, so we always create fresh.
     const sizeRatio = entry.height / 20;
     const badgeX = entry.posX + offsetX + entry.width * 1.3;
     const badgeY = entry.posY + offsetY + entry.height * 1.3;

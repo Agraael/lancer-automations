@@ -3,8 +3,9 @@
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
+import { rollCard } from "../interactive/tools/rollCard.js";
 import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
-import { pushEmbedButton } from "./alt-struct-helpers.js";
+import { altStructButton, pushEmbedButton, destroyMech, getRollCount } from "./alt-struct-helpers.js";
 
 const structTableTitles = [
     "Crushing Hit",
@@ -43,14 +44,63 @@ function structTableDescriptions(roll, remStruct)
     return "";
 }
 
-const getRollCount = (roll, num_to_count) =>
+export function describeDestruction(choice, destroyed)
 {
-    return roll
-        ? roll.terms[0].results.filter((diceResult) => diceResult.result === num_to_count).length
-        : 0;
-};
+    if (choice.type === "mount")
+    {
+        return {
+            title: "Weapons Destroyed",
+            description: destroyed.length > 0
+                ? `The following weapons on <strong>${choice.mount.name}</strong> have been destroyed: ${destroyed.join(', ')}`
+                : `No weapons on <strong>${choice.mount.name}</strong> could be destroyed as they are all indestructible.`
+        };
+    }
+    return {
+        title: "System Destroyed",
+        description: `System <strong>${choice.system.name}</strong> has been destroyed.`
+    };
+}
 
-function isValidActor(actor)
+/** Interactive replacement for the system's secondaryStructureRoll: the player rolls the tear-off d6 from a card. */
+export async function interactiveSecondaryStructureRoll(state)
+{
+    if (!state.data)
+        throw new TypeError(`Secondary Structure roll flow data missing!`);
+    if (!isValidActor(state.actor))
+        return false;
+
+    const token = state.actor.getActiveTokens()?.[0] ?? null;
+    const rolled = await rollCard({
+        title: "TEAR OFF",
+        description: "1-3: a weapon mount. 4-6: a system.",
+        roll: state.data.roll_str || "1d6",
+        allowEdit: false,
+        originToken: token,
+        icon: "fas fa-dice-d6"
+    });
+    if (!rolled)
+        return false;
+
+    const roll = rolled.roll;
+    state.data.result = {
+        roll: roll,
+        tt: await roll.getTooltip(),
+        total: String(roll.total)
+    };
+    if (roll.total <= 3)
+    {
+        state.data.title = "Weapon Destruction";
+        state.data.desc = "On a 1–3, all weapons on one mount of your choice are destroyed";
+    }
+    else
+    {
+        state.data.title = "System Destruction";
+        state.data.desc = "On a 4–6, a system of your choice is destroyed";
+    }
+    return true;
+}
+
+export function isValidActor(actor)
 {
     if (!actor.is_mech() && !actor.is_npc())
     {
@@ -58,6 +108,11 @@ function isValidActor(actor)
         return false;
     }
     return true;
+}
+
+export function hasUniquePhysiology(actor)
+{
+    return !!actor?.is_npc?.() && actor.itemTypes.npc_feature.some(item => item.system.lid === "npcf_unique_physiology_monstrosity");
 }
 
 async function createCrushingHitRoll(damage)
@@ -254,10 +309,8 @@ export async function insertHullCheckButton(state)
             // Direct Hit with 2 Structure: HULL check with conditional TEAR OFF
             pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
         }
-        else if (rollTotal === 1 && structure === 1)
-            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
         else
-            pushEmbedButton(state, { flowType: 'StatRollFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull' } });
+            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
     }
     return true;
 }
@@ -330,7 +383,34 @@ function isValidDestructionChoice(item)
     return true;
 }
 
-function getValidWeaponMounts(actor, includeDestroyed = false)
+function isIndestructible(item)
+{
+    return !!(item.system?.all_tags ?? item.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
+}
+
+/** Destroys the picked mount's weapons or the picked system. @returns {Promise<string[]>} destroyed item names */
+export async function destroyTraumaChoice(choice)
+{
+    const destroyed = [];
+    if (choice.type === "mount")
+    {
+        for (const weapon of choice.mount.weapons)
+        {
+            if (isIndestructible(weapon))
+                continue;
+            await weapon.update({ "system.destroyed": true });
+            destroyed.push(weapon.name);
+        }
+    }
+    else if (choice.type === "system")
+    {
+        await choice.system.update({ "system.destroyed": true });
+        destroyed.push(choice.system.name);
+    }
+    return destroyed;
+}
+
+export function getValidWeaponMounts(actor, includeDestroyed = false)
 {
     // Handle NPCs - they store weapons as items, not in loadout
     if (actor.is_npc?.())
@@ -387,7 +467,7 @@ function getValidWeaponMounts(actor, includeDestroyed = false)
     return validMounts;
 }
 
-function getValidSystems(actor, includeDestroyed = false)
+export function getValidSystems(actor, includeDestroyed = false)
 {
     // Handle NPCs - they store features as items, not in loadout
     if (actor.is_npc?.())
@@ -422,7 +502,7 @@ function getValidSystems(actor, includeDestroyed = false)
 
 // #endregion
 
-async function showSystemTraumaDialog(actor, traumaType)
+export async function showSystemTraumaDialog(actor, traumaType)
 {
     const validMounts = getValidWeaponMounts(actor);
     const validSystems = getValidSystems(actor);
@@ -741,25 +821,7 @@ export async function manualSystemTrauma()
     if (!choice)
         return;
 
-    let destroyedItems = [];
-    if (choice.type === "mount")
-    {
-        for (const weapon of choice.mount.weapons)
-        {
-            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
-            if (!isIndestructible)
-            {
-                await weapon.update({ "system.destroyed": true });
-                destroyedItems.push(weapon.name);
-            }
-        }
-    }
-    else if (choice.type === "system")
-    {
-        await choice.system.update({ "system.destroyed": true });
-        destroyedItems.push(choice.system.name);
-    }
-
+    const destroyedItems = await destroyTraumaChoice(choice);
     const itemsList = destroyedItems.join(', ');
     ui.notifications.info(`System Trauma: ${itemsList} destroyed`);
 
@@ -903,33 +965,9 @@ async function handleTearOffChoice(state, isSystemTrauma)
         return false;
     }
 
-    if (choice.type === "mount")
-    {
-        const destroyedWeapons = [];
-        for (const weapon of choice.mount.weapons)
-        {
-            const isIndestructible = (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
-            if (!isIndestructible)
-            {
-                await weapon.update({ "system.destroyed": true });
-                destroyedWeapons.push(weapon.name);
-            }
-        }
-        const weaponList = destroyedWeapons.join(', ');
-        state.data.title = "Weapons Destroyed";
-        if (destroyedWeapons.length > 0)
-            state.data.description = `The following weapons on <strong>${choice.mount.name}</strong> have been destroyed: ${weaponList}`;
-        else
-            state.data.description = `No weapons on <strong>${choice.mount.name}</strong> could be destroyed as they are all indestructible.`;
-        state.data.tags = [];
-    }
-    else if (choice.type === "system")
-    {
-        await choice.system.update({ "system.destroyed": true });
-        state.data.title = "System Destroyed";
-        state.data.description = `System <strong>${choice.system.name}</strong> has been destroyed.`;
-        state.data.tags = [];
-    }
+    const destroyed = await destroyTraumaChoice(choice);
+    state.data.tags = [];
+    Object.assign(state.data, describeDestruction(choice, destroyed));
 
     // Clear the result to prevent printGenericCard from showing the TEAR OFF roll
     delete state.data.result;
@@ -937,8 +975,8 @@ async function handleTearOffChoice(state, isSystemTrauma)
     const currentStructure = actor.system.structure.value;
     if (currentStructure === 1)
     {
-        state.data.embedButtons = state.data.embedButtons || [];
-        pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': 1 } });
+        // generic-card.hbs has no embedButtons block, the anchor has to ride in the description
+        state.data.description += altStructButton({ flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': 1 } });
     }
     return true;
 }
@@ -1117,155 +1155,77 @@ export async function tearOffCrushingHitFlow(state)
     return true;
 }
 
-/**
- * Handle Direct Hit with 1 or 2 Structure after HULL check
- */
-export async function handleDirectHitHullCheckResult(state)
+/** Direct Hit with 1 or 2 Structure, resolved from the HULL check. @returns {Promise<{title: string, description: string}|null>} */
+export async function handleDirectHitHullCheckResult(actor, success)
 {
-    console.log("lancer-automations (alt-struct): handleDirectHitHullCheckResult EXECUTING");
-    if (!state.data)
-        throw new TypeError(`Check flow data missing!`);
-    if (!isValidActor(state.actor))
-        return false;
-    const actor = state.actor;
+    if (!isValidActor(actor))
+        return null;
 
     const remStruct = actor.system.structure.value;
     if (remStruct !== 1 && remStruct !== 2)
-        return true;
-
-    const result = state.data.result;
-    if (!result)
-        throw new TypeError(`HULL check hasn't been rolled yet!`);
-
-    const roll = result.roll;
-    const DC = 10;
-    const success = roll.total >= DC;
+        return null;
 
     const tokens = actor.getActiveTokens();
     const token = tokens?.[0];
-    state.data.embedButtons = state.data.embedButtons || [];
 
     const validWeapons = getValidWeaponMounts(actor);
     const validSystems = getValidSystems(actor);
     const hasWeaponsOrSystems = validWeapons.length > 0 || validSystems.length > 0;
 
+    const applyHullEffects = async (effectNames, note) =>
+    {
+        if (!token)
+            return;
+        try
+        {
+            await applyEffectsToTokens({
+                tokens: [token],
+                effectNames,
+                note,
+                duration: { label: 'end', turns: 1, rounds: 0 },
+            });
+        }
+        catch (error)
+        {
+            console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
+        }
+    };
+    const tearOff = () => hasWeaponsOrSystems
+        ? altStructButton({ flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'TEAR OFF' })
+        : altStructButton({ flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'CRUSHING HIT' });
+
+    const title = "Direct Hit";
     if (remStruct === 2)
     {
         if (success)
         {
-            if (token)
-            {
-                try
-                {
-                    await applyEffectsToTokens({
-                        tokens: [token],
-                        effectNames: ["slow", "impaired"],
-                        note: "Direct Hit (HULL check success)",
-                        duration: { label: 'end', turns: 1, rounds: 0 },
-                    });
-                }
-                catch (error)
-                {
-                    console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
-                }
-            }
+            await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
+            return { title, description: "HULL check passed. Slowed and Impaired until the end of your next turn." };
         }
-        else
-        {
-            if (hasWeaponsOrSystems)
-            {
-                if (token)
-                {
-                    try
-                    {
-                        await applyEffectsToTokens({
-                            tokens: [token],
-                            effectNames: ["immobilized", "impaired"],
-                            note: "Direct Hit (HULL check failed)",
-                            duration: { label: 'end', turns: 1, rounds: 0 },
-                        });
-                    }
-                    catch (error)
-                    {
-                        console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
-                    }
-                }
-                pushEmbedButton(state, { flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'TEAR OFF' });
-            }
-            else
-                pushEmbedButton(state, { flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'CRUSHING HIT' });
-        }
+        if (hasWeaponsOrSystems)
+            await applyHullEffects(["immobilized", "impaired"], "Direct Hit (HULL check failed)");
+        return { title, description: `HULL check failed.${hasWeaponsOrSystems ? " Immobilized and Impaired until the end of your next turn." : ""}<br>${tearOff()}` };
     }
-    else if (remStruct === 1)
+
+    if (!hasWeaponsOrSystems)
+        return { title, description: `No valid weapons or systems remain.<br>${tearOff()}` };
+    if (success)
     {
-        if (!hasWeaponsOrSystems)
-            pushEmbedButton(state, { flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'CRUSHING HIT' });
-        else
-        {
-            pushEmbedButton(state, { flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'TEAR OFF' });
-            if (success)
-            {
-                if (token)
-                {
-                    try
-                    {
-                        await applyEffectsToTokens({
-                            tokens: [token],
-                            effectNames: ["slow", "impaired"],
-                            note: "Direct Hit (HULL check success)",
-                            duration: { label: 'end', turns: 1, rounds: 0 },
-                        });
-                    }
-                    catch (error)
-                    {
-                        console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
-                    }
-                }
-            }
-            else
-            {
-                if (token)
-                {
-                    try
-                    {
-                        await applyEffectsToTokens({
-                            tokens: [token],
-                            effectNames: ["stunned"],
-                            note: "Direct Hit (HULL check failed)",
-                            duration: { label: 'end', turns: 1, rounds: 0 },
-                        });
-                    }
-                    catch (error)
-                    {
-                        console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
-                    }
-                }
-            }
-        }
+        await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
+        return { title, description: `HULL check passed. Slowed and Impaired until the end of your next turn.<br>${tearOff()}` };
     }
-    return true;
+    await applyHullEffects(["stunned"], "Direct Hit (HULL check failed)");
+    return { title, description: `HULL check failed. Stunned until the end of your next turn.<br>${tearOff()}` };
 }
 
-/** Crushing Hit (multiple 1s) after HULL check: success = Dazed, failure = mech destroyed. */
-export async function handleCrushingHitHullCheckResult(state)
+/** Crushing Hit (multiple 1s) after HULL check: success = Dazed, failure = mech destroyed. @returns {Promise<{title: string, description: string}|null>} */
+export async function handleCrushingHitHullCheckResult(actor, success)
 {
-    console.log("lancer-automations (alt-struct): handleCrushingHitHullCheckResult EXECUTING");
-    if (!state.data)
-        throw new TypeError(`Check flow data missing!`);
-    if (!isValidActor(state.actor))
-        return false;
-    const actor = state.actor;
+    if (!isValidActor(actor))
+        return null;
 
-    const result = state.data.result;
-    if (!result)
-        throw new TypeError(`HULL check hasn't been rolled yet!`);
-
-    const roll = result.roll;
-    const DC = 10;
-    const success = roll.total >= DC;
-
-    const tokens = actor.getActiveTokens();
-    const token = tokens?.[0];
+    const token = actor.getActiveTokens()?.[0];
+    const title = "Crushing Hit";
 
     if (success)
     {
@@ -1285,23 +1245,11 @@ export async function handleCrushingHitHullCheckResult(state)
                 console.warn("lancer-automations (alt-struct): Could not apply Dazed effect:", error);
             }
         }
+        return { title, description: "HULL check passed. Dazed until the end of your next turn." };
     }
-    else
-    {
-        try
-        {
-            await actor.update({
-                "system.structure.value": 0,
-                "system.hp.value": actor.system.hp.value - actor.system.hp.max
-            });
-        }
-        catch (error)
-        {
-            console.error("lancer-automations (alt-struct): Failed to destroy mech:", error);
-            ui.notifications.error("HULL check failed! The mech is DESTROYED.");
-        }
-    }
-    return true;
+
+    await destroyMech(actor, "HULL check failed! The mech is DESTROYED.");
+    return { title, description: "HULL check failed. The mech is <strong>DESTROYED</strong>." };
 }
 
 /** Applies IMPAIRED on a Glancing Blow (5-6) structure roll. */

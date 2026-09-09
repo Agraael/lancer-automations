@@ -22,8 +22,8 @@ await api.applyEffectsToTokens(options, extraOptions)
 | **inside `options`** | | | |
 | <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
 | <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }`. `isCustom: true` marks a Temporary-Custom-Statuses effect, not a built-in status |
-| <kbd>note</kbd> | `string` | `undefined` | Flavor note |
-| <kbd>duration</kbd> | `Object` | `undefined` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
+| <kbd>note</kbd> | `string` | `""` | Flavor note |
+| <kbd>duration</kbd> | `Object` | `{}` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | <kbd>checkEffectCallback</kbd> | `(token: Token, effectData: object) => boolean` | `null` | Dup-check predicate `(token, effectData) => boolean`. Returning `true` blocks the apply with a warning |
 | <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config `{ prefixText, source, whisper }` (or `true`) |
 | <kbd>refresh</kbd> | `boolean` | `false` | If the effect already exists, reset its duration instead of blocking. Stack untouched |
@@ -33,6 +33,8 @@ await api.applyEffectsToTokens(options, extraOptions)
 
 - `consumption` → [Concepts: Consumption](API_REFERENCE.md#consumption).
 - `linkedBonusId`, `statDirect`, and any extra `...customFlags` → [Concepts: Effect flags](API_REFERENCE.md#effect-flags). Extra keys (e.g. `suppressSourceId`) are stored as-is in `flags['lancer-automations']` on each created effect and become removal filters via `extraFlags` in `removeEffectsByNameFromTokens`.
+
+Those extra keys are also the effect's identity on apply. An existing effect of the same name only stacks when every one of them matches. A mismatch is treated as a distinct effect and a new one is created.
 
 ```js
 await api.applyEffectsToTokens(
@@ -44,12 +46,12 @@ await api.applyEffectsToTokens(
 </details>
 
 <details id="applyMark">
-<summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>findMarkedTokens</code></b> → <code>Token[]</code><br><b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
+<summary><b><code>applyMark</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code><br><b><code>findMarkedTokens</code></b> → <code>Token[]</code><br><b><code>clearMarks</code></b> <sup>async</sup> → <code>Promise&lt;Token[]&gt;</code></summary>
 
 <br>
 
 ```js
-await api.applyMark(sourceToken, targets, { effect, note, duration, flagKey })
+await api.applyMark(sourceToken, targets, { effect, note, duration, flagKey, extraOptions })
 api.findMarkedTokens(sourceToken, effectName, { flagKey })   // → Token[]
 await api.clearMarks(sourceToken, effectName, { flagKey })   // → Token[] cleared
 ```
@@ -109,7 +111,7 @@ await api.removeEffectsByName(target.id, 'Suppress', reactorToken.id);
 await api.removeEffectsByNameFromTokens(options)
 ```
 
-Removes every effect matching the given name(s). Use `deleteEffect` for one specific effect by ID.
+Use `deleteEffect` instead for one specific effect by ID.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -158,7 +160,7 @@ await api.deleteEffect(target, effects[0]);
 </details>
 
 <details id="deleteAllEffects">
-<summary><b><code>deleteAllEffects</code></b> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>deleteAllEffects</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>executeEffectManager</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -171,7 +173,7 @@ await api.executeEffectManager(options) // Opens the Effect Manager UI
 |:------|:-----|:------------|
 | <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | Tokens to clear (`deleteAllEffects`) |
 
-`executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype? }`, pre-selecting the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`).
+`executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype?, initialTab? }`. The first three pre-select the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`). `initialTab` opens on a named tab: `'standard'`, `'custom'`, `'bonus'`, `'manage'`.
 
 ```js
 await api.deleteAllEffects([token]);
@@ -200,6 +202,8 @@ await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], dura
 
 </details>
 
+---
+
 ## Find & Query
 
 <details id="findEffectOnToken">
@@ -211,7 +215,7 @@ await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], dura
 api.findEffectOnToken(token, identifier)
 ```
 
-Searches for an effect on a token by name or predicate function. The string form uses the house name rules (exact name, custom-status originalName, effect flags, loose includes, status id) and returns the first match. It delegates to `findEffectsOnToken`, which is the one to use for flag filters or all matches.
+First match by name or predicate. The string form uses the house name rules (exact name, custom-status originalName, effect flags, loose includes, status id) and delegates to `findEffectsOnToken`, which is the one to use for flag filters or all matches.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -221,7 +225,7 @@ Searches for an effect on a token by name or predicate function. The string form
 **Example:**
 ```js
 const cover = api.findEffectOnToken(target, "Soft Cover");
-const mark = api.findEffectsOnToken(target, "Suppress", { extraFlags: { suppressSourceId: reactorToken.id } })[0];
+const stacked = api.findEffectOnToken(target, e => (e.flags?.statuscounter?.value ?? 0) > 1);
 ```
 
 </details>
@@ -235,7 +239,7 @@ const mark = api.findEffectsOnToken(target, "Suppress", { extraFlags: { suppress
 api.findEffectsOnToken(token, effectName, options)
 ```
 
-Every matching effect on one token, using the same loose name rules as `findEffectOnToken` (which delegates to this). Use it when you need flag filters or all matches rather than the first.
+Every matching effect on one token, same loose name rules as `findEffectOnToken`. Use it for flag filters or all matches rather than the first.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -263,10 +267,12 @@ api.findEffectFrom(token, effectName, sourceToken)
 
 The `originID` variant: the effect on `token` that `sourceToken` applied, matched on the `origin` stamp left by `addGlobalBonus` / `applyEffectsToTokens`. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
 
+The name match here is exact. The loose house name rules do not apply.
+
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token carrying the effect |
-| <kbd>effectName</kbd> | `string` | Name or status id |
+| <kbd>effectName</kbd> | `string` | Exact effect name |
 | <kbd>sourceToken</kbd> | `Token` | The token that applied it |
 
 ```js
@@ -284,14 +290,14 @@ const eff = api.findEffectFrom(target, 'Lock On', reactorToken);
 api.hasStatus(tokenOrActor, ...statusIds)
 ```
 
-True when any of the given status ids is active. Use this instead of reaching into `actor.statuses` by hand.
+True when any of the given status ids is active.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>tokenOrActor</kbd> | `Token\|TokenDocument\|Actor` | Whose statuses to read |
 | <kbd>statusIds</kbd> | `...(string\|string[])` | Status ids, or arrays of them. Matches if any is present |
 
-Takes status **ids** (`'cover_hard'`), not display names. For effects by name, or for flag filters, use [`findEffectOnToken`](#).
+Takes status **ids** (`'cover_hard'`), not display names. For effects by name, or for flag filters, use [`findEffectOnToken`](#findEffectOnToken).
 
 ```js
 if (api.hasStatus(target, 'prone', 'cover_hard', 'cover_soft'))
@@ -340,7 +346,11 @@ const names = api.getAllEffects(token).map(e => e.name);
 
 </details>
 
+---
+
 ## Charges & Immunity
+
+An effect's charges live in a single counter, `flags.statuscounter.value`. The `stack` extra option, a bonus's `uses`, and "charges" here all write and read that one number.
 
 <details id="consumeEffectCharge">
 <summary><b><code>consumeEffectCharge</code></b> <sup>async</sup> → <code>boolean</code></summary>
@@ -351,13 +361,13 @@ const names = api.getAllEffects(token).map(e => e.name);
 await api.consumeEffectCharge(effect)
 ```
 
-Decrements the effect's stack counter by 1. If the counter reaches 0, the effect is deleted. Grouped effects (via [`consumption`](API_REFERENCE.md#consumption)`.groupId`) share a counter and are all deleted together.
+Decrements the counter by 1. If it reaches 0, the effect is deleted. Grouped effects (via [`consumption`](API_REFERENCE.md#consumption)`.groupId`) share a counter and are all deleted together.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>effect</kbd> | `ActiveEffect` | The effect to consume a charge from |
 
-Returns `true` if consumed, `false` if the effect has no consumption data.
+Returns `true` if consumed, `false` for a null or unparented effect and for an effect with no consumption data. A non-GM who does not own the actor gets `true` as soon as the GM socket request is sent, before the GM has acted on it.
 
 ```js
 const eff = api.findEffectOnToken(token, 'Shield Charges');
@@ -399,7 +409,7 @@ await api.triggerEffectImmunity(target, ['impaired'], reactorToken, true);
 api.checkEffectImmunities(actor, effectIdOrName, effect, state)
 ```
 
-Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`) if the actor is immune to the named effect.
+Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`), empty when the actor is not immune. Test `.length`: the empty array is truthy.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -409,7 +419,7 @@ Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`) if
 | <kbd>state</kbd> | `Object` | `null` | Optional flow state |
 
 ```js
-if (api.checkEffectImmunities(target.actor, 'prone')) return;
+if (api.checkEffectImmunities(target.actor, 'prone').length) return;
 ```
 
 </details>
@@ -428,6 +438,27 @@ if (api.checkEffectImmunities(target.actor, 'prone')) return;
 const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 ```
 
+Returns `undefined` if `actor` is falsy.
+
+**`options` Object:**
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>duration</kbd> | `string` | `'end'` in combat | A [duration label](API_REFERENCE.md#duration-labels). A string here, unlike the effect APIs where `duration` is an object |
+| <kbd>durationTurns</kbd> | `number` | `1` | Origin turns until the effect ends. See below |
+| <kbd>origin</kbd> | `Token\|TokenDocument\|string` | the actor's token | Whose turns `durationTurns` counts |
+| <kbd>consumption</kbd> | `ConsumptionConfig` | `null` | A [Consumption](API_REFERENCE.md#consumption) config |
+| <kbd>refresh</kbd> | `boolean` | `false` | Re-add an existing bonus id in place: values replaced, linked effect's duration reset instead of blocked |
+| <kbd>icon</kbd> | `string` | per bonus type | Image path for the linked effect, overriding the type's default icon |
+| <kbd>forcePrototype</kbd> | `boolean` | `false` | Ignore the scene token and write the effect on the actor itself, so spawned tokens inherit it |
+
+`durationTurns` counts origin turns until the effect ends:
+- `0`: next matching trigger. If applied during origin's own turn with `duration: "end"`, ends at end of that same turn. With `duration: "start"`, it ends at start of the next turn. Off the origin's turn, `0` clamps to `1`.
+- `1`: one full origin turn (default). With `duration: "end"` applied during origin's own turn, ends at end of origin's *next* turn.
+- `n ≥ 2`: `n` origin turns.
+
+None of that applies out of combat, or with `duration: 'indefinite'`. There is no clamping: the effect is created indefinite, with no turn count. The prototype write (no scene token, or `forcePrototype`) is indefinite too.
+
 **`bonusData` Object:**
 
 <details>
@@ -439,8 +470,8 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>name</kbd> | `string` | Display name |
 | <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"`, `"movement_extra"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
-| <kbd>uses</kbd> | `number` | Stack count |
-| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 use only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
+| <kbd>uses</kbd> | `number` | Charges. Written to the linked effect's counter, the same one `consumeEffectCharge` reads |
+| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
 | <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
@@ -471,8 +502,8 @@ const bonusId = await api.addGlobalBonus(actor, bonusData, options)
 | <kbd>val</kbd> | `number` | Spaces added to each matching move |
 
 Feeds both the ruler bands and the movement cap through
-[`getMovementBands`](API_MOVEMENT.md#getMovementBands). Use it for standing effects ("your boosts are longer");
-for a one-shot on a single move use `recordMovementExtra` instead. The legacy type id `speed_boost_extra` is
+[`getMovementBands`](API_MOVEMENT.md#getMovementBands). Use it for standing effects ("your boosts are longer").
+For a one-shot on a single move use `recordMovementExtra` instead. The legacy type id `speed_boost_extra` is
 read as `movement_extra` with `subtype: "boost"`.
 
 </details>
@@ -559,18 +590,6 @@ Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep 
 
 </details>
 
-<br>
-
-**`options` Object:**
-`{ duration?: string, durationTurns?: number, origin?: Token|TokenDocument|string, consumption?: ConsumptionConfig, refresh?: boolean }`
-
-`duration` is a [duration label](API_REFERENCE.md#duration-labels). `consumption` is a [Consumption](API_REFERENCE.md#consumption) config. `refresh: true` re-adds an existing bonus id in place: values replaced, linked effect's duration reset instead of blocked.
-
-`durationTurns` counts origin turns until the effect ends:
-- `0`: next matching trigger. If applied during origin's own turn with `duration: "end"`, ends at end of that same turn. With `duration: "start"`, it ends at start of the next turn. Off-combat / off-origin's-turn, `0` clamps to `1`.
-- `1`: one full origin turn (default). With `duration: "end"` applied during origin's own turn, ends at end of origin's *next* turn.
-- `n ≥ 2`: `n` origin turns.
-
 </details>
 
 <details id="removeGlobalBonus">
@@ -614,6 +633,8 @@ const single = api.getGlobalBonus(actor, bonusId)  // → BonusData | null
 | <kbd>actor</kbd> | `Actor` | The actor to inspect |
 | <kbd>bonusId</kbd> | `string` | The bonus ID (for `getGlobalBonus` only) |
 
+`getGlobalBonuses` drops bonuses gated to a `tier` the NPC owner is not. `getGlobalBonus` does not: a by-id lookup returns the bonus whatever its tier gate.
+
 ```js
 const bonus = api.getGlobalBonus(actor, 'lightning-reflexes');
 ```
@@ -631,7 +652,7 @@ const bonuses = api.getConstantBonuses(actor)              // → Array<BonusDat
 await api.removeConstantBonus(actor, bonusIdOrPredicate)   // string ID or predicate
 ```
 
-Constant bonuses are permanent (stored in flags, not linked to an active effect). Auto-generates an `id` if not provided.
+Constant bonuses are permanent (stored in flags, not linked to an active effect). Auto-generates an `id` if not provided. `getConstantBonuses` drops bonuses gated to a `tier` the NPC owner is not.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -673,7 +694,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 | <kbd>items</kbd> / <kbd>actors</kbd> | `Array` | *required* | Source docs |
 | <kbd>effectNames</kbd> | `string\|Object\|Array` | *required* | Same shape as `applyEffectsToTokens` |
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
-| <kbd>duration</kbd> | `Object` | `{ label: 'permanent' }` | `{ label, turns?, rounds? }` |
+| <kbd>duration</kbd> | `Object` | `{}` (permanent) | `{ label, turns?, rounds? }` |
 
 `extraOptions` keys are stored on the source and copied to every effect that comes from it. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
 
@@ -721,7 +742,7 @@ await api.linkBonusToActor({ actors, bonusData, addOptions }, extraOptions)
 await api.ensureLinkedBonus({ items, bonusData, addOptions }, extraOptions)  // idempotent, needs bonusData.id
 ```
 
-Attaches a bonus to each source doc. Applies immediately on active tokens.
+Attaches a bonus to each source doc. Applies immediately on active tokens. Each call returns one `{ item, templateId }` (or `{ actor, templateId }`) pair per source doc. Keep the `templateId`, it is what `unlinkBonusFromItem` / `unlinkBonusFromActor` take.
 
 The `duration` in `addOptions` decides how it shows up:
 
@@ -754,10 +775,16 @@ Removes the entry from the source doc. Every bonus that came from it is removed 
 |:------|:-----|:--------|:------------|
 | **inside `options`** | | | |
 | <kbd>items</kbd> / <kbd>actors</kbd> | `Item[]` / `Actor[]` | `[]` | Source docs to unlink from |
-| <kbd>templateId</kbd> | `string` | *required* | The linked bonus's id |
+| <kbd>templateId</kbd> | `string` | *required* | The id of the link itself, from the `link*` call's return value |
+
+`templateId` is generated per link, not taken from `bonusData.id`. Passing `bonusData.id` matches nothing and the call is a silent no-op. When you no longer hold the return value, read it off the source with `getLinkedBonuses`.
 
 ```js
-await api.unlinkBonusFromItem({ items: [item], templateId: 'smart-rounds' });
+const [{ templateId }] = await api.linkBonusToItem({ items: [item], bonusData: { id: 'smart-rounds', type: 'accuracy', val: 1 } });
+await api.unlinkBonusFromItem({ items: [item], templateId });
+
+const template = api.getLinkedBonuses(item).find(t => t.bonusData?.id === 'smart-rounds');
+await api.unlinkBonusFromItem({ items: [item], templateId: template.id });
 ```
 
 </details>
@@ -774,10 +801,10 @@ api.getLinkedBonuses(source)   // → Object[]        bonus templates on Item or
 
 **Params:** <kbd>source</kbd> `Item|Actor`
 
-Read-side helpers, symmetric with `getConstantBonuses` / `getGlobalBonuses`. Returns the LINKED entries only (not merged with runtime state on the actor).
+Returns the LINKED entries only, not merged with runtime state on the actor. A bonus entry is `{ id, bonusData, addOptions }`, where `id` is the link's `templateId` and the bonus you passed in is under `bonusData`.
 
 ```js
-const hasTemplate = api.getLinkedBonuses(item).some(t => t.id === 'smart-rounds');
+const hasTemplate = api.getLinkedBonuses(item).some(t => t.bonusData?.id === 'smart-rounds');
 ```
 
 </details>
@@ -804,7 +831,7 @@ Args: `item`/`actor` source doc. The `apply*` helpers also take `tokens` (`Array
 
 ---
 
-### Flow State Data Injection
+## Flow State Data Injection
 
 During an active flow (attack, check, etc.), `triggerData` contains a `flowState` object. Inject ephemeral bonuses or share variables across triggers for the flow's lifespan.
 
@@ -820,8 +847,8 @@ triggerData.flowState.getFlowExtraData()             // read la_extraData
 ```
 
 - **`injectBonus`** - ephemeral bonus (e.g. an accuracy bonus) applied to this flow's rolls, discarded when the flow completes.
-- **`injectFlowExtraData`** - Merges properties into `state.la_extraData`, passing variables between trigger phases (e.g. from `onHit` to `onDamage`).
-- **`getFlowExtraData`** - Returns the `la_extraData` object attached to the current flow state.
+- **`injectFlowExtraData`** - merges into `state.la_extraData`, passing variables between trigger phases (e.g. `onHit` to `onDamage`).
+- **`getFlowExtraData`** - reads `la_extraData` back.
 
 </details>
 
@@ -854,16 +881,16 @@ await api.injectBonusToFlowState(triggerData.flowState, {
 
 ---
 
-### Immunity Queries
+## Immunity Queries
 
 <details id="getImmunityBonuses">
-<summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b> → <code>any[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
+<summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b> → <code>string[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
 
 <br>
 
 ```js
 api.getImmunityBonuses(actor, subtype, state)    // → Array<object>
-api.checkDamageResistances(actor, damageType)     // → Array<object>
+api.checkDamageResistances(actor, damageType)     // → Array<string>
 api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 ```
 
@@ -872,13 +899,14 @@ api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 | Function | Description |
 |:---------|:------------|
 | `getImmunityBonuses` | Returns all immunity bonuses of the specified [subtype](API_REFERENCE.md#immunity-subtypes) for the actor. |
-| `checkDamageResistances` | Returns all "resistance" subtype immunity bonuses matching the given damage type. |
-| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a new array where immune types are zeroed out. |
+| `checkDamageResistances` | Source **names** of the "resistance" subtype bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. |
+| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. |
 
 `getImmunityBonuses` and `applyDamageImmunities` accept an optional <kbd>state</kbd> (`Object`, default `null`) for conditional immunity evaluation.
 
 ```js
 const resist = api.checkDamageResistances(target.actor, 'Energy');
+if (resist.length) console.log(`Resisted by ${resist.join(', ')}`);
 ```
 
 </details>

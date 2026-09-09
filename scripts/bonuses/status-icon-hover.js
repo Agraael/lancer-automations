@@ -1,4 +1,4 @@
-import { getGlobalBonuses, getBonusDetailString } from './genericBonuses.js';
+import { effectTooltipData, showStatusTooltip, moveStatusTooltip } from './status-tooltip.js';
 import { playUiSound } from '../tah/sound.js';
 
 const HOVER_SCALE = 1.3;
@@ -58,11 +58,11 @@ function _onPointerMove(event)
     {
         _clear();
         _grow(hit.token, hit.sprite);
-        _tip = _buildTooltip(hit.token, hit.effect);
+        _tip = showStatusTooltip(effectTooltipData(hit.token.actor, hit.effect));
         playUiSound('statusHover');
     }
     if (_tip)
-        _moveTip(event.clientX ?? 0, event.clientY ?? 0);
+        moveStatusTooltip(_tip, event.clientX ?? 0, event.clientY ?? 0);
 }
 
 function _hitSprite(token, world)
@@ -155,89 +155,3 @@ function _clear()
     }
 }
 
-function _buildTooltip(token, effect)
-{
-    const el = document.createElement('div');
-    el.classList.add('la-status-tooltip');
-    const parts = [`<div class="la-status-tooltip-name">${effect.name ?? ''}</div>`];
-    const duration = _durationText(effect);
-    if (duration)
-        parts.push(`<div class="la-status-tooltip-duration">${duration}</div>`);
-    const bonus = _bonusText(token, effect);
-    if (bonus)
-        parts.push(`<div class="la-status-tooltip-bonus">${bonus}</div>`);
-    const description = _descriptionHtml(effect);
-    if (description)
-        parts.push(`<div class="la-status-tooltip-desc">${description}</div>`);
-    el.innerHTML = parts.join('');
-    document.body.appendChild(el);
-    return el;
-}
-
-function _moveTip(clientX, clientY)
-{
-    const rect = _tip.getBoundingClientRect();
-    let left = clientX + 14;
-    let top = clientY + 14;
-    if (left + rect.width > window.innerWidth - 4)
-        left = clientX - rect.width - 14;
-    if (top + rect.height > window.innerHeight - 4)
-        top = clientY - rect.height - 14;
-    _tip.style.left = `${left}px`;
-    _tip.style.top = `${top}px`;
-}
-
-function _durationText(effect)
-{
-    const flags = effect.flags?.['lancer-automations'];
-    const entries = [flags?.duration, ...(flags?.durationEntries ?? [])].filter(Boolean);
-    let best = null;
-    for (const entry of entries)
-    {
-        if ((entry.label === 'end' || entry.label === 'start') && Number(entry.turns) > 0)
-        {
-            if (!best || Number(entry.turns) < best.turns)
-                best = { label: entry.label, turns: Number(entry.turns) };
-        }
-    }
-    if (best)
-        return `${best.turns} turn${best.turns > 1 ? 's' : ''} (${best.label} of turn)`;
-    const first = entries[0];
-    if (first?.label === 'permanent')
-        return 'Permanent';
-    if (first?.label === 'indefinite')
-        return 'Indefinite';
-    if (first?.label === 'round')
-    {
-        const rounds = Number(first.rounds ?? first.turns);
-        if (rounds > 0)
-            return `${rounds} round${rounds > 1 ? 's' : ''}`;
-    }
-    return '';
-}
-
-function _bonusText(token, effect)
-{
-    const linkedBonusId = effect.flags?.['lancer-automations']?.linkedBonusId;
-    if (!linkedBonusId)
-        return '';
-    const bonus = getGlobalBonuses(token.actor).find(entry => entry.id === linkedBonusId);
-    if (!bonus)
-        return '';
-    if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
-        return bonus.bonuses.map(getBonusDetailString).join(' | ');
-    return getBonusDetailString(bonus);
-}
-
-function _descriptionHtml(effect)
-{
-    if (effect.description)
-        return effect.description;
-    for (const id of effect.statuses ?? [])
-    {
-        const config = CONFIG.statusEffects.find(entry => entry.id === id);
-        if (config?.description)
-            return game.i18n.localize(config.description);
-    }
-    return '';
-}

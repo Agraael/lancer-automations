@@ -1,97 +1,6 @@
-# API - Item & Actor Data
+# API - Items
 
 [Back to API Reference](API_REFERENCE.md)
-
----
-
-## Item & Actor Flags
-
-<details id="addItemFlags">
-<summary><b><code>addItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>removeItemFlags</code></b> <sup>async</sup> → <code>Item</code><br><b><code>getItemFlags</code></b> → <code>any</code></summary>
-
-<br>
-
-```js
-await api.addItemFlags(item, flags)            // set flags under 'lancer-automations'
-await api.removeItemFlags(item, flags)         // unset the listed keys
-api.getItemFlags(item, flagName?)              // read flags (specific key or all)
-```
-
-**Params:** <kbd>item</kbd> `Item` · <kbd>flags</kbd> `Object` key/value pairs · <kbd>flagName</kbd> `string` optional single key
-
-Routes through the GM via socket when the calling user does not own the item.
-
-**Known flag keys:**
-
-| Key | Type | Used by | Description |
-|:----|:-----|:--------|:------------|
-| <kbd>deployRange</kbd> | `number` | `placeDeployable` | Default placement range |
-| <kbd>deployCount</kbd> | `number` | `placeDeployable` | Default number to place |
-
-**Example:**
-```js
-await api.addItemFlags(myItem, { deployRange: 5, deployCount: 2 });
-```
-
-</details>
-
-<details id="addTokenFlags">
-<summary><b><code>addTokenFlags</code></b> <sup>async</sup> → <code>TokenDocument</code><br><b><code>getTokenFlags</code></b> → <code>any</code></summary>
-
-<br>
-
-```js
-await api.addTokenFlags(tokenOrDoc, flags)
-api.getTokenFlags(tokenOrDoc, flagName?)
-```
-
-The token-document counterpart to `addItemFlags` / `getItemFlags`. Routes through the GM via socket when the calling user does not own the token.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>tokenOrDoc</kbd> | `Token\|TokenDocument` | *required* | Token to read or stamp |
-| <kbd>flags</kbd> | `Object` | *required* | Key/value pairs set under `lancer-automations` |
-| <kbd>flagName</kbd> | `string` | `null` | Read one key. Omit for the whole namespace object |
-
-```js
-await api.addTokenFlags(token, { mineArmed: true });
-const armed = api.getTokenFlags(token, 'mineArmed');
-```
-
-</details>
-
-<details id="addActorFlags">
-<summary><b><code>addActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>removeActorFlags</code></b> <sup>async</sup> → <code>Actor</code><br><b><code>getActorFlags</code></b> → <code>any</code></summary>
-
-<br>
-
-```js
-await api.addActorFlags(actor, flags)          // set flags under 'lancer-automations'
-await api.removeActorFlags(actor, flags)       // unset the listed keys
-api.getActorFlags(actor, flagName?)            // read flags (specific key or all)
-```
-
-**Params:** <kbd>actor</kbd> `Actor` · <kbd>flags</kbd> `Object` key/value pairs · <kbd>flagName</kbd> `string` optional single key
-
-Routes through the GM via socket when the calling user does not own the actor.
-
-**Known flag keys (deployable Mines, read by the `Mine Zone` general reaction):**
-
-| Key | Type | Default | Description |
-|:----|:-----|:--------|:------------|
-| <kbd>mineDetectionRadius</kbd> | `number` | `1` | Aura radius in grid units. |
-| <kbd>mineDetectionDisposition</kbd> | `"ALL"` \| `"FRIENDLY"` \| `"HOSTILE"` \| `"NEUTRAL"` | `"ALL"` | Which disposition triggers the detonation prompt. |
-| <kbd>customMineDetection</kbd> | `boolean` | `false` | Skip the default `LA_MineZone` aura entirely. The per-LID handler installs its own detection. |
-
-**Example:**
-```js
-await api.addActorFlags(mineActor, {
-    mineDetectionRadius: 3,
-    mineDetectionDisposition: "HOSTILE"
-});
-```
-
-</details>
 
 ---
 
@@ -126,6 +35,8 @@ api.isItemUsable(item)
 
 Whether the item can be used right now, matching the TAH row state: false when destroyed, disabled, unloaded, uncharged, out of uses or per-round/turn/scene limits, or lock-blocked.
 
+The per-round/turn/scene part only counts when the `enablePerRoundTurnTags` setting is on. Those three are the `perRound` / `perTurn` / `perScene` resources of [Extra Config](#extra-config).
+
 </details>
 
 ---
@@ -138,7 +49,7 @@ Whether the item can be used right now, matching the TAH row state: false when d
 <br>
 
 ```js
-await api.setItemAsActivated(item, token, endAction, endActionDescription)
+await api.setItemAsActivated(item, token, endAction, endActionDescription, options)
 ```
 
 Marks an item as activated, so it shows as active in the HUD and appears in `getActivatedItems`. `endAction` is the action the player spends to end it, surfaced on the end-activation entry. Close it with `endItemActivation`.
@@ -149,9 +60,16 @@ Marks an item as activated, so it shows as active in the HUD and appears in `get
 | <kbd>token</kbd> | `Token` | *required* | Owner of the item |
 | <kbd>endAction</kbd> | `string` | *required* | Action spent to end it, e.g. `"Quick"` / `"Full"` |
 | <kbd>endActionDescription</kbd> | `string` | `""` | Text shown when ending the activation |
+| **inside `options`** | | | |
+| <kbd>blockAction</kbd> | `boolean` | `true` | Lock the action while the item is active. `false` opts out |
+| <kbd>actionName</kbd> | `string` | the item name | Which action to lock |
+| <kbd>blockReason</kbd> | `string` | `"<item> is already active."` | Reason shown on the locked row |
+
+By default this also takes an action lock, so the action named after the item cannot be used again while the activation stands. `endItemActivation` releases that lock. That is why the pairing is mandatory: end the activation any other way and the action stays locked.
 
 ```js
 await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.');
+await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.', { blockAction: false });
 ```
 
 </details>
@@ -165,7 +83,7 @@ await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.');
 api.getActivatedItems(token)
 ```
 
-Returns items currently marked as activated on a token (via `setItemAsActivated`). Checks `lancer-automations.activeStateData.active` on each item's flags.
+Items on the token carrying `lancer-automations.activeStateData.active`, the flag `setItemAsActivated` writes.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -187,7 +105,7 @@ if (active.some(i => i.name === 'Aegis Shield Generator')) return false;
 await api.endItemActivation(item, token)
 ```
 
-Ends an activation started by `setItemAsActivated`: clears the activated flags and posts the end-of-activation chat message through `SimpleActivationFlow`. Resolves whether the flow completed.
+Ends an activation started by `setItemAsActivated`: clears the activated flags, releases the action lock it took, and posts the end-of-activation chat message through `SimpleActivationFlow`. Resolves whether the flow completed.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -209,7 +127,7 @@ await api.endItemActivation(item, token);
 await api.openEndActivationMenu(token)
 ```
 
-Prompt listing the token's activated items; the picked one is ended via `endItemActivation`. Resolves the ended item, or `null` on cancel.
+Prompt listing the token's activated items. The picked one is ended via `endItemActivation`. Resolves the ended item, or `null` on cancel.
 
 **Params:** <kbd>token</kbd> `Token` holder of the activated items
 
@@ -221,14 +139,14 @@ Prompt listing the token's activated items; the picked one is ended via `endItem
 <br>
 
 ```js
-await api.destroyItem(item)   // system.destroyed = true
-await api.disableItem(item)   // system.disabled = true
-await api.restoreItem(item)   // clears both
+await api.destroyItem(item)
+await api.disableItem(item)
+await api.restoreItem(item)
 ```
 
 **Params:** <kbd>item</kbd> `Item`
 
-Destroyed/disabled items are skipped by the reaction engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
+`destroyItem` sets `system.destroyed`, `disableItem` sets `system.disabled`, and `restoreItem` clears both. Destroyed/disabled items are skipped by the reaction engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
 
 ```js
 await api.disableItem(weapon);
@@ -272,7 +190,7 @@ await api.setReaction(reactorToken, false);
 api.hasReactionAvailable(tokenOrActor)
 ```
 
-Reads the reaction flag on the actor's action tracker. Out of combat (no combatant for this actor) it is always `true`.
+Reads the reaction flag on the actor's action tracker. Always `true` when the actor has no combatant in the active combat, and when a combat exists but has not been started.
 
 **Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
 
@@ -288,21 +206,21 @@ if (!api.hasReactionAvailable(reactorToken)) return false;
 <br>
 
 ```js
-await api.setItemResource(item, nb, counterIndex)
+await api.setItemResource(item, value, counterIndex)
 ```
 
-Sets a resource value on an item. Auto-detects the resource type.
+Auto-detects the resource type.
 
 Detection order:
 1. **Talent** → `system.counters[counterIndex].value` (clamped to counter `min`/`max`)
 2. **Uses** (`uses.max > 0`) → `system.uses.value` (clamped `0..max`)
-3. **Loaded** → `system.loaded` (`Boolean(nb)`)
-4. **Charged** → `system.charged` (`Boolean(nb)`)
+3. **Loaded** → `system.loaded` (`Boolean(value)`)
+4. **Charged** → `system.charged` (`Boolean(value)`)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>item</kbd> | `Item` | *required* | The item document to update |
-| <kbd>nb</kbd> | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
+| <kbd>value</kbd> | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
 | <kbd>counterIndex</kbd> | `number` | `0` | For talent items: which counter to update. |
 
 ```js
@@ -320,7 +238,7 @@ await api.setItemResource(talentItem, 2, 0);
 await api.updateTokenSystem(token, data)
 ```
 
-Updates system data on a token's actor. Routes through the GM via socket when the calling user does not own the actor.
+Routes through the GM via socket when the calling user does not own the actor.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -338,11 +256,25 @@ await api.updateTokenSystem(target, { 'system.burn': 0 });
 
 ## Extra Config
 
-Per-item config controlling Lancer's automation of the item. Currently: opt out of auto-consuming specific resource types on activation. Stored at `item.flags['lancer-automations'].extraConfig`.
-
-Resource type keys: `uses`, `loading`, `charged`, `perTurn`, `perRound`, `perScene`, `reserveUsed`.
+Per-item config controlling Lancer's automation of the item: whether a resource is auto-consumed on activation, and when a per-X counter is spent. Stored at `item.flags['lancer-automations'].extraConfig`.
 
 Nested actions with their own `N/round` frequency have a separate counter, addressed by a sub key: `a{N}` for `system.actions[N]`, `p{P}a{N}` for a weapon profile action, `r{N}` for a talent rank.
+
+**Resource keys, and which functions take them:**
+
+| Key | Auto-consume opt-out | Sub / consume-on | Consume / recharge |
+|:----|:---------------------|:-----------------|:-------------------|
+| <kbd>uses</kbd> | yes | - | yes |
+| <kbd>loading</kbd> | yes | - | yes |
+| <kbd>charged</kbd> | yes | - | yes |
+| <kbd>perTurn</kbd> | yes | yes | yes |
+| <kbd>perRound</kbd> | yes | yes | yes |
+| <kbd>perScene</kbd> | yes | yes | yes |
+| <kbd>reserveUsed</kbd> | yes | - | yes |
+
+- **Auto-consume opt-out**: `setItemAutoConsumeDisabled`, `isAutoConsumeDisabled`, `getAutoConsumeDisabled`.
+- **Sub / consume-on**: `setSubAutoConsumeDisabled`, `getSubAutoConsumeDisabled`, `setConsumeOn`, `getConsumeOn`. Only the per-X keys have their own counter to address.
+- **Consume / recharge**: `consumeItemResource`, `rechargeItemResource`.
 
 <details id="setItemAutoConsumeDisabled">
 <summary><b><code>setItemAutoConsumeDisabled</code></b> <sup>async</sup> → <code>string[]</code></summary>
@@ -353,12 +285,12 @@ Nested actions with their own `N/round` frequency have a separate counter, addre
 await api.setItemAutoConsumeDisabled(item, 'uses', true);
 ```
 
-Toggle auto-consume opt-out for a single resource type. `true` = do NOT decrement on activation. `false` = default behavior.
+`true` = do NOT decrement on activation. `false` = default behavior.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>item</kbd> | `Item` | Owned Lancer item |
-| <kbd>type</kbd> | `'uses'\|'loading'\|'charged'\|'perTurn'\|'perRound'\|'reserveUsed'` | Resource key |
+| <kbd>type</kbd> | `'uses'\|'loading'\|'charged'\|'perTurn'\|'perRound'\|'perScene'\|'reserveUsed'` | Resource key |
 | <kbd>disabled</kbd> | `boolean` | true = opt out |
 
 Returns the updated opt-out array.
@@ -371,7 +303,7 @@ Returns the updated opt-out array.
 <br>
 
 ```js
-await api.setItemAutoConsumeDisabledAll(item, true);  // disable every resource the item has
+await api.setItemAutoConsumeDisabledAll(item, true);
 ```
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>disabled</kbd> `boolean`
@@ -391,7 +323,22 @@ await api.setSubAutoConsumeDisabled(item, 'a0', 'perRound', true);
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>subKey</kbd> `string` · <kbd>type</kbd> `'perTurn'|'perRound'|'perScene'` · <kbd>disabled</kbd> `boolean`
 
-Opt-out for one nested action's own counter. `getSubAutoConsumeDisabled(item, subKey)` returns the current `Set`.
+Opt-out for one nested action's own counter.
+
+</details>
+
+<details id="getSubAutoConsumeDisabled">
+<summary><b><code>getSubAutoConsumeDisabled</code></b> → <code>Set&lt;string&gt;</code></summary>
+
+<br>
+
+```js
+const off = api.getSubAutoConsumeDisabled(item, 'a0');
+```
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>subKey</kbd> `string`
+
+The opt-out set for one nested action. Empty `Set` when that action has none.
 
 </details>
 
@@ -406,7 +353,22 @@ await api.setConsumeOn(item, 'perRound', 'hit');
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `'perTurn'|'perRound'|'perScene'` · <kbd>mode</kbd> `'auto'|'activation'|'hit'`
 
-When a weapon attack spends the counter. `auto` detects it from the text (`N/round` in `on_hit` / `on_crit` = on hit). `getConsumeOn(item, type)` returns the current mode.
+When a weapon attack spends the counter. `auto` detects it from the text (`N/round` in `on_hit` / `on_crit` = on hit).
+
+</details>
+
+<details id="getConsumeOn">
+<summary><b><code>getConsumeOn</code></b> → <code>'auto'|'activation'|'hit'</code></summary>
+
+<br>
+
+```js
+const mode = api.getConsumeOn(item, 'perRound');
+```
+
+**Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `'perTurn'|'perRound'|'perScene'`
+
+The mode set by `setConsumeOn`, or `'auto'` when none was set.
 
 </details>
 
@@ -429,7 +391,7 @@ if (api.isAutoConsumeDisabled(item, 'uses')) { ... }
 <br>
 
 ```js
-const disabled = api.getAutoConsumeDisabled(item);  // Set of type keys
+const disabled = api.getAutoConsumeDisabled(item);
 ```
 
 **Params:** <kbd>item</kbd> `Item`
@@ -442,16 +404,18 @@ const disabled = api.getAutoConsumeDisabled(item);  // Set of type keys
 <br>
 
 ```js
-await api.consumeItemResource(item, 'uses', 2);   // uses -= 2 (clamped to 0)
-await api.consumeItemResource(item, 'loading');   // loaded = false
+await api.consumeItemResource(item, 'uses', 2);
+await api.consumeItemResource(item, 'loading');
 ```
 
-Force a consume regardless of opt-out. Throws if the item does not have the resource type. Numeric fields clamp to `[0, max]`. Booleans set to `false`.
+Force a consume regardless of opt-out. Throws if the item does not have the resource type. Booleans set to `false`.
+
+Only `uses` clamps to a real ceiling (`system.uses.max`). `perTurn` and `perRound` are floored at 0 with no upper bound, so a recharge past the tag's limit is not caught here.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>item</kbd> | `Item` | *required* | Owned Lancer item |
-| <kbd>type</kbd> | `string` | *required* | Resource key |
+| <kbd>type</kbd> | `string` | *required* | Resource key, see the table above |
 | <kbd>amount</kbd> | `number` | `1` | Positive integer for numeric fields, ignored for booleans |
 
 </details>
@@ -462,13 +426,13 @@ Force a consume regardless of opt-out. Throws if the item does not have the reso
 <br>
 
 ```js
-await api.rechargeItemResource(item, 'uses', 3);  // uses += 3 (clamped to max)
-await api.rechargeItemResource(item, 'charged'); // charged = true
+await api.rechargeItemResource(item, 'uses', 3);
+await api.rechargeItemResource(item, 'charged');
 ```
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>type</kbd> `string` resource key · <kbd>amount</kbd> `number` (default `1`)
 
-Reverse of consume. Same signature, same validation.
+Reverse of consume. Same signature, same validation, same clamping.
 
 </details>
 
@@ -481,9 +445,11 @@ Reverse of consume. Same signature, same validation.
 await api.configureItemExtraConfig(item, { autoConsumeDisabled: ['uses', 'loading'] });
 ```
 
-**Params:** <kbd>item</kbd> `Item` · <kbd>patch</kbd> `Object` shallow-merged fields
+**Params:** <kbd>item</kbd> `Item` · <kbd>patch</kbd> `Object` merged into the stored config
 
-Generic setter that shallow-merges a patch into the Extra Config flag. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature. Use this only for fields with no helper.
+Generic setter for Extra Config fields with no helper. Prefer the explicit `setItemAutoConsumeDisabled*` helpers for the auto-consume feature.
+
+The patch's top-level keys replace the stored ones, but the write itself goes through `setFlag`, which merges nested objects recursively. Passing `{ consumeOn: {} }` therefore does not clear the stored `consumeOn` keys. Arrays are replaced whole.
 
 </details>
 

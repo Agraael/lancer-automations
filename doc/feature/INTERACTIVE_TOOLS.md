@@ -6,6 +6,12 @@ Cards that ask players to choose or vote, and on-canvas tools to pick, place, an
 
 ---
 
+## Settings
+
+The settings named on this page sit on three tabs. **Combat & Movement** holds the targeting and sharing toggles (Targeting section) and the measure-toolbar ones (Advanced Measure section). **Tokens & Display** holds the deployable and overlap-picker toggles. The **Colors** tab holds the palette, and it's per-client, so each player sets their own.
+
+---
+
 ## Choice cards
 
 <img align="right" src="../img/it-choice-card.png" width="45%"/>
@@ -16,7 +22,7 @@ A choice card pauses and waits for a player to pick. `startChoiceCard` has four 
 - **AND** - every option must be clicked. Each runs as soon as it's confirmed.
 - **Vote** and **Hidden Vote** - the card is broadcast to its recipients. You watch a live tally and click **Confirm** to resolve (hidden keeps votes secret until then, ties are broken by you).
 
-**`userIdControl`** routes a card to one player or a list (first to respond wins). A non-interactive **waiting card** (`startWaitCard`) shows "waiting for X" in the meantime.
+Its `userIdControl` option routes a card to one player or a list (first to respond wins). A non-interactive **waiting card** (`startWaitCard`) shows "waiting for X" in the meantime.
 
 **openChoiceMenu** builds and sends a choice or vote card from a dialog, no code needed.
 
@@ -98,8 +104,8 @@ For one-off effects you can skip the API: place a template by hand and attach th
 
 The attack HUD's target and area buttons are covered in [Advanced Targeting and Measurement](./ATTACK_TARGETING.md#the-targeting-buttons). Two related settings:
 
-- **Target on a check** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) gets the same target button as an attack, using the picked token's save or matching stat as the difficulty.
-- **Range on the attack card** - **`rangePreviewOnAttackCard`** shows the attacker's reach on the canvas when the attack card opens, following the **Thrown** box for a thrown weapon.
+- **Stat Roll Targeting** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) gets the same target button as an attack, using the picked token's save or matching stat as the difficulty.
+- **Range Preview on Attack/Damage HUD** - with **`tah.rangePreviewOnAttackCard`** on, the attacker's reach is drawn on the canvas when the attack card opens, following the **Thrown** box for a thrown weapon.
 
 <br clear="right"/>
 
@@ -109,7 +115,7 @@ The attack HUD's target and area buttons are covered in [Advanced Targeting and 
 
 <img align="right" src="../img/it-colors.png" width="45%"/>
 
-The **Colors** settings tab lets each player recolor the targeting and range-glow palette, with a button to reset them.
+The **Colors** settings tab lets each player recolor the targeting and range-glow palette, with a button to reset them. It also carries the trace colors, the ruler speed-tier colors, the range-pulse style, and the Lancer Style Library theme.
 
 <br clear="right"/>
 
@@ -140,9 +146,11 @@ Delayed appearance / reinforcement is in [Gameplay Automation](./GAMEPLAY_AUTOMA
 
 <img align="right" src="../img/it-extras.png" width="45%"/>
 
-**Add Extra** attaches **custom actions** (activation type, plus charges, recharge, and limited / per-turn / per-round uses) and **extra deployables** to an actor, no code needed. It works on a token's actor, on the prototype actor, or directly on an **item** - and only lists the entries you create here.
+**Add Extra** attaches **custom actions** (activation type, plus charges, recharge, and limited / per-turn / per-round uses), **extra deployables**, and **extra resource bars** to an actor, no code needed. It works on a token's actor, on the prototype actor, or directly on an **item** - and only lists the entries you create here.
 
-Open it from the **Add Extra** button on the actor or item sheet header, or from **TAH > Utility > Misc > Add Extra**. Anything attached to an item is stored on the item and follows it: whoever carries it gets the extras.
+Open it from the **L.A** button on the actor or item sheet header (it reads **L.A (N)** once something is attached), which opens a dialog with **Add Extra**, **Add Effect**, and, on items, **Extra Config**. It's also under **Token Action HUD (TAH) > Utility > Misc > Add Extra**. Anything attached to an item is stored on the item and follows it: whoever carries it gets the extras.
+
+Set **Combat** to **Attack** or **Damage** to make an action roll. Attack rolls a to-hit on your targets then carries its **Dmg** rows to the damage card, Damage rolls them straight. **Acc** / **Diff** / **Bonus** and the tag boxes work like a weapon's, and a **Quick Tech** / **Full Tech** / **Invade** activation rolls a tech attack. The **Action Combat** list does the same for actions the item or actor already has: the pencil attaches the roll, the action itself is untouched and still prints its usual card first.
 
 <br clear="right"/>
 

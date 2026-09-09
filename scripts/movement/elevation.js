@@ -5,7 +5,7 @@ import { playUiSound } from '../tah/sound.js';
 import { initHexDragStabilizer } from './hex-drag-stabilizer.js';
 import { initTerrainTriggerSplits, injectTriggerSilentsAtDrop } from './terrain-trigger-waypoints.js';
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { thtApi } from './movement-utils.js';
+import { thtApi, canPassObstructions } from './movement-utils.js';
 
 const MODULE_ID = 'lancer-automations';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
@@ -102,18 +102,20 @@ function terrainTopUnder(tokenDoc, position)
         return null;
     const typeById = terrainTypeById(tht);
 
-    let highest = null;
+    const cellTops = [];
     const consider = (shapes) =>
     {
+        let cellTop = 0;
         for (const shape of shapes)
         {
             const terrainType = typeById.get(shape.terrainTypeId);
             if (!terrainType?.usesHeight || !terrainType?.isSolid)
                 continue;
             const top = shape.top ?? (shape.elevation + shape.height);
-            if (highest == null || top > highest)
-                highest = top;
+            if (top > cellTop)
+                cellTop = top;
         }
+        cellTops.push(cellTop);
     };
 
     if (canvas.grid?.type === CONST.GRID_TYPES.GRIDLESS)
@@ -141,7 +143,18 @@ function terrainTopUnder(tokenDoc, position)
         for (const gridOffset of offsets)
             consider(tht.getCell?.(gridOffset.j, gridOffset.i) ?? []);
     }
-    return highest;
+    if (!cellTops.length)
+        return null;
+    const maxTop = Math.max(...cellTops);
+    // Standing rule: rest on the lowest hex when nothing under the body is SIZE or taller above it.
+    const moverSize = Number(tokenDoc?.actor?.system?.size) || 0;
+    if (moverSize > 1 && cellTops.length > 1 && canPassObstructions(tokenDoc))
+    {
+        const minTop = Math.min(...cellTops);
+        if (maxTop - minTop < moverSize - 1e-6)
+            return minTop;
+    }
+    return maxTop;
 }
 
 function shouldAutoElevate(tokenDoc, { ruler: _ruler = true } = {})
@@ -252,12 +265,72 @@ export function elevationForPreview(tokenDoc, waypoint)
     });
 }
 
+// THT's own lancer rule: a mech is SIZE units tall.
 function _tokenZHeight(tokenDoc)
 {
+    const size = Number(tokenDoc?.actor?.system?.size);
+    if (Number.isFinite(size) && size > 0)
+        return size;
     return tokenDoc?.flags?.['wall-height']?.tokenHeight
         ?? tokenDoc?.flags?.elevatedvision?.tokenHeight
         ?? 1;
 }
+
+/** Max solid terrain top at one grid cell, grid units. */
+function _cellTopAt(typeById, tht, cellOffset)
+{
+    let shapes = [];
+    try
+    {
+        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+        shapes = tht.getShapesAtPoint?.(cellCenter.x, cellCenter.y) ?? [];
+        if (!shapes.length)
+            shapes = tht.getCell?.(cellOffset.j, cellOffset.i) ?? [];
+    }
+    catch
+    {
+        return 0;
+    }
+    let top = 0;
+    for (const shape of shapes)
+    {
+        const terrainType = typeById.get(shape.terrainTypeId);
+        if (!terrainType?.usesHeight || !terrainType?.isSolid)
+            continue;
+        const shapeTop = shape.top ?? ((shape.elevation ?? 0) + (shape.height ?? 0));
+        if (shapeTop > top)
+            top = shapeTop;
+    }
+    return top;
+}
+
+function _waypointCenterOffset(tokenDoc, waypoint)
+{
+    try
+    {
+        const centerPoint = tokenDoc.getCenterPoint?.(waypoint) ?? { x: waypoint.x, y: waypoint.y };
+        return canvas.grid.getOffset(centerPoint);
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+function _waypointFootprint(tokenDoc, waypoint)
+{
+    try
+    {
+        const cells = tokenDoc.getOccupiedGridSpaceOffsets?.(waypoint) ?? [];
+        if (cells.length)
+            return cells;
+    }
+    catch
+    { /* fall through */ }
+    const center = _waypointCenterOffset(tokenDoc, waypoint);
+    return center ? [center] : [];
+}
+
 
 function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {})
 {
@@ -337,6 +410,9 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
         return movementPath;
     if (!shouldAutoElevate(this))
         return movementPath;
+    const movedHorizontally = movementPath.some(waypoint => waypoint.x !== movementPath[0].x || waypoint.y !== movementPath[0].y);
+    if (!movedHorizontally)
+        return movementPath;
     try
     {
         if (!game.settings.get(MODULE_ID, CLIMB_WAYPOINTS_ENABLED))
@@ -393,17 +469,69 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
         jumpHop = cellsMoved <= 1 && rise <= sizeAllowance + 1e-9;
     }
 
+    // Standing rule: stand on the lowest hex under the body while nothing under it is SIZE or taller above that.
+    const moverSize = Number(this.actor?.system?.size) || 0;
+    let standingCtx = null;
+    if (!flying && terrainTops.length && moverSize > 1 && canPassObstructions(this))
+    {
+        const tht = thtApi();
+        const typeById = tht ? terrainTypeById(tht) : null;
+        if (typeById)
+            standingCtx = { tht, typeById };
+    }
+    const standingTopAt = (waypoint, rawTop) =>
+    {
+        if (!standingCtx)
+            return rawTop;
+        const cells = _waypointFootprint(this, waypoint);
+        if (cells.length < 2)
+            return rawTop;
+        let minTop = Infinity;
+        for (const cellOffset of cells)
+        {
+            const cellTop = _cellTopAt(standingCtx.typeById, standingCtx.tht, cellOffset);
+            if (cellTop < minTop)
+                minTop = cellTop;
+        }
+        // A min at or above the gap-aware top means an overhead layer; keep the gap result.
+        if (minTop === Infinity || minTop >= rawTop - 1e-6)
+            return rawTop;
+        return (rawTop - minTop < moverSize - 1e-6) ? minTop : rawTop;
+    };
+
     // Flying never descends mid-path: hold the running max altitude; only the landing waypoint drops.
     const landingIdx = movementPath.length - 1;
-    let prevEffectiveTop = originTop;
+    let prevEffectiveTop = standingTopAt(movementPath[0], originTop);
+    let prevBrushing = false;
     for (const { idx, top: waypointTop } of terrainTops)
     {
         const isLanding = idx === landingIdx;
-        const effectiveTop = (flying && !isLanding) ? Math.max(waypointTop, prevEffectiveTop) : waypointTop;
+        const baseTop = standingTopAt(movementPath[idx], waypointTop);
+        const effectiveTop = (flying && !isLanding) ? Math.max(baseTop, prevEffectiveTop) : baseTop;
 
         // Corners and silents arrive intermediate:false but follow the profile like dense cells.
         if (!movementPath[idx].explicit && !movementPath[idx]._laElevResolved)
             movementPath[idx].elevation = originElev + (effectiveTop - originTop) * sceneDistance + userDelta;
+
+        // Brushed obstructions get a visible ignore-elevation waypoint, like climbs get a ladder.
+        const brushing = waypointTop - baseTop > 1e-6;
+        if (brushing && !prevBrushing && !jumping)
+        {
+            if (movementPath[idx - 1])
+            {
+                if (!movementPath[idx - 1].explicit)
+                    movementPath[idx - 1]._laClimbFlip = true;
+                movementPath[idx - 1].intermediate = false;
+                movementPath[idx - 1].explicit = true;
+            }
+            if (!movementPath[idx].explicit)
+                movementPath[idx]._laClimbFlip = true;
+            Object.assign(movementPath[idx], {
+                action: 'ignore',
+                intermediate: false,
+                explicit: true
+            });
+        }
 
         if (effectiveTop !== prevEffectiveTop && !(jumping && jumpHop))
         {
@@ -424,6 +552,7 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
         }
 
         prevEffectiveTop = effectiveTop;
+        prevBrushing = brushing;
     }
 
     return movementPath;

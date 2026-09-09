@@ -113,11 +113,14 @@ const BATTLELOG_SOUNDS = {
     resultImpactBad:  { src: `${BATTLELOG_BASE}/resultImpact_bad.wav`,  scale: 1.02 },
     logOpen:          { src: `${BATTLELOG_BASE}/LogOpen.wav`,           scale: 0.85 },
     incomingTrans:    { src: `${BATTLELOG_BASE}/incomingTrans.wav`,     scale: 0.85 },
+    confirm:          { src: `${BATTLELOG_BASE}/confirm.wav`,           scale: 0.55 },
+    denied:           { src: `${BATTLELOG_BASE}/denied.wav`,            scale: 0.55 },
+    fail:             { src: `${BATTLELOG_BASE}/fail.wav`,              scale: 1 },
 };
 
 /**
  * Play a Battle Log sound.
- * @param {'fadeIn'|'fadeOut'|'loopBackground'|'typingLoop'|'displayList'|'longResult'|'shortResult'|'resultImpact'|'resultImpactGood'|'resultImpactBad'|'logOpen'|'incomingTrans'} variant
+ * @param {'fadeIn'|'fadeOut'|'loopBackground'|'typingLoop'|'displayList'|'longResult'|'shortResult'|'resultImpact'|'resultImpactGood'|'resultImpactBad'|'logOpen'|'incomingTrans'|'confirm'|'denied'|'fail'} variant
  * @param {{loop?: boolean, volumeScale?: number}} [opts] `volumeScale` multiplies the base scale (1 = default).
  * @returns {{stop: () => void}} controller. Call `.stop()` for loops or to cut a one-shot early.
  */

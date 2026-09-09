@@ -623,7 +623,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 }
 
 /* Grid backdrop, keyframes in battelog.css. */
-#lancer-automations-config .window-content {
+#lancer-automations-config .window-content,
+#reaction-manager-config .window-content {
     position: relative;
     isolation: isolate;
     overflow: hidden;
@@ -631,11 +632,14 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 
 /* the style library fills these with the plate, !important */
 #lancer-automations-config form.la-config-form,
-#lancer-automations-config .la-config-content {
+#lancer-automations-config .la-config-content,
+#reaction-manager-config form.lancer-dialog-base,
+#reaction-manager-config .content {
     background: none !important;
 }
 
-#lancer-automations-config .window-content::before {
+#lancer-automations-config .window-content::before,
+#reaction-manager-config .window-content::before {
     content: "";
     position: absolute;
     top: 0;
@@ -650,10 +654,40 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #lancer-automations-config .window-content::before {
+    #lancer-automations-config .window-content::before,
+    #reaction-manager-config .window-content::before {
         animation: none;
     }
 }
+
+/* Editor scrolls at .window-content, so the backdrop rides its form instead. */
+#reaction-editor form {
+    position: relative;
+    isolation: isolate;
+}
+
+#reaction-editor form::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: url("/modules/lancer-automations/assets/grid.png");
+    animation: la-editor-grid-scroll 13.33s linear infinite;
+}
+
+@keyframes la-editor-grid-scroll {
+    to {
+        background-position: -100px -100px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #reaction-editor form::before {
+        animation: none;
+    }
+}
+
 
 #reaction-manager-config .sheet-tabs {
     margin-top: 10px;
@@ -3036,6 +3070,101 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     color: var(--aw-hover-color);
 }
 
+.lancer-sw-btn.applied {
+    background: var(--sw-bg);
+    border-color: var(--sw-border);
+    color: #111;
+}
+
+.lancer-sw-btn.applied.hover {
+    background: var(--sw-border);
+    border-color: var(--sw-bg);
+    color: var(--sw-bg);
+}
+
+.lancer-sw-btn.applied.hover .la-hud-icon--dark {
+    filter: invert(1) !important;
+}
+
+.lancer-sw-btn.applied.hover .la-hud-icon--white {
+    filter: none !important;
+}
+
+.lancer-sw-btn .la-hud-icon {
+    margin: 0 !important;
+}
+
+/* laHudRenderIcon inverts for the light HUD rows: undo it on the dark button, keep it on the applied one */
+.lancer-sw-btn .la-hud-icon--dark {
+    filter: invert(1) !important;
+}
+
+.lancer-sw-btn .la-hud-icon--white {
+    filter: none !important;
+}
+
+.lancer-sw-btn.applied .la-hud-icon--dark {
+    filter: none !important;
+}
+
+.lancer-sw-btn.applied .la-hud-icon--white {
+    filter: invert(1) !important;
+}
+
+.lancer-sw-stack,
+.lancer-sw-turns {
+    position: absolute;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #14161a;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lancer-sw-stack {
+    right: -3px;
+    bottom: -3px;
+    border: 1px solid #7d838c;
+    color: #e6e6e6;
+}
+
+.lancer-sw-turns {
+    left: -3px;
+    top: -3px;
+    border: 1px solid #8a7320;
+    color: #ffd700;
+}
+
+.lancer-rw-pages {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.lancer-rw-pages i {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #6f757e;
+    background: rgba(20, 20, 30, 0.9);
+}
+
+.lancer-rw-pages i.on {
+    border-color: #c8a24a;
+    background: #e8c877;
+    box-shadow: 0 0 6px rgba(232, 200, 119, 0.75);
+}
+
 .lancer-rw-name-label {
     position: absolute;
     left: 0;
@@ -3155,6 +3284,11 @@ form[id^="accdiff"] .lancer-header input,
 
 .la-status-tooltip-duration {
     color: #ffd700;
+}
+
+.la-status-tooltip-count {
+    color: #00aaff;
+    font-weight: bold;
 }
 
 .la-status-tooltip-bonus {

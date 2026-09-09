@@ -1,0 +1,207 @@
+.la-bday-btn {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    color: var(--la-ink, #1b1b1b);
+    background: color-mix(in srgb, var(--la-plate, #e4dccd), #fff 22%);
+    border: 1px solid var(--la-ink, #1b1b1b);
+    padding: 0;
+    cursor: pointer;
+    animation: la-bday-btn-bob 2.6s ease-in-out infinite;
+}
+
+.la-bday-btn:hover {
+    border-color: var(--la-signal, #cf7b2a);
+    box-shadow: 0 0 0 2px rgba(207, 123, 42, 0.35);
+}
+
+.la-bday-btn .la-bday-glyph {
+    font-size: 17px;
+    line-height: 1;
+}
+
+.la-bday-btn .la-bday-mark {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 15px;
+    height: 15px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: #f3e9dc;
+    background: var(--primary-color, #782e22);
+    border: 1px solid var(--la-ink, #1b1b1b);
+    border-radius: 50%;
+}
+
+@keyframes la-bday-btn-bob {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-3px);
+    }
+}
+
+.la-bday-sky {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.la-bday-balloon,
+.la-bday-drifter-body {
+    border-radius: 50% 50% 48% 48% / 42% 42% 58% 58%;
+    background:
+        radial-gradient(38% 32% at 32% 26%, rgba(255, 255, 255, 0.75), transparent 62%),
+        radial-gradient(120% 110% at 50% 30%, hsl(var(--hue) 62% 62%), hsl(var(--hue) 55% 42%));
+}
+
+.la-bday-balloon::after,
+.la-bday-drifter-body::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 1px;
+    background: linear-gradient(180deg, hsl(var(--hue) 40% 35%), transparent);
+}
+
+.la-bday-balloon {
+    position: absolute;
+    bottom: -140px;
+    left: var(--x);
+    width: var(--size);
+    height: calc(var(--size) * 1.22);
+    opacity: 0.32;
+    animation: la-bday-rise var(--dur) linear var(--delay) infinite;
+}
+
+.la-bday-balloon::after {
+    height: calc(var(--size) * 1.1);
+}
+
+@keyframes la-bday-rise {
+    0% {
+        transform: translate(0, 0) rotate(-6deg);
+    }
+
+    25% {
+        transform: translate(16px, -28vh) rotate(4deg);
+    }
+
+    50% {
+        transform: translate(-12px, -56vh) rotate(-5deg);
+    }
+
+    75% {
+        transform: translate(14px, -84vh) rotate(3deg);
+    }
+
+    100% {
+        transform: translate(0, -118vh) rotate(-6deg);
+    }
+}
+
+.la-bday-drifter {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 99990;
+    width: 54px;
+    height: 70px;
+    cursor: pointer;
+    transition: opacity 1.2s ease;
+    will-change: transform;
+}
+
+.la-bday-drifter-body {
+    position: relative;
+    display: block;
+    width: 54px;
+    height: 66px;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.35));
+    animation: la-bday-drifter-bob 3.2s ease-in-out infinite;
+}
+
+.la-bday-drifter-body::after {
+    height: 46px;
+}
+
+@keyframes la-bday-drifter-bob {
+    0%,
+    100% {
+        transform: rotate(-4deg);
+    }
+
+    50% {
+        transform: rotate(4deg);
+    }
+}
+
+.la-bday-drifter-fade {
+    opacity: 0;
+}
+
+.la-bday-drifter-popped .la-bday-drifter-body {
+    animation: la-bday-drifter-pop 0.32s ease-out both;
+}
+
+@keyframes la-bday-drifter-pop {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    45% {
+        transform: scale(1.5);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+.battelog-intro-terminal.la-bday .battelog-intro-final-word {
+    font-size: clamp(34px, 6vw, 72px);
+}
+
+.battelog-intro-terminal.la-bday .battelog-intro-final {
+    min-height: clamp(34px, 6vw, 72px);
+}
+
+.battelog-intro-terminal.la-bday .battelog-intro-scan {
+    background: repeating-linear-gradient(0deg, rgba(120, 200, 255, 0.06) 0 1px, transparent 1px 3px);
+}
+
+.battelog-intro-terminal.la-bday .battelog-intro-final-word.win {
+    color: #2e9fd4;
+    text-shadow: 0 0 12px #2e9fd4, 0 0 40px rgba(46, 159, 212, 0.7);
+}
+
+.battelog-intro-terminal.la-bday .battelog-intro-final-subtitle.win {
+    color: #2e9fd4;
+}
+
+.battelog-intro-terminal.la-bday.battelog-flash-win .battelog-intro-crt::after {
+    background: radial-gradient(60% 55% at 50% 58%, color-mix(in srgb, #2e9fd4 16%, transparent), transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .la-bday-balloon,
+    .la-bday-btn {
+        animation: none;
+    }
+}

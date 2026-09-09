@@ -140,6 +140,22 @@ def collect_api_names():
     return {n for n in names if not n.startswith('_')}
 
 
+def find_exported_definition(name):
+    """Path of the module that exports `name` directly, or None."""
+    esc = re.escape(name)
+    patterns = [
+        re.compile(r'export\s+(?:async\s+)?function\s+' + esc + r'\s*\('),
+        re.compile(r'export\s+(?:const|let|var)\s+' + esc + r'\b'),
+        re.compile(r'export\s+class\s+' + esc + r'\b'),
+    ]
+    for path in iter_js_files():
+        src = path.read_text(encoding='utf-8', errors='replace')
+        for pattern in patterns:
+            if pattern.search(src):
+                return path
+    return None
+
+
 def find_function_signature(name):
     """Return (params_str, is_async), or (None, False) when the definition can't be found."""
     esc = re.escape(name)
@@ -255,7 +271,15 @@ def main():
         '',
         'interface LancerAutomationsAPI {',
     ]
+    linked = 0
     for name in missing:
+        # Named exports link via typeof import: types and go-to-definition flow from the implementation.
+        source = find_exported_definition(name)
+        if source:
+            rel = source.relative_to(MODULE_ROOT / 'scripts').as_posix()
+            lines.append(f'    {name}: typeof import("../{rel}").{name};')
+            linked += 1
+            continue
         args, is_async = find_function_signature(name)
         params = parse_params(args or '')
         lines.append(render_signature(name, params, is_async, args is not None))
@@ -263,7 +287,7 @@ def main():
     lines.append('')
 
     OUTPUT.write_text('\n'.join(lines), encoding='utf-8')
-    print(f'Wrote {OUTPUT.relative_to(MODULE_ROOT)} — {len(missing)} new entries '
+    print(f'Wrote {OUTPUT.relative_to(MODULE_ROOT)} — {len(missing)} new entries, {linked} linked to their export '
           f'({len(api_names)} total API names, {len(declared)} already hand-typed).')
 
 

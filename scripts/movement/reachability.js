@@ -2,7 +2,8 @@
 // Weighted movement reach: Dijkstra flood over grid cells using the ruler's own
 // per-cell cost core (evalCellStep), so the frontier matches what a drag would bill. style:ignore
 
-import { evalCellStep, getTerrainTypeMap, footprintShapesAt, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
+import { evalCellStep, getTerrainTypeMap, footprintShapesAt, standingTopFor, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
+import { canPassObstructions } from "./movement-utils.js";
 import { neighborKeys, getOccupiedOffsets, isHexGrid } from "../combat/grid-helpers.js";
 import { isHostile } from "../combat/overwatch.js";
 
@@ -199,10 +200,16 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
         }
     }
 
+    ctx.moverSize = Number(token.actor?.system?.size) || 0;
+    ctx.standingRule = ctx.moverSize > 1 && canPassObstructions(tokenDoc);
+    const startGround = (ctx.standingRule && !flying)
+        ? standingTopFor(typeById, startShapes.footprint, ctx.moverSize, startShapes.top)
+        : groundElevGrid;
+
     const heap = makeHeap();
     const best = new Map();
     best.set(startKey, 0);
-    heap.push({ key: startKey, cost: 0, tokenElev: startTokenElev, terrainTop: groundElevGrid });
+    heap.push({ key: startKey, cost: 0, tokenElev: startTokenElev, terrainTop: startGround });
 
     while (heap.size)
     {
@@ -414,7 +421,12 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
     const heap = makeHeap();
     const gScore = new Map([[startKey, 0]]);
     const cameFrom = new Map();
-    heap.push({ key: startKey, cost: heuristic(startOffset.j, startOffset.i), g: 0, tokenElev: startTokenElev, terrainTop: startShapes.top });
+    ctx.moverSize = Number(token.actor?.system?.size) || 0;
+    ctx.standingRule = ctx.moverSize > 1 && canPassObstructions(tokenDoc);
+    const startGround = (ctx.standingRule && !flying)
+        ? standingTopFor(typeById, startShapes.footprint, ctx.moverSize, startShapes.top)
+        : startShapes.top;
+    heap.push({ key: startKey, cost: heuristic(startOffset.j, startOffset.i), g: 0, tokenElev: startTokenElev, terrainTop: startGround });
 
     const NODE_CAP = 20000;
     let expansions = 0;

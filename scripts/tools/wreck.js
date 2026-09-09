@@ -448,11 +448,20 @@ export async function preLoadImageForAll(src, push = false)
 {
     if (!src || !src.trim())
         return src;
+    if (!/\.[a-z0-9]{2,5}$/i.test(src))
+        return src;
     if (push)
         game.socket.emit(`module.${MODULE_ID}`, { action: 'preLoadImageForAll', payload: src });
     // v13 namespaced loadTexture under foundry.canvas; the bare global is deprecated.
     const load = /** @type {any} */ (foundry).canvas?.loadTexture ?? /** @type {any} */ (globalThis).loadTexture;
-    await load(src);
+    try
+    {
+        await load(src);
+    }
+    catch (err)
+    {
+        log(`Failed to preload ${src}:`, err);
+    }
     return src;
 }
 
@@ -870,15 +879,32 @@ function _renderWreckTab(app, html, data)
     const flags = data.object?.flags?.[MODULE_ID] ?? data.source?.flags?.[MODULE_ID] ?? {};
     const showWreck = game.settings.get(MODULE_ID, 'enableWrecks') && actorType !== 'deployable';
 
-    const wreckHtml = showWreck ? _buildWreckSectionHtml(flags) : '';
-    const awarenessHtml = _buildAwarenessSectionHtml(flags);
-    const scanHtml = game.user?.isGM ? _buildScanSectionHtml(tokenDoc) : '';
-    const elevationHtml = _buildElevationSectionHtml(flags);
+    const sections = [];
+    if (showWreck)
+        sections.push({ title: 'Wreck', html: _buildWreckSectionHtml(flags) });
+    sections.push({ title: 'Detection', html: _buildAwarenessSectionHtml(flags) });
+    sections.push({ title: 'Stat Hint', html: _buildStatHintSectionHtml(flags) });
+    if (game.user?.isGM)
+        sections.push({ title: 'Scan', cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
+    sections.push({ title: 'Elevation', html: _buildElevationSectionHtml(flags) });
+    const sectionsHtml = sections.map((section, idx) => _wrapSection(section, idx > 0)).join('');
 
-    const tabHtml = `<div class="tab" data-group="sheet" data-tab="la"><div class="la-compact-config">${wreckHtml}${awarenessHtml}${scanHtml}${elevationHtml}</div></div>`;
+    const tabHtml = `<div class="tab scrollable" data-group="sheet" data-tab="la"><div class="la-compact-config">${sectionsHtml}</div></div>`;
     const resourcesTab = rootEl.querySelector('div.tab[data-tab="resources"]');
     if (resourcesTab)
         resourcesTab.insertAdjacentHTML('afterend', tabHtml);
+
+    const laTab = rootEl.querySelector('div.tab[data-tab="la"]');
+    laTab?.addEventListener('click', (event) =>
+    {
+        const head = event.target?.closest?.('.la-config-section-head');
+        if (!head)
+            return;
+        event.preventDefault();
+        head.parentElement.classList.toggle('collapsed');
+        if (typeof app.setPosition === 'function')
+            app.setPosition({ height: 'auto' });
+    });
 
     for (const btn of rootEl.querySelectorAll('button.la-pick-folder'))
     {
@@ -918,7 +944,6 @@ function _buildWreckSectionHtml(flags)
     const terrainOverride = flags.terrainOverride ?? 'default';
     const terrainOpt = (val, label) => `<option value="${val}" ${terrainOverride === val ? 'selected' : ''}>${label}</option>`;
     return `
-        <div class="la-config-section">
         <div class="form-group">
             <label>Wreck Mode</label>
             <div class="form-fields">
@@ -990,7 +1015,6 @@ function _buildWreckSectionHtml(flags)
             </div>
             <p class="notes">Play visual effect when this token is wrecked.</p>
         </div>
-        </div>
     `;
 }
 
@@ -999,7 +1023,6 @@ function _buildAwarenessSectionHtml(flags)
     const mode = flags.awarenessMode ?? 'default';
     const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
     return `
-        <div class="la-config-section">
         <div class="form-group">
             <label>Detection Visual</label>
             <div class="form-fields">
@@ -1012,6 +1035,38 @@ function _buildAwarenessSectionHtml(flags)
             </div>
             <p class="notes">Controls Battle Awareness display. Non-default modes also disable Sensor detection on this token.</p>
         </div>
+    `;
+}
+
+function _buildStatHintSectionHtml(flags)
+{
+    const unknownLabel = flags.statHintUnknownLabel ?? '';
+    const triSelect = (name, current) =>
+    {
+        const opt = (val, label) => `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`;
+        return `<select name="flags.${MODULE_ID}.${name}" data-dtype="String">
+            ${opt('default', 'Default (use global setting)')}
+            ${opt('on', 'On')}
+            ${opt('off', 'Off')}
+        </select>`;
+    };
+    return `
+        <div class="form-group">
+            <label>Unknown Label</label>
+            <div class="form-fields">
+                <input type="text" name="flags.${MODULE_ID}.statHintUnknownLabel" value="${_escapeText(unknownLabel)}" placeholder="Default (use global setting)">
+            </div>
+            <p class="notes">Stat hint header for this token while unscanned.</p>
+        </div>
+        <div class="form-group">
+            <label>Hide class/templates/tier when not scanned</label>
+            <div class="form-fields">${triSelect('statHintHideClass', flags.statHintHideClass ?? 'default')}</div>
+            <p class="notes">Hide the class/frame subtitle and tier badge until scanned.</p>
+        </div>
+        <div class="form-group">
+            <label>Hide current values without owner/observer access</label>
+            <div class="form-fields">${triSelect('statHintHideCurrent', flags.statHintHideCurrent ?? 'default')}</div>
+            <p class="notes">Current HP, heat, and resources show as "?" in the stat hint.</p>
         </div>
     `;
 }
@@ -1020,14 +1075,23 @@ function _buildElevationSectionHtml(flags)
 {
     const disableAutoTerrain = !!flags.disableAutoTerrainElevation;
     return `
-        <div class="la-config-section">
         <div class="form-group">
             <label>Disable Auto-elevation from Terrain</label>
             <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
             <p class="notes">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
         </div>
-        </div>
     `;
+}
+
+function _sectionHeadHtml(title)
+{
+    return `<button type="button" class="la-config-section-head"><i class="fas fa-chevron-down la-chevron" inert></i>${title}</button>`;
+}
+
+function _wrapSection(section, collapsed)
+{
+    const cls = section.cls ? ` ${section.cls}` : '';
+    return `<div class="la-config-section${cls}${collapsed ? ' collapsed' : ''}">${_sectionHeadHtml(section.title)}${section.html}</div>`;
 }
 
 function _escapeText(value)
@@ -1035,7 +1099,8 @@ function _escapeText(value)
     return String(value ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
 }
 
 function _linkedScanDocsFor(actorUuid)
@@ -1065,7 +1130,6 @@ function _buildScanSectionHtml(tokenDoc)
         ? `<button type="button" class="la-scan-unlink-btn"><i class="fas fa-unlink"></i> Unlink</button>`
         : '';
     return `
-        <div class="la-config-section la-scan-section">
         <div class="form-group">
             <label>Scan Document</label>
             <div class="form-fields">
@@ -1087,7 +1151,6 @@ function _buildScanSectionHtml(tokenDoc)
                 <input type="checkbox" class="la-scanned-by-all" ${scannedByAll ? 'checked' : ''}>
             </div>
             <p class="notes">Force this token revealed (stats, name, battle log) to every player, ignoring scan journals.</p>
-        </div>
         </div>
     `;
 }
@@ -1144,7 +1207,7 @@ function _refreshScanSection(rootEl, tokenDoc, app)
     const section = laTab?.querySelector('.la-scan-section');
     if (!section)
         return;
-    section.outerHTML = _buildScanSectionHtml(tokenDoc);
+    section.innerHTML = _sectionHeadHtml('Scan') + _buildScanSectionHtml(tokenDoc);
     _wireScanControls(rootEl, tokenDoc, app);
     if (typeof app?.setPosition === 'function')
         app.setPosition({ height: 'auto' });

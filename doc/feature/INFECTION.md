@@ -10,7 +10,7 @@ Infection is a damage type from [HORUS: Thy Hubris Manifest](https://cornylius.i
 
 <img align="right" src="../img/inf-settings.png" width="45%"/>
 
-**Combat & Movement → Combat Flows** (the **`enableInfectionDamageIntegration`** toggle).
+**Combat & Movement → Structure & Damage**, the **Infection Damage Integration** toggle (**`enableInfectionDamageIntegration`**).
 
 <br clear="right"/>
 
@@ -36,7 +36,7 @@ Anything that clears Burn, **Stabilize** or a **Full Repair**, clears infection 
 
 **Infection** is a weapon damage type alongside Kinetic, Energy, and the rest. Infection resistance halves it, though the Heat it deals can't be resisted.
 
-When an attack deals it, the damage card shows the infection amount with **Apply Heat** and **Undo** buttons.
+When an attack deals it, the module appends the infection amount to the system's own "took X damage" message. There's no extra button: the system's **Apply damage** applies the infection too, and its **Undo** control is rewired to take the infection Heat back out along with the damage.
 
 <br clear="right"/>
 
@@ -46,8 +46,8 @@ When an attack deals it, the damage card shows the infection amount with **Apply
 
 <img align="right" src="../img/inf-sheet.png" width="45%"/>
 
-An **Infection** card sits next to Burn on the sheet, with a value field and a button to roll the end-of-turn check by hand.
+An **Infection** card sits next to Burn on the sheet, with a value field and a button to roll the end-of-turn check by hand. On the alt sheet it's a bare **INFX** field next to Burn, with no roll button.
 
-Infection is tracked on the actor, available as a token resource-bar option in the Token Config Resources tab.
+Infection is tracked on the actor, available as a token resource-bar option in the Token Config Resources tab for mechs and NPCs. Pilots don't get it.
 
 <br clear="right"/>

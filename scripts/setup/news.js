@@ -1,5 +1,6 @@
 import { getPendingUpdate } from "./version-check.js";
 import { getSupabase } from "./supabase-client.js";
+import { escapeAttr as _escAttr } from "../tools/misc-tools.js";
 
 const NEWS_MODULE_ID = "lancer-automations";
 const NEWS_REPO = "Agraael/lancer-automations";
@@ -89,11 +90,6 @@ function _filterEntries(entries, { seen, role, version, isGM })
         }
         return true;
     });
-}
-
-function _escAttr(value)
-{
-    return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // Optional `link` / `image` / `linkLabel` / `linkNote` on an entry render a preview card.
@@ -386,7 +382,7 @@ function _renderUpdate(update)
         <div style="padding: 10px 4px;">
             <p>A new version of <b>${module.title}</b> is available: <span style="color: #782e22;"><b>v${newVersion}</b></span> (current: v${module.version}).</p>
             <p>You can update via the Foundry VTT Module Manager.</p>
-            <p style="margin-top: 8px;">If you like this module or my other work, you can support me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a>. Updates and previews land there too.</p>
+            <p style="margin-top: 8px;">If you like this module or my other work, you can support me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener"><b>Ko-fi</b></a>. Updates and previews land there too.</p>
             ${notesHtml ? `<div style="margin-top: 10px; padding: 10px; border: 1px solid #999; border-radius: 4px; background: rgba(0,0,0,0.05); max-height: 35vh; overflow-y: auto;">${notesHtml}</div>` : ""}
         </div>
     `;

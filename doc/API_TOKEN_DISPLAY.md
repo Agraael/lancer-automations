@@ -6,13 +6,21 @@
 
 ## Extra Stat Bars
 
-Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token, Item, or Actor** as the target:
+Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token, Item, or Actor** as the target. The first three also take a uuid or id string, `getExtraBars` needs the document itself.
 
 | Target | Storage | Lifecycle |
 |:-------|:--------|:----------|
 | `Token` | `token.flags.lancer-automations.statBarExtras` | Dies with the token |
 | `Item` | `item.flags.lancer-automations.extraBarTemplates` | Auto-injects onto every scene token of the item's actor |
 | `Actor` | `actor.flags.lancer-automations.extraBarTemplates` | Auto-injects onto every scene token of the actor |
+
+A token holds finished entries, an Item or Actor holds templates, so the same call does different work:
+
+| | Token target | Item / Actor target |
+|:--|:--|:--|
+| `addExtraBar` | Overlays `partial` on the full default entry | Stores only the fields you passed, seeding `valueSource` / `maxSource` as manual. The rest fills in at inject time |
+| `updateExtraBarValue` | Manual entries only, path-bound ones are read-only | Manual templates mutate and reinject, path templates write through the path with `.update()` |
+| `removeExtraBar` | Drops the entry | Drops the template, then prunes its injected rows from every scene token of the actor |
 
 <details id="addExtraBar">
 <summary><b><code>addExtraBar</code></b> <sup>async</sup> → <code>string | null</code></summary>
@@ -23,12 +31,14 @@ Extra bars drawn under a token's HP/Heat/etc. All four functions accept **Token,
 const id = await api.addExtraBar(target, partial)
 ```
 
-Create a new extra bar by overlaying `partial` on the default shape. Token target returns the entry id. Item/Actor target returns the template id. Defaults to `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan)).
+Create a new extra bar. Token target: `partial` overlays the default shape below, and the entry id comes back. Item/Actor target: the template keeps only the fields you passed, with `valueSource` and `maxSource` seeded to `{ kind: 'manual' }` when you leave them out, and the template id comes back. Either way the default is `visibility: 'scanned'` (bar shows once the token is [scanned](feature/GAMEPLAY_AUTOMATION.md#scan)).
+
+A template gets the default shape only when it is injected onto a token, so `addExtraBar(item, {})` produces a manual 0/1 bar, not a copy of the HP bar. Fields the template left out are filled from the auto-inject world settings (width, color, audio feedback) before the default shape.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Token \| TokenDocument \| Item \| Actor \| string` | *required* | Document (or uuid/id) |
-| <kbd>partial</kbd> | `object` | `{}` | Fields overlaying the default entry (see shape below) |
+| <kbd>partial</kbd> | `object` | `{}` | Fields of the entry (see shape below) |
 
 Entry shape (all fields optional in `partial`):
 
@@ -40,20 +50,23 @@ Entry shape (all fields optional in `partial`):
     widthPct: number,              // 1..100
     valueSource: { kind: 'path' | 'manual', path?: string, value?: number },
     maxSource:   { kind: 'path' | 'manual', path?: string, value?: number },
-    segmented: boolean,            // when on, pip count = resolved max
+    segmented: boolean,            // draw as pips, one per unit of the resolved max
+    segments: number,              // default 4, the pip count used when the max resolves to 0
     color: { kind: 'solid', stops: ['#RRGGBB'] },
     visibility: 'owner' | 'scanned' | 'all',
     icon: string,                  // file path
     showLabelInHint: boolean,      // show label in the hover stat hint
+    audioTextFeedback: boolean,    // default true, play the value-change sound and text
     linkedItemUuid: string,        // right-click in TAH opens this item's sheet
-    tier: 1 | 2 | 3,               // gate to an NPC owner tier; unset = any
+    tier: 1 | 2 | 3,               // gate to an NPC owner tier, unset = any
 }
 ```
 
-`valueSource.path` / `maxSource.path` understand three prefixes:
-- `system.X`: reads from the actor
+`valueSource.path` / `maxSource.path` read off the actor. Two prefixes redirect that:
 - `items.{itemId}.X`: reads from `actor.items.get(itemId)`
-- `pilotItems.{itemId}.X`: reads from the pilot's items when the actor is a mech
+- `pilotItems.{itemId}.X`: reads from the actor's pilot, falling back to the actor's own items when there is no pilot
+
+Any other path is read straight off the actor document, so `system.hp.value` works and so does any other actor-rooted path.
 
 </details>
 
@@ -66,7 +79,7 @@ Entry shape (all fields optional in `partial`):
 const newVal = await api.updateExtraBarValue(target, entryId, value)
 ```
 
-Token target: only **manual** entries can be updated. Path-bound entries are read-only. Item/Actor target: manual templates mutate their value and reinject. Path templates write through the resolved path via `.update()`.
+Token target: only **manual** entries can be updated. Path-bound entries are read-only, except a custom-flag bar (its `autoKey` starts with `flag:`), which writes the value through to the alt-sheets flag. Item/Actor target: manual templates mutate their value and reinject. Path templates write through the resolved path via `.update()`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

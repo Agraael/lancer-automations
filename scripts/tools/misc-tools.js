@@ -761,10 +761,17 @@ export async function executeSaveVsEffect(targets, options = /** @type {any} */ 
             subtype: "half_damage",
             applyTo: [entry.target.id]
         }));
-        /** @type {any} */ (canvas.tokens).setTargets(list.map(target => target.id));
         const originToken = (typeof origin === 'object' && origin) ? origin : null;
-        await executeDamageRoll(originToken, list, value, type, damageTitle, {},
-            flowBonuses.length ? { flow_bonus: flowBonuses } : {});
+        if (!originToken)
+        {
+            ui.notifications.warn("lancer-automations | halfDamageOnSave needs a Token origin, damage roll skipped.");
+        }
+        else
+        {
+            /** @type {any} */ (canvas.tokens).setTargets(list.map(target => target.id));
+            await executeDamageRoll(originToken, list, value, type, damageTitle, {},
+                flowBonuses.length ? { flow_bonus: flowBonuses } : {});
+        }
     }
     return results;
 }
@@ -980,7 +987,7 @@ export async function executeDamageRoll(attacker, targets, damageValue = null, d
         delete options.targeting;
     }
 
-    const actor = attacker.actor || attacker;
+    const actor = attacker?.actor || attacker;
     if (!actor)
         return { completed: false };
 
@@ -1300,6 +1307,103 @@ export function afterFlow(triggerData, callback)
     return true;
 }
 
+const GATE_FLAG = 'gates';
+
+function _gateActor(owner)
+{
+    return /** @type {any} */ (owner)?.actor ?? owner;
+}
+
+function _gateSubject(subject)
+{
+    return typeof subject === 'string' ? subject : (subject?.id ?? '_self');
+}
+
+// Combatant id rather than turn index, Lancer turn order is not fixed.
+function _turnStamp()
+{
+    const combat = game.combat;
+    if (!combat?.round)
+        return null;
+    return `${combat.round}:${combat.combatant?.id ?? combat.turn ?? 0}`;
+}
+
+// A gate from another combat is dead.
+function _gateBlocked(entry)
+{
+    if (!entry || entry.c !== game.combat?.id)
+        return false;
+    if (entry.t != null)
+        return entry.t === _turnStamp();
+    return entry.r === null || (game.combat?.round ?? 0) <= entry.r;
+}
+
+/**
+ * True when the gate is free and `consumeGate` would succeed. Never writes.
+ * @param {Token|Actor|any} owner
+ * @param {string} key
+ * @param {Token|Actor|string|null} [subject] - String or token. Omit for a single gate on the owner.
+ * @returns {boolean}
+ */
+export function checkGate(owner, key, subject = null)
+{
+    const actor = _gateActor(owner);
+    if (!actor || !key)
+        return true;
+    const api = game.modules.get('lancer-automations')?.api;
+    const gates = api?.getActorFlags(actor, GATE_FLAG) || {};
+    return !_gateBlocked(gates[key]?.[_gateSubject(subject)]);
+}
+
+/**
+ * Take a gate. Expiry is checked on read, nothing ticks. Out of combat every call succeeds.
+ * @param {Token|Actor|any} owner
+ * @param {string} key - Name of the gate, e.g. `'ring_of_fire'`.
+ * @param {Object} [options]
+ * @param {Token|Actor|string|null} [options.subject] - String or token. Omit for a single gate on the owner.
+ * @param {number|null} [options.rounds=1] - Rounds blocked counting the current one, null lasts the whole combat.
+ * @param {boolean} [options.turn] - Block for the current turn instead of a round count.
+ * @returns {Promise<boolean>} true when the gate was free and is now taken
+ */
+export async function consumeGate(owner, key, options = {})
+{
+    const actor = _gateActor(owner);
+    if (!actor || !key)
+        return true;
+    const api = game.modules.get('lancer-automations')?.api;
+    const gates = api.getActorFlags(actor, GATE_FLAG) || {};
+    const subjectId = _gateSubject(options.subject);
+    if (_gateBlocked(gates[key]?.[subjectId]))
+        return false;
+
+    const combat = game.combat;
+    if (!combat?.round)
+        return true;
+    const entry = options.turn
+        ? { c: combat.id, t: _turnStamp() }
+        : { c: combat.id, r: options.rounds === null ? null : combat.round + Math.max(1, options.rounds ?? 1) - 1 };
+    await api.addActorFlags(actor, { [GATE_FLAG]: { [key]: { [subjectId]: entry } } });
+    return true;
+}
+
+/**
+ * Release a gate. Omit `subject` to release the whole key.
+ * @param {Token|Actor|any} owner
+ * @param {string} key
+ * @param {Token|Actor|string|null} [subject]
+ * @returns {Promise<void>}
+ */
+export async function clearGate(owner, key, subject = null)
+{
+    const actor = _gateActor(owner);
+    if (!actor || !key)
+        return;
+    const api = game.modules.get('lancer-automations')?.api;
+    // setFlag merges, so null the entries instead of deleting them
+    const value = subject === null ? null : { [_gateSubject(subject)]: null };
+    await api.addActorFlags(actor, { [GATE_FLAG]: { [key]: value } });
+}
+
 /**
  * Once-per-round gate stored on `owner`, counted separately per `subject`.
  * Out of combat every call is the first one.
@@ -1308,27 +1412,21 @@ export function afterFlow(triggerData, callback)
  * @param {Token|Actor|string} [subject] - Who is being gated. Omit for a single gate on the owner.
  * @returns {Promise<boolean>} true the first time this round, false afterwards
  */
-export async function consumeOncePerRound(owner, key, subject = null)
+export function consumeOncePerRound(owner, key, subject = null)
 {
-    const actor = /** @type {any} */ (owner)?.actor ?? owner;
-    if (!actor || !key)
-        return true;
-    const round = game.combat?.round ?? 0;
-    if (!round)
-        return true;
+    return consumeGate(owner, key, { subject, rounds: 1 });
+}
 
-    const api = game.modules.get('lancer-automations')?.api;
-    const subjectId = typeof subject === 'string' ? subject : (subject?.id ?? '_self');
-    const flagKey = `${key}_round_${round}`;
-    const used = api.getActorFlags(actor, flagKey) || [];
-    if (used.includes(subjectId))
-        return false;
-
-    await api.addActorFlags(actor, { [flagKey]: [...used, subjectId] });
-    const previousKey = `${key}_round_${round - 1}`;
-    if (round > 1 && api.getActorFlags(actor, previousKey))
-        await api.removeActorFlags(actor, { [previousKey]: true });
-    return true;
+/**
+ * Once-per-turn gate, free again when the turn changes.
+ * @param {Token|Actor} owner
+ * @param {string} key
+ * @param {Token|Actor|string} [subject]
+ * @returns {Promise<boolean>} true the first time this turn, false afterwards
+ */
+export function consumeOncePerTurn(owner, key, subject = null)
+{
+    return consumeGate(owner, key, { subject, turn: true });
 }
 
 
@@ -1677,7 +1775,7 @@ export async function executeReactorExplosion(token)
         .atLocation(tokenCenter)
         .aboveLighting()
         .xray()
-        .scale(scaleFactor)
+        .preset("la_scaleToBurst", 2, token)
         .zIndex(100)
         .thenDo(async () =>
         {
@@ -1689,7 +1787,7 @@ export async function executeReactorExplosion(token)
         .zIndex(1)
         .randomRotation()
         .atLocation({ x: tokenCenterX, y: tokenCenterY })
-        .scale(scaleFactor)
+        .preset("la_scaleToBurst", 2, token)
         .thenDo(async () =>
         {
             await canvas.scene.createEmbeddedDocuments("AmbientLight", /** @type {any[]} */ ([{
@@ -1705,7 +1803,7 @@ export async function executeReactorExplosion(token)
         })
         .effect("modules/lancer-weapon-fx/sprites/scorch_mark_hires.png")
         .atLocation({ x: tokenCenterX, y: tokenCenterY })
-        .scale(scaleFactor * 1.1)
+        .preset("la_scaleToBurst", 2, token)
         .persist()
         .belowTokens()
         .zIndex(0)
@@ -2251,7 +2349,13 @@ export function getItemType(item)
     return item.system?.type || item.type || "";
 }
 
-export async function executeInvade(actorOrToken)
+/**
+ * Prompts the user to choose an invade then runs the tech attack.
+ * @param {Actor|Token} actorOrToken
+ * @param {Object|null} [bypassChoice=null] - Preselected invade option, skips the prompt
+ * @returns {Promise<void>}
+ */
+export async function executeInvade(actorOrToken, bypassChoice = null)
 {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
@@ -2260,7 +2364,7 @@ export async function executeInvade(actorOrToken)
         return;
     }
 
-    const selected = await chooseInvade(actor);
+    const selected = bypassChoice ?? await chooseInvade(actor);
     if (!selected)
         return;
 
@@ -2386,6 +2490,10 @@ export const MiscAPI = {
     setFlowFlag,
     afterFlow,
     consumeOncePerRound,
+    consumeOncePerTurn,
+    consumeGate,
+    checkGate,
+    clearGate,
     executeForceCheck,
     executeDamageRoll,
     executeBasicAttack,
@@ -2427,3 +2535,8 @@ export const MiscAPI = {
     boostMove,
     openAddReserveDialog,
 };
+
+export function escapeAttr(value)
+{
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}

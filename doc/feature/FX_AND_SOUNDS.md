@@ -27,7 +27,7 @@ Each status gets a Token Magic FX overlay (Token Magic FX must be installed), ap
 - a burn shimmer
 - an overshield outline
 - chains for immobilized
-- film grain for stunned, and so on
+- film grain for stunned
 
 Every one has its own toggle under **Visual effects**, all under a single master switch.
 
@@ -100,14 +100,7 @@ Many of the action animations use JB2A. If you only have the free pack, the modu
 
 <img align="right" src="../img/fs-sounds.png" width="45%"/>
 
-Most things at the table make a sound:
-
-- HUD clicks
-- token hover, select and target
-- damage by type
-- stat changes
-- action FX
-- wreck explosions
+Most things at the table make a sound: HUD clicks, token hover / select / target, damage by type, stat changes, action FX, and wreck explosions.
 
 Each family has a master volume, and every event inside it can be muted on its own, click a toggle to preview it.
 
@@ -117,6 +110,7 @@ Each family has a master volume, and every event inside it can be muted on its o
 
 | Option | What it does |
 |:--|:--|
+| **Roll Result FX** | Miss and crit overlays on attacks, success and fail pulses on H.A.S.E. |
 | **UI Sounds** | Volume of TAH hover/click sounds. |
 | **Token Feedback** | Volume of token feedback sounds (hover, select, target, drag, move, elevation key). |
 | **Damage / Stat Feedback** | Volume of damage, HP/heat/burn/overshield/infection sounds. |

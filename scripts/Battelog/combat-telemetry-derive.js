@@ -124,7 +124,12 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const structMax = _asNum(sys.structure?.max, 4);
     const stressMax = _asNum(sys.stress?.max,    4);
     const repairsMax = _asNum(sys.repairs?.max, 5);
-    const repairsUsed = events.filter(ev => ev.type === 'action' && ev.name === 'SELF REPAIR').length;
+    // Real logs: repair spend shows up in the captured ticks. SELF REPAIR events are mock-only.
+    const repairTicks = statTicks.filter(ev => typeof ev.repairs === 'number');
+    const repairsTickDrop = repairTicks.length
+        ? Math.max(0, repairTicks[0].repairs - repairTicks[repairTicks.length - 1].repairs)
+        : 0;
+    const repairsUsed = Math.max(repairsTickDrop, events.filter(ev => ev.type === 'action' && ev.name === 'SELF REPAIR').length);
     // Positive tick deltas = healing, negative heat deltas = cooling; structure/stress resets excluded.
     const structRounds = new Set(events.filter(ev => ev.type === 'structure-loss').map(ev => ev.round));
     const stressRounds = new Set(events.filter(ev => ev.type === 'stress-loss').map(ev => ev.round));

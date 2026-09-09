@@ -79,10 +79,11 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'autoDamageRoll', type: 'boolean' },
     { key: 'autoDamageApply', type: 'boolean' },
+    { key: 'autoStructFollowup', type: 'boolean' },
 
     { type: 'section', label: 'Movement & Boost', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
-    { key: 'enableBoostOffer', type: 'boolean' },
+    { key: 'enableBoostOffer', type: 'select' },
     { key: 'count3DDistance', type: 'boolean' },
 
     { type: 'section', label: 'Structure & Damage', collapsible: true, collapsed: true },
@@ -100,7 +101,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' , requires: 'enableBuiltinSpeedProvider' },
     { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' , requires: 'enableBuiltinSpeedProvider' },
     { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Fire THT/TemplateMacro/GAA triggers at each boundary crossing instead of once at the end of a drag.' },
-    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler speed tier changes.' },
+    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler speed tier changes. The boost offer then judges each tier on its own.' },
     { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
     { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation during ruler moves; Q/E offsets still work.' },
     { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the measure ruler labels; token drags are unaffected.' , requires: 'enableBuiltinSpeedProvider' },
@@ -109,7 +110,7 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta on every other visible token.' },
     { key: 'tacticalLabelPosition', type: 'select', label: 'Tactical Label Position' },
     { key: 'tacticalMinZoomScale', type: 'slider', label: 'Minimum Label Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the label keeps a constant screen size. 0 = disabled.' },
-    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the label elevation delta to the nearest multiple of this; ignored on gridless scenes.' },
+    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the label elevation delta to the nearest multiple of this. Ignored on gridless scenes.' },
 
     { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
     { key: 'ctrlRulerMode', type: 'select', label: 'Ctrl Ruler', hint: 'Hold Ctrl to switch to the Measure Distance ruler.' },
@@ -388,6 +389,9 @@ const TAH_FIELDS = [
     { key: 'tah.hoverCloseDelay', type: 'number' , requires: 'tahEnabled' },
     { key: 'tah.maxColumnItems', type: 'number' , requires: 'tahEnabled' },
 
+    { type: 'section', label: 'Radial Wheels', collapsible: true, collapsed: true },
+    { key: 'tah.wheelRadiusOffset', type: 'slider', label: 'Wheel Radius Offset', min: -40, max: 120, step: 5, requires: 'tahEnabled' },
+
     { type: 'section', label: 'Keyboard', collapsible: true, collapsed: true },
     { key: 'tah.keyboardNav', type: 'boolean' , requires: 'tahEnabled' },
     { key: 'tah.keyboardNavResetDelay', type: 'number' , requires: ['tahEnabled', 'tah.keyboardNav'], requiresAll: true },
@@ -444,6 +448,7 @@ const TAH_FIELDS = [
             if (!confirmed)
                 return;
             await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites', []);
+            await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites2', []);
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info('TAH Favorites cleared.');
         } },
@@ -525,6 +530,7 @@ const STATUS_FX_AUTO = [
 const STATUSES_FIELDS = [
     { type: 'section', label: 'Statuses & Effects' },
     { key: 'additionalStatuses', type: 'boolean' },
+    { key: 'effectNotificationMode', type: 'select', label: 'Effect Notification Mode' },
     { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Master switch for all visual and auto-status effects.' },
     { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
@@ -552,12 +558,23 @@ const DEBUG_FIELDS = [
 ];
 
 const VISION_FIELDS = [
+    { type: 'button',
+        key: 'visionDocs',
+        label: 'How to set up line of sight / vision',
+        icon: 'fas fa-book',
+        hint: 'Opens the Vision documentation.',
+        clientAllowed: true,
+        onClick: () => window.open('https://agraael.github.io/lancer-automations/feature/VISION.html', '_blank'),
+    },
+
     { type: 'section', label: 'Basic Vision' },
     { key: 'basicSightTo999', type: 'boolean' },
 
-    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
+    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight, blocked by walls. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { key: 'lancerLos', type: 'boolean' },
+    { key: 'lancerLosFlagOnly', type: 'boolean' },
+    { key: 'lancerLosAttackHover', type: 'boolean', requires: 'lancerLos' },
     { key: 'lancerLosHeightRule', type: 'select' },
     { key: 'lancerLosDebug', type: 'boolean' },
     { type: 'compactBooleans',
@@ -732,6 +749,7 @@ const CONTROL_FIELDS = [
     laKb('debugMovement'),
     laKb('movementWheel'),
     laKb('actionWheel'),
+    laKb('statusWheel'),
 
     { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
     laKb('advancedMeasure'),
@@ -2006,7 +2024,13 @@ export class LancerAutomationsConfig extends FormApplication
                 _toggleSection($head, false);
                 this._sectionStates.set(sectionKey($head), false);
             }
-            target[0].scrollIntoView({ block: 'start', behavior: 'smooth' });
+            if (!scroller)
+            {
+                target[0].scrollIntoView({ block: 'start', behavior: 'smooth' });
+                return;
+            }
+            const top = scroller.scrollTop + target[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+            scroller.scrollTo({ top, behavior: 'smooth' });
         });
         if (scroller && typeof IntersectionObserver === 'function')
         {
@@ -2438,7 +2462,6 @@ export class LancerAutomationsConfig extends FormApplication
                 console.warn(`${MODULE_ID} | Could not save ${f.key}`, e);
             }
         }
-        ui.notifications.info('Lancer Automations configuration saved.');
         this._setSaveState('saved');
         await this._promptReload();
     }

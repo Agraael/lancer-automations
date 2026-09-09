@@ -232,8 +232,7 @@ export async function spawnHardCover(originToken, options = {})
         icon: "fas fa-cube",
         extraData
     });
-    if (result)
-        await _applyProvokeImmunity(result);
+    // provoke immunity is added by the createToken hook on Template Hard Cover tokens
     return result;
 }
 
@@ -1326,20 +1325,28 @@ export function getLockedActions(target)
  * @param {Token} token - The token that owns the item (kept for signature compatibility)
  * @param {string} endAction - A string defining what action is used to end the activation (e.g. "Quick", "Full")
  * @param {string} [endActionDescription=""] - Optional text description shown when ending the activation
+ * @param {Object} [options]
+ * @param {boolean} [options.blockAction=true] - Lock the activated action while active
+ * @param {string} [options.actionName] - Action to lock, defaults to the item name
+ * @param {string} [options.blockReason] - Reason shown on the locked row
  * @returns {Promise<Item>} The updated item
  */
-export async function setItemAsActivated(item, token, endAction, endActionDescription = "")
+export async function setItemAsActivated(item, token, endAction, endActionDescription = "", options = {})
 {
     if (!item)
     {
         ui.notifications.warn("No item provided to setItemAsActivated.");
         return null;
     }
+    const blockedAction = options.blockAction === false ? null : (options.actionName ?? item.name);
+    if (blockedAction)
+        await lockActorAction(item, blockedAction, { reason: options.blockReason ?? `${item.name} is already active.` });
     return await addItemFlags(item, {
         activeStateData: {
             active: true,
             endAction: endAction,
-            endActionDescription: endActionDescription
+            endActionDescription: endActionDescription,
+            blockedAction: blockedAction
         }
     });
 }
@@ -1378,8 +1385,11 @@ export async function endItemActivation(item, token)
 
     const endAction = flags.activeStateData.endAction || "Unknown";
     const endActionDescription = flags.activeStateData.endActionDescription || "";
+    const blockedAction = flags.activeStateData.blockedAction;
 
     await removeItemFlags(item, { activeStateData: true });
+    if (blockedAction)
+        await unlockActorAction(item, blockedAction);
 
     const api = game.modules.get('lancer-automations')?.api;
     if (api?.executeSimpleActivation)
@@ -1540,10 +1550,13 @@ export async function addExtraActions(target, actions)
     }
 
     const existing = doc.getFlag('lancer-automations', 'extraActions') || [];
-    const merged = [...existing, ...newActions];
+    // Same-name entries keep their stored state, so onInit re-runs stay idempotent.
+    const fresh = newActions.filter(action => !existing.some(entry => entry.name === action.name));
+    if (!fresh.length)
+        return doc;
 
-    await doc.setFlag('lancer-automations', 'extraActions', merged);
-    console.log(`lancer-automations | addExtraActions: Added action(s) to ${doc.name}:`, newActions);
+    await doc.setFlag('lancer-automations', 'extraActions', [...existing, ...fresh]);
+    console.log(`lancer-automations | addExtraActions: Added action(s) to ${doc.name}:`, fresh);
     return doc;
 }
 

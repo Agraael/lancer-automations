@@ -2,7 +2,7 @@
 
 import { getSpeedRanges } from '../combat/speed-provider.js';
 import { elevationForPreview } from './elevation.js';
-import { isForceFreeMovement, isForceDebugMovement } from './keybindings.js';
+import { isForceFreeMovement, isForceDebugMovement, pathfindDragEnabled } from './keybindings.js';
 import { parseAction } from './movement-actions.js';
 import { snapElevationForDisplay } from './tactical-distance.js';
 import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
@@ -871,8 +871,13 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
         );
         let total = 0;
         const countedOverrides = new Set();
+        let inWaypointMove = false;
         for (const entry of sourceHistory)
         {
+            if (entry.movementId === waypoint.movementId)
+                inWaypointMove = true;
+            else if (inWaypointMove)
+                break;
             const laMove = regularMoves.get(entry.movementId);
             if (laMove?.costOverridden)
             {
@@ -889,9 +894,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 if (cost !== null && cost !== undefined && cost !== Infinity)
                     total += cost;
             }
+            // hex centers are irrational, so snapped vs recorded coords drift by float hairs
             if (entry.movementId === waypoint.movementId
-                && entry.x === waypoint.x && entry.y === waypoint.y
-                && entry.elevation === waypoint.elevation)
+                && Math.abs(entry.x - waypoint.x) < 1 && Math.abs(entry.y - waypoint.y) < 1
+                && Math.abs((entry.elevation ?? 0) - (waypoint.elevation ?? 0)) < 0.001)
                 break;
         }
         return total;
@@ -1185,23 +1191,35 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 : '';
 
         // Vertical cost goes through the elevation arrow, not this number.
+        // Penalty stamps sit on group-end waypoints (silents split cost groups), so sum the whole leg.
         const debugMove = isForceDebugMovement();
-        const penalty = debugMove ? 0 : round((measurement.lancerClimbMalus ?? 0) + (measurement.lancerTerrainPenalty ?? 0));
-        const penaltyZone = !debugMove && !!measurement.lancerPenaltyZone;
+        let penaltyRaw = (measurement.lancerClimbMalus ?? 0) + (measurement.lancerTerrainPenalty ?? 0);
+        let zoneRaw = !!measurement.lancerPenaltyZone;
+        for (let prevWp = waypoint.previous; prevWp && skip(prevWp) && prevWp.stage !== 'passed'; prevWp = prevWp.previous)
+        {
+            penaltyRaw += (prevWp.measurement?.lancerClimbMalus ?? 0) + (prevWp.measurement?.lancerTerrainPenalty ?? 0);
+            zoneRaw = zoneRaw || !!prevWp.measurement?.lancerPenaltyZone;
+        }
+        const penalty = debugMove ? 0 : round(penaltyRaw);
+        const penaltyZone = !debugMove && zoneRaw;
 
-        const showSecondLine = !debugMove && !!(elevArrow || penalty || penaltyZone);
+        const deltaShown = deltaCost && deltaCost !== totalCost ? deltaCost : 0;
+        const showSecondLine = !debugMove && !!(deltaShown || elevArrow || penalty || penaltyZone);
         const units = canvas.scene?.grid?.units ?? '';
         const isLast = !waypoint.next;
         const uiScale = canvas.dimensions.uiScale;
 
-        const labelAnchor = _isoActive() ? {
-            x: ray.B.x,
-            y: ray.B.y + (isLast ? 0.5 * this.token.h : 0) + (16 * uiScale)
-        } : {
-            x: ray.B.x + (isLast ? 0.5 * this.token.w + 16 * uiScale : 0),
-            y: ray.B.y + (isLast ? 0 : 16 * uiScale)
-        };
-        const labelPos = _isoProjectLabelPos(labelAnchor);
+        let ringColor = '';
+        try
+        {
+            const tier = this._tierForWaypoint(waypoint);
+            if (tier && tier.color !== undefined)
+                ringColor = PIXI.Color.shared.setValue(tier.color).toHex();
+        }
+        catch
+        { /* neutral ring */ }
+
+        const labelPos = _isoProjectLabelPos({ x: ray.B.x, y: ray.B.y });
 
         return {
             cssClass: [isLast ? 'last' : '', isForceLabel ? 'force' : '', isFreeLabel ? 'free' : ''].filter(Boolean).join(' '),
@@ -1209,12 +1227,15 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             uiScale,
             action: waypoint.actionConfig,
             totalCost,
-            deltaCost: deltaCost && deltaCost !== totalCost ? deltaCost : 0,
+            deltaCost: deltaShown,
             elevArrow,
             elevAbs: Math.abs(elevDelta),
             penalty,
             penaltyZone,
             showSecondLine,
+            ringColor,
+            showPathfind: isLast,
+            pathfindOn: pathfindDragEnabled(),
             units
         };
     }

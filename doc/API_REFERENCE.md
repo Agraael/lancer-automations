@@ -11,11 +11,13 @@
 | **[Spatial API](API_SPATIAL.md)** | Distance & grid math, coordinate helpers, faction/disposition, cell data, debug overlays |
 | **[Effects API](API_EFFECTS.md)** | Status effect management, global/constant bonuses, immunities, flow state injection |
 | **[Interactive API](API_INTERACTIVE.md)** | Token picker, zones, knockback, choice/vote cards, deployables, thrown weapons, hard cover |
-| **[Items API](API_ITEMS.md)** | Item & actor flags, tags, resource management, auto-consume config |
+| **[Items API](API_ITEMS.md)** | Item tags, resource management, activated items, auto-consume config |
+| **[Flags API](API_FLAGS.md)** | Item/token/actor flags, once-per-round/turn gates, flow flags |
 | **[HUD API](API_HUD.md)** | Extra actions, action locks, and combat overlays in the Token Action HUD |
 | **[Movement API](API_MOVEMENT.md)** | Movement tracking, history, movement cap |
 | **[Token Display API](API_TOKEN_DISPLAY.md)** | Extra token stat bars |
 | **[API How-To](API_HOWTO.md)** | Registration, user helpers, how-tos, Grid-Aware Auras wrapper |
+| **[Macros](MACROS.md)** | The shipped `L.A -` macro compendium |
 
 ---
 
@@ -57,11 +59,13 @@ Used by `cancelAttack`, `cancelTechAttack`, `cancelCheck`, `cancelAction`, `canc
 | <kbd>title</kbd> | `string` | per-trigger | Card header |
 | <kbd>allowConfirm</kbd> | `boolean` | `true` | `false` cancels with no card |
 | <kbd>userIdControl</kbd> | `string \| string[] \| null` | `null` | Who sees the card. `null` = active GM |
-| <kbd>preConfirm</kbd> | `(() => Promise<boolean>) \| null` | `null` | Asked first. `true` cancels, `false` takes the ignore path |
+| <kbd>preConfirm</kbd> | `(() => Promise<boolean>) \| null` | `null` | Asked first. Truthy lets the confirmation card proceed. The ignore path runs only when every registered `preConfirm` returns falsy |
 | <kbd>postChoice</kbd> | `((chose: boolean) => Promise<void>) \| null` | `null` | `chose` is `true` if it stayed cancelled |
 | <kbd>opts</kbd> | `{ item?, originToken?, relatedToken? }` | `{}` | Documents shown on the card |
 
 The ignore path re-runs the original action. Reactors already in `_cancelledBy` are skipped on the redo, so a gate is not asked twice. `.wait()` resolves after the card and any redo.
+
+`cancelStructureOutcome` and `cancelStressOutcome` are the exception. They render no Ignore choice, and their ignore path does nothing.
 
 </details>
 
@@ -92,7 +96,9 @@ reroll(reasonText?, subtype?, title?, allowConfirm?, userIdControl?, opts?)
 changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)
 ```
 
-`modifyHpChange` and `modifyHeatChange` both expose `.wait()`. `modifyRoll` is structure/stress only and shows no card. `subtype` defaults to `'retry'`. Trailing params behave as on `CancelFunction`.
+`modifyHpChange` and `modifyHeatChange` both expose `.wait()`. `modifyRoll` is structure/stress only and shows no card. `subtype` defaults to `'retry'`.
+
+Trailing params behave as on `CancelFunction` for `modifyHpChange`, `modifyHeatChange` and `changeRoll`. `reroll` has no positional `preConfirm` / `postChoice` slots, pass them inside `opts`.
 
 </details>
 
@@ -119,9 +125,11 @@ changeRoll(newTotal: number, reasonText?, title?, allowConfirm?, userIdControl?,
 |:------|:-----|
 | <kbd>type</kbd> | `string` (`"action"` / `"attack"` / `"tech"`) |
 | <kbd>title</kbd> | `string` |
-| <kbd>action</kbd> | `{ name: string, activation: string } \| null` |
+| <kbd>action</kbd> | `{ name: string, activation: string }` on `"action"`, `{ name: string }` on `"attack"` / `"tech"` |
 | <kbd>detail</kbd> | `string` |
 | <kbd>tags</kbd> | `Array<{ lid: string, val?: string }>` |
+| <kbd>attack_type</kbd> | `string` - `"attack"` only |
+| <kbd>deployable</kbd> | `{ actor: Actor, lid: string } \| null` - `"action"` only |
 | <kbd>flowState</kbd> | `FlowState` |
 
 `flowState` is the Lancer flow `state`: `state.data` (e.g. `data.damage`, `data.bonus_damage`), `state.la_extraData`, `state.injectFlowExtraData(obj)`, `state.getFlowExtraData()`, `state.actor`, `state.item`.
@@ -150,7 +158,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     actionName: string,
     tags: Array<Tag>,
     actionData: ActionData,
-    cancelAttack: CancelFunction
+    cancelAttack: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -166,7 +175,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     attackType: string,
     actionName: string,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -182,7 +192,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     attackType: string,
     actionName: string,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -198,7 +209,8 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
     attackType: string,
     actionName: string,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -241,7 +253,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     attackType: string,
     actionName: string,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -262,7 +275,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     isInvade: boolean,
     tags: Array<Tag>,
     actionData: ActionData,
-    cancelTechAttack: CancelFunction
+    cancelTechAttack: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -278,7 +292,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     actionName: string,
     isInvade: boolean,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -294,7 +309,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     actionName: string,
     isInvade: boolean,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -310,7 +326,8 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
     actionName: string,
     isInvade: boolean,
     tags: Array<Tag>,
-    actionData: ActionData
+    actionData: ActionData,
+    flowState: FlowState
 }
 ```
 
@@ -363,9 +380,19 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
         movementCost: number,
         isModified: boolean,
         extraData: Record<string, any>
-    }
+    },
+    moveLeg: {
+        start: string | null,
+        end: string | null,
+        boosted: boolean,
+        granted: boolean,
+        spentBefore: number,
+        spentAfter: number
+    } | null
 }
 ```
+
+`moveLeg` names the movement band the leg started and ended in (`standard`, `boost`, `over-boost`), with the movement spent either side. It is `null` out of combat and on free movement.
 
 </details>
 
@@ -399,12 +426,14 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 {
     triggeringToken: Token,
     item: Item,
-    deployedTokens: Array<TokenDocument>,
+    deployedTokens: Array<TokenDocument | Token>,
     deployType: "deployable" | "throw",
     distanceToTrigger: number,
     canTriggerReaction?: boolean
 }
 ```
+
+`deployedTokens` holds TokenDocuments from the throw and deploy flows, but the manual drop path passes canvas Tokens. Read through `.document ?? entry` if you need one shape.
 
 </details>
 
@@ -551,7 +580,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     roll: Roll,
     total: number,
     success: boolean,
-    targets: Array<Object>,
+    targets: Array<Object> | undefined,
     item: Item,
     isReroll: boolean,
     rerollCount: number,
@@ -564,11 +593,14 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 - `reroll()` re-runs the Lancer flow step that produced the roll. `changeRoll(newTotal)` sets the total (and recomputes hit/crit for attack flows). Both cascade: after either call, `onRoll` re-fires so later reactions see the new state.
 - No engine-level reroll cap. Reactions that reroll should gate themselves via `api.setFlowFlag(triggerData, '_myReactionRerolled')` + `api.getFlowFlag` in `evaluate`.
 - `success` rule: attack/tech = any hit, skill = total >= 10, damage/structure/stress = undefined.
+- `targets` is `undefined` (not an empty array) on `skillRoll`, `structureRoll` and `stressRoll`.
 - `changeRoll` on structure/stress only updates `roll._total` (title/desc stay stale, prefer `reroll()`).
 
 </details>
 
 <details id="onDestroyed"><summary><b><code>onDestroyed</code></b> - token delete when <code>structure.value &lt;= 0 || stress.value &lt;= 0</code></summary>
+
+`triggeringToken` may be a fallback `{ document, id, name, actor }` object if the canvas token is already gone.
 
 ```js
 { triggeringToken: Token }
@@ -590,7 +622,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 <details id="onTokenRemoved"><summary><b><code>onTokenRemoved</code></b> - any token deletion (unconditional, unlike onDestroyed)</summary>
 
-`triggeringToken` may be a fallback `{ document, id, name, actor }` object if the canvas token is already gone.
+Fires before the token leaves `canvas.tokens`, and not at all if it is already gone.
 
 ```js
 {
@@ -713,7 +745,8 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     targetVal: number,
     item: Item | null,
     actionName: string | null,
-    cancelCheck: CancelFunction
+    cancelCheck: CancelFunction,
+    flowState: FlowState
 }
 ```
 
@@ -733,7 +766,8 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     checkAgainstToken: Token,
     targetVal: number,
     item: Item | null,
-    actionName: string | null
+    actionName: string | null,
+    flowState: FlowState
 }
 ```
 
@@ -749,6 +783,7 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     item: Item,
     actionData: ActionData,
     deployable: { actor: Actor, lid: string } | null,
+    endActivation: false,
     cancelAction: CancelFunction,
     flowState: FlowState
 }
@@ -758,7 +793,11 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 
 <details id="onActivation"><summary><b><code>onActivation</code></b> - item/action fired</summary>
 
-`extraData` carries anything injected via `startRelatedFlowToReactor` / flow-state injection. Profile switches fire it with the profile name; mod activations carry `extraData.hostWeapon`.
+`extraData` carries anything injected via `startRelatedFlowToReactor` / flow-state injection. Profile switches fire it with the profile name. Mod activations carry `extraData.hostWeapon`.
+
+Ending an activation fires `onEndActivation` instead, never this trigger.
+
+`reactionJustConsumed` is `true` when this activation is what spent the actor's Reaction, which is how a self-reactor with `checkReaction` on still passes its own gate here.
 
 ```js
 {
@@ -768,7 +807,49 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
     item: Item,
     actionData: ActionData,
     deployable: { actor: Actor, lid: string } | null,
-    endActivation: boolean,
+    reactionJustConsumed: boolean,
+    endActivation: false,
+    extraData: Record<string, any>,
+    flowState: FlowState
+}
+```
+
+</details>
+
+<details id="onInitEndActivation"><summary><b><code>onInitEndActivation</code></b> - before an activation is ended (non-async evaluate only)</summary>
+
+Fires when the end action from `setItemAsActivated` runs, in place of `onInitActivation`. `cancelAction` only suppresses the end card, the item is already marked inactive by then.
+
+```js
+{
+    triggeringToken: Token,
+    actionType: string,
+    actionName: string,
+    item: Item,
+    actionData: ActionData,
+    deployable: { actor: Actor, lid: string } | null,
+    endActivation: true,
+    cancelAction: CancelFunction,
+    flowState: FlowState
+}
+```
+
+</details>
+
+<details id="onEndActivation"><summary><b><code>onEndActivation</code></b> - an activation was ended</summary>
+
+Fires when the end action from `setItemAsActivated` runs, in place of `onActivation`. This is where teardown belongs.
+
+```js
+{
+    triggeringToken: Token,
+    actionType: string,
+    actionName: string,
+    item: Item,
+    actionData: ActionData,
+    deployable: { actor: Actor, lid: string } | null,
+    reactionJustConsumed: boolean,
+    endActivation: true,
     extraData: Record<string, any>,
     flowState: FlowState
 }
@@ -802,12 +883,25 @@ Shared params: `triggerType: TriggerType`, `triggerData: TriggerData`, `reactorT
 | `onInit` | `(token: Token, item: Item, api: LancerAutomationsAPI)` | `Promise<void>` - runs when a token carrying the item is created |
 | `onMessage` | `(triggerType, data: any, reactorToken, item, activationName, api)` | `Promise<void>` - runs on the client targeted by `sendMessageToReactor` |
 
-#### `triggerData.debugActivation(label?: string)`
-Console-logs everything the current callback received, including the helper functions the trigger provides. Available in `evaluate` and `activationCode`.
-- **Returns**: `Object` - the same content as a summary.
-- API form: `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?: string)` → `Object`.
+<details id="debugActivation">
+<summary><b><code>debugActivation</code></b> → <code>Object</code></summary>
+
+<br>
+
+```js
+triggerData.debugActivation(label?)
+api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)
+```
+
+Console-logs everything the current callback received, including the helper functions the trigger provides, and returns the same summary object. Available in `evaluate` and `activationCode`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>label</kbd> | `string` | activation name | Heading on the console group |
 
 Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
+
+</details>
 
 ---
 
@@ -815,27 +909,30 @@ Debug mode and breakpoints: [Automation Engine - Debugging an automation](featur
 
 ### Consumption
 
-Charge-consumption config attached to an effect. Set it via `extraOptions.consumption` on `applyEffectsToTokens`, or `options.consumption` on `addGlobalBonus`.
+Charge-consumption config attached to an effect. Pass it as `extraOptions.consumption` on `applyEffectsToTokens`, or `options.consumption` on `addGlobalBonus`.
 
-`consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0. `processEffectConsumption` matches and spends it on every trigger. `grouped` / `groupId` make several effects share one counter (deleted together).
+The charge count is not part of the config, it sits beside it: `extraOptions.stack` on `applyEffectsToTokens`, `bonusData.uses` on `addGlobalBonus`.
+
+`consumeEffectCharge(effect)` decrements the effect's `statuscounter` on each matching trigger and deletes the effect at 0. `grouped` / `groupId` make several effects share one counter (deleted together).
 
 | Field | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>trigger</kbd> | `TriggerType \| TriggerType[]` | *required* | Trigger(s) that consume a charge |
 | <kbd>originId</kbd> | `string` | bearer token id | Only consume if this token is involved |
 | <kbd>role</kbd> | `"source" \| "target"` | either | How the origin must be involved: caused the trigger, or was one of its targets |
-| <kbd>stack</kbd> | `number` | `1` | Initial charge count. Each matching trigger removes 1 |
 | <kbd>grouped</kbd> | `boolean` | `false` | Share one counter across all effects in this call (auto-fills `groupId`) |
 | <kbd>groupId</kbd> | `string` | auto | Shared counter id across calls |
 | <kbd>evaluate</kbd> | `(triggerType: TriggerType, data: TriggerData, token: Token, effect: ActiveEffect) => boolean` | `null` | Extra gate |
-| <kbd>itemLid</kbd> | `string` | - | Only consume for this item source |
+| <kbd>itemLid</kbd> | `string` | - | Only consume for this item source. Comma-separated for several LIDs |
+| <kbd>itemId</kbd> | `string` | - | Only consume for this exact item document id |
 | <kbd>actionName</kbd> | `string` | - | Only consume for this action name, e.g. `"Boost"` |
-| <kbd>minDistance</kbd> | `number` | - | Distance filter |
-| <kbd>checkType</kbd> | `string` | - | Stat filter, e.g. `"Agility"` |
-| <kbd>checkAbove</kbd> | `number` | - | Only consume if the roll is above this |
-| <kbd>checkBelow</kbd> | `number` | - | Only consume if the roll is below this |
+| <kbd>minDistance</kbd> | `number` | - | Only consume if `distanceMoved` is at least this. Movement triggers only |
+| <kbd>checkType</kbd> | `string` | - | Only consume for this roll title, e.g. `"AGI Check"` or `"AGI Save (>= 12)"`. Matched whole against the card title, not a stat name |
+| <kbd>checkAbove</kbd> | `number` | - | Only consume if the roll total is at or above this |
+| <kbd>checkBelow</kbd> | `number` | - | Only consume if the roll total is at or below this |
+| <kbd>statusId</kbd> | `string` | - | Status triggers only. Only consume for this status id. Comma-separated for several |
 
-**Resistance that lasts 3 hits** (Dispersal Shield). One counter shared by all five resistance effects, so they vanish together on the third hit:
+**Resistance that lasts 3 hits** (Dispersal Shield). One counter shared by all three resistance effects, so they vanish together on the third hit:
 
 ```js
 await api.applyEffectsToTokens({
@@ -855,21 +952,37 @@ await api.addGlobalBonus(target.actor, { name: "Squad Leader", val: 1, type: "ac
     { duration: "1 Round", origin: reactorToken, consumption: { trigger: "onHit" } });
 ```
 
-**Only spend on a failed Agility save**, using the gate:
+**Only spend on a failed AGI check**, using the gate:
 
 ```js
 consumption: {
     trigger: "onCheck",
-    checkType: "Agility",
+    checkType: "AGI Check",
     evaluate: (triggerType, data, token, effect) => data.success === false
 }
 ```
 
+**One die, several possible uses** (Leadership die). Bonuses added in separate calls share one `groupId`: whichever consumes first removes them all.
+
+```js
+const groupId = foundry.utils.randomID();
+
+await api.addGlobalBonus(actor, { name: "Leadership (Accuracy)", type: "accuracy", val: 1, rollTypes: ["attack"] },
+    { consumption: { trigger: "onAttack", groupId } });
+
+await api.addGlobalBonus(actor, { name: "Leadership (Damage)", type: "damage", damage: [{ val: "1d6", type: "Kinetic" }] },
+    { consumption: { trigger: "onDamage", groupId } });
+```
+
+`addGlobalBonus` copies only the trigger filters. It drops `originId`, `role`, `grouped` and `statusId`, silently. Without `originId` the engine falls back to the bearer token at trigger time, so each bearer consumes on its own. When the bearer can also be a target of the trigger, gate with `evaluate`, e.g. `(t, data, bearer) => data.triggeringToken?.id === bearer.id`.
+
 ### Reaction economy
 
-Two separate keys:
-- **`checkReaction`** (reaction config, default `true` via `!== false`) - the availability **gate**. When set, the reaction is skipped if the reactor has no reaction left this round.
-- **`consumeReaction`** (world setting, default off) - what **spends** a reaction: when a `Reaction`-type action fires, it decrements `system.action_tracker.reaction` by 1.
+Two separate keys, both opt-in, at different scopes:
+- **`checkReaction`** (reaction config, default off) - the availability **gate**, opt-in per activation. When set, the reaction is skipped if the reactor has no reaction left this round.
+- **`consumeReaction`** (world setting, default off) - what **spends** a reaction, opt-in per world: when a `Reaction`-type action fires, it decrements `system.action_tracker.reaction` by 1.
+
+A reactor that just spent its own reaction still passes its own `checkReaction` gate on that same trigger, so an activation can react to the action that consumed it.
 
 ### Effect flags
 
@@ -921,20 +1034,25 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | Field | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>triggers</kbd> | `TriggerType[]` | *required* | Trigger names this entry listens to |
+| <kbd>name</kbd> | `string` | `""` | Display name in the manager, and the key that matches an entry to its saved user settings |
 | <kbd>enabled</kbd> | `boolean` | `true` | Master toggle |
-| <kbd>awaitActivationCompletion</kbd> | `boolean` | `false` | Required to intercept `onPreMove`, `onInitActivation`, `onInitAttack`, `onInitTechAttack`, `onInitCheck` |
+| <kbd>awaitActivationCompletion</kbd> | `boolean` | `true` | Required to intercept `onPreMove`, `onInitActivation`, `onInitEndActivation`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`. The engine tests `!== false`, so a code-registered entry awaits unless you opt out. The manager's checkbox writes an explicit value and starts unchecked |
 | <kbd>triggerDescription</kbd> | `string` | `""` | Header text on the activation card |
 | <kbd>effectDescription</kbd> | `string` | `""` | Body text on the activation card |
+| <kbd>comments</kbd> | `string` | `""` | Author notes. Never shown in play |
 | <kbd>actionType</kbd> | `"Automation" \| "Reaction" \| "Free Action" \| "Quick Action" \| "Full Action" \| "Protocol" \| "Other"` | `"Automation"` | Lancer action type. `"Reaction"` is what spends a reaction |
 | <kbd>frequency</kbd> | `string` | `""` | Display-only text |
 | <kbd>triggerSelf</kbd> | `boolean` | `false` | React to own actions |
 | <kbd>triggerOther</kbd> | `boolean` | `true` | React to others' actions (includes targets) |
 | <kbd>triggerTarget</kbd> | `boolean` | `false` | React when the reactor is one of the event's targets, even with `triggerOther` off. Target-capable triggers only |
-| <kbd>checkReaction</kbd> | `boolean` | `true` | Skip if the reactor has no Reaction left this round |
-| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat |
+| <kbd>checkReaction</kbd> | `boolean` | `false` | Skip if the reactor has no Reaction left this round. Plain truthy check, so omitting it leaves the gate off |
+| <kbd>requireCanProvoke</kbd> | `boolean` | `false` | Skip unless the trigger source can provoke the reactor (engagement, provoke immunity). Used by Overwatch |
+| <kbd>checkUsage</kbd> | `boolean` | `false` | Item entries only. Skip when the item is unloaded, uncharged, out of uses, or past its `tg_turn` / `tg_round` limit |
+| <kbd>isReaction</kbd> | `boolean` | `false` | Marks the entry as a reaction in the manager UI |
+| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd` and `onRoundStart`, which always fire |
 | <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
 | <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
-| <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print` |
+| <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print`. Also gates availability: `ranks[N]` needs the talent at rank N+1, `profiles[N]` needs that weapon profile selected |
 | <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Must be synchronous on cancellable triggers |
 | <kbd>activationType</kbd> | `"code" \| "macro" \| "flow" \| "none"` | `"flow"` | What runs |
 | <kbd>activationMode</kbd> | `"instead" \| "after"` | item: `"instead"`, general: `"after"` | `after` also fires the reaction's own flow/card. Macro/code only |

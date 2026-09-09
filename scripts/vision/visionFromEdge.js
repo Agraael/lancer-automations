@@ -1,4 +1,4 @@
-                                                                                                                                                                                        /* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI */
+                                                                                                                                                                                        /* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI, CONFIG */
 
 /*
    Lancer-style vision: see from the token's perimeter, not its center.
@@ -17,12 +17,15 @@
 
 */
 
+import { laSightEdgeOptions } from './laWallLos.js';
+
 const MODULE_ID = 'lancer-automations';
 const FLAG_KEY = 'visionFromEdge';
 const SETTING_ENABLED = 'visionFromEdgeEnabled';
 const SETTING_SAMPLE_MODE = 'visionFromEdgeSampleMode';
 const SETTING_SAMPLE_OFFSET = 'visionFromEdgeSampleOffset';
 const SOURCE_ID_PART = 'la-edge';
+const WALL_STEP_INSIDE = 4;
 
 function _getVisionSourceClass()
 {
@@ -215,80 +218,43 @@ export function getTokenVisionLOS(token)
     return elevation + tokenHeight;
 }
 
-function _edgeBlocksAtLOS(edge, losHeight)
-{
-    if ((edge.sight ?? 0) <= 0)
-        return false;
-    const flags = edge.object?.document?.flags?.['wall-height']
-        ?? edge.object?.flags?.['wall-height']
-        ?? {};
-    const wallBottom = flags.bottom ?? Number.NEGATIVE_INFINITY;
-    const wallTop = flags.top ?? Number.POSITIVE_INFINITY;
-    return wallBottom <= losHeight && losHeight <= wallTop;
-}
-
-function _rayGrazesEnd(sample, edge, dirX, dirY, lenSq)
-{
-    const cornerTol = 1.5;
-    for (const endPoint of [edge.a, edge.b])
-    {
-        const along = (((endPoint.x - sample.x) * dirX) + ((endPoint.y - sample.y) * dirY)) / lenSq;
-        if (along <= 0 || along >= 1)
-            continue;
-        const projX = sample.x + (dirX * along);
-        const projY = sample.y + (dirY * along);
-        if (Math.hypot(endPoint.x - projX, endPoint.y - projY) <= cornerTol)
-            return { x: endPoint.x, y: endPoint.y };
-    }
-    return null;
-}
-
+// Collide up to the offset: cast center -> sample, land at the sample or just short of the first wall.
 function _nudgePastWall(sample, center, token)
 {
     if (!canvas?.edges || !token)
         return sample;
     const losHeight = getTokenVisionLOS(token);
-    const dirX = center.x - sample.x;
-    const dirY = center.y - sample.y;
-    const lenSq = dirX * dirX + dirY * dirY;
-    if (lenSq === 0)
-        return sample;
-
-    const ownPrefix = `la-block-los-${token.id}-`;
-    let lastHit = null;
-    let lastAlong = -Infinity;
-    for (const edge of canvas.edges.values())
+    let hit = null;
+    try
     {
-        if (edge.type !== 'wall')
-            continue;
-        if (edge.id?.startsWith(ownPrefix))
-            continue;
-        if (!_edgeBlocksAtLOS(edge, losHeight))
-            continue;
-        let hit = foundry.utils.lineSegmentIntersects(sample, center, edge.a, edge.b)
-            ? foundry.utils.lineLineIntersection(sample, center, edge.a, edge.b)
-            : null;
-        if (!hit)
-            hit = _rayGrazesEnd(sample, edge, dirX, dirY, lenSq);
-        if (!hit)
-            continue;
-        const along = ((hit.x - sample.x) * dirX + (hit.y - sample.y) * dirY) / lenSq;
-        if (along > lastAlong)
-        {
-            lastAlong = along;
-            lastHit = hit;
-        }
+        hit = CONFIG.Canvas.polygonBackends.sight.testCollision(
+            { x: center.x, y: center.y, elevation: losHeight },
+            { x: sample.x, y: sample.y, elevation: losHeight },
+            {
+                type: 'sight',
+                mode: 'closest',
+                edgeOptions: laSightEdgeOptions(),
+                source: { object: { b: losHeight, t: losHeight } },
+                b: losHeight,
+                t: losHeight
+            }
+        );
     }
-    if (!lastHit)
+    catch (err)
+    {
+        console.warn(`${MODULE_ID} | sample collision test failed:`, err);
         return sample;
-    const dist = Math.sqrt(lenSq);
-    const stepInside = 4;
-    return {
-        x: lastHit.x + (dirX / dist) * stepInside,
-        y: lastHit.y + (dirY / dist) * stepInside
-    };
+    }
+    if (!hit)
+        return sample;
+    const spanX = hit.x - center.x;
+    const spanY = hit.y - center.y;
+    const dist = Math.hypot(spanX, spanY);
+    if (!dist)
+        return sample;
+    const stopAt = Math.max(0, dist - WALL_STEP_INSIDE) / dist;
+    return { x: center.x + (spanX * stopAt), y: center.y + (spanY * stopAt) };
 }
-
 function _edgeSourceId(token, idx)
 {
     return `${token.sourceId}.${SOURCE_ID_PART}.${idx}`;

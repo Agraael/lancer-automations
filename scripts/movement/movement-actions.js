@@ -124,6 +124,8 @@ Hooks.once('init', () =>
             ...cfg,
             canSelect: () => false,
             getCostFunction: () => () => 0,
+            // Derived actions stay out of the Modify Movement Cost sheet.
+            deriveTerrainDifficulty: cfg.deriveTerrainDifficulty ?? (() => 1),
         };
     }
 });

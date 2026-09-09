@@ -2,12 +2,15 @@ import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWhee
 import { hud } from './index.js';
 import { laHudRenderIcon, laHudStripeStyle } from './item-helpers.js';
 import { onHudRowHover, deactivateRangePreview } from './hover.js';
+import { playUiSound } from './sound.js';
+import { lastCursor } from './cursor-menu.js';
 
 const MODULE_ID = 'lancer-automations';
 
 let _openToken = null;
 let _refreshTimer = null;
-
+let _page = 1;
+let _pageCount = 1;
 function plainTitle(label)
 {
     return String(label ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -34,6 +37,16 @@ function openFavoriteDetails(favorite, favoriteIndex)
         $(rowEl).trigger('contextmenu');
 }
 
+// Macro rows carry no icon field: theirs is markup inside the label.
+function labelIconEl(label)
+{
+    if (typeof label !== 'string' || !label.includes('<'))
+        return null;
+    const holder = document.createElement('div');
+    holder.innerHTML = label;
+    return holder.querySelector('img, i');
+}
+
 function buildWheelItem(favorite, favoriteIndex, token)
 {
     return {
@@ -43,6 +56,13 @@ function buildWheelItem(favorite, favoriteIndex, token)
         buildContent: (buttonEl) =>
         {
             buttonEl.classList.add('lancer-aw-btn');
+            const embedded = !favorite.icon ? labelIconEl(favorite.label) : null;
+            if (embedded)
+            {
+                embedded.style.cssText = 'width:24px;height:24px;font-size:24px;margin:0;';
+                buttonEl.replaceChildren(embedded);
+                return;
+            }
             buttonEl.innerHTML = laHudRenderIcon(favorite.icon ?? 'fas fa-circle-dot', 24);
         },
         styleButton: (buttonEl) =>
@@ -68,39 +88,68 @@ function buildWheelItem(favorite, favoriteIndex, token)
     };
 }
 
+function wheelItems(page, token)
+{
+    return (hud.getFavorites(page) ?? []).map((favorite, favoriteIndex) => buildWheelItem(favorite, favoriteIndex, token));
+}
+
+function switchPage(page, token)
+{
+    const items = wheelItems(page, token);
+    if (!items.length)
+        return;
+    _page = page;
+    playUiSound('toggle');
+    refreshRadialWheel(items, { page });
+}
+
 export async function toggleActionWheel()
 {
     if (isRadialWheelOpen())
     {
         closeRadialWheel(); return;
     }
-    const token = canvas.tokens?.controlled?.[0];
-    if (!token)
-        return;
     if (!game.settings.get(MODULE_ID, 'tahEnabled'))
     {
         ui.notifications.info('Enable the Token Action HUD to use the action wheel.');
         return;
     }
-    if (!hud.getFavorites())
-        await hud.bind([token]);
-    const favorites = hud.getFavorites() ?? [];
-    if (!favorites.length)
+    const token = canvas.tokens?.controlled?.[0] ?? null;
+    // No selection: the narrative HUD's favorites, centered on the cursor.
+    if (!token && !game.settings.get(MODULE_ID, 'tah.narrativeMode'))
+        return;
+    if (token)
+    {
+        if (!hud.getFavorites() || hud._token !== token)
+            await hud.bind([token]);
+    }
+    else if (!hud.getFavorites())
+        await hud.bindNarrative();
+    const firstPage = hud.getFavorites(1) ?? [];
+    const secondPage = hud.getFavorites(2) ?? [];
+    if (!firstPage.length && !secondPage.length)
     {
         ui.notifications.info('No favorite actions yet. Mark actions with Ctrl+Right-click in the Token Action HUD.');
         return;
     }
+    _pageCount = secondPage.length ? 2 : 1;
+    _page = firstPage.length ? 1 : 2;
     _openToken = token;
     openRadialWheel({
         token,
+        anchor: token ? null : lastCursor(),
         rootClass: 'lancer-action-wheel',
         showLabel: true,
+        pageCount: _pageCount,
+        page: _page,
+        onPageChange: (nextPage) => switchPage(nextPage, token),
         onClose: () =>
         {
             _openToken = null;
-            deactivateRangePreview(token);
+            if (token)
+                deactivateRangePreview(token);
         },
-        items: favorites.map((favorite, favoriteIndex) => buildWheelItem(favorite, favoriteIndex, token))
+        items: wheelItems(_page, token)
     });
 }
 
@@ -118,8 +167,7 @@ function scheduleWheelRefresh(changedDoc)
     {
         if (!_openToken)
             return;
-        const favorites = hud.getFavorites() ?? [];
-        refreshRadialWheel(favorites.map((favorite, favoriteIndex) => buildWheelItem(favorite, favoriteIndex, _openToken)));
+        refreshRadialWheel(wheelItems(_page, _openToken));
     }, 100);
 }
 
@@ -141,7 +189,7 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyF' }],
         onDown: () =>
         {
-            if (!canvas.tokens?.controlled?.length)
+            if (!canvas.tokens?.controlled?.length && !game.settings.get(MODULE_ID, 'tah.narrativeMode'))
                 return false;
             toggleActionWheel();
             return true;

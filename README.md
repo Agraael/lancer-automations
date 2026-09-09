@@ -30,7 +30,7 @@
 
 Well, project became bigger, now there's more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
 
-In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis)
+In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis) or [Ko-fi](https://ko-fi.com/lasossis)
 
 </details>
 

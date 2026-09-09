@@ -618,22 +618,112 @@
 }
 
 .battelog-intro-inner {
-    width: min(720px, 88vw);
+    width: min(764px, 92vw);
     position: relative;
     z-index: 2;
+}
+
+.battelog-intro-head {
+    font-size: clamp(11px, 1.5vw, 15px);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #d7ddda;
+    padding: 0 26px 0 18px;
+    margin-bottom: 10px;
+    animation: battelog-intro-blink-in 0.5s steps(1, end) both;
+}
+
+.battelog-intro-scroll {
+    position: relative;
+}
+
+.battelog-intro-body {
+    position: relative;
+    max-height: 62vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 26px 0 18px;
+    scrollbar-width: none;
+}
+
+.battelog-intro-body::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+
+.battelog-intro-edge {
+    position: absolute;
+    left: 0;
+    right: 26px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--terminal-accent, #ffaa00), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+
+.battelog-intro-edge.top {
+    top: 0;
+}
+
+.battelog-intro-edge.bot {
+    bottom: 0;
+}
+
+.battelog-intro-scroll.more-up .battelog-intro-edge.top,
+.battelog-intro-scroll.more-down .battelog-intro-edge.bot {
+    opacity: 0.75;
+}
+
+.battelog-intro-rail {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 14px;
+    display: none;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+.battelog-intro-rail.on {
+    display: flex;
+}
+
+.battelog-intro-rail span {
+    height: 1px;
+    width: 7px;
+    background: #5c655f;
+    opacity: 0.5;
+    transition: width 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.battelog-intro-rail span.long {
+    width: 14px;
+}
+
+.battelog-intro-rail span.lit {
+    background: var(--terminal-accent, #ffaa00);
+    width: 14px;
+    opacity: 1;
+    box-shadow: 0 0 7px var(--terminal-accent, #ffaa00);
 }
 
 .battelog-intro-emblem {
     display: block;
     width: clamp(48px, 6vw, 72px);
     height: auto;
-    margin: 0 0 8px 0;
+    margin: 0 0 8px 18px;
     filter: brightness(0) invert(1);
     opacity: 0.85;
 }
 
 .battelog-intro-line {
     font-size: clamp(11px, 1.5vw, 15px);
+    line-height: 1.35;
     margin: 4px 0;
     letter-spacing: 0.3px;
     display: flex;
@@ -682,9 +772,9 @@
 
 .battelog-intro-result {
     font-weight: 700;
-    color: #ffaa00;
+    color: var(--terminal-text, #ffaa00);
     letter-spacing: 0.5px;
-    text-shadow: 0 0 10px rgba(255, 170, 0, 0.6);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--terminal-text, #ffaa00) 60%, transparent);
     animation: battelog-intro-boom 0.34s cubic-bezier(.2, 1.4, .4, 1) both;
     display: inline-block;
 }
@@ -912,8 +1002,157 @@
 }
 
 .battelog-intro-hint i {
-    color: #ffaa00;
+    color: var(--terminal-text, #ffaa00);
     margin-right: 6px;
+}
+
+.battelog-intro-terminal.no-dismiss {
+    cursor: default;
+}
+
+.battelog-intro-line.say {
+    color: #d7ddda;
+    font-size: clamp(12px, 1.6vw, 16px);
+}
+
+.battelog-intro-line.say.shout {
+    color: var(--terminal-text, #ffaa00);
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.battelog-intro-line.say.menace {
+    color: #e50000;
+    letter-spacing: 4px;
+}
+
+.battelog-intro-line.gap {
+    margin-top: 16px;
+}
+
+/* distort-subtle animates text-shadow, so the glow has to be a filter to survive it. */
+.battelog-horus {
+    color: #e50000;
+    text-decoration: none;
+    filter: drop-shadow(0 0 6px rgba(229, 0, 0, 0.5));
+}
+
+.battelog-intro-form {
+    margin-top: 20px;
+    border-top: 1px solid #3a413c;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: battelog-intro-blink-in 0.3s steps(1, end) both;
+}
+
+.battelog-intro-form label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #6d746f;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.battelog-intro-form textarea {
+    width: 100%;
+    min-height: 84px;
+    resize: vertical;
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #d7ddda;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid #5c655f;
+    padding: 10px 12px;
+    caret-color: var(--terminal-text, #ffaa00);
+}
+
+.battelog-intro-form textarea::placeholder {
+    color: #5a615d;
+}
+
+.battelog-intro-form textarea:focus {
+    outline: none;
+    border-color: var(--terminal-text, #ffaa00);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--terminal-text, #ffaa00) 40%, transparent),
+        0 0 18px color-mix(in srgb, var(--terminal-text, #ffaa00) 20%, transparent);
+}
+
+.battelog-intro-form-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.battelog-intro-form-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.battelog-intro-send {
+    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #0a0d0f;
+    background: var(--terminal-text, #ffaa00);
+    border: 1px solid var(--terminal-text, #ffaa00);
+    padding: 10px 26px;
+    cursor: pointer;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--terminal-text, #ffaa00) 40%, transparent);
+}
+
+.battelog-intro-send:hover {
+    filter: brightness(1.18);
+    box-shadow: 0 0 26px color-mix(in srgb, var(--terminal-text, #ffaa00) 60%, transparent);
+}
+
+.battelog-intro-send[disabled],
+.battelog-intro-decline[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.battelog-intro-decline {
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #6d746f;
+    background: none;
+    border: 1px solid #3a413c;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.battelog-intro-decline:hover {
+    color: #ff2b3d;
+    border-color: #ff2b3d;
+}
+
+.battelog-intro-count {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: #6d746f;
+    font-variant-numeric: tabular-nums;
+}
+
+.battelog-intro-nag {
+    font-size: clamp(11px, 1.5vw, 15px);
+    letter-spacing: 0.3px;
+    color: #ffaa00;
+    text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+    margin: 4px 0;
+    animation: battelog-intro-blink-in 0.5s steps(1, end) both;
 }
 
 @keyframes battelog-intro-blink {

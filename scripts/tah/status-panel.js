@@ -6,12 +6,43 @@ import { durationFieldsHtml, setupDurationUI, getDurationConfig, createDurationM
 import { playUiSound } from './sound.js';
 import { tahScale, laHudRenderIcon } from './item-helpers.js';
 import { HudPanel } from './hud-panel.js';
+import { openCursorMenu } from './cursor-menu.js';
 
 function getBonusDetailStr(/** @type {any} */ bonus)
 {
     if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
         return bonus.bonuses.map(getBonusDetailStr).join(' | ');
     return getBonusDetailString(bonus);
+}
+
+/**
+ * @param {any[]} effects
+ * @returns {boolean} true when any of them is flagged permanent
+ */
+export function isPermanentEffect(effects)
+{
+    for (const effect of (effects ?? []))
+    {
+        const laFlags = /** @type {any} */ (effect.flags)?.['lancer-automations'];
+        const duration = laFlags?.duration ?? /** @type {any} */ (effect.flags)?.['csm-lancer-qol']?.duration;
+        if (duration?.label === 'permanent')
+            return true;
+    }
+    return false;
+}
+
+// A permanent effect is meant to stay, so dropping one asks first.
+export async function confirmPermanentRemoval(label, effects)
+{
+    if (!isPermanentEffect(effects))
+        return true;
+    return await openCursorMenu({
+        head: `${label} is permanent`,
+        rows: [
+            { value: true, label: 'Remove', glyph: '✕', cls: 'la-menu-popup-danger' },
+            { value: false, label: 'Keep' },
+        ],
+    }) === true;
 }
 
 let _lastSearchQuery = '';
@@ -180,17 +211,7 @@ export class StatusPanel extends HudPanel
 
         const isActive = (/** @type {any} */ s) => getEffectsForStatus(s.id).length > 0;
 
-        const isPermanent = (/** @type {any} */ status) =>
-        {
-            for (const eff of getEffectsForStatus(status.id))
-            {
-                const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
-                const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
-                if (dur?.label === 'permanent')
-                    return true;
-            }
-            return false;
-        };
+        const isPermanent = (/** @type {any} */ status) => isPermanentEffect(getEffectsForStatus(status.id));
 
         // active-row colors: yellow when any active effect is permanent, blue otherwise
         const ACTIVE_BG_NORMAL    = '#b8d4f0';
@@ -365,17 +386,8 @@ export class StatusPanel extends HudPanel
                 $(this).css({ background: active ? activeBg(perm) : BG_DEFAULT, borderLeftColor: active ? activeBorder(perm) : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
             });
 
-            rowEl.on('click', async (ev) =>
+            rowEl.on('click', async () =>
             {
-                if (ev.ctrlKey)
-                {
-                    const nowFav = await toggleStatusFavorite(status.id);
-                    playUiSound('toggle');
-                    rowEl.find('.la-hud-fav-mark').remove();
-                    if (nowFav)
-                        rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
-                    return;
-                }
                 playUiSound('toggle');
                 const effects = getEffectsForStatus(status.id);
                 if (effects.length > 1)
@@ -395,6 +407,8 @@ export class StatusPanel extends HudPanel
                         await this._applyWithDuration(status);
                     else
                     {
+                        if (!await confirmPermanentRemoval(status.name, effects))
+                            return;
                         for (const token of this._tokens)
                             await /** @type {any} */ (token).toggleEffect(status);
                     }
@@ -410,6 +424,15 @@ export class StatusPanel extends HudPanel
             rowEl.on('contextmenu', async (ev) =>
             {
                 ev.preventDefault();
+                if (ev.ctrlKey)
+                {
+                    const nowFav = await toggleStatusFavorite(status.id);
+                    playUiSound('toggle');
+                    rowEl.find('.la-hud-fav-mark').remove();
+                    if (nowFav)
+                        rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
+                    return;
+                }
                 playUiSound('toggle');
                 const effects = getEffectsForStatus(status.id);
                 if (effects.length > 1)
@@ -442,6 +465,8 @@ export class StatusPanel extends HudPanel
                         await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                     else
                     {
+                        if (!await confirmPermanentRemoval(status.name, effects))
+                            return;
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                         for (const token of this._tokens.slice(1))
                         {
@@ -577,6 +602,8 @@ export class StatusPanel extends HudPanel
                         }
                         else
                         {
+                            if (!await confirmPermanentRemoval(customStatus.name, effs))
+                                return;
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [effs[0].id]);
                             for (const tok of this._tokens.slice(1))
                             {
@@ -627,6 +654,8 @@ export class StatusPanel extends HudPanel
                             await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
                         else
                         {
+                            if (!await confirmPermanentRemoval(customStatus.name, effs))
+                                return;
                             await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                             for (const token of this._tokens.slice(1))
                             {

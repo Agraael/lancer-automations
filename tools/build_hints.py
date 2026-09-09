@@ -20,8 +20,8 @@ SKIP_DIRS  = {'typing', 'node_modules'}
 
 DOC_DIR = MODULE_ROOT / 'doc'
 DOC_FILES = ['API_REFERENCE.md', 'API_COMBAT.md', 'API_SPATIAL.md', 'API_EFFECTS.md',
-             'API_INTERACTIVE.md', 'API_ITEMS.md', 'API_HUD.md', 'API_MOVEMENT.md',
-             'API_TOKEN_DISPLAY.md', 'API_HOWTO.md']
+             'API_INTERACTIVE.md', 'API_ITEMS.md', 'API_FLAGS.md', 'API_HUD.md',
+             'API_MOVEMENT.md', 'API_TOKEN_DISPLAY.md', 'API_HOWTO.md']
 DETAILS_RE = re.compile(
     r'<details[^>]*>\s*<summary>((?:(?!</summary>)[\s\S])*?)</summary>([\s\S]*?)</details>',
     re.IGNORECASE,

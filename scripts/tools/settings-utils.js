@@ -1,12 +1,13 @@
-// Read a lancer-automations boolean setting; false if settings are not ready.
-export function getModuleSetting(key)
+// Read a lancer-automations setting; boolean without a fallback, raw value with one.
+export function getModuleSetting(key, fallback)
 {
     try
     {
-        return !!game.settings.get('lancer-automations', key);
+        const value = game.settings.get('lancer-automations', key);
+        return fallback === undefined ? !!value : value;
     }
     catch
     {
-        return false;
+        return fallback === undefined ? false : fallback;
     }
 }

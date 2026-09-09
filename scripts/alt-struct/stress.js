@@ -2,7 +2,8 @@
 
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { executeReactorMeltdown } from "../tools/misc-tools.js";
-import { pushEmbedButton } from "./alt-struct-helpers.js";
+import { altStructButton, pushEmbedButton, getRollCount } from "./alt-struct-helpers.js";
+import { rollCard } from "../interactive/tools/rollCard.js";
 
 const stressTableTitles = [
     "Critical Reactor Failure",
@@ -41,13 +42,6 @@ function stressTableDescriptions(roll, remStress)
     }
     return "";
 }
-
-const getRollCount = (roll, targetFace) =>
-{
-    return roll
-        ? roll.terms[0].results.filter((dieResult) => dieResult.result === targetFace).length
-        : 0;
-};
 
 export async function altRollStress(state)
 {
@@ -177,7 +171,7 @@ export async function insertEngineeringCheckButton(state)
     let onesRolled = getRollCount(roll, 1);
 
     if (showEngCheckButton && !(onesRolled > 1))
-        pushEmbedButton(state, { flowType: 'StressEngineeringCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'ENGINEERING', attrs: { 'check-type': 'engineering' } });
+        pushEmbedButton(state, { flowType: 'StressEngineeringCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'ENGINEERING', attrs: { 'check-type': 'eng' } });
     return true;
 }
 
@@ -215,9 +209,15 @@ export async function applyStressEffects(state)
     // Multiple 1s: EXPOSED + THROTTLED + Critical Meltdown
         try
         {
+            // EXPOSED ends on stabilize or a passed ENG check, not on a turn timer
             await applyEffectsToTokens({
                 tokens: [token],
-                effectNames: ["exposed", "throttled"],
+                effectNames: ["exposed"],
+                note: "Critical Stress Failure",
+            });
+            await applyEffectsToTokens({
+                tokens: [token],
+                effectNames: ["throttled"],
                 note: "Critical Stress Failure",
                 duration: { label: 'end', turns: 1, rounds: 0 },
             });
@@ -272,7 +272,22 @@ export async function applyStressEffects(state)
                 break;
 
             case 1:
-                // Single 1: effects applied after the engineering check button resolves
+                // At 1 stress the mech is Exposed up front, the rest waits on the engineering check
+                if (state.data.remStress === 1)
+                {
+                    try
+                    {
+                        await applyEffectsToTokens({
+                            tokens: [token],
+                            effectNames: ["exposed"],
+                            note: "Meltdown",
+                        });
+                    }
+                    catch (error)
+                    {
+                        console.warn("lancer-automations (alt-struct): Could not apply EXPOSED effect:", error);
+                    }
+                }
                 break;
         }
     }
@@ -280,28 +295,24 @@ export async function applyStressEffects(state)
     return true;
 }
 
-async function applyEngineeringCheckEffects(state, engineeringSuccess)
+async function applyEngineeringCheckEffects(actor, engineeringSuccess)
 {
-    if (!state.data)
-        throw new TypeError(`Stress roll flow data missing!`);
-
-    const actor = state.actor;
-    if (!actor.is_mech() && !actor.is_npc())
-        return false;
-
-    const remStress = state.data.remStress;
+    const remStress = actor.system.stress.value;
+    let description = "";
 
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations (alt-struct): No active token found for actor");
-        return true;
+        return description;
     }
 
     const token = tokens[0];
 
     try
     {
+        const meltdownButton = () => altStructButton({ flowType: 'MeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'MELTDOWN' });
+
         if (remStress >= 3)
         {
             // 3+ stress remaining
@@ -314,6 +325,7 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
+                description = ("ENGINEERING check passed. Slowed and Throttled until the end of your next turn.");
             }
             else
             {
@@ -322,8 +334,8 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
                     tokens: [token],
                     effectNames: ["exposed"],
                     note: "Engineering Check Failure",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
                 });
+                description = ("ENGINEERING check failed. Exposed until you stabilize or pass an ENGINEERING check.");
             }
         }
         else if (remStress === 2)
@@ -338,6 +350,7 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
+                description = ("ENGINEERING check passed. Slowed and Throttled until the end of your next turn.");
             }
             else
             {
@@ -346,11 +359,8 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
                     tokens: [token],
                     effectNames: ["exposed"],
                     note: "Engineering Check Failure",
-                    duration: { label: 'end', turns: 1, rounds: 0 },
                 });
-
-                // Add Meltdown button
-                pushEmbedButton(state, { flowType: 'MeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'MELTDOWN' });
+                description = (`ENGINEERING check failed. Exposed, and the reactor melts down after 1d3 of your turns.<br>${meltdownButton()}`);
             }
         }
         else if (remStress === 1)
@@ -365,11 +375,12 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
                     note: "Engineering Check Success",
                     duration: { label: 'end', turns: 1, rounds: 0 },
                 });
+                description = ("ENGINEERING check passed. Throttled until the end of your next turn.");
             }
             else
             {
                 // Failure: Meltdown
-                pushEmbedButton(state, { flowType: 'MeltdownFlow', actorUuid: actor.uuid, icon: 'fas fa-radiation', label: 'MELTDOWN' });
+                description = (`ENGINEERING check failed. The reactor melts down after 1d3 of your turns.<br>${meltdownButton()}`);
             }
         }
     }
@@ -378,38 +389,20 @@ async function applyEngineeringCheckEffects(state, engineeringSuccess)
         console.warn("lancer-automations (alt-struct): Could not apply engineering check effects:", error);
     }
 
-    return true;
+    return description;
 }
 
-export async function handleStressEngineeringCheckResult(state)
+/** @returns {Promise<{title: string, description: string}|null>} */
+export async function handleStressEngineeringCheckResult(actor, success)
 {
-    console.log("lancer-automations (alt-struct): handleStressEngineeringCheckResult EXECUTING");
-    if (!state.data)
-        throw new TypeError(`Check flow data missing!`);
-
-    const actor = state.actor;
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn("Only npcs and mechs can perform this action.");
-        return false;
+        return null;
     }
 
-    const result = state.data.result;
-    if (!result)
-        throw new TypeError(`Engineering check hasn't been rolled yet!`);
-
-    const roll = result.roll;
-    const DC = 10;
-    const success = roll.total >= DC;
-
-    const remStress = state.actor.system.stress.value;
-
-    // Store remStress in state data for applyEngineeringCheckEffects
-    state.data.remStress = remStress;
-
-    await applyEngineeringCheckEffects(state, success);
-
-    return true;
+    const description = await applyEngineeringCheckEffects(actor, success);
+    return description ? { title: "Meltdown", description } : null;
 }
 
 export async function rollMeltdownCountdown(state)
@@ -424,19 +417,25 @@ export async function rollMeltdownCountdown(state)
         return false;
     }
 
-    const roll = await new Roll("1d3").evaluate();
-    const countdown = roll.total;
+    // alt-struct rolls 1d3, the core table rolls 1d6, the button carries the formula
+    const formula = state.data.countdownFormula || "1d3";
+    const token = actor.getActiveTokens()?.[0] ?? null;
+    const rolled = await rollCard({
+        title: "MELTDOWN COUNTDOWN",
+        roll: formula,
+        allowEdit: false,
+        originToken: token,
+        icon: "fas fa-radiation"
+    });
+    if (!rolled)
+        return false;
+    const countdown = rolled.total;
 
     state.data = {
         type: "meltdown",
         title: "Reactor Meltdown Countdown",
-        desc: `Your reactor will melt down in ${countdown} turn${countdown > 1 ? 's' : ''}.`,
-        roll_str: "1d3",
-        result: {
-            roll: roll,
-            tt: await roll.getTooltip(),
-            total: countdown.toString(),
-        },
+        description: `Your reactor will melt down in ${countdown} turn${countdown > 1 ? 's' : ''}.`,
+        roll_str: formula,
         countdown: countdown
     };
 

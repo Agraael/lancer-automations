@@ -1,3 +1,5 @@
+import { runInOnInitTriggerContext } from '../bonuses/flagged-effects.js';
+
 // Lancer system patches applied at init/ready, without editing the system bundle.
 
 // Schema extension: add `disabled` field to item data models
@@ -1688,3 +1690,52 @@ export async function syncAllActorImgs()
     }
     ui.notifications.info(`Synced ${imgUpdated} portrait${imgUpdated === 1 ? '' : 's'} and ${nameUpdated} name${nameUpdated === 1 ? '' : 's'}, skipped ${skipped}.`);
 }
+
+// Full Repair: silently drop item activations and action locks, then re-run onInit and refresh engagement.
+Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
+{
+    if (!success)
+        return;
+    const actor = flow?.state?.actor;
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!actor || !api)
+        return;
+    for (const item of actor.items)
+    {
+        const flags = item.flags?.['lancer-automations'] ?? {};
+        const stale = {};
+        if (flags.activeStateData)
+            stale.activeStateData = true;
+        if (flags.actionLocks?.length)
+            stale.actionLocks = true;
+        if (flags.actionTypeLocks?.length)
+            stale.actionTypeLocks = true;
+        if (Object.keys(stale).length)
+            await api.removeItemFlags(item, stale);
+    }
+    const actorStale = {};
+    if (actor.getFlag('lancer-automations', 'lockedActions'))
+        actorStale.lockedActions = true;
+    if (actor.getFlag('lancer-automations', 'lockedActionTypes'))
+        actorStale.lockedActionTypes = true;
+    if (Object.keys(actorStale).length)
+        await api.removeActorFlags(actor, actorStale);
+
+    const token = actor.getActiveTokens?.()?.[0] ?? null;
+    if (token)
+    {
+        await api.checkOnInitReactions(token);
+        // The repair wiped the materialized copies. The templates on items/actor survived it.
+        await runInOnInitTriggerContext(async () =>
+        {
+            await api.applyActorTemplatesToTokens(actor, [token]);
+            await api.applyActorBonusTemplatesToTokens(actor, [token]);
+            for (const item of actor.items)
+            {
+                await api.applyItemTemplatesToTokens(item, [token]);
+                await api.applyItemBonusTemplatesToTokens(item, [token]);
+            }
+        });
+    }
+    await api.updateAllEngagements?.();
+});

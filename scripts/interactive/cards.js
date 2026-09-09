@@ -1065,6 +1065,21 @@ export function _updateInfoCard(cardEl, type, cardState)
     }
 }
 
+// Capture-phase Escape that cancels the card, unless an open picker owns the key.
+export function bindCardEscape(onCancel, isPickerActive)
+{
+    const keyHandler = (event) =>
+    {
+        if (event.key !== 'Escape' || isPickerActive?.())
+            return;
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+    };
+    document.addEventListener('keydown', keyHandler, true);
+    return () => document.removeEventListener('keydown', keyHandler, true);
+}
+
 export function _removeInfoCard(cardEl)
 {
     if (!cardEl || cardEl.length === 0)

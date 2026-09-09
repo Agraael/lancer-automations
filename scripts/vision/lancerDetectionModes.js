@@ -3,6 +3,7 @@
 import { getTokenDistance } from "../combat/overwatch.js";
 import { getTokenVisionLOS } from "./visionFromEdge.js";
 import { blindedVisionEnabled } from "./blindedVision.js";
+import { laLosFlagOnly } from "./laWallLos.js";
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
@@ -74,6 +75,9 @@ function _isBlockedByTokenEdge(visionSource, target)
         const id = edge.id;
         if (typeof id !== 'string' || !id.startsWith('la-block-los-'))
             continue;
+        // LA-only token blockers stay out of the vanilla veto.
+        if (id.includes('-laonly-'))
+            continue;
         if (srcTokenId && id.startsWith(`la-block-los-${srcTokenId}-`))
             continue;
         if (foundry.utils.lineSegmentIntersects(src, dst, edge.a, edge.b))
@@ -86,6 +90,7 @@ function _isBlockedByTokenEdge(visionSource, target)
 let _losEdgeCache = null;
 let _losVertexMap = null;
 let _losPolyMap = null;
+let _losClosedPolys = null;
 const _losPairCache = new Map();
 // Banded wall polygons per eye height, each with its bbox. Same lifetime as the edge cache.
 let _eyeSolidCache = null;
@@ -101,6 +106,7 @@ function _losInvalidate()
     _losEdgeCache = null;
     _losVertexMap = null;
     _losPolyMap = null;
+    _losClosedPolys = null;
     _eyeSolidCache = null;
     _losPairCache.clear();
 }
@@ -116,9 +122,13 @@ function _collectSightEdges()
     if (_losEdgeCache)
         return _losEdgeCache;
     const records = [];
+    // Flag-only mode: full token blockers carry laSight twins, so laSight edges alone cover everything.
+    const flagOnly = laLosFlagOnly();
     for (const edge of canvas?.edges?.values?.() ?? [])
     {
         if ((edge.sight ?? 0) <= 0)
+            continue;
+        if (flagOnly && edge.type !== 'laSight')
             continue;
         const flags = edge.object?.document?.flags?.['wall-height']
             ?? edge.object?.flags?.['wall-height']
@@ -155,8 +165,31 @@ function _collectSightEdges()
         else
             _losPolyMap.set(polyId, [record]);
     }
+    _losClosedPolys = new Set();
+    for (const [polyId, polyRecords] of _losPolyMap)
+    {
+        if (polyRecords.length < 3)
+            continue;
+        const degrees = new Map();
+        for (const polyRecord of polyRecords)
+        {
+            for (const end of [polyRecord.edge.a, polyRecord.edge.b])
+            {
+                const key = _vertexKey(end.x, end.y);
+                degrees.set(key, (degrees.get(key) ?? 0) + 1);
+            }
+        }
+        if ([...degrees.values()].every(count => count === 2))
+            _losClosedPolys.add(polyId);
+    }
     _losEdgeCache = records;
     return records;
+}
+
+// Only closed rings support interior tests: parity over an open wall chain reads a half plane as inside.
+function _isClosedPoly(record)
+{
+    return _losClosedPolys?.has(record.id.replace(/-\d+$/, '')) ?? false;
 }
 
 // Ray-cast point-in-polygon over every edge of the wall that `record` belongs to.
@@ -252,7 +285,7 @@ function _vertexKey(x, y)
 }
 
 // Vertex graze: false = real crossing, ±1 = which side the solid is on (0 unknown).
-function _skimsVertex(origin, dest, edge, vx, vy)
+function _skimsVertex(origin, dest, edge, vx, vy, record)
 {
     const neighbors = _losVertexMap?.get(_vertexKey(vx, vy));
     if (!neighbors)
@@ -273,7 +306,15 @@ function _skimsVertex(origin, dest, edge, vx, vy)
     const sideThis = Math.sign(dirX * (thisFar.y - vy) - dirY * (thisFar.x - vx));
     const sideOther = Math.sign(dirX * (otherFar.y - vy) - dirY * (otherFar.x - vx));
     if (sideThis === 0 || sideOther === 0)
-        return 0;
+    {
+        // a side of 0 means the ray is collinear with one of the two faces, so this is not a corner peek
+        const ridesFace = (sideThis === 0 && ((((thisFar.x - vx) * dirX) + ((thisFar.y - vy) * dirY)) > 0))
+            || (sideOther === 0 && ((((otherFar.x - vx) * dirX) + ((otherFar.y - vy) * dirY)) > 0));
+        if (ridesFace || ((((dest.x - vx) * dirX) + ((dest.y - vy) * dirY)) <= 0) || !record || !_isClosedPoly(record))
+            return 0;
+        const step = canvas.grid.size * 0.02 / (Math.hypot(dirX, dirY) || 1);
+        return _pointInWall(vx + (dirX * step), vy + (dirY * step), record) ? false : 0;
+    }
     return sideThis === sideOther ? sideThis : false;
 }
 
@@ -302,6 +343,16 @@ function _pointToSegmentDist(px, py, ax, ay, bx, by)
     return Math.hypot(px - (ax + proj * dx), py - (ay + proj * dy));
 }
 
+// Renderer path only: collect every blocking hit so the nearest one along the ray wins.
+function _noteBlock(state, origin, rayDirX, rayDirY, rayLenSq, px, py, reason, tAlong)
+{
+    const along = tAlong ?? ((((px - origin.x) * rayDirX) + ((py - origin.y) * rayDirY)) / rayLenSq);
+    if (!state.near || along < state.near.along)
+        state.near = { along, x: px, y: py, reason };
+    if (!state.far || along > state.far.along)
+        state.far = { along, x: px, y: py, reason };
+}
+
 // Wall LOS height rule: both eyes over the top => clear; neither => blocked; one over => the shorter is hidden only if adjacent.
 function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
 {
@@ -309,18 +360,32 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
     const adjacentSlack = canvas.grid.size * 0.75;
     ctx.lastReason = 'open';
     ctx.blockPoint = null;
+    ctx.blockPointFar = null;
     ctx.skimPos = false;
     ctx.skimNeg = false;
+    const nearest = ctx.nearestBlock ? { near: null, far: null } : null;
     const trigHeightRule = _getSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
     const rayDirX = dest.x - origin.x;
     const rayDirY = dest.y - origin.y;
     const rayLenSq = ((rayDirX * rayDirX) + (rayDirY * rayDirY)) || 1;
     const rayLen = Math.sqrt(rayLenSq);
+    const takeBlock = (reason, px, py, tAlong) =>
+    {
+        if (!nearest)
+        {
+            ctx.lastReason = reason;
+            ctx.blockPoint = { x: px, y: py };
+            return true;
+        }
+        _noteBlock(nearest, origin, rayDirX, rayDirY, rayLenSq, px, py, reason, tAlong);
+        return false;
+    };
     const endpointTol = canvas.grid.size * 0.02;
     const segMinX = Math.min(origin.x, dest.x);
     const segMaxX = Math.max(origin.x, dest.x);
     const segMinY = Math.min(origin.y, dest.y);
     const segMaxY = Math.max(origin.y, dest.y);
+    let divedPolys = null;
     for (const record of edges)
     {
         if (record.maxX < segMinX || record.minX > segMaxX || record.maxY < segMinY || record.minY > segMaxY)
@@ -360,6 +425,37 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             ctx.lastReason = 'over2';
             continue;
         }
+        // trig sightline diving below the surface inside the footprint is buried even when no edge crossing says so
+        if (originOver !== destOver && trigHeightRule && _isClosedPoly(record))
+        {
+            const polyId = record.id.replace(/-\d+$/, '');
+            if (!divedPolys?.has(polyId))
+            {
+                (divedPolys ??= new Set()).add(polyId);
+                const heightDelta = destHeight - originHeight;
+                const tTop = (record.top - originHeight) / heightDelta;
+                const tBottom = Number.isFinite(record.bottom)
+                    ? (record.bottom - originHeight) / heightDelta
+                    : (heightDelta > 0 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
+                const spanLo = Math.max(Math.min(tTop, tBottom), 0);
+                const spanHi = Math.min(Math.max(tTop, tBottom), 1);
+                if (spanLo < spanHi)
+                {
+                    for (const fraction of [0.25, 0.5, 0.75])
+                    {
+                        const along = spanLo + ((spanHi - spanLo) * fraction);
+                        const probeX = origin.x + (rayDirX * along);
+                        const probeY = origin.y + (rayDirY * along);
+                        if (_pointInWall(probeX, probeY, record))
+                        {
+                            if (takeBlock('dive', probeX, probeY, along))
+                                return true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         if (originOver !== destOver && !trigHeightRule)
         {
             // the corner peek is height-independent: a vertex graze skims here exactly as at ground level
@@ -373,7 +469,7 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                 grazedVertex = edge.b;
             if (grazedVertex)
             {
-                const skimSide = _skimsVertex(origin, dest, edge, grazedVertex.x, grazedVertex.y);
+                const skimSide = _skimsVertex(origin, dest, edge, grazedVertex.x, grazedVertex.y, record);
                 if (skimSide !== false)
                 {
                     if (skimSide < 0)
@@ -382,9 +478,9 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                         ctx.skimPos = true;
                     if (ctx.skimNeg && ctx.skimPos)
                     {
-                        ctx.lastReason = 'pinch';
-                        ctx.blockPoint = { x: hit.x, y: hit.y };
-                        return true;
+                        if (takeBlock('pinch', hit.x, hit.y, hit.t0))
+                            return true;
+                        continue;
                     }
                     ctx.lastReason = 'skim';
                     continue;
@@ -397,9 +493,9 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             // hiding flush behind a taller wall is absolute: no viewer height exemption
             if (shorterAdj)
             {
-                ctx.lastReason = 'adj';
-                ctx.blockPoint = { x: hit.x, y: hit.y };
-                return true;
+                if (takeBlock('adj', hit.x, hit.y, hit.t0))
+                    return true;
+                continue;
             }
             ctx.lastReason = 'over1';
             continue;
@@ -419,7 +515,7 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                 touchedVertex = edge.b;
             if (touchedVertex)
             {
-                const skimSide = _skimsVertex(origin, dest, edge, touchedVertex.x, touchedVertex.y);
+                const skimSide = _skimsVertex(origin, dest, edge, touchedVertex.x, touchedVertex.y, record);
                 if (skimSide !== false)
                 {
                     if (skimSide < 0)
@@ -428,9 +524,9 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                         ctx.skimPos = true;
                     if (ctx.skimNeg && ctx.skimPos && !ctx.noPinch)
                     {
-                        ctx.lastReason = 'pinch';
-                        ctx.blockPoint = { x: startPt.x, y: startPt.y };
-                        return true;
+                        if (takeBlock('pinch', startPt.x, startPt.y))
+                            return true;
+                        continue;
                     }
                     ctx.lastReason = 'skim';
                     continue;
@@ -439,14 +535,14 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             // touching a wall never grants shots through it: block when the far end is across it
             const anchor = originOn ? centerA : centerB;
             const toucherHeight = originOn ? originHeight : destHeight;
-            const sideOther = edge.orientPoint?.(otherPt) ?? 0;
-            const sideAnchor = edge.orientPoint?.(anchor) ?? 0;
+            const sideOther = Math.sign(edge.orientPoint?.(otherPt) ?? 0);
+            const sideAnchor = Math.sign(edge.orientPoint?.(anchor) ?? 0);
             if (sideOther && sideAnchor && sideOther !== sideAnchor
                 && toucherHeight >= record.bottom && toucherHeight <= record.top)
             {
-                ctx.lastReason = 'through-touch';
-                ctx.blockPoint = { x: startPt.x, y: startPt.y };
-                return true;
+                if (takeBlock('through-touch', startPt.x, startPt.y))
+                    return true;
+                continue;
             }
             const stepLen = Math.hypot(otherPt.x - startPt.x, otherPt.y - startPt.y) || 1;
             const sampleX = startPt.x + ((otherPt.x - startPt.x) / stepLen) * 2;
@@ -466,7 +562,7 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                 grazed = edge.b;
             if (grazed)
             {
-                const skimSide = _skimsVertex(origin, dest, edge, grazed.x, grazed.y);
+                const skimSide = _skimsVertex(origin, dest, edge, grazed.x, grazed.y, record);
                 if (skimSide !== false)
                 {
                     if (skimSide < 0)
@@ -476,9 +572,9 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
                     // opposite-side skims pinch the line: tilting off one corner lands on the other
                     if (ctx.skimNeg && ctx.skimPos && !ctx.noPinch)
                     {
-                        ctx.lastReason = 'pinch';
-                        ctx.blockPoint = { x: hit.x, y: hit.y };
-                        return true;
+                        if (takeBlock('pinch', hit.x, hit.y, hit.t0))
+                            return true;
+                        continue;
                     }
                     ctx.lastReason = 'skim';
                     continue;
@@ -490,11 +586,19 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
             const heightAtHit = originHeight + (destHeight - originHeight) * (hit.t0 ?? 0);
             if (heightAtHit >= record.bottom && heightAtHit <= record.top)
             {
-                ctx.lastReason = 'band';
-                ctx.blockPoint = { x: hit.x, y: hit.y };
-                return true;
+                if (takeBlock('band', hit.x, hit.y, hit.t0))
+                    return true;
+                continue;
             }
         }
+    }
+    if (nearest?.near)
+    {
+        ctx.lastReason = nearest.near.reason;
+        ctx.blockPoint = { x: nearest.near.x, y: nearest.near.y };
+        if (nearest.far.along > nearest.near.along)
+            ctx.blockPointFar = { x: nearest.far.x, y: nearest.far.y };
+        return true;
     }
     return false;
 }
@@ -534,6 +638,11 @@ function _tokenLosPoints(token, aCenter, bCenter)
             { x: originX, y: originY + shape.height },
         ];
     }
+    return _extremeLosPoints(center, verts, aCenter, dx, dy);
+}
+
+function _extremeLosPoints(center, verts, aCenter, dx, dy)
+{
     let leftPt = center;
     let rightPt = center;
     let leftBest = -1;
@@ -554,6 +663,33 @@ function _tokenLosPoints(token, aCenter, bCenter)
         }
     }
     return [center, leftPt, rightPt];
+}
+
+function _cellVerts(centers)
+{
+    const verts = [];
+    for (const center of centers)
+        verts.push(...(canvas.grid.getVertices(canvas.grid.getOffset(center)) ?? []));
+    return verts;
+}
+
+// A bare point gets its cell footprint's silhouette so it rays like a token of that size.
+function _pointLosPoints(point, aCenter, cellCenters = null)
+{
+    if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
+        return [point, point, point];
+    let verts = null;
+    try
+    {
+        verts = _cellVerts(cellCenters?.length ? cellCenters : [point]);
+    }
+    catch
+    {
+        verts = null;
+    }
+    if (!verts?.length)
+        return [point, point, point];
+    return _extremeLosPoints(point, verts, aCenter, point.x - aCenter.x, point.y - aCenter.y);
 }
 
 // Centre plus every silhouette vertex, for the dense LOS fallback.
@@ -746,8 +882,29 @@ export function makeEyeSolidTester(originToken)
 
 function _denseLosClear(tokenA, tokenB, heightA, heightB, edges, ctx)
 {
-    const pointsA = _tokenSamplePoints(tokenA);
-    const pointsB = _tokenSamplePoints(tokenB);
+    return _densePointsClear(_tokenSamplePoints(tokenA), _tokenSamplePoints(tokenB), heightA, heightB, edges, ctx);
+}
+
+// Cell sample set for a bare point: the footprint's centers plus their cells' vertices.
+function _pointSamplePoints(point, cellCenters = null)
+{
+    const centers = cellCenters?.length ? cellCenters : [point];
+    const points = centers.map(center => ({ x: center.x, y: center.y }));
+    if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
+        return points;
+    try
+    {
+        points.push(..._cellVerts(centers));
+    }
+    catch
+    {
+        return points;
+    }
+    return points;
+}
+
+function _densePointsClear(pointsA, pointsB, heightA, heightB, edges, ctx)
+{
     ctx.denseWitness = null;
     for (const pointA of pointsA)
     {
@@ -811,6 +968,60 @@ export function hasLineOfSight(refA, refB)
 function _roundPoint(point)
 {
     return { x: Math.round(point.x), y: Math.round(point.y) };
+}
+
+/**
+ * Forward ray set for sightline rendering: the 3 primary rays with block points,
+ * plus the dense-pass witness when no primary connects.
+ * @param {Token} viewer
+ * @param {Token|{x: number, y: number, h?: number}} target
+ * @returns {{rays: {a: any, b: any, clear: boolean, blockPoint: any}[], witness: {a: any, b: any}|null, heightV: number, heightT: number}|null}
+ */
+export function computeSightlineRays(viewer, target)
+{
+    if (!viewer?.document || !target)
+        return null;
+    const isToken = target instanceof Token;
+    if (isToken && !target.document)
+        return null;
+    const edges = _collectSightEdges();
+    const heightV = getTokenVisionLOS(viewer);
+    const heightT = isToken ? getTokenVisionLOS(target) : (target.h ?? heightV);
+    const centerV = viewer.center;
+    const centerT = isToken ? target.center : { x: target.x, y: target.y };
+    const cellCenters = (!isToken && Array.isArray(target.cells) && target.cells.length) ? target.cells : null;
+    const pointsV = _tokenLosPoints(viewer, centerV, centerT);
+    const pointsT = isToken ? _tokenLosPoints(target, centerV, centerT) : _pointLosPoints(centerT, centerV, cellCenters);
+    const ctx = {
+        skipPrefixA: `la-block-los-${viewer.document.id}-`,
+        skipPrefixB: isToken ? `la-block-los-${target.document.id}-` : 'la-block-los-<none>-',
+        centerA: centerV,
+        centerB: centerT,
+        radiusA: Math.max(viewer.w, viewer.h) / 2,
+        radiusB: isToken ? Math.max(target.w, target.h) / 2 : 0,
+        nearestBlock: true,
+    };
+    const rays = pointsV.map((origin, index) =>
+    {
+        ctx.blockPoint = null;
+        const clear = !_segmentBlocked(origin, heightV, pointsT[index], heightT, edges, ctx);
+        return {
+            a: { ...origin },
+            b: { ...pointsT[index] },
+            clear,
+            blockPoint: clear ? null : (ctx.blockPoint ? { ...ctx.blockPoint } : null),
+        };
+    });
+    let witness = null;
+    if (!rays.some(ray => ray.clear))
+    {
+        const denseClear = isToken
+            ? _denseLosClear(viewer, target, heightV, heightT, edges, ctx)
+            : _densePointsClear(_tokenSamplePoints(viewer), _pointSamplePoints(centerT, cellCenters), heightV, heightT, edges, ctx);
+        if (denseClear && ctx.denseWitness)
+            witness = { a: { ...ctx.denseWitness.from }, b: { ...ctx.denseWitness.to } };
+    }
+    return { rays, witness, heightV, heightT };
 }
 
 // Console diagnostic (lancerLosDump()): prints ray endpoints, per-ray reason, and nearby wall edges to copy.
@@ -958,6 +1169,7 @@ function _drawLosDebug()
                 centerB: targetCenter,
                 radiusA: Math.max(effectiveViewer.w ?? 0, effectiveViewer.h ?? 0) / 2,
                 radiusB: Math.max(effectiveTarget.w ?? 0, effectiveTarget.h ?? 0) / 2,
+                nearestBlock: true,
             };
             let anyClear = false;
             for (let index = 0; index < viewerPoints.length; index++)
@@ -975,6 +1187,16 @@ function _drawLosDebug()
                 const labelPoint = (!clear && ctx.blockPoint) ? ctx.blockPoint : { x: (viewerPoints[index].x + targetPoints[index].x) / 2, y: (viewerPoints[index].y + targetPoints[index].y) / 2 };
                 reasonText.position.set(labelPoint.x, labelPoint.y);
                 _losDebugLayer.addChild(reasonText);
+                if (!clear && ctx.blockPointFar)
+                {
+                    const exitText = new PIXI.Text('exit', {
+                        fontFamily: 'monospace', fontSize: 10, fill: 0xff2222, stroke: 0x000000, strokeThickness: 3,
+                    });
+                    exitText.anchor.set(0.5, 0.5);
+                    exitText.alpha = 0.6;
+                    exitText.position.set(ctx.blockPointFar.x, ctx.blockPointFar.y);
+                    _losDebugLayer.addChild(exitText);
+                }
             }
             if (!anyClear)
             {
@@ -1211,6 +1433,8 @@ class DetectionModeLancerLosShadow extends DetectionMode
             return false;
         if (_sensorCanDetect(visionSource, target))
             return false;
+        if (_losCanDetect(target))
+            return false;
         return _losVetoed(visionSource, target);
     }
 
@@ -1245,6 +1469,8 @@ class DetectionModeLancerAwareness extends DetectionMode
         // Sensor wins: if the same observer's sensor mode would detect this target, suppress awareness.
         if (_sensorCanDetect(visionSource, target))
             return false;
+        if (_losCanDetect(target))
+            return false;
         return true;
     }
 
@@ -1254,6 +1480,28 @@ class DetectionModeLancerAwareness extends DetectionMode
             return super._testRange(visionSource, mode, target, test);
         return true;
     }
+}
+
+// LOS wins: a full reveal from any of the user's sources suppresses the silhouette modes,
+// which testVisibility source order could otherwise let win.
+function _losCanDetect(target)
+{
+    if (!_getSetting(SETTING_LOS))
+        return false;
+    const losMode = CONFIG.Canvas.detectionModes.lancerLineOfSight;
+    if (!losMode)
+        return false;
+    for (const source of canvas?.effects?.visionSources?.values?.() ?? [])
+    {
+        if (!source.active)
+            continue;
+        const entry = source.object?.document?.detectionModes?.find(modeEntry => modeEntry.id === 'lancerLineOfSight');
+        if (!entry?.enabled)
+            continue;
+        if (losMode._canDetect(source, target))
+            return true;
+    }
+    return false;
 }
 
 function _sensorCanDetect(visionSource, target)
@@ -1314,6 +1562,8 @@ class DetectionModeLancerSensor extends DetectionMode
             return false;
         const mode = target.document?.getFlag?.(MODULE_ID, 'awarenessMode');
         if (mode && mode !== 'default')
+            return false;
+        if (_losCanDetect(target))
             return false;
         return true;
     }
@@ -1430,7 +1680,7 @@ function _registerVisionSettings()
     });
     game.settings.register(MODULE_ID, SETTING_LOS, {
         name: 'Lancer Line of Sight',
-        hint: 'Wall-based reciprocal line of sight: reveals tokens that can see you, dims those you have no clear line to.',
+        hint: 'Reciprocal line of sight blocked by walls: reveals tokens that can see you, dims those you have no clear line to.',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1438,7 +1688,7 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_LOS_HEIGHT_RULE, {
-        name: 'Lancer Line of Sight: height rule',
+        name: 'Height rule',
         hint: 'Discrete follows the size rules. Trigonometric follows the real sightline, so peeks over walls fade with distance.',
         scope: 'world',
         config: false,
@@ -1451,7 +1701,7 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_LOS_DEBUG, {
-        name: 'Lancer Line of Sight: debug overlay',
+        name: 'Debug overlay',
         hint: 'Draw the tested sightlines from controlled tokens; green clear, red blocked.',
         scope: 'client',
         config: false,

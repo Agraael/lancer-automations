@@ -56,7 +56,20 @@ Each definition can declare:
 
 - Optional `onInit` (runs once when a token enters the scene/combat) and `onMessage` (cross-client request).
 
-The engine pumps every trigger through this pipeline for every reactor candidate.
+### Vocabulary
+
+The names used by every callback and the rest of this doc:
+
+| Name | Meaning |
+|---|---|
+| trigger | a game event turned into a dispatch: a trigger type plus a data payload |
+| `triggerData` | the payload your callbacks receive. Enriched per reactor, carries the helpers and cancel functions |
+| `triggeringToken` | the token whose action fired the trigger |
+| reactor / `reactorToken` | the token being checked for a reaction, the one reacting (nothing to do with the mech part) |
+| `item` | the reactor's matched item. `null` for general activations |
+| `activationName` | the name of the action at the action path, else the item's name, else the general activation's name |
+| LID | Lancer ID, `item.system.lid`. Stable identifier, same across all copies of an item |
+| flow | the Lancer system's step pipeline for one action (attack, damage, activation). Every chat card is the output of a flow |
 
 <br>
 
@@ -78,7 +91,7 @@ flowchart TD
     F --> G{"General reactions<br/>matched by name<br/>or unconditional?"}
     G --> H["Run filters + evaluate()"]
     H --> I{"autoActivate?"}
-    I -- Yes --> J["activateReaction()<br/>runs immediately"]
+    I -- Yes --> J["activateReaction()<br/>now, or after the sweep<br/>on cancellable triggers"]
     I -- No --> K["Push to reactionQueue"]
     K --> L["After all tokens processed,<br/>show summary popup<br/>via socket"]
     L --> M["User clicks Activate"]
@@ -91,13 +104,9 @@ flowchart TD
 
 What the engine does for one trigger:
 
-1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires these helpers onto `data`:
+1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires the reaction helpers (`startRelatedFlow`, `startRelatedFlowToReactor`, `sendMessageToReactor`, `debugActivation`) onto `triggerData`. Signatures in [section 8](#8-clients-and-sockets).
 
-    - `startRelatedFlow` / `startRelatedFlowToReactor` - launch the reacting item's own default flow, optionally on a specific user's client and with injected `extraData`. Full signatures in [section 8](#8-clients-and-sockets).
-    - `sendMessageToReactor` - remote RPC to an `onMessage` handler. Full signature in [section 8](#8-clients-and-sockets).
-    - `debugActivation(label?)` - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console (expandable) and returns a summary. Available in `evaluate` and `activationCode`, plus `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`. Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
-
-2. **Reactor sweep.** Every token on the scene is a potential reactor. Hidden tokens are skipped when the trigger came from someone else.
+2. **Reactor sweep.** Every token on the scene is a potential reactor. When the *triggering* token is hidden, only the reactors that are the mover itself or one of its targets are considered. Everyone else is skipped.
 
 3. **Distance enrichment.** For each reactor, two values are computed once and merged into a per-reactor copy of the trigger data:
 
@@ -108,14 +117,16 @@ What the engine does for one trigger:
 
 5. **General reactions second.** Walk the flat list of general activations that listen to this trigger, and run the filter chain.
 
-6. **Filter chain** (any failure = skip): `outOfCombat`, `triggerSelf` / `triggerOther` / `triggerTarget`, `onlyOnSourceMatch`, reaction availability, `dispositionFilter`, `distanceFilter`. (Details in [section 4](#4-filters-in-order).)
+6. **Filter chain** (any failure = skip). Order and details in [section 4](#4-filters-in-order).
 
 7. **`evaluate()`** runs synchronously (see [section 5](#5-the-four-callbacks)). Exceptions are caught and logged, and the activation is skipped on error.
 
 8. **Branch** on `autoActivate`:
 
-    - **true**: `activateReaction()` runs right away, on the local client.
+    - **true**: `activateReaction()` runs on the local client.
     - **false**: the entry is pushed to `reactionQueue`.
+
+    On the seven cancellable triggers (`onPreMove`, `onPreStructure`, `onPreStress`, `onPreStatusApplied`, `onPreStatusRemoved`, `onPreHpChange`, `onPreHeatChange`) auto activations are not run inline. They are collected and run after the whole sweep, triggering token first, stopping at the first cancel. That ordering is why Engagement beats Overwatch.
 
 9. **Summary popup.** After every token is processed, if the queue is non-empty, the engine builds a summary popup, decides who sees it (per the `reactionNotificationMode` setting), and broadcasts it via socket.
 
@@ -129,6 +140,19 @@ Filters and `evaluate` run for every reactor on the scene, every time a matching
 
 ## 3. Item vs General Activations
 
+### Picking one
+
+| If you want to... | Use |
+|---|---|
+| React when a specific weapon, system, or NPC feature is used | Item, with `onlyOnSourceMatch: true` |
+| React when any hostile starts moving in your threat | General, no source match |
+| Apply a passive effect at scene-load to anyone with a feature | Item, `onInit` only (no triggers) |
+| Build a one-off rule that applies to all tokens | General |
+| React on a specific deployable's action (or its deploy) | Deployable LID (`actor.system.lid`), with `onlyOnSourceMatch: true` |
+| React only as one specific actor or deployable instance | Actor UUID (`actor.uuid`) in the LID field, with `onlyOnSourceMatch: true` |
+| React once per event as the scene, not per token | General with `sceneReactor: "add"` or `"only"`, `sceneId` to limit it to one scene |
+| React when you deploy something yourself | Item LID that grants the deployable, `triggers: ["onDeploy"]`, `triggerSelf: true` |
+
 ### Item activation
 
 - Registered under a specific **item LID** (e.g. `"npcf_dispersal_shield_priest"`).
@@ -137,7 +161,7 @@ Filters and `evaluate` run for every reactor on the scene, every time a matching
 
 - The matched item is passed to your callbacks as the `item` argument.
 
-- `onlyOnSourceMatch: true` means: *the activation only fires if the item that triggered the event has the same LID as the activation's LID*. This is what makes "react when **this** weapon is used" work. Without it, your activation would also try to fire when the user activates an unrelated item or moves.
+- `onlyOnSourceMatch: true` means: *the activation only fires if the item that triggered the event has the same LID as the activation's LID*. Without it, your activation would also try to fire when the user activates an unrelated item or moves.
 
 - When a reactor owns several items sharing the triggering LID, only the exact triggering document fires (same-LID dedupe), so duplicate copies of the same item don't each react.
 
@@ -203,41 +227,40 @@ Use this when an item or deployable LID is too broad: a LID-keyed reaction fires
 
 - A world actor's UUID (`Actor.<id>`, the prototype) matches every token spawned from it, linked or not. An unlinked token's own `actor.uuid` (`Scene.<id>.Token.<id>.Actor.<id>`) matches that one placed token only.
 
-### Picking one
-
-| If you want to... | Use |
-|---|---|
-| React when a specific weapon, system, or NPC feature is used | Item, with `onlyOnSourceMatch: true` |
-| React when any hostile starts moving in your threat | General, no source match |
-| Apply a passive effect at scene-load to anyone with a feature | Item, `onInit` only (no triggers) |
-| Build a one-off rule that applies to all tokens | General |
-| React on a specific deployable's action (or its deploy) | Deployable LID (`actor.system.lid`), with `onlyOnSourceMatch: true` |
-| React only as one specific actor or deployable instance | Actor UUID (`actor.uuid`) in the LID field, with `onlyOnSourceMatch: true` |
-| React once per event as the scene, not per token | General with `sceneReactor: "add"` or `"only"`, `sceneId` to limit it to one scene |
-| React when you deploy something yourself | Item LID that grants the deployable, `triggers: ["onDeploy"]`, `triggerSelf: true` |
-
 <br>
 
 ---
 
 ## 4. Filters, in Order
 
-Filters short-circuit. The order matters because earlier filters are cheaper:
+Filters short-circuit, in this order (rows 6 and 7 apply to item activations only):
 
 | # | Filter | Behavior |
 |---|---|---|
-| 1 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
-| 2 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. |
-| 3 | `onlyOnSourceMatch` | See [section 3](#3-item-vs-general-activations) for the different meaning across item, general, deployable, and Actor-UUID reactions. The engine matches the triggering item LID, deployable LID, or triggering actor UUID against the registered key. |
-| 4 | `checkReaction` | If set (default `true`), skip the reaction when the reactor has no reaction left this round. Spending is separate: the world setting `consumeReaction`. |
-| 5 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed, otherwise `CONST.TOKEN_DISPOSITIONS`. |
-| 6 | `distanceFilter` | Compares the precomputed `distanceToTrigger` against the configured max range. |
-| 7 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
-| 8 | `evaluate()` | Your custom predicate. Last gate. |
+| 1 | `onlyOnSourceMatch` | Matches the triggering item LID, deployable LID, or actor UUID against the registered key. Meaning per kind in [section 3](#3-item-vs-general-activations). |
+| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
+| 3 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. **`triggerOther` defaults to `true`**: it only skips when you set it to exactly `false`. |
+| 4 | `checkReaction` | Skip the reaction when the reactor has no reaction left this round. Runs only when the field is set `true`. Spending is separate: the world setting `consumeReaction`. |
+| 5 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
+| 6 | item availability | A destroyed or disabled item never reacts, same for an action path that no longer resolves. |
+| 7 | `checkUsage` | Skip when the item is unloaded, out of uses, uncharged, or past its per-round / per-turn tag limit. Same gate as the editor's Check Usage box, which is **on** unless you clear it. A config registered from code that omits the field gets no gate at all. |
+| 8 | `dispositionFilter` | Array like `["hostile", "friendly"]`. Uses Token Factions multi-team data when installed, otherwise `CONST.TOKEN_DISPOSITIONS`. |
+| 9 | `evaluate()` | Your custom predicate. Last gate. Range checks go here, compare `triggerData.distanceToTrigger`. |
 
-Fail any: that activation is silently skipped for that reactor. No popup, no log entry.
+Fail any: that activation is skipped for that reactor, with no popup. Three cases still speak up: an `onActivation` dropped only by `outOfCombat` warns once, a `checkUsage` on an item that has no usage tag to check warns once, and the **Debug: Out of Combat Warnings** setting warns on every out-of-combat drop. Debug mode ([Automation Engine - Debugging](feature/AUTOMATION_ENGINE.md#debugging-an-automation)) logs which filter dropped it.
 
-**The three identities.** An actor does a thing, everyone may react. `triggerSelf` = the one doing it. `triggerTarget` = the one it is done TO. `triggerOther` = anyone else - and for compatibility it still includes targets, so `triggerTarget` matters when `triggerOther` is off ("target only": Self off, Other off, Target on). It only works on triggers whose payload carries targets (attacks, tech, damage, `onRoll`, `onCheck`, `onInvoluntaryMove`). The editor greys the rest. Target-reactors get `isTarget: true` and `targetEntry` (their own roll/crit on hit/miss triggers), and they still fire when the attacker is hidden - being attacked is knowable. A target-side reaction that cancels (`cancelAttack`, `cancelDamage`) must be `autoActivate`: manual popups routed to another client receive serialized data without the cancel functions.
+**The three identities.** An actor does a thing, everyone may react:
+
+| Gate | Passes when the reactor is... |
+|---|---|
+| `triggerSelf` | the one doing it |
+| `triggerTarget` | one of the event's targets |
+| `triggerOther` | anyone else. It still admits targets, so an older config written before `triggerTarget` existed keeps working. Defaults to on |
+
+- "Target only" is Self off, Other off, Target on.
+- `triggerTarget` only works on triggers whose payload carries targets (attacks, tech, damage, `onRoll`, `onCheck`, `onInvoluntaryMove`). The editor greys the rest.
+- Target-reactors get `isTarget: true` and `targetEntry` (their own roll/crit on hit/miss triggers), and they still fire when the attacker is hidden. Being attacked is knowable.
+- A target-side reaction that cancels (`cancelAttack`, `cancelDamage`) must be `autoActivate`: manual popups routed to another client receive serialized data without the cancel functions.
 
 <br>
 
@@ -245,7 +268,7 @@ Fail any: that activation is silently skipped for that reactor. No popup, no log
 
 ## 5. The Four Callbacks
 
-All four receive `api` as the last argument. All four are wrapped in `try/catch`. Uncaught exceptions are logged to the console, never thrown to the user.
+All four receive `api` as the last argument. All four are wrapped in `try/catch`. Uncaught exceptions are logged to the console, never thrown to the user. Argument names are defined in the [vocabulary](#vocabulary).
 
 ### `evaluate`
 
@@ -253,7 +276,7 @@ All four receive `api` as the last argument. All four are wrapped in `try/catch`
 
 The final filter. Return `true` to allow the activation, `false` to skip it.
 
-**Must be synchronous** for triggers that expose a cancel function (see [section 9](#9-cancel-and-modify)). The engine warns in the console if it detects a `Promise` returned from `evaluate` for one of those triggers.
+**Must be synchronous**, on every trigger. If `evaluate` returns a `Promise` the engine logs a `console.error` and treats the result as `false`, so the activation is dropped.
 
 ### `activationCode`
 
@@ -310,7 +333,7 @@ Two independent dimensions on each reaction config:
 | Value | Effect |
 |---|---|
 | `"code"` | Run your `activationCode` function. The most common choice. |
-| `"flow"` | Launch the reaction's own flow: the `reactionPath` action, else the item's first Reaction action, else the system flow, else a generic chat card (weapons get this, and it never rolls an attack). General reactions post a trigger/effect card. |
+| `"flow"` | Launch the reaction's own flow: the `reactionPath` action, else the item's first Reaction action, else its first action, else the system flow, else a generic chat card (weapons get this, and it never rolls an attack). General reactions post a trigger/effect card. |
 | `"macro"` | Execute a Foundry macro by name (`activationMacro` field). |
 | `"none"` | Do nothing. Typically only used for `onInit`-only reactions. |
 
@@ -323,7 +346,7 @@ Macro/code only. Ignored for `"flow"` and `"none"`.
 | `"instead"` | Your code runs alone. Default for item reactions. |
 | `"after"` | The reaction's own flow/card fires alongside your code. Default for general reactions. |
 
-> `activationMode` never touches the flow you are *reacting to*. That one runs regardless. And `"after"` is not ordered: both run together via `Promise.all`. For strict ordering use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectData` (see [section 11](#11-flow-data-injection)).
+> `activationMode` never touches the flow you are *reacting to*. That one runs regardless. And `"after"` is not ordered: both run together via `Promise.all`. For strict ordering use `"instead"` and call the flow yourself, or inject into the flow state with `injectBonus` / `injectFlowExtraData` (see [section 11](#11-flow-data-injection)).
 
 ### `sceneReactor`
 
@@ -333,9 +356,16 @@ General activations only. Default `"off"`.
 |---|---|
 | `"off"` | Per-token evaluation as usual. |
 | `"add"` | Also evaluated once as the active scene, on top of the per-token passes. |
-| `"only"` | Evaluated once as the active scene, never per token. |
+| `"only"` | Evaluated once as the active scene, never per token. `onInit` is the exception: it still runs per token. |
 
-The scene pass runs on the GM client only, before the token passes, with `reactorToken` set to a scene stand-in (`isSceneReactor: true`, `.scene`, `.name`, `.document.texture.src`, `actor: null`). Token gates (`triggerSelf` / `triggerOther` / `triggerTarget`, `checkReaction`, `dispositionFilter`, `requireCanProvoke`) do not apply, `outOfCombat` and `evaluate` do. `triggerData` carries `isSceneReactor: true` and `scene`. Use `activationType: "code"` or `"none"`, a flow needs an actor. With `onlyOnSourceMatch` the activation still fires once as the scene, on the action whose name matches.
+The scene pass:
+
+- runs on the GM client only, before the token passes.
+- `reactorToken` is a scene stand-in: `isSceneReactor: true`, `.scene`, `.name`, `.document.texture.src`, `actor: null`.
+- token gates do not apply (`triggerSelf` / `triggerOther` / `triggerTarget`, `checkReaction`, `dispositionFilter`, `requireCanProvoke`). `outOfCombat` and `evaluate` do.
+- `triggerData` carries `isSceneReactor: true` and `scene`.
+- use `activationType: "code"` or `"none"`, a flow needs an actor.
+- with `onlyOnSourceMatch` it still fires once as the scene, on the action whose name matches.
 
 `sceneId` (the Scene select in the editor) limits the whole activation, token passes included, to one scene. Empty means every scene.
 
@@ -359,13 +389,14 @@ The activation runs immediately, on the local client, with no UI. Use this for t
 
 ### Popup
 
-The activation is queued. After every reactor has been checked, all queued entries for the trigger are bundled into a single **summary popup**. Each entry shows the reactor's name and the activation's label. Clicking an entry expands its details. Clicking **Activate** runs that single entry's `activationCode`.
+The activation is queued. After every reactor has been checked, all queued entries for the trigger are bundled into a single **summary popup**. Each entry shows the reactor's name and the activation's label. Clicking an entry expands its details, **Activate** runs that entry's `activationCode`.
 
-Multiple popups can be open at the same time: the system queues them and shows a "pending" badge so nothing is lost.
+> [!WARNING]
+> Only one activation popup exists at a time. If a second trigger raises its own popup, the previous one is closed and its unclicked entries are gone. There is no queue and no pending badge. Anything that must not be missed belongs on `autoActivate`.
 
 ### Who sees the popup
 
-Controlled by **Module Settings > Reaction Notification Mode**:
+Controlled by **Module Settings > Activation Notification Mode**:
 
 | Setting | Recipients |
 |---|---|
@@ -411,6 +442,8 @@ triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
 
 **`sendMessageToReactor(data, userId = null, opts = {})`** <sup>async</sup> → `any` - RPC to the reactor's `onMessage` (same `opts`). With `wait:true`, returns its result. Delegation primitive for GM-only work.
 
+**`debugActivation(label?)`** - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console and returns the same as an object. Also on the api as `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`. Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
+
 <br>
 
 ---
@@ -421,13 +454,17 @@ A subset of triggers fire **before** the underlying action commits. From inside 
 
 ### The synchronous rule
 
-The cancel/modify functions only work **synchronously**. The engine continues past your callback as soon as it returns a non-`Promise`. If you write an async function and `await` something before calling `cancelAttack(...)`, the underlying flow has already moved on.
+The cancel/modify functions only work **synchronously**. The operative rule is one line: **call the cancel or modify function before your first `await`.** Everything after an `await` reaches the flow too late. An `async` `activationCode` is fine as long as the cancel call happens in its synchronous head, which is exactly the [`preConfirm` / `postChoice` pattern](#why-preconfirm-and-postchoice-exist) below.
 
-Two ways to handle this:
+#### What `awaitActivationCompletion` actually does
 
-1. **Keep `evaluate` and `activationCode` synchronous.** Do all the work in pure synchronous code.
+It is not the escape hatch it looks like.
 
-2. **Set `awaitActivationCompletion: true`** on the reaction config. The engine then `await`s your activation before continuing the flow, so you can do async work and still cancel. Without this flag, async work + a cancel call logs a warning and the cancel is silently ignored.
+- **The default already awaits.** The engine awaits an auto activation unless the flag is set to exactly `false`. Leaving it unset awaits.
+
+- **On the seven cancellable triggers it does nothing.** `onPreMove`, `onPreStructure`, `onPreStress`, `onPreStatusApplied`, `onPreStatusRemoved`, `onPreHpChange` and `onPreHeatChange` defer their auto activations to the end of the sweep and invoke them without awaiting, so the flag is never read. This is the case the flag looks like it should fix, and it is the one case it cannot.
+
+- **Its one real effect** is on activations written as code *strings* in the editor. An `async` string that mentions a cancel/modify function, or sits on a timing-sensitive trigger, raises a permanent `ui.notifications.warn` telling you it will probably fail to block. Setting the flag suppresses that warning. A config registered from code with real functions never hits it.
 
 ### Cancel functions
 
@@ -435,12 +472,14 @@ Signature: `(reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, po
 
 | Trigger | Cancel function | Effect |
 |---|---|---|
+| `onPreMove` | `cancel()` | Stops the move with no card and no reason text |
 | `onPreMove` | `cancelTriggeredMove` | Stops the move outright |
 | `onPreMove` | `changeTriggeredMove(newPos, extraData?, reason?, allowConfirm?, ...)` | Redirects the move to a new destination |
 | `onInitAttack` | `cancelAttack` | Aborts the attack flow |
 | `onInitTechAttack` | `cancelTechAttack` | Aborts the tech attack flow |
 | `onInitCheck` | `cancelCheck` | Aborts the stat check flow |
 | `onInitActivation` | `cancelAction` | Aborts the activation flow |
+| `onInitEndActivation` | `cancelAction` | Suppresses the end card, the item is already inactive |
 | `onPreStatusApplied` / `onPreStatusRemoved` | `cancelChange` | Blocks the status change |
 | `onPreStructure` | `cancelStructure` | Skips the structure roll |
 | `onStructure` | `cancelStructureOutcome` | Stops the outcome step (after the roll) |
@@ -448,20 +487,22 @@ Signature: `(reasonText?, title?, allowConfirm?, userIdControl?, preConfirm?, po
 | `onStress` | `cancelStressOutcome` | Stops the outcome step (after the roll) |
 | `onPreHpChange` | `cancelHpChange` | Blocks the HP change |
 | `onPreHeatChange` | `cancelHeatChange` | Blocks the heat change |
+| `onInvoluntaryMove` | `cancel(reason)` | Blocks the forced move |
 
 ### Modify functions
 
-Same signature as cancels, with `newValue` prepended: `(newValue, reason?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)`. They block the original update and commit the replacement value instead.
+They block the original update and commit the replacement value instead. `modifyHpChange` and `modifyHeatChange` take `(newValue, reason?, allowConfirm?, userIdControl?, preConfirm?, postChoice?, opts?)`. Note the missing `title`: they drop that slot, unlike the cancels. Check the per-trigger signature below before passing positional arguments.
 
 | Trigger | Function | Effect |
 |---|---|---|
 | `onPreHpChange` | `modifyHpChange(newValue, ...)` | Override the HP value being applied |
 | `onPreHeatChange` | `modifyHeatChange(newValue, ...)` | Override the heat value being applied |
 | `onStructure` / `onStress` | `modifyRoll(newTotal)` | Override the roll total before outcome steps |
+| `onRoll` | `changeRoll(newTotal, reason?, title?, allowConfirm?, userIdControl?)` | Override any roll total. This one does keep `title` |
 
 `onStructure` / `onStress` also expose `triggerData.rollResult` (total) and `triggerData.rollDice` (raw die results, useful for detecting double-1s or doubles).
 
-### Why `preConfirm` / `postChoice` exist
+### Why `preConfirm` and `postChoice` exist
 
 Foundry's `preUpdate*` hooks (move, actor update, etc.) are non-blocking: if your handler returns a Promise, Foundry does not wait for it. Anything after an `await` happens too late to stop the update.
 
@@ -536,19 +577,17 @@ triggerData.modifyHpChange(
 
 ## 10. Economy and Frequency
 
-The Lancer reaction economy (1 reaction per round) has two separate parts: the reaction config's `checkReaction` (default `true`) filters out a reactor with no reaction left before `evaluate` runs, and the world setting `consumeReaction`, when enabled, spends one reaction each time a `Reaction`-type action fires.
+The Lancer reaction economy (1 reaction per round) has two separate parts: the reaction config's `checkReaction` filters out a reactor with no reaction left before `evaluate` runs (only when set `true`), and the world setting `consumeReaction`, when enabled, spends one reaction each time a `Reaction`-type action fires.
 
 Other frequency-related fields:
 
-- `actionType`: labels the popup entry (`"Reaction"`, `"Quick Action"`, `"Full Action"`, `"Protocol"`, `"Free Action"`, `"Other"`). Display only.
+- `actionType`: seven values, `"Automation"` (the default), `"Reaction"`, `"Free Action"`, `"Quick Action"`, `"Full Action"`, `"Protocol"`, `"Other"`. It labels the popup entry, but it is not only a label: it is written into the flow data as the activation, which is what `consumeReaction` reads. Set it to `"Reaction"` and the activation can spend the token's reaction.
 
-- `frequency`: display string (`"1/Round"`, `"1/Combat"`). Currently display-only for non-reactions. The engine does not enforce per-combat counters automatically.
-
-- `usesPerRound`: for reactions, enforced via the reaction tracker.
+- `frequency`: display string (`"1/Round"`, `"1/Combat"`) shown on the popup entry. Never enforced.
 
 - `outOfCombat`: opt-in for triggers that wouldn't normally fire outside combat.
 
-For activations that need their own per-round / per-target tracking (e.g. "1x per target per round"), maintain it yourself in actor flags. The Triangulation Ping NPC feature is the canonical example.
+Real limits come from two places. Item tags (`tg_round`, `tg_turn`, limited uses, loading, recharge) are enforced by the `checkUsage` filter. Everything else uses the gate API: `await api.consumeOncePerRound(reactorToken, 'my_key', target)` is true the first time this round per target, and `consumeGate` covers longer windows. See [Flags API](API_FLAGS.md). The Triangulation Ping NPC feature is the worked example.
 
 <br>
 
@@ -556,7 +595,7 @@ For activations that need their own per-round / per-target tracking (e.g. "1x pe
 
 ## 11. Flow Data Injection
 
-Inside an `activationCode` whose trigger carries a `flowState` (most attack/damage/check/activation triggers), you can mutate the in-progress flow:
+Inside an `activationCode` whose trigger carries a `flowState` (most attack/damage/check/activation triggers), you can mutate the in-progress flow. Three methods are wired onto the state:
 
 ```js
 triggerData.flowState.injectBonus({
@@ -566,10 +605,12 @@ triggerData.flowState.injectBonus({
     val: 1
 });
 
-triggerData.flowState.injectData({ myFlag: true });
+triggerData.flowState.injectFlowExtraData({ myFlag: true });
+
+const extra = triggerData.flowState.getFlowExtraData();
 ```
 
-**Lifetime.** Injected values live on `flowState.la_extraData` for the rest of the flow. They're also serialized onto the resulting chat message, so a damage card produced later in the same flow can still read what was injected during the attack step.
+**Lifetime.** `injectFlowExtraData` values live on `flowState.la_extraData` for the rest of the flow. They're also serialized onto the resulting chat message, so a damage card produced later in the same flow can still read what was injected during the attack step. `injectBonus` is different: a bonus is dropped from the flow's bonus list the moment it is actually applied, so it lands on one roll and not the next.
 
 Use this when you need a bonus to apply *exactly to this one roll/attack/damage card* without leaving a global bonus or a status effect on the actor.
 
@@ -587,13 +628,16 @@ An activation config can target a specific sub-action of an item instead of the 
 
 Common forms:
 
-- `"system.actions.0"` - the first action on a regular item
+- `"actions[0]"` - the first action on a regular item
 
 - `"extraActions.Fall Prone"` - an extra action stored on the item via `addExtraActions`
 
 - `"ranks[2]"` - rank-3 of a talent
 
 - `"profiles[0]"` - a weapon profile, fires when switched to
+
+> [!WARNING]
+> The path is relative to `item.system`, so it carries **no `system.` prefix**. `"system.actions.0"` resolves `item.system.system`, which is `undefined`, and the activation quietly never fires. Only the flow launcher tolerates the prefix, which is why a config can look half-working. The Find Action browser always emits the correct form.
 
 At evaluation time the engine walks the path into `item.system` (or the `extraActions` flag), pulls the `name` off the action found there, and uses it as `activationName`. If `onlyOnSourceMatch` is set, the activation only fires when the triggering action's name matches the one at the path.
 
@@ -614,11 +658,11 @@ Typical uses: Sniper's Mark adds a "Fall Prone" action, Limitless adds "Overchar
 
 `activation` field must use TAH's short form (`"Quick"`, `"Full"`, `"Protocol"`, `"Free"`, `"Reaction"`, `"Quick Tech"`, `"Full Tech"`). Not `"Quick Action"` etc. TAH filters by strict equality.
 
-**Binding an activation to an extra action.** There are two ways, picked based on where the extra action was stored:
+**Binding an activation to an extra action.** Two ways:
 
-- **By general name** - when the extra action is injected onto a token or actor (not tied to a specific item), register a *general* activation whose name matches the action name. Source matching is done on the activation name directly.
+- **By general name** - register a *general* activation whose name matches the action name. Source matching is done on the activation name directly. This is the only option for an action injected onto a token or actor, and it also works for an item-stored one (Limitless binds its item-stored "Overcharge (NPC)" this way).
 
-- **By action path** - when the extra action is injected onto an item, register an *item* activation with `reactionPath: "extraActions.<Name>"`. The engine resolves the sub-action through the flag lookup the same way it walks `system.actions.N`.
+- **By action path** - when the extra action is injected onto an item, register an *item* activation with `reactionPath: "extraActions.<Name>"`. The engine resolves the sub-action through the flag lookup the same way it walks `actions[N]`.
 
 **Access.** Extra actions are currently only surfaced through the Lancer Automations TAH. Other UIs (the native Lancer sheet, the native action bar, etc.) do not show them. If the TAH is disabled, extra actions are invisible to the user even though they still fire when triggered from code.
 
@@ -626,7 +670,7 @@ Typical uses: Sniper's Mark adds a "Fall Prone" action, Limitless adds "Overchar
 
 For items that stay "on" after being activated (auras, persistent effects, stances), the engine tracks an activated state per token.
 
-- `setItemAsActivated(item, token, endActivation, endActionDescription)` marks the item as active. Adds an extra action (the "end action") with the given activation type and description, e.g. `"Protocol"` and `"Collapse the Defense Net"`. That action shows up in the TAH so the user can click to end.
+- `setItemAsActivated(item, token, endAction, endActionDescription = "", options = {})` marks the item as active. Adds an extra action (the "end action") with the given activation type and description, e.g. `"Protocol"` and `"Collapse the Defense Net"`. That action shows up in the TAH so the user can click to end. `options` covers the lock on the original action: `blockAction` (on by default), `actionName`, `blockReason`.
 
 - `getActivatedItems(token)` returns the currently-active items on a token. Use in `evaluate` to gate other reactions behind "only while this item is on".
 
@@ -634,11 +678,12 @@ For items that stay "on" after being activated (auras, persistent effects, stanc
 
 ### How the three combine
 
-When the end action fires, it goes through the same activation flow as any action on the item. That means `onActivation` fires **again**, but this time with `triggerData.endActivation === true`. A single reaction can handle both setup and teardown by checking that flag:
+The end action raises `onEndActivation` instead of `onActivation` (and `onInitEndActivation` instead of `onInitActivation`). List both triggers to handle setup and teardown in one reaction:
 
 ```js
+triggers: ["onActivation", "onEndActivation"],
 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
-    if (triggerData.endActivation) {
+    if (triggerType === "onEndActivation") {
         await teardownEffect(reactorToken, item, api);
         return;
     }
@@ -659,7 +704,7 @@ evaluate: function (triggerType, triggerData, reactorToken, item, activationName
 
 Forced teardown from a separate trigger (e.g. the wearer gets stunned and the field collapses) calls `endItemActivation` directly, or calls the teardown helper and then `endItemActivation` to clean up the end-action row.
 
-Defense Net in `startups/itemActivations.js` is the reference implementation (`onActivation` for setup + `endActivation` teardown, `onStatusApplied` with `getActivatedItems` to force-collapse when stunned/jammed, `onHeatGain` / `onTechMiss` reactions gated by `getActivatedItems`).
+Defense Net in `startups/itemActivations.js` is the reference implementation (`onActivation` for setup + `onEndActivation` teardown, `onStatusApplied` with `getActivatedItems` to force-collapse when stunned/jammed, `onHeatGain` / `onTechMiss` reactions gated by `getActivatedItems`).
 
 <br>
 
@@ -705,11 +750,11 @@ External registrations are merged with **last-write-wins** semantics: re-registe
 
 ### C. Built-in defaults
 
-The same two functions are used by `startups/itemActivations.js` for the bundled NPC/feature automations. The result is identical to B. The only difference is where it comes from.
+The same two functions are used by `startups/itemActivations.js` for the bundled NPC/feature automations, with the same result as B.
 
 ### D. Startup scripts
 
-**Module Settings > Activation Manager > Startups tab.** Arbitrary code blocks run once on `ready`. Useful for registering helper functions on the API (`api.registerUserHelper("myHelper", fn)`) so your activation code can call them by name.
+**Module Settings > Activation Manager > Startup tab.** Arbitrary code blocks run once on `ready`. Useful for registering helper functions on the API (`api.registerUserHelper("myHelper", fn)`) so your activation code can call them by name.
 
 ### Override order
 
@@ -721,18 +766,22 @@ For a given key (LID or general name), the resolution order is roughly: **user U
 
 ## 14. Caches and Invalidation
 
-The engine caches:
-
-- **Flat general reaction list.** Built once, used for every general-reaction sweep. Cleared when an item or actor changes (so a new general reaction registered through code becomes visible).
-
-- **Per-actor item list.** Each actor's item set is cached for the LID lookup. Cleared on `updateActor`, `createItem`, `deleteItem`, `updateItem`.
-
-- **Compiled function cache.** UI activations are stored as code strings. The engine compiles them on first use and caches the function. Cleared whenever the UI saves.
-
-If you ever change a reaction in the UI and *don't* see it take effect, fire the manual cache clear:
+If a reaction you just changed or registered doesn't take effect, clear the caches:
 
 ```js
 Hooks.callAll("lancer-automations.clearCaches");
 ```
 
-This is what the UI does internally on save.
+That hook is the **only** thing that invalidates them. Nothing about an item or an actor changing does. Three caches listen to it:
+
+- **Flat general reaction list.** Built once, used for every general-reaction sweep.
+
+- **Per-trigger non-action list.** The general reactions that listen to one trigger, keyed by trigger type.
+
+- **Per-trigger scene list.** The same, for reactions with `sceneReactor` on.
+
+The UI fires the hook on every save, and so does `registerDefaultItemReactions` / `registerDefaultGeneralReactions`. You only need to call it by hand when you have edited a registry from the console.
+
+There is **no per-actor item cache**: `getReactionItems` rebuilds an actor's list from `actor.items` on every trigger. If a reaction stopped firing after an item change, the cache is not why.
+
+Separate from all three, the **compiled function cache** holds the functions built from UI code strings, keyed by code, argument list and source name. The hook does not clear it. The UI's own save path clears it and then fires the hook.

@@ -237,6 +237,12 @@ async function _applyResourceDelta(item, type, delta)
             await item.update({ 'system.uses_per_round.value': _clampAt(cur + delta, Infinity) });
             return Number(item.system?.uses_per_round?.value) || 0;
         }
+        case 'perScene':
+        {
+            const cur = Number(item.system?.uses_per_scene?.value) || 0;
+            await item.update({ 'system.uses_per_scene.value': _clampAt(cur + delta, Infinity) });
+            return Number(item.system?.uses_per_scene?.value) || 0;
+        }
         case 'reserveUsed':
         {
             const used = delta < 0;
@@ -250,7 +256,7 @@ async function _applyResourceDelta(item, type, delta)
 
 /**
  * @param {any} item
- * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'reserveUsed'} type
+ * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'reserveUsed'} type
  * @param {number} [amount=1]
  * @returns {Promise<number|boolean|null>}
  */
@@ -265,7 +271,7 @@ export async function consumeItemResource(item, type, amount = 1)
 
 /**
  * @param {any} item
- * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'reserveUsed'} type
+ * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'reserveUsed'} type
  * @param {number} [amount=1]
  * @returns {Promise<number|boolean|null>}
  */

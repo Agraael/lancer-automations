@@ -899,7 +899,9 @@ export async function onActivationStep(state)
             ui.notifications.warn(`${token.name} has no reaction available!`);
     }
 
-    await handleTrigger('onActivation', {
+    const isEndActivation = !!state.la_extraData?.endActivation;
+
+    await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', {
         triggeringToken: token,
         actionType: actionType,
         actionName: actionName,
@@ -907,7 +909,7 @@ export async function onActivationStep(state)
         actionData,
         deployable,
         reactionJustConsumed,
-        endActivation: state.la_extraData?.endActivation || false,
+        endActivation: isEndActivation,
         extraData: state.la_extraData ?? {},
         flowState: state
     });
@@ -1048,14 +1050,17 @@ export async function onInitActivationStep(state)
         defaultTitle: "ACTIVATION CANCELED",
     });
 
+    const isEndActivation = !!state.la_extraData?.endActivation;
+
     // Called without await, only synchronous evaluate functions work with cancelAction.
-    handleTrigger('onInitActivation', {
+    handleTrigger(isEndActivation ? 'onInitEndActivation' : 'onInitActivation', {
         triggeringToken: token,
         actionType,
         actionName,
         item,
         actionData,
         deployable,
+        endActivation: isEndActivation,
         cancelAction,
         _cancelledBy: state.data._cancelledBy,
         flowState: state

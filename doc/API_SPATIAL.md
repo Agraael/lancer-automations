@@ -11,7 +11,7 @@ Three distance functions. All return distance in **grid spaces** (not pixels).
 | Function | Input | Size-aware | Use case |
 |:---------|:------|:---:|:---------|
 | `getTokenDistance` | Two tokens | Yes | General token-to-token distance. Wraps `getMinGridDistance`. |
-| `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. Optional `includeElevation` adds elevation difference to the planar distance. |
+| `getMinGridDistance` | Two tokens + optional override pos + optional elevation flag | Yes | Iterates all occupied cells of both tokens, returns the shortest cell-to-cell distance. Supports hypothetical positioning via `overridePos1`. With `includeElevation`, distance is `max(horizontal, elevation)`. |
 | `getGridDistance` | Two `{x,y}` world points | No | Raw point-to-point grid distance. Use when you have coordinates, not tokens. |
 
 To find the tokens themselves rather than measure a known pair, use `getTokensInRange`.
@@ -25,13 +25,11 @@ To find the tokens themselves rather than measure a known pair, use `getTokensIn
 api.getTokenDistance(token1, token2, includeElevation)
 ```
 
-Delegates to `getMinGridDistance(token1, token2, null, includeElevation)`.
-
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>token1</kbd> | `Token` | First token |
 | <kbd>token2</kbd> | `Token` | Second token |
-| <kbd>includeElevation</kbd> | `boolean` | If `true`, add the grid-space elevation difference to the planar result |
+| <kbd>includeElevation</kbd> | `boolean` | `true` returns `max(horizontal, elevation)`. Omit it to follow the `count3DDistance` setting |
 
 ```js
 const dist = api.getTokenDistance(reactorToken, moverToken);
@@ -49,16 +47,14 @@ if (dist > 3) return false;
 api.getMinGridDistance(token1, token2, overridePos1, includeElevation)
 ```
 
-Minimum cell-to-cell grid distance across all occupied cell pairs.
-
-With `includeElevation`, the grid-space elevation difference is added to the planar distance (1 horizontal + 2 vertical = 3). Default ignores it.
+With `includeElevation`, the result is `max(planar distance, elevation difference)` in grid spaces: the dominant axis wins, so 1 horizontal + 2 vertical = 2.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>token1</kbd> | `Token` | *required* | First token |
 | <kbd>token2</kbd> | `Token` | *required* | Second token |
 | <kbd>overridePos1</kbd> | `{ x: number; y: number }` | `null` | Evaluate as if token1 were at this world position |
-| <kbd>includeElevation</kbd> | `boolean` | `false` | If `true`, add `\|elevation1 − elevation2\|` (in grid spaces) to the planar result |
+| <kbd>includeElevation</kbd> | `boolean` | `count3DDistance` setting | If `true`, the planar distance competes with `\|elevation1 − elevation2\|` (in grid spaces) and the larger wins |
 
 ```js
 const planar = api.getMinGridDistance(tokenA, tokenB);
@@ -103,13 +99,13 @@ Tokens within `range` spaces of a token or a world point, nearest first. Size-aw
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>origin</kbd> | `Token` or `{ x, y, elevation? }` | *required* | Measured from every cell of the token, or from the point's cell |
-| <kbd>range</kbd> | `number` or `'sensors'` | `1` | Spaces; `'sensors'` reads the origin actor's sensor range |
+| <kbd>range</kbd> | `number` or `'sensors'` | `1` | Spaces. `'sensors'` reads the origin actor's sensor range |
 | <kbd>disposition</kbd> | `'friendly'` \| `'hostile'` | any | Faction-correct, Token Factions aware |
 | <kbd>includeSelf</kbd> | `boolean` | `false` | |
 | <kbd>includeHidden</kbd> | `boolean` | `false` | |
 | <kbd>includeDefeated</kbd> | `boolean` | `false` | Structure or stress at 0 |
 | <kbd>includeDeployables</kbd> | `boolean` | `true` | |
-| <kbd>engageable</kbd> | `boolean` | `false` | Also apply `canEngage`: hostile, non-deployable, no `hidden`/`disengage`/`intangible`, no provoke immunity |
+| <kbd>engageable</kbd> | `boolean` | `false` | Also apply `canEngage`: hostile, non-deployable, structure above 0, no `hidden`/`disengage`/`intangible`, no provoke immunity |
 | <kbd>includeElevation</kbd> | `boolean` | `count3DDistance` setting | A point origin is always elevation-aware |
 | <kbd>filter</kbd> | `(token) => boolean` | `null` | |
 
@@ -133,7 +129,7 @@ const nearBlast = api.getTokensInRange(template.center, { range: 2 });
 api.getEngagedTokens(token, options)
 ```
 
-The tokens `token` is engaged with. Empty unless `token` itself carries the `engaged` status; the returned tokens carry it too. The status is read from both the flagged effect and the actor status, so GM-applied ones count.
+The tokens `token` is engaged with. Empty unless `token` itself carries the `engaged` status, and the returned tokens carry it too. The status is read from both the flagged effect and the actor status, so GM-applied ones count.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -160,7 +156,9 @@ api.getTokenPosition(tokenLike)   // → { x, y, elevation }
 api.samePosition(a, b)            // same x / y / elevation
 ```
 
-Snapshot a token's position and compare it later ("has it moved since?"). `tokenLike` is a Token or TokenDocument; `a`/`b` are position objects.
+Snapshot a token's position and compare it later ("has it moved since?"). `tokenLike` is a Token or TokenDocument, `a`/`b` are position objects.
+
+`getTokenPosition` returns the token's top-left corner (`doc.x` / `doc.y`), not its center. It is not a drop-in destination for `moveToken`, which expects a center point.
 
 </details>
 
@@ -177,14 +175,14 @@ Square + hex. "Center" points drop straight into `moveToken({ destination })`.
 | `getOccupiedCenters(token, overridePos?)` | `Array<{ x, y }>` | Centers of every cell the token occupies. |
 | `getHexCenter(col, row)` | `{ x, y }` center | Cell center from a grid offset. |
 | `pixelToOffset(x, y)` | `{ col, row }` | Grid offset at a world point. |
-| `measureGridDistance(p1, p2)` | `number` | Grid distance between two points. |
+| `measureGridDistance(p1, p2)` | `number` | Distance between two points in scene units, not grid spaces. Divide by `canvas.scene.grid.distance` for spaces, or use `getGridDistance`. |
 | `neighborKeys("col,row")` | `string[]` | Adjacent cell keys (6 hex / 8 square). |
 
 ---
 
 ## Line of Sight
 
-**Beta.** Wall-based, height-aware, reciprocal line of sight - the same test the Lancer LOS detection mode runs. Only meaningful with **Lancer Line of Sight** enabled in the [Vision tab](feature/VISION.md).
+**Beta.** Wall-based, height-aware line of sight - the same test the Lancer LOS detection mode runs. Only meaningful with **Lancer Line of Sight** enabled in the [Vision tab](feature/VISION.md).
 
 <details id="hasLineOfSight">
 <summary><b><code>hasLineOfSight</code></b> → <code>boolean</code></summary>
@@ -195,7 +193,9 @@ Square + hex. "Center" points drop straight into `moveToken({ destination })`.
 api.hasLineOfSight(refA, refB)
 ```
 
-True if `refA` has a clear Lancer line of sight to `refB`. Reciprocal: if A sees B, B sees A. Each argument is a `Token`, `TokenDocument`, or token id. Returns `false` if either can't be resolved.
+True if `refA` has a clear Lancer line of sight to `refB`. Each argument is a `Token`, `TokenDocument`, or token id. Returns `false` if either can't be resolved.
+
+The wall test is reciprocal: if A sees B, B sees A. Blinded is not. With the `blindedSetsVision` setting on, a Blinded token sees adjacent spaces only, and that cuts sight for it alone, so the pair can disagree. Fails open: a token paired with itself, or a destroyed placeable, returns `true`.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -221,7 +221,7 @@ if (!api.hasLineOfSight(reactorToken, targetToken)) return false;
 api.isHostile(reactor, mover)
 ```
 
-Compatible with the Token Factions module.
+True when one side is friendly and the other hostile. NEUTRAL counts as friendly, SECRET counts as hostile. Two hostile tokens are not hostile to each other. Compatible with the Token Factions module, which answers the question itself when active.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -249,12 +249,12 @@ api.canProvokeReaction(triggering, reactor, reasonOut?)
 |:------|:-----|:--------|:------------|
 | <kbd>triggering</kbd> | `Token` | *required* | The token that would provoke |
 | <kbd>reactor</kbd> | `Token` | *required* | The token that would react |
-| <kbd>reasonOut</kbd> | `Object` | `null` | Filled with why it was blocked |
+| <kbd>reasonOut</kbd> | `Array<string>` | `null` | Pass an array. The blocking reason is pushed onto it: `hidden`, `disengage`, `provoke_immunity` or `intangible` |
 
 ```js
-const reason = {};
-if (!api.canProvokeReaction(moverToken, reactorToken, reason))
-    console.log(reason);
+const reasons = [];
+if (!api.canProvokeReaction(moverToken, reactorToken, reasons) && reasons.includes('disengage'))
+    console.log('mover disengaged');
 ```
 
 </details>
@@ -268,7 +268,7 @@ if (!api.canProvokeReaction(moverToken, reactorToken, reason))
 api.isFriendly(token1, token2)
 ```
 
-Compatible with the Token Factions module.
+True when both sides sit on the same side of the line: both friendly, or both hostile. NEUTRAL counts as friendly, SECRET counts as hostile. Two mutually hostile tokens are therefore friendly to each other, so this is not the inverse of `isHostile`. Compatible with the Token Factions module, which answers the question itself when active.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -290,7 +290,7 @@ const allies = canvas.tokens.placeables.filter(t => api.isFriendly(casterToken, 
 api.getRelativeDisposition(viewer, other)
 ```
 
-Disposition of `other` as seen from `viewer`, returned as a `CONST.TOKEN_DISPOSITIONS` value. With Token Factions active it resolves the advanced-team matrix, otherwise it falls back to `other`'s own token disposition. Use instead of `token.disposition` for faction-correct results.
+Disposition of `other` as seen from `viewer`, returned as a `CONST.TOKEN_DISPOSITIONS` value. It resolves the advanced-team matrix only when Token Factions is active **and** its "color from" setting is `advanced-factions`, the one mode that carries the full matrix. Otherwise it falls back to `other`'s own token disposition. Use instead of `token.disposition` for faction-correct results.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -335,12 +335,12 @@ const occupied = new Set(api.getTokenCells(token).map(([row, col]) => `${col},${
 api.getMaxGroundHeightUnderToken(token, terrainAPI)
 ```
 
-Returns the highest terrain height value under any cell occupied by the token. Requires the Terrain Height Tools module API.
+Highest terrain top (`elevation + height`) under any cell the token occupies, in scene units. Only terrain types that are both solid and height-using count, so decorative or non-solid terrain is skipped. Returns `0` with no terrain or no Terrain Height Tools.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token to check |
-| <kbd>terrainAPI</kbd> | `Object` | Terrain Height Tools API object |
+| <kbd>terrainAPI</kbd> | `Object` | Optional. Terrain Height Tools API object, defaults to `globalThis.terrainHeightTools` |
 
 ```js
 const tht = game.modules.get("terrain-height-tools")?.api;
@@ -359,6 +359,8 @@ await api.triggerDangerousZoneFlow(token, damageType, damageValue)
 ```
 
 Rolls an ENG check on the token's actor. On a result below 10 the token is targeted and a damage roll is performed. Dedupes to once per combat round per actor (uses an actor flag in the `lancer-automations` namespace). Outside combat, fires every call.
+
+If the actor is terrain-immune (the `terrain_immunity` status or a `terrain` immunity bonus), a "TERRAIN IMMUNITY" choice card goes to the GM first: ignore the terrain, which consumes an immunity use when the immunity came from a bonus, or apply it anyway and run the check.
 
 Body for a "dangerous terrain" trigger, e.g. a Terrain Height Tools on-enter callback:
 
@@ -381,7 +383,7 @@ await game.modules.get("lancer-automations").api.triggerDangerousZoneFlow(token,
 ## Debug Visualizations
 
 <details id="drawThreatDebug">
-<summary><b><code>drawThreatDebug</code></b><br><b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
+<summary><b><code>drawThreatDebug</code></b> <sup>async</sup><br><b><code>drawDistanceDebug</code></b> <sup>async</sup> → <code>void</code></summary>
 
 <br>
 
@@ -414,7 +416,7 @@ api.drawRangeHighlight(casterToken, range, color, alpha, includeSelf, opts)
 | <kbd>color</kbd> | `number` | `0x00ff00` | Hex color |
 | <kbd>alpha</kbd> | `number` | `0.2` | Opacity (0-1) |
 | <kbd>includeSelf</kbd> | `boolean` | `false` | Include origin cells |
-| <kbd>opts</kbd> | `Object` | `{}` | Extra styling: `lineAlpha`, `lineColor`, `lineWidth`, `glowColor` |
+| <kbd>opts</kbd> | `Object` | `{}` | Styling: `lineAlpha`, `lineColor`, `lineWidth`, `glowColor`, `perimeterAlpha`. Also `los`, which clips the highlight to line of sight and needs the `rangePulseLos` setting, and `freeRange`, spaces around the origin the clip never removes |
 
 ```js
 const gfx = api.drawRangeHighlight(casterToken, 5, 0xff6400, 0.15);

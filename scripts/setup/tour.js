@@ -765,13 +765,13 @@ const TAH_STEPS = [
     {
         id: 'favorites',
         title: 'Favorites',
-        content: 'Ctrl+Right-click any action to mark as favorite. Hover the star tab to open the list.',
+        content: 'Ctrl+Right-click any action to pick which wheel it goes on. The mark on a row says where it lives. Hover the star tab to open the list.',
         selector: `${TAH_ROOT} .la-hud-fav-icon`,
     },
     {
         id: 'action-wheel',
         title: 'Action Wheel',
-        content: 'Press <b>F</b> on a selected token: your favorites form a wheel around it. Click an icon to use it, right-click for its details, hover for the range preview.',
+        content: 'Press <b>F</b> on a selected token: your favorites form a wheel around it. Click an icon to use it, right-click for its details, hover for the range preview. <b>Tab</b> switches to the second wheel once you have one.',
         selector: 'body',
         allowCanvas: true,
         action: async () =>
@@ -785,6 +785,29 @@ const TAH_STEPS = [
         cleanup: async () =>
         {
             if (document.querySelector('.lancer-action-wheel'))
+            {
+                const { closeRadialWheel } = await import('../tools/radial-wheel.js');
+                closeRadialWheel({ silent: true });
+            }
+        },
+    },
+    {
+        id: 'status-wheel',
+        title: 'Status Wheel',
+        content: 'Press <b>G</b> for the statuses on the token plus the ones starred in the status panel. Click to apply or add a stack, right-click to remove one. Removing a permanent effect asks first.',
+        selector: 'body',
+        allowCanvas: true,
+        action: async () =>
+        {
+            if (!canvas.tokens.controlled[0])
+                canvas.tokens.placeables.find((token) => token.actor && !token.document.hidden)?.control({ releaseOthers: true });
+            const { toggleStatusWheel } = await import('../tah/status-wheel.js');
+            if (!document.querySelector('.lancer-status-wheel'))
+                toggleStatusWheel();
+        },
+        cleanup: async () =>
+        {
+            if (document.querySelector('.lancer-status-wheel'))
             {
                 const { closeRadialWheel } = await import('../tools/radial-wheel.js');
                 closeRadialWheel({ silent: true });
@@ -1601,7 +1624,7 @@ function _welcomeDialog()
                     <p style="margin: 0 0 8px;">It's a very dense, powerful, big module. Its use is mainly for me, so the design is catered to what I like.</p>
                     <p style="margin: 0 0 8px;">Since it's a big module, here's a set of tours for the important stuff. They can run long, so take them one at a time and come back later.</p>
                     <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
-                    <p style="margin: 0; opacity: 0.85;">Shout to the people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a>.</p>
+                    <p style="margin: 0; opacity: 0.85;">Shout to the people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener">Ko-fi</a>.</p>
                     ${setupNote}
                     <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);"><b>Last warning:</b> if you installed this without reading <a href="https://agraael.github.io/lancer-automations/" target="_blank" rel="noopener">the documentation</a>, please go read it. This is not a plug and play module, and you have to be serious about that.</p>
                 </div>

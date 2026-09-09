@@ -2,8 +2,12 @@
 
 const MODULE_ID = 'lancer-automations';
 
+import { getSettingEnabled } from '../setup/settings-register.js';
+import { playUiSound } from '../tah/sound.js';
+
 let _forceFree = false;
 let _forceDebug = false;
+let _pathfindOverride = null;
 
 export function isForceFreeMovement()
 {
@@ -12,6 +16,12 @@ export function isForceFreeMovement()
 export function isForceDebugMovement()
 {
     return _forceDebug;
+}
+
+// Session override on top of the pathfindDragMovement setting; null = follow the setting.
+export function pathfindDragEnabled()
+{
+    return _pathfindOverride ?? getSettingEnabled('pathfindDragMovement');
 }
 
 export function getCurrentMovementType()
@@ -79,6 +89,23 @@ Hooks.once('init', () =>
         onUp:   () =>
         {
             _forceDebug = false; refreshActiveDragPreviews(); return true;
+        },
+        repeat: false,
+        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+    });
+
+    game.keybindings.register(MODULE_ID, 'togglePathfinding', {
+        name: 'Toggle Pathfinding',
+        hint: 'Toggle drag pathfinding for this session.',
+        editable: [{ key: 'KeyX' }],
+        onDown: () =>
+        {
+            if (canvas?.activeLayer !== canvas?.tokens)
+                return false;
+            _pathfindOverride = !pathfindDragEnabled();
+            playUiSound('toggle');
+            refreshActiveDragPreviews();
+            return true;
         },
         repeat: false,
         precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2

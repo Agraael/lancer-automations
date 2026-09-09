@@ -167,6 +167,80 @@ void main(void)
 
 const _tempRect = new PIXI.Rectangle();
 
+// Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord + self-driven time.
+function applyCustomFilter(filter, filterManager, input, output, clear)
+{
+    const now = performance.now();
+    const dt = (now - filter._lastTime) / 1000;
+    filter._lastTime = now;
+    filter.uniforms.time += dt * filter._timeSpeed;
+
+    const filterMatrix = filter.uniforms.filterMatrix;
+
+    if (filterMatrix)
+    {
+        const { sourceFrame, destinationFrame, target } = filterManager.activeState;
+
+        filterMatrix.set(
+            destinationFrame.width, 0, 0, destinationFrame.height,
+            sourceFrame.x, sourceFrame.y
+        );
+
+        const worldTransform = PIXI.Matrix.TEMP_MATRIX;
+        const localBounds = target.getLocalBounds(_tempRect);
+
+        if (filter.sticky)
+        {
+            worldTransform.copyFrom(target.transform.worldTransform);
+            worldTransform.invert();
+
+            const rotation = target.transform.rotation;
+            const sin = Math.sin(rotation);
+            const cos = Math.cos(rotation);
+            const scaleX = Math.hypot(
+                cos * worldTransform.a + sin * worldTransform.c,
+                cos * worldTransform.b + sin * worldTransform.d
+            );
+            const scaleY = Math.hypot(
+                -sin * worldTransform.a + cos * worldTransform.c,
+                -sin * worldTransform.b + cos * worldTransform.d
+            );
+
+            localBounds.pad(scaleX * filter.boundsPadding.x, scaleY * filter.boundsPadding.y);
+        }
+        else
+        {
+            const transform = target.transform;
+            worldTransform.a = transform.scale.x;
+            worldTransform.b = 0;
+            worldTransform.c = 0;
+            worldTransform.d = transform.scale.y;
+            worldTransform.tx = transform.position.x - transform.pivot.x * transform.scale.x;
+            worldTransform.ty = transform.position.y - transform.pivot.y * transform.scale.y;
+            worldTransform.prepend(target.parent.transform.worldTransform);
+            worldTransform.invert();
+
+            const scaleX = Math.hypot(worldTransform.a, worldTransform.b);
+            const scaleY = Math.hypot(worldTransform.c, worldTransform.d);
+
+            localBounds.pad(scaleX * filter.boundsPadding.x, scaleY * filter.boundsPadding.y);
+        }
+
+        filterMatrix.prepend(worldTransform);
+        filterMatrix.translate(-localBounds.x, -localBounds.y);
+        filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
+
+        const filterMatrixInverse = filter.uniforms.filterMatrixInverse;
+        if (filterMatrixInverse)
+        {
+            filterMatrixInverse.copyFrom(filterMatrix);
+            filterMatrixInverse.invert();
+        }
+    }
+
+    filterManager.applyFilter(filter, input, output, clear);
+}
+
 export class FilterFracture extends PIXI.Filter
 {
     constructor(params)
@@ -189,78 +263,9 @@ export class FilterFracture extends PIXI.Filter
             this.normalizeTMParams();
     }
 
-    // Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord + self-driven time.
     apply(filterManager, input, output, clear)
     {
-        const now = performance.now();
-        const dt = (now - this._lastTime) / 1000;
-        this._lastTime = now;
-        this.uniforms.time += dt * this._timeSpeed;
-
-        const filterMatrix = this.uniforms.filterMatrix;
-
-        if (filterMatrix)
-        {
-            const { sourceFrame, destinationFrame, target } = filterManager.activeState;
-
-            filterMatrix.set(
-                destinationFrame.width, 0, 0, destinationFrame.height,
-                sourceFrame.x, sourceFrame.y
-            );
-
-            const worldTransform = PIXI.Matrix.TEMP_MATRIX;
-            const localBounds = target.getLocalBounds(_tempRect);
-
-            if (this.sticky)
-            {
-                worldTransform.copyFrom(target.transform.worldTransform);
-                worldTransform.invert();
-
-                const rotation = target.transform.rotation;
-                const sin = Math.sin(rotation);
-                const cos = Math.cos(rotation);
-                const scaleX = Math.hypot(
-                    cos * worldTransform.a + sin * worldTransform.c,
-                    cos * worldTransform.b + sin * worldTransform.d
-                );
-                const scaleY = Math.hypot(
-                    -sin * worldTransform.a + cos * worldTransform.c,
-                    -sin * worldTransform.b + cos * worldTransform.d
-                );
-
-                localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            }
-            else
-            {
-                const transform = target.transform;
-                worldTransform.a = transform.scale.x;
-                worldTransform.b = 0;
-                worldTransform.c = 0;
-                worldTransform.d = transform.scale.y;
-                worldTransform.tx = transform.position.x - transform.pivot.x * transform.scale.x;
-                worldTransform.ty = transform.position.y - transform.pivot.y * transform.scale.y;
-                worldTransform.prepend(target.parent.transform.worldTransform);
-                worldTransform.invert();
-
-                const scaleX = Math.hypot(worldTransform.a, worldTransform.b);
-                const scaleY = Math.hypot(worldTransform.c, worldTransform.d);
-
-                localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            }
-
-            filterMatrix.prepend(worldTransform);
-            filterMatrix.translate(-localBounds.x, -localBounds.y);
-            filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
-
-            const filterMatrixInverse = this.uniforms.filterMatrixInverse;
-            if (filterMatrixInverse)
-            {
-                filterMatrixInverse.copyFrom(filterMatrix);
-                filterMatrixInverse.invert();
-            }
-        }
-
-        filterManager.applyFilter(this, input, output, clear);
+        applyCustomFilter(this, filterManager, input, output, clear);
     }
 
     get time()
@@ -495,75 +500,7 @@ export class FilterChains extends PIXI.Filter
 
     apply(filterManager, input, output, clear)
     {
-        const now = performance.now();
-        const dt = (now - this._lastTime) / 1000;
-        this._lastTime = now;
-        this.uniforms.time += dt * this._timeSpeed;
-
-        const filterMatrix = this.uniforms.filterMatrix;
-
-        if (filterMatrix)
-        {
-            const { sourceFrame, destinationFrame, target } = filterManager.activeState;
-
-            filterMatrix.set(
-                destinationFrame.width, 0, 0, destinationFrame.height,
-                sourceFrame.x, sourceFrame.y
-            );
-
-            const worldTransform = PIXI.Matrix.TEMP_MATRIX;
-            const localBounds = target.getLocalBounds(_tempRect);
-
-            if (this.sticky)
-            {
-                worldTransform.copyFrom(target.transform.worldTransform);
-                worldTransform.invert();
-
-                const rotation = target.transform.rotation;
-                const sin = Math.sin(rotation);
-                const cos = Math.cos(rotation);
-                const scaleX = Math.hypot(
-                    cos * worldTransform.a + sin * worldTransform.c,
-                    cos * worldTransform.b + sin * worldTransform.d
-                );
-                const scaleY = Math.hypot(
-                    -sin * worldTransform.a + cos * worldTransform.c,
-                    -sin * worldTransform.b + cos * worldTransform.d
-                );
-
-                localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            }
-            else
-            {
-                const transform = target.transform;
-                worldTransform.a = transform.scale.x;
-                worldTransform.b = 0;
-                worldTransform.c = 0;
-                worldTransform.d = transform.scale.y;
-                worldTransform.tx = transform.position.x - transform.pivot.x * transform.scale.x;
-                worldTransform.ty = transform.position.y - transform.pivot.y * transform.scale.y;
-                worldTransform.prepend(target.parent.transform.worldTransform);
-                worldTransform.invert();
-
-                const scaleX = Math.hypot(worldTransform.a, worldTransform.b);
-                const scaleY = Math.hypot(worldTransform.c, worldTransform.d);
-
-                localBounds.pad(scaleX * this.boundsPadding.x, scaleY * this.boundsPadding.y);
-            }
-
-            filterMatrix.prepend(worldTransform);
-            filterMatrix.translate(-localBounds.x, -localBounds.y);
-            filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
-
-            const filterMatrixInverse = this.uniforms.filterMatrixInverse;
-            if (filterMatrixInverse)
-            {
-                filterMatrixInverse.copyFrom(filterMatrix);
-                filterMatrixInverse.invert();
-            }
-        }
-
-        filterManager.applyFilter(this, input, output, clear);
+        applyCustomFilter(this, filterManager, input, output, clear);
     }
 
     get time()

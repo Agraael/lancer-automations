@@ -5,8 +5,9 @@ import { consumeAction, executeSimpleActivation } from "../tools/misc-tools.js";
 import * as actionFX from "../fx/actionFX.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { cancelRulerDrag, startChoiceCard, getTokenOwnerUserId, drawMovementTrace } from "../interactive/index.js";
-import { splitPathAtCosts, legUsable } from "./path-replay.js";
+import { splitPathAtCosts, legUsable, measurePathCost } from "./path-replay.js";
 import { findEffectOnToken } from "../bonuses/flagged-effects.js";
+import { getBoostOfferMode } from "../setup/settings-register.js";
 
 // Bridges multi-segment moves where preUpdateToken fires per-segment.
 export const _moveHistoryCache = new Map();
@@ -29,6 +30,8 @@ export const _moveHistoryCache = new Map();
 let _activeMoveStack = null;
 const _MOVE_STACK_TIMEOUT_MS = 5000;
 const _MOVE_STACK_INTER_DELAY_MS = 1000;
+// Auto boost has no card to wait behind, so it needs its own pause for the cancelled drag to settle.
+const _AUTO_ACCEPT_DELAY_MS = 300;
 
 export function _isActiveMoveStackFor(tokenId)
 {
@@ -39,6 +42,8 @@ export function _wipeMoveStack()
 {
     if (!_activeMoveStack)
         return;
+    if (/** @type {any} */ (globalThis)._laStackDebug && _activeMoveStack.cursor < _activeMoveStack.frames.length)
+        console.log('laStack wiped early', { cursor: _activeMoveStack.cursor, frames: _activeMoveStack.frames.length, at: new Error().stack?.split('\n')[2]?.trim() });
     if (_activeMoveStack._timer)
         clearTimeout(_activeMoveStack._timer);
     _activeMoveStack = null;
@@ -53,18 +58,35 @@ function _pushMoveStack(tokenId, frames)
 
 export async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {})
 {
+    const stackDebug = /** @type {any} */ (globalThis)._laStackDebug;
     const stack = _activeMoveStack;
     if (!stack || stack.tokenId !== tokenId)
+    {
+        if (stackDebug)
+            console.log('laStack skip', { kind, tokenId, reason: stack ? 'other-token' : 'no-stack', actionName: ctx.actionName });
         return;
+    }
     const frame = stack.frames[stack.cursor];
     if (!frame || frame.kind !== kind)
+    {
+        if (stackDebug)
+            console.log('laStack skip', { kind, cursor: stack.cursor, frameKind: frame?.kind, actionName: ctx.actionName });
         return;
+    }
     if (frame.matchActionName && ctx.actionName !== frame.matchActionName)
+    {
+        if (stackDebug)
+            console.log('laStack skip', { kind, cursor: stack.cursor, want: frame.matchActionName, got: ctx.actionName });
         return;
+    }
     if (cancelled)
     {
+        if (stackDebug)
+            console.log('laStack wipe-on-cancel', { kind, cursor: stack.cursor });
         _wipeMoveStack(); return;
     }
+    if (stackDebug)
+        console.log('laStack advance', { kind, cursor: stack.cursor, actionName: ctx.actionName, hasSatisfy: !!frame.onSatisfy });
     const onSatisfy = frame.onSatisfy;
     stack.cursor++;
     // Wall-clock safety timer: reset on progress.
@@ -79,7 +101,9 @@ export async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {})
         {
             // Inter-action grace period: lets async side-effects from the just-completed frame settle before the next fires.
             await new Promise(resolve => setTimeout(resolve, _MOVE_STACK_INTER_DELAY_MS));
-            await onSatisfy();
+            const satisfied = await onSatisfy();
+            if (stackDebug)
+                console.log('laStack onSatisfy done', { cursor: stack.cursor - 1, result: satisfied });
         }
         catch (err)
         {
@@ -338,12 +362,12 @@ export function getMovementBands(tokenOrId)
 
     const boostBase = speed + standing.boost;
     const casts = data.boostCasts ?? [];
-    for (const cast of casts)
-        push('boost', boostBase + (Number(cast.extra) || 0), true);
+    casts.forEach((cast, castIndex) =>
+        push(castIndex === 0 ? 'boost' : 'over-boost', boostBase + (Number(cast.extra) || 0), true));
 
     if (!slowed && !casts.length)
         push('boost', boostBase + (Number(data.pendingExtra) || 0), false);
-    if (!slowed && canOvercharge(actor))
+    if (!slowed && canOvercharge(actor) && casts.length <= 1)
         push('over-boost', boostBase, false);
 
     return bands;
@@ -395,7 +419,7 @@ export function getIntentionalMoveData(tokenOrId)
     );
 }
 
-// Derived: the granted legs, never below what was already spent.
+// Derived: the granted legs, never below sanctioned spend. Bypass walks (Ignore, cap system off) read as over-cap.
 export function getMovementCap(tokenOrId)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
@@ -406,8 +430,22 @@ export function getMovementCap(tokenOrId)
         return doc.getFlag('lancer-automations', 'movementCap') ?? 0;
     const granted = getMovementBands(tokenOrId).filter(band => band.granted);
     const total = granted.length ? granted[granted.length - 1].max : 0;
-    // Not getMovementHistory: it reports the cap, which would recurse back into here.
-    return Math.max(total, getIntentionalMoveData(tokenOrId).cost);
+    const sanctioned = (_getMoveHistoryData(tokenOrId).moves ?? [])
+        .filter(move => move.isDrag && !move.isFreeMovement && !move.capBypass)
+        .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved ?? 0), 0);
+    return Math.max(total, sanctioned);
+}
+
+function _capSystemOff()
+{
+    try
+    {
+        return !game.settings.get('lancer-automations', 'enableMovementCapDetection') && getBoostOfferMode() === 'no';
+    }
+    catch
+    {
+        return true;
+    }
 }
 
 // Used by the token-ruler overlay to look up which past waypoints belong to free/debug moves.
@@ -529,7 +567,9 @@ export function _handleMovementCapExceeded(token, ctx)
 {
     const { options, change, startPos, endPos, moveInfo, moveToMovementCost, moveIsFreeMovement, triggerData, intentPath, intentEndPos } = ctx;
     const capDetect = game.settings.get('lancer-automations', 'enableMovementCapDetection');
-    const boostOffer = game.settings.get('lancer-automations', 'enableBoostOffer');
+    const boostMode = getBoostOfferMode();
+    const boostOffer = boostMode !== 'no';
+    const autoBoost = boostMode === 'auto';
     const isTokenInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === token.id);
     if (options.ignoreMovementCap
         || (!capDetect && !boostOffer)
@@ -538,9 +578,10 @@ export function _handleMovementCapExceeded(token, ctx)
         return;
 
 
-    const cap = getMovementCap(token);
     const history = getMovementHistory(token);
     const spent = history.exists ? history.intentional.regularCost : 0;
+    // the gate stays armed past bypass walks even though the cap itself excludes them
+    const cap = Math.max(getMovementCap(token), spent);
     if (!(spent <= cap && spent + moveToMovementCost > cap))
         return;
 
@@ -552,16 +593,32 @@ export function _handleMovementCapExceeded(token, ctx)
     catch
     { /* not registered yet */ }
     const isMech = token.actor?.type === 'mech';
+    // Limitless NPCs store the extra action on the feature item, not the actor
+    const findOverchargeExtra = (holder) => (holder?.getFlag?.('lancer-automations', 'extraActions') || []).find(action => action.name === 'Overcharge (NPC)');
     const npcOvercharge = !isMech && token.actor?.type === 'npc'
-        ? (token.actor.getFlag('lancer-automations', 'extraActions') || []).find(action => action.name === 'Overcharge (NPC)')
+        ? findOverchargeExtra(token.actor) ?? token.actor.items.map(findOverchargeExtra).find(Boolean) ?? null
         : null;
-    const need = spent + moveToMovementCost;
-    const overBoostBand = getMovementBands(token).find(band => !band.granted && band.name === 'over-boost');
-    const boostSize = getNextBoostSize(token);
+    // tier-split judges per tier leg. Otherwise regions/trigger silents may chunk the commit, so the whole remaining intent decides
+    let tierSplit = false;
+    try
+    {
+        tierSplit = !!game.settings.get('lancer-automations', 'splitMovementAtSpeedTiers');
+    }
+    catch
+    { /* not registered yet */ }
+    const lastLegOpts = tierSplit
+        ? { isDrag: true, useRuler: true }
+        : { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true };
+    const intentCost = tierSplit ? null : measurePathCost(token, intentPath ?? [], startPos);
+    const need = spent + (intentCost ?? moveToMovementCost);
+    const bands = getMovementBands(token);
+    const goldPreview = bands.find(band => !band.granted && band.name === 'boost');
+    const overBoostBand = bands.find(band => !band.granted && band.name === 'over-boost');
+    const boostSize = goldPreview?.size ?? 0;
     const overBoostSize = overBoostBand?.size ?? 0;
     const boostReach = cap + boostSize;
     const canBoost = boostSize > 0 && need <= boostReach;
-    const canOvercharge = overBoostSize > 0 && (isMech || !!npcOvercharge)
+    const canOvercharge = overBoostSize > 0
         && need > boostReach && need <= boostReach + overBoostSize;
     const overchargeActionName = isMech ? 'Overcharge' : 'Overcharge (NPC)';
 
@@ -603,6 +660,15 @@ export function _handleMovementCapExceeded(token, ctx)
             detail: npcOvercharge?.detail || '',
         });
     };
+    // Auto picks the first choice, but only after yielding: the legs must not fire inside preUpdateToken.
+    const offerChoice = async (cardOptions) =>
+    {
+        if (!autoBoost)
+            return startChoiceCard(cardOptions);
+        await new Promise(resolve => setTimeout(resolve, _AUTO_ACCEPT_DELAY_MS));
+        return { choiceIdx: 0 };
+    };
+
     const computeMid = (/** @type {number} */ cost) =>
     {
         const ratio = moveToMovementCost > 0 ? Math.max(0, cost / moveToMovementCost) : 0;
@@ -630,7 +696,7 @@ export function _handleMovementCapExceeded(token, ctx)
             let result;
             try
             {
-                result = await startChoiceCard({
+                result = await offerChoice({
                     title: 'BOOST & MOVE',
                     icon: 'modules/lancer-automations/icons/speedometer.svg',
                     description: `Movement exceeds cap (${need}/${cap}). Boost adds +${boostSize}.`,
@@ -661,7 +727,7 @@ export function _handleMovementCapExceeded(token, ctx)
                 _clearCapRuler(token);
                 return;
             }
-            const fireFinalLeg = () => _rulerMove(token, finalLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
+            const fireFinalLeg = () => _rulerMove(token, finalLeg, lastLegOpts);
             if (midLeg)
             {
                 // Cap not yet exhausted: leg1 -> Boost -> leg2.
@@ -685,25 +751,14 @@ export function _handleMovementCapExceeded(token, ctx)
     }
     else if (canOvercharge && boostOffer && !options._skipBoostOffer)
     {
-        // 3-leg: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3; skip leg1 if cap exhausted.
         const remaining = cap - spent;
-        const mid1 = remaining > 0 ? computeMid(remaining) : null;
-        const mid2 = computeMid(remaining + boostSize);
-        const ocLegs = splitPathAtCosts(token, origWaypoints, startPos, remaining > 0 ? [remaining, remaining + boostSize] : [remaining + boostSize], capOriginalAction);
-        const ocSecondRaw = ocLegs ? (remaining > 0 ? ocLegs[1] : ocLegs[0]) : null;
-        const ocThirdRaw = ocLegs ? (remaining > 0 ? ocLegs[2] : ocLegs[1]) : null;
-        const ocPrevEnd = remaining > 0 ? (ocLegs?.[0]?.at(-1) ?? startPos) : startPos;
-        const useOcLegs = !!(ocSecondRaw?.length && ocThirdRaw?.length && legUsable(ocSecondRaw, ocPrevEnd));
-        const ocFirstLeg = useOcLegs ? (remaining > 0 && legUsable(ocLegs[0], startPos) ? ocLegs[0] : null) : mid1;
-        const ocSecondLeg = useOcLegs ? ocSecondRaw : mid2;
-        const ocFinalLeg = useOcLegs ? ocThirdRaw : finalDest;
-        (async () =>
+        const askOverchargeChoice = async () =>
         {
             const moveTrace = drawMovementTrace(token, finalDest, null, { path: origWaypoints });
             let result;
             try
             {
-                result = await startChoiceCard({
+                result = await offerChoice({
                     title: 'OVERCHARGE & BOOST & MOVE',
                     icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
                     description: `Movement exceeds cap+boost (${need}/${boostReach}). Overcharge grants an extra Boost (+${overBoostSize}).`,
@@ -726,39 +781,97 @@ export function _handleMovementCapExceeded(token, ctx)
             if (choiceIdx === 1)
             {
                 await _rulerMove(token, finalPath, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
-                return;
+                return false;
             }
             if (choiceIdx !== 0)
             {
                 _clearCapRuler(token);
-                return;
+                return false;
             }
-            const mid2Move = () => _rulerMove(token, ocSecondLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
-            const finalMove = () => _rulerMove(token, ocFinalLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
-            const tailFrames = [
-                { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: mid2Move },
-                { kind: 'awaitMove', onSatisfy: fireOvercharge },
-                { kind: 'awaitActivation', matchActionName: overchargeActionName, onSatisfy: fireBoost },
-                { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: finalMove },
-                { kind: 'awaitMove' }
-            ];
-            if (ocFirstLeg)
+            return true;
+        };
+        if (boostSize > 0)
+        {
+            // 3-leg: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3; skip leg1 if cap exhausted.
+            const mid1 = remaining > 0 ? computeMid(remaining) : null;
+            const mid2 = computeMid(remaining + boostSize);
+            const ocLegs = splitPathAtCosts(token, origWaypoints, startPos, remaining > 0 ? [remaining, remaining + boostSize] : [remaining + boostSize], capOriginalAction);
+            const ocSecondRaw = ocLegs ? (remaining > 0 ? ocLegs[1] : ocLegs[0]) : null;
+            const ocThirdRaw = ocLegs ? (remaining > 0 ? ocLegs[2] : ocLegs[1]) : null;
+            const ocPrevEnd = remaining > 0 ? (ocLegs?.[0]?.at(-1) ?? startPos) : startPos;
+            const useOcLegs = !!(ocSecondRaw?.length && ocThirdRaw?.length && legUsable(ocSecondRaw, ocPrevEnd));
+            const ocFirstLeg = useOcLegs ? (remaining > 0 && legUsable(ocLegs[0], startPos) ? ocLegs[0] : null) : mid1;
+            const ocSecondLeg = useOcLegs ? ocSecondRaw : mid2;
+            const ocFinalLeg = useOcLegs ? ocThirdRaw : finalDest;
+            (async () =>
             {
-                _pushMoveStack(token.id, [
-                    { kind: 'awaitMove', onSatisfy: fireBoost },
-                    ...tailFrames
-                ]);
-                await _rulerMove(token, ocFirstLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
-            }
-            else
+                if (!await askOverchargeChoice())
+                    return;
+                const mid2Move = () => _rulerMove(token, ocSecondLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
+                const finalMove = () => _rulerMove(token, ocFinalLeg, lastLegOpts);
+                const tailFrames = [
+                    { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: mid2Move },
+                    { kind: 'awaitMove', onSatisfy: fireOvercharge },
+                    { kind: 'awaitActivation', matchActionName: overchargeActionName, onSatisfy: fireBoost },
+                    { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: finalMove },
+                    { kind: 'awaitMove' }
+                ];
+                if (ocFirstLeg)
+                {
+                    _pushMoveStack(token.id, [
+                        { kind: 'awaitMove', onSatisfy: fireBoost },
+                        ...tailFrames
+                    ]);
+                    await _rulerMove(token, ocFirstLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
+                }
+                else
+                {
+                    _pushMoveStack(token.id, tailFrames);
+                    await fireBoost();
+                }
+            })();
+        }
+        else
+        {
+            (async () =>
             {
-                _pushMoveStack(token.id, tailFrames);
-                await fireBoost();
-            }
-        })();
+                if (!await askOverchargeChoice())
+                    return;
+                // gold spent: legToCap -> Overcharge -> Boost -> rest
+                const twoLegSplit = remaining > 0 ? splitPathAtCosts(token, origWaypoints, startPos, [remaining], capOriginalAction) : null;
+                const twoLegTail = !!(twoLegSplit && twoLegSplit[1]?.length);
+                const twoLegFirst = (twoLegTail && legUsable(twoLegSplit[0], startPos)) ? twoLegSplit[0] : (twoLegTail ? null : (remaining > 0 ? computeMid(remaining) : null));
+                const twoLegRest = twoLegTail ? twoLegSplit[1] : (remaining > 0 ? finalDest : finalPath);
+                const restMove = () => _rulerMove(token, twoLegRest, lastLegOpts);
+                const twoLegFrames = [
+                    { kind: 'awaitActivation', matchActionName: overchargeActionName, onSatisfy: fireBoost },
+                    { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: restMove },
+                    { kind: 'awaitMove' }
+                ];
+                if (twoLegFirst)
+                {
+                    _pushMoveStack(token.id, [
+                        { kind: 'awaitMove', onSatisfy: fireOvercharge },
+                        ...twoLegFrames
+                    ]);
+                    await _rulerMove(token, twoLegFirst, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
+                }
+                else
+                {
+                    _pushMoveStack(token.id, twoLegFrames);
+                    await fireOvercharge();
+                }
+            })();
+        }
     }
     else
     {
+        try
+        {
+            token.document.stopMovement?.();
+        }
+        catch
+        { /* idle */ }
         triggerData.cancelTriggeredMove(
             `Movement exceeds cap (${need} > ${cap}) and cannot be covered by Boost or Overcharge. ` +
             `Hold <b>${freeKey}</b> for free movement.`
@@ -972,6 +1085,7 @@ export async function handleTokenMove(document, change, options, userId)
             isFreeMovement,
             isForceMovement,
             costOverridden: costOverridden === true,
+            capBypass: options.ignoreMovementCap === true || _capSystemOff(),
             startPos
         }]
     };
@@ -993,7 +1107,24 @@ export async function handleTokenMove(document, change, options, userId)
 
     moveInfo.isFreeMovement = isFreeMovement;
     moveInfo.movementCost = movementCost;
-    await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo });
+    let moveLeg = null;
+    if (inCombat && !isFreeMovement)
+    {
+        const spentBefore = prevIntentional;
+        const spentAfter = prevIntentional + (movementCost ?? distanceMoved);
+        const legBands = getMovementBands(token).filter(band => band.size > 0);
+        const startBand = legBands.find(band => spentBefore < band.max - 1e-9) ?? null;
+        const endBand = legBands.find(band => spentAfter <= band.max + 1e-9) ?? null;
+        moveLeg = {
+            start: startBand?.name ?? null,
+            end: endBand?.name ?? null,
+            boosted: endBand?.name === 'boost' || endBand?.name === 'over-boost',
+            granted: endBand?.granted === true,
+            spentBefore,
+            spentAfter
+        };
+    }
+    await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo, moveLeg });
 
     const pendingWaypointCount = options._movement?.[token.id]?.pending?.waypoints?.length ?? 0;
     if (pendingWaypointCount === 0)

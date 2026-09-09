@@ -2,6 +2,7 @@
 
 import { getSpeedRanges } from '../combat/speed-provider.js';
 import { computeMovementRoute } from './reachability.js';
+import { pathfindDragEnabled } from './keybindings.js';
 
 const MODULE_ID = 'lancer-automations';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
@@ -382,7 +383,7 @@ function _settingOn(key)
 function _onModifyPlannedMovement(token, context)
 {
     _patchDetected = true;
-    const pathfindOn = _settingOn(PATHFIND_DRAG_MOVEMENT);
+    const pathfindOn = pathfindDragEnabled();
     const triggerOn = _settingOn(SPLIT_AT_TRIGGER_BOUNDARIES);
     const tierOn = _settingOn(SPLIT_AT_SPEED_TIERS);
     if (!pathfindOn && !triggerOn && !tierOn)
@@ -397,7 +398,7 @@ export function injectTriggerSilentsAtDrop(event)
 {
     if (_patchDetected)
         return;
-    const pathfindOn = _settingOn(PATHFIND_DRAG_MOVEMENT);
+    const pathfindOn = pathfindDragEnabled();
     const triggerOn = _settingOn(SPLIT_AT_TRIGGER_BOUNDARIES);
     const tierOn = _settingOn(SPLIT_AT_SPEED_TIERS);
     if (!pathfindOn && !triggerOn && !tierOn)
@@ -426,7 +427,7 @@ export function _transformFoundPath(token, path)
 {
     if (!Array.isArray(path) || path.length < 2)
         return path;
-    const pathfindOn = _settingOn(PATHFIND_DRAG_MOVEMENT);
+    const pathfindOn = pathfindDragEnabled();
     const triggerOn = _settingOn(SPLIT_AT_TRIGGER_BOUNDARIES);
     const tierOn = _settingOn(SPLIT_AT_SPEED_TIERS);
     if (!pathfindOn && !triggerOn && !tierOn)

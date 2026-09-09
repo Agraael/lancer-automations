@@ -1,4 +1,4 @@
-import { _queueCard, _createInfoCard, _removeInfoCard } from "../cards.js";
+import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
@@ -122,16 +122,21 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         const cleanup = () =>
         {
             teardownCanvas();
+            unbindEscape();
             _removeInfoCard(cardEl);
         };
 
+        const cancel = () =>
+        {
+            cleanup();
+            resolve(null);
+        };
+
+        const unbindEscape = bindCardEscape(cancel, () => isSingleTargetPickerActive() || isAreaPickerActive());
+
         cardEl = _createInfoCard("forceCheck", {
             title: "FORCE CHECK",
-            onCancel: () =>
-            {
-                cleanup();
-                resolve(null);
-            },
+            onCancel: cancel,
         });
 
         const updateRun = () =>

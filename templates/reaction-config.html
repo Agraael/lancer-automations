@@ -558,14 +558,15 @@
         border: 1px solid #ccc;
         border-top: none;
         border-radius: 0 0 4px 4px;
-        background: var(--la-plate);
+        /* translucent so the window grid backdrop reads through the list */
+        background: color-mix(in srgb, var(--la-plate), transparent 12%);
     }
 
     /* ===== Filter Bar ===== */
     .filter-bar input,
     .filter-bar select {
-        border: 2px solid #999;
-        background: #fff;
+        border: 2px solid var(--la-edge);
+        background: color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);
         color: var(--la-ink);
         border-radius: 4px;
         font-size: 12px;

@@ -401,7 +401,7 @@ const hiddenEffect = [
         filterType: "fog",
         filterId: "hidden",
         color: 0x000000,
-        density: 0.65,
+        density: 0.4,
         time: 0,
         dimX: 1,
         dimY: 1,

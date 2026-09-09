@@ -152,19 +152,20 @@ export function getTokenOwnerUserId(token)
 /**
  * Interactive choice card: presents a list of choices with callbacks.
  * @param {Object} options
- * @param {string} [options.mode="or"] - "or" (pick one, done) or "and" (pick all sequentially)
- * @param {Array<Object>} [options.choices=[]] - Array of { text, icon?, callback, data? }
+ * @param {"or"|"and"|"vote"|"vote-hidden"} [options.mode="or"] - "or" picks one, "and" picks all sequentially, vote modes delegate to the vote card
+ * @param {Array<{text: string, icon?: string, callback?: (data: any) => any, data?: any}>} [options.choices=[]]
  * @param {string} [options.title] - Card title
  * @param {string} [options.description=""] - Card description
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
  * @param {string|string[]|null} [options.userIdControl=null] - userId or array of userIds who control this card. Array = broadcast, first to respond wins. null = show locally. Offline users are dropped with a warning.
  * @param {Object} [options.traceData=null]
- * @param {Token} [options.relatedToken=null] - Optional token to show in the card header.
- * @param {Token} [options.originToken=null] - Optional origin token to show in the card header (orange border).
+ * @param {Token|null} [options.relatedToken=null] - Optional token to show in the card header.
+ * @param {Token|null} [options.originToken=null] - Optional origin token to show in the card header (orange border).
  * @param {boolean} [options.forceSocket=false] - If true, treats the current user as a remote target (shows delegated card instead of local)
- * @param {Item} [options.item=null] - Item associated with the card
- * @returns {Promise<true|null>} true on completion, null if cancelled
+ * @param {Item|null} [options.item=null] - Item associated with the card
+ * @param {boolean} [options.urgent=false] - Jumps the card queue
+ * @returns {Promise<{choiceIdx: number|null, responderIds: string[]}|null>} the pick, null if cancelled
  */
 export function startChoiceCard(options = {})
 {

@@ -1,5 +1,5 @@
 /*global console, game, Dialog, canvas, $, foundry */
-import { ReactionManager, stringToAsyncFunction } from "./reaction-manager.js";
+import { ReactionManager, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./reaction-manager.js";
 import { hasReactionAvailable } from "../tools/misc-tools.js";
 import { runInFlowBody } from "./flow-queue.js";
 
@@ -66,7 +66,6 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const reactionEntry = reaction || reactionConfig?.reactions?.[0];
 
         const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
-        const checkReaction = reactionEntry?.checkReaction !== false;
 
         const activationType = reactionEntry?.activationType || "flow";
         const activationMode = reactionEntry?.activationMode || "instead";
@@ -114,7 +113,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         };
 
         // Re-activating the same item that triggered us would loop via onActivation/onInitActivation.
-        const wouldRecurse = (triggerType === 'onActivation' || triggerType === 'onInitActivation')
+        const wouldRecurse = ACTIVATION_TRIGGERS.has(triggerType)
             && triggerData?.item?.uuid
             && triggerData.item.uuid === item?.uuid;
         const recurseGuardMatters = activationType === "flow"
@@ -151,7 +150,6 @@ export function activateReaction(triggerType, triggerData, token, item, activati
 
         const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
         const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
-        const checkReaction = generalReaction?.checkReaction !== false;
 
         const activationType = generalReaction?.activationType || "flow";
         const activationMode = generalReaction?.activationMode || "after";

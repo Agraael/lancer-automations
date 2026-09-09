@@ -10,6 +10,7 @@ import "./movement/vision-throttle.js";
 import "./movement/movement-actions.js";
 import "./movement/movement-wheel.js";
 import "./tah/action-wheel.js";
+import "./tah/status-wheel.js";
 import "./interactive/overlap-picker.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
@@ -47,6 +48,8 @@ import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerF
 // Vision
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
+import { initLaWallLos } from "./vision/laWallLos.js";
+import { initSightlines } from "./vision/sightlines.js";
 import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
 import { smokeZoneGraphics, importTemplateMacroPresets } from "./setup/tmac-presets.js";
@@ -75,6 +78,7 @@ import { getActorActions } from "./interactive/deployables.js";
 
 // Activations
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
+import { runDeprecationScans } from "./setup/deprecations.js";
 import { displayReactionPopup, activateReaction } from "./activations/reactions-ui.js";
 import { ReactionsAPI } from "./activations/reactions-registry.js";
 import { registerModuleFlows, registerFlowStatePersistence, injectExtraDataUtility,
@@ -89,6 +93,7 @@ import { registerStatRollTargetButton } from "./activations/statroll-target-butt
 import { registerDamageTargetButton } from "./activations/damage-target-button.js";
 import { initFlowQueue, runInFlowBody } from "./activations/flow-queue.js";
 import { initAutoDamage } from "./activations/auto-damage.js";
+import { initAutoStruct } from "./activations/auto-struct.js";
 import { initCombatBannerFit } from "./tools/combat-banner-fit.js";
 import {
     onAttackStep, hitImmunityStep, onHitMissStep, onPreDamageStep, onDamageStep,
@@ -197,7 +202,7 @@ import { dedupeWorldSettings } from "./setup/settings-dedupe.js";
 import { checkModuleUpdate } from "./setup/version-check.js";
 import { injectDisabledSchemaField, registerDisabledFlowSteps, registerPermanentStatusFlowSteps, onRenderActorSheet, onRenderItemSheet, injectDisabledCSS, ItemDisabledAPI, registerExtraTrackableAttributes, registerMeleeCoverFix, patchStatRollCardTemplate, initCustomFlowDispatch, registerUseAmmoFlow, repairLCPData, TriggerUseAmmoFlow, wrapInitTechAttackData, wrapInitAttackData, wrapSetDamageTags, registerNonTechAttackStep } from "./setup/lancer-modif.js";
 import { registerSettingsMenus, LancerAutomationsConfig } from "./setup/settingsMenus.js";
-import { registerSettings } from "./setup/settings-register.js";
+import { registerSettings, getBoostOfferMode } from "./setup/settings-register.js";
 import { registerTourBootstrap, startConfigTour, startActivationManagerTour } from "./setup/tour.js";
 import { registerOnboardingBootstrap } from "./setup/settings-onboarding.js";
 import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/iso-settings.js";
@@ -222,7 +227,9 @@ import { injectBarToggles } from "./integrations/alt-sheets-flags.js";
 import { reapplyIsometricTileTab } from "./integrations/isometric-tile-tab.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { CardStackTests } from "../tests/card-stack.js";
+import { MovementCapTests } from "../tests/movement-cap.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
+import { StructStressTests } from "../tests/struct-stress.js";
 
 // Eager registrations (all imports above evaluate first)
 registerAccDiffTargetButton();
@@ -531,6 +538,8 @@ Hooks.on('init', () =>
 
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
+    initLaWallLos(); // Per-wall "Blocks LA Line of Sight" flag: LA-only mirror edges
+    initSightlines(); // B1 sightline rays + attack-card hover takeover from THT
     initBlindedVision(); // Blinded status clamps the token's sight to one space
     registerActionLimitsHooks();
     initVisionDisableOnSelect();
@@ -1174,6 +1183,7 @@ Hooks.on('ready', async () =>
         actionFX,
         processEffectConsumption,
         handleTrigger,
+        checkOnInitReactions,
         registerUserHelper,
         getUserHelper,
         getActiveGMId,
@@ -1197,7 +1207,9 @@ Hooks.on('ready', async () =>
         getCellToward,
         tests: {
             cardStack: CardStackTests,
+            movementCap: MovementCapTests,
             flowQueue: FlowQueueTests,
+            structStress: StructStressTests,
         }
     });
     initSocket();
@@ -1215,6 +1227,7 @@ Hooks.on('ready', async () =>
     await syncBuiltinStartups();
     runStartupScripts(game.modules.get('lancer-automations').api);
     Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
+    runDeprecationScans();
 
     registerExtraTrackableAttributes();
     initCustomFlowDispatch();
@@ -1224,6 +1237,7 @@ Hooks.on('ready', async () =>
     initTokenStatHint();
     initConsumeFeedback();
     initAutoDamage();
+    initAutoStruct();
     initCombatBannerFit();
     initDamageCalcWrapper();
     if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
@@ -1851,7 +1865,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) =>
         if (endingToken)
         {
             await handleTrigger('onTurnEnd', { triggeringToken: endingToken });
-            processDurationEffects('end', endingToken.id);
+            await processDurationEffects('end', endingToken.id);
         }
     }
 
@@ -1864,7 +1878,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) =>
             clearMoveData(startingToken.document.id);
             initMovementCap(startingToken);
             await handleTrigger('onTurnStart', { triggeringToken: startingToken });
-            processDurationEffects('start', startingToken.id);
+            await processDurationEffects('start', startingToken.id);
             if (startingToken.actor)
                 await rechargeExtraActionsForActor(startingToken.actor);
             await refreshActionLimits(startingToken, { turnStart: true });
@@ -1907,7 +1921,7 @@ Hooks.on('combatRound', async (combat, updateData, opts) =>
 Hooks.on('combatStart', (combat) =>
 {
     if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')
-        && !game.settings.get('lancer-automations', 'enableBoostOffer'))
+        && getBoostOfferMode() === 'no')
 
         return;
 
@@ -2273,7 +2287,7 @@ Hooks.on('renderSettings', (app, html) =>
     divider.className = 'divider';
     divider.textContent = 'Lancer Automations';
     const overviewButton = makeBtn('lancer-automations-overview', 'fa-cog', 'Lancer Automations');
-    const managerButton = makeBtn('lancer-automations-manager', 'fa-tasks', 'Activation Manager');
+    const managerButton = makeBtn('lancer-automations-manager', 'fa-tasks', 'Automation Manager');
     settingsSection.append(divider, overviewButton, managerButton);
 
     overviewButton.addEventListener('click', (ev) =>

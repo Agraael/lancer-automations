@@ -13,6 +13,28 @@ export function getSettingEnabled(key, moduleId = 'lancer-automations')
     }
 }
 
+/**
+ * Boost offer mode, normalising the boolean this setting used to store.
+ * @returns {'no' | 'yes' | 'auto'}
+ */
+export function getBoostOfferMode()
+{
+    let raw;
+    try
+    {
+        raw = game.settings.get('lancer-automations', 'enableBoostOffer');
+    }
+    catch
+    {
+        return 'no';
+    }
+    if (raw === true)
+        return 'yes';
+    if (raw === false)
+        return 'no';
+    return raw === 'yes' || raw === 'auto' ? raw : 'no';
+}
+
 export function registerSettings()
 {
     // Core
@@ -28,6 +50,20 @@ export function registerSettings()
             "owner": "Owner Only"
         },
         default: "both"
+    });
+
+    game.settings.register('lancer-automations', 'effectNotificationMode', {
+        name: 'Effect Notification Mode',
+        hint: 'Chat message when a token gains or loses an effect or bonus.',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: {
+            "public": "Public",
+            "whisper": "GM and Owner",
+            "off": "Off"
+        },
+        default: "public"
     });
 
     game.settings.register('lancer-automations', 'consumeReaction', {
@@ -291,6 +327,15 @@ export function registerSettings()
         default: false
     });
 
+    game.settings.register('lancer-automations', 'autoStructFollowup', {
+        name: 'Auto Structure / Stress Follow-ups',
+        hint: 'Click the follow-up buttons on your own structure and stress cards automatically.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     game.settings.register('lancer-automations', 'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
@@ -406,7 +451,7 @@ export function registerSettings()
     });
 
     game.settings.register('lancer-automations', 'enableMovementCapDetection', {
-        name: 'Movement Cap Detection [beta]',
+        name: 'Movement Cap Detection',
         hint: 'Cancel drag movement exceeding the token\'s movement cap.',
         scope: 'world',
         config: false,
@@ -415,12 +460,17 @@ export function registerSettings()
     });
 
     game.settings.register('lancer-automations', 'enableBoostOffer', {
-        name: 'Boost & Move Offer [beta]',
-        hint: 'When a move exceeds the cap, offer to split it with Boost (and Overcharge for mechs or NPCs with the Overcharge action).',
+        name: 'Boost & Move Offer',
+        hint: 'Offer to cover an over-cap move with Boost then Overcharge (Automatic accepts without asking).',
         scope: 'world',
         config: false,
-        type: Boolean,
-        default: false
+        type: String,
+        choices: {
+            no: 'No',
+            yes: 'Yes, ask first',
+            auto: 'Automatic, no prompt',
+        },
+        default: 'no'
     });
 
     game.settings.register('lancer-automations', 'showDeployableLines', {
@@ -586,7 +636,7 @@ export function registerSettings()
     });
     game.settings.register('lancer-automations', 'wreckAuraOpacity', {
         name: 'Wreck Aura Opacity',
-        hint: 'Fill opacity of the wreck aura; the outline scales with it.',
+        hint: 'Fill opacity of the wreck aura. The outline scales with it.',
         scope: 'world',
         config: false,
         type: Number,

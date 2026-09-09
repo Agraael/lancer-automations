@@ -7,16 +7,18 @@ import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, res
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
 import { applyActionOverlays } from '../interactive/action-overlays.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
+import { getBoostOfferMode } from '../setup/settings-register.js';
 import { knockBackToken } from '../interactive/tools/moveTokenRuler.js';
 import { openHaseContestCard } from '../interactive/tools/haseContest.js';
 import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, getActionLockInfo, getStatusLockedFields, getFieldLockingStatuses, lockEntryLabel } from '../combat/action-limits.js';
-import { laHudRenderIcon, laHudSizeMark, laHudStripeStyle, weaponSizeLevel, weaponTypeIcon, HUD_ICON_SIZE, HUD_WEAPON_ICON_SIZE, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale } from './item-helpers.js';
+import { laHudRenderIcon, laHudSizeMark, laHudStripeStyle, weaponSizeLevel, weaponTypeIcon, HUD_ICON_SIZE, HUD_WEAPON_ICON_SIZE, isWhiteIcon, getActivationIcon, getDeployableIcon, laHudItemChildren, getItemStatus, activationTheme, appendReservePips, appendBondPowerPips, rechargeIcon, tahScale, actionDisplayName } from './item-helpers.js';
 import { isAutoConsumeDisabled, renderConsumeStatusHtml } from '../interactive/extra-config.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
+import { favoriteKeys, favoriteWheel, setFavoriteWheel, favMarkHtml, openFavoritePopup } from './favorites.js';
 import {
     isAdvancedMeasureActive,
     getAdvancedMeasureState,
@@ -362,9 +364,9 @@ export class LancerHUD
         return true;
     }
 
-    getFavorites()
+    getFavorites(wheel = 0)
     {
-        return this._el ? this._collectFavorites() : null;
+        return this._el ? this._collectFavorites(wheel) : null;
     }
 
     openFavoritesColumn()
@@ -442,6 +444,7 @@ export class LancerHUD
                 document.removeEventListener('click', this._favDocHandlers.click, true);
             this._favDocHandlers = null;
         }
+        $('.la-menu-popup').remove();
         $('.la-hud-popup').stop(true).animate({ opacity: 0 }, 120, function()
         {
             $(this).remove();
@@ -1045,7 +1048,7 @@ export class LancerHUD
             {
                 if (!this._el)
                     return;
-                if (!$.contains(this._el[0], /** @type {Element} */ (/** @type {unknown} */ (ev.target))) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge').length)
+                if (!$.contains(this._el[0], /** @type {Element} */ (/** @type {unknown} */ (ev.target))) && !$(ev.target).closest('.la-hud-popup, .la-hud-popup-bridge, .la-menu-popup').length)
                 {
                     closeCol(c2); closeCol(c3); closeCol(c4);
                     this._statusPanelInstance?.close();
@@ -1159,11 +1162,10 @@ export class LancerHUD
                     makeRow: (...a) => this._makeRow(...a),
                     token: this._token,
                     brighten,
-                    onCtrlRightClick: async (item) =>
+                    onCtrlRightClick: async (item, row, ev) =>
                     {
-                        await this._toggleFavorite(item);
-                        playUiSound('toggle');
-                        listFavorites();
+                        if (await this._pickFavoriteWheel(item, null, ev.clientX, ev.clientY) !== null)
+                            listFavorites();
                     }
                 });
                 c2.find('.la-hud-col-label').text('Favorites');
@@ -1606,8 +1608,9 @@ export class LancerHUD
                 });
             }
             const isFavoritable = !item.isSectionLabel && !!item.onClick && !!this._favKey(item);
-            if (isFavoritable && this._isFavorite(item))
-                this._applyFavStyle(row);
+            const itemWheel = isFavoritable ? this._favoriteWheel(item) : 0;
+            if (itemWheel)
+                this._applyFavStyle(row, itemWheel);
             row.on('contextmenu', async (ev) =>
             {
                 if (!ev.ctrlKey)
@@ -1619,12 +1622,7 @@ export class LancerHUD
                     this._showQuickTip(ev.clientX, ev.clientY, "Can't favorite this");
                     return;
                 }
-                const nowFav = await this._toggleFavorite(item);
-                playUiSound('toggle');
-                if (nowFav)
-                    this._applyFavStyle(row);
-                else
-                    this._clearFavStyle(row);
+                await this._pickFavoriteWheel(item, row, ev.clientX, ev.clientY);
             });
 
             // if (hasChildren && rawChildren !== null && !rawChildren.length)
@@ -2047,14 +2045,17 @@ export class LancerHUD
                         getChildren: () => deactItems.map(item =>
                         {
                             const asd = item.flags?.['lancer-automations']?.activeStateData;
-                            const label = `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${asd?.endActionDescription || `Deactivate ${item.name}`}`;
+                            const endName = asd?.endActionDescription || `Deactivate ${item.name}`;
+                            const label = `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${endName}`;
                             const activation = asd?.endAction || 'Protocol';
+                            // Ending an activation is never gated by the locks that activation put up.
+                            const action = { name: endName, activation, detail: item.system?.effect || '', _skipLockInfo: true };
                             return {
                                 label,
                                 icon: getActivationIcon({ activation }),
-                                hoverData: { actor, item, action: { name: label, activation }, category: 'Actions' },
+                                hoverData: { actor, item, action, category: 'Actions' },
                                 onClick: () => endItemActivation(item, this._token),
-                                onRightClick: this._actionPopup({ name: label, activation, detail: item.system?.effect || '' }, item),
+                                onRightClick: this._actionPopup(action, item),
                             };
                         })
                     }];
@@ -2904,7 +2905,7 @@ export class LancerHUD
         ];
 
         const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection')
-            || game.settings.get('lancer-automations', 'enableBoostOffer');
+            || getBoostOfferMode() !== 'no';
 
         const ap = a => this._actionPopup(a);
         const movementItems = [
@@ -3204,8 +3205,9 @@ export class LancerHUD
         {
             const single = sysActions[0] ?? null;
             const actStr = single?.activation ?? (activationTag ? activationTag.lid.replace('tg_', '').replace('_action', ' action') : 'Activation');
-            children.push(this._itemRow(item, {
-                label: single?.name ?? item.name,
+            const singleName = single ? actionDisplayName(item, single) : item.name;
+            children.push(this._lockable(this._itemRow(item, {
+                label: singleName,
                 action: single ?? { name: item.name, activation: actStr },
                 category: 'Systems',
                 icon: single ? getActivationIcon(single) : (activationTag ? getActivationIcon(actStr) : 'systems/lancer/assets/icons/activate.svg'),
@@ -3217,20 +3219,21 @@ export class LancerHUD
                         this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: 'sys-activate', dataValue: item.id, title: item.name, subtitle, bodyHtml: this._bodyHtml(sys), theme: 'system', item, row });
                     }
                         : ap({ name: item.name, activation: 'Activation', detail: 'Default system activation.' }),
-            }));
+            }), singleName, actStr));
         }
         else if (!hidePrimary)
         {
             sysActions.forEach((action, idx) =>
             {
-                children.push(this._itemRow(item, {
-                    label: action.name,
+                const name = actionDisplayName(item, action);
+                children.push(this._lockable(this._itemRow(item, {
+                    label: name,
                     action,
                     category: 'Systems',
                     icon: getActivationIcon(action),
                     onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
                     onRightClick: ap(action),
-                }));
+                }), name, action.activation));
             });
         }
         const sysActionNames = new Set((sys.actions ?? []).map(/** @type {any} */ a => a.name));
@@ -4036,25 +4039,25 @@ export class LancerHUD
                         {
                             const single = sysActions[0] ?? null;
                             const actStr = single?.activation ?? activation ?? 'Activation';
-                            baseRows.push(this._itemRow(item, {
+                            baseRows.push(this._lockable(this._itemRow(item, {
                                 label: item.name,
                                 action: { name: item.name, activation: actStr },
                                 category: 'Systems',
                                 icon: (single || activation) ? getActivationIcon({ ...(single ?? {}), name: item.name, activation: actStr }) : 'systems/lancer/assets/icons/activate.svg',
                                 onClick: () => /** @type {any} */ (item).beginSystemFlow(),
                                 onRightClick: npcRightClick,
-                            }));
+                            }), item.name, actStr));
                         }
                         else if (!hidePrimary)
                         {
-                            sysActions.forEach((action, idx) => baseRows.push(this._itemRow(item, {
-                                label: action.name,
+                            sysActions.forEach((action, idx) => baseRows.push(this._lockable(this._itemRow(item, {
+                                label: actionDisplayName(item, action),
                                 action,
                                 category: 'Systems',
                                 icon: getActivationIcon(action),
                                 onClick: () => /** @type {any} */ (item).beginActivationFlow(`system.actions.${idx}`),
                                 onRightClick: npcRightClick,
-                            })));
+                            }), actionDisplayName(item, action), action.activation)));
                         }
                         const depLids = getItemDeployables(item, actor);
                         if (depLids.length)
@@ -5379,7 +5382,8 @@ export class LancerHUD
                 ? `<p class="la-hud-action-locked-reason" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(160,119,68,0.18);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Blocked:</strong> ${blockReason}</p>`
                 : '';
             const consumeHtml = source?.documentName === 'Item' ? renderConsumeStatusHtml(source, action) : '';
-            const bodyHtml = blockHtml + this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null, action.activation) + laRenderActionDetail(action, { tier }) + consumeHtml;
+            const lockHtml = action._skipLockInfo ? '' : this._actionLockReasonHtml(action.name, ACTIVATION_FIELD[action.activation] ?? null, action.activation);
+            const bodyHtml = blockHtml + lockHtml + laRenderActionDetail(action, { tier }) + consumeHtml;
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
@@ -5429,9 +5433,10 @@ export class LancerHUD
                 status.badge = (status.badge ? status.badge + ' ' : '') + batt;
                 status.badgeColor = charged ? '#3a9e6e' : '#c33';
             }
-            return {
-                label: status.destroyed ? this._destroyedLabel(action.name)
-                    : ((action._sourceItemId || action._addedViaExtrasUI) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}` : action.name),
+            const displayName = actionDisplayName(sourceItem, action);
+            return this._lockable({
+                label: status.destroyed ? this._destroyedLabel(displayName)
+                    : ((action._sourceItemId || action._addedViaExtrasUI) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${displayName}` : displayName),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
@@ -5550,7 +5555,7 @@ export class LancerHUD
                 },
                 onRightClick: this._actionPopup(action, sourceItem, null, talentSubKey ? { subKey: talentSubKey } : null),
                 hoverData: { actor, item: sourceItem ?? null, action, category },
-            };
+            }, displayName, activationType);
         });
     }
 
@@ -6098,9 +6103,9 @@ export class LancerHUD
         return row;
     }
 
-    _collectFavorites()
+    _collectFavorites(wheel = 0)
     {
-        const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
+        const favs = wheel ? favoriteKeys(wheel) : [...favoriteKeys(1), ...favoriteKeys(2)];
         if (!favs.length)
             return [];
         const favSet = new Set(favs);
@@ -6143,11 +6148,11 @@ export class LancerHUD
         setTimeout(() => tip.remove(), 1000);
     }
 
-    _applyFavStyle(row)
+    _applyFavStyle(row, wheel = 1)
     {
         row.css({ position: 'relative' });
         row.find('.la-hud-fav-mark').remove();
-        row.append('<span class="la-hud-fav-mark">★</span>');
+        row.append(favMarkHtml(wheel));
         // Striped rows are dark, the default dark star vanishes on them.
         if (row.data('restingBg'))
             row.find('.la-hud-fav-mark').css('color', '#fff');
@@ -6172,28 +6177,38 @@ export class LancerHUD
         return item?.label ?? null;
     }
 
-    _isFavorite(item)
+    _favoriteWheel(item)
     {
-        const key = this._favKey(item);
-        if (!key)
-            return false;
-        const favs = /** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [];
-        return favs.includes(key);
+        return favoriteWheel(this._favKey(item));
     }
 
-    async _toggleFavorite(item)
+    _isFavorite(item)
     {
-        const key = this._favKey(item);
-        if (!key)
-            return false;
-        const favs = [...(/** @type {any} */ (game.user).getFlag('lancer-automations', 'tahFavorites') || [])];
-        const idx = favs.indexOf(key);
-        if (idx >= 0)
-            favs.splice(idx, 1);
-        else
-            favs.push(key);
-        await /** @type {any} */ (game.user).setFlag('lancer-automations', 'tahFavorites', favs);
-        return idx < 0;
+        return this._favoriteWheel(item) > 0;
+    }
+
+    // Ctrl+right-click asks which wheel, then repaints the row's mark from the answer.
+    async _pickFavoriteWheel(item, row, x, y)
+    {
+        const chosen = await openFavoritePopup(x, y, this._favoriteWheel(item), {
+            onEnter: () => this._cancelCollapse?.(),
+            onLeave: () =>
+            {
+                if (!this._clickToOpen)
+                    this._scheduleCollapse?.();
+            }
+        });
+        if (chosen === null)
+            return null;
+        await setFavoriteWheel(this._favKey(item), chosen);
+        playUiSound('toggle');
+        if (row)
+        {
+            this._clearFavStyle(row);
+            if (chosen)
+                this._applyFavStyle(row, chosen);
+        }
+        return chosen;
     }
 
     _setActive(col, activeRow, isCategory = false)

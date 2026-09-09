@@ -62,7 +62,7 @@ export function stringToFunction(str, args = [], reaction = null, sourceName = n
         const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck', 'cancelStructure', 'cancelStress', 'cancelStructureOutcome', 'cancelStressOutcome', 'cancelHpChange', 'cancelHeatChange', 'modifyRoll', 'modifyHpChange', 'modifyHeatChange'];
         const foundKeywords = blockingKeywords.filter(keyword => trimmed.includes(keyword));
 
-        const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
+        const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onInitEndActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
         const foundTriggers = reaction?.triggers?.filter(trigger => sensitiveTriggers.has(trigger)) || [];
 
         const isForceSync = reaction?.awaitActivationCompletion;
@@ -114,6 +114,17 @@ export const TARGET_CAPABLE_TRIGGERS = new Set([
     'onInitTechAttack', 'onTechAttack', 'onTechHit', 'onTechMiss',
     'onRoll', 'onCheck', 'onInitCheck', 'onInvoluntaryMove'
 ]);
+
+// Triggers that report a source, the only ones Only On Source Match can key on.
+export const SOURCE_MATCH_TRIGGERS = new Set([
+    'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
+    'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
+    'onEndActivation', 'onInitEndActivation',
+    'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
+]);
+
+export const ACTIVATION_TRIGGERS = new Set(['onActivation', 'onInitActivation', 'onEndActivation', 'onInitEndActivation']);
+const ACTIVATION_TRIGGER_SELECTOR = [...ACTIVATION_TRIGGERS].map(trigger => `input[name="trigger.${trigger}"]`).join(', ');
 
 const sameTriggerSet = (left, right) => Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every(trigger => right.includes(trigger));
 
@@ -167,8 +178,8 @@ export class ReactionManager
         });
 
         game.settings.registerMenu(ReactionManager.ID, "reactionConfig", {
-            name: "Activation Manager",
-            label: "Open Activation Manager",
+            name: "Automation Manager",
+            label: "Open Automation Manager",
             hint: "Configure custom activations and triggers.",
             icon: "fas fa-bolt",
             type: ReactionConfig,
@@ -2046,8 +2057,8 @@ export class ReactionEditor extends FormApplication
             title: "Edit Activation",
             id: "reaction-editor",
             template: `modules/lancer-automations/templates/reaction-editor.html`,
-            width: 800,
-            height: 1100,
+            width: 860,
+            height: Math.min(1100, Math.max(640, Math.round(document.documentElement.clientHeight * 0.9))),
             resizable: true,
             closeOnSubmit: false,
             classes: ["lancer-reaction-editor", "lancer-dialog-base", "lancer-no-title"]
@@ -2163,8 +2174,10 @@ export class ReactionEditor extends FormApplication
             onInitCheck: "{ triggeringToken, statName, checkAgainstToken, targetVal, cancelCheck(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onInitAttack: "{ triggeringToken, weapon, targets, hitTokens, actionName, tags, actionData, cancelAttack(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onInitTechAttack: "{ triggeringToken, techItem, targets, hitTokens, actionName, isInvade, tags, actionData, cancelTechAttack(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
-            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, cancelAction(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onInitActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, endActivation, cancelAction(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, distanceToTrigger, canTriggerReaction}",
+            onInitEndActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, endActivation, cancelAction(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
+            onEndActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, distanceToTrigger, canTriggerReaction}",
             onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, allowConfirm, userIdControl), modifyHpChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onHpGain: "{ triggeringToken, hpChange, currentHP, maxHP, distanceToTrigger, canTriggerReaction}",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger, canTriggerReaction}",
@@ -2217,7 +2230,7 @@ export class ReactionEditor extends FormApplication
             onInit: typeof reaction.onInit === 'function' ? reaction.onInit.toString() : (reaction.onInit || ""),
             onMessage: typeof reaction.onMessage === 'function' ? reaction.onMessage.toString() : (reaction.onMessage || ""),
             actionType: reaction.actionType || "Automation",
-            checkReaction: reaction.checkReaction !== false,
+            checkReaction: reaction.checkReaction === true,
             requireCanProvoke: reaction.requireCanProvoke === true,
             checkUsage: reaction.checkUsage ?? true,
             actionTypeOptions: {
@@ -2385,15 +2398,12 @@ export class ReactionEditor extends FormApplication
             }
         });
 
+        let syncGroupCounts = () => { };
         const onlyOnSourceMatchCheckbox = html.find('input[name="onlyOnSourceMatch"]');
         const triggerTargetCheckbox = html.find('input[name="triggerTarget"]');
         const triggerCheckboxes = html.find('input[name^="trigger."]');
 
-        const sourceMatchTriggers = new Set([
-            'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
-            'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
-            'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
-        ]);
+        const sourceMatchTriggers = SOURCE_MATCH_TRIGGERS;
 
         const toggleSourceMatchTriggers = () =>
         {
@@ -2414,23 +2424,18 @@ export class ReactionEditor extends FormApplication
                 {
                     $(this).prop('disabled', true);
                     $(this).prop('checked', false);
-                    $(this).closest('label').css('opacity', '0.5');
+                    $(this).closest('label').addClass('locked').css('opacity', '');
                 }
                 else
                 {
+                    $(this).closest('label').removeClass('locked').css('opacity', '');
                     $(this).prop('disabled', false);
-                    $(this).closest('label').css('opacity', '1');
                 }
             });
+            syncGroupCounts();
         };
 
-        onlyOnSourceMatchCheckbox.on('change', (ev) =>
-        {
-            // Sync all checkboxes with this name (DOM has two: one for General, one for Item)
-            const isChecked = $(ev.currentTarget).prop('checked');
-            onlyOnSourceMatchCheckbox.prop('checked', isChecked);
-            toggleSourceMatchTriggers();
-        });
+        onlyOnSourceMatchCheckbox.on('change', toggleSourceMatchTriggers);
         triggerTargetCheckbox.on('change', toggleSourceMatchTriggers);
         toggleSourceMatchTriggers();
 
@@ -2446,7 +2451,7 @@ export class ReactionEditor extends FormApplication
         {
             const type = activationTypeSelect.val();
             const mode = activationModeSelect.val();
-            const hasActivationTrigger = html.find('input[name="trigger.onActivation"], input[name="trigger.onInitActivation"]').is(':checked');
+            const hasActivationTrigger = html.find(ACTIVATION_TRIGGER_SELECTOR).is(':checked');
             const risky = hasActivationTrigger && (type === 'flow' || ((type === 'macro' || type === 'code') && mode === 'after'));
             recursionWarning.toggle(!!risky);
             afterModeWarning.toggle((type === 'macro' || type === 'code') && mode === 'after');
@@ -2463,7 +2468,7 @@ export class ReactionEditor extends FormApplication
 
         activationTypeSelect.on('change', toggleActivationFields);
         activationModeSelect.on('change', toggleRecursionWarning);
-        html.on('change', 'input[name="trigger.onActivation"], input[name="trigger.onInitActivation"]', toggleRecursionWarning);
+        html.on('change', ACTIVATION_TRIGGER_SELECTOR, toggleRecursionWarning);
         toggleActivationFields();
 
         html.find('.show-item-btn').on('click', async (ev) =>
@@ -2486,29 +2491,15 @@ export class ReactionEditor extends FormApplication
 
         const actionTypeSelect = html.find('#actionType');
         const frequencySelect = html.find('#frequency');
-        const checkReactionContainer = html.find('#checkReactionContainer');
-
-        const toggleConsumesReaction = () =>
-        {
-            const type = actionTypeSelect.val();
-            if (type === 'Reaction')
-                checkReactionContainer.removeClass('hidden');
-            else
-            {
-                checkReactionContainer.addClass('hidden');
-                checkReactionContainer.find('input[type="checkbox"]').prop('checked', false);
-            }
-        };
-
-        actionTypeSelect.on('change', toggleConsumesReaction);
-        toggleConsumesReaction();
 
         const autoActivateCheckbox = html.find('input[name="autoActivate"]');
         const forceSyncOption = html.find('.force-sync-option');
+        const frequencyOption = html.find('.frequency-option');
         const syncAutoActivateLock = () =>
         {
             const checked = autoActivateCheckbox.prop('checked');
             forceSyncOption.toggle(checked);
+            frequencyOption.toggle(!checked);
         };
         autoActivateCheckbox.on('change', syncAutoActivateLock);
         syncAutoActivateLock();
@@ -2662,10 +2653,7 @@ export class ReactionEditor extends FormApplication
                 });
 
                 if (autoSelect && (options.has(detectedActionType) || detectedActionType === "Other"))
-                {
                     actionTypeSelect.val(options.has(detectedActionType) ? detectedActionType : "Other");
-                    actionTypeSelect.trigger('change');
-                }
             }
 
             if (detectedFrequency)
@@ -2812,6 +2800,13 @@ export class ReactionEditor extends FormApplication
                 setTimeout(refreshEditors, 50);
             });
 
+            html.find('details.code-section').on('toggle', function ()
+            {
+                if (!this.open)
+                    return;
+                setTimeout(refreshEditors, 0);
+            });
+
             setTimeout(refreshEditors, 100);
         }
 
@@ -2853,7 +2848,10 @@ export class ReactionEditor extends FormApplication
                 const countEl = $(this).find('.trigger-group-count');
                 countEl.text(checked > 0 ? `(${checked})` : '');
             });
+            const total = html.find('input[name^="trigger."]:checked').length;
+            html.find('.trigger-selected-count').text(`${total} selected`);
         };
+        syncGroupCounts = updateGroupCounts;
         html.find('.trigger-group-header').on('click', function ()
         {
             $(this).closest('.trigger-group').toggleClass('collapsed');
@@ -2866,6 +2864,30 @@ export class ReactionEditor extends FormApplication
             const checked = $(this).find('.trigger-group-body input:checked').length;
             if (checked === 0)
                 $(this).addClass('collapsed');
+        });
+
+        const triggerSearch = html.find('#trigger-search');
+        triggerSearch.on('input', function ()
+        {
+            const query = String($(this).val() || '').trim().toLowerCase();
+            html.find('.trigger-group').each(function ()
+            {
+                const group = $(this);
+                let visible = 0;
+                group.find('.trigger-item').each(function ()
+                {
+                    const key = String($(this).find('input').attr('name') || '').replace('trigger.', '');
+                    const match = !query || key.toLowerCase().includes(query);
+                    $(this).toggle(match);
+                    if (match)
+                        visible++;
+                });
+                group.toggle(visible > 0);
+                if (query)
+                    group.removeClass('collapsed');
+                else if (group.find('.trigger-group-body input:checked').length === 0)
+                    group.addClass('collapsed');
+            });
         });
 
         html.find('#open-api-ref').on('click', () =>
@@ -3519,22 +3541,71 @@ export class ReactionEditor extends FormApplication
             { label: "Rolls", triggers: ["onRoll"] },
             { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
             { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
-            { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitCheck", "onCheck", "onDeploy"] },
+            { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
             { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
             { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
             { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
             { label: "Token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
             { label: "Other", triggers: ["onUpdate"] }
         ];
+        const help = this._triggerHelp ?? {};
+        const hasCancelFn = (triggerKey) => /\w+\s*\(/.test(help[triggerKey] ?? "");
+
         return groups.map(group => ({
             label: group.label,
-            items: group.triggers.map(triggerKey => ({ key: triggerKey, checked: selected.includes(triggerKey) }))
+            items: group.triggers.map(triggerKey => ({
+                key: triggerKey,
+                checked: selected.includes(triggerKey),
+                cx: hasCancelFn(triggerKey),
+                tg: TARGET_CAPABLE_TRIGGERS.has(triggerKey),
+                sm: SOURCE_MATCH_TRIGGERS.has(triggerKey)
+            }))
         }));
+    }
+
+    /**
+     * Compile each non-empty code field so a syntax error is reported here
+     * instead of surfacing later inside the engine's error boundary.
+     * @param {Record<string, any>} formData
+     * @returns {string|null} the first field name that failed to compile
+     */
+    _findSyntaxError(formData)
+    {
+        const fields = [
+            { name: "Evaluate Function", code: formData.evaluate, args: ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], async: false },
+            { name: "Activation Code", code: formData.activationCode, args: ["triggerType", "triggerData", "reactorToken", "item", "activationName", "api"], async: true },
+            { name: "onInit Code", code: formData.onInit, args: ["token", "item", "api"], async: false },
+            { name: "onMessage Code", code: formData.onMessage, args: ["triggerType", "data", "reactorToken", "item", "activationName", "api"], async: true }
+        ];
+
+        for (const field of fields)
+        {
+            const code = String(field.code ?? "").trim();
+            if (!code)
+                continue;
+            try
+            {
+                if (field.async)
+                    stringToAsyncFunction(code, field.args, `validate-${field.name}`);
+                else
+                    stringToFunction(code, field.args, null, `validate-${field.name}`);
+            }
+            catch (error)
+            {
+                ui.notifications.error(`${field.name}: ${error.message}`);
+                return field.name;
+            }
+        }
+        return null;
     }
 
     async _updateObject(event, formData)
     {
         this._lastSaveOk = false;
+
+        if (this._findSyntaxError(formData))
+            return;
+
         const isGeneral = formData.isGeneral === true;
 
         const triggers = [];
@@ -3554,9 +3625,7 @@ export class ReactionEditor extends FormApplication
         if (formData['dispositionFilter.secret'])
             dispositionFilter.push('secret');
 
-        const isSourceMatch = Array.isArray(formData.onlyOnSourceMatch)
-            ? formData.onlyOnSourceMatch.some(value => value === true || value === "on")
-            : (formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on");
+        const isSourceMatch = formData.onlyOnSourceMatch === true || formData.onlyOnSourceMatch === "on";
 
         if (isGeneral)
         {

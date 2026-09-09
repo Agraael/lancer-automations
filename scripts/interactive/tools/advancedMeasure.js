@@ -13,6 +13,7 @@ import { isHexGrid, getHexCenter, pixelToOffset, drawHexAt, getOccupiedOffsets }
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
+import { drawSightlines, clearSightlines } from "../../vision/sightlines.js";
 import { getActorMaxThreat, getWeaponProfiles_WithBonus, weaponPulseRange } from "../../tools/misc-tools.js";
 import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, weaponIgnoresLineOfSight } from "../../tools/weapon-bonus-utils.js";
 import { getWeapons } from "../deployables.js";
@@ -52,6 +53,7 @@ const _saved = {
     size: 1,
     rangeSource: 'none',
     manualRadius: 5,
+    losEye: false,
     losBySource: {},
     weaponItemId: null,
     elevationAware: true,
@@ -793,6 +795,7 @@ function applyMark(mark, token, adding, sound)
     store.toggle(mark);
     if (sound)
         playUiSound(token ? (adding ? 'tokenTarget' : 'tokenUntarget') : 'targetingConfirm');
+    refreshLosEye();
     onSelectionChange();
     if (_ctrlCursorWorld)
         _ctrlIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
@@ -875,7 +878,10 @@ function onWhiteMarkTokenDeleted(doc)
             store.remove(mark);
     }
     if (store.marks.length !== before)
+    {
+        refreshLosEye();
         onSelectionChange();
+    }
 }
 
 function onCombatStateChange()
@@ -1510,6 +1516,8 @@ function clearPlacements()
     _saved.pulseEnabled = false;
     _saved.movementReachEnabled = false;
     _saved.tacticalLabels = false;
+    _saved.losEye = false;
+    clearSightlines('adv-measure');
     _controller?.redraw();
     _emitStateChange();
     onSelectionChange();
@@ -1878,6 +1886,7 @@ const HELP_LINES = [
     '[[T]]: next range source   [[G]]: clear all',
     '[[Right-click]] a range source or a weapon: pin its outline (★, no pulse)',
     'Move: movement reach in ruler speed tiers',
+    'Eye: line of sight to marks, or to your targets when nothing is marked',
     '[[Escape]]: stop placing   [[Shift+R]]: close',
 ];
 
@@ -1951,9 +1960,9 @@ function makeHorusText(text)
     return glitch;
 }
 
-function makeUnknownName()
+function makeUnknownName(token)
 {
-    return makeHorusText(getUnknownLabel());
+    return makeHorusText(getUnknownLabel(token?.document ?? token));
 }
 
 function renderControlledChip()
@@ -1983,7 +1992,7 @@ function renderControlledChip()
     else if (isKnownToken(first))
         chip.appendChild(makeScrollingName(first.name));
     else
-        chip.appendChild(makeUnknownName());
+        chip.appendChild(makeUnknownName(first));
     chip.title = 'Reference: the controlled token(s). Select tokens to change.';
     chip.style.cursor = 'pointer';
     chip.addEventListener('click', () => canvas.animatePan({ x: first.center.x, y: first.center.y }));
@@ -2279,6 +2288,149 @@ function renderLabelsToggle()
     return button;
 }
 
+// Ground marks ray like a size-1 token standing on the terrain below them.
+function _markGroundHeight(center)
+{
+    let top = 0;
+    try
+    {
+        for (const shape of globalThis.terrainHeightTools?.getShapesAtPoint?.(center.x, center.y) ?? [])
+        {
+            const shapeTop = (shape.elevation ?? 0) + (shape.height ?? 0);
+            if (Number.isFinite(shapeTop) && shapeTop > top)
+                top = shapeTop;
+        }
+    }
+    catch
+    {
+        top = 0;
+    }
+    return top + 1.1;
+}
+
+// Adjacent ground marks fuse into one footprint that rays like a bigger token.
+function _clusterGroundMarks(groundMarks)
+{
+    const byKey = new Map(groundMarks.map(mark => [`${mark.col},${mark.row}`, mark]));
+    const seen = new Set();
+    const clusters = [];
+    for (const mark of groundMarks)
+    {
+        const startKey = `${mark.col},${mark.row}`;
+        if (seen.has(startKey))
+            continue;
+        seen.add(startKey);
+        const cluster = [];
+        const queue = [mark];
+        while (queue.length)
+        {
+            const current = queue.pop();
+            cluster.push(current);
+            let adjacent = [];
+            try
+            {
+                adjacent = canvas.grid.getAdjacentOffsets({ i: current.row, j: current.col }) ?? [];
+            }
+            catch
+            {
+                adjacent = [];
+            }
+            for (const offset of adjacent)
+            {
+                const key = `${offset.j},${offset.i}`;
+                if (seen.has(key) || !byKey.has(key))
+                    continue;
+                seen.add(key);
+                queue.push(byKey.get(key));
+            }
+        }
+        clusters.push(cluster);
+    }
+    return clusters;
+}
+
+function refreshLosEye()
+{
+    clearSightlines('adv-measure');
+    if (!_open || !_saved.losEye)
+        return;
+    const viewer = getReferenceTokens()[0];
+    if (!viewer)
+        return;
+    const targets = [];
+    const groundMarks = [];
+    const markers = _saved.whiteMarks?.marks ?? [];
+    // Markers when there are any, the user's targets otherwise.
+    if (markers.length)
+    {
+        for (const mark of markers)
+        {
+            if (mark.tokenId)
+            {
+                const token = canvas.tokens.get(mark.tokenId);
+                if (token && token !== viewer)
+                    targets.push(token);
+            }
+            else
+                groundMarks.push(mark);
+        }
+    }
+    else
+    {
+        for (const token of game.user?.targets ?? [])
+        {
+            if (token !== viewer)
+                targets.push(token);
+        }
+    }
+    for (const cluster of _clusterGroundMarks(groundMarks))
+    {
+        const cells = cluster.map(mark => getHexCenter(mark.col, mark.row));
+        const center = {
+            x: cells.reduce((sum, cell) => sum + cell.x, 0) / cells.length,
+            y: cells.reduce((sum, cell) => sum + cell.y, 0) / cells.length,
+        };
+        const height = Math.max(...cells.map(cell => _markGroundHeight(cell)));
+        targets.push({ ...center, h: height, cells });
+    }
+    if (targets.length)
+        drawSightlines('adv-measure', viewer, targets);
+}
+
+function onLosEyeTokenUpdate(tokenDoc, change)
+{
+    if (!_saved.losEye || !['x', 'y', 'elevation', 'width', 'height'].some(key => key in change))
+        return;
+    refreshLosEye();
+}
+
+let _losEyeRefreshTimer = null;
+
+// Throttled so movement animation frames redraw the rays without recomputing per frame.
+function onLosEyeTokenRefresh(token, opts)
+{
+    if (!_saved.losEye || (!opts?.refreshPosition && !opts?.refreshSize) || _losEyeRefreshTimer)
+        return;
+    _losEyeRefreshTimer = setTimeout(() =>
+    {
+        _losEyeRefreshTimer = null;
+        refreshLosEye();
+    }, 100);
+}
+
+function renderLosEyeToggle()
+{
+    const button = makeIconButton('fa-solid fa-eye', 'Line of sight to marks, or your targets', () =>
+    {
+        _saved.losEye = !_saved.losEye;
+        refreshLosEye();
+        renderToolbar();
+    });
+    if (_saved.losEye)
+        markActive(button, false);
+    return button;
+}
+
 function renderToolbar()
 {
     if (!_toolbarEl)
@@ -2296,10 +2448,12 @@ function renderToolbar()
     if (isLancerRulerActive())
         _toolbarEl.appendChild(renderMoveToggle());
     _toolbarEl.appendChild(renderLabelsToggle());
+    _toolbarEl.appendChild(renderLosEyeToggle());
     _toolbarEl.appendChild(makeSep());
     _toolbarEl.appendChild(makeButton('Clear', clearPlacements));
     _toolbarEl.appendChild(makeButton('✕', () => closeAdvancedMeasure()));
     _overToolbar = pointerOverToolbar();
+    refreshLosEye();
 }
 
 // Sit just above the Foundry macro hotbar, tracking its collapse/expand/hide.
@@ -2545,6 +2699,9 @@ export function openAdvancedMeasure(options)
     Hooks.on('combatRound', onCombatStateChange);
     Hooks.on('deleteCombat', onCombatStateChange);
     Hooks.on('deleteToken', onWhiteMarkTokenDeleted);
+    Hooks.on('updateToken', onLosEyeTokenUpdate);
+    Hooks.on('refreshToken', onLosEyeTokenRefresh);
+    Hooks.on('targetToken', refreshLosEye);
     Hooks.on('updateItem', onProfileSwitched);
     window.addEventListener('resize', onHotbarChange);
     ensureWhiteMarkStore();
@@ -2587,6 +2744,12 @@ export function closeAdvancedMeasure()
         return;
     _open = false;
     _overToolbar = false;
+    clearSightlines('adv-measure');
+    Hooks.off('updateToken', onLosEyeTokenUpdate);
+    Hooks.off('refreshToken', onLosEyeTokenRefresh);
+    Hooks.off('targetToken', refreshLosEye);
+    clearTimeout(_losEyeRefreshTimer);
+    _losEyeRefreshTimer = null;
     document.removeEventListener('pointermove', onClientPointerMove, { capture: true });
     _hidePins();
     playUiSound('details');

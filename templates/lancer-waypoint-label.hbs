@@ -1,25 +1,26 @@
-<div class="la-waypoint-label {{cssClass}}">
-	<div class="la-line la-line-cost">
+<div class="la-waypoint-label {{cssClass}}"{{#if ringColor}} style="--la-ring: {{ringColor}};"{{/if}}>
+	<div class="la-badge-icon">
 		{{#if action.img}}
 		<div class="la-img" style="background-image: url('{{action.img}}');"></div>
 		{{else if action.icon}}
 		<i class="la-icon {{action.icon}}"></i>
 		{{/if}}
-		<span class="la-total">{{totalCost}}{{#if units}} {{units}}{{/if}}</span>
-		{{#if deltaCost}}<span class="la-delta">+ {{deltaCost}}</span>{{/if}}
 	</div>
-	{{#if showSecondLine}}
-	<div class="la-line la-line-elev">
+	<div class="la-badge-disc"><span class="la-total">{{totalCost}}</span></div>
+	{{#if showPathfind}}
+	<div class="la-badge-pathfind{{#unless pathfindOn}} off{{/unless}}"><i class="fa-solid fa-route"></i></div>
+	{{/if}}
+	<div class="la-badge-row{{#unless showSecondLine}} empty{{/unless}}">
+		{{#if deltaCost}}<span class="la-delta">+{{deltaCost}}</span>{{/if}}
 		{{#if elevArrow}}
 		<i class="la-icon {{elevArrow}}"></i>
-		<span class="la-elev">{{elevAbs}}{{#if units}} {{units}}{{/if}}</span>
+		<span class="la-elev">{{elevAbs}}</span>
 		{{/if}}
 		{{#if penalty}}
 		<i class="la-icon la-penalty fa-solid fa-triangle-exclamation"></i>
-		<span class="la-penalty-value">{{penalty}}{{#if units}} {{units}}{{/if}}</span>
+		<span class="la-penalty-value">{{penalty}}</span>
 		{{else if penaltyZone}}
 		<i class="la-icon la-penalty fa-solid fa-triangle-exclamation" data-tooltip="Movement penalty zone (no cost on gridless)"></i>
 		{{/if}}
 	</div>
-	{{/if}}
 </div>

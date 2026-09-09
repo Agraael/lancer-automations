@@ -1,6 +1,6 @@
 /* global game, canvas, PIXI, performance */
 
-import { _queueCard, _createInfoCard, _removeInfoCard } from "../cards.js";
+import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
 import { isSingleTargetPickerActive, cancelSingleTargetPicker, createChanceLabel } from "../canvas.js";
 import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { TG, paintDashedFootprint, createTokenTether } from "../canvas-helpers.js";
@@ -159,16 +159,21 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             clearToolPresence('haseContest');
             clearChanceLabels();
             destroyMarks();
+            unbindEscape();
             _removeInfoCard(cardEl);
         };
 
+        const cancel = () =>
+        {
+            cleanup();
+            resolve(null);
+        };
+
+        const unbindEscape = bindCardEscape(cancel, isSingleTargetPickerActive);
+
         cardEl = _createInfoCard("haseContest", {
             title: "HASE CONTEST",
-            onCancel: () =>
-            {
-                cleanup();
-                resolve(null);
-            },
+            onCancel: cancel,
         });
 
         const updateRun = () =>

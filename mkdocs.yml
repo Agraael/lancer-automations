@@ -108,6 +108,7 @@ nav:
       - Effects: API_EFFECTS.md
       - Interactive: API_INTERACTIVE.md
       - Items: API_ITEMS.md
+      - Flags: API_FLAGS.md
       - HUD: API_HUD.md
       - Movement: API_MOVEMENT.md
       - Token Display: API_TOKEN_DISPLAY.md

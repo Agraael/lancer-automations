@@ -293,6 +293,12 @@ const GROUPS = [
                 explain: 'Rolled damage is applied to the targets without a confirm step.',
                 keys: ['autoDamageApply'],
             },
+            {
+                id: 'auto-struct-followup',
+                label: 'Click structure and stress follow-up buttons automatically?',
+                explain: 'HULL, ENGINEERING, CASCADE, TEAR OFF and MELTDOWN fire on their own.',
+                keys: ['autoStructFollowup'],
+            },
         ],
     },
     {
@@ -363,7 +369,7 @@ const GROUPS = [
             {
                 id: 'split-at-speed-tiers',
                 label: 'Split a drag where the speed tier changes?',
-                explain: 'Breaks a drag into sub-moves at each speed-tier change.',
+                explain: 'Breaks a drag into sub-moves at each speed-tier change. The boost offer then judges each tier on its own.',
                 keys: ['splitMovementAtSpeedTiers'],
             },
             {
@@ -437,8 +443,15 @@ const GROUPS = [
             {
                 id: 'movement-cap',
                 label: 'Enforce the movement cap and offer to Boost when a move goes over?',
-                explain: 'Cancels a drag longer than the token can move, and offers to split it with Boost or Overcharge instead.',
-                keys: ['enableMovementCapDetection', 'enableBoostOffer'],
+                explain: 'Cancels a drag longer than the token can move, and offers to cover it with Boost or Overcharge.',
+                kind: 'choice',
+                keys: ['enableBoostOffer', 'enableMovementCapDetection'],
+                choices: [
+                    { value: 'no', label: 'No' },
+                    { value: 'yes', label: 'Ask first' },
+                    { value: 'auto', label: 'Automatic' },
+                ],
+                apply: (value) => ({ enableMovementCapDetection: value !== 'no', enableBoostOffer: value }),
             },
             {
                 id: 'split-at-boundaries',

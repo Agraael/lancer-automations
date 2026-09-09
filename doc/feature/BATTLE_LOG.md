@@ -10,19 +10,23 @@ So what is it? It tries to track everything that happens during a combat and han
 
 ---
 
+## Settings
+
+The **Battle Log** tab: **Enable Battle Log**, **Disable awards**, and **Theme music** (a default, or one per outcome).
+
+---
+
 ## Ending a combat
 
 When a combat ends, the GM gets a card first. Pick the outcome, **SUCCESS**, **PARTIAL**, or **FAILURE**, add whatever detail lines you want, and set the **MVP** (leave it blank and it auto-picks from the awards). Hit broadcast and the sequence plays for everyone.
-
-The rest is in the **Battle Log** settings tab: **Enable Battle Log**, **Disable awards**, and **Theme music** (a default, or one per outcome).
 
 ---
 
 ## A word on accuracy
 
-Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item the moment it hits the chat, that is what it reads as "used."
+Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item the moment it hits the chat. That is what it reads as "used."
 
-Past that it tracks kills, assists, accuracy, damage, movement, and saves, per token, so every grunt in a squad gets its own line.
+Past that it tracks kills, assists, accuracy, damage, movement, and saves, per token, so every grunt in a squad gets its own line. An assist is a hit or damage you landed on an enemy someone else finished off: the last blow is the kill and everyone else who hurt it gets the assist.
 
 ---
 
@@ -47,10 +51,11 @@ Up top sit the awards, medals for how the fight went:
 - most kills (**EXECUTIONER**)
 - most physical damage (**HEAVY HITTER**)
 - most assists (**SUPPORT**)
-- best accuracy (**SHARPSHOOTER**)
+- best weapon hit rate, three shots minimum (**SHARPSHOOTER**)
+- best tech hit rate (**HACKER**)
 - most attacks dodged (**GHOST**), and more
 
-Each has a threshold, so it only shows when someone earns it. The **MVP** goes to whoever collected the most, unless the GM picks by hand. Not your thing? Flip **Disable awards**.
+Each has a threshold, so it only shows when someone earns it. Each is also worth 1 to 3 points depending on how hard it is, and the **MVP** is whoever ends up with the highest total, damage dealt breaking a tie. A GM pick overrides that. Not your thing? Flip **Disable awards**.
 
 ---
 

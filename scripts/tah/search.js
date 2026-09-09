@@ -3,6 +3,7 @@
 import { onHudRowHover } from './hover.js';
 import { playUiSound } from './sound.js';
 import { tahScale, laHudStripeStyle } from './item-helpers.js';
+import { favoriteWheel, favMarkHtml } from './favorites.js';
 
 /**
  * Collect search results across all categories.
@@ -63,6 +64,23 @@ export function collectSearchResults(query, categories)
  * @param {any[]} results  From `collectSearchResults`.
  * @param {{ el: any, makeRow: Function, token: any, brighten: Function }} ctx
  */
+const CAT_ABBREV = {
+    'Actions': 'ACT',
+    'Attributes': 'ATTR',
+    'Deployables': 'DEPL',
+    'Resources': 'RES',
+    'Statuses': 'STATUS',
+    'Systems': 'SYS',
+    'Talents': 'TAL',
+    'Utility': 'UTIL',
+    'Weapons': 'WPN',
+};
+
+function catLabel(label)
+{
+    return CAT_ABBREV[label] ?? label;
+}
+
 export function openSearchResults(col, results, { el, makeRow, token, brighten, onCtrlRightClick = null })
 {
     col.children(':not(.la-hud-col-label)').remove();
@@ -82,9 +100,16 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
     {
         for (const item of results)
         {
-            const row = makeRow(item.label, false, item.icon ?? 'fas fa-circle-dot', item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, 0, item.sizeLevel ?? null);
+            const labelHasIcon = typeof item.label === 'string' && item.label.includes('<');
+            const rowIcon = item.icon ?? (labelHasIcon ? null : 'fas fa-circle-dot');
+            const row = makeRow(item.label, false, rowIcon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, 0, item.sizeLevel ?? null);
             if (item.favKey)
+            {
                 row.attr('data-la-fav-key', item.favKey);
+                const wheel = favoriteWheel(item.favKey);
+                if (wheel)
+                    row.css('position', 'relative').append(favMarkHtml(wheel));
+            }
             if (item.highlightBg)
             {
                 const borderColor = item.highlightBorderColor ?? item.highlightBg;
@@ -113,7 +138,7 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
                 row.on('mouseleave', () => onHudRowHover({ ...hoverData, token, isEntering: false, isLeaving: true  }));
             }
             const catColor = (stripe || item.highlightBg) ? 'color:rgba(255,255,255,0.9);' : '';
-            row.css({ flexWrap: 'wrap', height: 'auto', minHeight: '44px' }).prepend($(`<span class="la-hud-cat" style="width:100%;font-size:0.58em;text-transform:uppercase;letter-spacing:0.06em;line-height:1.4;padding-bottom:1px;opacity:0.85;${catColor}">${item._catLabel}</span>`));
+            row.append($(`<span class="la-hud-cat" style="flex-shrink:0;padding-right:8px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.06em;line-height:1;opacity:0.8;${catColor}" title="${item._catLabel}">${catLabel(item._catLabel)}</span>`));
             row.on('mouseenter', () => playUiSound('hover'));
             row.on('click', () =>
             {
@@ -125,7 +150,7 @@ export function openSearchResults(col, results, { el, makeRow, token, brighten, 
                 {
                     ev.preventDefault();
                     ev.stopImmediatePropagation();
-                    onCtrlRightClick(item, row);
+                    onCtrlRightClick(item, row, ev);
                     return;
                 }
                 if (!item.onRightClick)

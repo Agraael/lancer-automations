@@ -1,7 +1,7 @@
 {
     "id": "lancer-automations",
     "title": "Lancer Automations",
-    "version": "4.2.1",
+    "version": "4.2.4",
     "description": "Big ol' module containing many automations for lancer.",
     "socket": true,
     "documentTypes": {
@@ -22,6 +22,7 @@
             "url": "https://github.com/Agraael",
             "github": "Agraael",
             "patreon": "https://www.patreon.com/c/LaSossis",
+            "ko-fi": "https://ko-fi.com/lasossis",
             "discord": "232918237107453962"
         }
     ],
@@ -29,7 +30,7 @@
     "license": "LICENSE",
     "readme": "https://agraael.github.io/lancer-automations/",
     "manifest": "https://github.com/Agraael/lancer-automations/releases/latest/download/module.json",
-    "download": "https://github.com/Agraael/lancer-automations/releases/download/4.2.1/module.zip",
+    "download": "https://github.com/Agraael/lancer-automations/releases/download/4.2.4/module.zip",
     "esmodules": [
         "scripts/combat/overwatch.js",
         "scripts/main.js",
@@ -39,7 +40,8 @@
         "scripts/setup/telemetry.js",
         "scripts/setup/news.js",
         "scripts/Battelog/battlelog.js",
-        "scripts/Battelog/recap.js"
+        "scripts/Battelog/recap.js",
+        "scripts/seasonal/annual.js"
     ],
     "scripts": [
         "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"
@@ -48,7 +50,8 @@
         "styles/codemirror-dark.css",
         "styles/interactive-tools.css",
         "styles/tah.css",
-        "styles/battelog.css"
+        "styles/battelog.css",
+        "styles/seasonal.css"
     ],
     "compatibility": {
         "minimum": "13.351",

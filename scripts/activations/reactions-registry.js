@@ -11,11 +11,13 @@ const externalGeneralReactions = {};
 export function registerExternalItemReactions(reactions)
 {
     Object.assign(externalItemReactions, reactions);
+    Hooks.callAll('lancer-automations.clearCaches');
 }
 
 export function registerExternalGeneralReactions(reactions)
 {
     Object.assign(externalGeneralReactions, reactions);
+    Hooks.callAll('lancer-automations.clearCaches');
 }
 
 export function getDefaultItemReactionRegistry()

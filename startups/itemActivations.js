@@ -17,7 +17,7 @@ const suppressArcherAutomation = {
     itemType: "npc_feature",
     reactions: [{
         name: "Suppress",
-        triggers: ["onActivation", "onDamage", "onStatusApplied", "onDestroyed"],
+        triggers: ["onActivation", "onEndActivation", "onDamage", "onStatusApplied", "onDestroyed"],
         triggerSelf: true,
         triggerOther: true,
         outOfCombat: true,
@@ -28,7 +28,7 @@ const suppressArcherAutomation = {
         activationMode: "instead",
         evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            if (triggerType === "onActivation")
+            if (triggerType === "onActivation" || triggerType === "onEndActivation")
                 return triggerData.triggeringToken?.id === reactorToken.id && triggerData.item?.system?.lid === item?.system?.lid;
             if (triggerType === "onDamage")
             {
@@ -71,9 +71,9 @@ const suppressArcherAutomation = {
             };
             const isItemActive = () => !!api.getActivatedItems?.(reactorToken)?.some(active => active.id === item.id);
 
-            if (triggerType === "onActivation")
+            if (triggerType === "onActivation" || triggerType === "onEndActivation")
             {
-                if (triggerData.endActivation)
+                if (triggerType === "onEndActivation")
                 {
                     await removeSuppressFromAll();
                     return;
@@ -882,7 +882,7 @@ function buildDefenseNetAutomation(radius, isRebake = false)
     /** @type {ReactionConfig[]} */
     const reactions = [
         {
-            triggers: ["onActivation"],
+            triggers: ["onActivation", "onEndActivation"],
             actionType: "Full Action",
             onlyOnSourceMatch: true,
             triggerSelf: true,
@@ -893,7 +893,7 @@ function buildDefenseNetAutomation(radius, isRebake = false)
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                if (triggerData.endActivation)
+                if (triggerType === "onEndActivation")
                 {
                     await teardownDefenseNet(reactorToken, item, api, false);
                     return;
@@ -2587,7 +2587,7 @@ const tunnellerAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [{
-        triggers: ["onActivation"],
+        triggers: ["onActivation", "onEndActivation"],
         onlyOnSourceMatch: true,
         actionType: "Quick Action",
         triggerSelf: true,
@@ -2598,7 +2598,7 @@ const tunnellerAutomation = {
         activationMode: "instead",
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            if (triggerData.endActivation)
+            if (triggerType === "onEndActivation")
             {
                 new Sequence()
                     .sound()

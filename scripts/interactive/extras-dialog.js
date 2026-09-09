@@ -35,6 +35,17 @@ function iconHtml(img, size = 22)
 
 const DAMAGE_TYPES = ['Kinetic', 'Energy', 'Explosive', 'Heat', 'Burn', 'Infection'];
 const RANGE_TYPES = ['Range', 'Threat', 'Line', 'Cone', 'Blast', 'Burst', 'Thrown'];
+const COMBAT_MODES = [['', 'None'], ['attack', 'Attack'], ['damage', 'Damage']];
+// Third entry lists the modes the tag actually reaches, the rest are hidden and cleared.
+const COMBAT_TAGS = [
+    ['tg_smart', 'Smart', 'attack'],
+    ['tg_seeking', 'Seeking', 'attack'],
+    ['tg_ap', 'AP', 'attack damage'],
+    ['tg_reliable', 'Reliable', 'attack damage'],
+    ['tg_overkill', 'Overkill', 'attack damage'],
+    ['tg_accurate', 'Accurate', 'attack'],
+    ['tg_inaccurate', 'Inaccurate', 'attack'],
+];
 
 function dmgRowHtml(dmgAmount = '', type = 'Kinetic')
 {
@@ -359,28 +370,30 @@ export function openExtrasDialog(target)
                     </div>
                     <div class="la-extras-overlay-note" style="display:none;margin-top:2px;padding:6px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 4%);font-size:0.8em;color:var(--la-ink-dim);">Attack or damage attached to this action. The action itself is untouched.</div>
                     <div class="la-extras-combat" style="margin-top:6px;padding:6px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 4%);font-size:0.8em;">
-                        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <div style="display:flex;align-items:center;gap:6px;">
                             <span style="color:var(--la-ink-dim);text-transform:uppercase;letter-spacing:0.5px;">Combat</span>
-                            <label style="display:flex;align-items:center;gap:3px;"><input type="radio" name="la-extras-combat-mode" value="" checked> None</label>
-                            <label style="display:flex;align-items:center;gap:3px;"><input type="radio" name="la-extras-combat-mode" value="attack"> Attack</label>
-                            <label style="display:flex;align-items:center;gap:3px;"><input type="radio" name="la-extras-combat-mode" value="damage"> Damage</label>
-                            <label style="margin-left:auto;display:flex;align-items:center;gap:3px;"><input type="checkbox" class="la-extras-act-melee"> Melee</label>
+                            <div class="la-extras-combat-seg" style="display:flex;flex:1;border:1px solid var(--la-edge);background:var(--la-plate);">
+                                ${COMBAT_MODES.map(([value, label], idx) => `<label style="position:relative;flex:1;display:flex;align-items:center;justify-content:center;padding:2px 0;cursor:pointer;${idx < COMBAT_MODES.length - 1 ? 'border-right:1px solid var(--la-edge);' : ''}"><input type="radio" name="la-extras-combat-mode" value="${value}"${value ? '' : ' checked'} style="position:absolute;opacity:0;pointer-events:none;">${label}</label>`).join('')}
+                            </div>
                         </div>
-                        <div style="margin-top:5px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;">
-                            <label style="display:flex;align-items:center;gap:3px;">Acc<input type="number" class="la-extras-act-acc" value="0" style="width:38px;height:22px;"></label>
-                            <label style="display:flex;align-items:center;gap:3px;">Diff<input type="number" class="la-extras-act-diff" value="0" style="width:38px;height:22px;"></label>
-                            <label style="display:flex;align-items:center;gap:3px;">Bonus<input type="number" class="la-extras-act-atkbonus" value="0" style="width:38px;height:22px;"></label>
-                        </div>
-                        <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px 10px;">
-                            ${[['tg_smart', 'Smart'], ['tg_seeking', 'Seeking'], ['tg_ap', 'AP'], ['tg_reliable', 'Reliable'], ['tg_overkill', 'Overkill'], ['tg_accurate', 'Accurate'], ['tg_inaccurate', 'Inaccurate']].map(([lid, label]) => `<label style="display:flex;align-items:center;gap:3px;"><input type="checkbox" class="la-extras-wtag" value="${lid}"> ${label}</label>`).join('')}
-                        </div>
-                        <div style="margin-top:5px;">
-                            <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--la-ink-dim);">Dmg</span><span class="la-extras-dmg-add" title="Add damage" style="cursor:pointer;color:var(--primary-color);"><i class="fas fa-plus"></i></span></div>
-                            <div class="la-extras-dmg-rows" style="margin-top:3px;display:flex;flex-direction:column;gap:3px;">${dmgRowHtml()}</div>
-                        </div>
-                        <div style="margin-top:5px;">
-                            <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--la-ink-dim);">Range</span><span class="la-extras-range-add" title="Add range" style="cursor:pointer;color:var(--primary-color);"><i class="fas fa-plus"></i></span></div>
-                            <div class="la-extras-range-rows" style="margin-top:3px;display:flex;flex-direction:column;gap:3px;">${rangeRowHtml()}</div>
+                        <div class="la-extras-combat-fields">
+                            <div class="la-extras-combat-attack" style="margin-top:5px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;">
+                                <label style="display:flex;align-items:center;gap:3px;">Acc<input type="number" class="la-extras-act-acc" value="0" style="width:38px;height:22px;"></label>
+                                <label style="display:flex;align-items:center;gap:3px;">Diff<input type="number" class="la-extras-act-diff" value="0" style="width:38px;height:22px;"></label>
+                                <label style="display:flex;align-items:center;gap:3px;">Bonus<input type="number" class="la-extras-act-atkbonus" value="0" style="width:38px;height:22px;"></label>
+                                <label style="margin-left:auto;display:flex;align-items:center;gap:3px;"><input type="checkbox" class="la-extras-act-melee"> Melee</label>
+                            </div>
+                            <div style="margin-top:5px;display:grid;grid-template-columns:repeat(3,1fr);gap:4px 6px;">
+                                ${COMBAT_TAGS.map(([lid, label, modes]) => `<label data-modes="${modes}" style="display:flex;align-items:center;gap:3px;"><input type="checkbox" class="la-extras-wtag" value="${lid}"> ${label}</label>`).join('')}
+                            </div>
+                            <div style="margin-top:5px;">
+                                <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--la-ink-dim);">Dmg</span><span class="la-extras-dmg-add" title="Add damage" style="cursor:pointer;color:var(--primary-color);"><i class="fas fa-plus"></i></span></div>
+                                <div class="la-extras-dmg-rows" style="margin-top:3px;display:flex;flex-direction:column;gap:3px;">${dmgRowHtml()}</div>
+                            </div>
+                            <div style="margin-top:5px;">
+                                <div style="display:flex;align-items:center;gap:6px;"><span style="color:var(--la-ink-dim);">Range</span><span class="la-extras-range-add" title="Add range" style="cursor:pointer;color:var(--primary-color);"><i class="fas fa-plus"></i></span></div>
+                                <div class="la-extras-range-rows" style="margin-top:3px;display:flex;flex-direction:column;gap:3px;">${rangeRowHtml()}</div>
+                            </div>
                         </div>
                     </div>
                     </div>
@@ -472,6 +485,29 @@ export function openExtrasDialog(target)
                         },
                     }).render(true);
                 });
+                const applyCombatMode = () =>
+                {
+                    const mode = String(drawerFind('input[name="la-extras-combat-mode"]:checked').val() ?? '');
+                    drawerFind('.la-extras-combat-seg label').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+                    {
+                        const on = !!el.querySelector('input')?.checked;
+                        el.style.background = on ? 'var(--primary-color)' : '';
+                        el.style.color = on ? '#fff' : '';
+                    });
+                    // Restore the real display value, not '': these rows carry an inline display:flex.
+                    drawerFind('.la-extras-combat-fields').css('display', mode ? 'block' : 'none');
+                    drawerFind('.la-extras-combat-attack').css('display', mode === 'attack' ? 'flex' : 'none');
+                    drawerFind('.la-extras-wtag').each((/** @type {number} */ _i, /** @type {any} */ el) =>
+                    {
+                        const label = el.closest('label');
+                        const on = String(label?.dataset.modes ?? '').split(' ').includes(mode);
+                        if (label)
+                            label.style.display = on ? 'flex' : 'none';
+                        if (!on)
+                            el.checked = false;
+                    });
+                };
+                drawerFind('input[name="la-extras-combat-mode"]').on('change', applyCombatMode);
                 const fillActionForm = (/** @type {any} */ src) =>
                 {
                     drawerFind('.la-extras-act-name').val(src.name ?? '');
@@ -505,6 +541,7 @@ export function openExtrasDialog(target)
                         : rangeRowHtml());
                     editingName = src.name;
                     drawerFind('.la-extras-act-add').text('Save Changes');
+                    applyCombatMode();
                 };
                 const clearActionForm = () =>
                 {
@@ -526,6 +563,7 @@ export function openExtrasDialog(target)
                     drawerFind('.la-extras-dmg-rows').html(dmgRowHtml());
                     drawerFind('.la-extras-range-rows').html(rangeRowHtml());
                     drawerFind('.la-extras-act-add').text('Add Action');
+                    applyCombatMode();
                 };
                 const openDrawer = (/** @type {string} */ type, /** @type {string} */ title) =>
                 {
@@ -584,8 +622,9 @@ export function openExtrasDialog(target)
                 {
                     drawerFind('.la-extras-act-basics').css('display', on ? 'none' : '');
                     drawerFind('.la-extras-overlay-note').css('display', on ? 'block' : 'none');
-                    drawerFind('input[name="la-extras-combat-mode"][value=""]').closest('label').css('display', on ? 'none' : '');
+                    drawerFind('input[name="la-extras-combat-mode"][value=""]').closest('label').css('display', on ? 'none' : 'flex');
                     drawerFind('.la-extras-act-add').text(on ? 'Save Combat' : 'Add Action');
+                    applyCombatMode();
                 };
                 drawerFind('.la-extras-drawer-close').on('click', () => closeDrawer());
                 html.find('.la-extras-act-new').on('click', () =>
@@ -733,16 +772,20 @@ export function openExtrasDialog(target)
                             if (el.checked)
                                 tags.push({ lid: String($(el).val()), val: '' });
                         });
-                        const acc = Number(drawerFind('.la-extras-act-acc').val() ?? 0);
-                        const diff = Number(drawerFind('.la-extras-act-diff').val() ?? 0);
-                        const atkBonus = Number(drawerFind('.la-extras-act-atkbonus').val() ?? 0);
-                        if (acc)
-                            entry.accuracy = acc;
-                        if (diff)
-                            entry.difficulty = diff;
-                        if (atkBonus)
-                            entry.attack_bonus = atkBonus;
-                        entry.attack_type = /** @type {HTMLInputElement} */ (drawerFind('.la-extras-act-melee')[0])?.checked ? 'Melee' : 'Ranged';
+                        // A damage roll reads none of these, so don't carry them onto the entry.
+                        if (combatMode === 'attack')
+                        {
+                            const acc = Number(drawerFind('.la-extras-act-acc').val() ?? 0);
+                            const diff = Number(drawerFind('.la-extras-act-diff').val() ?? 0);
+                            const atkBonus = Number(drawerFind('.la-extras-act-atkbonus').val() ?? 0);
+                            if (acc)
+                                entry.accuracy = acc;
+                            if (diff)
+                                entry.difficulty = diff;
+                            if (atkBonus)
+                                entry.attack_bonus = atkBonus;
+                            entry.attack_type = /** @type {HTMLInputElement} */ (drawerFind('.la-extras-act-melee')[0])?.checked ? 'Melee' : 'Ranged';
+                        }
                         const damage = [];
                         drawerFind('.la-extras-dmg-row').each((/** @type {number} */ _i, /** @type {any} */ rowEl) =>
                         {

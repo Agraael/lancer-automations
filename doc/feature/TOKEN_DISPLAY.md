@@ -8,9 +8,9 @@ Lancer Automations draws its own bars and labels directly on the token, as a rep
 
 ## Settings
 
-Everything here lives in the **Tokens & Display** tab, under the **Custom Token Stat Bars** and **Token Stat Hint** sections.
+Everything here lives in the **Tokens & Display** tab. The bars and the hover popup sit in the **Custom Token Stat Bars** and **Token Stat Hint** sections, the halo, hover info and effect icon scale in **Status Icons**, and **Allow Half-Size Tokens** at the top of the tab.
 
-Turn the bars on with **`tokenStatBar`** (Enable Custom Token Stat Bars). It needs a reload, and it's disabled while **Bar Brawl** is active, so turn Bar Brawl off first.
+Turn the bars on with **Enable Custom Token Stat Bars** (`tokenStatBar`). It needs a reload, and the whole subsystem is skipped while the **Bar Brawl** module is active, so disable that module first.
 
 <img src="../img/td-settings.png" width="70%"/>
 
@@ -40,11 +40,14 @@ Elevation also gets a small badge at the token's corner (up/down arrow with the 
 
 The settings hold the **world defaults**. Each token can override them from **Token Config → Resources tab**:
 
-- **Visibility mode**, set separately for **in combat** and **out of combat**: *all* (anyone who can see the token), *owners only*, or *none* (only when the token is selected).
-- **Show only in combat** - bars appear only during an encounter.
-- **Hide stat bar** - suppress the bars on this token.
-- **Row height** - fixed pixels, or 0 to scale with the grid.
-- **Display stress** - show the pilot bond-stress bar (pilot tokens).
+- **Visibility mode**, set separately for **in combat** and **out of combat**: *All*, *Owners only*, *Owners + scanned*, or *None* (only when the token is selected). A fifth entry, *Use world default*, clears the override.
+- **Show Only In Combat** - bars appear only during an encounter.
+- **Hide Stat Bar** - suppress the bars on this token. They still flash briefly when a value changes.
+- **Disable Stat Bar** - never show them on this token, not even on value changes.
+- **Row Height (px)** - fixed pixels, blank or 0 to scale with the grid.
+- **Display Stress** - show the pilot bond-stress bar (pilot tokens).
+
+The visibility mode says who *may* see the bars. On top of that, the bar hub is only drawn when the token is controlled, hovered, targeted by you, or while Alt is held.
 
 **Minimum Bar Zoom Scale** keeps the bars a constant screen size below a given zoom level.
 
@@ -77,7 +80,7 @@ Set on an item or actor instead of one token, an extra bar becomes a template th
 
 <img align="right" src="../img/td-talent-counters.png" width="45%"/>
 
-With **Auto-add Talent Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section.
+With **Auto-add Talent & Frame Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section.
 
 A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-Injected** button rebuilds them from its current talents and frame.
 
@@ -98,7 +101,7 @@ In the Custom Token Stat Bars settings:
 
 <img align="right" src="../img/td-stat-hint.png" width="45%"/>
 
-A hover popup with a token's full stats, enabled with **`tokenStatHintEnabled`**. Settings cover the hover **delay**, the popup **scale**, whether it shows for the token you control, and whether it's **combat only**.
+A hover popup with a token's full stats, enabled with **Enable Token Stat Hint** (`tokenStatHintEnabled`). Settings cover the hover **delay**, the popup **scale**, whether it shows for the token you control, whether it's **combat only**, and whether it carries a HASE line (**Show HASE**).
 
 For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned).
 
@@ -122,13 +125,9 @@ With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid
 
 ## Status icons
 
-<img align="right" src="../vid/td-status-icons.gif" width="45%"/>
-
-**Status Icon Halo** circles the icons around the token instead of stacking them in a column, with sliders for ring radius and the angle of the first icon. Inspired by [status-halo](https://gitlab.com/mxzf/status-halo); if that module is also on, you get a warning on load.
+**Status Icon Halo** circles the icons around the token instead of stacking them in a column, with sliders for ring radius and the angle of the first icon. Inspired by [status-halo](https://gitlab.com/mxzf/status-halo). If that module is also on, you get a warning on load.
 
 **Status Icon Hover Info** enlarges the icon under the cursor and shows its name, description, duration and bonus.
-
-<br clear="right"/>
 
 ## Notable options
 
@@ -152,3 +151,4 @@ With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid
 | **Unknown Label** | Text shown for unscanned NPCs in Tied-to-scan mode. |
 | **Hide class/templates/tier when not scanned** | Also hide the class/frame subtitle and tier badge until scanned. |
 | **Hide current values without owner/observer access** | Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track. |
+| **Show HASE** | Adds a hull/agility/systems/engineering line to the popup. |

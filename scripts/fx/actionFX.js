@@ -77,8 +77,8 @@ const ACTION_FX_PREVIEW = {
     mineDetonation: { src: 'modules/lancer-automations/FX/audio/extra/mineDetonation.wav', scale: 0.5 },
     profile:      { src: 'modules/lancer-automations/FX/audio/profile.wav', scale: 0.5 },
     mod:          { src: 'modules/lancer-automations/FX/audio/mod.wav', scale: 0.5 },
-    attack:       { src: () => `modules/lancer-automations/FX/audio/weapon0${1 + Math.floor(Math.random() * 3)}.wav`, scale: 0.5 },
-    damage:       { src: () => `modules/lancer-automations/FX/audio/Damage0${1 + Math.floor(Math.random() * 2)}.wav`, scale: 0.5 },
+    attack:       { src: () => `modules/lancer-automations/FX/audio/weapon0${1 + Math.floor(Math.random() * 3)}.wav`, scale: 0.3 },
+    damage:       { src: () => `modules/lancer-automations/FX/audio/Damage0${1 + Math.floor(Math.random() * 2)}.wav`, scale: 0.3 },
     hase:         { src: () => `modules/lancer-automations/FX/audio/HASE_0${1 + Math.floor(Math.random() * 3)}.wav`, scale: 0.5 },
     skill:        { src: 'modules/lancer-automations/FX/audio/skill.wav', scale: 0.5 },
 };

@@ -1,4 +1,4 @@
-import { ReactionManager, stringToFunction, stringToAsyncFunction } from "./reaction-manager.js";
+import { ReactionManager, stringToFunction, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./reaction-manager.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
@@ -1050,7 +1050,7 @@ async function checkReactions(triggerType, data)
                     let activationName = item.name;
                     const reactionPath = reaction.reactionPath || "";
                     // actionName only identifies a sub-action on activation triggers, elsewhere it's a flow title
-                    const actionNameIsSubAction = triggerType === 'onActivation' || triggerType === 'onInitActivation';
+                    const actionNameIsSubAction = ACTIVATION_TRIGGERS.has(triggerType);
 
                     if (reactionPath && reactionPath !== "" && reactionPath !== "system" && reactionPath !== "system.trigger")
                     {
@@ -1620,7 +1620,7 @@ export async function processEffectConsumption(triggerType, data)
     await Promise.all(consumptionPromises);
 }
 
-const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation']);
+const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation', 'onEndActivation']);
 
 export async function handleTrigger(triggerType, data)
 {

@@ -8,6 +8,7 @@ import {
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
 import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester } from "../vision/lancerDetectionModes.js";
+import { laSightEdgeOptions } from "../vision/laWallLos.js";
 import { getShapeSamplePoints, getTokenVisionLOS } from "../vision/visionFromEdge.js";
 import { getSettingEnabled } from "../setup/settings-register.js";
 import { blindedVisionEnabled } from "../vision/blindedVision.js";
@@ -980,7 +981,7 @@ function _visibilityTester(originToken)
             : { source: { object: { b: eyeElevation, t: eyeElevation } }, b: eyeElevation, t: eyeElevation };
         const built = origins.map(point => ({
             origin: point,
-            sweep: CONFIG.Canvas.polygonBackends.sight.create({ x: point.x, y: point.y, elevation: eyeElevation }, { type: 'sight', ...sourceOpt }),
+            sweep: CONFIG.Canvas.polygonBackends.sight.create({ x: point.x, y: point.y, elevation: eyeElevation }, { type: 'sight', edgeOptions: laSightEdgeOptions(), ...sourceOpt }),
         }));
         const tester = (x, y) => built.some(entry => entry.sweep.contains(x, y));
         tester.built = built;
@@ -1959,7 +1960,7 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
         strokeBoundary(lineW, lineColor, lineAlpha);
 }
 
-const BLOCKED_CONTOUR_ALPHA = 0.35;
+const BLOCKED_CONTOUR_ALPHA = 0.25;
 
 // Dashed ghost of the true flat reach over whatever the filter dropped; edges shared with the lit contour are skipped.
 export function paintBlockedRangeContour(graphic, fullCells, litCells, { glowColor = RANGE_GLOW.manual, lineAlpha = BLOCKED_CONTOUR_ALPHA } = {})

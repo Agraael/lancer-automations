@@ -4,7 +4,7 @@
 
 <img src="../img/feature-automation-engine.png" width="55%"/>
 
-Automate almost any Lancer action.
+Turns game events into automations: a trigger fires, filters decide who reacts, and your code, a flow, or a macro runs.
 
 Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[Automation System](../AUTOMATION_SYSTEM.md)**.
 
@@ -12,7 +12,13 @@ Engine internals (full trigger list, evaluate / activation / onInit callbacks, c
 
 ## What's automated by default
 
-Lancer Automations provides basic automation for most of the game's base actions. There's no ready-made automation for specific NPC or mech items yet. For those, it's up to you to build your own, and the Activation Manager is where you do it.
+Two things ship enabled, both listed on the **Defaults** tab of the Activation Manager.
+
+**The base actions.** Overwatch, Brace, Engagement, Disengage, Ram, Boost, Overcharge, Lock On, Bolster, Stabilize, Eject, Reactor Meltdown, Hide, Scan, Mount and the rest of the general reactions.
+
+**A short list of LID-keyed item automations.** Custom Paint Job, Limitless, Treads or Hover, Limited Melee Attacks (ships and vehicles), No Manipulators, Limited Handling, and Veterancy, each keyed to the item's LID and firing for any actor that owns it.
+
+Beyond those, an item automation is yours to write, and the Activation Manager is where you do it. The larger [personal activation set](#the-personal-activation-set) is a separate opt-in.
 
 ---
 
@@ -27,7 +33,7 @@ It has two kinds of entries:
 - **Item-based** automations are tied to a Lancer item by its LID. Only tokens that own that item can react. You can also bind one to a deployable LID, or to a specific Actor UUID, so it reacts only as that one exact actor instead of every actor with the item.
 - **General** automations aren't tied to any item. Any token in the scene can react, filtered by the rules you set.
 
-Entries can be sorted into named **folders**, and there's a **Startup Scripts** tab, covered further down.
+Entries can be sorted into named **folders**. The four tabs are **Activations**, **Defaults**, **Startup** and **Workshop**.
 
 Each activation has an **enable / disable** toggle. It works per sub-reaction on a multi-reaction item, and on the built-in and personal-set automations too (the toggle is saved as your own override, so disabling a built-in one sticks).
 
@@ -41,7 +47,7 @@ You can't edit a built-in directly. Three ways around it:
 |------|----|
 | Turn it off | The **enable toggle**. Saved, so updates don't undo it. |
 | Change it | **Edit** it. Your version is saved over the default. |
-| Make a variant | **Copy to Custom** (copy icon on the row). Makes an editable copy and opens it. The original stays. |
+| Make a variant | **Copy to Custom** (copy icon on the row, Defaults tab only). Makes an editable copy and opens it. The original stays. |
 
 To replace a built-in: copy it, edit the copy, disable the original.
 
@@ -53,7 +59,7 @@ All of this is saved in your world, not the module, so updates never overwrite i
 
 <img align="right" src="../img/ae-lid-finder.png" width="45%"/>
 
-Item-based automations need the item's LID. The **LID finder** on the Item tab browses your world and compendium items so you can search and copy a LID, and see the action paths inside it. A deployable can be set to react to its own deploy (the `onDeploy` trigger), covered in [Automation System](../AUTOMATION_SYSTEM.md).
+Item-based automations need the item's LID. Three finder buttons sit next to the LID field in the editor: **Item** browses your world and compendium items, **Deploy** lists deployable LIDs, **Actor** picks an Actor UUID. A separate **Find Action** button beside the Action Path field lists every action inside the selected item with the path to paste. A deployable can be set to react to its own deploy (the `onDeploy` trigger), covered in [Automation System](../AUTOMATION_SYSTEM.md).
 
 <br clear="right"/>
 
@@ -68,14 +74,14 @@ Each activation is a small form. The main fields:
 | Group | What you set |
 |-------|--------------|
 | **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). |
-| **Mode** | How it composes with the original action: **instead of** or **after** it, and whether it **auto-activates** silently (no popup). |
-| **Filters** | Disposition (Friendly / Hostile / Neutral, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the activation is limited to. |
-| **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type shown in the popup (Reaction / Quick / Full / ...), and frequency. |
+| **Mode** | How your code composes with the activation's **own** flow or card: **instead of** it, or **after** it. Never the flow that triggered you, which runs either way. Also whether it **auto-activates** silently (no popup). |
+| **Filters** | Disposition (Friendly / Hostile / Neutral / Secret, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the activation is limited to. |
+| **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type (Automation / Reaction / Quick Action / Full Action / ...), and frequency. Note the long forms: it is `"Quick Action"` here, not the `"Quick"` short form the TAH extra actions use. |
 | **Text** | Override the trigger and effect descriptions shown in the popup. |
 
 ### Example: react to your own activation
 
-The smallest useful activation: run your own code when an item's action is used. Exported, a self-reacting `onActivation` looks like this (this one shows a notification):
+The smallest useful activation: run your own code when an item's action is used. Exported, a self-reacting `onActivation` looks like this, trimmed to the fields that matter (a real export carries every field in the form):
 
 ```json
 {
@@ -122,9 +128,9 @@ When a trigger fires and the filters pass, three pieces decide the outcome.
 
 **Activation type** sets *what* runs: your own **code**, the item's normal **flow**, a **macro**, or **none**.
 
-**The evaluate function** runs first, as a final check. Return `true` to go ahead, `false` to skip. Use it for conditions the filters can't express, like "only if the target is below half HP" or "only if the attacker is flying".
+**The evaluate function** runs first, as a final check. Return `true` to go ahead, `false` to skip. Use it for conditions the filters can't express, like "only if the target is below half HP".
 
-**The activation code** is the effect itself, run when the automation fires. It has access to the full `api` (apply effects, move tokens, place zones, show choice cards, etc.).
+**The activation code** is the effect itself, with access to the full `api` (apply effects, move tokens, place zones, show choice cards, etc.).
 
 There's also an **onInit** block that runs once when a token is created, for passive setup like constant bonuses or auras.
 
@@ -140,7 +146,7 @@ Three tools, from quickest to most thorough.
 
 ### Console logging
 
-`console.log` works anywhere in your code. Open the console with F12 and the logs show up as the automation runs. For a full picture of what a trigger hands you, call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
+`console.log` works anywhere in your code. For a full picture of what a trigger hands you, call **`triggerData.debugActivation()`** inside `evaluate` or `activationCode` to dump that call to the console:
 
 - the trigger type, the reactor token, the item, the activation name
 - every field on `triggerData`
@@ -150,8 +156,6 @@ Pass a label (`debugActivation("before the check")`) to name the group when you 
 
 It returns the same information as an object, and it's also on the api as `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label)`.
 
-This is the fastest way to find out what a trigger actually hands you instead of guessing from the docs.
-
 ### Debug mode
 
 The **Debug: Automation System** toggle (module settings, Debug tab) logs the whole trigger pipeline: which trigger fires, which activations were candidates, why each one was skipped (out of combat, wrong disposition, no reaction left, evaluate returned false, ...), and which one ran. Turn it on when your automation doesn't fire at all and you want to know where it fell out.
@@ -160,17 +164,17 @@ The **Debug: Automation System** toggle (module settings, Debug tab) logs the wh
 
 ### Breakpoints
 
-Your most useful tool to understand what is going on inside an automation. A breakpoint pauses the game mid-run so you can step through your code line by line and inspect everything at that moment: `triggerData`, `reactorToken`, `api`, your own variables.
+The most useful tool for understanding what is going on inside an automation.
 
 Your functions are compiled the first time they run, so they don't exist in the devtools until then. The **Load for Debug** button at the top of the activation editor compiles them immediately:
 
 <img src="../img/ae-debug-load.png" width="60%"/>
 
-Then in devtools (F12), under **Sources**, your functions appear as files in `modules/lancer-automations/dynamic/`, one folder per activation with one file per function (`evaluate.js`, `activation.js`, `oninit.js`, `onmessage.js`). General activations are named by their activation name, item activations by their item LID. Click a line number to set a breakpoint.
+Then in devtools (F12), under **Sources**, your functions appear as files in `modules/lancer-automations/dynamic/`, one folder per activation with one file per function (`evaluate.js`, `activation.js`, `oninit.js`, `onmessage.js`). General activations are named by their activation name. Item activations nest two levels, `dynamic/<lid>/<index>/`, where the index is the sub-reaction's position, so a multi-reaction item gets one folder per reaction. Click a line number to set a breakpoint.
 
 <img src="../img/ae-debug-sources.png" width="60%"/>
 
-Trigger the automation and the game freezes on your breakpoint. Hover a variable to see its value, step line by line with the arrows at the top, press F8 to resume. Breakpoints stay armed across triggers, so you can replay the situation as many times as you need.
+Breakpoints stay armed across triggers, so you can replay the situation as many times as you need.
 
 You can also write `debugger;` directly in your code: with devtools open, execution pauses on that line without any setup.
 
@@ -184,7 +188,7 @@ When a trigger fires reactions that aren't set to auto-activate, they're collect
 
 - Who sees the popup depends on the **`reactionNotificationMode`** setting: the token's owner, the GM, or both.
 - **Right-click** a reaction to open its source item's sheet.
-- If more reactions trigger while a popup is open, a small **pending badge** shows how many are queued behind it.
+- Only one popup exists at a time. If a second trigger raises its own, the first is closed and its unclicked entries are gone. There is no queue and no pending badge, so anything that must not be missed belongs on auto-activate.
 
 <br clear="right"/>
 
@@ -192,7 +196,7 @@ When a trigger fires reactions that aren't set to auto-activate, they're collect
 
 ## Reaction economy
 
-If **`consumeReaction`** is on, activating a reaction spends that token's reaction for the round. The popup shows the reaction as unavailable once it's spent.
+If **`consumeReaction`** is on, the token's reaction for the round is spent when an action whose activation resolves to **Reaction** runs through a flow. That covers a `"flow"` activation and any action whose `actionType` is Reaction. An auto-activating code automation that never launches a flow does not touch the counter. The popup shows the reaction as unavailable once it's spent.
 
 ---
 
@@ -200,7 +204,7 @@ If **`consumeReaction`** is on, activating a reaction spends that token's reacti
 
 <img align="right" src="../img/ae-startup-scripts.png" width="45%"/>
 
-The **Startup Scripts** tab in the Activation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any activation or macro.
+The **Startup** tab in the Activation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any activation or macro.
 
 The registration patterns are in [API How-To](../API_HOWTO.md).
 
@@ -220,7 +224,7 @@ The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where 
 
 ## The personal activation set
 
-Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section.
+Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section. The toggle stays locked until **LaSossis Additional statuses and effects** (`additionalStatuses`) is on, since the set applies those statuses.
 
 > [!NOTE]
 > This is **my own stuff, not part of the core module**. It's literally the automations I built for my own games (my NPCs, my items), shared as-is. It isn't a complete or general library, and it won't automate your content. Treat it as a set of examples to learn from, not something to rely on.

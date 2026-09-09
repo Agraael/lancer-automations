@@ -16,6 +16,17 @@ const ICON_MOD     = 'systems/lancer/assets/icons/weapon_mod.svg';
 export const HUD_ICON_SIZE = 20;
 export const HUD_WEAPON_ICON_SIZE = 30;
 
+const GENERIC_ACTION_NAMES = new Set(['action', 'new action']);
+
+/** Placeholder action names ("Action") display as the item's name. */
+export function actionDisplayName(item, action)
+{
+    const name = String(action?.name ?? '').trim();
+    if (!name || GENERIC_ACTION_NAMES.has(name.toLowerCase()))
+        return item?.name ?? name;
+    return name;
+}
+
 export const rechargeIcon = (/** @type {boolean} */ charged) =>
     `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
 

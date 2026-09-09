@@ -6,28 +6,45 @@
 
 ## Extra Actions
 
-Inject actions onto items or actors, drive their charge / limited state, lock native actions, and overlay combat data onto native actions. Everything here shows up in the TAH action menu.
+Everything here shows up in the TAH action menu.
 
-<details id="addExtraActions">
-<summary><b><code>addExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getItemActions</code></b> → <code>object[]</code><br><b><code>getActorActions</code></b> → <code>object[]</code><br><b><code>getLinkedActions</code></b> → <code>any[]</code><br><b><code>removeExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<details id="getItemActions">
+<summary><b><code>getItemActions</code></b> → <code>object[]</code><br><b><code>getActorActions</code></b> → <code>object[]</code><br><b><code>getLinkedActions</code></b> → <code>any[]</code></summary>
 
 <br>
 
 ```js
-await api.addExtraActions(target, actions)       // add to Item, Token, or Actor
-api.getItemActions(item)                          // → Object[] (system.actions + extras)
-api.getActorActions(tokenOrActor)                 // → Object[] (extras on actor/item)
-api.getLinkedActions(source)                      // same, Item/Actor/Token uniformly
-await api.removeExtraActions(target, filter?)     // string name, predicate, or null (clear all)
+api.getItemActions(item, opts?)                   // → Object[] (system + profile actions + extras)
+api.getActorActions(target)                       // → Object[] (extras only)
+api.getLinkedActions(target)                      // → Object[] (same function as getActorActions)
 ```
 
-**Params (read side):** <kbd>source</kbd> `Item|Actor|Token`
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>target</kbd> | `Item\|Token\|Actor` | Item reads itself. Token/Actor reads the actor |
+| <kbd>opts.extraOnly</kbd> | `boolean` | `getItemActions` only. Return just the extras, skipping system and profile actions |
+
+`getItemActions` merges `system.actions`, the weapon's `active_profile.actions` and the item's extras, folds action overlays into the first two, and drops exact duplicates matched on name + activation + detail. `getActorActions` and `getLinkedActions` only read the `extraActions` flag, and are the same function under two names.
+
+</details>
+
+<details id="addExtraActions">
+<summary><b><code>addExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>removeExtraActions</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.addExtraActions(target, actions)        // add to Item, Token, or Actor
+await api.removeExtraActions(target, filter?)     // string name, predicate, or null (clear all)
+```
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Item\|Token\|Actor` | Item stores on itself. Token/Actor stores on the actor |
 | <kbd>actions</kbd> | `ExtraAction\|ExtraAction[]` | One action or an array |
 | <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null (clear all) |
+
+`addExtraActions` skips any entry whose `name` already exists on the target, so an `onInit` that adds the same action every time is idempotent and stored charge state survives.
 
 **`ExtraAction` shape** (`LancerAction` + extras):
 
@@ -43,7 +60,10 @@ await api.removeExtraActions(target, filter?)     // string name, predicate, or 
 | `tags` | `Array<{lid,val}>` | Standard Lancer tags. Weapon tags (`tg_smart` etc.) coexist with consumable tags |
 | `icon` | `string` | TAH icon override (path or FontAwesome class) |
 | `recharge`, `charged` | `number`, `boolean` | Charge state for `tg_recharge` actions |
+| `loaded` | `boolean` | Charge state for `tg_loading` actions |
 | `uses` | `{value,max}` | Charge state for `tg_limited` actions |
+| `usesPerTurn` | `{value,max}` | Charge state for `tg_turn` actions. Resets at the owner's turn start |
+| `usesPerRound` | `{value,max}` | Charge state for `tg_round` actions. Resets at round start |
 | `tier` | `1\|2\|3` | Gate to an NPC owner tier. Unset = any tier. Non-NPC owners ignore it |
 | `laCombat` | `'attack'\|'damage'` | Turn the action into an attack or damage roll (see below). Absent = plain card |
 | `accuracy`, `difficulty`, `attack_bonus` | `number` | Combat attack: flat accuracy/difficulty dice + flat to-hit bonus |
@@ -68,7 +88,7 @@ await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", la
 </details>
 
 <details id="consumeExtraAction">
-<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+<summary><b><code>consumeExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code><br><b><code>reloadExtraAction</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>rechargeExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>resetPerRoundExtraActionsForActor</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
 
 <br>
 
@@ -76,15 +96,16 @@ await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", la
 await api.consumeExtraAction(target, actionName)
 await api.reloadExtraAction(target, actionName)
 await api.rechargeExtraActionsForActor(actor)
+await api.resetPerRoundExtraActionsForActor(actor)
 ```
 
-Charge plumbing for extras with `tg_loading` / `tg_recharge` / `tg_limited` tags. `consume` decrements / spends, returns `false` if depleted. `reload` resets. `recharge` rolls 1d6 vs `entry.recharge` per uncharged entry (fires on turn start).
+Charge plumbing for extras with `tg_loading` / `tg_recharge` / `tg_limited` / `tg_turn` / `tg_round` tags. `consume` decrements / spends every state the entry's tags call for, returns `false` if any of them is depleted. `reload` resets them all. `recharge` rolls 1d6 vs `entry.recharge` per uncharged entry and refills `usesPerTurn`, and fires on turn start. `resetPerRound` refills `usesPerRound`, and fires at round start. Both sweeps cover the actor's own extras and its items'.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Item\|Actor` | Holder of `extraActions` flag |
 | <kbd>actionName</kbd> | `string` | Matches `action.name` |
-| <kbd>actor</kbd> | `Actor` | Recharge sweep target |
+| <kbd>actor</kbd> | `Actor` | Sweep target |
 
 ```js
 if (!await api.consumeExtraAction(item, 'Turret Shot')) return;
@@ -101,9 +122,11 @@ if (!await api.consumeExtraAction(item, 'Turret Shot')) return;
 await api.lockActorAction(item, actionName, { reason? })          // lock held BY the item
 await api.lockActorAction(actor, actionName, sourceId, { reason? }) // manual actor lock
 await api.unlockActorAction(target, actionName, sourceId?)        // sourceId only for actor locks
-api.isActionLocked(actor, actionName)        // → boolean (manual + item locks)
+api.isActionLocked(actor, actionName)        // → boolean (manual + item locks, disabled included)
 api.getLockedActions(actor)                  // → string[]
 ```
+
+Both readers count `disable*` entries alongside locks, and neither sees activation-type locks.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -141,15 +164,18 @@ Locks by activation type rather than by name, so one call greys every Quick or F
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>target</kbd> | `Item\|Actor\|Token` | *required* | Item holds the lock, actor is source-tracked |
-| <kbd>activationTypes</kbd> | `string\|string[]` | *required* | Types to lock, e.g. `"Quick"` / `"Full"`. Omit on unlock to clear all |
+| <kbd>activationTypes</kbd> | `string\|string[]` | *required* | Types to lock, e.g. `"Quick"` / `"Full"`. `"*"` locks every type |
 | <kbd>sourceIdOrOpts</kbd> | `string\|Object` | `null` | Source id for later removal, or the options object itself |
 | <kbd>opts.reason</kbd> | `string` | `null` | Shown in the popup's "Locked by:" line |
+| <kbd>opts.except</kbd> | `string[]` | `[]` | Action names the lock skips |
 
-On unlock, pass the same `sourceId`. The trailing `kind` is internal - leave it unset.
+On unlock of an actor target, both `activationTypes` and the same `sourceId` are required. Omitting either errors and unlocks nothing. Only an Item target may omit them, which drops every type lock the item holds.
 
 ```js
 await api.lockActorActionTypes(actor, ['Quick', 'Full'], 'stunned', { reason: 'Stunned' });
 await api.unlockActorActionTypes(actor, ['Quick', 'Full'], 'stunned');
+await api.lockActorActionTypes(item, '*', { reason: 'Overloaded', except: ['Boost'] });
+await api.unlockActorActionTypes(item);
 ```
 
 </details>
@@ -170,24 +196,25 @@ Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show 
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>target</kbd> | `Actor\|Token` | *required* | Owner of the actions |
+| <kbd>target</kbd> | `Item\|Actor\|Token` | *required* | Same target rules as `lockActorAction`. Item targets work here too |
 | <kbd>actionName</kbd> | `string` | *required* | Action to disable. `*Types` variants take `activationTypes` instead |
 | <kbd>activationTypes</kbd> | `string\|string[]` | *required* | Activation types to disable, e.g. `"Quick"` / `"Full"` |
 | <kbd>sourceIdOrOpts</kbd> | `string\|Object` | `null` | Source id for later removal, or the options object itself |
 | <kbd>opts</kbd> | `Object` | `null` | Options when `sourceIdOrOpts` held the source id |
 | <kbd>opts.reason</kbd> | `string` | `null` | Shown on the disabled row |
 
-`enable*` takes `sourceId` in place of the last two: pass the same id used to disable, or omit to clear all.
+`enable*` takes `sourceId` in place of the last two. On an actor target pass the same id used to disable, omitting it errors and enables nothing. An Item target ignores `sourceId` and drops its own disabled entries, and `enableActorActionTypes` on an Item may also omit `activationTypes` to drop all of them.
 
 ```js
 await api.disableActorAction(actor, 'Boost', 'overheat', { reason: 'Reactor venting' });
 await api.enableActorAction(actor, 'Boost', 'overheat');
+await api.enableActorActionTypes(item);
 ```
 
 </details>
 
 <details id="setActionOverlay">
-<summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActionOverlay</code></b> → <code>object | null</code><br><b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code><br><b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>applyActionOverlays</code></b> → <code>object[]</code><br><b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
+<summary><b><code>setActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>getActionOverlay</code></b> → <code>object | null</code><br><b><code>getActionOverlays</code></b> → <code>Record&lt;string, object&gt;</code><br><b><code>removeActionOverlay</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -196,13 +223,9 @@ await api.setActionOverlay(target, actionName, overlay)   // attach / patch; nul
 api.getActionOverlay(target, actionName)                  // → overlay | null
 api.getActionOverlays(target)                             // → { [actionName]: overlay }
 await api.removeActionOverlay(target, actionName)
-api.applyActionOverlays(target, actions)                  // → actions with overlays folded in
-api.resolveGrantedActionRange(actor, actionName, base?)   // → number | null
 ```
 
-`resolveGrantedActionRange` takes the owning `actor`.
-
-Combat data on an item's **native** actions (`system.actions`), stored in a flag so re-imports don't wipe it. The overlay merges onto the action at read time. Name / activation / detail are never touched. Activating the action anywhere (TAH, sheet, macro) prints the normal card, then rolls via [`executeExtraActionCombat`](API_COMBAT.md).
+Combat data on an item's **native** actions (`system.actions`), stored in a flag so re-imports don't wipe it. Name / activation / detail are never touched. Activating the action anywhere (TAH, sheet, macro) prints the normal card, then rolls via [`executeExtraActionCombat`](API_COMBAT.md).
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -211,8 +234,6 @@ Combat data on an item's **native** actions (`system.actions`), stored in a flag
 | <kbd>overlay</kbd> | `Object\|null` | Combat fields below. Patch-merge. An empty value clears a field, `null` removes the overlay |
 
 **Overlay fields:** `laCombat` (`'attack'|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range` - same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
-
-**Range grants:** `resolveGrantedActionRange` folds every non-destroyed item's overlay `range` entries for that action onto `base`. Per-entry `mode` works like AE changes: `upgrade` (default, greater wins), `add` (sums, negatives allowed), `override` (hard set). Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
 
 **Example:**
 ```js
@@ -226,20 +247,36 @@ Managed from the UI via Add Extra > Action Combat.
 
 </details>
 
+<details id="applyActionOverlays">
+<summary><b><code>applyActionOverlays</code></b> → <code>object[]</code><br><b><code>resolveGrantedActionRange</code></b> → <code>number | null</code></summary>
+
+<br>
+
+```js
+api.applyActionOverlays(target, actions)                  // → actions with overlays folded in
+api.resolveGrantedActionRange(actor, actionName, base?)   // → number | null
+```
+
+`resolveGrantedActionRange` takes the owning `actor`. `applyActionOverlays` takes an Item or Actor, a Token is not resolved and comes back with its actions unchanged.
+
+**Range grants:** `resolveGrantedActionRange` folds the overlay `range` entries for that action from every item that is neither destroyed nor disabled onto `base`. Per-entry `mode` works like AE changes: `upgrade` (default, greater wins), `add` (sums, negatives allowed), `override` (replaces `base` and any `upgrade`, highest override wins). `add` still sums on top of an `override`, so it is not a hard final value. Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
+
+</details>
+
 <details id="openExtrasDialog">
 <summary><b><code>openExtrasDialog</code></b> → <code>void</code></summary>
 
 <br>
 
 ```js
-api.openExtrasDialog(actor)
+api.openExtrasDialog(target)
 ```
 
-Dialog for managing actor-level extras (extra actions + extra deployment actors). Only lists entries created here. Also reachable via TAH > Utility > Misc > Add Extra.
+Dialog for managing an owner's extras: extra actions, extra deployment actors, deployable LIDs, and extra token stat bars. Only lists entries created here. Warns when the stat-bar setting is off, the data is still saved. Also reachable via TAH > Utility > Misc > Add Extra.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>target</kbd> | `Actor\|Token` | Owner |
+| <kbd>target</kbd> | `Actor\|Item` | Owner. A Token is not resolved and throws |
 
 ```js
 api.openExtrasDialog(token.actor);

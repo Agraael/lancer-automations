@@ -229,9 +229,18 @@ Hooks.on('init', () =>
         default: 0,
         range: { min: 0, max: 50, step: 1 },
     });
+    game.settings.register(MODULE, 'tah.wheelRadiusOffset', {
+        name: 'Wheel Radius Offset',
+        hint: 'Push the radial wheels further from the token, or pull them closer.',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 0,
+        range: { min: -40, max: 120, step: 5 },
+    });
     game.settings.register(MODULE, 'tah.rangePreview', {
         name: 'Weapon Range Preview',
-        hint: 'Show weapon range on the map when hovering items in the HUD. Requires Grid Aware Auras.',
+        hint: 'Show weapon range on the map when hovering items in the HUD.',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -320,7 +329,7 @@ Hooks.on('init', () =>
         default: 1,
         range: { min: 0, max: 1, step: 0.05 },
     });
-    for (const soundKey of ['fadeIn', 'fadeOut', 'loopBackground', 'typingLoop', 'displayList', 'longResult', 'shortResult', 'resultImpact', 'resultImpactGood', 'resultImpactBad', 'logOpen', 'incomingTrans'])
+    for (const soundKey of ['fadeIn', 'fadeOut', 'loopBackground', 'typingLoop', 'displayList', 'longResult', 'shortResult', 'resultImpact', 'resultImpactGood', 'resultImpactBad', 'logOpen', 'incomingTrans', 'confirm', 'denied', 'fail'])
     {
         game.settings.register(MODULE, `tah.battleLog.${soundKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,

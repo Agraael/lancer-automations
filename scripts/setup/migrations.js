@@ -39,6 +39,17 @@ const MIGRATIONS = [
         },
     },
     {
+        // enableBoostOffer went from a boolean to no / yes / auto
+        id: 'boostOfferMode_v1',
+        async run()
+        {
+            const stored = game.settings.get(MODULE, 'enableBoostOffer');
+            if (typeof stored !== 'boolean')
+                return;
+            await game.settings.set(MODULE, 'enableBoostOffer', stored ? 'yes' : 'no');
+        },
+    },
+    {
         id: 'tah.scopeMigration_clientToWorld_v1',
         run()
         {

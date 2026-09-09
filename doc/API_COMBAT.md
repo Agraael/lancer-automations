@@ -2,12 +2,14 @@
 
 [Back to API Reference](API_REFERENCE.md) · Feature guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md)
 
+Every flow function here returns `{ completed: false }` and does nothing when its Lancer flow class is missing or the input is invalid. Check `completed` before chaining on a result.
+
 ---
 
 ## Attacks
 
 <details id="attackWith">
-<summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code><br><b><code>attackRollWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code><br><b><code>hitWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code><br><b><code>damageWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code><br><b><code>getTier</code></b> → <code>number</code><br><b><code>tierValue</code></b> → <code>any</code><br><b><code>getFlowFlag</code></b> → <code>any</code><br><b><code>setFlowFlag</code></b> → <code>boolean</code><br><b><code>afterFlow</code></b> → <code>boolean</code><br><b><code>consumeOncePerRound</code></b> <sup>async</sup> → <code>Promise&lt;boolean&gt;</code></summary>
+<summary><b><code>attackWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any; reloaded?: boolean }&gt;</code><br><b><code>attackRollWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code><br><b><code>hitWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code><br><b><code>damageWith</code></b> <sup>async</sup> → <code>Promise&lt;{ completed: boolean; flow?: any }&gt;</code></summary>
 
 <br>
 
@@ -16,40 +18,46 @@ await api.attackWith(weapon, targets?, { reloadIfEmpty?, fxSourceToken? })   // 
 await api.attackRollWith(weapon, targets?, { fxSourceToken?, title? })       // repeat the weapon's attack roll only
 await api.hitWith(weapon, targets, damageOptions?)                           // declare a hit: onHit trigger + the weapon's damage flow
 await api.damageWith(weapon, targets?, damageOptions?)                       // the weapon's damage flow alone
-api.getTier(tokenOrActor)                                     // → 1-3
-api.tierValue(tokenOrActor, [t1, t2, t3])                     // → value for the actor's tier
-api.getFlowFlag(triggerData, key)                             // read a la_extraData flag off the flow
-api.setFlowFlag(triggerData, key, value?)                     // stamp it (once-per-flow gates)
-api.afterFlow(triggerData, callback)                          // run callback after the trigger's flow completes
-await api.consumeOncePerRound(owner, key, subject?)           // → true the first time this round
 ```
 
-**Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>values</kbd> `[any, any, any]` per-tier values · <kbd>triggerData</kbd> the trigger's data object · <kbd>value</kbd> `any` (default `true`) · <kbd>reloadIfEmpty</kbd> `boolean` (default `false`) · <kbd>fxSourceToken</kbd> `Token` (default `null`) · <kbd>title</kbd> `string` card title override · <kbd>callback</kbd> `(flow, success) => any`
+**Params:** <kbd>reloadIfEmpty</kbd> `boolean` (default `false`) · <kbd>fxSourceToken</kbd> `Token` (default `null`) · <kbd>title</kbd> `string` card title override
 
 `attackWith` sets the given tokens as targets then starts the weapon's attack flow. `reloadIfEmpty: true` reloads instead and returns `{ reloaded: true }` when the weapon is unloaded. `fxSourceToken` plays the lancer-weapon-fx effect from that token instead of the attacker (the roll stays the attacker's) - reflected shots, turrets, drones.
 
 `attackRollWith` repeats the weapon's attack roll as a basic attack with the weapon's stats (tier-resolved for NPC features) and carries its damage/tags to the damage roll, but skips the weapon-fire mechanics: no loading gate, no self-heat, no item updates. Rebound pattern.
 
-The chain is attack > hit > damage: `attackWith` runs all three stages, `hitWith` the last two (fires `onHit` with the upcoming damage flow as its flowState, then rolls the weapon's damage), `damageWith` the last one. `damageOptions` override the damage flow data (defaults: the weapon's tier-resolved damage and tags).
+The chain is attack > hit > damage: `attackWith` runs all three stages, `hitWith` the last two (fires `onHit` with the upcoming damage flow as its flowState, then rolls the weapon's damage), `damageWith` the last one. `damageOptions` override the damage flow data and take the same keys as [`executeDamageRoll`](#executeDamageRoll)'s `options` (defaults: the weapon's tier-resolved damage and tags).
 
-`afterFlow` runs the callback once the trigger's flow completes or aborts, after its card printed - one-shot, matched to that exact flow. Use it for anything that must not interleave with the flow (follow-up attacks, moves).
+</details>
 
-`tierValue(reactorToken, [4, 6, 8])` replaces tier ladders and clamped index picks. Flow flags replace the hand-written `flowState.la_extraData = ... || {}; ..._key = true` stamp and its evaluate read.
+<details id="getTier">
+<summary><b><code>getTier</code></b> → <code>number</code><br><b><code>tierValue</code></b> → <code>any</code></summary>
 
-`consumeOncePerRound` is the round-scoped version, for "first time in a round" rules.
-
-| Param | Type | Default | Description |
-|:------|:-----|:--------|:------------|
-| <kbd>owner</kbd> | `Token \| Actor` | *required* | Holds the flag, usually the reactor |
-| <kbd>key</kbd> | `string` | *required* | Name of the gate, e.g. `'ring_of_fire'` |
-| <kbd>subject</kbd> | `Token \| Actor \| string \| null` | `null` | Counted separately per subject. Omit for one gate on the owner |
-
-`true` on the first call this round, `false` after. Last round's flag is cleaned up for you, and out of combat it is always `true`.
+<br>
 
 ```js
-if (await api.consumeOncePerRound(reactorToken, 'ring_of_fire', target))
-    await api.executeDamageRoll(reactorToken, [target], 2, 'Heat', 'Ring of Fire');
+api.getTier(tokenOrActor)                                     // → 1-3
+api.tierValue(tokenOrActor, [t1, t2, t3])                     // → value for the actor's tier
 ```
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>values</kbd> `[any, any, any]` per-tier values
+
+`tierValue(reactorToken, [4, 6, 8])` replaces tier ladders and clamped index picks.
+
+</details>
+
+<details id="afterFlow">
+<summary><b><code>afterFlow</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.afterFlow(triggerData, callback)                          // run callback after the trigger's flow completes
+```
+
+**Params:** <kbd>triggerData</kbd> the trigger's data object · <kbd>callback</kbd> `(flow, success) => any`
+
+`afterFlow` runs the callback once the trigger's flow completes or aborts, after its card printed - one-shot, matched to that exact flow. Use it for anything that must not interleave with the flow (follow-up attacks, moves).
 
 </details>
 
@@ -62,7 +70,7 @@ if (await api.consumeOncePerRound(reactorToken, 'ring_of_fire', target))
 await api.executeBasicAttack(actor, options, extraData)
 ```
 
-Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow constructor.
+Starts a `BasicAttackFlow`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -72,8 +80,11 @@ Starts a `BasicAttackFlow`. The `options` object is passed directly to the flow 
 | <kbd>targets</kbd> | `Token\|Token[]` | `null` | Who is attacked. Avoids touching `setTarget` |
 | <kbd>tags</kbd> | `Array` | `undefined` | Weapon tags carried onto the attack card |
 | <kbd>damage</kbd> | `Array` | `undefined` | Damage list carried onto the card, so its damage button rolls pre-filled |
+| <kbd>fxSourceToken</kbd> | `Token` | `null` | Play the lancer-weapon-fx effect from this token instead of the attacker |
+| <kbd>fxItem</kbd> | `Item` | `null` | Item whose FX the flow should use |
+| <kbd>item</kbd> | `Item` | `null` | Roots the flow on this item, so it uses the item's stats and triggers see it as `weapon`. Forces non-tech classification |
 
-Any other key is forwarded to the `BasicAttackFlow` constructor.
+Those six are consumed here. Any other key is forwarded to the `BasicAttackFlow` constructor.
 
 ```js
 await api.executeBasicAttack(actor, {
@@ -115,7 +126,7 @@ await api.executeTechAttack(actor, { targets: [target] });
 <br>
 
 ```js
-await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, opts)
+await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, options)
 ```
 
 | Param | Type | Default | Description |
@@ -124,7 +135,7 @@ await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, op
 | <kbd>bypassMount</kbd> | `Object` | `null` | Mount object to skip mount selection |
 | <kbd>preTarget</kbd> | `Token` | `null` | Pre-selected target token |
 | <kbd>weaponFilter</kbd> | `(weapon: Item) => boolean` | `null` | Filter for available weapons |
-| <kbd>opts</kbd> | `Object` | `{}` | `noFX: true` skips the skirmish FX |
+| <kbd>options</kbd> | `Object` | `{}` | `noFX: true` skips the skirmish FX |
 
 ```js
 await api.executeSkirmish(token, null, targetToken);
@@ -166,7 +177,7 @@ await api.executeInvade(actorOrToken, bypassChoice)
 
 Prompts for one of the actor's invade options, then fires the tech attack flow.
 
-**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>bypassChoice</kbd> `Object` preselected invade, skips the prompt
+**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>bypassChoice</kbd> `Object` optional preselected invade option, skips the picker
 
 ```js
 await api.executeInvade(token);
@@ -182,8 +193,6 @@ await api.executeInvade(token);
 ```js
 await api.beginWeaponAttackFlow(weapon, options, extraData)
 ```
-
-Starts a weapon attack flow for a given weapon item.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -216,12 +225,12 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 | <kbd>attacker</kbd> | `Token\|Actor` | *required* | The attacker |
 | <kbd>targets</kbd> | `Array<Token>` | *required* | Damage targets |
 | <kbd>damageValue</kbd> | `number\|string` | `null` | Base damage |
-| <kbd>damageType</kbd> | `string` | `null` | kinetic, energy, explosive, burn, heat, variable |
+| <kbd>damageType</kbd> | `string` | `null` | kinetic, energy, explosive, burn, heat, infection, variable. Case-insensitive, and anything unrecognized silently becomes Kinetic |
 | <kbd>title</kbd> | `string` | `"Damage Roll"` | Roll title |
 | <kbd>options</kbd> | `Object` | `{}` | Flow options (see below) |
 | <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
 
-**`options` keys** (all merged onto the Lancer `DamageRollFlow` state):
+**`options` keys** (all merged onto the `DamageRollFlow`'s flow data, not its state. `extraData` is what goes to `state.la_extraData`):
 
 | Key | Type | Default | Meaning |
 |:----|:-----|:--------|:--------|
@@ -264,9 +273,11 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` |
 | <kbd>title</kbd> | `string` | auto | Roll title |
 | <kbd>target</kbd> | `number\|"token"\|Token\|TokenDocument` | `10` | Pass threshold or `"token"` for interactive choice |
-| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup. `sourceItemUuid` / `sourceAction` attribute the roll, surfacing as `item` / `actionName` on `onInitCheck` and `onCheck` |
+| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup. `sourceItemUuid` / `sourceAction` attribute the roll, surfacing as `item` / `actionName` on `onInitCheck` and `onCheck`. `sendToOwner` routes the roll to the owning player, `cardTitle` / `cardDescription` set the card text. Every other key is merged into `state.la_extraData` |
 
 `extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD, the way a weapon's tags pre-fill an attack. They are added to whatever the HUD already computed and stay editable by the roller. No bonus needed for a one-off +1 Difficulty.
+
+`passed` is `total >= target`. A number target is that number. A token target is resolved at roll time: an NPC or deployable gives its SAVE, a mech gives its HASE value for the rolled stat (or the one named by `extraData.targetStat`), both falling back to 10. If the flow does not complete, only `{ completed: false }` comes back.
 
 ```js
 await api.executeStatRoll(actor, 'SYS', 'Blind', witchToken, { difficulty: 1 });
@@ -293,12 +304,16 @@ Save-or-effect over a target list: each target rolls the save (owner-routed by d
 | <kbd>title</kbd> | `string` | *required* | Roll title |
 | <kbd>origin</kbd> | `number\|Token` | `10` | Difficulty value or token to derive it from |
 | <kbd>effects</kbd> | `string\|Object\|Array` | `null` | Applied on fail (`applyEffectsToTokens` shape) |
-| <kbd>duration</kbd> / <kbd>note</kbd> / <kbd>extraFlags</kbd> | `Object` / `string` / `Object` | `null` | Forwarded to the effect application |
+| <kbd>duration</kbd> | `Object` | `{ label: 'indefinite' }` | Forwarded to the effect application |
+| <kbd>note</kbd> | `string` | `title` | Note on the applied effects. Falls back to `title` |
+| <kbd>extraFlags</kbd> | `Object` | `{}` | Identity flags stamped on the applied effects |
 | <kbd>cardTitle</kbd> / <kbd>cardDescription</kbd> | `string \| ((target: Token) => string)` | `null` | Owner card text. Description can be per target |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its owner |
 | <kbd>onFail</kbd> / <kbd>onPass</kbd> | `(target: Token, result: { passed: boolean, total: number }) => void \| Promise<void>` | `null` | Per-target extras |
 | <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number \| ((target: Token) => number)` | `0` | Pre-fill each roller's HASE HUD. Pass a function for a per-target value |
-| <kbd>halfDamageOnSave</kbd> | `{ value, type?, title? }` | `null` | Afterwards roll this damage on ALL targets, halved for the ones that saved |
+| <kbd>halfDamageOnSave</kbd> | `{ value, type?, title? }` | `null` | Afterwards roll this damage on ALL targets, halved for the ones that saved. Requires a Token `origin` |
+
+`halfDamageOnSave` uses `origin` as the attacker of the follow-up damage roll. A numeric `origin` (including the default `10`) leaves no attacker, so the damage roll is skipped with a warning. Pass the source token when you use it.
 
 ```js
 await api.executeSaveVsEffect(targets, {
@@ -334,7 +349,7 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>sourceAction</kbd> | `string` | `null` | Action the check belongs to, surfaced as `actionName` |
 | <kbd>extraData</kbd> | `object` | `null` | Extra keys merged into both rolls' `la_extraData` |
 
-Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
+Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. When either roll does not complete, the result is `{ completed: false }` with `winner`, `loser` and `tie` set but no `winnerToken`/`loserToken` keys at all. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
 
 ```js
 const res = await api.executeContestedCheck(tokenA, 'HULL', tokenB, 'AGI', { title: 'Grapple', difficulty2: 1 });
@@ -363,7 +378,7 @@ const res = await api.executeForceCheck(skill, targets, options)
 | <kbd>title</kbd> | `string` | `""` | Card header |
 | <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number\|(rollerToken) => number` | `0` | Pre-filled on the roller's HASE HUD. Per-roller when given a function |
 
-Sends each target its HASE check (owner rolls, or the GM if unowned). `saveVs` makes it a save vs that actor's SAVE, pre-targeted in the roller's HUD. Posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
+Sends each target its HASE check (owner rolls, or the GM if unowned), then posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
 
 ```js
 await api.executeForceCheck('ENG', [target], { saveVs: witchToken, title: 'Petrify' });
@@ -382,7 +397,9 @@ await api.executeForceCheck('ENG', [target], { saveVs: witchToken, title: 'Petri
 await api.executeItemActivation(item, options, extraData)
 ```
 
-Runs an item's activation flow, using the same dispatch rules as `triggerData.startRelatedFlow`. The item's own automation fires. `activateGeneralAction` is the equivalent for registry actions that belong to no item.
+Runs an item's activation flow. The item's own automation fires. `activateGeneralAction` is the equivalent for registry actions that belong to no item.
+
+The flow class is picked in this order: `flowName` if given, then `CoreActiveFlow` for a frame with `path: "system.core_system"`, then `ActivationFlow` if there is a `path` or the item has any actions (`system.actions.0` when no path is given), then `SystemFlow` for a mech system, weapon mod, or non-weapon NPC feature, then `WeaponAttackFlow` for a weapon. If none match it errors and returns `{ completed: false }`. This is close to `triggerData.startRelatedFlow` but not the same: that one tries weapons before actions, prefers a Reaction action over `actions.0`, has no `CoreActiveFlow` branch, and falls back to a simple activation card instead of erroring.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -409,9 +426,9 @@ await api.executeSimpleActivation(actor, options, extraData)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>actor</kbd> | `Actor` | *required* | Acting actor |
-| <kbd>options</kbd> | `{ title?: string; action?: { name, activation }; detail?: string; tags?: Array }` | `{}` | Card fields |
-| <kbd>extraData</kbd> | `Object` | `{}` | Injected state data |
+| <kbd>actor</kbd> | `Actor\|Token` | *required* | Acting actor, or a token to take the actor from |
+| <kbd>options</kbd> | `{ title?: string, action?: { name, activation }, detail?: string, tags?: Array }` | `{}` | Card fields |
+| <kbd>extraData</kbd> | `Object` | `{}` | Injected state data. An `item` here roots the flow on that item instead of the actor |
 
 ```js
 await api.executeSimpleActivation(actor, {
@@ -448,7 +465,7 @@ await api.activateGeneralAction(reactorToken, 'Brace');
 <br>
 
 ```js
-await api.executeExtraActionCombat(actorOrToken, action, sourceItem?)
+await api.executeExtraActionCombat(actorOrToken, action, sourceItem?, options?)
 ```
 
 Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`). `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [HUD API](API_HUD.md).
@@ -458,6 +475,10 @@ Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-h
 | <kbd>actorOrToken</kbd> | `Actor\|Token` | *required* | The attacker |
 | <kbd>action</kbd> | `ExtraAction` | *required* | The extra action (must have `laCombat`) |
 | <kbd>sourceItem</kbd> | `Item\|null` | `null` | Owning item, if any (tech attacks route through it) |
+| **inside `options`** | | | |
+| <kbd>targets</kbd> | `Token[]` | user targets | Who is attacked, instead of the user's current targets |
+| <kbd>fxSourceToken</kbd> | `Token` | `null` | Play the FX from this token. Basic-attack branch only |
+| <kbd>fxItem</kbd> | `Item` | `null` | Item whose FX to use. Basic-attack branch only |
 
 ```js
 await api.executeExtraActionCombat(actor, {
@@ -482,6 +503,8 @@ api.afterFx(callback)
 
 Runs `callback` at flow end, right after lancer-weapon-fx starts its sequence (or immediately at flow end if there is no FX). Use in trigger code whose printed cards should land after the FX.
 
+The queue only drains on the flows lancer-weapon-fx binds: `WeaponAttackFlow`, `BasicAttackFlow`, `TechAttackFlow`, `ActivationFlow`, `SystemFlow`, `CoreActiveFlow`, `OverchargeFlow`, `FullRepairFlow`, `StructureFlow`, `SecondaryStructureFlow`, `OverheatFlow`, `CascadeFlow`. Stat rolls and damage rolls are deliberately excluded, since automations nest them inside an outer flow. A callback queued from one of those runs when the outer flow ends, not when the roll does.
+
 ```js
 api.afterFx(() => api.executeDamageRoll(reactorToken, targets, 4, 'Heat', 'Tear Down'));
 ```
@@ -500,7 +523,7 @@ await api.executeReactorMeltdown(tokenOrActor, turns)
 await api.executeReactorExplosion(token)
 ```
 
-`executeReactorMeltdown` starts the meltdown countdown; `turns` skips the turn-picker dialog. `executeReactorExplosion` runs the explosion itself: a Burst 2 catch-confirm picker around the token, then the damage.
+`executeReactorMeltdown` starts the meltdown countdown, and `turns` skips the turn-picker dialog. `executeReactorExplosion` runs the explosion itself: a Burst 2 catch-confirm picker around the token, then the damage.
 
 **Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>turns</kbd> `number` countdown length · <kbd>token</kbd> `Token` the exploding mech
 
@@ -523,7 +546,7 @@ await api.openAddReserveDialog(tokenOrActor)
 
 The out-of-combat flows, same as their TAH entries: the Rest card, the downtime activity builder, and the add-a-reserve dialog. Feature guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md).
 
-**Params:** <kbd>token</kbd> `Token` the resting mech · <kbd>tokenOrActor</kbd> `Token|Actor` the pilot's mech
+**Params:** <kbd>token</kbd> `Token` the resting mech, or a pilot token with an active mech · <kbd>tokenOrActor</kbd> `Token|Actor` the pilot's mech
 
 ```js
 await api.executeRest(token);
@@ -570,7 +593,7 @@ const isSmart = tags.some(t => t.lid === 'tg_smart');
 api.getActorMaxThreat(actor)
 ```
 
-Returns the highest Threat range across all weapons held by the actor, accounting for active bonuses.
+Returns the highest Threat range across all weapons held by the actor, accounting for active bonuses. Floored at 1, so a ranged-only actor still reads 1. It is 0 only for a deployable, or an actor with no weapons at all.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -592,7 +615,7 @@ if (api.getTokenDistance(reactorToken, moverToken) <= api.getActorMaxThreat(reac
 api.getMaxWeaponRanges_WithBonus(input)
 ```
 
-Returns the maximum range value per range type across all weapons provided in the input.
+Max range value per range type, across every weapon in the input.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -632,10 +655,10 @@ const reach = await api.getMaxWeaponReach_WithBonus(reactorToken);
 <br>
 
 ```js
-await api.getMaxItemRanges_WithBonus(item, actor)   // { Range: 10, Thrown: 5, Deploy: 8 }
+await api.getMaxItemRanges_WithBonus(item, actor)
 ```
 
-Single item's max range per type, with bonuses. Also folds in action ranges, `tg_thrown` (`Thrown`) and `deployRange` (`Deploy`).
+Single item's max range per type, with bonuses, e.g. `{ Range: 10, Thrown: 5, Deploy: 8 }`. Also folds in action ranges, `tg_thrown` (`Thrown`) and `deployRange` (`Deploy`).
 
 **Params:** <kbd>item</kbd> `Item` · <kbd>actor</kbd> `Actor` (optional, defaults to `item.parent`).
 
@@ -676,7 +699,7 @@ api.getSensorRange_WithBonus(actor)
 
 Actor's effective sensor range (`system.sensor_range`, else `10`), plus any `Sensor` range-type bonuses.
 
-**Params:** <kbd>input</kbd> `Actor|Token`.
+**Params:** <kbd>actor</kbd> `Actor|Token`.
 
 ```js
 const inSensors = api.getTokenDistance(reactorToken, target) <= api.getSensorRange_WithBonus(reactorToken);
@@ -690,12 +713,12 @@ const inSensors = api.getTokenDistance(reactorToken, target) <= api.getSensorRan
 <br>
 
 ```js
-await api.hasTag(item, 'smart')   // or 'tg_smart'
+await api.hasTag(item, 'smart')
 ```
 
-**Params:** <kbd>item</kbd> `Item` · <kbd>lid</kbd> `string` tag LID
+**Params:** <kbd>item</kbd> `Item` · <kbd>tagLid</kbd> `string` tag LID · <kbd>actor</kbd> `Actor` (optional, defaults to `item.parent`) whose bonuses apply
 
-True if the item has the tag (bonus-aware). Accepts the LID with or without `tg_`.
+True if the item has the tag (bonus-aware). Accepts the LID with or without `tg_`, so `'smart'` and `'tg_smart'` both work.
 
 ```js
 if (!await api.hasTag(weapon, 'smart')) return false;
@@ -711,4 +734,4 @@ if (!await api.hasTag(weapon, 'smart')) return false;
 |:---------|:--------|:------------|
 | `getWeaponType(item)` | `string` | Weapon subtype (e.g. `"Superheavy Rifle"`, `"Melee"`). Synchronous, no bonuses. |
 | `getItemType(item)` | `string` | Lancer item type (e.g. `"Weapon"`, `"System"`, `"mech_weapon"`). |
-| `getActivationIcon(actionOrActivation)` | `string` | Icon path or CSS class. Accepts `"reaction"`, `"quick"`, `"full"`, `"protocol"`, `"free"` or an action object. |
+| `getActivationIcon(actionOrActivation)` | `string\|null` | Icon path or CSS class, `null` when nothing matches. Accepts `"reaction"`, `"quick"`, `"full"`, `"protocol"`, `"free"`, `"invade"` or an action object. An action with `tech_attack: true` (or a "tech" activation) gets the tech icons, and an action whose name contains "grenade" gets the grenade icon. |

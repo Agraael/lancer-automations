@@ -117,6 +117,28 @@ export function splitPathAtCosts(token, waypoints, startPos, budgets, action)
     }
 }
 
+// Same measure the split uses. Cost in grid units, null when the walk fails.
+export function measurePathCost(token, waypoints, startPos, action)
+{
+    try
+    {
+        if (!Array.isArray(waypoints) || !waypoints.length)
+            return null;
+        const { densePath } = densify(token, startPos, waypoints, action);
+        const hasFlyAction = densePath.some(cell => String(cell.action ?? '').includes('fly'));
+        const measureInput = hasFlyAction ? densePath : densePath.map(cell => ({ ...cell, checkpoint: true }));
+        const measure = token.measureMovementPath(measureInput, { preview: true });
+        const sceneDist = canvas.scene?.grid?.distance ?? 1;
+        const cost = Number(measure?.cost);
+        return Number.isFinite(cost) ? Math.round(cost / sceneDist) : null;
+    }
+    catch (err)
+    {
+        console.warn('lancer-automations | path cost measure failed', err);
+        return null;
+    }
+}
+
 // Original route truncated at the redirect position; null when the position is off the path.
 export function trimPathToPosition(token, waypoints, startPos, position, action)
 {

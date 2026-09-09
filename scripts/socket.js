@@ -10,6 +10,7 @@ import {
     updateVoteCardOnVoter, confirmVoteCardOnVoter, cancelVoteCardOnVoter,
 } from './interactive/index.js';
 import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
+import { onRemoteSightlines, onRemoteSightlinesClear } from './vision/sightlines.js';
 import { handleRemoteFocus } from './tools/auto-focus.js';
 import { floatTokenText } from './tools/float-text.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
@@ -746,6 +747,9 @@ const HANDLERS = {
 
     toolPresence: (payload) => onRemotePresence(payload),
     toolPresenceClear: (payload) => onRemotePresenceClear(payload),
+
+    sightlines: (payload) => onRemoteSightlines(payload),
+    sightlinesClear: (payload) => onRemoteSightlinesClear(payload),
 
     // Foundry doesn't echo socket emits to sender, so GM playback is triggered locally in gm-card.
     battleLogPlayIntro: ({ outcome, battle, mvpId, extraLines }) =>
