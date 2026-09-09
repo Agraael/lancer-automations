@@ -103,6 +103,15 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Fire THT/TemplateMacro/GAA triggers at each boundary crossing instead of once at the end of a drag.' },
     { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler speed tier changes. The boost offer then judges each tier on its own.' },
     { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
+    { type: 'section', label: 'No Step-over', hint: 'NPC templates that cannot step over terrain walls lower than their size.', collapsible: false, subsection: true },
+    { type: 'compactBooleans',
+        items: [
+            { key: 'obstructionBlocksVehicle', label: 'Vehicles' },
+            { key: 'obstructionBlocksSquad', label: 'Squads' },
+            { key: 'obstructionBlocksHuman', label: 'Humans' },
+            { key: 'obstructionBlocksSpecialist', label: 'Specialists' }
+        ]
+    },
     { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation during ruler moves; Q/E offsets still work.' },
     { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the measure ruler labels; token drags are unaffected.' , requires: 'enableBuiltinSpeedProvider' },
 

@@ -5,6 +5,7 @@ const MODULE_ID = 'lancer-automations';
 const FLAG_KEY = 'losBlock';
 const SETTING_FLAG_ONLY = 'lancerLosFlagOnly';
 const EDGE_PREFIX = 'la-wall-los-';
+const WALL_COLOR = 0xFF4444;
 
 /** True when LA line of sight uses only LA-flagged walls, ignoring plain sight walls. */
 export function laLosFlagOnly()
@@ -114,6 +115,23 @@ function _patchSweepEdgeTypes()
     proto._laSightPatched = true;
 }
 
+// Flagged walls render red on the wall layer. Doors keep their state colors.
+function _patchWallColor()
+{
+    const proto = foundry.canvas.placeables.Wall?.prototype;
+    if (!proto?._getWallColor || proto._laColorPatched)
+        return;
+    const original = proto._getWallColor;
+    proto._getWallColor = function ()
+    {
+        const doc = this.document;
+        if (doc?.getFlag?.(MODULE_ID, FLAG_KEY) && !(doc.door > 0))
+            return WALL_COLOR;
+        return original.call(this);
+    };
+    proto._laColorPatched = true;
+}
+
 function _onRenderWallConfig(app, html)
 {
     const el = html instanceof HTMLElement ? html : html?.[0];
@@ -142,6 +160,7 @@ function _onRenderWallConfig(app, html)
 export function initLaWallLos()
 {
     _patchSweepEdgeTypes();
+    _patchWallColor();
     game.settings.register(MODULE_ID, SETTING_FLAG_ONLY, {
         name: 'Flagged walls only',
         hint: 'Lancer line of sight uses only LA-flagged walls.',
@@ -174,11 +193,14 @@ export function initLaWallLos()
     {
         if (wallDoc.parent !== canvas?.scene)
             return;
+        const flagChanged = change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined;
         const relevant = ['c', 'sight', 'door', 'ds', 'dir'].some(key => key in change)
-            || change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined
+            || flagChanged
             || change?.flags?.['wall-height'] !== undefined;
         if (relevant)
             _refreshWall(wallDoc);
+        if (flagChanged)
+            wallDoc.object?.renderFlags.set({ refreshLine: true, refreshEndpoints: true });
     });
     Hooks.on('renderWallConfig', _onRenderWallConfig);
 }

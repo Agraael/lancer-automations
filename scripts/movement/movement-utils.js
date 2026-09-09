@@ -1,4 +1,5 @@
 import { getHexGroundElevation } from '../combat/terrain-utils.js';
+import { getSettingEnabled } from '../setup/settings-register.js';
 
 const THT_ID = 'terrain-height-tools';
 
@@ -10,7 +11,14 @@ export function thtApi()
     return globalThis.terrainHeightTools ?? null;
 }
 
-// Mechs step over sub-SIZE walls; humans, squads, specialists, and vehicles do not.
+const OBSTRUCTION_TEMPLATE_SETTINGS = {
+    vehicle: 'obstructionBlocksVehicle',
+    squad: 'obstructionBlocksSquad',
+    human: 'obstructionBlocksHuman',
+    specialist: 'obstructionBlocksSpecialist',
+};
+
+// Mechs step over sub-SIZE walls; the settings pick which NPC templates do not.
 export function canPassObstructions(tokenDoc)
 {
     if (tokenDoc.getFlag?.('lancer-automations', 'noObstructionPass') || tokenDoc.actor?.getFlag?.('lancer-automations', 'noObstructionPass'))
@@ -18,8 +26,14 @@ export function canPassObstructions(tokenDoc)
     const actor = tokenDoc?.actor;
     if (!actor || actor.type === 'pilot')
         return false;
-    if (actor.items?.some?.(item => item.type === 'npc_template' && /vehicle|squad|human|specialist/i.test(item.system?.lid ?? '')))
-        return false;
+    const blocked = Object.keys(OBSTRUCTION_TEMPLATE_SETTINGS)
+        .filter(type => getSettingEnabled(OBSTRUCTION_TEMPLATE_SETTINGS[type]));
+    if (blocked.length > 0)
+    {
+        const pattern = new RegExp(blocked.join('|'), 'i');
+        if (actor.items?.some?.(item => item.type === 'npc_template' && pattern.test(item.system?.lid ?? '')))
+            return false;
+    }
     return true;
 }
 

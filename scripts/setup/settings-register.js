@@ -849,4 +849,40 @@ export function registerSettings()
         type: Boolean,
         default: false
     });
+
+    game.settings.register('lancer-automations', 'obstructionBlocksVehicle', {
+        name: 'No Step-over: Vehicles',
+        hint: 'Vehicle NPCs cannot step over terrain walls lower than their size.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'obstructionBlocksSquad', {
+        name: 'No Step-over: Squads',
+        hint: 'Squad NPCs cannot step over terrain walls lower than their size.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'obstructionBlocksHuman', {
+        name: 'No Step-over: Humans',
+        hint: 'Human NPCs cannot step over terrain walls lower than their size.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register('lancer-automations', 'obstructionBlocksSpecialist', {
+        name: 'No Step-over: Specialists',
+        hint: 'Specialist NPCs cannot step over terrain walls lower than their size.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
 }
