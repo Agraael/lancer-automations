@@ -363,6 +363,24 @@ export function registerSettings()
         default: false
     });
 
+    game.settings.register('lancer-automations', 'uplinkEnabled', {
+        name: 'Roll Uplink (Beta)',
+        hint: 'Streams players\' open roll dialogs to the GM as live mirror cards.',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register('lancer-automations', 'uplinkAutoOpen', {
+        name: 'Uplink Auto-Open',
+        hint: 'Open the uplink bar as soon as a roll dialog appears.',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register('lancer-automations', 'haseChanceLabels', {
         scope: 'world',
         config: false,
@@ -547,7 +565,7 @@ export function registerSettings()
     game.settings.register('lancer-automations', 'rangePulseLos', {
         name: 'Range Pulse Line of Sight',
         hint: 'Experimental. Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false
@@ -739,6 +757,18 @@ export function registerSettings()
         config: false,
         type: Boolean,
         default: false,
+    });
+    game.settings.register('lancer-automations', 'scanRevealAllies', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register('lancer-automations', 'scanRevealPlayers', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
     });
     game.settings.register('lancer-automations', 'wreckMasterVolume', {
         name: 'Wreck Master Volume',

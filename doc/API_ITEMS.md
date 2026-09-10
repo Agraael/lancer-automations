@@ -200,6 +200,63 @@ if (!api.hasReactionAvailable(reactorToken)) return false;
 
 </details>
 
+<details id="isCombatant">
+<summary><b><code>isCombatant</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.isCombatant(tokenOrActor)
+```
+
+`true` when the token has a combatant in the started active combat. `false` outside combat or before the combat starts.
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
+
+```js
+if (!api.isCombatant(reactorToken)) return false;
+```
+
+</details>
+
+<details id="isCurrentTurnActive">
+<summary><b><code>isCurrentTurnActive</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.isCurrentTurnActive(tokenOrActor)
+```
+
+`true` while it is this token's turn in the active combat. `false` outside combat.
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
+
+```js
+if (!api.isCurrentTurnActive(reactorToken)) return false;
+```
+
+</details>
+
+<details id="hasTurnAvailable">
+<summary><b><code>hasTurnAvailable</code></b> → <code>number</code></summary>
+
+<br>
+
+```js
+api.hasTurnAvailable(tokenOrActor)
+```
+
+Activations the token still has this round, read from its combatant. `0` outside a started combat.
+
+**Params:** <kbd>tokenOrActor</kbd> `Token|Actor`
+
+```js
+if (api.hasTurnAvailable(reactorToken) === 0) return false;
+```
+
+</details>
+
 <details id="setItemResource">
 <summary><b><code>setItemResource</code></b> <sup>async</sup> → <code>void</code></summary>
 

@@ -474,8 +474,9 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 | <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
 | <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty` and `target_modifier`. `target` is the Token, `entry` its HUD card (cover, prone). Evaluated per target when the HUD opens and again when its targets change or move. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
-| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For dynamic per-target filters on `target_modifier`, see `applyToCondition` below. |
+| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For a dynamic per-target gate, see `applyToCondition`. |
 | <kbd>tier</kbd> | `1\|2\|3` | Gate to an NPC owner tier. Unset = any. Non-NPC owners ignore it |
 
 </details>
@@ -514,7 +515,7 @@ read as `movement_extra` with `subtype: "boost"`.
 | Property | Type | Description |
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | Attack: `"invisible"`, `"no_invisible"`, `"no_cover"`, `"soft_cover"`, `"hard_cover"`. Damage: `"ap"`, `"half_damage"`, `"paracausal"`, `"crit"`, `"hit"`, `"miss"` |
-| <kbd>applyToCondition</kbd> | `string\|fn` | **Per-target** gate (complements `applyTo` and `condition`). Lambda `(target, state, reactorToken) => boolean` evaluated once per target during the attack / damage / toggle pass. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | Per-target gate, see the core fields. Also runs on the damage card and on each toggle. |
 
 `"no_invisible"` forces `plugins.invisibility.data = 0` on the target, bypassing `"invisible"`.
 
@@ -527,8 +528,8 @@ await api.addConstantBonus(actor, {
     subtype: 'no_invisible',
     applyToCondition: (target, state, reactorToken) => {
         const api = game.modules.get('lancer-automations')?.api;
-        return api?.getTokenDistance(reactorToken, target.target) <= 3
-            && target.target?.actor?.effects?.some(e => e.statuses?.has('invisible'));
+        return api?.getTokenDistance(reactorToken, target) <= 3
+            && target?.actor?.effects?.some(e => e.statuses?.has('invisible'));
     }
 });
 ```
@@ -889,16 +890,16 @@ await api.injectBonusToFlowState(triggerData.flowState, {
 <br>
 
 ```js
-api.getImmunityBonuses(actor, subtype, state)    // → Array<object>
+api.getImmunityBonuses(actor, subtype?, state)   // → Array<object>
 api.checkDamageResistances(actor, damageType)     // → Array<string>
 api.applyDamageImmunities(actor, damages, state)  // → Array<object>
 ```
 
-**Params:** <kbd>actor</kbd> `Actor` · <kbd>subtype</kbd> `string` immunity subtype · <kbd>damageType</kbd> `string` · <kbd>damages</kbd> `Array<{type, val}>`
+**Params:** <kbd>actor</kbd> `Actor | Token` · <kbd>subtype</kbd> `string` immunity subtype, omit for all · <kbd>damageType</kbd> `string` · <kbd>damages</kbd> `Array<{type, val}>`
 
 | Function | Description |
 |:---------|:------------|
-| `getImmunityBonuses` | Returns all immunity bonuses of the specified [subtype](API_REFERENCE.md#immunity-subtypes) for the actor. |
+| `getImmunityBonuses` | Returns the actor's immunity bonuses of the given [subtype](API_REFERENCE.md#immunity-subtypes), or every immunity bonus when <kbd>subtype</kbd> is omitted. A Token resolves to its actor. Unknown subtypes log a console warning. |
 | `checkDamageResistances` | Source **names** of the "resistance" subtype bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. |
 | `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. |
 

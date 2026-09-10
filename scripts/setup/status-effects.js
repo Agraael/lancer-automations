@@ -1,6 +1,33 @@
 // filled in even when the toggle is off, so callers can tell "opted out" from "typo"
 let additionalStatusKeys = null;
 
+// LCP status items point at system icons the system never shipped; the module carries those
+const SYSTEM_ICON_DIR = 'systems/lancer/assets/icons/white/';
+const MODULE_ICON_DIR = 'modules/lancer-automations/icons/system/';
+const SHIPPED_SYSTEM_ICONS = new Set([
+    'condition_dazed.svg',
+    'condition_DeadRings_statuses_staggered.svg',
+    'condition_DeadRings_statuses_stripped.svg',
+    'condition_DeadRings_statuses_vulnerable.svg',
+    'status_overheated.svg'
+]);
+
+function remapShippedSystemIcons()
+{
+    for (const status of CONFIG.statusEffects)
+    {
+        for (const key of ['img', 'icon'])
+        {
+            const path = status[key];
+            if (typeof path !== 'string' || !path.startsWith(SYSTEM_ICON_DIR))
+                continue;
+            const file = path.slice(SYSTEM_ICON_DIR.length);
+            if (SHIPPED_SYSTEM_ICONS.has(file))
+                status[key] = MODULE_ICON_DIR + file;
+        }
+    }
+}
+
 /** @param {any} nameOrId */
 export function isAdditionalStatusUnavailable(nameOrId)
 {
@@ -11,6 +38,8 @@ export function isAdditionalStatusUnavailable(nameOrId)
 
 Hooks.on('lancer.statusesReady', () =>
 {
+    remapShippedSystemIcons();
+
     if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
         && !CONFIG.statusEffects.find(status => status.id === 'infection'))
     {

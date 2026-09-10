@@ -100,6 +100,7 @@ interface LancerAutomationsAPI {
     hasReaction: typeof import("../utils/lancer-token.js").hasReaction;
     hasReactionAvailable: typeof import("../tools/misc-tools.js").hasReactionAvailable;
     hasTallerSolidAdjacent: typeof import("../combat/terrain-utils.js").hasTallerSolidAdjacent;
+    hasTurnAvailable: typeof import("../utils/lancer-token.js").hasTurnAvailable;
     hitWith: typeof import("../tools/misc-tools.js").hitWith;
     importDowntimeActionsJson: typeof import("../tools/downtime-item.js").importDowntimeActionsJson;
     importTemplateMacroPresets: typeof import("../setup/tmac-presets.js").importTemplateMacroPresets;
@@ -109,6 +110,8 @@ interface LancerAutomationsAPI {
     isAdvancedMeasureActive: typeof import("../interactive/tools/advancedMeasure.js").isAdvancedMeasureActive;
     isAreaPickerActive: typeof import("../interactive/tools/pickAreaTargetToggle.js").isAreaPickerActive;
     isCardlessTokenPickerActive: typeof import("../interactive/tools/pickTokensCardless.js").isCardlessTokenPickerActive;
+    isCombatant: typeof import("../utils/lancer-token.js").isCombatant;
+    isCurrentTurnActive: typeof import("../utils/lancer-token.js").isCurrentTurnActive;
     isItemUsable: typeof import("../tools/misc-tools.js").isItemUsable;
     isLancerActor: typeof import("../utils/lancer-token.js").isLancerActor;
     isSingleTargetPickerActive: typeof import("../interactive/tools/pickSingleTargetToggle.js").isSingleTargetPickerActive;

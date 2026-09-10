@@ -13,6 +13,7 @@ import { getActionOverlay } from '../interactive/action-overlays.js';
 import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
+import { recordRollSnapshot } from '../uplink/snapshots.js';
 
 // Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
 function checkAttribution(state)
@@ -64,6 +65,7 @@ export async function onAttackStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
     broadcastFocus('attack', [token, ...targets]);
+    recordRollSnapshot('attack', state);
 
     const actionData = attackActionData(state, weapon);
 
@@ -242,6 +244,7 @@ export async function onDamageStep(state)
     const damageResults = state.data?.damage_results || [];
     const targets = state.data?.targets || [];
     broadcastFocus('damage', [token, ...targets.map(targetInfo => targetInfo.target)]);
+    recordRollSnapshot('damage', state);
 
     const actionData = attackActionData(state, weapon);
 
@@ -390,6 +393,7 @@ export async function onTechAttackStep(state)
     const targetInfos = state.data?.acc_diff?.targets || [];
     const targets = targetInfos.map(accDiffTargetToken).filter(Boolean);
     broadcastFocus('attack', [token, ...targets]);
+    recordRollSnapshot('tech', state);
 
     const actionData = techActionData(state, techItem);
 
@@ -492,6 +496,7 @@ export async function onCheckStep(state)
     const targetTokenId = state.la_extraData?.targetTokenId;
     const checkAgainstToken = targetTokenId ? canvas.tokens.get(targetTokenId) : null;
     broadcastFocus('check', [token, checkAgainstToken]);
+    recordRollSnapshot('hase', state);
 
     await handleTrigger('onCheck', {
         triggeringToken: token,

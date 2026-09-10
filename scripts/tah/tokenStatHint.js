@@ -9,7 +9,7 @@ import {
 } from '../utils/lancer-token.js';
 import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
 import { getTokenDispositionInfo } from '../tools/misc-tools.js';
-import { isActorScannedForUser } from '../tools/scan-lookup.js';
+import { isActorScannedForUser, isActorAllyOfUser } from '../tools/scan-lookup.js';
 
 const MODULE_ID = 'lancer-automations';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
@@ -21,6 +21,8 @@ const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
 const SETTING_UNKNOWN_LABEL = 'tokenStatHintUnknownLabel';
 const SETTING_HIDE_CLASS_UNKNOWN = 'tokenStatHintHideClassWhenUnknown';
 const SETTING_HIDE_CURRENT_ON_SCAN = 'tokenStatHintHideCurrentOnScan';
+const SETTING_HIDE_CURRENT_FROM_ALLIES = 'tokenStatHintHideCurrentFromAllies';
+const SETTING_HIDE_CURRENT_FROM_PLAYERS = 'tokenStatHintHideCurrentFromPlayers';
 const SETTING_SHOW_HASE = 'tokenStatHintShowHase';
 
 const LABEL_ACTOR = 'actor';   // always show the token name
@@ -234,12 +236,16 @@ function hasObserverAccess(actor)
     }
 }
 
-// No ownership/observer permission (scan-only or unknown) with the hide-current option on.
+// Scan-only or unknown with the hide-current option on. Player tokens and allies show like observed ones unless hidden too.
 function masksCurrentStats(actor, mode, tokenDoc)
 {
     if (mode === 'gm')
         return false;
     if (mode === 'scanned' && hasObserverAccess(actor))
+        return false;
+    if (mode === 'scanned' && !getModuleSetting(SETTING_HIDE_CURRENT_FROM_PLAYERS) && actor?.hasPlayerOwner)
+        return false;
+    if (mode === 'scanned' && !getModuleSetting(SETTING_HIDE_CURRENT_FROM_ALLIES) && isActorAllyOfUser(actor, game.user))
         return false;
     const override = _hintFlagTriState(tokenDoc, 'statHintHideCurrent');
     if (override !== null)
@@ -254,7 +260,7 @@ function masksCurrentStats(actor, mode, tokenDoc)
     }
 }
 
-// The same reveal gate the stat-hover uses: GM, OBSERVER permission, or scanned (incl. scannedByAll).
+// The same reveal gate the stat-hover uses: GM, OBSERVER permission, or scanned (incl. scannedByAll, allies, player tokens).
 export function isActorRevealedToUser(actor)
 {
     return !!actor && resolveViewMode(actor) !== 'unknown';
@@ -1531,6 +1537,18 @@ export function registerTokenStatHintSettings()
         config: false,
         type: Boolean,
         default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_HIDE_CURRENT_FROM_ALLIES, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE_ID, SETTING_HIDE_CURRENT_FROM_PLAYERS, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true,
     });
     game.settings.register(MODULE_ID, SETTING_SHOW_HASE, {
         scope: 'world',

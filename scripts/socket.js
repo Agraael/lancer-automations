@@ -11,6 +11,7 @@ import {
 } from './interactive/index.js';
 import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
 import { onRemoteSightlines, onRemoteSightlinesClear } from './vision/sightlines.js';
+import { onUplinkRollOpen, onUplinkRollSnapshot, onUplinkRollClose } from './uplink/live-rolls.js';
 import { handleRemoteFocus } from './tools/auto-focus.js';
 import { floatTokenText } from './tools/float-text.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
@@ -204,6 +205,10 @@ function emitAck(action, requestId, extra = {})
 const HANDLERS = {
 
     autoFocus: handleRemoteFocus,
+
+    uplinkRollOpen: onUplinkRollOpen,
+    uplinkRollSnapshot: onUplinkRollSnapshot,
+    uplinkRollClose: onUplinkRollClose,
 
     floatTokenText: ({ tokenId, text, fill }) =>
     {

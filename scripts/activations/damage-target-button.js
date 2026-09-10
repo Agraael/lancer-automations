@@ -7,6 +7,7 @@ import {
     beginTargetSession, isTargetSessionActive, createTokenMark,
 } from '../interactive/canvas.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed } from './targeting-ui.js';
+import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 
 const _formulaBounds = new Map();
 function formulaBounds(formula)
@@ -127,6 +128,20 @@ async function injectButton(state, $form)
     else
         $form.append($section);
     const $row = $section.find('.accdiff-ranges');
+
+    if (!$form.data('laDmgSightlines'))
+    {
+        $form.data('laDmgSightlines', true);
+        $form.on('mouseenter.laDmgSight', '.damage-hud-target-card', function ()
+        {
+            const cardIndex = $form.find('.damage-hud-target-card').index(this);
+            const targetUuid = state.data?.damage_hud_data?.targets?.[cardIndex]?.targetUuid;
+            const target = targetUuid ? fromUuidSync(targetUuid)?.object : null;
+            const viewer = state.actor?.token ? canvas.tokens.get(state.actor.token.id) : state.actor?.getActiveTokens?.()?.[0];
+            hoverSightlines(viewer, target);
+        });
+        $form.on('mouseleave.laDmgSight', '.damage-hud-target-card', () => clearHoverSightlines());
+    }
 
     const targeting = state.la_extraData?.laTargeting ?? null;
     if (targeting && !state.__laAttackShape)

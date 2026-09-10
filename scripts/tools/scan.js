@@ -793,6 +793,52 @@ function _useLAJournal()
     }
 }
 
+// The system's initScanData refuses non-NPC actors; mechs, pilots and deployables scan with the generic fields.
+function _wrapInitScanData(flowSteps)
+{
+    const original = flowSteps.get('initScanData');
+    if (!original || original.__laWrapped)
+        return;
+    const wrapped = async function laInitScanDataGate(state)
+    {
+        const actor = state.data?.target?.actor;
+        if (!actor || actor.is_npc?.())
+            return original(state);
+        const sys = actor.system ?? {};
+        Object.assign(state.data, {
+            name: state.data.target.name,
+            img: actor.img,
+            tier: sys.tier || 1,
+            class: sys.loadout?.frame?.value?.name || actor.type,
+            templates: [],
+            stats: {
+                hull: sys.hull,
+                agi: sys.agi,
+                sys: sys.sys,
+                eng: sys.eng,
+                hp: sys.hp?.max,
+                heat: sys.heat?.max,
+                structure: sys.structure?.max,
+                stress: sys.stress?.max,
+                armor: sys.armor,
+                evasion: sys.evasion,
+                edef: sys.edef,
+                speed: sys.speed,
+                size: sys.size,
+                save: sys.save,
+                sensor_range: sys.sensor_range,
+            },
+            weapons: [],
+            techAttacks: [],
+            systems: [],
+            traits: [],
+        });
+        return true;
+    };
+    wrapped.__laWrapped = true;
+    flowSteps.set('initScanData', wrapped);
+}
+
 function _wrapPrintScanCard(flowSteps)
 {
     const original = flowSteps.get('printScanCard');
@@ -845,6 +891,7 @@ function _wrapCreateScanJournal(flowSteps)
 
 export function registerScanFlowSteps(flowSteps, flows)
 {
+    _wrapInitScanData(flowSteps);
     _wrapPrintScanCard(flowSteps);
     _wrapCreateScanJournal(flowSteps);
     flowSteps.set('lancer-automations:postProcessScanJournal', laPostProcessScanJournal);

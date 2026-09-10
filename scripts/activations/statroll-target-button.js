@@ -5,6 +5,7 @@ import {
     clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel,
 } from '../interactive/canvas.js';
 import { createTokenTether } from '../interactive/canvas-helpers.js';
+import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
 
 function rollerLiveChance(state)
@@ -112,6 +113,14 @@ function injectButton(state, $form)
             $btn.removeClass('la-targeting-active');
         }
     });
+    $btn.on('mouseenter', () =>
+    {
+        const contest = state.la_extraData?.contest;
+        const contestToken = contest?.actorUuid ? fromUuidSync(contest.actorUuid)?.object : null;
+        const pickedToken = state.la_extraData?.targetTokenId ? canvas.tokens.get(state.la_extraData.targetTokenId) : null;
+        hoverSightlines(caster(), pickedToken ?? contestToken);
+    });
+    $btn.on('mouseleave', () => clearHoverSightlines());
     $row.append($btn);
 }
 

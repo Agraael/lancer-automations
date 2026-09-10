@@ -7,6 +7,7 @@ import { invalidateLosCaches } from "../vision/lancerDetectionModes.js";
 
 export const RANGE_PULSE_PRIORITY = Object.freeze({
     INTERACTIVE: 60,
+    UPLINK: 45,
     ATTACK_CARD: 40,
     HOVER: 20,
     MEASURE: 10,

@@ -92,6 +92,12 @@ function serializeBonusLambdas(bonusData)
     return serialized;
 }
 
+// The card label's `for` is the token uuid on Lancer 3.x, a bare id before
+function accDiffCardTokenId($card)
+{
+    return ($card.find('label.target-name').attr('for') || '').split('.').pop();
+}
+
 // Prefers bonus.context.ownerTokenId, falls back to state.actor's first token; provides reactorToken for condition lambdas.
 function resolveReactorToken(bonus, state)
 {
@@ -103,7 +109,7 @@ function resolveReactorToken(bonus, state)
 
 /**
  * Evaluate `mod.applyToCondition` against one HUD target entry. Returns true if no condition is set.
- * Lambda must be synchronous and return a boolean.
+ * Lambda gets (targetToken, state, reactorToken, entry), must be synchronous and return a boolean.
  */
 function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
 {
@@ -119,13 +125,13 @@ function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
             fn = compileCachedLambda(
                 mod.applyToCondition.slice('@@fn:'.length),
                 applyToConditionCache,
-                ['target', 'state', 'reactorToken'],
+                ['target', 'state', 'reactorToken', 'entry'],
                 `const api=game.modules.get('lancer-automations')?.api;`
             );
         }
         else
             return true;
-        const result = fn(targetEntry, state, reactorToken);
+        const result = fn(accDiffTargetToken(targetEntry), state, reactorToken, targetEntry);
         if (result instanceof Promise)
         {
             console.error(`lancer-automations | applyToCondition for "${mod.name || mod.id}" is async. Must be synchronous.`);
@@ -163,6 +169,8 @@ export function flattenBonuses(bonuses)
                     flatSub.id = `${bonus.id || 'multi'}_sub_${idx}`;
                 if (bonus.applyTo && !flatSub.applyTo)
                     flatSub.applyTo = bonus.applyTo;
+                if (bonus.applyToCondition && !flatSub.applyToCondition)
+                    flatSub.applyToCondition = bonus.applyToCondition;
                 if (!flatSub.source && bonus.source)
                     flatSub.source = bonus.source;
                 if (!flatSub.name && bonus.name)
@@ -457,6 +465,17 @@ function createGenericBonusStep(flowType)
                 base.difficulty += Math.abs(collected.netBonus);
 
             const appliedMode = new Map();
+            // Ids matched last pass, the gate can change
+            const appliedTargetIds = new Map();
+            const matchesTarget = (bonus, targetEntry) =>
+            {
+                const tokenId = accDiffTargetToken(targetEntry)?.id;
+                if (!tokenId)
+                    return false;
+                if (Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0 && !bonus.applyTo.includes(tokenId))
+                    return false;
+                return evaluateApplyToCondition(bonus, targetEntry, state, resolveReactorToken(bonus, state));
+            };
             const applyTargetedBonuses = (accDiff) =>
             {
                 const count = accDiff.targets?.length || 0;
@@ -477,9 +496,10 @@ function createGenericBonusStep(flowType)
                     }
                     else if (prevMode === 'target')
                     {
+                        const prevIds = appliedTargetIds.get(bonus.id) ?? [];
                         accDiff.targets.forEach(targetEntry =>
                         {
-                            if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
+                            if (prevIds.includes(accDiffTargetToken(targetEntry)?.id))
                             {
                                 if (bonus.type === 'difficulty')
                                     targetEntry.difficulty -= val;
@@ -489,7 +509,10 @@ function createGenericBonusStep(flowType)
                         });
                     }
 
-                    const matching = accDiff.targets?.filter(targetEntry => bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id)) ?? [];
+                    const matching = accDiff.targets?.filter(targetEntry => matchesTarget(bonus, targetEntry)) ?? [];
+                    const matchedIds = matching.map(targetEntry => accDiffTargetToken(targetEntry)?.id);
+                    appliedTargetIds.set(bonus.id, matchedIds);
+                    bonus._matchedIds = matchedIds;
                     if (!matching.length)
                     {
                         appliedMode.set(bonus.id, null);
@@ -593,6 +616,7 @@ function createGenericBonusStep(flowType)
                 dmgEnabled: new Map(),
                 modEnabled: null,
                 appliedMode,
+                appliedTargetIds,
                 burned: new Set()
             };
             const addUsageCandidates = (list, bucket) =>
@@ -958,7 +982,7 @@ function createGenericBonusStep(flowType)
                         $allCards.each(function ()
                         {
                             const $card = $(this);
-                            const tokenId = (mod.applyTo || []).find(id => $card.find(`label.target-name[for="${id}"]`).length > 0);
+                            const tokenId = (mod.applyTo || []).find(id => accDiffCardTokenId($card) === id);
                             if (!tokenId)
                                 return;
                             const guardClass = `la-tmod-${mKey}-${tokenId}`;
@@ -1035,9 +1059,10 @@ function createGenericBonusStep(flowType)
                                 }
                                 else if (val && prevMode === 'target')
                                 {
+                                    const prevIds = appliedTargetIds.get(bonus.id) ?? [];
                                     for (const targetEntry of (accDiff?.targets ?? []))
                                     {
-                                        if (bonus.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
+                                        if (prevIds.includes(accDiffTargetToken(targetEntry)?.id))
                                         {
                                             if (bonus.type === 'difficulty')
                                                 targetEntry.difficulty -= val;
@@ -1047,6 +1072,7 @@ function createGenericBonusStep(flowType)
                                     }
                                 }
                                 appliedMode.delete(bonus.id);
+                                appliedTargetIds.delete(bonus.id);
                             }
                             else if (flowType === 'damage' && dmgLive)
                             {
@@ -1173,7 +1199,8 @@ async function processBonusBatch(bonuses, flowType, tags, state, results)
         }
         else if (bonus.type !== 'damage')
         {
-            const hasTarget = Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0;
+            const gated = (bonus.type === 'accuracy' || bonus.type === 'difficulty') && !!bonus.applyToCondition;
+            const hasTarget = (Array.isArray(bonus.applyTo) && bonus.applyTo.length > 0) || gated;
             if (hasTarget)
             {
                 const injectedBonus = { ...bonus, id: bonus.id || foundry.utils.randomID() };
@@ -1761,10 +1788,14 @@ function showBonusNotification(getBonuses, state, getTargetedBonuses, disabledBy
     observeHudReinject('form[id^="accdiff"]', '.csm-global-bonus-row', injectIntoCard);
 
     // Always set up per-target injection with the same getter so it re-evaluates on each re-injection
-    injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser);
+    const reinjectTargeted = injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser);
 
-    // Return injectIntoCard so replaceTargets monkey-patch can force a DOM rebuild on target changes
-    return injectIntoCard;
+    // Called by the replaceTargets patch on target change
+    return () =>
+    {
+        injectIntoCard();
+        reinjectTargeted();
+    };
 }
 
 // Injects per-target acc/diff checkboxes; MutationObserver handles mid-dialog target additions.
@@ -1828,9 +1859,9 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             {
                 const $card = $(this);
                 let matchedTokenId = null;
-                for (const tokenId of (bonus.applyTo || []))
+                for (const tokenId of (bonus._matchedIds ?? bonus.applyTo ?? []))
                 {
-                    if ($card.find(`label.target-name[for="${tokenId}"]`).length > 0)
+                    if (accDiffCardTokenId($card) === tokenId)
                     {
                         matchedTokenId = tokenId;
                         break;
@@ -1853,6 +1884,16 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                 else
                     nonMatchingCards.push($card);
             });
+
+            // Drop stale rows first, the gate can change
+            for (const { $card } of matchingCards)
+                $card.find(`[class*="csm-tgt-ph-${bonus.id}-"]`).remove();
+            for (const $card of nonMatchingCards)
+            {
+                $card.find(`[class*="csm-tgt-bonus-${bonus.id}-"]`).remove();
+                if (matchingCards.length === 0)
+                    $card.find(`[class*="csm-tgt-ph-${bonus.id}-"]`).remove();
+            }
 
             if (matchingCards.length === 0)
                 continue;
@@ -1959,6 +2000,8 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
     observer.observe(observeTarget, { childList: true, subtree: true });
     // Safety disconnect after 10 minutes
     setTimeout(() => observer.disconnect(), 600000);
+
+    return tryInjectTargeted;
 }
 
 /**
@@ -3455,10 +3498,11 @@ export async function burnBonusUsageForFlow(state)
             else if (mode === 'target')
             {
                 const targets = state.data?.acc_diff?.targets ?? [];
+                const matchedIds = usage.appliedTargetIds?.get(candidate.id) ?? candidate.applyTo ?? [];
                 used = targets.some(entry =>
                 {
                     const tokenId = accDiffTargetToken(entry)?.id;
-                    return tokenId && candidate.applyTo?.includes(tokenId) && !usage.disabledByUser?.has(`${candidate.id}:${tokenId}`);
+                    return tokenId && matchedIds.includes(tokenId) && !usage.disabledByUser?.has(`${candidate.id}:${tokenId}`);
                 });
             }
         }
@@ -3719,11 +3763,20 @@ export function executeGenericBonusMenu(actor = null)
     executeEffectManager({ initialTab: 'bonus', actor });
 }
 
-/** @returns {object[]} */
-export function getImmunityBonuses(actor, subtype, state = null)
+const IMMUNITY_SUBTYPES = new Set(['effect', 'damage', 'resistance', 'crit', 'hit', 'miss', 'elevation', 'terrain', 'obstacle', 'provoke']);
+
+/**
+ * @param {any} actor Actor, Token or TokenDocument
+ * @param {string|null} [subtype] omit for every immunity bonus
+ * @returns {object[]}
+ */
+export function getImmunityBonuses(actor, subtype = null, state = null)
 {
-    if (!actor)
+    actor = actor?.actor ?? actor;
+    if (!actor?.getFlag)
         return [];
+    if (subtype && !IMMUNITY_SUBTYPES.has(subtype))
+        console.warn(`lancer-automations | getImmunityBonuses: unknown subtype "${subtype}"`);
 
     const constants = actor.getFlag("lancer-automations", "constant_bonuses") || [];
     const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
@@ -3731,7 +3784,7 @@ export function getImmunityBonuses(actor, subtype, state = null)
     const flowBonuses = state?.la_extraData?.flow_bonus || [];
 
     return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses])
-        .filter(bonus => bonus.type === "immunity" && bonus.subtype === subtype && linkTierGate(bonus, actor));
+        .filter(bonus => bonus.type === "immunity" && (!subtype || bonus.subtype === subtype) && linkTierGate(bonus, actor));
 }
 
 /** @returns {string[]} array of immunity source names; empty if not immune */

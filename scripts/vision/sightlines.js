@@ -608,6 +608,23 @@ function _clearBroadcastSightlines()
     game.socket.emit(CHANNEL, { action: 'sightlinesClear', payload: { userId: game.user.id } });
 }
 
+/** Target-hover sightlines shared by the roll dialogs and the uplink, same gates as the attack hover. */
+export function hoverSightlines(viewer, target)
+{
+    if (!viewer || !target)
+        return;
+    if (!getSettingEnabled('lancerLos') || !getSettingEnabled(SETTING_ATTACK_HOVER))
+        return;
+    drawSightlines('attack-hover', viewer, [target]);
+    _broadcastSightlines(viewer, [target]);
+}
+
+export function clearHoverSightlines()
+{
+    clearSightlines('attack-hover');
+    _clearBroadcastSightlines();
+}
+
 /** Draws another client's hovered sightlines locally, under their own key. */
 export function onRemoteSightlines(payload)
 {

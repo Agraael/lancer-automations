@@ -48,7 +48,14 @@ const ACTIVATIONS_FIELDS = [
     { type: 'section', label: 'Scan' },
     { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System = native Lancer v3 scan journal, LA legacy = the older LA journal template.' },
     { key: 'scanPlayerOwnershipMode', type: 'select', label: 'Player Ownership', hint: 'Who gets ownership when a player runs a scan; GM scans always grant to all players.' },
-    { key: 'revealStatsWithoutScan', type: 'boolean', label: 'Reveal Stats Without Scanning', hint: 'Every actor reads as scanned, so the token stat hint, scanned stat bars, and consume feedback always show full stats.' },
+    { type: 'section', label: 'Count As Scanned Without A Scan', hint: 'Who reads as scanned for the stat hint, scanned stat bars, and consume feedback.', collapsible: false, subsection: true },
+    { type: 'compactBooleans',
+        items: [
+            { key: 'revealStatsWithoutScan', label: 'Everyone', hint: 'Every actor reads as scanned.' },
+            { key: 'scanRevealAllies', label: 'Allies', hint: 'Tokens friendly to one you own. Uses Token Factions when active.' },
+            { key: 'scanRevealPlayers', label: 'Player tokens', hint: 'Tokens owned by a player.' },
+        ]
+    },
     { type: 'button',
         key: 'regenerateScans',
         label: 'Regenerate All Scan Journals',
@@ -80,6 +87,10 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'autoDamageRoll', type: 'boolean' },
     { key: 'autoDamageApply', type: 'boolean' },
     { key: 'autoStructFollowup', type: 'boolean' },
+
+    { type: 'section', label: 'Roll Uplink', collapsible: true, collapsed: true },
+    { key: 'uplinkEnabled', type: 'boolean' },
+    { key: 'uplinkAutoOpen', type: 'boolean', requires: 'uplinkEnabled' },
 
     { type: 'section', label: 'Movement & Boost', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
@@ -383,6 +394,13 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
     { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Also hide the class/frame subtitle and tier badge until scanned.' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'Hide current values without owner/observer access', hint: 'Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track.' , requires: 'tokenStatHintEnabled' },
+    { type: 'section', label: 'Also Hide Current Values From', hint: 'Who sees "?" as well. Unchecked groups see live values.', collapsible: false, subsection: true },
+    { type: 'compactBooleans',
+        items: [
+            { key: 'tokenStatHintHideCurrentFromAllies', label: 'Allies', hint: 'Tokens friendly to one you own. Uses Token Factions when active.', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
+            { key: 'tokenStatHintHideCurrentFromPlayers', label: 'Player tokens', hint: 'Tokens owned by a player.', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
+        ]
+    },
     { key: 'tokenStatHintShowHase', type: 'boolean', label: 'Show HASE', hint: 'Adds a hull/agility/systems/engineering line.', requires: 'tokenStatHintEnabled' },
 ];
 
@@ -965,9 +983,16 @@ function _requiredKeys(field)
     return Array.isArray(field.requires) ? field.requires : [field.requires];
 }
 
+// Compact boolean items count as fields so they can carry `requires` too.
+function _allKeyedFields()
+{
+    return TAB_DEFS.flatMap(tab => tab.fields ?? [])
+        .flatMap(field => field?.type === 'compactBooleans' ? (field.items ?? []) : [field]);
+}
+
 function _fieldByKey(key)
 {
-    return TAB_DEFS.flatMap(tab => tab.fields ?? []).find(field => field?.key === key);
+    return _allKeyedFields().find(field => field?.key === key);
 }
 
 function _requirementLabel(key)
@@ -1017,7 +1042,7 @@ function _requirementHint(field)
 
 function _fieldsWithRequirements()
 {
-    return TAB_DEFS.flatMap(tab => tab.fields ?? []).filter(field => field?.key && field.requires);
+    return _allKeyedFields().filter(field => field?.key && field.requires);
 }
 
 function _visibleTabs()
@@ -1771,7 +1796,7 @@ export class LancerAutomationsConfig extends FormApplication
                 continue;
             const keys = _requiredKeys(field);
             const isMet = (key) => _isRequirementMet($html, key);
-            const $row = $target.closest('.form-group');
+            const $row = $target.closest('.form-group, .la-compact-bool');
             const $warning = $('<i class="fas fa-triangle-exclamation la-req-icon"></i>')
                 .attr('data-tooltip', _requirementHint(field))
                 .hide();

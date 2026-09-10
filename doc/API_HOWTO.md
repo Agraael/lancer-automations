@@ -148,6 +148,33 @@ both surface on `onInitCheck` / `onCheck` as `item` / `actionName`.
 
 ---
 
+### How-To: Per-Target Accuracy
+
+`applyToCondition` gates each target and re-runs when the HUD's targets change or move.
+
+```javascript
+onInit: async function (token, item, api) {
+    await api.ensureLinkedBonus({
+        items: [item],
+        bonusData: {
+            id: `handshake-etiquette-${item.id}`,
+            name: "Handshake Etiquette",
+            type: "accuracy",
+            val: 1,
+            rollTypes: ["attack"],
+            applyToCondition: (target, state, reactorToken) => {
+                const api = game.modules.get('lancer-automations')?.api;
+                return api.isHostile(reactorToken, target)
+                    && api.getTokenDistance(reactorToken, target) <= 3;
+            }
+        },
+        addOptions: { duration: 'constant' }
+    });
+}
+```
+
+---
+
 ### How-To: Extra Movement
 
 Two shapes, and picking the wrong one leaks. A **standing** bonus lengthens every move of that kind for as long

@@ -51,7 +51,8 @@
         "styles/interactive-tools.css",
         "styles/tah.css",
         "styles/battelog.css",
-        "styles/seasonal.css"
+        "styles/seasonal.css",
+        "styles/uplink.css"
     ],
     "compatibility": {
         "minimum": "13.351",

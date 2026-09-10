@@ -1170,14 +1170,14 @@ const lesserSightAutomation = {
                         subtype: "no_invisible",
                         applyToCondition: (target, state, reactorToken) =>
                         {
-                            if (!reactorToken || !target?.target)
+                            if (!reactorToken || !target)
                                 return false;
                             const laApi = game.modules.get('lancer-automations')?.api;
                             if (!laApi)
                                 return false;
-                            if (laApi.getTokenDistance(reactorToken, target.target) > 3)
+                            if (laApi.getTokenDistance(reactorToken, target) > 3)
                                 return false;
-                            return target.target.actor?.effects?.some(effect => effect.statuses?.has('invisible'));
+                            return target.actor?.effects?.some(effect => effect.statuses?.has('invisible'));
                         }
                     },
                     addOptions: { duration: 'constant' }

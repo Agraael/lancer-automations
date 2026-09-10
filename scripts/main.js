@@ -103,6 +103,7 @@ import {
     onActivationStep, onInitActivationStep, consumeGenericPrintResourcesStep,
     _buildCancelFn
 } from "./activations/flow-steps.js";
+import { uplinkHudOpenStep } from "./uplink/live-rolls.js";
 import {
     noBonusDmgInjectStep,
     wrapRollDamageForNoBonusDmg,
@@ -220,6 +221,9 @@ import {
     hasReaction,
     isTokenInCombat,
     isTokenVisible,
+    isCombatant,
+    isCurrentTurnActive,
+    hasTurnAvailable,
 } from "./utils/lancer-token.js";
 
 // Integrations / Alt-struct / Tests
@@ -379,6 +383,7 @@ function insertModuleFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:genericBonusStepDamage', genericBonusStepDamage);
 
     flowSteps.set('lancer-automations:forceTechHUD', forceTechHUDStep);
+    flowSteps.set('lancer-automations:uplinkHudOpen', uplinkHudOpenStep);
 
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepAttack');
     flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:genericAccuracyStepTechAttack');
@@ -392,6 +397,12 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:genericAccuracyStepStatRoll');
 
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:genericBonusStepDamage');
+
+    flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:uplinkHudOpen');
+    flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:uplinkHudOpen');
+    flows.get('TechAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:uplinkHudOpen');
+    flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:uplinkHudOpen');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:uplinkHudOpen');
 
     flows.get('WeaponAttackFlow')?.insertStepBefore('initAttackData', 'lancer-automations:throwChoice');
     // mirror LA's throw choice into v3's native thrown flag (so the HUD opens with it ticked)
@@ -1197,6 +1208,9 @@ Hooks.on('ready', async () =>
         hasReaction,
         isTokenInCombat,
         isTokenVisible,
+        isCombatant,
+        isCurrentTurnActive,
+        hasTurnAvailable,
         hasLineOfSight,
         snapTokenCenter,
         getOccupiedCenters,
