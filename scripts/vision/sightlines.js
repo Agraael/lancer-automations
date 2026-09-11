@@ -6,7 +6,7 @@ import { drawDashedEdges } from '../interactive/canvas-helpers.js';
 import { thtApi } from '../movement/movement-utils.js';
 import { getTerrainTypeMap } from '../movement/cost-rules.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const CHANNEL = 'module.lancer-automations';
 const REMOTE_PREFIX = 'remote:';
 const SETTING_ATTACK_HOVER = 'lancerLosAttackHover';

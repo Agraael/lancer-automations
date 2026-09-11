@@ -1,6 +1,6 @@
 import { openCursorMenu } from './cursor-menu.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2'];
 
 export const WHEEL_COUNT = WHEEL_FLAGS.length;

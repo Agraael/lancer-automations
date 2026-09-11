@@ -1,7 +1,7 @@
 import { playUiSound } from '../tah/sound.js';
 import { openRadialWheel, closeRadialWheel, isRadialWheelOpen } from '../tools/radial-wheel.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 function targetToken()
 {

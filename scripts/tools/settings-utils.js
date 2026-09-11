@@ -1,13 +1,15 @@
-// Read a lancer-automations setting; boolean without a fallback, raw value with one.
+import { MODULE_ID } from './constants.js';
+
+// Read a lancer-automations setting, falling back instead of throwing when it is
+// not registered yet. Returns the value as registered, whatever its type.
 export function getModuleSetting(key, fallback)
 {
     try
     {
-        const value = game.settings.get('lancer-automations', key);
-        return fallback === undefined ? !!value : value;
+        return game.settings.get(MODULE_ID, key);
     }
     catch
     {
-        return fallback === undefined ? false : fallback;
+        return fallback;
     }
 }

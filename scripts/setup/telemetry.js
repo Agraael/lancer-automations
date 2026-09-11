@@ -1,6 +1,6 @@
 import { getSupabase } from "./supabase-client.js";
 
-const MODULE_NAMESPACE = "lancer-automations";
+import { MODULE_ID } from '../tools/constants.js';
 const INSTALL_ID_SETTING = "dataInstallId";
 const CONSENT_SETTING = "dataConsent";
 const LAST_PING_SETTING = "dataLastPing";
@@ -14,7 +14,7 @@ const TABLE = "seen_users";
 
 async function _upsertUser(userHash, role)
 {
-    const moduleVersion = game.modules.get(MODULE_NAMESPACE)?.version || "unknown";
+    const moduleVersion = game.modules.get(MODULE_ID)?.version || "unknown";
     const language = game.i18n.lang || "unknown";
 
     try
@@ -57,7 +57,7 @@ async function _maybeDailyTouch(userHash, role)
     let last = "";
     try
     {
-        last = game.settings.get(MODULE_NAMESPACE, LAST_PING_SETTING) || "";
+        last = game.settings.get(MODULE_ID, LAST_PING_SETTING) || "";
     }
     catch
     {
@@ -69,7 +69,7 @@ async function _maybeDailyTouch(userHash, role)
     await _upsertUser(userHash, role);
     try
     {
-        await game.settings.set(MODULE_NAMESPACE, LAST_PING_SETTING, today);
+        await game.settings.set(MODULE_ID, LAST_PING_SETTING, today);
     }
     catch
     {
@@ -133,13 +133,13 @@ async function _runFirstLaunch()
     const role = await _showFirstLaunchPopup();
     if (role === CONSENT_DECLINED)
     {
-        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
+        await game.settings.set(MODULE_ID, CONSENT_SETTING, CONSENT_DECLINED);
         console.log("Lancer Automation | User declined; no data sent.");
         return;
     }
     const installId = foundry.utils.randomID();
-    await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
-    await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, role);
+    await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, installId);
+    await game.settings.set(MODULE_ID, CONSENT_SETTING, role);
     await _upsertUser(installId, role);
     console.log(`Lancer Automation | Counted as ${role}.`);
 }
@@ -152,7 +152,7 @@ async function _handleStartup()
     let consent = CONSENT_PENDING;
     try
     {
-        consent = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING) || CONSENT_PENDING;
+        consent = game.settings.get(MODULE_ID, CONSENT_SETTING) || CONSENT_PENDING;
     }
     catch
     {
@@ -171,14 +171,14 @@ async function _handleStartup()
         let installId = "";
         try
         {
-            installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
+            installId = game.settings.get(MODULE_ID, INSTALL_ID_SETTING) || "";
         }
         catch
         { /* not registered yet */ }
         if (!installId)
         {
             installId = foundry.utils.randomID();
-            await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
+            await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, installId);
         }
         await _maybeDailyTouch(installId, consent);
         return;
@@ -191,7 +191,7 @@ class ConsentMenu extends FormApplication
 {
     render()
     {
-        const current = game.settings.get(MODULE_NAMESPACE, CONSENT_SETTING);
+        const current = game.settings.get(MODULE_ID, CONSENT_SETTING);
         const label = current === ROLE_GM ? "currently counted as GM"
             : current === ROLE_PLAYER ? "currently counted as Player"
                 : current === CONSENT_DECLINED ? "currently opted out"
@@ -199,13 +199,13 @@ class ConsentMenu extends FormApplication
 
         const switchTo = async (role) =>
         {
-            let installId = game.settings.get(MODULE_NAMESPACE, INSTALL_ID_SETTING) || "";
+            let installId = game.settings.get(MODULE_ID, INSTALL_ID_SETTING) || "";
             if (!installId)
             {
                 installId = foundry.utils.randomID();
-                await game.settings.set(MODULE_NAMESPACE, INSTALL_ID_SETTING, installId);
+                await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, installId);
             }
-            await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, role);
+            await game.settings.set(MODULE_ID, CONSENT_SETTING, role);
             await _upsertUser(installId, role);
             ui.notifications.info(`Now counted as ${role}. Thank you!`);
         };
@@ -221,7 +221,7 @@ class ConsentMenu extends FormApplication
                     label: "Opt out",
                     callback: async () =>
                     {
-                        await game.settings.set(MODULE_NAMESPACE, CONSENT_SETTING, CONSENT_DECLINED);
+                        await game.settings.set(MODULE_ID, CONSENT_SETTING, CONSENT_DECLINED);
                         ui.notifications.info("Opted out. No more data will be sent.");
                     },
                 },
@@ -236,13 +236,13 @@ class ConsentMenu extends FormApplication
 Hooks.once("setup", () =>
 {
     // client scope: per browser; random per install.
-    game.settings.register(MODULE_NAMESPACE, INSTALL_ID_SETTING, {
+    game.settings.register(MODULE_ID, INSTALL_ID_SETTING, {
         scope: "client",
         config: false,
         type: String,
         default: "",
     });
-    game.settings.register(MODULE_NAMESPACE, CONSENT_SETTING, {
+    game.settings.register(MODULE_ID, CONSENT_SETTING, {
         name: "Data Collection Consent",
         hint: "Anonymous count of GM/Player installs (no game.userId, no IP).",
         scope: "client",
@@ -250,14 +250,14 @@ Hooks.once("setup", () =>
         type: String,
         default: CONSENT_PENDING,
     });
-    game.settings.register(MODULE_NAMESPACE, LAST_PING_SETTING, {
+    game.settings.register(MODULE_ID, LAST_PING_SETTING, {
         scope: "client",
         config: false,
         type: String,
         default: "",
     });
 
-    game.settings.registerMenu(MODULE_NAMESPACE, "consentMenu", {
+    game.settings.registerMenu(MODULE_ID, "consentMenu", {
         name: "Change Data Consent",
         label: "Update Consent",
         hint: "Change your role or opt out at any time.",

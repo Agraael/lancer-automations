@@ -1,7 +1,7 @@
 import { getModuleSetting } from './settings-utils.js';
 import { isFriendly } from '../combat/overwatch.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from './constants.js';
 const SCAN_NAME_RE = /^SCAN:\s/i;
 
 function _observes(entry, user, allowGm)

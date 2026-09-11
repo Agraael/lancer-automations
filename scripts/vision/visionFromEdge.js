@@ -19,7 +19,8 @@
 
 import { laSightEdgeOptions } from './laWallLos.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const FLAG_KEY = 'visionFromEdge';
 const SETTING_ENABLED = 'visionFromEdgeEnabled';
 const SETTING_SAMPLE_MODE = 'visionFromEdgeSampleMode';
@@ -41,12 +42,12 @@ function _isEdgeVisionEnabled(tokenDoc)
         return true;
     if (flag === 'off')
         return false;
-    return game.settings.get(MODULE_ID, SETTING_ENABLED) === true;
+    return getModuleSetting(SETTING_ENABLED) === true;
 }
 
 function _getSampleCount(tokenDoc)
 {
-    const mode = game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE);
+    const mode = getModuleSetting(SETTING_SAMPLE_MODE);
     if (mode === 'corners4')
         return 4;
     if (mode === 'perimeter8')
@@ -147,22 +148,14 @@ function _getSamplePoints(token)
     const boxBottom = boxTop + size.height;
     const centerX = boxLeft + size.width / 2;
     const centerY = boxTop + size.height / 2;
-    let offset = 0;
-    try
-    {
-        offset = Number(game.settings.get(MODULE_ID, SETTING_SAMPLE_OFFSET)) || 0;
-    }
-    catch
-    {
-        offset = 0;
-    }
+    const offset = Number(getModuleSetting(SETTING_SAMPLE_OFFSET)) || 0;
     const left = boxLeft - offset;
     const top = boxTop - offset;
     const right = boxRight + offset;
     const bottom = boxBottom + offset;
     const center = { x: centerX, y: centerY };
 
-    const mode = game.settings.get(MODULE_ID, SETTING_SAMPLE_MODE);
+    const mode = getModuleSetting(SETTING_SAMPLE_MODE);
     if (mode === 'silhouette' || mode === 'silhouette2')
     {
         const hull = _convexShapeVertices(token, center, offset - 2);
@@ -460,7 +453,7 @@ function _onDeleteToken(tokenDoc)
 function _onCanvasReady()
 {
     _rebuildAll();
-    if (game.settings.get(MODULE_ID, 'visionFromEdgeDebug'))
+    if (getModuleSetting('visionFromEdgeDebug'))
     {
         /** @type {any} */ (globalThis).lancerVisionDebug?.show?.();
     }

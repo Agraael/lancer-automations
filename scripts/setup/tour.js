@@ -5,7 +5,7 @@ import { getWeapons } from '../interactive/deployables.js';
 
 const SETTING_TOUR_DONE = 'tourCompleted';
 const SETTING_MOVEMENT_WARNING_SHOWN = 'movementWarningShown';
-const NS = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const ROOT = '#lancer-automations-config';
 const RM_ROOT = '#reaction-manager-config';
 const TAH_ROOT = '#la-hud';
@@ -1098,7 +1098,7 @@ async function _ensureTAHOpen({ withCombat = true } = {})
         return true;
 
     // tahEnabled is client-scope, defaults off. Offer to turn it on for the tour.
-    if (!game.settings.get(NS, 'tahEnabled'))
+    if (!game.settings.get(MODULE_ID, 'tahEnabled'))
     {
         const enable = await new Promise((resolve) =>
         {
@@ -1115,7 +1115,7 @@ async function _ensureTAHOpen({ withCombat = true } = {})
         });
         if (!enable)
             return false;
-        await game.settings.set(NS, 'tahEnabled', true);
+        await game.settings.set(MODULE_ID, 'tahEnabled', true);
     }
 
     _tahPrevControlled = canvas.tokens.controlled.slice();
@@ -1548,7 +1548,7 @@ async function startTour(id)
         return;
     try
     {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
+        await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
     }
     catch
     { /* not ready */ }
@@ -1677,7 +1677,7 @@ async function _maybeShowMovementWarning()
     let shown = false;
     try
     {
-        shown = !!game.settings.get(NS, SETTING_MOVEMENT_WARNING_SHOWN);
+        shown = !!game.settings.get(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN);
     }
     catch
     { /* not registered yet */ }
@@ -1686,7 +1686,7 @@ async function _maybeShowMovementWarning()
     await _movementWarningDialog();
     try
     {
-        await game.settings.set(NS, SETTING_MOVEMENT_WARNING_SHOWN, true);
+        await game.settings.set(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN, true);
     }
     catch
     { /* not ready */ }
@@ -1764,7 +1764,7 @@ async function _runChooser()
         await _runFullTour();
     try
     {
-        await game.settings.set(NS, SETTING_TOUR_DONE, true);
+        await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
     }
     catch
     { /* not ready */ }
@@ -1785,21 +1785,21 @@ class TourMenu extends FormApplication
 export function registerTourBootstrap()
 {
     console.log('lancer-automations | registerTourBootstrap called');
-    game.settings.register(NS, SETTING_TOUR_DONE, {
+    game.settings.register(MODULE_ID, SETTING_TOUR_DONE, {
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
 
-    game.settings.register(NS, SETTING_MOVEMENT_WARNING_SHOWN, {
+    game.settings.register(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN, {
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
 
-    game.settings.registerMenu(NS, 'tourMenu', {
+    game.settings.registerMenu(MODULE_ID, 'tourMenu', {
         name: 'Configuration Tour',
         label: 'Start Tour',
         hint: 'Guided walkthrough of the configuration window or the Activation Manager.',
@@ -1856,14 +1856,14 @@ export function registerTourBootstrap()
                     }
                 }
                 entry.assign(tour);
-                game.tours.register(NS, entry.id, tour);
+                game.tours.register(MODULE_ID, entry.id, tour);
             }
             catch (e)
             {
                 console.error(`lancer-automations | failed to register tour ${entry.id}`, e);
             }
         }
-        console.log('lancer-automations | tours registered OK', game.tours.get(`${NS}.config-tour`), game.tours.get(`${NS}.activation-manager-tour`), game.tours.get(`${NS}.tah-tour`));
+        console.log('lancer-automations | tours registered OK', game.tours.get(`${MODULE_ID}.config-tour`), game.tours.get(`${MODULE_ID}.activation-manager-tour`), game.tours.get(`${MODULE_ID}.tah-tour`));
     };
 
     Hooks.once('setup', doRegister);
@@ -1873,7 +1873,7 @@ export function registerTourBootstrap()
         let done = true;
         try
         {
-            done = !!game.settings.get(NS, SETTING_TOUR_DONE);
+            done = !!game.settings.get(MODULE_ID, SETTING_TOUR_DONE);
         }
         catch
         { /* not ready */ }

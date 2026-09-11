@@ -1,5 +1,5 @@
-const MODULE = 'lancer-automations';
-const CSS_PATH = `modules/${MODULE}/styles/battelog.css`;
+import { MODULE_ID } from '../tools/constants.js';
+const CSS_PATH = `modules/${MODULE_ID}/styles/battelog.css`;
 
 // The SVG can't see document @font-face, so every font rides along as a data uri.
 const FONT_SOURCES = [
@@ -84,7 +84,7 @@ async function _loadAssets()
                 }
                 catch (err)
                 {
-                    console.warn(`${MODULE} | Battle Log share: could not embed ${font.family} ${font.weight}.`, err);
+                    console.warn(`${MODULE_ID} | Battle Log share: could not embed ${font.family} ${font.weight}.`, err);
                     return '';
                 }
             }));
@@ -296,7 +296,7 @@ function _showPreview(dataUri, blob, filename)
                 label: 'Copy',
                 callback: () => _copyToClipboard(blob).catch((err) =>
                 {
-                    console.warn(`${MODULE} | Clipboard write refused.`, err);
+                    console.warn(`${MODULE_ID} | Clipboard write refused.`, err);
                     ui.notifications.warn(`Clipboard copy failed: ${err.message}`);
                 }),
             },
@@ -309,7 +309,7 @@ function _showPreview(dataUri, blob, filename)
                     {
                         if (err?.name === 'AbortError')
                             return;
-                        console.error(`${MODULE} | Battle Log card save failed:`, err);
+                        console.error(`${MODULE_ID} | Battle Log card save failed:`, err);
                         ui.notifications.error(`Could not save the file: ${err.message}`);
                     }),
             },
@@ -331,7 +331,7 @@ async function _deliver(blob, filename, toClipboard)
         }
         catch (err)
         {
-            console.warn(`${MODULE} | Clipboard write refused, showing preview instead.`, err);
+            console.warn(`${MODULE_ID} | Clipboard write refused, showing preview instead.`, err);
         }
     }
     _showPreview(await _blobToDataUri(blob), blob, filename);
@@ -420,7 +420,7 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
     }
     catch (err)
     {
-        console.error(`${MODULE} | Battle Log share failed:`, err);
+        console.error(`${MODULE_ID} | Battle Log share failed:`, err);
         ui.notifications.error(`Battle Log card export failed: ${err.message}`);
     }
     finally

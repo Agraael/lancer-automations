@@ -1,6 +1,6 @@
 /* global game */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 const _clone = (value) => (typeof foundry?.utils?.deepClone === 'function' ? foundry.utils.deepClone(value) : JSON.parse(JSON.stringify(value ?? null)));
 const _snapshotAttackLike = (state) => ({

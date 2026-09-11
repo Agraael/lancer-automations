@@ -5,7 +5,7 @@ import { onHudRowHover, deactivateRangePreview } from './hover.js';
 import { playUiSound } from './sound.js';
 import { lastCursor } from './cursor-menu.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 let _openToken = null;
 let _refreshTimer = null;

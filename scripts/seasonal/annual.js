@@ -3,7 +3,7 @@ import { playBattleLogSound } from '../tah/sound.js';
 import { playSeasonalSound } from './sound.js';
 import { getSupabase } from '../setup/supabase-client.js';
 
-const MODULE = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SENT_SETTING = 'birthdayWishYear';
 const DECLINED_SETTING = 'birthdayDeclinedYear';
 const BALLOON_SETTING = 'birthdayBalloonState';
@@ -54,7 +54,7 @@ function _setting(key, fallback = '')
 {
     try
     {
-        return game.settings.get(MODULE, key) ?? fallback;
+        return game.settings.get(MODULE_ID, key) ?? fallback;
     }
     catch
     {
@@ -125,7 +125,7 @@ async function _markYear(key, label)
 {
     try
     {
-        await game.settings.set(MODULE, key, String(new Date().getFullYear()));
+        await game.settings.set(MODULE_ID, key, String(new Date().getFullYear()));
     }
     catch
     {
@@ -142,7 +142,7 @@ async function _storeWish(message)
         const { error } = await getSupabase().from(WISH_TABLE).insert({
             user_hash: String(_setting('dataInstallId')) || null,
             message: message.slice(0, MAX_MESSAGE),
-            module_version: game.modules.get(MODULE)?.version || 'unknown',
+            module_version: game.modules.get(MODULE_ID)?.version || 'unknown',
         });
         if (error)
             throw error;
@@ -410,7 +410,7 @@ function _spawnBalloon()
     {
         const state = _balloonState();
         const today = new Date().toISOString().slice(0, 10);
-        game.settings.set(MODULE, BALLOON_SETTING, JSON.stringify({
+        game.settings.set(MODULE_ID, BALLOON_SETTING, JSON.stringify({
             year: state.year,
             lastDay: today,
             count: state.count + 1,
@@ -615,19 +615,19 @@ function _maybeScheduleBalloon()
 
 Hooks.once('setup', () =>
 {
-    game.settings.register(MODULE, SENT_SETTING, {
+    game.settings.register(MODULE_ID, SENT_SETTING, {
         scope: 'client',
         config: false,
         type: String,
         default: '',
     });
-    game.settings.register(MODULE, DECLINED_SETTING, {
+    game.settings.register(MODULE_ID, DECLINED_SETTING, {
         scope: 'client',
         config: false,
         type: String,
         default: '',
     });
-    game.settings.register(MODULE, BALLOON_SETTING, {
+    game.settings.register(MODULE_ID, BALLOON_SETTING, {
         scope: 'client',
         config: false,
         type: String,

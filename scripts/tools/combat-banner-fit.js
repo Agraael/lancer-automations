@@ -1,4 +1,4 @@
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from './constants.js';
 
 function applyBannerFit()
 {

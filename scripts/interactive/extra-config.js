@@ -3,7 +3,7 @@
 
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const FLAG_KEY = 'extraConfig';
 
 export const CANONICAL_TYPES = ['uses', 'loading', 'charged', 'perTurn', 'perRound', 'perScene', 'reserveUsed'];

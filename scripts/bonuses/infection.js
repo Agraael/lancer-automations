@@ -16,7 +16,7 @@
 import { checkDamageResistances, consumeImmunityUse } from './genericBonuses.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
 let _pendingInfection = null;

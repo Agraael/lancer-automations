@@ -1,6 +1,6 @@
 /* global CONST, Hooks, console, game, canvas, loadTexture, FilePicker, TokenMagic, Sequence, foundry */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from './constants.js';
 
 function log(...args)
 {

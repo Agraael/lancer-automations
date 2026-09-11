@@ -1,6 +1,6 @@
 /* global game, canvas, foundry, Hooks */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const RESTORE_FLAG = 'actionTrackerRestore';
 
 // brace / dazed: 1 quick action only (Lancer "prefer full, then quick" spend logic means

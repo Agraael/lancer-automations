@@ -1,7 +1,8 @@
 import { invalidateLosCaches } from './lancerDetectionModes.js';
 import { refreshTokenBlockEdges } from './tokenBlocksVision.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const FLAG_KEY = 'losBlock';
 const SETTING_FLAG_ONLY = 'lancerLosFlagOnly';
 const EDGE_PREFIX = 'la-wall-los-';
@@ -10,14 +11,7 @@ const WALL_COLOR = 0xFF4444;
 /** True when LA line of sight uses only LA-flagged walls, ignoring plain sight walls. */
 export function laLosFlagOnly()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_FLAG_ONLY) === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting(SETTING_FLAG_ONLY) === true;
 }
 
 /** Sweep edgeOptions for LA-owned sweeps: laSight edges in, plain walls out in flag-only mode. */

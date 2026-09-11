@@ -12,7 +12,7 @@ import { runSettingsOnboarding } from './settings-onboarding.js';
 import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 import { importTemplateMacroPresets } from './tmac-presets.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
 
 // Per-action FX functions. Same list as the settings registered in tah/index.js.

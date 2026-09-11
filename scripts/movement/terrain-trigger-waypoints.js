@@ -4,7 +4,7 @@ import { getSpeedRanges } from '../combat/speed-provider.js';
 import { computeMovementRoute } from './reachability.js';
 import { pathfindDragEnabled } from './keybindings.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
 const SPLIT_AT_SPEED_TIERS = 'splitMovementAtSpeedTiers';
 const PATHFIND_DRAG_MOVEMENT = 'pathfindDragMovement';

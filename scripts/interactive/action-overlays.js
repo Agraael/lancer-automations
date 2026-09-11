@@ -1,6 +1,6 @@
 // Combat data attached to an item's native actions, kept in a flag so re-imports don't wipe it.
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const FLAG_KEY = 'actionOverlays';
 
 // setFlag treats dots in keys as paths; action names can contain them.

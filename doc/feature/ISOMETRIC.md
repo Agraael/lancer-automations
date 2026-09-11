@@ -2,7 +2,9 @@
 
 [← Back to Home](../index.md)
 
-Lancer Automations works with the isometric modules, **isometric-perspective** and **grape_juice-isometrics**.
+Lancer Automations only supports **isometric-perspective**.
+
+**grape_juice-isometrics** isn't supported and isn't tested. It may work, but issues specific to it won't be handled unless they're proven unrelated to it. Support may come later, it's not a priority right now.
 
 It re-aligns its own overlays (stat bars, labels, target reticle, etc.) so they sit upright over the projected token instead of the flat grid cell, and on Isometric Perspective it animates a token's elevation over terrain.
 

@@ -7,7 +7,7 @@ import { canPassObstructions } from "./movement-utils.js";
 import { neighborKeys, getOccupiedOffsets, isHexGrid } from "../combat/grid-helpers.js";
 import { isHostile } from "../combat/overwatch.js";
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 function autoElevDisabled()
 {

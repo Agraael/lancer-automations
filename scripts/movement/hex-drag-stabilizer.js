@@ -1,6 +1,6 @@
 /* global foundry, libWrapper */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 // Per-cell parity override for HexagonalGrid.getDirectPath. v13's EPS tie-break uses the call's
 // starting cube parity, which flips between A->B (preview) and A->S + S->B (animation split).

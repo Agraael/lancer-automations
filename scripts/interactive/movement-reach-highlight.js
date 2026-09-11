@@ -9,7 +9,7 @@ import { computeMovementReach } from "../movement/reachability.js";
 import { liveDragState } from "../movement/token-ruler.js";
 import { getSpeedRanges, tokenSpeed } from "../combat/speed-provider.js";
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 // Knockback (forced) preview: 2x the unit's speed, flat, purple, not speed-limited.
 const FORCED_MOVES = 2;

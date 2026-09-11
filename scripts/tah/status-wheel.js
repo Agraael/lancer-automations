@@ -5,7 +5,7 @@ import { removeGlobalBonus, getBonusIcon } from '../bonuses/genericBonuses.js';
 import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
 import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const ICON_SIZE = 24;
 // Matches Foundry's own tooltip dwell, the wheel is swept through so an instant tip would flicker.
 const TIP_DELAY_MS = 500;

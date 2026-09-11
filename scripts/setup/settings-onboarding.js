@@ -3,7 +3,7 @@
 import { isFCSActive, getFCSData, getFCSMode, setFCSForceBulk } from './fcs.js';
 import { ReactionManager } from '../activations/reaction-manager.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const TEMPLATE = `modules/${MODULE_ID}/templates/settings-onboarding.html`;
 
 /**

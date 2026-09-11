@@ -5,7 +5,7 @@ import { getImmunityBonuses } from '../bonuses/genericBonuses.js';
 import { isForceFreeMovement, getCurrentMovementType } from './keybindings.js';
 import { freeTwinOf, parseAction } from './movement-actions.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const GAA_ID = 'grid-aware-auras';
 
 let _debugGfx = null;

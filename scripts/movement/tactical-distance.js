@@ -5,7 +5,7 @@ import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoStateForToken } from '../setup
 import { hasLineOfSight } from '../vision/lancerDetectionModes.js';
 import { belowBarsY } from '../tah/tokenStatBar.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const MODE_KEY = 'enableTacticalDistance'; // values: 'off' | 'combat' | 'always' (legacy boolean migrated below)
 const LABEL_KEY = '_laTacticalLabel';
 const GHOST_KEY = '_laTacticalLabelGhost';

@@ -1,6 +1,6 @@
 /* global game, globalThis, Hooks */
 
-const MODULE = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 const MIGRATIONS = [
     {
@@ -9,14 +9,14 @@ const MIGRATIONS = [
         async run()
         {
             const priorInstall = game.settings.storage.get('world')?.contents
-                ?.some(setting => setting.key?.startsWith(`${MODULE}.`));
+                ?.some(setting => setting.key?.startsWith(`${MODULE_ID}.`));
             if (!priorInstall)
                 return;
-            const saved = game.settings.get(MODULE, 'generalReactions') || {};
+            const saved = game.settings.get(MODULE_ID, 'generalReactions') || {};
             if (saved.Overwatch?.reactions?.some(sub => sub?.enabled !== undefined))
                 return;
             saved.Overwatch = { ...saved.Overwatch, reactions: [{ enabled: true }] };
-            await game.settings.set(MODULE, 'generalReactions', saved);
+            await game.settings.set(MODULE_ID, 'generalReactions', saved);
             Hooks.callAll('lancer-automations.clearCaches');
         },
     },
@@ -24,7 +24,7 @@ const MIGRATIONS = [
         id: 'visionRangeScrub_v1',
         async run()
         {
-            if (!game.settings.get(MODULE, 'lancerVisionAutoAdd'))
+            if (!game.settings.get(MODULE_ID, 'lancerVisionAutoAdd'))
                 return;
             await globalThis.lancerAutoVisionSetup?.();
         },
@@ -33,7 +33,7 @@ const MIGRATIONS = [
         id: 'lancerLosModes_v1',
         async run()
         {
-            if (!game.settings.get(MODULE, 'lancerVisionAutoAdd'))
+            if (!game.settings.get(MODULE_ID, 'lancerVisionAutoAdd'))
                 return;
             await globalThis.lancerAutoVisionSetup?.();
         },
@@ -43,10 +43,10 @@ const MIGRATIONS = [
         id: 'boostOfferMode_v1',
         async run()
         {
-            const stored = game.settings.get(MODULE, 'enableBoostOffer');
+            const stored = game.settings.get(MODULE_ID, 'enableBoostOffer');
             if (typeof stored !== 'boolean')
                 return;
-            await game.settings.set(MODULE, 'enableBoostOffer', stored ? 'yes' : 'no');
+            await game.settings.set(MODULE_ID, 'enableBoostOffer', stored ? 'yes' : 'no');
         },
     },
     {
@@ -58,14 +58,14 @@ const MIGRATIONS = [
             {
                 try
                 {
-                    const raw = globalThis.localStorage.getItem(`${MODULE}.${key}`);
+                    const raw = globalThis.localStorage.getItem(`${MODULE_ID}.${key}`);
                     if (raw === null)
                         continue;
                     const value = JSON.parse(raw);
-                    const def = game.settings.settings.get(`${MODULE}.${key}`)?.default;
+                    const def = game.settings.settings.get(`${MODULE_ID}.${key}`)?.default;
                     if (value === def)
                         continue;
-                    game.settings.set(MODULE, key, value);
+                    game.settings.set(MODULE_ID, key, value);
                 }
                 catch
                 { /* ignore */ }
@@ -78,7 +78,7 @@ Hooks.once('init', () =>
 {
     for (const m of MIGRATIONS)
     {
-        game.settings.register(MODULE, m.id, {
+        game.settings.register(MODULE_ID, m.id, {
             scope: 'world',
             config: false,
             type: Boolean,
@@ -94,7 +94,7 @@ Hooks.once('ready', async () =>
     await new Promise(resolve => globalThis.setTimeout(resolve, 0));
     for (const m of MIGRATIONS)
     {
-        if (game.settings.get(MODULE, m.id))
+        if (game.settings.get(MODULE_ID, m.id))
             continue;
         try
         {
@@ -105,6 +105,6 @@ Hooks.once('ready', async () =>
             console.error(`LA migration "${m.id}" failed`, e);
             continue;
         }
-        await game.settings.set(MODULE, m.id, true);
+        await game.settings.set(MODULE_ID, m.id, true);
     }
 });

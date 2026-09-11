@@ -3,7 +3,7 @@
 import { playStatsSound } from './sound.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const _lastConsume = new Map();
 const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene' };
 // Per-X fields count uses spent, so their delta is shown inverted (spend = -1).

@@ -2,7 +2,7 @@
 
 import { showOverlapStackPicker } from './canvas.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 function overlappingTokens(token)
 {

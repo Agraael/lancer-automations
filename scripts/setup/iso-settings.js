@@ -1,6 +1,6 @@
 /* global game, canvas, Hooks, libWrapper, PIXI, CONFIG, requestAnimationFrame */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 export const ISO_PERSPECTIVE_ID = 'isometric-perspective';
 export const GRAPE_ISO_ID = 'grape_juice-isometrics';

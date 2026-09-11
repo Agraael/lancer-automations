@@ -1,4 +1,5 @@
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const SETTING_BLINDED_VISION = 'blindedSetsVision';
 const FLAG_CLAMPED = 'blindedClampedSight';
 const STATUS_ID = 'blinded';
@@ -9,14 +10,7 @@ const STATUS_ID = 'blinded';
  */
 export function blindedVisionEnabled()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_BLINDED_VISION) !== false;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting(SETTING_BLINDED_VISION, false) !== false;
 }
 
 const enabled = blindedVisionEnabled;

@@ -1,6 +1,7 @@
 ﻿/*global game, FormApplication, mergeObject, foundry, console, document, URL, Blob, CodeMirror */
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
@@ -132,7 +133,7 @@ export class ReactionManager
 {
     static get ID()
     {
-        return "lancer-automations";
+        return MODULE_ID;
     }
 
     static get SETTING_REACTIONS()

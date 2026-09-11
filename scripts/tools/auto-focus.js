@@ -1,6 +1,6 @@
 import { _flowSourceToken } from '../fx/actionFX.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from './constants.js';
 const SOCKET_CHANNEL = 'module.lancer-automations';
 const DEFAULT_PAN_DURATION_MS = 1000;
 const ACTIVATION_DEBOUNCE_MS = 300;

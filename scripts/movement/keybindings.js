@@ -1,6 +1,6 @@
 /* global game, Hooks, canvas, foundry */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 import { getSettingEnabled } from '../setup/settings-register.js';
 import { playUiSound } from '../tah/sound.js';

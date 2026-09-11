@@ -1,6 +1,6 @@
 /* global game, Hooks, canvas, libWrapper, foundry */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SETTING_CLEAR_ON_TURN = 'historyClearOnTurn';
 const SETTING_CLEAR_ON_ROUND = 'historyClearOnRound';
 

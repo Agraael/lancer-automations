@@ -1,6 +1,6 @@
 /* global game, Hooks, libWrapper, performance */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SETTING_FPS = 'visionAnimationThrottleFps';
 const SKIP_FLAG = Symbol('laVisionThrottleSkip');
 

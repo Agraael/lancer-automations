@@ -8,7 +8,7 @@ import { snapElevationForDisplay } from './tactical-distance.js';
 import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from '../tah/sound.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const PER_STEP_RENDER = 'rulerPerStepRender';
 const LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-waypoint-label.hbs`;

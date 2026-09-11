@@ -1,7 +1,7 @@
 /* global game */
 
 // Rebindable elevation/tilt shortcuts for the placement tools (Settings > Configure Controls).
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 export const ELEV_TILT_KEYBINDS = [
     { id: 'elevationUp', name: 'Area/Token: Elevation Up', key: 'KeyE' },

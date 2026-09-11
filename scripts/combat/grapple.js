@@ -2,7 +2,7 @@ import * as actionFX from '../fx/actionFX.js';
 
 // IMMOBILIZED uses flagged-effects; ENGAGED is managed by overwatch.js, not here.
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 // Held > 0 while grapple-internal status mutations run on this client.
 // Lets the deleteActiveEffect hook (Layer 3) tell its own removals from user-manual ones.

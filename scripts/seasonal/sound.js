@@ -1,4 +1,4 @@
-const MODULE = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const BASE = 'modules/lancer-automations/FX/audio/Mmmmmm';
 const VOLUME_SETTING = 'seasonalVolume';
 
@@ -20,7 +20,7 @@ export function playSeasonalSound(variant, { volumeScale = 1 } = {})
     let vol = 0;
     try
     {
-        vol = Number(game.settings.get(MODULE, VOLUME_SETTING)) || 0;
+        vol = Number(game.settings.get(MODULE_ID, VOLUME_SETTING)) || 0;
     }
     catch
     {
@@ -37,7 +37,7 @@ export function playSeasonalSound(variant, { volumeScale = 1 } = {})
 
 Hooks.once('setup', () =>
 {
-    game.settings.register(MODULE, VOLUME_SETTING, {
+    game.settings.register(MODULE_ID, VOLUME_SETTING, {
         scope: 'client',
         config: false,
         type: Number,

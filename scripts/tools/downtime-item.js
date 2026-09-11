@@ -1,4 +1,4 @@
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from './constants.js';
 export const DOWNTIME_TYPE = 'lancer-automations.downtime';
 export const DOWNTIME_PACK = 'la-downtime-activities';
 const DOWNTIME_ICON = 'systems/lancer/assets/icons/white/downtime.svg';

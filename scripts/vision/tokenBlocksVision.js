@@ -2,7 +2,8 @@
 
 import { laLosFlagOnly } from './laWallLos.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const FLAG_KEY = 'blocksLineOfSight';
 const LA_ONLY_FLAG_KEY = 'blocksLaLosOnly';
 const EDGE_PREFIX = 'la-block-los';
@@ -20,14 +21,7 @@ function shouldTokenBlock(token)
     const actor = (doc.actor) ?? token.actor;
     if (actor?.statuses?.has?.('bulwark'))
     {
-        try
-        {
-            return game.settings.get(MODULE_ID, SETTING_BULWARK_BLOCKS) !== false;
-        }
-        catch (e)
-        {
-            return true;
-        }
+        return getModuleSetting(SETTING_BULWARK_BLOCKS) !== false;
     }
     return false;
 }

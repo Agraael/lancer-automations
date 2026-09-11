@@ -6,7 +6,7 @@
 import { getIsoProvider } from '../setup/iso-settings.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
 // Effect definitions

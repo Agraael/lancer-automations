@@ -3,7 +3,7 @@
 import { getAutoConsumeDisabled, getSubAutoConsumeDisabled, getConsumeOn } from '../interactive/extra-config.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SETTING_KEY = 'enablePerRoundTurnTags';
 const TARGET_FLOWS = ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow', 'ActivationFlow', 'SystemFlow', 'CoreActiveFlow'];
 

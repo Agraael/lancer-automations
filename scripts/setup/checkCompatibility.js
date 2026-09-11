@@ -1,6 +1,6 @@
 // Detects setting conflicts with other modules (csm-lancer-qol, lancer-alt-structure) and offers a one-click autofix + reload.
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 /**
  * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).

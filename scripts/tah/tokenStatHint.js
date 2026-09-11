@@ -11,7 +11,7 @@ import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
 import { getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { isActorScannedForUser, isActorAllyOfUser } from '../tools/scan-lookup.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
 const SETTING_DELAY_MS = 'tokenStatHintDelayMs';
 const SETTING_SCALE = 'tokenStatHintScale';

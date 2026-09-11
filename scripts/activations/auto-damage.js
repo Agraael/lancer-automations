@@ -1,4 +1,4 @@
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 
 const pendingRoll = new Set();
 const rollOnRender = new Set();

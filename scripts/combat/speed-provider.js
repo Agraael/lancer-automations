@@ -1,6 +1,6 @@
 /* global Hooks, game, Color, CONST */
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const COLOR_STANDARD = 'speedProvider.colorStandard';
 const COLOR_BOOST = 'speedProvider.colorBoost';

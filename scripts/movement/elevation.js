@@ -7,7 +7,7 @@ import { initTerrainTriggerSplits, injectTriggerSilentsAtDrop } from './terrain-
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { thtApi, canPassObstructions } from './movement-utils.js';
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
 const CLIMB_WAYPOINTS_ENABLED = 'enableClimbWaypoints';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';

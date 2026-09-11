@@ -5,7 +5,8 @@ import { getTokenVisionLOS } from "./visionFromEdge.js";
 import { blindedVisionEnabled } from "./blindedVision.js";
 import { laLosFlagOnly } from "./laWallLos.js";
 
-const MODULE_ID = 'lancer-automations';
+import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
 const SETTING_LOS = 'lancerLos';
 const SETTING_LOS_HEIGHT_RULE = 'lancerLosHeightRule';
@@ -17,18 +18,6 @@ const SETTING_SENSOR_USE_MODE_RANGE = 'lancerSensorUseModeRange';
 const SETTING_AWARENESS_USE_MODE_RANGE = 'lancerAwarenessUseModeRange';
 const SETTING_BASIC_SIGHT_999 = 'basicSightTo999';
 const SETTING_DRAG_VISION_MODE = 'dragVisionMode';
-
-function _getSetting(key)
-{
-    try
-    {
-        return game.settings.get(MODULE_ID, key);
-    }
-    catch (e)
-    {
-        return undefined;
-    }
-}
 
 function _isCombatActive()
 {
@@ -48,7 +37,7 @@ function _fovContains(visionSource, target)
 
 function _losVetoed(visionSource, target)
 {
-    if (!_getSetting(SETTING_LOS))
+    if (!getModuleSetting(SETTING_LOS))
         return false;
     if (!(target instanceof Token))
         return false;
@@ -364,7 +353,7 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
     ctx.skimPos = false;
     ctx.skimNeg = false;
     const nearest = ctx.nearestBlock ? { near: null, far: null } : null;
-    const trigHeightRule = _getSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
+    const trigHeightRule = getModuleSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
     const rayDirX = dest.x - origin.x;
     const rayDirY = dest.y - origin.y;
     const rayLenSq = ((rayDirX * rayDirX) + (rayDirY * rayDirY)) || 1;
@@ -1121,7 +1110,7 @@ function _drawLosDebug()
         return;
     for (const child of _losDebugLayer.removeChildren())
         child.destroy();
-    if (!_getSetting(SETTING_LOS_DEBUG))
+    if (!getModuleSetting(SETTING_LOS_DEBUG))
         return;
     const edges = _collectSightEdges();
     const gfx = new PIXI.Graphics();
@@ -1384,7 +1373,7 @@ class DetectionModeLancerLineOfSight extends DetectionMode
     {
         if (!(target instanceof Token))
             return false;
-        if (!_getSetting(SETTING_LOS))
+        if (!getModuleSetting(SETTING_LOS))
             return false;
         // plain-sight semantics: blind viewers and invisible targets stay hidden
         if (!super._canDetect(visionSource, target))
@@ -1460,7 +1449,7 @@ class DetectionModeLancerAwareness extends DetectionMode
     {
         if (!(target instanceof Token))
             return false;
-        if (_getSetting(SETTING_AWARENESS_COMBAT_ONLY) && !_isCombatActive())
+        if (getModuleSetting(SETTING_AWARENESS_COMBAT_ONLY) && !_isCombatActive())
             return false;
         if (_basicVisionSees(visionSource, target))
             return false;
@@ -1476,7 +1465,7 @@ class DetectionModeLancerAwareness extends DetectionMode
 
     _testRange(visionSource, mode, target, test)
     {
-        if (_getSetting(SETTING_AWARENESS_USE_MODE_RANGE))
+        if (getModuleSetting(SETTING_AWARENESS_USE_MODE_RANGE))
             return super._testRange(visionSource, mode, target, test);
         return true;
     }
@@ -1486,7 +1475,7 @@ class DetectionModeLancerAwareness extends DetectionMode
 // which testVisibility source order could otherwise let win.
 function _losCanDetect(target)
 {
-    if (!_getSetting(SETTING_LOS))
+    if (!getModuleSetting(SETTING_LOS))
         return false;
     const losMode = CONFIG.Canvas.detectionModes.lancerLineOfSight;
     if (!losMode)
@@ -1512,7 +1501,7 @@ function _sensorCanDetect(visionSource, target)
     const sensorMode = sourceToken.document.detectionModes?.find(modeEntry => modeEntry.id === 'lancerSensor');
     if (!sensorMode?.enabled)
         return false;
-    if (_getSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
+    if (getModuleSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
         return false;
     const targetMode = target.document?.getFlag?.(MODULE_ID, 'awarenessMode');
     if (targetMode && targetMode !== 'default')
@@ -1556,7 +1545,7 @@ class DetectionModeLancerSensor extends DetectionMode
     {
         if (!(target instanceof Token))
             return false;
-        if (_getSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
+        if (getModuleSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
             return false;
         if (_basicVisionSees(visionSource, target))
             return false;
@@ -1570,7 +1559,7 @@ class DetectionModeLancerSensor extends DetectionMode
 
     _testRange(visionSource, mode, target, test)
     {
-        if (_getSetting(SETTING_SENSOR_USE_MODE_RANGE))
+        if (getModuleSetting(SETTING_SENSOR_USE_MODE_RANGE))
             return super._testRange(visionSource, mode, target, test);
         const sourceToken = visionSource.object;
         const sensorRange = sourceToken?.actor?.system?.sensor_range;
@@ -1785,13 +1774,13 @@ function _onCreateToken(tokenDoc, _options, userId)
 {
     if (game.user.id !== userId)
         return;
-    if (!_getSetting(SETTING_AUTO_ADD))
+    if (!getModuleSetting(SETTING_AUTO_ADD))
         return;
     const update = {};
     const { updates, changed } = _augmentDetectionModes(tokenDoc._source?.detectionModes ?? tokenDoc.detectionModes);
     if (changed)
         update.detectionModes = updates;
-    if (_getSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== null)
+    if (getModuleSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== null)
         update["sight.range"] = null;
     if (Object.keys(update).length > 0)
         tokenDoc.update(update);
@@ -1801,7 +1790,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
 {
     if (!game.user.isGM)
         return;
-    const overrideSightRange = _getSetting(SETTING_BASIC_SIGHT_999);
+    const overrideSightRange = getModuleSetting(SETTING_BASIC_SIGHT_999);
 
     ui.notifications.info("Updating prototype token vision...");
     await Promise.all(game.actors.map(actor =>
@@ -1928,7 +1917,7 @@ function _wrapPlainSightVeto(mode)
         if (!result)
             return result;
         // The Lancer LOS and shadow modes own token detection, so basic vision never clips a token at a wall.
-        if (_getSetting(SETTING_LOS) && target instanceof Token && target.document?.getFlag?.(MODULE_ID, 'awarenessMode') !== 'ignore')
+        if (getModuleSetting(SETTING_LOS) && target instanceof Token && target.document?.getFlag?.(MODULE_ID, 'awarenessMode') !== 'ignore')
             return false;
         return result;
     };
@@ -1982,7 +1971,7 @@ function _patchRenderDetectionFilter()
         const filterName = this.detectionFilter?.constructor?.name;
         if (filterName === 'SilhouetteOutlineFilter')
         {
-            if (_getSetting(SETTING_SILH_FILTER_TEST))
+            if (getModuleSetting(SETTING_SILH_FILTER_TEST))
                 renderWithMeshFilters(this, renderer);
             return;
         }
@@ -2123,7 +2112,7 @@ function _getOverlayConfig(token)
     const filterName = token.detectionFilter?.constructor?.name;
     if (filterName !== 'SilhouetteOutlineFilter')
         return null;
-    if (_getSetting(SETTING_SILH_FILTER_TEST))
+    if (getModuleSetting(SETTING_SILH_FILTER_TEST))
         return null;
     const mode = token.document?.getFlag?.(MODULE_ID, 'awarenessMode') ?? 'default';
     if (mode === 'ignore' || mode === 'visible')
@@ -2138,7 +2127,7 @@ const _DIM_TINT = 0x999999;
 // Dim rather than hide occluded tokens so sensor/awareness overlays still show.
 function _isOccludedFromUser(token)
 {
-    if (!_getSetting(SETTING_LOS) || !token?.document)
+    if (!getModuleSetting(SETTING_LOS) || !token?.document)
         return false;
     const sources = canvas?.effects?.visionSources;
     if (!sources || !sources.size)
