@@ -1,6 +1,8 @@
 /* global game, ui, Hooks */
 
 import { altRollStress, insertEngineeringCheckButton, stressCheckMultipleOnes, applyStressEffects, handleStressEngineeringCheckResult, rollMeltdownCountdown, executeMeltdown, executeCriticalMeltdown, handleNoStressRemaining } from "./stress.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHullCheckButton, insertSecondaryRollButton, applyStructureEffects, selectDestructionTargetDirectHitFallback, selectDestructionTargetCrushingHitFallback, handleDirectHitHullCheckResult, handleCrushingHitHullCheckResult, manualSystemTrauma, tearOffCrushingHitFlow, tearOffDirectHitFlow, interactiveSecondaryStructureRoll } from "./structure.js";
 import { baseApplyStructureEffects, baseInsertHullCheckButton, baseHandleHullCheckResult, baseSelectDestructionTarget, baseApplyStressEffects, baseHandleNoStressRemaining, baseInsertEngCheckButton, baseHandleEngCheckResult } from "./base-rules.js";
 import { executeStatRoll } from "../tools/misc-tools.js";
@@ -60,7 +62,7 @@ function insertSteps(flow, anchor, offset, ...steps)
     if (idx > -1)
         flow.steps.splice(idx + offset, 0, ...steps);
     else
-        console.warn(`lancer-automations (alt-struct): anchor "${anchor}" missing, skipped ${steps.join(", ")}`);
+        console.warn(`lancer-automations | alt-struct |anchor "${anchor}" missing, skipped ${steps.join(", ")}`);
 }
 
 function chainNoStressRemaining(flowSteps, handler)
@@ -68,7 +70,7 @@ function chainNoStressRemaining(flowSteps, handler)
     const original = flowSteps?.get("noStressRemaining");
     if (!original)
     {
-        console.warn("lancer-automations (alt-struct): noStressRemaining flow step not found");
+        console.warn("lancer-automations | alt-struct |noStressRemaining flow step not found");
         return;
     }
     flowSteps.set("noStressRemaining", async function (state)
@@ -171,12 +173,12 @@ function _detectPreRegisterOverrideHijacks()
 export function initAltStructReady()
 {
     const hasConflict = game.modules.get('lancer-alt-structure')?.active;
-    const isEnabled = game.settings.get('lancer-automations', 'enableAltStruct');
+    const isEnabled = getModuleSetting('enableAltStruct');
 
     // One-struct NPCs is a separate opt-in from the full alt-struct rules.
     if (!isEnabled)
     {
-        if (game.settings.get('lancer-automations', 'enableOneStructNpc'))
+        if (getModuleSetting('enableOneStructNpc'))
         {
             _flowSteps?.set('npcOneStructStep', npcOneStructStep);
             insertSteps(_flows?.get('StructureFlow'), 'preStructureRollChecks', 0, 'npcOneStructStep');
@@ -184,7 +186,7 @@ export function initAltStructReady()
         if (!hasConflict && _flowSteps && _flows)
         {
             setupBaseRules(_flowSteps, _flows);
-            console.log("lancer-automations (base-struct): initialized");
+            console.log("lancer-automations | base-struct |initialized");
         }
         return;
     }
@@ -218,17 +220,17 @@ export function initAltStructReady()
             `Lancer Automations (Alt Structure): flow conflict detected. The other module's changes will be overwritten. ${parts.join(" | ")}. See console.`,
             { permanent: true }
         );
-        console.warn("lancer-automations (alt-struct): flow conflicts", { preSteps, preFlows, postConflicts, preHijacks });
+        console.warn("lancer-automations | alt-struct |flow conflicts", { preSteps, preFlows, postConflicts, preHijacks });
     }
 
     setupHooks(_flowSteps, _flows);
     _registerChatHook();
 
-    const mod = game.modules.get('lancer-automations');
+    const mod = game.modules.get(MODULE_ID);
     if (mod?.api)
         mod.api.manualSystemTrauma = manualSystemTrauma;
 
-    console.log("lancer-automations (alt-struct): initialized");
+    console.log("lancer-automations | alt-struct |initialized");
 }
 
 let _chatHookRegistered = false;
@@ -271,7 +273,7 @@ function _runAltStructFlow(btn)
     if (CHECK_RESULTS[flowType])
     {
         _runHaseCheck(btn, CHECK_RESULTS[flowType])
-            .catch(error => console.error(`lancer-automations (alt-struct): ${flowType} failed:`, error));
+            .catch(error => console.error(`lancer-automations | alt-struct |${flowType} failed:`, error));
         return;
     }
     const Flow = /** @type {any} */ (game)?.lancer?.Flow;

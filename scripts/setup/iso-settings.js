@@ -1,6 +1,7 @@
 /* global game, canvas, Hooks, libWrapper, PIXI, CONFIG, requestAnimationFrame */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 export const ISO_PERSPECTIVE_ID = 'isometric-perspective';
 export const GRAPE_ISO_ID = 'grape_juice-isometrics';
@@ -205,7 +206,7 @@ export function isIsoFeatureEnabled(featureKey)
         return false;
     try
     {
-        return !!game.settings.get(MODULE_ID, featureKey);
+        return !!getModuleSetting(featureKey);
     }
     catch
     {
@@ -220,7 +221,7 @@ export function isIsoPerspectiveFeatureEnabled(featureKey)
         return false;
     try
     {
-        return !!game.settings.get(MODULE_ID, featureKey);
+        return !!getModuleSetting(featureKey);
     }
     catch
     {
@@ -236,7 +237,7 @@ export function isoLabelTransform(scene, settingKey = null)
     {
         try
         {
-            if (!game.settings.get(MODULE_ID, settingKey))
+            if (!getModuleSetting(settingKey))
                 return null;
         }
         catch
@@ -383,7 +384,7 @@ function _debugOverlayOn()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, ISO_SETTINGS.debugSelectionOverlay);
+        return !!getModuleSetting(ISO_SETTINGS.debugSelectionOverlay);
     }
     catch
     {

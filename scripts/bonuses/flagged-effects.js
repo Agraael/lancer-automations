@@ -1,6 +1,8 @@
 /* global CONFIG, canvas, game, ChatMessage, ui */
 
 import { socketRequestWithAck } from '../socket.js';
+import { getLAFlag, setLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 import { linkTierGate } from '../interactive/deployables.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 import { untilEndOfTurn, untilStartOfTurn, currentTurnKey } from './duration-widget.js';
@@ -39,7 +41,7 @@ function _isStatBarActive()
 {
     try
     {
-        return game.settings.get('lancer-automations', 'tokenStatBar') === true;
+        return getModuleSetting('tokenStatBar') === true;
     }
     catch
     {
@@ -200,7 +202,7 @@ function _sameIdentity(extraOptions, existingEffect)
     const identityKeys = Object.keys(extraOptions || {}).filter(key => !META_KEYS.has(key));
     if (identityKeys.length === 0)
         return true;
-    const storedFlags = existingEffect?.flags?.['lancer-automations'] || {};
+    const storedFlags = getLAFlags(existingEffect) || {};
     return identityKeys.every(key => storedFlags[key] === extraOptions[key]);
 }
 
@@ -220,13 +222,13 @@ async function _refreshEffectDuration(existingEffect, duration, note, originID)
 export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {})
 {
     log('**setEffect**');
-    const target = canvas.tokens.placeables.find(token => token.id === targetID);
+    const target = canvas.tokens.get(targetID);
     if (!target)
         return;
 
     if (extraOptions.refresh && extraOptions.linkedBonusId)
     {
-        const linkedExisting = /** @type {any} */ (target.actor).effects.find(/** @param {any} effect */ effect => effect.flags?.['lancer-automations']?.linkedBonusId === extraOptions.linkedBonusId);
+        const linkedExisting = /** @type {any} */ (target.actor).effects.find(/** @param {any} effect */ effect => getLAFlags(effect)?.linkedBonusId === extraOptions.linkedBonusId);
         if (linkedExisting)
         {
             await _refreshEffectDuration(linkedExisting, duration, note, originID);
@@ -284,12 +286,12 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
 
                 // Build duration entries for stack-aware expiration
-                const entries = [...(existingEffect.getFlag('lancer-automations', 'durationEntries') || [])];
+                const entries = [...(getLAFlag(existingEffect,'durationEntries') || [])];
                 if (entries.length === 0)
                 {
-                    const existingDur = existingEffect.getFlag('lancer-automations', 'duration');
-                    const existingOrigin = existingEffect.getFlag('lancer-automations', 'originID');
-                    const existingApplied = (game.modules.get("lancer-automations")?.active && existingEffect.getFlag('lancer-automations', 'appliedStack'));
+                    const existingDur = getLAFlag(existingEffect,'duration');
+                    const existingOrigin = getLAFlag(existingEffect,'originID');
+                    const existingApplied = (game.modules.get(MODULE_ID)?.active && getLAFlag(existingEffect,'appliedStack'));
                     const existingStack = (game.modules.get("statuscounter")?.active && existingEffect.getFlag("statuscounter", "value")) || 1;
                     if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied || existingStack });
@@ -341,7 +343,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 {
                     forceNew: !!(extraOptions.consumption || extraOptions.linkedBonusId || existingEffect),
                     extraFlags: {
-                        "lancer-automations": lancerFlags,
+                        [MODULE_ID]: lancerFlags,
                         "statuscounter": { value: counterValue, visible: counterValue > 1 }
                     }
                 }
@@ -382,7 +384,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             statuses: [],
             changes: extraOptions.changes || resolvedEffectData.changes || [],
             flags: {
-                'lancer-automations': {
+                [MODULE_ID]: {
                     targetID: targetID,
                     effect: resolvedEffectData.name,
                     duration: duration,
@@ -428,7 +430,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         const existingEffect = target.actor.effects.find(/** @param {any} effect */ effect =>
             effect.name === game.i18n.localize(statusEffect.name) ||
             effect.statuses?.has(statusEffect.id) ||
-            effect.getFlag('lancer-automations', 'effect') === statusEffect.name
+            getLAFlag(effect,'effect') === statusEffect.name
         );
 
         if (existingEffect && !extraOptions.consumption && !extraOptions.linkedBonusId && _sameIdentity(extraOptions, existingEffect))
@@ -450,12 +452,12 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
             if (duration && duration.label !== 'indefinite' && duration.turns !== null)
             {
-                const entries = [...(existingEffect.getFlag('lancer-automations', 'durationEntries') || [])];
+                const entries = [...(getLAFlag(existingEffect,'durationEntries') || [])];
                 if (entries.length === 0)
                 {
-                    const existingDur = existingEffect.getFlag('lancer-automations', 'duration');
-                    const existingOrigin = existingEffect.getFlag('lancer-automations', 'originID');
-                    const existingApplied = existingEffect.getFlag('lancer-automations', 'appliedStack') || currentStack;
+                    const existingDur = getLAFlag(existingEffect,'duration');
+                    const existingOrigin = getLAFlag(existingEffect,'originID');
+                    const existingApplied = getLAFlag(existingEffect,'appliedStack') || currentStack;
                     if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied });
                 }
@@ -473,7 +475,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         const flags = {
             /** @type {LancerEffectFlags} */
-            'lancer-automations': {
+            [MODULE_ID]: {
                 targetID: targetID,
                 effect: statusEffect.name,
                 duration: duration,
@@ -523,7 +525,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null)
 {
     log('**removeEffectsByName**');
-    const target = canvas.tokens.placeables.find(token => token.id === targetID);
+    const target = canvas.tokens.get(targetID);
     if (!target)
         return;
 
@@ -536,7 +538,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         // When a source is specified, skip effects from any other source.
         if (originID)
         {
-            const flagOrigin = effect.getFlag('lancer-automations', 'originID') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'originID') : null);
+            const flagOrigin = getLAFlag(effect,'originID') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'originID') : null);
             if (flagOrigin !== originID)
                 return false;
         }
@@ -544,7 +546,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         // When extra flag constraints are specified, all must match.
         if (extraFlags)
         {
-            const storedFlags = effect.flags?.['lancer-automations'] ?? {};
+            const storedFlags = getLAFlags(effect) ?? {};
             for (const [key, value] of Object.entries(extraFlags))
             {
                 if (storedFlags[key] !== value)
@@ -552,7 +554,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
             }
         }
 
-        if (effect.getFlag('lancer-automations', 'effect') === effectNameStr)
+        if (getLAFlag(effect,'effect') === effectNameStr)
             return true;
         if (effect.getFlag('temporary-custom-statuses', 'originalName') === effectNameStr)
             return true;
@@ -673,7 +675,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                 const bonusId = extraOptions.linkedBonusId;
                 hasEffect = token.actor?.effects.some(actorEffect =>
                 {
-                    const flags = /** @type {SetEffectOptions} */ (actorEffect.flags?.['lancer-automations'] || {});
+                    const flags = /** @type {SetEffectOptions} */ (getLAFlags(actorEffect) || {});
                     if (groupId && flags.consumption?.groupId === groupId &&
                         (actorEffect.name === effectNameForLog || flags.effect === effectNameForLog))
                         return true;
@@ -693,7 +695,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                 {
                     const nameMatch = (effect.name)?.toLowerCase().includes(effectNameLower) ||
                         effect.statuses?.has(effectNameTail) ||
-                        effect.flags?.['lancer-automations']?.effect === effectNameToCheck ||
+                        getLAFlags(effect)?.effect === effectNameToCheck ||
                         effect.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
                     if (!nameMatch)
                         return false;
@@ -702,7 +704,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
 
                 // Unflagged (player-added) effect is distinct when the new application carries managed settings (duration/origin); allow it.
                 if (existingEffect &&
-                    !existingEffect.flags?.['lancer-automations']?.effect &&
+                    !getLAFlags(existingEffect)?.effect &&
                     !existingEffect.flags?.['temporary-custom-statuses']?.originalName &&
                     !existingEffect.flags?.['csm-lancer-qol']?.effect &&
                     (duration?.label || duration?.overrideTurnOriginId))
@@ -824,7 +826,7 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
             statuses: [],
             changes: extraOptions.changes || resolvedEffectData.changes || [],
             flags: {
-                'lancer-automations': {
+                [MODULE_ID]: {
                     effect: resolvedEffectData.name,
                     duration,
                     note,
@@ -858,7 +860,7 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
             statuses: [statusEffect.id],
             changes: extraOptions.changes || statusEffect.changes || [],
             flags: {
-                'lancer-automations': {
+                [MODULE_ID]: {
                     effect: statusEffect.name,
                     duration,
                     note,
@@ -876,9 +878,9 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
     /** @type {any} */ (effectData).transfer = false;
     /** @type {any} */ (effectData).disabled = true;
     if (isItem)
-        effectData.flags['lancer-automations'].isItemTemplate = true;
+        getLAFlags(effectData).isItemTemplate = true;
     else
-        effectData.flags['lancer-automations'].isActorTemplate = true;
+        getLAFlags(effectData).isActorTemplate = true;
 
     const created = await /** @type {any} */ (doc).createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
 
@@ -916,7 +918,7 @@ async function _applyTemplatesToTokens(sourceDoc, templates, sourceKey, tokens)
     for (const template of templates)
     {
         const descriptor = templateToEffectDescriptor(template);
-        const laFlags = template.flags?.['lancer-automations'] ?? {};
+        const laFlags = getLAFlags(template) ?? {};
         const persistedStack = laFlags.lastRuntimeStack;
         const stack = Number.isFinite(persistedStack)
             ? persistedStack
@@ -930,7 +932,7 @@ async function _applyTemplatesToTokens(sourceDoc, templates, sourceKey, tokens)
                 continue;
             const already = /** @type {any[]} */ (Array.from(token.actor.effects ?? [])).some(effect =>
             {
-                const flags = effect.flags?.['lancer-automations'];
+                const flags = getLAFlags(effect);
                 return flags?.[sourceKey] === sourceDoc.uuid && flags?.sourceTemplateId === template.id;
             });
             if (already)
@@ -971,7 +973,7 @@ export async function applyItemTemplatesToTokens(item, tokens)
     if (item.system?.destroyed || item.system?.disabled)
         return;
     const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
-        .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+        .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
     await _applyTemplatesToTokens(item, templates, 'sourceItemUuid', tokens);
 }
 
@@ -986,7 +988,7 @@ export async function applyActorTemplatesToTokens(actor, tokens)
     if (!actor || !tokens?.length)
         return;
     const templates = /** @type {any[]} */ (Array.from(actor.effects ?? []))
-        .filter(effect => effect.flags?.['lancer-automations']?.isActorTemplate === true);
+        .filter(effect => getLAFlags(effect)?.isActorTemplate === true);
     await _applyTemplatesToTokens(actor, templates, 'sourceActorUuid', tokens);
 }
 
@@ -1043,14 +1045,14 @@ export async function ensureLinkedEffect(options = /** @type {any} */ ({}), extr
         if (!item || item.documentName !== 'Item')
             continue;
         const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
-            .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+            .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
         const missing = wanted.filter(effect =>
         {
             const name = typeof effect === 'string' ? effect : effect?.name;
             const nameLower = String(name ?? '').toLowerCase();
             return !templates.some(template =>
             {
-                const laFlags = template.flags?.['lancer-automations'] ?? {};
+                const laFlags = getLAFlags(template) ?? {};
                 const nameMatch = template.name?.toLowerCase() === nameLower
                     || template.statuses?.has?.(name)
                     || laFlags.effect === name;
@@ -1112,7 +1114,7 @@ export function findEffectsOnToken(token, effectName, options = /** @type {any} 
     {
         if (excludeId && effect.id === excludeId)
             return false;
-        const laFlags = effect.flags?.['lancer-automations'] ?? {};
+        const laFlags = getLAFlags(effect) ?? {};
         const nameMatch = effect.name === effectName
             || effect.flags?.['temporary-custom-statuses']?.originalName === effectName
             || laFlags.effect === effectName
@@ -1141,7 +1143,7 @@ export function findEffectFrom(token, effectName, sourceToken)
     if (!sourceToken?.id)
         return undefined;
     return findEffectOnToken(token, effect =>
-        effect.name === effectName && effect.flags?.['lancer-automations']?.originID === sourceToken.id);
+        effect.name === effectName && getLAFlags(effect)?.originID === sourceToken.id);
 }
 
 /**
@@ -1158,7 +1160,7 @@ export function findMarkedTokens(sourceToken, effectName, options = /** @type {a
         return [];
     return (canvas.tokens?.placeables ?? []).filter(token =>
         !!findEffectOnToken(token, effect =>
-            effect.name === effectName && effect.flags?.['lancer-automations']?.[flagKey] === sourceToken.id));
+            effect.name === effectName && getLAFlags(effect)?.[flagKey] === sourceToken.id));
 }
 
 /**
@@ -1228,16 +1230,16 @@ export async function unlinkEffectFromItem(options = /** @type {any} */ ({}))
         const nameLower = String(effectName).toLowerCase();
         const matches = /** @type {any[]} */ (Array.from(item.effects ?? [])).filter(effect =>
         {
-            if (effect.flags?.['lancer-automations']?.isItemTemplate !== true)
+            if (getLAFlags(effect)?.isItemTemplate !== true)
                 return false;
             const nameMatch = effect.name?.toLowerCase() === nameLower
                 || effect.statuses?.has?.(effectName)
-                || effect.flags?.['lancer-automations']?.effect === effectName;
+                || getLAFlags(effect)?.effect === effectName;
             if (!nameMatch)
                 return false;
             if (!extraFlags)
                 return true;
-            const laFlags = effect.flags?.['lancer-automations'] ?? {};
+            const laFlags = getLAFlags(effect) ?? {};
             return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
         });
         if (!matches.length)
@@ -1269,16 +1271,16 @@ export async function unlinkEffectFromActor(options = /** @type {any} */ ({}))
         const nameLower = String(effectName).toLowerCase();
         const matches = /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(effect =>
         {
-            if (effect.flags?.['lancer-automations']?.isActorTemplate !== true)
+            if (getLAFlags(effect)?.isActorTemplate !== true)
                 return false;
             const nameMatch = effect.name?.toLowerCase() === nameLower
                 || effect.statuses?.has?.(effectName)
-                || effect.flags?.['lancer-automations']?.effect === effectName;
+                || getLAFlags(effect)?.effect === effectName;
             if (!nameMatch)
                 return false;
             if (!extraFlags)
                 return true;
-            const laFlags = effect.flags?.['lancer-automations'] ?? {};
+            const laFlags = getLAFlags(effect) ?? {};
             return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
         });
         if (!matches.length)
@@ -1297,7 +1299,7 @@ export async function unlinkEffectFromActor(options = /** @type {any} */ ({}))
  */
 export async function persistRuntimeStackToTemplate(runtime)
 {
-    const laFlags = runtime?.flags?.['lancer-automations'];
+    const laFlags = getLAFlags(runtime);
     const sourceUuid = laFlags?.sourceItemUuid ?? laFlags?.sourceActorUuid;
     const sourceTemplateId = laFlags?.sourceTemplateId;
     if (!sourceUuid || !sourceTemplateId)
@@ -1310,7 +1312,7 @@ export async function persistRuntimeStackToTemplate(runtime)
             return;
         const currentStack = runtime.flags?.statuscounter?.value;
         if (Number.isFinite(currentStack))
-            await template.setFlag('lancer-automations', 'lastRuntimeStack', currentStack);
+            await setLAFlag(template,'lastRuntimeStack', currentStack);
     }
     catch (e)
     {
@@ -1463,7 +1465,7 @@ export async function consumeEffectCharge(effect)
         return true;
     }
 
-    const consumption = effect.getFlag('lancer-automations', 'consumption');
+    const consumption = getLAFlag(effect,'consumption');
     if (!consumption?.trigger)
         return false;
 
@@ -1475,7 +1477,7 @@ export async function consumeEffectCharge(effect)
     {
         const groupEffects = actor.effects.filter(groupMember =>
         {
-            const innerConsumption = groupMember.flags?.['lancer-automations']?.consumption;
+            const innerConsumption = getLAFlags(groupMember)?.consumption;
             return innerConsumption?.groupId === groupId;
         });
 
@@ -1536,7 +1538,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId)
 
         for (const effect of effects)
         {
-            const flags = effect.flags?.['lancer-automations'];
+            const flags = getLAFlags(effect);
             if (!flags)
             {
                 const legacyFlags = effect.flags?.['csm-lancer-qol'];
@@ -1697,7 +1699,7 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
 
     const foundEffects = actor.effects.filter(effect =>
     {
-        const flagName = effect.getFlag('lancer-automations', 'effect');
+        const flagName = getLAFlag(effect,'effect');
         const legacyFlagName = game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null;
 
         return targets.some(name =>
@@ -1765,7 +1767,7 @@ export function initCollapseHook()
 {
     if (typeof libWrapper === 'undefined')
         return;
-    libWrapper.register('lancer-automations', 'Token.prototype._refreshEffects',
+    libWrapper.register(MODULE_ID,'Token.prototype._refreshEffects',
         function (wrapped, ...args)
         {
             // concurrent _drawEffects can destroy sprites; wrapped() sizing must always run
@@ -1796,7 +1798,7 @@ export function initCollapseHook()
         }, 'WRAPPER');
 
     // circular icon mask, halo style (after status-halo by mxzf, MIT), for when the module is absent
-    libWrapper.register('lancer-automations', 'Token.prototype._drawOverlay',
+    libWrapper.register(MODULE_ID,'Token.prototype._drawOverlay',
         async function (wrapped, ...args)
         {
             this._laDrawingOverlay = true;
@@ -1809,7 +1811,7 @@ export function initCollapseHook()
                 this._laDrawingOverlay = false;
             }
         }, 'WRAPPER');
-    libWrapper.register('lancer-automations', 'Token.prototype._drawEffect',
+    libWrapper.register(MODULE_ID,'Token.prototype._drawEffect',
         async function (wrapped, ...args)
         {
             const icon = await wrapped(...args);
@@ -1842,7 +1844,7 @@ function _haloActive()
         return true;
     try
     {
-        return !!game.settings.get('lancer-automations', 'statusHalo');
+        return !!getModuleSetting('statusHalo');
     }
     catch
     {
@@ -1874,8 +1876,8 @@ function _layoutHaloIcons(token)
     let startAngle = 135;
     try
     {
-        radiusFactor = Number(game.settings.get('lancer-automations', 'statusHaloRadius')) || 1.15;
-        startAngle = Number(game.settings.get('lancer-automations', 'statusHaloStartAngle'));
+        radiusFactor = Number(getModuleSetting('statusHaloRadius')) || 1.15;
+        startAngle = Number(getModuleSetting('statusHaloStartAngle'));
     }
     catch
     {
@@ -2000,7 +2002,7 @@ function _effectIconZoomBoost()
     let minZoom = 0;
     try
     {
-        minZoom = Number(game.settings.get('lancer-automations', 'statusIconMinZoomScale')) || 0;
+        minZoom = Number(getModuleSetting('statusIconMinZoomScale')) || 0;
     }
     catch
     { /* not registered */ }
@@ -2016,7 +2018,7 @@ function _effectIconBaseSize()
     let scale = 1;
     try
     {
-        scale = Number(game.settings.get('lancer-automations', 'statBarEffectIconScale')) || 1;
+        scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
     }
     catch
     { /* not registered */ }
@@ -2060,7 +2062,7 @@ function _shrinkEffectIcons(token)
     let scale = 1;
     try
     {
-        scale = Number(game.settings.get('lancer-automations', 'statBarEffectIconScale')) || 1;
+        scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
     }
     catch
     { /* not registered */ }
@@ -2136,7 +2138,7 @@ function _collapseRemoveDuplicates(token)
 
     // Collect names managed by lancer-automations so we can include HUD effects with the same name.
     const managedNames = new Set(
-        temporaryEffects.filter(effect => effect.flags?.['lancer-automations'] && effect.name).map(effect => effect.name)
+        temporaryEffects.filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name)
     );
 
     // Walk effects in order; keep the first sprite for each name, destroy the rest.
@@ -2188,7 +2190,7 @@ function _collapseAddBadges(token)
 
     // Collect names managed by lancer-automations, then count ALL effects (flagged or HUD) sharing those names.
     const managedNames = new Set(
-        temporaryEffects.filter(effect => effect.flags?.['lancer-automations'] && effect.name).map(effect => effect.name)
+        temporaryEffects.filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name)
     );
 
     const effectCountByName = new Map();
@@ -2298,7 +2300,7 @@ function _drawDurationBadges(token)
 
     for (const [index, effect] of temporaryEffects.entries())
     {
-        const flags = effect.flags?.['lancer-automations'];
+        const flags = getLAFlags(effect);
         if (!flags)
             continue;
         const candidates = [];
@@ -2457,7 +2459,7 @@ export function getLinkedEffects(source)
     return /** @type {any[]} */ (Array.from(source.effects ?? []))
         .filter(effect =>
         {
-            const laFlags = effect.flags?.['lancer-automations'];
+            const laFlags = getLAFlags(effect);
             return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
         });
 }

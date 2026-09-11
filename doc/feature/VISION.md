@@ -18,13 +18,21 @@ The **Vision** tab.
 
 <img align="right" src="../vid/vis-los.gif" width="45%"/>
 
-**`lancerLos`** emulates Lancer's line-of-sight rules in full: a token behind a wall stays visible if another token can see it. It's more accurate than Terrain Height Tools' (THT) own line of sight, and **`lancerLosHeightRule`** can follow the real sightline (trigonometric) instead of the discrete size rules. It feeds the rest of the module too, [range previews](#range-pulse-line-of-sight) and automation included, but it needs its own setup. Turn on **`lancerLosDebug`** to see how it resolves.
+**`lancerLos`** emulates Lancer's line-of-sight rules in full: a token behind a wall stays visible if another token can see it. It's more accurate than Terrain Height Tools' (THT) own line of sight. It feeds the rest of the module too, [range previews](#range-pulse-line-of-sight) and automation included.
 
-No walls, nothing blocks. Place them by hand, generate them with [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools), or use the auto wall generation in [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools). That's also why [tokens that block sight](#token-blocks-line-of-sight), Bulwark included, count here: they act as walls.
+It reads Foundry walls, never THT terrain directly. Walls are cheaper to test and more flexible, and they let [tokens that block sight](#token-blocks-line-of-sight), Bulwark included, count here: they act as walls of their own.
 
 From code, [`hasLineOfSight`](../API_SPATIAL.md#line-of-sight) runs the same test.
 
 <br clear="right"/>
+
+### Setup
+
+1. Turn on **`lancerLos`** in the Vision tab. Nothing below applies without it.
+2. Give the scene walls. No walls, nothing blocks. Place them by hand, generate them with [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools), or use the auto wall generation in [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools).
+3. Decide which walls count. By default LA reads walls that block Sight **and** any wall flagged **Blocks LA Line of Sight**. **`lancerLosFlagOnly`** narrows that to flagged walls only, so you can wall a map for gameplay without blocking vision and light. See [LA-only walls](#la-only-walls).
+4. Pick a height rule. **`lancerLosHeightRule`** is either **Discrete**, which follows the size rules, or **Trigonometric**, which follows the real sightline so peeks over walls fade with distance. It changes results more than anything else here.
+5. Check the result with **`lancerLosDebug`**, which draws every tested sightline from the controlled tokens. It's heavy, leave it off in play.
 
 ---
 
@@ -33,6 +41,28 @@ From code, [`hasLineOfSight`](../API_SPATIAL.md#line-of-sight) runs the same tes
 A wall can be flagged **Blocks LA Line of Sight** in its Wall Config. It then blocks Lancer line of sight, targeting and range previews without blocking Foundry vision, light or fog, whatever its Sight setting. **`lancerLosFlagOnly`** goes further: LA line of sight uses only flagged walls and ignores every other wall.
 
 Together they let you wall a map for Lancer play without the vision and light blocking regular walls bring. The easiest setup is [my THT fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools): terrain types get an **LA line of sight only** option on their auto walls, and shape conversion can set the flag on the walls it creates. Tokens have the same option, **Blocks LA Line of Sight Only** in their Token Config Vision tab.
+
+---
+
+## Where line of sight shows
+
+- **Attack cards** - **`lancerLosAttackHover`** draws Lancer line of sight when you hover a target, in place of THT's own ruler.
+- **[Advanced Measure](./ATTACK_TARGETING.md#advanced-measure-tool)** - the eye tool, on your marks or on your targets when nothing is marked.
+- **Range pulses** - see [range pulse line of sight](#range-pulse-line-of-sight).
+
+---
+
+## Reading the sightlines
+
+<img src="../img/vis-sightlines.png" width="70%"/>
+
+| Line | Meaning |
+|:--|:--|
+| **Green** | A clear line from viewer to target. |
+| **Red** | Blocked, cut at the point that blocks it. |
+| **Yellow** | Valid, but the three main rays all failed and it took a denser sweep of sample points to find a clear one. |
+
+Icons along a line mark what it crosses: terrain (THT), auras (Grid Aware Auras) and templates (Template Macro).
 
 ---
 

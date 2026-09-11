@@ -30,7 +30,7 @@ async function applyStatus(actor, effectNames, note, duration)
     }
     catch (error)
     {
-        console.warn("lancer-automations (base-struct): Could not apply effects:", error);
+        console.warn("lancer-automations | base-struct |Could not apply effects:", error);
     }
 }
 

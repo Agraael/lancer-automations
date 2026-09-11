@@ -45,89 +45,11 @@ declare namespace Sequencer {
     };
 }
 
-// ─── Module registry: game.modules.get('lancer-automations').api ─────────────
-interface ModuleConfig {
-    "lancer-automations": {
-        api: LancerAutomationsAPI;
-    };
-}
-
-interface RequiredModules {
-    "lancer-automations": true;
-}
-
-// ─── Foundry FlagConfig augmentation ─────────────────────────────────────────
-interface FlagConfig {
-    Actor: {
-        "lancer-automations": {
-            constant_bonuses?: any[];
-            global_bonuses?: any[];
-            ephemeral_bonuses?: any[];
-            smokeTemplates?: string[];
-            [key: string]: any;
-        };
-        "token-factions"?: {
-            team?: any;
-            [key: string]: any;
-        };
-        [key: string]: any;
-    };
-    ActiveEffect: {
-        "lancer-automations": LancerEffectFlags;
-        [key: string]: any;
-    };
-    Token: {
-        "lancer-automations": {
-            fallStartElevation?: number;
-            moveHistory?: MoveHistoryData;
-            movementCap?: number;
-            [key: string]: any;
-        };
-        "token-factions"?: {
-            team?: any;
-            [key: string]: any;
-        };
-        [key: string]: any;
-    };
-    Item: {
-        "lancer-automations": {
-            [key: string]: any;
-        };
-        [key: string]: any;
-    };
-    Combat: {
-        "lancer-automations": {
-            delayedAppearances?: any[];
-            [key: string]: any;
-        };
-        [key: string]: any;
-    };
-}
+// Module registry, flags and Lancer system data live in fvtt-config.d.ts.
+// They only take effect through `declare module "fvtt-types/configuration"`.
 
 // ─── CodeMirror ───────────────────────────────────────────────────────────────
 declare const CodeMirror: any;
-
-// ─── Combatant / Combat augmentation ─────────────────────────────────────────
-interface Combatant {
-    token: TokenDocument | null;
-    actor: Actor | null;
-    [key: string]: any;
-}
-
-interface Combat {
-    combatants: Collection<Combatant>;
-    [key: string]: any;
-}
-
-// ─── ActiveEffect augmentation ───────────────────────────────────────────────
-interface ActiveEffect {
-    name: string;
-    statuses: Set<string>;
-    flags: any;
-    img?: string;
-    icon?: string;
-    [key: string]: any;
-}
 
 // ─── libWrapper ───────────────────────────────────────────────────────────────
 declare const libWrapper: any;
@@ -137,40 +59,8 @@ interface Application {
     _needsReload?: boolean;
 }
 
-interface Item {
-    sheet?: any;
-    name?: string;
-    type?: string;
-}
-
-interface Actor {
-    sheet?: any;
-    actor?: undefined;
-}
-
-interface Token {
-    actor?: Actor | null;
-    _movement?: { points: number[];[key: string]: any } | null;
-    effects?: PIXI.Container & { bg?: any;[key: string]: any };
-}
-
-// ─── Lancer document system augmentation ─────────────────────────────────────
-interface Actor {
-    name: string;
-    type: string;
-    system: LancerActorSystem;
-    prototypeToken: any;
-    flags: any;
-    is_mech?(): boolean;
-    is_npc?(): boolean;
-    is_pilot?(): boolean;
-    is_deployable?(): boolean;
-}
-
-interface Item {
-    type: string;
-    system: LancerItemSystem;
-}
+// Actor / Item / Token belong in fvtt-config.d.ts. A bare global interface replaces the
+// fvtt-types class rather than merging, stripping every core member project-wide.
 
 // ─── Lancer system (game.lancer) ──────────────────────────────────────────────
 
@@ -187,10 +77,6 @@ interface LancerSystemAPI {
     [key: string]: any;
 }
 
-interface Game {
-    lancer?: LancerSystemAPI;
-    settings: any;
-}
 
 // ─── CONFIG.lancer / CONFIG.GeometryLib augmentation ─────────────────────────
 interface CONFIG {

@@ -3,6 +3,8 @@
 // built on the shared shape-placement engine and the range-pulse manager. style:ignore
 
 import { createShapePlacement, createPlacedShapeStore } from "../shape-placement-engine.js";
+import { getModuleSetting } from "../../tools/settings-utils.js";
+import { MODULE_ID } from "../../tools/constants.js";
 import {
     pointerToWorld, makeSafe, suppressTokenInteraction, addGraphicsBelowTokens, addGraphicsAboveTokens,
     destroyGraphics, paintSingleMarkCursor, gridLineWidth, TG, createMergedRangeHighlight, RANGE_GLOW,
@@ -999,7 +1001,7 @@ const TARGET_CURSOR_KEY = 'targetToolCursor';
 const TOOLBAR_SCALE_KEY = 'advMeasureScale';
 Hooks.once('init', () =>
 {
-    game.settings.register('lancer-automations', TOOLBAR_SCALE_KEY, {
+    game.settings.register(MODULE_ID,TOOLBAR_SCALE_KEY, {
         name: 'Advanced Measure: toolbar scale',
         hint: 'Size of the measure toolbar.',
         scope: 'client',
@@ -1009,7 +1011,7 @@ Hooks.once('init', () =>
         range: { min: 0.6, max: 1.6, step: 0.05 },
         onChange: (value) => _toolbarEl?.style.setProperty('--la-mt-scale', String(Number(value) || 1)),
     });
-    game.settings.register('lancer-automations', CTRL_RULER_KEY, {
+    game.settings.register(MODULE_ID,CTRL_RULER_KEY, {
         scope: 'client',
         config: false,
         type: String,
@@ -1017,14 +1019,14 @@ Hooks.once('init', () =>
         default: 'tool',
         onChange: () => refreshGlobalRulerDecoration(),
     });
-    game.settings.register('lancer-automations', RULER_CURSOR_KEY, {
+    game.settings.register(MODULE_ID,RULER_CURSOR_KEY, {
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
         onChange: () => refreshGlobalRulerDecoration(),
     });
-    game.settings.register('lancer-automations', TARGET_CURSOR_KEY, {
+    game.settings.register(MODULE_ID,TARGET_CURSOR_KEY, {
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1041,7 +1043,7 @@ function ctrlRulerMode()
 {
     try
     {
-        return game.settings.get('lancer-automations', CTRL_RULER_KEY);
+        return getModuleSetting(CTRL_RULER_KEY);
     }
     catch
     {
@@ -1052,7 +1054,7 @@ function targetCursorOn()
 {
     try
     {
-        return !!game.settings.get('lancer-automations', TARGET_CURSOR_KEY);
+        return !!getModuleSetting(TARGET_CURSOR_KEY);
     }
     catch
     {
@@ -1063,7 +1065,7 @@ function rulerCursorOn()
 {
     try
     {
-        return !!game.settings.get('lancer-automations', RULER_CURSOR_KEY);
+        return !!getModuleSetting(RULER_CURSOR_KEY);
     }
     catch
     {
@@ -2499,7 +2501,7 @@ function buildToolbar()
     _toolbarEl.className = 'lancer lancer-hud';
     try
     {
-        const toolbarScale = Number(game.settings.get('lancer-automations', TOOLBAR_SCALE_KEY)) || 1;
+        const toolbarScale = Number(getModuleSetting(TOOLBAR_SCALE_KEY)) || 1;
         if (toolbarScale !== 1)
             _toolbarEl.style.setProperty('--la-mt-scale', String(toolbarScale));
     }
@@ -2668,7 +2670,7 @@ export function openAdvancedMeasure(options)
     {
         try
         {
-            _saved.elevationAware = !!game.settings.get('lancer-automations', 'tah.areaElevationAware');
+            _saved.elevationAware = !!getModuleSetting('tah.areaElevationAware');
         }
         catch
         { /* setting not ready */ }
@@ -2972,7 +2974,7 @@ function measureShortcutLabel()
 {
     try
     {
-        const binding = game.keybindings.get('lancer-automations', 'advancedMeasure')?.[0];
+        const binding = game.keybindings.get(MODULE_ID,'advancedMeasure')?.[0];
         if (!binding?.key)
             return 'Shift + R';
         const key = binding.key.replace(/^Key/, '').replace(/^Digit/, '');

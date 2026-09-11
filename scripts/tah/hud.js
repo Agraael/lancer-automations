@@ -3,6 +3,9 @@
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup, stripDeployOwner } from '../interactive/detail-renderers.js';
 import { weaponSkirmishable, executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeProfileSwitch, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { getPerSceneLimitFromSub, getPerRoundLimitFromSub, getPerTurnLimitFromSub, rankSubKey, getSubUsed } from '../combat/per-frequency-tags.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, setLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
 import { applyActionOverlays } from '../interactive/action-overlays.js';
@@ -229,7 +232,7 @@ export class LancerHUD
 
     _getNarrativeLinkedActor()
     {
-        const uuid = game.settings.get('lancer-automations', 'tah.narrativeLinkedActorUuid');
+        const uuid = getModuleSetting('tah.narrativeLinkedActorUuid');
         if (!uuid)
             return null;
         const actor = /** @type {any} */ (fromUuidSync(uuid));
@@ -241,7 +244,7 @@ export class LancerHUD
     async _openNarrativeLinkDialog()
     {
         const pilots = (game.actors?.contents ?? []).filter(a => a.type === 'pilot' && a.isOwner);
-        const current = game.settings.get('lancer-automations', 'tah.narrativeLinkedActorUuid');
+        const current = getModuleSetting('tah.narrativeLinkedActorUuid');
         const currentActor = current ? /** @type {any} */ (fromUuidSync(current)) : null;
         const subtitle = currentActor ? `Currently linked: ${currentActor.name}` : 'No pilot linked';
         const tokenImg = (a) => a?.prototypeToken?.texture?.src || a?.img || 'icons/svg/mystery-man.svg';
@@ -282,7 +285,7 @@ export class LancerHUD
                     callback: async (html) =>
                     {
                         const uuid = String(/** @type {any} */ (html).find('[name="pilot-uuid"]').val() || '');
-                        await game.settings.set('lancer-automations', 'tah.narrativeLinkedActorUuid', uuid);
+                        await game.settings.set(MODULE_ID,'tah.narrativeLinkedActorUuid', uuid);
                         if (this._narrativeMode)
                             this.bindNarrative();
                     },
@@ -292,7 +295,7 @@ export class LancerHUD
                     label: 'Unlink',
                     callback: async () =>
                     {
-                        await game.settings.set('lancer-automations', 'tah.narrativeLinkedActorUuid', '');
+                        await game.settings.set(MODULE_ID,'tah.narrativeLinkedActorUuid', '');
                         if (this._narrativeMode)
                             this.bindNarrative();
                     },
@@ -397,14 +400,7 @@ export class LancerHUD
         if (!row.length)
             return false;
         let clickToOpen = false;
-        try
-        {
-            clickToOpen = !!game.settings.get('lancer-automations', 'tah.clickToOpen');
-        }
-        catch
-        {
-            clickToOpen = false;
-        }
+        clickToOpen = !!getModuleSetting('tah.clickToOpen');
         row.trigger(clickToOpen ? 'click' : 'mouseenter');
         return true;
     }
@@ -576,8 +572,8 @@ export class LancerHUD
 
         const categories = this._buildCategories();
         this._categories = categories;
-        const clickToOpen      = game.settings.get('lancer-automations', 'tah.clickToOpen')      ?? false;
-        const hoverCloseDelay  = (game.settings.get('lancer-automations', 'tah.hoverCloseDelay') ?? 2) * 1000;
+        const clickToOpen      = getModuleSetting('tah.clickToOpen')      ?? false;
+        const hoverCloseDelay  = (getModuleSetting('tah.hoverCloseDelay') ?? 2) * 1000;
         this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
@@ -589,7 +585,7 @@ export class LancerHUD
         // Resolve disposition / team (only if setting is on)
         let _dispColor = null;
         let _dispLabel = null;
-        if (!this._narrativeMode && game.settings.get('lancer-automations', 'tah.showDisposition'))
+        if (!this._narrativeMode && getModuleSetting('tah.showDisposition'))
         {
             const d = getTokenDispositionInfo(this._token) ?? { color: '#888', label: 'Unknown' };
             _dispColor = d.color;
@@ -672,7 +668,7 @@ export class LancerHUD
         c1.prepend(titleEl);
 
         // c1 must exist in DOM before we can measure it below, so build hud first
-        const savedPos = game.settings.get('lancer-automations', 'tah.position');
+        const savedPos = getModuleSetting('tah.position');
         const startLeft = savedPos?.left ?? HUD_LEFT;
         const startTop  = savedPos?.top  ?? HUD_TOP;
         const hud = $(`<div id="la-hud" style="left:${startLeft}px;top:${startTop}px;"></div>`);
@@ -789,7 +785,7 @@ export class LancerHUD
         resetBtn.on('click', (ev) =>
         {
             ev.stopPropagation();
-            game.settings.set('lancer-automations', 'tah.position', null);
+            game.settings.set(MODULE_ID,'tah.position', null);
             hud.animate({ left: HUD_LEFT, top: HUD_TOP }, 200);
         });
 
@@ -820,7 +816,7 @@ export class LancerHUD
             dragStart = null;
             hud.css('cursor', '');
             const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
-            game.settings.set('lancer-automations', 'tah.position', pos);
+            game.settings.set(MODULE_ID,'tah.position', pos);
         });
 
         // c2/c3/c4 are absolutely positioned. They never affect c1's layout.
@@ -1126,7 +1122,7 @@ export class LancerHUD
                 searchIcon.trigger('click');
                 return;
             }
-            const bindings = /** @type {any[]} */ (game.keybindings.get('lancer-automations', 'tah.toggleSearch') ?? []);
+            const bindings = /** @type {any[]} */ (game.keybindings.get(MODULE_ID,'tah.toggleSearch') ?? []);
             const match = bindings.some(b =>
             {
                 if (b.key !== ev.code)
@@ -1809,11 +1805,11 @@ export class LancerHUD
                     if (multi)
                     {
                         // Fire primary + every other token concurrently, none awaiting the others.
-                        Promise.resolve(item.onClick()).catch(e => console.error('[TAH primary]', e));
+                        Promise.resolve(item.onClick()).catch(e => console.error('lancer-automations | TAH primary |', e));
                         for (const t of this._tokens.slice(1))
                         {
                             Promise.resolve(item.broadcastFn(t, t.actor))
-                                .catch(e => console.error('[TAH broadcast]', e));
+                                .catch(e => console.error('lancer-automations | TAH broadcast |', e));
                         }
                     }
                     else
@@ -1926,7 +1922,7 @@ export class LancerHUD
             col.append(row);
         }
 
-        const maxItems = game.settings.get('lancer-automations', 'tah.maxColumnItems') ?? 0;
+        const maxItems = getModuleSetting('tah.maxColumnItems') ?? 0;
         if (maxItems > 0 && filteredItems.length > maxItems)
         {
             const ROW_H = 32; // approx row height including 2px gap
@@ -2033,7 +2029,7 @@ export class LancerHUD
                 ...(() =>
                 {
                     const deactItems = actor.items.filter(item =>
-                        item.flags?.['lancer-automations']?.activeStateData?.active
+                        getLAFlags(item)?.activeStateData?.active
                         || (item.system?.tags ?? []).some(tag => tag.lid === 'tg_deactivate')
                     );
                     if (!deactItems.length)
@@ -2044,7 +2040,7 @@ export class LancerHUD
                         icon: 'systems/lancer/assets/icons/status_shutdown.svg',
                         getChildren: () => deactItems.map(item =>
                         {
-                            const asd = item.flags?.['lancer-automations']?.activeStateData;
+                            const asd = getLAFlags(item)?.activeStateData;
                             const endName = asd?.endActionDescription || `Deactivate ${item.name}`;
                             const label = `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${endName}`;
                             const activation = asd?.endAction || 'Protocol';
@@ -2135,7 +2131,7 @@ export class LancerHUD
             });
         }
 
-        for (const extra of (actor.getFlag?.('lancer-automations', 'extraActions') ?? []))
+        for (const extra of (getLAFlag(actor,'extraActions') ?? []))
         {
             items.push({
                 label: extra.name,
@@ -2201,7 +2197,7 @@ export class LancerHUD
     {
         const actionPopup = action => this._actionPopup(action);
         const token = this._token;
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
+        const showAHIS = getModuleSetting('tah.showAidHandleInteractSqueeze') ?? false;
         const basicQuick = () => [
             this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, 'When you BOOST, you move at least 1 space, up to your SPEED. This allows you to make an extra movement, on top of your standard move. Certain talents and systems can only be used when you BOOST, not when you make a standard move.'),
             this._simpleItem('Hide',     'systems/lancer/assets/icons/status_hidden.svg',    { name: 'Hide',     activation: 'Quick'          }, 'Obscure your position, becoming HIDDEN and unable to be identified, precisely located, or targeted directly by attacks or hostile actions.'),
@@ -2269,7 +2265,7 @@ export class LancerHUD
     _deployBodyHtml(/** @type {any} */ item, /** @type {string} */ lid, /** @type {any} */ actor, /** @type {any} */ dep)
     {
         const extra = item
-            ? [...(item.getFlag?.('lancer-automations', 'extraDeployables') ?? []), ...(item.getFlag?.('lancer-automations', 'extraDeployableActors') ?? [])]
+            ? [...(getLAFlag(item,'extraDeployables') ?? []), ...(getLAFlag(item,'extraDeployableActors') ?? [])]
             : [];
         const isExtra = !item || extra.includes(lid);
         return laRenderDeployables([dep], { label: isExtra ? 'EXTRA DEPLOYABLE' : 'DEPLOYABLE', metas: [resolveDeployRangeCount(item, lid, actor)] });
@@ -2504,7 +2500,7 @@ export class LancerHUD
     {
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
+        const showAHIS = getModuleSetting('tah.showAidHandleInteractSqueeze') ?? false;
         const basicChildren = () =>
         {
             const items = [
@@ -2601,7 +2597,7 @@ export class LancerHUD
     _catFreeActions()
     {
         const actor = this._actor;
-        const showAHIS = game.settings.get('lancer-automations', 'tah.showAidHandleInteractSqueeze') ?? false;
+        const showAHIS = getModuleSetting('tah.showAidHandleInteractSqueeze') ?? false;
         return {
             label: 'Free Actions',
             colLabel: 'Free Actions',
@@ -2743,7 +2739,7 @@ export class LancerHUD
                 icon: 'mdi mdi-cogs',
                 onClick: () =>
                 {
-                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     if (api?.executeEffectManager)
                         api.executeEffectManager();
                     else
@@ -2755,7 +2751,7 @@ export class LancerHUD
                 icon: 'modules/lancer-automations/icons/vote.svg',
                 onClick: () =>
                 {
-                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     if (api?.openChoiceMenu)
                         api.openChoiceMenu();
                     else
@@ -2778,7 +2774,7 @@ export class LancerHUD
             icon: 'systems/lancer/assets/icons/white/downtime.svg',
             onClick: async () =>
             {
-                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                 await api?.executeDowntime?.();
             },
             onRightClick: this._actionPopup({ name: 'Downtime', activation: 'Tool', detail: 'Open the downtime activities dialog, with rolls and journal logging.' }),
@@ -2789,7 +2785,7 @@ export class LancerHUD
                 icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                 onClick: () =>
                 {
-                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     api?.openAddReserveDialog?.(actor);
                 },
                 onRightClick: this._actionPopup({ name: 'Reserve', activation: 'Tool', detail: 'Add a reserve to the pilot.' }),
@@ -2847,13 +2843,13 @@ export class LancerHUD
                 icon: 'modules/lancer-automations/icons/pin.svg',
                 onClick: async () =>
                 {
-                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
                     if (!picked || !picked.length)
                         return;
                     const target = picked[0];
-                    await token.document.setFlag('lancer-automations', 'ownerActorUuid', target.actor.uuid);
-                    await token.document.setFlag('lancer-automations', 'ownerName', target.actor.name ?? '');
+                    await setLAFlag(token.document,'ownerActorUuid', target.actor.uuid);
+                    await setLAFlag(token.document,'ownerName', target.actor.name ?? '');
                 },
                 onRightClick: this._actionPopup({ name: 'Link to Token', activation: 'Tool', detail: 'Link this token to an owner token (deployable-style ownership).' }) },
             ...(isMechOrNpc ? [
@@ -2881,7 +2877,7 @@ export class LancerHUD
                 { label: 'Suicide',          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }), onRightClick: this._actionPopup({ name: 'Suicide', activation: 'Tool', detail: 'Zero structure, stress and HP.' }) },
                 { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token), onRightClick: this._actionPopup({ name: 'Reactor Explosion', activation: 'Tool', detail: 'Detonate the reactor: blast damage around the token.' }) },
             ] : []),
-            ...(token.document.getFlag('lancer-automations', 'isWreck') ? [
+            ...(getLAFlag(token.document,'isWreck') ? [
                 { label: 'Resurrect', icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token), onRightClick: this._actionPopup({ name: 'Resurrect', activation: 'Tool', detail: 'Restore this wreck to a live unit.' }) },
             ] : []),
             ...(actor?.type === 'npc' ? [
@@ -2893,7 +2889,7 @@ export class LancerHUD
                 icon: 'mdi mdi-cogs',
                 onClick: () =>
                 {
-                    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     if (api?.executeEffectManager)
                         api.executeEffectManager();
                     else
@@ -2904,7 +2900,7 @@ export class LancerHUD
             { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', icon: 'systems/lancer/assets/icons/white/status_hidden.svg', onClick: () => token.document.update({ hidden: !token.document.hidden }), onRightClick: this._actionPopup({ name: 'Hide / Reveal Token', activation: 'Tool', detail: 'Toggle this token\'s hidden state.' }) },
         ];
 
-        const capEnabled = game.settings.get('lancer-automations', 'enableMovementCapDetection')
+        const capEnabled = getModuleSetting('enableMovementCapDetection')
             || getBoostOfferMode() !== 'no';
 
         const ap = a => this._actionPopup(a);
@@ -2921,10 +2917,10 @@ export class LancerHUD
                 subtype: 'type',
                 name: 'Move Cap',
                 icon: 'modules/lancer-automations/icons/path-distance.svg',
-                getValue: () => game.modules.get('lancer-automations')?.api?.getMovementCap(token) ?? 0,
+                getValue: () => game.modules.get(MODULE_ID)?.api?.getMovementCap(token) ?? 0,
                 onValueChanged: (newVal) =>
                 {
-                    const api = game.modules.get('lancer-automations')?.api;
+                    const api = game.modules.get(MODULE_ID)?.api;
                     if (!api)
                         return;
                     api.increaseMovementCap(token, newVal - api.getMovementCap(token));
@@ -3048,10 +3044,10 @@ export class LancerHUD
                 noColor: true,
                 min: 1,
                 max: 100,
-                getValue: () => token.document?.getFlag('lancer-automations', 'customMeasureSize') ?? 10,
+                getValue: () => getLAFlag(token.document,'customMeasureSize') ?? 10,
                 onValueChanged: async (newVal) =>
                 {
-                    await token.document?.setFlag('lancer-automations', 'customMeasureSize', newVal);
+                    await setLAFlag(token.document,'customMeasureSize', newVal);
                     if (amSourceMatches('manual'))
                         setAdvancedMeasureState({ manualRadius: newVal });
                     if (hasRangePin(token, 'manual'))
@@ -3069,7 +3065,7 @@ export class LancerHUD
                 getValue: () => hasRangePin(token, 'manual'),
                 onToggle: () =>
                 {
-                    const size = token.document?.getFlag('lancer-automations', 'customMeasureSize') ?? 10;
+                    const size = getLAFlag(token.document,'customMeasureSize') ?? 10;
                     togglePin('manual', { range: size });
                 },
             },
@@ -3093,7 +3089,7 @@ export class LancerHUD
                             icon: 'mdi mdi-vote',
                             onClick: () =>
                             {
-                                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; if (api?.openChoiceMenu)
+                                const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; if (api?.openChoiceMenu)
                                     api.openChoiceMenu(); else /** @type {any} */
                                     (ui.notifications).error('Lancer Automations API not found or outdated.');
                             },
@@ -3102,21 +3098,21 @@ export class LancerHUD
                             icon: 'systems/lancer/assets/icons/white/downtime.svg',
                             onClick: async () =>
                             {
-                                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; await api?.executeDowntime?.();
+                                const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; await api?.executeDowntime?.();
                             },
                             onRightClick: ap({ name: 'Downtime', activation: 'Tool', detail: 'Open the downtime activities dialog, with rolls and journal logging.' }) },
                         { label: 'Reserve',
                             icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                             onClick: () =>
                             {
-                                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; api?.openAddReserveDialog?.(token);
+                                const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; api?.openAddReserveDialog?.(token);
                             },
                             onRightClick: ap({ name: 'Reserve', activation: 'Tool', detail: 'Add a reserve to the pilot.' }) },
                         { label: 'Rest',
                             icon: 'modules/lancer-automations/icons/night-sleep.svg',
                             onClick: () =>
                             {
-                                const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api; api?.executeRest?.(token);
+                                const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; api?.executeRest?.(token);
                             },
                             onRightClick: ap({ name: 'Rest', activation: 'Tool', detail: 'Open the rest dialog: spend repairs, clear heat and conditions.' }) },
                         { label: 'Add Extra',
@@ -3297,7 +3293,7 @@ export class LancerHUD
                     icon: 'systems/lancer/assets/icons/ammo.svg',
                     onClick: () =>
                     {
-                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                         if (api?.TriggerUseAmmoFlow)
                             api.TriggerUseAmmoFlow(item.uuid, idx);
                         else
@@ -4019,7 +4015,7 @@ export class LancerHUD
                     const npcSysChildren = () =>
                     {
                         const sysActions = /** @type {any[]} */ (applyActionOverlays(item, sys.actions ?? []));
-                        const extraActions = /** @type {any[]} */ (item.getFlag?.('lancer-automations', 'extraActions') || [])
+                        const extraActions = /** @type {any[]} */ (getLAFlag(item,'extraActions') || [])
                             .filter(/** @type {any} */ action => linkTierGate(action, actor, item));
                         const npcRightClick = (/** @type {any} */ row) =>
                         {
@@ -4442,14 +4438,7 @@ export class LancerHUD
     _rankFreqStatus(talent, rank, rankIdx)
     {
         let perFreqOn;
-        try
-        {
-            perFreqOn = !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags');
-        }
-        catch
-        {
-            perFreqOn = false;
-        }
+        perFreqOn = !!getModuleSetting('enablePerRoundTurnTags');
         if (!perFreqOn)
             return null;
         const subKey = rankSubKey(rankIdx);
@@ -4628,7 +4617,7 @@ export class LancerHUD
     {
         const actor = this._actor;
         const tokenDoc = /** @type {any} */ (this._token?.document);
-        const raw = (tokenDoc?.getFlag?.('lancer-automations', 'statBarExtras') ?? [])
+        const raw = (getLAFlag(tokenDoc,'statBarExtras') ?? [])
             .filter(/** @type {any} */ entry =>
             {
                 const key = entry?.autoKey;
@@ -4651,7 +4640,7 @@ export class LancerHUD
                 max: resolved.max,
                 getValue: () =>
                 {
-                    const live = (tokenDoc?.getFlag?.('lancer-automations', 'statBarExtras') ?? [])
+                    const live = (getLAFlag(tokenDoc,'statBarExtras') ?? [])
                         .find(/** @type {any} */ item => item?.id === entry.id);
                     return _resolveExtraBarValues(actor, live ?? entry).value;
                 },
@@ -4719,7 +4708,7 @@ export class LancerHUD
                     hoverData: { actor, item: sysItem, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
                     onClick: () =>
                     {
-                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                         if (api?.TriggerUseAmmoFlow)
                             api.TriggerUseAmmoFlow(sysItem.uuid, idx);
                     },
@@ -4787,7 +4776,7 @@ export class LancerHUD
                     hoverData: { actor, item, action: { name: ammo.name, activation: 'Ammo' }, category: 'Ammo' },
                     onClick: () =>
                     {
-                        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+                        const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                         if (api?.TriggerUseAmmoFlow)
                             api.TriggerUseAmmoFlow(item.uuid, idx);
                     },
@@ -4831,13 +4820,13 @@ export class LancerHUD
 
     _getMacroList()
     {
-        const raw = game.settings.get('lancer-automations', 'tah.macroList');
+        const raw = getModuleSetting('tah.macroList');
         return Array.isArray(raw) ? raw : [];
     }
 
     async _saveMacroList(list)
     {
-        await game.settings.set('lancer-automations', 'tah.macroList', list);
+        await game.settings.set(MODULE_ID,'tah.macroList', list);
         Hooks.callAll('forceUpdateTokenActionHud');
     }
 
@@ -5963,22 +5952,15 @@ export class LancerHUD
         clearTimeout(this._kbResetTimer);
         if (this._clickToOpen)
             return;
-        const delay = (game.settings.get('lancer-automations', 'tah.keyboardNavResetDelay') ?? 5) * 1000;
+        const delay = (getModuleSetting('tah.keyboardNavResetDelay') ?? 5) * 1000;
         this._kbResetTimer = setTimeout(() => this._kbReset(), delay);
     }
     _kbHandleKey(event)
     {
         if (!this._el)
             return;
-        try
-        {
-            if (!game.settings.get('lancer-automations', 'tah.keyboardNav'))
-                return;
-        }
-        catch
-        {
+        if (!getModuleSetting('tah.keyboardNav'))
             return;
-        }
         const focused = document.activeElement;
         const inInput = !!(focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.isContentEditable));
         const inHudInput = inInput && !!(this._el[0] && $.contains(this._el[0], focused));

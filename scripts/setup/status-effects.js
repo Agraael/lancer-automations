@@ -1,4 +1,6 @@
 // filled in even when the toggle is off, so callers can tell "opted out" from "typo"
+import { getModuleSetting } from '../tools/settings-utils.js';
+
 let additionalStatusKeys = null;
 
 // LCP status items point at system icons the system never shipped; the module carries those
@@ -40,7 +42,7 @@ Hooks.on('lancer.statusesReady', () =>
 {
     remapShippedSystemIcons();
 
-    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
+    if (getModuleSetting('enableInfectionDamageIntegration')
         && !CONFIG.statusEffects.find(status => status.id === 'infection'))
     {
         CONFIG.statusEffects.push({
@@ -51,7 +53,7 @@ Hooks.on('lancer.statusesReady', () =>
         });
     }
 
-    if (game.settings.get('lancer-automations', 'additionalStatuses'))
+    if (getModuleSetting('additionalStatuses'))
     {
         if (!CONFIG.statusEffects.find(status => status.id === 'guardian'))
         {
@@ -258,7 +260,7 @@ Hooks.on('lancer.statusesReady', () =>
         'bulwark', 'Bulwark', 'phasing', 'Phasing', 'guardian', 'Guardian'
     ]);
 
-    if (!game.settings.get('lancer-automations', 'additionalStatuses'))
+    if (!getModuleSetting('additionalStatuses'))
         return;
 
     for (const status of additional)

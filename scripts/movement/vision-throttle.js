@@ -1,6 +1,7 @@
 /* global game, Hooks, libWrapper, performance */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const SETTING_FPS = 'visionAnimationThrottleFps';
 const SKIP_FLAG = Symbol('laVisionThrottleSkip');
 
@@ -52,7 +53,7 @@ Hooks.once('ready', () =>
 {
     libWrapper.register(MODULE_ID, 'foundry.canvas.placeables.Token.prototype._onAnimationUpdate', function(wrapped, changed, context)
     {
-        const fps = Number(game.settings.get(MODULE_ID, SETTING_FPS)) || 0;
+        const fps = Number(getModuleSetting(SETTING_FPS)) || 0;
         if (fps <= 0)
             return wrapped.call(this, changed, context);
         if (!game.settings.get('core', 'visionAnimation'))

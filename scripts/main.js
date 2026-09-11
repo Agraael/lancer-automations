@@ -16,6 +16,8 @@ import "./movement/history.js";
 import "./movement/keybindings.js";
 import './filters/customFilters.js';
 import './setup/scene-dim-from-image.js';
+import { getModuleSetting } from './tools/settings-utils.js';
+import { MODULE_ID } from './tools/constants.js';
 import './setup/migrations.js';
 import "./setup/status-effects.js";
 import "./setup/qol-compat.js";
@@ -28,7 +30,7 @@ import { isForceFreeMovement, isForceDebugMovement } from "./movement/keybinding
 import {
     _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack,
     clearMoveData, undoMoveData, getCumulativeMoveData, getIntentionalMoveData,
-    getMovementCap, getMoveDataList, getMovementHistory,
+    getMovementCap, getMoveDataList, getMovementHistory, isPositionChange,
     initMovementCap, increaseMovementCap, recordBoostCast, recordMovementExtra, getMovementBands, tokenSpeed, _rulerMove
 } from "./movement/move-tracking.js";
 export { _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack, _rulerMove };
@@ -194,6 +196,7 @@ import { DowntimeAPI } from "./tools/downtime.js";
 import { initDowntimeItems } from "./tools/downtime-item.js";
 import { RestAPI } from "./tools/rest.js";
 import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
+import { FlagsAPI, getLAFlag, getLAFlags } from "./tools/flag-utils.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import { initAutoFocus, registerCardFocusFlags } from "./tools/auto-focus.js";
@@ -557,7 +560,7 @@ Hooks.on('init', () =>
     injectDisabledSchemaField();
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField();
-    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+    if (getModuleSetting('enableInfectionDamageIntegration'))
     {
         injectInfectionDamageType(); // Add "Infection" to DamageField choices
         injectInfectionCSS(); // Infection damage icon + color
@@ -566,7 +569,7 @@ Hooks.on('init', () =>
     patchStatRollCardTemplate();
 
     registerElevTiltKeybindings(); // Rebindable Q/E elevation + W/S line tilt
-    game.keybindings.register('lancer-automations', 'resetMovement', {
+    game.keybindings.register(MODULE_ID,'resetMovement', {
         name: 'Reset Movement',
         hint: 'Open the movement history reset dialog for the selected token.',
         editable: [{ key: 'KeyH' }],
@@ -583,12 +586,12 @@ Hooks.on('init', () =>
         precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
     });
     // No onDown: the card owns focus, so targeting-ui.js reads this binding from its own listener.
-    game.keybindings.register('lancer-automations', 'cardTargeting', {
+    game.keybindings.register(MODULE_ID,'cardTargeting', {
         name: 'Toggle Card Targeting',
         hint: 'Start or cancel the targeting picker of the open attack or damage card.',
         editable: [{ key: 'KeyT', modifiers: ['Control'] }],
     });
-    game.keybindings.register('lancer-automations', 'advancedMeasure', {
+    game.keybindings.register(MODULE_ID,'advancedMeasure', {
         name: 'Advanced Measure Tool',
         hint: 'Toggle the standalone measure toolbar (shapes, single marks, reference range pulse).',
         editable: [{ key: 'KeyR', modifiers: ['Shift'] }],
@@ -724,7 +727,7 @@ Hooks.once('ready', async () =>
     {
         try
         {
-            libWrapper.register('lancer-automations', 'Hooks.callAll', function (wrapped, hook, ...args)
+            libWrapper.register(MODULE_ID,'Hooks.callAll', function (wrapped, hook, ...args)
             {
                 if (hook === 'renderCombatDock' && args[1] instanceof HTMLElement)
                     args[1] = $(args[1]);
@@ -740,14 +743,14 @@ Hooks.once('ready', async () =>
         try
         {
             const hudNs = /** @type {any} */ (foundry.applications).hud;
-            libWrapper.register('lancer-automations', 'foundry.applications.hud.BasePlaceableHUD.prototype._updatePosition', function (wrapped, position)
+            libWrapper.register(MODULE_ID,'foundry.applications.hud.BasePlaceableHUD.prototype._updatePosition', function (wrapped, position)
             {
                 const result = wrapped(position);
                 if (!(this instanceof hudNs.TokenHUD))
                     return result;
                 try
                 {
-                    if (!game.settings.get('lancer-automations', 'tokenStatBar'))
+                    if (!getModuleSetting('tokenStatBar'))
                         return result;
                 }
                 catch
@@ -778,7 +781,7 @@ Hooks.once('ready', async () =>
     }
 
     // gated on a setting; deferred to 'ready' because registerFlows can fire before LA's init
-    if (game.settings.get('lancer-automations', 'treatGenericPrintAsActivation'))
+    if (getModuleSetting('treatGenericPrintAsActivation'))
     {
         const flows = game.lancer?.flows;
         flows?.get('SimpleHTMLFlow')?.insertStepAfter('printGenericHTML', 'lancer-automations:onActivation');
@@ -792,7 +795,7 @@ Hooks.once('ready', async () =>
 
     initCollapseHook();
     initStatusIconHover();
-    if (game.modules.get('status-halo')?.active && game.settings.get('lancer-automations', 'statusHalo'))
+    if (game.modules.get('status-halo')?.active && getModuleSetting('statusHalo'))
         ui.notifications.warn('Lancer Automations: the Status Icon Halo setting duplicates the Status Halo module. Disable one of them.');
 
     if (typeof libWrapper !== 'undefined')
@@ -853,7 +856,7 @@ Hooks.once('ready', async () =>
             return range;
         }
 
-        libWrapper.register('lancer-automations', 'CONFIG.Item.documentClass.prototype.currentProfile',
+        libWrapper.register(MODULE_ID,'CONFIG.Item.documentClass.prototype.currentProfile',
             function(wrapped)
             {
                 const result = wrapped.call(this);
@@ -865,7 +868,7 @@ Hooks.once('ready', async () =>
             }, 'WRAPPER');
 
         // attack HUD uses this to pick Blast/Burst/Cone/Line buttons; route through currentProfile
-        libWrapper.register('lancer-automations', 'CONFIG.Item.documentClass.prototype.rangesFor',
+        libWrapper.register(MODULE_ID,'CONFIG.Item.documentClass.prototype.rangesFor',
             function(wrapped, types)
             {
                 if (!_getRangeBonuses(this))
@@ -874,17 +877,17 @@ Hooks.once('ready', async () =>
                 return this.currentProfile().range.filter(rangeEntry => filter.has(rangeEntry.type));
             }, 'MIXED');
 
-        libWrapper.register('lancer-automations', 'Token.prototype._getVisionSourceData',
+        libWrapper.register(MODULE_ID,'Token.prototype._getVisionSourceData',
             function (wrapped, ...args)
             {
                 const data = wrapped(...args);
                 if (this.isPreview)
                 {
-                    const value = game.settings.get('lancer-automations', 'dragVisionMultiplier');
+                    const value = getModuleSetting('dragVisionMultiplier');
                     let mode = 'ratio';
                     try
                     {
-                        mode = game.settings.get('lancer-automations', 'dragVisionMode');
+                        mode = getModuleSetting('dragVisionMode');
                     }
                     catch (e)
                     {
@@ -906,7 +909,7 @@ Hooks.once('ready', async () =>
             }, 'WRAPPER');
 
         // suppress lwfx's per-weapon FX if LA already played one inline (Ram/Grapple/throw)
-        libWrapper.register('lancer-automations', 'Macro.prototype.execute',
+        libWrapper.register(MODULE_ID,'Macro.prototype.execute',
             function (wrapped, ...args)
             {
                 try
@@ -967,13 +970,13 @@ function _redrawHoverConnections()
         return;
     if (!token.actor?.isOwner)
         return;
-    if (!game.settings.get('lancer-automations', 'showDeployableLines'))
+    if (!getModuleSetting('showDeployableLines'))
         return;
     const sourceUuid = token.actor?.uuid;
     if (!sourceUuid)
         return;
 
-    const ownerUuidFlag = token.document.getFlag('lancer-automations', 'ownerActorUuid');
+    const ownerUuidFlag = getLAFlag(token.document,'ownerActorUuid');
     deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
     if (ownerUuidFlag)
     {
@@ -984,7 +987,7 @@ function _redrawHoverConnections()
     else
     {
         const deployables = canvas.tokens.placeables.filter(candidate =>
-            candidate.document.getFlag('lancer-automations', 'ownerActorUuid') === sourceUuid
+            getLAFlag(candidate.document,'ownerActorUuid') === sourceUuid
         );
         for (const deployable of deployables)
             _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, deployable.center.x, deployable.center.y, 8, 14, _dashOffset);
@@ -1076,7 +1079,7 @@ async function syncBuiltinStartups()
         }
 
         const settingEnabled = entry.settingKey
-            ? (game.settings.get(ReactionManager.ID, entry.settingKey) ?? true)
+            ? (getModuleSetting(entry.settingKey) ?? true)
             : true;
 
         if (!settingEnabled)
@@ -1151,7 +1154,7 @@ Hooks.on('ready', async () =>
     LAAuras.init();
     reapplyIsometricTileTab();
 
-    game.modules.get('lancer-automations').api = /** @type {any} */ ({
+    game.modules.get(MODULE_ID).api = /** @type {any} */ ({
         ...OverwatchAPI,
         ...ReactionsAPI,
         ...EffectsAPI,
@@ -1163,6 +1166,7 @@ Hooks.on('ready', async () =>
         ...TerrainAPI,
         ...DowntimeAPI,
         ...ScanAPI,
+        ...FlagsAPI,
         ...RestAPI,
         ...AurasAPI,
         ...ItemDisabledAPI,
@@ -1184,6 +1188,7 @@ Hooks.on('ready', async () =>
         getMoveDataList,
         getMovementCap,
         getMovementBands,
+        isPositionChange,
         tokenSpeed,
         smokeZoneGraphics,
         importTemplateMacroPresets,
@@ -1239,8 +1244,8 @@ Hooks.on('ready', async () =>
 
     initDelayedAppearanceHook();
     await syncBuiltinStartups();
-    runStartupScripts(game.modules.get('lancer-automations').api);
-    Hooks.callAll('lancer-automations.ready', game.modules.get('lancer-automations').api);
+    runStartupScripts(game.modules.get(MODULE_ID).api);
+    Hooks.callAll('lancer-automations.ready', game.modules.get(MODULE_ID).api);
     runDeprecationScans();
 
     registerExtraTrackableAttributes();
@@ -1254,13 +1259,13 @@ Hooks.on('ready', async () =>
     initAutoStruct();
     initCombatBannerFit();
     initDamageCalcWrapper();
-    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+    if (getModuleSetting('enableInfectionDamageIntegration'))
         initInfectionHooks();
     initConstantStatHooks();
     initPerFrequencyHooks();
     initWreckTokenConfig();
 
-    if (game.settings.get('lancer-automations', 'allowHalfSizeTokens'))
+    if (getModuleSetting('allowHalfSizeTokens'))
         patchHalfSizeTokens();
 
     checkCompatibility();
@@ -1269,7 +1274,7 @@ Hooks.on('ready', async () =>
 Hooks.on('renderActorSheet', onRenderActorSheet);
 Hooks.on('renderActorSheet', (app, html, data) =>
 {
-    if (!game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+    if (!getModuleSetting('enableInfectionDamageIntegration'))
         return;
     onRenderActorSheetInfection(app, html, data);
 });
@@ -1337,7 +1342,7 @@ async function _cleanupItemFromActor(item, actor)
     if (!actor)
         return;
     await _cleanupRuntimesByFilter(actor, effect =>
-        effect.flags?.['lancer-automations']?.sourceItemUuid === item.uuid);
+        getLAFlags(effect)?.sourceItemUuid === item.uuid);
     await cleanupItemBonusesFromActor(item, actor);
 }
 
@@ -1347,7 +1352,7 @@ async function _cleanupItemTemplateFromActor(item, actor, templateId)
         return;
     await _cleanupRuntimesByFilter(actor, effect =>
     {
-        const flags = effect.flags?.['lancer-automations'];
+        const flags = getLAFlags(effect);
         return flags?.sourceItemUuid === item.uuid && flags?.sourceTemplateId === templateId;
     });
 }
@@ -1364,7 +1369,7 @@ async function _cleanupActorTemplateFromTokens(actor, templateId)
             continue;
         await _cleanupRuntimesByFilter(target, effect =>
         {
-            const flags = effect.flags?.['lancer-automations'];
+            const flags = getLAFlags(effect);
             return flags?.sourceActorUuid === actor.uuid && flags?.sourceTemplateId === templateId;
         });
     }
@@ -1378,7 +1383,7 @@ Hooks.on('createItem', async (item, _options, _userId) =>
     if (!actor || actor.documentName !== 'Actor')
         return;
     await _applyItemTemplatesFromHook(item, actor.getActiveTokens?.() ?? []);
-    if ((item.getFlag?.('lancer-automations', 'extraBarTemplates') ?? []).length)
+    if ((getLAFlag(item,'extraBarTemplates') ?? []).length)
         await reinjectAutoBarsForActor(actor);
 });
 
@@ -1408,7 +1413,7 @@ Hooks.on('deleteItem', async (item, _options, _userId) =>
         return;
     await _cleanupItemFromActor(item, actor);
     // Prune templates the deleted item was contributing (autoKey references its uuid).
-    if ((item.getFlag?.('lancer-automations', 'extraBarTemplates') ?? []).length)
+    if ((getLAFlag(item,'extraBarTemplates') ?? []).length)
         await reinjectAutoBarsForActor(actor);
 });
 
@@ -1438,7 +1443,7 @@ Hooks.on('deleteActiveEffect', async (effect, _options, userId) =>
         return;
     if (!game.user?.isGM)
         return;
-    const flags = effect.flags?.['lancer-automations'];
+    const flags = getLAFlags(effect);
     if (!flags)
         return;
     if (flags.isItemTemplate === true)
@@ -1492,7 +1497,7 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
             const isForeignSource = (uuid) => typeof uuid === 'string' && uuid.includes('.Token.') && !uuid.startsWith(tokenDoc.uuid);
             await _cleanupRuntimesByFilter(token.actor, effect =>
             {
-                const flags = effect.flags?.['lancer-automations'];
+                const flags = getLAFlags(effect);
                 const source = flags?.sourceItemUuid ?? flags?.sourceActorUuid;
                 return source ? isForeignSource(source) : false;
             });
@@ -1515,33 +1520,33 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
 
 function _laSheetCounts(target)
 {
-    const bonusCount = (target?.getFlag?.('lancer-automations', 'global_bonuses') || []).length
-        + (target?.getFlag?.('lancer-automations', 'constant_bonuses') || []).length
-        + (target?.getFlag?.('lancer-automations', 'bonusTemplates') || []).length;
+    const bonusCount = (getLAFlag(target,'global_bonuses') || []).length
+        + (getLAFlag(target,'constant_bonuses') || []).length
+        + (getLAFlag(target,'bonusTemplates') || []).length;
     const statusCount = /** @type {any[]} */ (Array.from(target?.effects ?? []))
         .filter(effect =>
         {
-            const laFlags = effect?.flags?.['lancer-automations'];
+            const laFlags = getLAFlags(effect);
             const isTemplate = laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
             if (!(isTemplate || !effect.disabled))
                 return false;
             if (!(effect.icon || effect.img))
                 return false;
-            if (effect.getFlag?.('lancer-automations', 'linkedBonusId'))
+            if (getLAFlag(effect,'linkedBonusId'))
                 return false;
             return true;
         })
         .length;
     const extraActionCount = (getActorActions(target) || []).filter(action => action._addedViaExtrasUI === true).length;
-    const extraDepCount = (target?.getFlag?.('lancer-automations', 'extraDeployableActorsViaUI') || []).length
-        + (target?.getFlag?.('lancer-automations', 'extraDeployableLidsViaUI') || []).length;
-    const extraBarCount = (target?.getFlag?.('lancer-automations', 'extraBarTemplates') || []).length;
-    const extraCfg = target?.documentName === 'Item' ? (target?.getFlag?.('lancer-automations', 'extraConfig') ?? {}) : null;
+    const extraDepCount = (getLAFlag(target,'extraDeployableActorsViaUI') || []).length
+        + (getLAFlag(target,'extraDeployableLidsViaUI') || []).length;
+    const extraBarCount = (getLAFlag(target,'extraBarTemplates') || []).length;
+    const extraCfg = target?.documentName === 'Item' ? (getLAFlag(target,'extraConfig') ?? {}) : null;
     const extraConfigConfigured = extraCfg && (
         (extraCfg.autoConsumeDisabled?.length ?? 0) > 0
         || Object.values(extraCfg.subAutoConsumeDisabled ?? {}).some(list => list?.length)
         || Object.keys(extraCfg.consumeOn ?? {}).length > 0
-        || target?.getFlag?.('lancer-automations', 'hidePrimaryAction')) ? 1 : 0;
+        || getLAFlag(target,'hidePrimaryAction')) ? 1 : 0;
     return { bonusCount, statusCount, extraActionCount, extraDepCount, extraBarCount, extraConfigConfigured };
 }
 
@@ -1553,7 +1558,7 @@ function _laSheetTotalCount(target)
 
 function _openLaSheetMenu(app)
 {
-    const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
     const target = app.document;
     const isItem = target.documentName === 'Item';
     const isPrototype = !isItem && !app.token && !target.token;
@@ -1802,14 +1807,14 @@ Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) =>
 {
     // v13 hands a raw HTMLElement; wrap so the jQuery below works
     const html = htmlOrEl instanceof HTMLElement ? $(htmlOrEl) : htmlOrEl;
-    if (!game.settings.get('lancer-automations', 'showStatusEffectsHudButton'))
+    if (!getModuleSetting('showStatusEffectsHudButton'))
         html.find('[data-palette="effects"]').remove();
-    if (!game.settings.get('lancer-automations', 'showCombatStateHudButton'))
+    if (!getModuleSetting('showCombatStateHudButton'))
         html.find('.control-icon[data-action="combat"]').remove();
-    if (!game.settings.get('lancer-automations', 'showTargetStateHudButton'))
+    if (!getModuleSetting('showTargetStateHudButton'))
         html.find('.control-icon[data-action="target"]').remove();
 
-    if (game.settings.get('lancer-automations', 'showBonusHudButton'))
+    if (getModuleSetting('showBonusHudButton'))
     {
         const token = hud.object;
         if (token?.actor)
@@ -1835,7 +1840,7 @@ Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) =>
     if (!game.combat?.started)
         return;
 
-    if (!game.settings.get('lancer-automations', 'showRevertMovementHudButton'))
+    if (!getModuleSetting('showRevertMovementHudButton'))
         return;
 
     const resetButtonHtml = `
@@ -1934,7 +1939,7 @@ Hooks.on('combatRound', async (combat, updateData, opts) =>
 // boost offer + cap detection both read the cap, so seed it for everyone at start
 Hooks.on('combatStart', (combat) =>
 {
-    if (!game.settings.get('lancer-automations', 'enableMovementCapDetection')
+    if (!getModuleSetting('enableMovementCapDetection')
         && getBoostOfferMode() === 'no')
 
         return;
@@ -1990,7 +1995,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) =>
     if (!actor || actor.documentName !== 'Actor')
         return true;
 
-    if (effect.flags?.['lancer-automations']?.isActorTemplate === true)
+    if (getLAFlags(effect)?.isActorTemplate === true)
         return true;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
@@ -2072,7 +2077,7 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) =>
     if (!actor || actor.documentName !== 'Actor')
         return;
 
-    if (effect.flags?.['lancer-automations']?.isActorTemplate === true)
+    if (getLAFlags(effect)?.isActorTemplate === true)
         return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
@@ -2115,7 +2120,7 @@ Hooks.on('createActiveEffect', async (effect, _options, userId) =>
     const actor = effect.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
-    if (effect.flags?.['lancer-automations']?.isActorTemplate === true)
+    if (getLAFlags(effect)?.isActorTemplate === true)
         return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
@@ -2131,7 +2136,7 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) =>
     const actor = effect.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
-    if (effect.flags?.['lancer-automations']?.isActorTemplate === true)
+    if (getLAFlags(effect)?.isActorTemplate === true)
         return;
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
@@ -2140,11 +2145,11 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) =>
     await handleTrigger('onStatusRemoved', { triggeringToken: token, statusId, effect });
 
     // grouped effects share lifetime: removing one removes the rest
-    const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
+    const groupId = getLAFlags(effect)?.consumption?.groupId;
     if (groupId && !options?.skipGroupCleanup)
     {
         const groupEffects = actor.effects.filter(groupMember =>
-            groupMember.id !== effect.id && groupMember.flags?.['lancer-automations']?.consumption?.groupId === groupId
+            groupMember.id !== effect.id && getLAFlags(groupMember)?.consumption?.groupId === groupId
         );
         if (groupEffects.length > 0)
             actor.deleteEmbeddedDocuments("ActiveEffect", groupEffects.map(groupMember => groupMember.id), { skipGroupCleanup: true });
@@ -2165,12 +2170,12 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) =>
     if (!actor || actor.documentName !== 'Actor')
         return;
 
-    const groupId = effect.flags?.['lancer-automations']?.consumption?.groupId;
+    const groupId = getLAFlags(effect)?.consumption?.groupId;
     if (!groupId)
         return;
 
     const groupEffects = actor.effects.filter(groupMember =>
-        groupMember.id !== effect.id && groupMember.flags?.['lancer-automations']?.consumption?.groupId === groupId
+        groupMember.id !== effect.id && getLAFlags(groupMember)?.consumption?.groupId === groupId
     );
     if (groupEffects.length === 0)
         return;
@@ -2233,12 +2238,12 @@ Hooks.on('preDeleteToken', (tokenDocument, _options, userId) =>
 
 Hooks.on('canvasReady', () =>
 {
-    if (game.settings.get('lancer-automations', 'enableWrecks'))
+    if (getModuleSetting('enableWrecks'))
         canvasReadyWreck();
 });
 Hooks.on('createToken', (tokenDoc, options, userId) =>
 {
-    if (game.settings.get('lancer-automations', 'enableWrecks'))
+    if (getModuleSetting('enableWrecks'))
         preWreck(tokenDoc, options, userId);
 });
 
@@ -2255,7 +2260,7 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
     if (!TEMPLATE_NO_PROVOKE_NAMES.has(baseName))
         return;
     const actor = tokenDoc.actor;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (!actor || !api?.addConstantBonus)
         return;
     try
@@ -2274,7 +2279,7 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
 });
 Hooks.on('renderTileHUD', (app, html) =>
 {
-    if (game.settings.get('lancer-automations', 'enableWrecks'))
+    if (getModuleSetting('enableWrecks'))
         tileHUDButton(app, html);
 });
 

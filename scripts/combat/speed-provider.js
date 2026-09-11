@@ -1,6 +1,7 @@
 /* global Hooks, game, Color, CONST */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { setLAFlag } from '../tools/flag-utils.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const COLOR_STANDARD = 'speedProvider.colorStandard';
 const COLOR_BOOST = 'speedProvider.colorBoost';
@@ -25,7 +26,7 @@ function getColor(key, fallback)
 {
     try
     {
-        const rawColor = game.settings.get(MODULE_ID, key);
+        const rawColor = getModuleSetting(key);
         return Color.from(rawColor ?? fallback);
     }
     catch
@@ -113,7 +114,7 @@ Hooks.on('updateCombat', (combat, change) =>
     if (!combatant?.isOwner)
         return;
     const conditionIds = Array.from(token.actor?.statuses ?? []);
-    combatant.setFlag(MODULE_ID, 'speedProvider.turn-status', conditionIds);
+    setLAFlag(combatant,'speedProvider.turn-status', conditionIds);
 });
 
 Hooks.on('preDeleteCombatant', (combatant) =>

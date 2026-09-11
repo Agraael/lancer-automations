@@ -12,6 +12,7 @@ import { getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { isActorScannedForUser, isActorAllyOfUser } from '../tools/scan-lookup.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
 const SETTING_DELAY_MS = 'tokenStatHintDelayMs';
 const SETTING_SCALE = 'tokenStatHintScale';
@@ -68,66 +69,33 @@ function isEnabled()
 }
 function getDelayMs()
 {
-    try
-    {
-        const raw = Number(game.settings.get(MODULE_ID, SETTING_DELAY_MS));
-        return Number.isFinite(raw) && raw >= 0 ? raw : 500;
-    }
-    catch
-    {
-        return 500;
-    }
+    const raw = Number(getModuleSetting(SETTING_DELAY_MS));
+    return Number.isFinite(raw) && raw >= 0 ? raw : 500;
 }
 function getUserScale()
 {
-    try
-    {
-        const raw = Number(game.settings.get(MODULE_ID, SETTING_SCALE));
-        return Number.isFinite(raw) && raw > 0 ? raw : 1;
-    }
-    catch
-    {
-        return 1;
-    }
+    const raw = Number(getModuleSetting(SETTING_SCALE));
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
 }
 function showForControlled()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_SHOW_CONTROLLED) !== false;
-    }
-    catch
-    {
-        return true;
-    }
+    return getModuleSetting(SETTING_SHOW_CONTROLLED) !== false;
 }
 function isCombatOnly()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_COMBAT_ONLY) === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting(SETTING_COMBAT_ONLY) === true;
 }
 function getLabelMode()
 {
-    try
-    {
-        const raw = game.settings.get(MODULE_ID, SETTING_LABEL_MODE);
-        if (raw === LABEL_ACTOR || raw === LABEL_SCAN)
-            return raw;
-    }
-    catch
-    { /* ignore */ }
+    const raw = getModuleSetting(SETTING_LABEL_MODE);
+    if (raw === LABEL_ACTOR || raw === LABEL_SCAN)
+        return raw;
     return LABEL_SCAN;
 }
 // Per-token tri-state override ('on'/'off'), null = use the global setting.
 function _hintFlagTriState(tokenDoc, key)
 {
-    const raw = tokenDoc?.getFlag?.(MODULE_ID, key);
+    const raw = getLAFlag(tokenDoc,key);
     if (raw === 'on')
         return true;
     if (raw === 'off')
@@ -136,17 +104,12 @@ function _hintFlagTriState(tokenDoc, key)
 }
 export function getUnknownLabel(tokenDoc)
 {
-    const perToken = tokenDoc?.getFlag?.(MODULE_ID, 'statHintUnknownLabel');
+    const perToken = getLAFlag(tokenDoc,'statHintUnknownLabel');
     if (typeof perToken === 'string' && perToken.trim().length > 0)
         return perToken;
-    try
-    {
-        const raw = game.settings.get(MODULE_ID, SETTING_UNKNOWN_LABEL);
-        if (typeof raw === 'string' && raw.trim().length > 0)
-            return raw;
-    }
-    catch
-    { /* ignore */ }
+    const raw = getModuleSetting(SETTING_UNKNOWN_LABEL);
+    if (typeof raw === 'string' && raw.trim().length > 0)
+        return raw;
     return 'UNKNOWN';
 }
 function hideClassWhenUnknown(tokenDoc)
@@ -154,42 +117,22 @@ function hideClassWhenUnknown(tokenDoc)
     const override = _hintFlagTriState(tokenDoc, 'statHintHideClass');
     if (override !== null)
         return override;
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_HIDE_CLASS_UNKNOWN) === true;
-    }
-    catch
-    { /* ignore */ }
-    return false;
+    return getModuleSetting(SETTING_HIDE_CLASS_UNKNOWN) === true;
 }
 function isBurnEnabled()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, 'enableBurnIntegration') !== false;
-    }
-    catch
-    {
-        return true;
-    }
+    return getModuleSetting('enableBurnIntegration') !== false;
 }
 function isInfectionEnabled()
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration') === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('enableInfectionDamageIntegration') === true;
 }
 
 function isScannedByUser(actor, user)
 {
     if (!actor || !user)
         return false;
-    if (actor.getFlag?.(MODULE_ID, 'scannedByAll'))
+    if (getLAFlag(actor,'scannedByAll'))
         return true;
     const key = `${actor.uuid}|${user.id}`;
     const memo = SCANNED_MEMO.get(key);
@@ -250,14 +193,7 @@ function masksCurrentStats(actor, mode, tokenDoc)
     const override = _hintFlagTriState(tokenDoc, 'statHintHideCurrent');
     if (override !== null)
         return override;
-    try
-    {
-        return game.settings.get(MODULE_ID, SETTING_HIDE_CURRENT_ON_SCAN) === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting(SETTING_HIDE_CURRENT_ON_SCAN) === true;
 }
 
 // The same reveal gate the stat-hover uses: GM, OBSERVER permission, or scanned (incl. scannedByAll, allies, player tokens).
@@ -270,7 +206,7 @@ export function isActorRevealedToUser(actor)
 function _bondXpColor(actor)
 {
     const tokenDoc = actor?.getActiveTokens?.()?.[0]?.document;
-    const extras = tokenDoc?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     const entry = extras.find((/** @type {any} */ extra) => extra?.autoKey === 'bondXp');
     return entry?.color?.stops?.[0] || '#00b8d4';
 }
@@ -1045,7 +981,7 @@ function buildExtrasHintHtml(token, actor, maskCurrent = false)
     const tokenDoc = token?.document;
     if (!tokenDoc || !actor)
         return '';
-    const extras = tokenDoc.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     if (!extras.length)
         return '';
     const visible = extras.filter(extra => !extra.hideInHint && _resolveExtraBarValues(actor, extra).ownerOk);
@@ -1090,7 +1026,7 @@ function buildPopupDom(token)
     {
         const isMechOrNpc = stats.type === 'mech' || stats.type === 'npc';
         headerHtml = buildHeaderHtml(token, 'reveal');
-        const showHase = game.settings.get(MODULE_ID, SETTING_SHOW_HASE) === true;
+        const showHase = getModuleSetting(SETTING_SHOW_HASE) === true;
         rowsHtml = isMechOrNpc
             ? buildTwoZoneStatsHtml(actor, stats, { maskCurrent, showHase })
             : `<div class="la-stat-hint-rows">${buildRevealRowsHtml(actor, stats, { maskCurrent })}</div>`;

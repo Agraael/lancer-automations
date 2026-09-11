@@ -462,7 +462,7 @@ const turretShutdownOnDeathAutomation = {
             return;
         const turrets = (canvas.tokens?.placeables ?? []).filter(token =>
             token.actor?.type === 'deployable'
-            && token.document?.getFlag?.('lancer-automations', 'ownerActorUuid') === ownerUuid);
+            && api.getLAFlag(token.document,'ownerActorUuid') === ownerUuid);
         if (turrets.length)
             await api.applyEffectsToTokens({ tokens: turrets, effectNames: ['shutdown'], note: 'Owner destroyed', duration: { label: 'unlimited' } });
     }
@@ -575,7 +575,7 @@ const restockDroneSupportAutomation = {
                     mode: "ENTER",
                     function: async (token, parent, aura, options) =>
                     {
-                        const lancerApi = game.modules.get('lancer-automations')?.api;
+                        const lancerApi = api;
                         if (!lancerApi || !options.hasEntered)
                             return;
                         if (!lancerApi.isFriendly(token, parent))
@@ -805,7 +805,7 @@ function buildRingOfFireTurnStartCallback()
 {
     return async (token, parent) =>
     {
-        const la = game.modules.get('lancer-automations')?.api;
+        const la = api;
         if (!la || !token?.actor || !parent?.actor)
             return;
         if (!hasRingOfFire(parent, la) || !la.isHostile(token, parent))
@@ -848,7 +848,7 @@ function buildDefenseNetAuraCallback()
         };
         if (options.isPreview)
             return;
-        const la = game.modules.get('lancer-automations')?.api;
+        const la = api;
         if (!la)
             return;
 
@@ -1172,7 +1172,7 @@ const lesserSightAutomation = {
                         {
                             if (!reactorToken || !target)
                                 return false;
-                            const laApi = game.modules.get('lancer-automations')?.api;
+                            const laApi = api;
                             if (!laApi)
                                 return false;
                             if (laApi.getTokenDistance(reactorToken, target) > 3)
@@ -1369,13 +1369,13 @@ const instinctModeAutomation = {
                     return false;
                 if (!api.hasLineOfSight(reactorToken, attacker))
                     return false;
-                return effect.flags['lancer-automations']?.instinctTurnKey !== api.currentTurnKey();
+                return api.getLAFlags(effect)?.instinctTurnKey !== api.currentTurnKey();
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 const attacker = triggerData.triggeringToken;
                 const effect = api.findEffectOnToken(reactorToken, effect => effect.name === "Instinct Mode");
-                await effect?.setFlag('lancer-automations', 'instinctTurnKey', api.currentTurnKey());
+                await api.setLAFlag(effect,'instinctTurnKey', api.currentTurnKey());
                 const ask = await api.askCard({
                     title: "INSTINCT MODE",
                     description: `Boost towards <b>${attacker?.name ?? 'the attacker'}</b> and strike with the Carbon Fiber Sword?`,
@@ -1533,7 +1533,6 @@ const chaffLaunchersAutomation = {
                         {
                             if (!state?.actor?.system?.statuses?.engaged)
                                 return false;
-                            const api = game.modules.get('lancer-automations').api;
                             const attackType = api.getWeaponType(state.item) || state.data?.attack_type || 'Ranged';
                             return !attackType.includes('Melee');
                         }
@@ -1676,7 +1675,7 @@ const coolingModuleAutomation = {
             activationMode: "instead",
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                await reactorToken.document.setFlag('lancer-automations', 'coolingModulePos', {
+                await api.setLAFlag(reactorToken.document,'coolingModulePos', {
                     combatId: game.combat?.id ?? null,
                     ...api.getTokenPosition(reactorToken)
                 });
@@ -1693,7 +1692,7 @@ const coolingModuleAutomation = {
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                const saved = reactorToken.document.getFlag('lancer-automations', 'coolingModulePos');
+                const saved = api.getLAFlag(reactorToken.document,'coolingModulePos');
                 if (!saved || saved.combatId !== (game.combat?.id ?? null))
                     return false;
                 if (!api.samePosition(saved, api.getTokenPosition(reactorToken)))
@@ -1891,7 +1890,7 @@ const focusDownAutomation = {
             {
                 const hitTokens = triggerData.hitTokens ?? [];
                 const burnTargets = hitTokens.filter(target => api.findEffectOnToken(target, effect =>
-                    effect.name === SCOURER_MARK_NAME && effect.flags['lancer-automations']?.[SCOURER_MARK_FLAG] === reactorToken.id));
+                    effect.name === SCOURER_MARK_NAME && api.getLAFlags(effect)?.[SCOURER_MARK_FLAG] === reactorToken.id));
                 if (burnTargets.length)
                 {
                     await api.injectBonusToFlowState(triggerData.flowState, {
@@ -2240,10 +2239,9 @@ const guerillaWarfareAutomation = {
 // Terrain Printer waypoint hook: friendly token in the zone may spend 1 movement to travel to the twin waypoint.
 async function _terrainPrinterHookFn(template, scene, token)
 {
-    const api = game.modules.get('lancer-automations')?.api;
     if (!api || !token)
         return;
-    const data = template.getFlag('lancer-automations', 'terrainPrinterData');
+    const data = api.getLAFlag(template,'terrainPrinterData');
     if (!data)
         return;
     const architect = canvas.tokens.get(data.architectTokenId);
@@ -2274,10 +2272,9 @@ async function _terrainPrinterHookFn(template, scene, token)
 // Sandblast entered/onInside hook: add invisible target_modifier bonus + soft cover to tokens in the zone.
 async function _sandblastEnteredHookFn(template, scene, token)
 {
-    const api = game.modules.get('lancer-automations')?.api;
     if (!api || !token?.actor)
         return;
-    const existing = (token.actor.getFlag('lancer-automations', 'global_bonuses') || []);
+    const existing = (api.getLAFlag(token.actor,'global_bonuses') || []);
     if (existing.some(bonus => bonus.id === 'sandblast-invis-' + template.id))
         return;
     await api.addGlobalBonus(token.actor, {
@@ -2295,7 +2292,6 @@ async function _sandblastEnteredHookFn(template, scene, token)
 // Sandblast left hook: remove invisible bonus and soft cover when token leaves the zone.
 async function _sandblastLeftHookFn(template, scene, token)
 {
-    const api = game.modules.get('lancer-automations')?.api;
     if (!api || !token?.actor)
         return;
     await api.removeGlobalBonus(token.actor, 'sandblast-invis-' + template.id);
@@ -2307,7 +2303,6 @@ async function _sandblastLeftHookFn(template, scene, token)
 }
 async function _sandblastDeletedHookFn(template, scene, token, context)
 {
-    const api = game.modules.get('lancer-automations')?.api;
     if (!api)
         return;
     for (const inside of context?.contained ?? [])
@@ -2334,8 +2329,7 @@ async function _sandblastTurnEndHookFn(template, scene, token)
 
 async function _remoteCloudHealHookFn(template, scene, token)
 {
-    const api = game.modules.get('lancer-automations')?.api;
-    const data = template?.getFlag?.('lancer-automations', 'remoteCloud');
+    const data = api.getLAFlag(template,'remoteCloud');
     if (!api || !data || !token?.actor || token.actor.type === 'deployable')
         return;
     const reactorActor = await fromUuid(data.reactorUuid);
@@ -3070,7 +3064,7 @@ const witchBlurAutomation = {
                     subtype: "invisible",
                     applyToTargetter: true,
                     applyToCondition: (target, state) =>
-                        !!game.modules.get('lancer-automations')?.api?.inDangerZone(state?.actor)
+                        !!api?.inDangerZone(state?.actor)
                 },
                 addOptions: { duration: 'constant' }
             });
@@ -3146,14 +3140,14 @@ const witchPetrifyAutomation = {
             {
                 const marker = api.findEffectOnToken(triggerData.triggeringToken, WITCH_PETRIFY_EFFECT,
                     { extraFlags: { [WITCH_PETRIFY_FLAG]: reactorToken.id } });
-                return !!marker && marker.flags?.['lancer-automations']?.petrifyAppliedAt !== api.currentTurnKey();
+                return !!marker && api.getLAFlags(marker)?.petrifyAppliedAt !== api.currentTurnKey();
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 const target = triggerData.triggeringToken;
                 const marker = api.findEffectOnToken(target, WITCH_PETRIFY_EFFECT,
                     { extraFlags: { [WITCH_PETRIFY_FLAG]: reactorToken.id } });
-                const stage = marker?.flags?.['lancer-automations']?.petrifyStage ?? 0;
+                const stage = api.getLAFlags(marker)?.petrifyStage ?? 0;
 
                 await api.clearMarks(reactorToken, WITCH_PETRIFY_EFFECT, { flagKey: WITCH_PETRIFY_FLAG });
 
@@ -3833,7 +3827,7 @@ api.registerDefaultItemReactions({
                     const template = (Array.isArray(result) ? result : [result])[0]?.template;
                     if (template)
                     {
-                        await template.setFlag('lancer-automations', 'remoteCloud', {
+                        await api.setLAFlag(template,'remoteCloud', {
                             heal: api.tierValue(reactorToken, [2, 4, 6]),
                             reactorUuid: reactorToken.actor.uuid
                         });
@@ -4621,7 +4615,7 @@ api.registerDefaultItemReactions({
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken)
             {
-                return !reactorToken.document.getFlag("lancer-automations", "feign_death");
+                return !api.getLAFlag(reactorToken.document,"feign_death");
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
@@ -4830,7 +4824,7 @@ api.registerDefaultItemReactions({
                 {
                     if (triggerData.statusId !== 'immobilized')
                         return false;
-                    return !!triggerData.effect?.flags?.['lancer-automations']?.sealantBlendSourceId;
+                    return !!api.getLAFlags(triggerData.effect)?.sealantBlendSourceId;
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
@@ -5421,11 +5415,11 @@ api.registerDefaultItemReactions({
                 const wp2 = wp2Result[0];
 
                 // Cross-reference each waypoint with the other
-                await wp1.template.setFlag('lancer-automations', 'terrainPrinterData', {
+                await api.setLAFlag(wp1.template,'terrainPrinterData', {
                     otherTemplateId: wp2.template.id,
                     architectTokenId: reactorToken.id
                 });
-                await wp2.template.setFlag('lancer-automations', 'terrainPrinterData', {
+                await api.setLAFlag(wp2.template,'terrainPrinterData', {
                     otherTemplateId: wp1.template.id,
                     architectTokenId: reactorToken.id
                 });

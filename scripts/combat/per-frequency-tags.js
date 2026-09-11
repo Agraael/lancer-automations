@@ -4,12 +4,13 @@ import { getAutoConsumeDisabled, getSubAutoConsumeDisabled, getConsumeOn } from 
 import { getSettingEnabled } from '../setup/settings-register.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 const SETTING_KEY = 'enablePerRoundTurnTags';
 const TARGET_FLOWS = ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow', 'ActivationFlow', 'SystemFlow', 'CoreActiveFlow'];
 
 function enabled()
 {
-    return getSettingEnabled(SETTING_KEY, MODULE_ID);
+    return getSettingEnabled(SETTING_KEY);
 }
 
 function inCombat()
@@ -194,7 +195,7 @@ export function rankSubKey(rankIdx)
 }
 export function getSubUses(item, subKey)
 {
-    return item?.getFlag?.(MODULE_ID, SUB_FLAG)?.[subKey] ?? {};
+    return getLAFlag(item,SUB_FLAG)?.[subKey] ?? {};
 }
 export function getSubUsed(item, subKey, field)
 {
@@ -202,9 +203,9 @@ export function getSubUsed(item, subKey, field)
 }
 export async function patchSubUses(item, subKey, patch)
 {
-    const all = foundry.utils.duplicate(item.getFlag(MODULE_ID, SUB_FLAG) ?? {});
+    const all = foundry.utils.duplicate(getLAFlag(item,SUB_FLAG) ?? {});
     all[subKey] = { ...all[subKey], ...patch };
-    await item.setFlag(MODULE_ID, SUB_FLAG, all);
+    await setLAFlag(item,SUB_FLAG, all);
 }
 
 export function subHasLimits(sub)
@@ -422,7 +423,7 @@ async function resetPerFrequencyOnRepairStep(state)
             patch['system.uses_per_scene.value'] = 0;
             touched = true;
         }
-        const subMap = item.getFlag?.(MODULE_ID, 'perFreqSub');
+        const subMap = getLAFlag(item,'perFreqSub');
         for (const [subKey, entry] of Object.entries(subMap ?? {}))
         {
             for (const subField of ['uses_per_round', 'uses_per_turn', 'uses_per_scene'])
@@ -494,7 +495,7 @@ async function resetForCombatants(combatants, scope)
                 patch[`system.${field}.value`] = 0;
                 touched = true;
             }
-            const subMap = item.getFlag?.(MODULE_ID, 'perFreqSub');
+            const subMap = getLAFlag(item,'perFreqSub');
             for (const [subKey, entry] of Object.entries(subMap ?? {}))
             {
                 if (Number(entry?.[field]?.value ?? 0) > 0)

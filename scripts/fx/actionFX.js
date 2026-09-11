@@ -1,6 +1,8 @@
 /* global game, Sequence, Sequencer, Hooks, canvas, foundry */
 
 import { isActionFXEnabled, isRollResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
 
 // Action FX sequences; every one no-ops unless Sequencer and lancer-weapon-fx are active and Action FX is enabled.
@@ -20,17 +22,10 @@ function _canPlay()
 function _effectVolume(fx, action)
 {
     const scale = ACTION_FX_PREVIEW[action]?.scale ?? 0.5;
-    try
-    {
-        if (game.settings.get('lancer-automations', `tah.actionFxSound.${action}`) === false)
-            return 0;
-        const master = Number(game.settings.get('lancer-automations', 'tah.actionFxVolume'));
-        return fx.getEffectVolume(scale) * (Number.isFinite(master) ? master : 1);
-    }
-    catch
-    {
-        return fx.getEffectVolume(scale);
-    }
+    if (getModuleSetting(`tah.actionFxSound.${action}`) === false)
+        return 0;
+    const master = Number(getModuleSetting('tah.actionFxVolume'));
+    return fx.getEffectVolume(scale) * (Number.isFinite(master) ? master : 1);
 }
 
 const ACTION_FX_PREVIEW = {
@@ -124,15 +119,8 @@ export function registerWeaponFxAboveTokens()
     {
         if (data?.moduleName !== 'Lancer Weapon FX')
             return;
-        try
-        {
-            if (!game.settings.get('lancer-automations', 'weaponFxAboveTokens'))
-                return;
-        }
-        catch
-        {
+        if (!getModuleSetting('weaponFxAboveTokens'))
             return;
-        }
         if (data.screenSpace || data.screenSpaceAboveUI || data.aboveInterface)
             return;
         data.aboveLighting = true;
@@ -167,7 +155,7 @@ export function previewActionFxSound(action)
     const src = typeof entry.src === 'function' ? entry.src() : entry.src;
     const fx = _weaponFx();
     const base = fx ? fx.getEffectVolume(entry.scale) : entry.scale;
-    const masterRaw = Number(game.settings.get('lancer-automations', 'tah.actionFxVolume'));
+    const masterRaw = Number(getModuleSetting('tah.actionFxVolume'));
     const master = Number.isFinite(masterRaw) ? masterRaw : 1;
     foundry.audio.AudioHelper.play(/** @type {any} */ ({ src, volume: base * master, autoplay: true, loop: false }), false);
 }
@@ -937,14 +925,7 @@ const BADGE_FX = {
 
 function badgeItemNameOn()
 {
-    try
-    {
-        return game.settings.get('lancer-automations', 'actionBadgeItemName') === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('actionBadgeItemName') === true;
 }
 
 const _svgTextCache = new Map();
@@ -2139,7 +2120,7 @@ function _playActionFxForActivation(activation, token, title, nameOnBadge = true
     const actor = token?.actor;
     if (actor?.type === 'deployable' && actor.system?.type === 'Mine' && title === actor.name)
     {
-        if (!actor.getFlag?.('lancer-automations', 'mineFxDisabled'))
+        if (!getLAFlag(actor,'mineFxDisabled'))
             return playMineDetonationFX(token);
         return undefined;
     }
@@ -2296,7 +2277,7 @@ Hooks.on('lancer.preFlow.SimpleActivationFlow', (flow) =>
 
 function _playGenericPrintActivationFX(flow)
 {
-    if (!game.settings.get('lancer-automations', 'treatGenericPrintAsActivation'))
+    if (!getModuleSetting('treatGenericPrintAsActivation'))
         return;
     const token = _flowSourceToken(flow);
     if (token)
@@ -2430,6 +2411,7 @@ export async function playTargetFailFX(token)
         .file('jb2a.ui.miss.red')
         .atLocation(token)
         .scaleToObject(1.5)
+        .xray(true)
         .aboveInterface()
         .sound()
         .file('modules/lancer-automations/FX/audio/targetFail.wav')
@@ -2534,6 +2516,7 @@ const _missCritOverlayHandler = async (flow) =>
                 .file(file)
                 .attachTo(tokenObj)
                 .scale(0.5)
+                .xray(true)
                 .aboveInterface()
                 .delay(delay);
             setTimeout(() => playStatsSound(soundKey), delay);
@@ -2579,6 +2562,7 @@ export async function playContestedOutcomeFX(winnerToken, loserToken)
                 .file('jb2a.ui.success.green')
                 .attachTo(winnerToken)
                 .scale(0.5)
+                .xray(true)
                 .aboveInterface()
                 .play();
             playStatsSound('success');
@@ -2600,6 +2584,7 @@ export async function playContestedOutcomeFX(winnerToken, loserToken)
                 .file('jb2a.ui.failure.red')
                 .attachTo(loserToken)
                 .scale(0.5)
+                .xray(true)
                 .aboveInterface()
                 .play();
             playStatsSound('fail');
@@ -2641,6 +2626,7 @@ export async function playStatRollOutcomeFX(token, success, { waitForActiveFX = 
             .file(file)
             .attachTo(token)
             .scale(0.5)
+            .xray(true)
             .aboveInterface()
             .play();
         playStatsSound(soundKey);

@@ -14,6 +14,7 @@ import {
     createMergedRangeHighlight, isPulseLosEnabled,
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
+import { getLAFlag, setLAFlag } from "../../tools/flag-utils.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
@@ -67,7 +68,7 @@ async function _applyZoneExpiry(results, casterToken, expires)
     for (const placed of results)
     {
         if (placed?.template?.setFlag)
-            await placed.template.setFlag('lancer-automations', 'zoneExpires', { on: expires.on, tokenId: originId, remaining });
+            await setLAFlag(placed.template,'zoneExpires', { on: expires.on, tokenId: originId, remaining });
     }
 }
 
@@ -81,7 +82,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) =>
     const ticked = [];
     for (const template of (canvas.scene?.templates ?? []))
     {
-        const expiry = template.getFlag?.('lancer-automations', 'zoneExpires');
+        const expiry = getLAFlag(template,'zoneExpires');
         if (!expiry?.on)
             continue;
         const hit = (expiry.on === 'ownerTurnStart' && expiry.tokenId === currentTokenId)
@@ -97,7 +98,7 @@ Hooks.on('combatTurnChange', async (combat, prior, current) =>
     for (const template of expired)
         await template.delete().catch(() => {});
     for (const entry of ticked)
-        await entry.template.setFlag('lancer-automations', 'zoneExpires', entry.expiry);
+        await setLAFlag(entry.template,'zoneExpires', entry.expiry);
 });
 
 async function _placeZoneInner(casterToken, options = {})

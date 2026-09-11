@@ -1,4 +1,7 @@
 import { runInOnInitTriggerContext } from '../bonuses/flagged-effects.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 
 // Lancer system patches applied at init/ready, without editing the system bundle.
 
@@ -139,7 +142,7 @@ async function snapshotPermanentEffects(state)
     if (!state.actor || !state.data)
         return true;
     const perm = state.actor.effects
-        .filter(e => e.getFlag('lancer-automations', 'duration')?.label === 'permanent')
+        .filter(e => getLAFlag(e,'duration')?.label === 'permanent')
         .map(effect =>
         {
             const effectData = effect.toObject();
@@ -322,7 +325,7 @@ function _injectPilotStressBar(jHtml, actor)
         return;
     try
     {
-        if (!game.settings.get('lancer-automations', 'statBarDefaultPilotStress'))
+        if (!getModuleSetting('statBarDefaultPilotStress'))
             return;
     }
     catch
@@ -1057,7 +1060,7 @@ export function initCustomFlowDispatch()
 }
 
 /**
- * Call via API: game.modules.get('lancer-automations').api.repairLCPData()
+ * Call via API: game.modules.get(MODULE_ID).api.repairLCPData()
  */
 export async function repairLCPData()
 {
@@ -1501,7 +1504,7 @@ function getDesiredWallHeight(actor)
     let vsEnabled = false;
     try
     {
-        vsEnabled = !!game.settings.get('lancer-automations', 'autoTokenHeightVehicleSquad');
+        vsEnabled = !!getModuleSetting('autoTokenHeightVehicleSquad');
     }
     catch
     { /* ignore */ }
@@ -1529,7 +1532,7 @@ Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
         return;
     if (!game.modules.get('wall-height')?.active)
         return;
-    if (!game.settings.get('lancer-automations', 'autoTokenHeight'))
+    if (!getModuleSetting('autoTokenHeight'))
         return;
     const actor = tokenDoc.actor;
     if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type))
@@ -1697,12 +1700,12 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
     if (!success)
         return;
     const actor = flow?.state?.actor;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (!actor || !api)
         return;
     for (const item of actor.items)
     {
-        const flags = item.flags?.['lancer-automations'] ?? {};
+        const flags = getLAFlags(item) ?? {};
         const stale = {};
         if (flags.activeStateData)
             stale.activeStateData = true;
@@ -1714,9 +1717,9 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
             await api.removeItemFlags(item, stale);
     }
     const actorStale = {};
-    if (actor.getFlag('lancer-automations', 'lockedActions'))
+    if (getLAFlag(actor,'lockedActions'))
         actorStale.lockedActions = true;
-    if (actor.getFlag('lancer-automations', 'lockedActionTypes'))
+    if (getLAFlag(actor,'lockedActionTypes'))
         actorStale.lockedActionTypes = true;
     if (Object.keys(actorStale).length)
         await api.removeActorFlags(actor, actorStale);

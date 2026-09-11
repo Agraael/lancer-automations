@@ -1,5 +1,6 @@
 /*global console, game, Dialog, canvas, $, foundry */
 import { ReactionManager, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./reaction-manager.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { hasReactionAvailable } from "../tools/misc-tools.js";
 import { runInFlowBody } from "./flow-queue.js";
 
@@ -26,7 +27,7 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
         const code = source?.activationCode;
         if (code)
         {
-            const api = game.modules.get('lancer-automations')?.api;
+            const api = game.modules.get(MODULE_ID)?.api;
             const invoke = typeof code === 'function'
                 ? () => code(triggerType, triggerData, token, item, activationName, api)
                 : (typeof code === 'string'
@@ -108,7 +109,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                     }).begin();
                 }
                 else
-                    game.modules.get('lancer-automations').api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
+                    game.modules.get(MODULE_ID).api.executeSimpleActivation(token.actor, { title: item.name, action: { name: item.name } }, { item: item });
             }
         };
 
@@ -192,7 +193,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                 };
             }
 
-            await game.modules.get('lancer-automations').api.executeSimpleActivation(actor, flowData);
+            await game.modules.get(MODULE_ID).api.executeSimpleActivation(actor, flowData);
         };
 
         if (activationType === "none")

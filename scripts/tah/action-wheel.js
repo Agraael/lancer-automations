@@ -1,4 +1,5 @@
 import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWheel } from '../tools/radial-wheel.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { hud } from './index.js';
 import { laHudRenderIcon, laHudStripeStyle } from './item-helpers.js';
 import { onHudRowHover, deactivateRangePreview } from './hover.js';
@@ -109,14 +110,14 @@ export async function toggleActionWheel()
     {
         closeRadialWheel(); return;
     }
-    if (!game.settings.get(MODULE_ID, 'tahEnabled'))
+    if (!getModuleSetting('tahEnabled'))
     {
         ui.notifications.info('Enable the Token Action HUD to use the action wheel.');
         return;
     }
     const token = canvas.tokens?.controlled?.[0] ?? null;
     // No selection: the narrative HUD's favorites, centered on the cursor.
-    if (!token && !game.settings.get(MODULE_ID, 'tah.narrativeMode'))
+    if (!token && !getModuleSetting('tah.narrativeMode'))
         return;
     if (token)
     {
@@ -189,7 +190,7 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyF' }],
         onDown: () =>
         {
-            if (!canvas.tokens?.controlled?.length && !game.settings.get(MODULE_ID, 'tah.narrativeMode'))
+            if (!canvas.tokens?.controlled?.length && !getModuleSetting('tah.narrativeMode'))
                 return false;
             toggleActionWheel();
             return true;

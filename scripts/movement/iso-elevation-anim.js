@@ -1,6 +1,7 @@
 /* global game, canvas, Hooks, requestAnimationFrame */
 
 import { ISO_SETTINGS, isIsoPerspectiveFeatureEnabled, ISO_PERSPECTIVE_ID } from '../setup/iso-settings.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 const ISO_MODULE_ID = ISO_PERSPECTIVE_ID;
 
@@ -50,7 +51,7 @@ function _laIsoDebug(token, frame)
         buf = { tokenName: token.document?.name, tokenId: id, autoClimbOn: null, frames: [] };
         try
         {
-            buf.autoClimbOn = !!game.settings.get('lancer-automations', 'enableClimbWaypoints');
+            buf.autoClimbOn = !!getModuleSetting('enableClimbWaypoints');
         }
         catch
         { /* ignore */ }

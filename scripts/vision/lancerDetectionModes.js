@@ -7,6 +7,7 @@ import { laLosFlagOnly } from "./laWallLos.js";
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
 const SETTING_LOS = 'lancerLos';
 const SETTING_LOS_HEIGHT_RULE = 'lancerLosHeightRule';
@@ -1019,7 +1020,7 @@ function _dumpLos()
     const viewer = canvas?.tokens?.controlled?.[0];
     if (!viewer)
     {
-        console.warn('lancerLosDump: select a viewer token first');
+        console.warn('lancer-automations | lancerLosDump | select a viewer token first');
         return null;
     }
     const targeted = Array.from(game.user?.targets ?? []);
@@ -1082,7 +1083,7 @@ function _dumpLos()
         dump.push({ viewer: viewer.document.name, viewerEye: heightV, target: target.document.name, targetEye: heightT, grid: canvas.grid.size,
             forward: { rays, dense: denseForward, denseWitness: denseForwardWitness }, reverse: { rays: raysReverse, dense: denseReverse, denseWitness: denseReverseWitness }, cachedRenderValue: cached, nearEdges });
     }
-    console.log('LANCER_LOS_DUMP\n' + JSON.stringify(dump, null, 1));
+    console.log('lancer-automations | LANCER_LOS_DUMP\n' + JSON.stringify(dump, null, 1));
     return dump;
 }
 globalThis.lancerLosDump = _dumpLos;
@@ -1378,7 +1379,7 @@ class DetectionModeLancerLineOfSight extends DetectionMode
         // plain-sight semantics: blind viewers and invisible targets stay hidden
         if (!super._canDetect(visionSource, target))
             return false;
-        if (target.document?.getFlag?.(MODULE_ID, 'awarenessMode') === 'ignore')
+        if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
         const viewerToken = visionSource?.object;
         if (!viewerToken?.document)
@@ -1414,7 +1415,7 @@ class DetectionModeLancerLosShadow extends DetectionMode
     {
         if (!(target instanceof Token))
             return false;
-        if (target.document?.getFlag?.(MODULE_ID, 'awarenessMode') === 'ignore')
+        if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
         if (_blindedBlocksSight(visionSource?.object, target))
             return false;
@@ -1453,7 +1454,7 @@ class DetectionModeLancerAwareness extends DetectionMode
             return false;
         if (_basicVisionSees(visionSource, target))
             return false;
-        if (target.document?.getFlag?.(MODULE_ID, 'awarenessMode') === 'ignore')
+        if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
         // Sensor wins: if the same observer's sensor mode would detect this target, suppress awareness.
         if (_sensorCanDetect(visionSource, target))
@@ -1503,7 +1504,7 @@ function _sensorCanDetect(visionSource, target)
         return false;
     if (getModuleSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
         return false;
-    const targetMode = target.document?.getFlag?.(MODULE_ID, 'awarenessMode');
+    const targetMode = getLAFlag(target.document,'awarenessMode');
     if (targetMode && targetMode !== 'default')
         return false;
     const sensorRange = sourceToken.actor?.system?.sensor_range;
@@ -1549,7 +1550,7 @@ class DetectionModeLancerSensor extends DetectionMode
             return false;
         if (_basicVisionSees(visionSource, target))
             return false;
-        const mode = target.document?.getFlag?.(MODULE_ID, 'awarenessMode');
+        const mode = getLAFlag(target.document,'awarenessMode');
         if (mode && mode !== 'default')
             return false;
         if (_losCanDetect(target))
@@ -1917,7 +1918,7 @@ function _wrapPlainSightVeto(mode)
         if (!result)
             return result;
         // The Lancer LOS and shadow modes own token detection, so basic vision never clips a token at a wall.
-        if (getModuleSetting(SETTING_LOS) && target instanceof Token && target.document?.getFlag?.(MODULE_ID, 'awarenessMode') !== 'ignore')
+        if (getModuleSetting(SETTING_LOS) && target instanceof Token && getLAFlag(target.document,'awarenessMode') !== 'ignore')
             return false;
         return result;
     };
@@ -2114,7 +2115,7 @@ function _getOverlayConfig(token)
         return null;
     if (getModuleSetting(SETTING_SILH_FILTER_TEST))
         return null;
-    const mode = token.document?.getFlag?.(MODULE_ID, 'awarenessMode') ?? 'default';
+    const mode = getLAFlag(token.document,'awarenessMode') ?? 'default';
     if (mode === 'ignore' || mode === 'visible')
         return null;
     const simple = mode === 'simple';

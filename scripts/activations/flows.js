@@ -3,6 +3,7 @@
  */
 
 import { injectBonusToFlowState } from '../bonuses/genericBonuses.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 
 import('../bonuses/genericBonuses.js');
 
@@ -91,7 +92,7 @@ export const ActiveFlowState = {
 
 export function bindChatMessageStateInterceptor(message, html)
 {
-    const flowState = message.flags?.["lancer-automations"]?.flowState;
+    const flowState = getLAFlags(message)?.flowState;
     if (!flowState)
         return;
 

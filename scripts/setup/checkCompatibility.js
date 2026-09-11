@@ -1,6 +1,7 @@
 // Detects setting conflicts with other modules (csm-lancer-qol, lancer-alt-structure) and offers a one-click autofix + reload.
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 /**
  * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
@@ -10,7 +11,7 @@ function isEngagementReactionEnabled()
 {
     try
     {
-        const general = game.settings.get(MODULE_ID, 'generalReactions') || {};
+        const general = getModuleSetting('generalReactions') || {};
         const entry = general['Engagement'];
         if (!entry)
             return true;
@@ -42,7 +43,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
-                const statusFXConfig = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+                const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
                 if (!statusFXConfig.master)
                     return false;
                 try
@@ -68,7 +69,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
-                const statusFXConfig = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+                const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
                 if (!statusFXConfig.master)
                     return false;
                 try
@@ -96,7 +97,7 @@ function getConflictRules()
                     return false;
                 try
                 {
-                    if (!game.settings.get(MODULE_ID, 'enableAltStruct'))
+                    if (!getModuleSetting('enableAltStruct'))
                         return false;
                     return game.settings.get('csm-lancer-qol', 'oneStructNPCAutomation') === true;
                 }
@@ -121,7 +122,7 @@ function getConflictRules()
                     return false;
                 try
                 {
-                    return game.settings.get(MODULE_ID, 'enableAltStruct') === true;
+                    return getModuleSetting('enableAltStruct') === true;
                 }
                 catch
                 {
@@ -170,7 +171,7 @@ function getConflictRules()
                     return false;
                 try
                 {
-                    const statusFXConfig = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+                    const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
                     if (!statusFXConfig.removeStatusesOnDeath)
                         return false;
                     return game.settings.get('csm-lancer-qol', 'enableWipOnDeath') === true;
@@ -195,7 +196,7 @@ function getConflictRules()
                     return false;
                 try
                 {
-                    return game.settings.get(MODULE_ID, 'enableBuiltinSpeedProvider') === true;
+                    return getModuleSetting('enableBuiltinSpeedProvider') === true;
                 }
                 catch
                 {
@@ -218,7 +219,7 @@ function getConflictRules()
                     return false;
                 try
                 {
-                    if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+                    if (!getModuleSetting('enableWrecks'))
                         return false;
                     return game.settings.get('csm-lancer-qol', 'enableAutomationWrecks') === true;
                 }
@@ -328,7 +329,7 @@ function showQolAdvisoryOnce()
 {
     if (!game.modules.get('csm-lancer-qol')?.active)
         return;
-    if (game.settings.get(MODULE_ID, 'qolAdvisoryShown'))
+    if (getModuleSetting('qolAdvisoryShown'))
         return;
     game.settings.set(MODULE_ID, 'qolAdvisoryShown', true);
     new Dialog({
@@ -362,7 +363,7 @@ export function checkCompatibility()
     const detected = rules.filter(rule => rule.check());
 
     const conflicts = detected.filter(rule => typeof rule.fix === 'function');
-    const seen = /** @type {string[]} */ (game.settings.get(MODULE_ID, 'compatWarningsShown') || []);
+    const seen = /** @type {string[]} */ (getModuleSetting('compatWarningsShown') || []);
     const warnings = detected.filter(rule => typeof rule.fix !== 'function' && !seen.includes(rule.id));
 
     if (conflicts.length === 0 && warnings.length === 0)

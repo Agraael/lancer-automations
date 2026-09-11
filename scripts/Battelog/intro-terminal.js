@@ -1,5 +1,6 @@
 // Shared CRT shell: playTerminal + typeTerminalLines are reused by seasonal/annual.js.
 import { playBattleLogSound, playBattleLogTheme } from '../tah/sound.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 const INTRO_SPEED = 1.7;
 
@@ -8,14 +9,7 @@ const THEME_LEAD_MS = 500;
 
 function _themeStart()
 {
-    try
-    {
-        return game.settings.get('lancer-automations', 'tah.battleLog.themeStart') || 'intro';
-    }
-    catch
-    {
-        return 'intro';
-    }
+    return getModuleSetting('tah.battleLog.themeStart') || 'intro';
 }
 
 // Letters+digits only so per-frame scramble doesn't reflow the fixed-width slot.

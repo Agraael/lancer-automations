@@ -7,6 +7,8 @@ import {
     measureGridDistance, pixelToOffset, isPositionInRange
 } from "./grid-helpers.js";
 import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { hasLineOfSight } from "../vision/lancerDetectionModes.js";
 
 export { getMinGridDistance };
@@ -79,15 +81,7 @@ export function checkOverwatchCondition(reactor, mover, startPos)
     if (!hasReactionAvailable(reactor))
         return false;
 
-    let losEnabled = false;
-    try
-    {
-        losEnabled = game.settings.get('lancer-automations', 'lancerLos') === true;
-    }
-    catch
-    {
-        losEnabled = false;
-    }
+    const losEnabled = getModuleSetting('lancerLos') === true;
     if (losEnabled && !hasLineOfSight(reactor, mover))
         return false;
 
@@ -111,7 +105,7 @@ export function checkOverwatchCondition(reactor, mover, startPos)
 
 export async function checkOverwatch(token, distance, elevation, startPos, endPos)
 {
-    if (!game.settings.get('lancer-automations', 'overwatchEnabled'))
+    if (!getModuleSetting('overwatchEnabled'))
         return;
 
     const movedToken = token;
@@ -269,7 +263,7 @@ export function displayOverwatch(reactors, target)
     </div>
     `;
 
-    const mode = game.settings.get('lancer-automations', 'reactionReminder');
+    const mode = getModuleSetting('reactionReminder');
 
     if (mode === 'p')
     {
@@ -499,7 +493,7 @@ export function canProvokeReaction(triggering, reactor, reasonOut = null)
         return true;
     if (triggering.id === reactor.id)
         return true;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     const hasStatus = (token, statusId) =>
     {
         if (api?.findEffectOnToken && api.findEffectOnToken(token, statusId))
@@ -554,7 +548,7 @@ export function canEngage(token1, token2)
     if (token1.actor.system.structure?.value === 0 || token2.actor.system.structure?.value === 0)
         return false;
 
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
 
     const checkStatus = (token, statusName) =>
     {
@@ -590,7 +584,7 @@ function hasEngagedStatus(token)
 {
     if (!token?.actor)
         return false;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (api?.findEffectOnToken && api.findEffectOnToken(token, 'engaged'))
         return true;
     return !!token.actor.effects?.some(effect => effect.statuses?.has('engaged') && !effect.disabled);
@@ -713,7 +707,7 @@ export async function updateAllEngagements(options = {})
     if (!game.user.isGM)
         return;
 
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
 
     if (!api)
         return;

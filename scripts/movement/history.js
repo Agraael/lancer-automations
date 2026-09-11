@@ -1,6 +1,7 @@
 /* global game, Hooks, canvas, libWrapper, foundry */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const SETTING_CLEAR_ON_TURN = 'historyClearOnTurn';
 const SETTING_CLEAR_ON_ROUND = 'historyClearOnRound';
 
@@ -17,7 +18,7 @@ function laDebug()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'debugMovement');
+        return !!getModuleSetting('debugMovement');
     }
     catch
     {
@@ -243,7 +244,7 @@ Hooks.on('combatRound', async (combat, _changed, opts) =>
 {
     if (opts?.direction !== 1)
         return;
-    if (!game.settings.get(MODULE_ID, SETTING_CLEAR_ON_ROUND))
+    if (!getModuleSetting(SETTING_CLEAR_ON_ROUND))
         return;
     await clearCombatantsHistory(combat);
 });
@@ -252,7 +253,7 @@ Hooks.on('combatTurnChange', async (combat, prior, _current) =>
 {
     if (!game.user?.isGM)
         return;
-    if (!game.settings.get(MODULE_ID, SETTING_CLEAR_ON_TURN))
+    if (!getModuleSetting(SETTING_CLEAR_ON_TURN))
         return;
     const priorToken = prior?.tokenId ? canvas.scene?.tokens?.get(prior.tokenId) : null;
     if (priorToken)

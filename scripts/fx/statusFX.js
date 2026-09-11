@@ -7,6 +7,8 @@ import { getIsoProvider } from '../setup/iso-settings.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
 // Effect definitions
@@ -54,15 +56,8 @@ const FX_DEFAULTS = {
 
 function getConfig()
 {
-    try
-    {
-        const stored = game.settings.get(MODULE_ID, SETTING_FX_CONFIG);
-        return { ...FX_DEFAULTS, ...stored };
-    }
-    catch
-    {
-        return { ...FX_DEFAULTS };
-    }
+    const stored = getModuleSetting(SETTING_FX_CONFIG);
+    return { ...FX_DEFAULTS, ...stored };
 }
 
 export function isActionFXEnabled()
@@ -145,13 +140,7 @@ export class StatusFXConfig extends FormApplication
     getData()
     {
         const config = getConfig();
-        let additionalStatuses = true;
-        try
-        {
-            additionalStatuses = game.settings.get(MODULE_ID, 'additionalStatuses');
-        }
-        catch
-        { /* setting may not be registered yet */ }
+        const additionalStatuses = getModuleSetting('additionalStatuses', true);
         const hasWeaponFX = !!game.modules.get('lancer-weapon-fx')?.active;
         return {
             master: config.master,
@@ -1099,7 +1088,7 @@ async function autoStatusCorePowerOff(actor)
 
 function _isTemplateAE(document)
 {
-    const laFlags = document?.flags?.['lancer-automations'];
+    const laFlags = getLAFlags(document);
     return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
 }
 

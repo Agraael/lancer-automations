@@ -1,6 +1,7 @@
 // TAH stats bar: the inline HP / heat / structure / pips display.
 
 import { playUiSound } from './sound.js';
+import { MODULE_ID } from '../tools/constants.js';
 
 /** Whether the secondary stats panel is expanded. Persists across in-place updates. */
 let _statsExpanded = false;
@@ -98,7 +99,7 @@ export function buildStatsHtml(actor, token = null)
     let movCell;
     if (inCombat && token)
     {
-        const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+        const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
         const mh = api?.getMovementHistory?.(token);
         const regularCost = mh?.intentional?.regularCost ?? 0;
         const cap = api?.getMovementCap?.(token);

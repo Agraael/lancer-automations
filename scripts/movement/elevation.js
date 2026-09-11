@@ -5,6 +5,7 @@ import { playUiSound } from '../tah/sound.js';
 import { initHexDragStabilizer } from './hex-drag-stabilizer.js';
 import { initTerrainTriggerSplits, injectTriggerSilentsAtDrop } from './terrain-trigger-waypoints.js';
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag } from "../tools/flag-utils.js";
 import { thtApi, canPassObstructions } from './movement-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -163,7 +164,7 @@ function shouldAutoElevate(tokenDoc, { ruler: _ruler = true } = {})
         return false;
     try
     {
-        if (game.settings.get(MODULE_ID, DISABLE_AUTO_TERRAIN_ELEVATION))
+        if (getModuleSetting(DISABLE_AUTO_TERRAIN_ELEVATION))
             return false;
     }
     catch
@@ -171,7 +172,7 @@ function shouldAutoElevate(tokenDoc, { ruler: _ruler = true } = {})
     // getFlag throws on a scope whose module isn't active; gate the THT lookup.
     if (game.modules.get(THT_ID)?.active && tokenDoc.getFlag?.(THT_ID, THT_IGNORE_FLAG))
         return false;
-    if (tokenDoc.getFlag?.(MODULE_ID, LA_DISABLE_AUTO_TERRAIN_FLAG))
+    if (getLAFlag(tokenDoc,LA_DISABLE_AUTO_TERRAIN_FLAG))
         return false;
     return true;
 }
@@ -415,7 +416,7 @@ function getCompleteMovementPathWrapper(wrapped, waypoints)
         return movementPath;
     try
     {
-        if (!game.settings.get(MODULE_ID, CLIMB_WAYPOINTS_ENABLED))
+        if (!getModuleSetting(CLIMB_WAYPOINTS_ENABLED))
             return movementPath;
     }
     catch

@@ -2,6 +2,7 @@
  * Wraps Grid-Aware Auras to support lambda-function macro callbacks, via libWrapper (no GAA edits).
  */
 import { hasReactionAvailable } from "./misc-tools.js";
+import { MODULE_ID } from "./constants.js";
 
 // GAA auras live in one flag array with read-modify-write updates, so concurrent
 // writers clobber each other's append unless serialized per owner document.
@@ -37,7 +38,7 @@ export class LAAuras
 
         if (typeof libWrapper === "function")
         {
-            libWrapper.register('lancer-automations', 'Macros.prototype.get', function (wrapped, ...args)
+            libWrapper.register(MODULE_ID,'Macros.prototype.get', function (wrapped, ...args)
             {
                 const id = args[0];
                 if (typeof id === 'string' && id.startsWith('@@fn:'))

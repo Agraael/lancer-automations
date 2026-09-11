@@ -1,6 +1,7 @@
 /* global CONFIG, canvas, foundry, game, Hooks, PIXI */
 
 import { getSpeedRanges } from '../combat/speed-provider.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { elevationForPreview } from './elevation.js';
 import { isForceFreeMovement, isForceDebugMovement, pathfindDragEnabled } from './keybindings.js';
 import { parseAction } from './movement-actions.js';
@@ -17,7 +18,7 @@ function settingOn()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, ENABLED);
+        return !!getModuleSetting(ENABLED);
     }
     catch
     {
@@ -58,7 +59,7 @@ function perStepRenderOn()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, PER_STEP_RENDER);
+        return !!getModuleSetting(PER_STEP_RENDER);
     }
     catch
     {
@@ -70,7 +71,7 @@ function climbWaypointsOn()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'enableClimbWaypoints');
+        return !!getModuleSetting('enableClimbWaypoints');
     }
     catch
     {
@@ -87,7 +88,7 @@ function freeMoveColor()
 {
     try
     {
-        const hex = game.settings.get(MODULE_ID, 'speedProvider.colorFreeMovement') || '#ffffff';
+        const hex = getModuleSetting('speedProvider.colorFreeMovement') || '#ffffff';
         return parseInt(hex.replace('#', ''), 16);
     }
     catch
@@ -100,7 +101,7 @@ function forceMoveColor()
 {
     try
     {
-        const hex = game.settings.get(MODULE_ID, 'speedProvider.colorForceMovement') || '#8B5CF6';
+        const hex = getModuleSetting('speedProvider.colorForceMovement') || '#8B5CF6';
         return parseInt(hex.replace('#', ''), 16);
     }
     catch
@@ -852,7 +853,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
     {
         if (waypoint?.stage !== 'passed' || !waypoint.movementId)
             return null;
-        const laApi = game.modules.get('lancer-automations')?.api;
+        const laApi = game.modules.get(MODULE_ID)?.api;
         const moves = laApi?.getMoveDataList?.(this.token.document.id) ?? [];
         return moves.find(m => m.movementId === waypoint.movementId) || null;
     }
@@ -863,7 +864,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
         const sourceHistory = this.token.document._source?._movementHistory ?? [];
         if (!sourceHistory.length)
             return 0;
-        const laApi = game.modules.get('lancer-automations')?.api;
+        const laApi = game.modules.get(MODULE_ID)?.api;
         const moves = laApi?.getMoveDataList?.(this.token.document.id) ?? [];
         const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
         const regularMoves = new Map(
@@ -920,7 +921,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             total = this._cumulativeRegularCostThrough(waypoint);
         else
         {
-            const laApi = game.modules.get('lancer-automations')?.api;
+            const laApi = game.modules.get(MODULE_ID)?.api;
             const prior = Number(laApi?.getMovementHistory?.(this.token.document.id)?.intentional?.regular ?? 0);
             let lastPassed = waypoint.previous;
             while (lastPassed && lastPassed.stage !== 'passed')
@@ -964,7 +965,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 return { ...base, color: freeMoveColor() };
             // No LA entry but a real movementId = debug-mode move; skip drawing it.
             if (waypoint.movementId && moveData === null
-                && (game.modules.get('lancer-automations')?.api?.getMoveDataList?.(this.token.document.id)?.length ?? 0) > 0)
+                && (game.modules.get(MODULE_ID)?.api?.getMoveDataList?.(this.token.document.id)?.length ?? 0) > 0)
 
                 return { ...base, alpha: 0 };
 
@@ -1032,7 +1033,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
     {
         if (waypoint?.stage === 'passed')
             return this._cumulativeRegularCostThrough(waypoint?.previous ?? waypoint);
-        const laApi = game.modules.get('lancer-automations')?.api;
+        const laApi = game.modules.get(MODULE_ID)?.api;
         const prior = Number(laApi?.getMovementHistory?.(this.token.document.id)?.intentional?.regular ?? 0);
         let lastPassed = waypoint.previous;
         while (lastPassed && lastPassed.stage !== 'passed')
@@ -1130,7 +1131,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             if (moveData && (moveData.isFreeMovement || !moveData.isDrag))
                 return { ...base, color: freeMoveColor(), alpha: 0.35 };
             if (waypoint.movementId && moveData === null
-                && (game.modules.get('lancer-automations')?.api?.getMoveDataList?.(this.token.document.id)?.length ?? 0) > 0)
+                && (game.modules.get(MODULE_ID)?.api?.getMoveDataList?.(this.token.document.id)?.length ?? 0) > 0)
 
                 return { ...base, alpha: 0 };
 
@@ -1247,8 +1248,8 @@ function _measureTerrainElevDisabled()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'disableAutoElevationOnMeasure')
-            || !!game.settings.get(MODULE_ID, 'disableAutoTerrainElevation');
+        return !!getModuleSetting('disableAutoElevationOnMeasure')
+            || !!getModuleSetting('disableAutoTerrainElevation');
     }
     catch
     {

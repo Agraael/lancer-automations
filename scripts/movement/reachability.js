@@ -3,17 +3,18 @@
 // per-cell cost core (evalCellStep), so the frontier matches what a drag would bill. style:ignore
 
 import { evalCellStep, getTerrainTypeMap, footprintShapesAt, standingTopFor, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag } from "../tools/flag-utils.js";
 import { canPassObstructions } from "./movement-utils.js";
 import { neighborKeys, getOccupiedOffsets, isHexGrid } from "../combat/grid-helpers.js";
 import { isHostile } from "../combat/overwatch.js";
 
-import { MODULE_ID } from '../tools/constants.js';
 
 function autoElevDisabled()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'disableAutoTerrainElevation');
+        return !!getModuleSetting('disableAutoTerrainElevation');
     }
     catch
     {
@@ -160,7 +161,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
         const otherDoc = cand.document;
         if (otherDoc?.hidden)
             return false;
-        if (otherDoc?.getFlag?.(MODULE_ID, 'isWreck'))
+        if (getLAFlag(otherDoc,'isWreck'))
             return false;
         const otherActor = cand.actor;
         if (!otherActor || otherActor.type === 'deployable')
@@ -355,7 +356,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         const otherDoc = cand.document;
         if (otherDoc?.hidden)
             return false;
-        if (otherDoc?.getFlag?.(MODULE_ID, 'isWreck'))
+        if (getLAFlag(otherDoc,'isWreck'))
             return false;
         const otherActor = cand.actor;
         if (!otherActor || otherActor.type === 'deployable')

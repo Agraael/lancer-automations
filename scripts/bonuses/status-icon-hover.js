@@ -1,4 +1,5 @@
 import { effectTooltipData, showStatusTooltip, moveStatusTooltip } from './status-tooltip.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { playUiSound } from '../tah/sound.js';
 
 const HOVER_SCALE = 1.3;
@@ -20,7 +21,7 @@ function _enabled()
 {
     try
     {
-        return !!game.settings.get('lancer-automations', 'statusIconHover');
+        return !!getModuleSetting('statusIconHover');
     }
     catch
     {

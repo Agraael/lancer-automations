@@ -1,16 +1,12 @@
 /* global game */
 
-// A setting read before its registration throws, so early hooks treat that as off.
-export function getSettingEnabled(key, moduleId = 'lancer-automations')
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
+
+// Boolean view of a setting, for callers that want a guaranteed true/false.
+export function getSettingEnabled(key)
 {
-    try
-    {
-        return !!game.settings.get(moduleId, key);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(key);
 }
 
 /**
@@ -22,7 +18,7 @@ export function getBoostOfferMode()
     let raw;
     try
     {
-        raw = game.settings.get('lancer-automations', 'enableBoostOffer');
+        raw = getModuleSetting('enableBoostOffer');
     }
     catch
     {
@@ -38,7 +34,7 @@ export function getBoostOfferMode()
 export function registerSettings()
 {
     // Core
-    game.settings.register('lancer-automations', 'reactionNotificationMode', {
+    game.settings.register(MODULE_ID,'reactionNotificationMode', {
         name: 'Activation Notification Mode',
         hint: 'Who sees the activation popup.',
         scope: 'world',
@@ -52,7 +48,7 @@ export function registerSettings()
         default: "both"
     });
 
-    game.settings.register('lancer-automations', 'effectNotificationMode', {
+    game.settings.register(MODULE_ID,'effectNotificationMode', {
         name: 'Effect Notification Mode',
         hint: 'Chat message when a token gains or loses an effect or bonus.',
         scope: 'world',
@@ -66,7 +62,7 @@ export function registerSettings()
         default: "public"
     });
 
-    game.settings.register('lancer-automations', 'consumeReaction', {
+    game.settings.register(MODULE_ID,'consumeReaction', {
         name: 'Consume Reaction on Activation',
         hint: 'Auto-spend the token\'s reaction when a Reaction activation fires.',
         scope: 'world',
@@ -75,21 +71,21 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'qolAdvisoryShown', {
+    game.settings.register(MODULE_ID,'qolAdvisoryShown', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false
     });
 
-    game.settings.register('lancer-automations', 'compatWarningsShown', {
+    game.settings.register(MODULE_ID,'compatWarningsShown', {
         scope: 'world',
         config: false,
         type: Array,
         default: []
     });
 
-    game.settings.register('lancer-automations', 'consumeAction', {
+    game.settings.register(MODULE_ID,'consumeAction', {
         name: 'Consume Action on Activation',
         hint: 'Auto-spend the token\'s Quick / Full action when an activation flow succeeds.',
         scope: 'world',
@@ -98,7 +94,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'overlapTokenPicker', {
+    game.settings.register(MODULE_ID,'overlapTokenPicker', {
         name: 'Overlapping Token Picker',
         hint: 'When clicking a token at the same spot and size as others, open a picker to choose among them.',
         scope: 'client',
@@ -107,7 +103,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoFocusDuration', {
+    game.settings.register(MODULE_ID,'autoFocusDuration', {
         name: 'Focus Pan Duration',
         hint: 'How long the camera takes to reach the focused tokens, in milliseconds.',
         scope: 'client',
@@ -117,7 +113,7 @@ export function registerSettings()
         default: 1000
     });
 
-    game.settings.register('lancer-automations', 'autoFocusCards', {
+    game.settings.register(MODULE_ID,'autoFocusCards', {
         name: 'Focus on Interactive Cards',
         hint: 'Pan the canvas to the card\'s tokens when a choice, confirm or wait card shows.',
         scope: 'client',
@@ -126,7 +122,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoFocusAttack', {
+    game.settings.register(MODULE_ID,'autoFocusAttack', {
         name: 'Focus on Attack Rolls',
         hint: 'Pan the canvas to the attacker and targets when the attack rolls, or when its card reaches you.',
         scope: 'client',
@@ -135,7 +131,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoFocusDamage', {
+    game.settings.register(MODULE_ID,'autoFocusDamage', {
         name: 'Focus on Damage Rolls',
         hint: 'Pan the canvas to the attacker and targets when damage rolls, or when its card reaches you.',
         scope: 'client',
@@ -144,7 +140,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoFocusCheck', {
+    game.settings.register(MODULE_ID,'autoFocusCheck', {
         name: 'Focus on Stat Rolls',
         hint: 'Pan the canvas to the roller and its target when a stat roll happens, or when its card reaches you.',
         scope: 'client',
@@ -153,7 +149,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoFocusActivation', {
+    game.settings.register(MODULE_ID,'autoFocusActivation', {
         name: 'Focus on Activations',
         hint: 'Pan the canvas to the acting token when its action FX plays.',
         scope: 'client',
@@ -162,7 +158,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'showBonusHudButton', {
+    game.settings.register(MODULE_ID,'showBonusHudButton', {
         name: 'Token HUD Bonus Button',
         hint: 'Adds a button on the Token HUD to open the Effect Manager.',
         scope: 'client',
@@ -171,7 +167,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'showStatusEffectsHudButton', {
+    game.settings.register(MODULE_ID,'showStatusEffectsHudButton', {
         name: 'Token HUD Status Effects Button',
         hint: 'Foundry\'s default "Assign Status Effects" button on the Token HUD.',
         scope: 'client',
@@ -180,7 +176,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'showCombatStateHudButton', {
+    game.settings.register(MODULE_ID,'showCombatStateHudButton', {
         name: 'Token HUD Combat State Button',
         hint: 'Foundry\'s default "Toggle Combat State" button on the Token HUD.',
         scope: 'client',
@@ -189,7 +185,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'showTargetStateHudButton', {
+    game.settings.register(MODULE_ID,'showTargetStateHudButton', {
         name: 'Token HUD Target State Button',
         hint: 'Foundry\'s default "Toggle Target State" button on the Token HUD.',
         scope: 'client',
@@ -198,7 +194,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'showRevertMovementHudButton', {
+    game.settings.register(MODULE_ID,'showRevertMovementHudButton', {
         name: 'Revert Movement Button',
         hint: 'The Revert Last Movement / Reset Movement History button on the Token HUD.',
         scope: 'client',
@@ -207,7 +203,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'statusHalo', {
+    game.settings.register(MODULE_ID,'statusHalo', {
         name: 'Status Icon Halo',
         hint: 'Status icons circle around the token instead of stacking in a column.',
         scope: 'world',
@@ -217,7 +213,7 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
-    game.settings.register('lancer-automations', 'statusHaloRadius', {
+    game.settings.register(MODULE_ID,'statusHaloRadius', {
         name: 'Halo Radius',
         hint: 'Ring radius as a fraction of the token size.',
         scope: 'world',
@@ -228,7 +224,7 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
-    game.settings.register('lancer-automations', 'statusIconMinZoomScale', {
+    game.settings.register(MODULE_ID,'statusIconMinZoomScale', {
         name: 'Minimum Icon Zoom Scale',
         hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.',
         scope: 'world',
@@ -239,7 +235,7 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
-    game.settings.register('lancer-automations', 'statusHaloStartAngle', {
+    game.settings.register(MODULE_ID,'statusHaloStartAngle', {
         name: 'Halo Start Angle',
         hint: 'Angle of the first icon, in degrees counterclockwise from the token\'s right.',
         scope: 'world',
@@ -250,7 +246,7 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
-    game.settings.register('lancer-automations', 'statusIconHover', {
+    game.settings.register(MODULE_ID,'statusIconHover', {
         name: 'Status Icon Hover Info',
         hint: 'Hovering a status icon enlarges it and shows its name, description, duration and bonus.',
         scope: 'client',
@@ -261,7 +257,7 @@ export function registerSettings()
 
     // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
-    game.settings.register('lancer-automations', 'additionalStatuses', {
+    game.settings.register(MODULE_ID,'additionalStatuses', {
         name: 'LaSossis Additional statuses and effects',
         hint: 'Extra statuses (Resist All, Disengage, Grappling, etc.) in the status effects list.',
         scope: 'world',
@@ -271,7 +267,7 @@ export function registerSettings()
         requiresReload: true
     });
 
-    game.settings.register('lancer-automations', 'enablePerRoundTurnTags', {
+    game.settings.register(MODULE_ID,'enablePerRoundTurnTags', {
         name: 'Per-Round / Per-Turn / Per-Scene Enforcement',
         hint: 'Enforce per-round and per-turn tags (tg_round, tg_turn) and per-scene frequencies ("N/scene", use="Encounter"). Blocks attacks/activations at the limit and auto-resets on round/turn/combat. Requires reload.',
         scope: 'world',
@@ -281,7 +277,7 @@ export function registerSettings()
         requiresReload: true
     });
 
-    game.settings.register('lancer-automations', 'enableInfectionDamageIntegration', {
+    game.settings.register(MODULE_ID,'enableInfectionDamageIntegration', {
         name: 'Infection Damage Integration',
         hint: 'Adds Infection as a fully integrated Lancer damage type. Requires reload.',
         scope: 'world',
@@ -291,7 +287,7 @@ export function registerSettings()
         requiresReload: true
     });
 
-    game.settings.register('lancer-automations', 'convertHeatToEnergyOnHeatless', {
+    game.settings.register(MODULE_ID,'convertHeatToEnergyOnHeatless', {
         name: 'Heat as Energy on heatless targets',
         hint: 'Convert Heat damage to Energy when the target has no heat capacity (pilots, biological NPCs). Mirrors what Lancer does natively for pilots.',
         scope: 'world',
@@ -300,7 +296,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'resistSelfHeat', {
+    game.settings.register(MODULE_ID,'resistSelfHeat', {
         name: 'Resist Self-Inflicted Heat',
         hint: 'Halve self-inflicted heat from self-heat, overkill, and overcharge when the mech resists Heat.',
         scope: 'world',
@@ -309,7 +305,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoDamageRoll', {
+    game.settings.register(MODULE_ID,'autoDamageRoll', {
         name: 'Auto Damage Roll',
         hint: 'Open the Damage HUD automatically after an attack.',
         scope: 'world',
@@ -318,7 +314,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoDamageApply', {
+    game.settings.register(MODULE_ID,'autoDamageApply', {
         name: 'Auto Apply Damage',
         hint: 'Apply rolled damage to targets automatically. Unowned targets are applied by the GM client.',
         scope: 'world',
@@ -327,7 +323,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'autoStructFollowup', {
+    game.settings.register(MODULE_ID,'autoStructFollowup', {
         name: 'Auto Structure / Stress Follow-ups',
         hint: 'Click the follow-up buttons on your own structure and stress cards automatically.',
         scope: 'world',
@@ -336,7 +332,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'enableKnockbackFlow', {
+    game.settings.register(MODULE_ID,'enableKnockbackFlow', {
         name: 'Automate Knockback on Hit',
         hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
         scope: 'world',
@@ -345,7 +341,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'enableThrowFlow', {
+    game.settings.register(MODULE_ID,'enableThrowFlow', {
         name: 'Automate Throw Choice for Thrown Weapons',
         hint: 'Thrown-tagged weapons prompt Attack or Throw at the start of the flow.',
         scope: 'world',
@@ -354,7 +350,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'statRollTargeting', {
+    game.settings.register(MODULE_ID,'statRollTargeting', {
         name: 'Stat Roll Targeting',
         hint: 'Adds an optional single-target picker to the stat-roll HUD to auto-calculate save difficulty.',
         scope: 'world',
@@ -363,7 +359,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'uplinkEnabled', {
+    game.settings.register(MODULE_ID,'uplinkEnabled', {
         name: 'Roll Uplink (Beta)',
         hint: 'Streams players\' open roll dialogs to the GM as live mirror cards.',
         scope: 'world',
@@ -372,7 +368,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'uplinkAutoOpen', {
+    game.settings.register(MODULE_ID,'uplinkAutoOpen', {
         name: 'Uplink Auto-Open',
         hint: 'Open the uplink bar as soon as a roll dialog appears.',
         scope: 'client',
@@ -381,21 +377,21 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'haseChanceLabels', {
+    game.settings.register(MODULE_ID,'haseChanceLabels', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: true
     });
 
-    game.settings.register('lancer-automations', 'actionBadgeItemName', {
+    game.settings.register(MODULE_ID,'actionBadgeItemName', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: true
     });
 
-    game.settings.register('lancer-automations', 'weaponFxAboveTokens', {
+    game.settings.register(MODULE_ID,'weaponFxAboveTokens', {
         name: 'Weapon FX Above Tokens',
         hint: 'Since Sequencer 4, some Lancer Weapon FX render behind tokens. This lifts them back above token art.',
         scope: 'world',
@@ -404,7 +400,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'enableAttackTargeting', {
+    game.settings.register(MODULE_ID,'enableAttackTargeting', {
         name: 'LA Attack Targeting',
         hint: 'Adds an LA target/range picker to the attack HUD; hold Shift to target multiple.',
         scope: 'world',
@@ -413,7 +409,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'enableDamageTargeting', {
+    game.settings.register(MODULE_ID,'enableDamageTargeting', {
         name: 'LA Damage Targeting',
         hint: 'Adds the LA target/range picker to the damage HUD; hold Shift to target multiple.',
         scope: 'world',
@@ -422,7 +418,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'clearTargetsAfterRoll', {
+    game.settings.register(MODULE_ID,'clearTargetsAfterRoll', {
         name: 'Clear Targets After Roll',
         hint: 'Drop targets once an attack or damage roll resolves.',
         scope: 'world',
@@ -431,7 +427,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'targetInfoDisplay', {
+    game.settings.register(MODULE_ID,'targetInfoDisplay', {
         name: 'Target Info Labels',
         hint: 'Who sees the hit-chance and damage-range labels while targeting.',
         scope: 'world',
@@ -441,7 +437,7 @@ export function registerSettings()
         default: 'gm'
     });
 
-    game.settings.register('lancer-automations', 'autoStartTargetPicking', {
+    game.settings.register(MODULE_ID,'autoStartTargetPicking', {
         name: 'Auto-Start Target Picking',
         hint: 'Open the target picker automatically when an attack starts with no target set.',
         scope: 'world',
@@ -450,7 +446,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'displayToolsToOthers', {
+    game.settings.register(MODULE_ID,'displayToolsToOthers', {
         name: 'Share Interactive Tools',
         hint: 'Show your in-progress targeting / placement / movement tools to other clients (discreet overlay), and see theirs.',
         scope: 'client',
@@ -459,7 +455,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'treatGenericPrintAsActivation', {
+    game.settings.register(MODULE_ID,'treatGenericPrintAsActivation', {
         name: 'Treat Generic Prints as Activations',
         hint: 'Items printed via the generic method also trigger onActivation events.',
         scope: 'world',
@@ -468,7 +464,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'enableMovementCapDetection', {
+    game.settings.register(MODULE_ID,'enableMovementCapDetection', {
         name: 'Movement Cap Detection',
         hint: 'Cancel drag movement exceeding the token\'s movement cap.',
         scope: 'world',
@@ -477,7 +473,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'enableBoostOffer', {
+    game.settings.register(MODULE_ID,'enableBoostOffer', {
         name: 'Boost & Move Offer',
         hint: 'Offer to cover an over-cap move with Boost then Overcharge (Automatic accepts without asking).',
         scope: 'world',
@@ -491,7 +487,7 @@ export function registerSettings()
         default: 'no'
     });
 
-    game.settings.register('lancer-automations', 'showDeployableLines', {
+    game.settings.register(MODULE_ID,'showDeployableLines', {
         name: 'Show Deployable Lines',
         hint: 'Draw lines between owned tokens and their deployables on hover.',
         scope: 'client',
@@ -501,7 +497,7 @@ export function registerSettings()
     });
 
     // Alt Structure
-    game.settings.register('lancer-automations', 'enableAltStruct', {
+    game.settings.register(MODULE_ID,'enableAltStruct', {
         name: "Maria's Alternate Structure & Stress Rules",
         hint: "Integrated implementation of Maria's Alternate Structure & Stress rules. Disable if using the standalone lancer-alt-structure module.",
         scope: 'world',
@@ -512,7 +508,7 @@ export function registerSettings()
     });
 
     // One-Structure NPC Auto-Destroy
-    game.settings.register('lancer-automations', 'enableOneStructNpc', {
+    game.settings.register(MODULE_ID,'enableOneStructNpc', {
         name: 'One-Structure NPC Auto-Destroy',
         hint: 'NPCs with max structure 1 skip the structure table and are destroyed on the first structure hit.',
         scope: 'world',
@@ -522,7 +518,7 @@ export function registerSettings()
     });
 
     // Vision
-    game.settings.register('lancer-automations', 'dragVisionMultiplier', {
+    game.settings.register(MODULE_ID,'dragVisionMultiplier', {
         name: 'Drag Vision Radius Multiplier',
         hint: '1 = full vision while dragging, 0.5 = half, 0 = none.',
         scope: 'world',
@@ -532,7 +528,7 @@ export function registerSettings()
         default: 1
     });
 
-    game.settings.register('lancer-automations', 'rangePulseLineOpacity', {
+    game.settings.register(MODULE_ID,'rangePulseLineOpacity', {
         name: 'Range Pulse Grid Line Opacity',
         hint: 'Opacity of the still grid lines inside the range.',
         scope: 'client',
@@ -542,7 +538,7 @@ export function registerSettings()
         default: 0
     });
 
-    game.settings.register('lancer-automations', 'rangePulseWaveOpacity', {
+    game.settings.register(MODULE_ID,'rangePulseWaveOpacity', {
         name: 'Range Pulse Wave Opacity',
         hint: 'Opacity of the wave running through the range and of its outline.',
         scope: 'client',
@@ -552,7 +548,7 @@ export function registerSettings()
         default: 0.75
     });
 
-    game.settings.register('lancer-automations', 'rangePulseLineWidth', {
+    game.settings.register(MODULE_ID,'rangePulseLineWidth', {
         name: 'Range Pulse Wave Width',
         hint: 'Thickness of the wave and its black outline. 1 = original.',
         scope: 'client',
@@ -562,7 +558,7 @@ export function registerSettings()
         default: 1
     });
 
-    game.settings.register('lancer-automations', 'rangePulseLos', {
+    game.settings.register(MODULE_ID,'rangePulseLos', {
         name: 'Range Pulse Line of Sight',
         hint: 'Experimental. Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.',
         scope: 'world',
@@ -571,7 +567,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'rangePulseSpeed', {
+    game.settings.register(MODULE_ID,'rangePulseSpeed', {
         name: 'Range Pulse Speed',
         hint: 'Speed of the wave and of the bloom. 1 = original.',
         scope: 'client',
@@ -581,7 +577,7 @@ export function registerSettings()
         default: 1
     });
 
-    game.settings.register('lancer-automations', 'rangePulseStyle', {
+    game.settings.register(MODULE_ID,'rangePulseStyle', {
         name: 'Range Pulse Style',
         hint: 'Shape drawn for each ring of the pulse.',
         scope: 'client',
@@ -594,7 +590,7 @@ export function registerSettings()
         default: 'inset'
     });
 
-    game.settings.register('lancer-automations', 'rangePulseMotion', {
+    game.settings.register(MODULE_ID,'rangePulseMotion', {
         name: 'Range Pulse Motion',
         hint: 'A bloom outward that repeats, or a single bloom that then holds still.',
         scope: 'client',
@@ -608,7 +604,7 @@ export function registerSettings()
     });
 
     // Wreck system
-    game.settings.register('lancer-automations', 'enableWrecks', {
+    game.settings.register(MODULE_ID,'enableWrecks', {
         name: 'Wreck Automation',
         hint: 'Automate wrecking on structure reaching 0.',
         scope: 'world',
@@ -621,7 +617,7 @@ export function registerSettings()
     for (const cat of ['mech', 'vehicle', 'human', 'monstrosity', 'biological'])
     {
         const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-        game.settings.register('lancer-automations', `wreckMode_${cat}`, {
+        game.settings.register(MODULE_ID,`wreckMode_${cat}`, {
             name: `${label}: Wreck Mode`,
             hint: `How ${label} wrecks are placed.`,
             scope: 'world',
@@ -630,7 +626,7 @@ export function registerSettings()
             default: 'token',
             choices: wreckModeChoices,
         });
-        game.settings.register('lancer-automations', `wreckTerrain_${cat}`, {
+        game.settings.register(MODULE_ID,`wreckTerrain_${cat}`, {
             name: `${label}: Wreck Difficult Terrain`,
             hint: `What to leave behind for movement cost when a ${label} is wrecked.`,
             scope: 'world',
@@ -644,7 +640,7 @@ export function registerSettings()
             },
         });
     }
-    game.settings.register('lancer-automations', 'wreckAuraColor', {
+    game.settings.register(MODULE_ID,'wreckAuraColor', {
         name: 'Wreck Aura Color',
         hint: 'Line and fill color of the aura left on a wreck. Applies to new wrecks.',
         scope: 'world',
@@ -652,7 +648,7 @@ export function registerSettings()
         type: String,
         default: '#8B4513',
     });
-    game.settings.register('lancer-automations', 'wreckAuraOpacity', {
+    game.settings.register(MODULE_ID,'wreckAuraOpacity', {
         name: 'Wreck Aura Opacity',
         hint: 'Fill opacity of the wreck aura. The outline scales with it.',
         scope: 'world',
@@ -661,7 +657,7 @@ export function registerSettings()
         default: 0.2,
         range: { min: 0, max: 1, step: 0.05 },
     });
-    game.settings.register('lancer-automations', 'wreckAssetsPath', {
+    game.settings.register(MODULE_ID,'wreckAssetsPath', {
         name: 'Wreck Assets Folder',
         hint: 'Custom folder for wreck images/effects/audio. Leave blank for built-in.',
         scope: 'world',
@@ -669,13 +665,13 @@ export function registerSettings()
         type: String,
         default: '',
     });
-    game.settings.register('lancer-automations', 'wreckFactionOnDeath', {
+    game.settings.register(MODULE_ID,'wreckFactionOnDeath', {
         scope: 'world',
         config: false,
         type: String,
         default: 'same',
     });
-    game.settings.register('lancer-automations', 'enableRemoveFromCombat', {
+    game.settings.register(MODULE_ID,'enableRemoveFromCombat', {
         name: 'Remove Wrecks from Combat',
         hint: 'Remove wrecked tokens from the combat tracker.',
         scope: 'world',
@@ -683,7 +679,7 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
-    game.settings.register('lancer-automations', 'enableWreckAnimation', {
+    game.settings.register(MODULE_ID,'enableWreckAnimation', {
         name: 'Wreck Explosion Effects',
         hint: 'Play explosion effects when tokens are wrecked.',
         scope: 'client',
@@ -691,7 +687,7 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
-    game.settings.register('lancer-automations', 'enableWreckAudio', {
+    game.settings.register(MODULE_ID,'enableWreckAudio', {
         name: 'Wreck Explosion Audio',
         hint: 'Play explosion sounds when tokens are wrecked.',
         scope: 'client',
@@ -699,7 +695,7 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
-    game.settings.register('lancer-automations', 'squadLostOnDeath', {
+    game.settings.register(MODULE_ID,'squadLostOnDeath', {
         name: 'Squad MIA on Death',
         hint: 'Apply MIA status to dead squads.',
         scope: 'world',
@@ -707,7 +703,7 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
-    game.settings.register('lancer-automations', 'wreckTerrainType', {
+    game.settings.register(MODULE_ID,'wreckTerrainType', {
         name: 'Wreck Terrain Type',
         hint: 'Terrain Height Tools terrain type ID for wreck difficult terrain.',
         scope: 'world',
@@ -715,33 +711,33 @@ export function registerSettings()
         type: String,
         default: '',
     });
-    game.settings.register('lancer-automations', 'guardianBulwarkAuraMode', {
+    game.settings.register(MODULE_ID,'guardianBulwarkAuraMode', {
         scope: 'world',
         config: false,
         type: String,
         choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
         default: 'always',
     });
-    game.settings.register('lancer-automations', 'syncActorImgToToken', {
+    game.settings.register(MODULE_ID,'syncActorImgToToken', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'syncActorNameToToken', {
+    game.settings.register(MODULE_ID,'syncActorNameToToken', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'scanJournalSource', {
+    game.settings.register(MODULE_ID,'scanJournalSource', {
         scope: 'world',
         config: false,
         type: String,
         choices: { system: 'Lancer System (v3)', 'lancer-automations': 'Lancer Automations (legacy)' },
         default: 'system',
     });
-    game.settings.register('lancer-automations', 'scanPlayerOwnershipMode', {
+    game.settings.register(MODULE_ID,'scanPlayerOwnershipMode', {
         scope: 'world',
         config: false,
         type: String,
@@ -752,25 +748,25 @@ export function registerSettings()
         },
         default: 'all',
     });
-    game.settings.register('lancer-automations', 'revealStatsWithoutScan', {
+    game.settings.register(MODULE_ID,'revealStatsWithoutScan', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'scanRevealAllies', {
+    game.settings.register(MODULE_ID,'scanRevealAllies', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'scanRevealPlayers', {
+    game.settings.register(MODULE_ID,'scanRevealPlayers', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
-    game.settings.register('lancer-automations', 'wreckMasterVolume', {
+    game.settings.register(MODULE_ID,'wreckMasterVolume', {
         name: 'Wreck Master Volume',
         hint: 'Volume of wreck explosion sounds (0 = mute, 1 = full).',
         scope: 'client',
@@ -779,7 +775,7 @@ export function registerSettings()
         default: 1,
         range: { min: 0, max: 1.5, step: 0.1 },
     });
-    game.settings.register('lancer-automations', 'disableHumanDeathSound', {
+    game.settings.register(MODULE_ID,'disableHumanDeathSound', {
         name: 'Disable Human Death Sound',
         hint: 'Mute wreck sounds for human/pilot/squad deaths.',
         scope: 'client',
@@ -787,7 +783,7 @@ export function registerSettings()
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'allowHalfSizeTokens', {
+    game.settings.register(MODULE_ID,'allowHalfSizeTokens', {
         name: 'Allow Half-Size Tokens',
         hint: 'Size 0.5 actors get 0.5 grid token dimensions instead of being forced to 1.',
         scope: 'world',
@@ -795,13 +791,13 @@ export function registerSettings()
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'autoTokenHeight', {
+    game.settings.register(MODULE_ID,'autoTokenHeight', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
     });
-    game.settings.register('lancer-automations', 'autoTokenHeightVehicleSquad', {
+    game.settings.register(MODULE_ID,'autoTokenHeightVehicleSquad', {
         scope: 'world',
         config: false,
         type: Boolean,
@@ -809,7 +805,7 @@ export function registerSettings()
     });
     // Debug
 
-    game.settings.register('lancer-automations', 'debugPathHexCalculation', {
+    game.settings.register(MODULE_ID,'debugPathHexCalculation', {
         name: 'Debug: Path Hex Calculation',
         hint: 'Draw temporary circles on the map highlighting the calculated path hex steps.',
         scope: 'world',
@@ -818,7 +814,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'debugMovement', {
+    game.settings.register(MODULE_ID,'debugMovement', {
         name: 'Debug: Movement',
         hint: 'Console logs from the Lancer cost-rules pipeline, revert flow, and movement recording. Also enables the on-canvas debug overlay (per-cell terrain markers).',
         scope: 'world',
@@ -827,7 +823,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'debugOutOfCombat', {
+    game.settings.register(MODULE_ID,'debugOutOfCombat', {
         name: 'Debug: Out of Combat Warnings',
         hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
         scope: 'world',
@@ -836,7 +832,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'debugAutomation', {
+    game.settings.register(MODULE_ID,'debugAutomation', {
         name: 'Debug: Automation System',
         hint: 'Console logs from the reaction / trigger pipeline: which trigger fires, which reactions match, why each one is skipped or evaluated, and which activation fires.',
         scope: 'world',
@@ -845,7 +841,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'debugForceJb2aFree', {
+    game.settings.register(MODULE_ID,'debugForceJb2aFree', {
         name: 'Debug: Force JB2A Free Fallbacks',
         hint: 'Pretend the JB2A Patreon module is not installed; route all premium assets through the free-version fallback registry. For testing only.',
         scope: 'world',
@@ -854,7 +850,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'lastNotifiedVersion', {
+    game.settings.register(MODULE_ID,'lastNotifiedVersion', {
         name: 'Last Notified Version',
         scope: 'world',
         config: false,
@@ -862,7 +858,7 @@ export function registerSettings()
         default: ""
     });
 
-    game.settings.register('lancer-automations', 'linkManualDeploy', {
+    game.settings.register(MODULE_ID,'linkManualDeploy', {
         name: 'Link Manually Placed Deployables',
         hint: 'Auto-link dragged deployable tokens to their owner and fire onDeploy.',
         scope: 'world',
@@ -871,7 +867,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'count3DDistance', {
+    game.settings.register(MODULE_ID,'count3DDistance', {
         name: 'Count Elevation in Combat Distance',
         hint: 'Distance = max(horizontal, elevation). Off = 2D only. Affects overwatch, engagement, range checks.',
         scope: 'world',
@@ -880,7 +876,7 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register('lancer-automations', 'obstructionBlocksVehicle', {
+    game.settings.register(MODULE_ID,'obstructionBlocksVehicle', {
         name: 'No Step-over: Vehicles',
         hint: 'Vehicle NPCs cannot step over terrain walls lower than their size.',
         scope: 'world',
@@ -889,7 +885,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'obstructionBlocksSquad', {
+    game.settings.register(MODULE_ID,'obstructionBlocksSquad', {
         name: 'No Step-over: Squads',
         hint: 'Squad NPCs cannot step over terrain walls lower than their size.',
         scope: 'world',
@@ -898,7 +894,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'obstructionBlocksHuman', {
+    game.settings.register(MODULE_ID,'obstructionBlocksHuman', {
         name: 'No Step-over: Humans',
         hint: 'Human NPCs cannot step over terrain walls lower than their size.',
         scope: 'world',
@@ -907,7 +903,7 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register('lancer-automations', 'obstructionBlocksSpecialist', {
+    game.settings.register(MODULE_ID,'obstructionBlocksSpecialist', {
         name: 'No Step-over: Specialists',
         hint: 'Specialist NPCs cannot step over terrain walls lower than their size.',
         scope: 'world',

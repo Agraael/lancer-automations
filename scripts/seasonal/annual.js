@@ -1,4 +1,5 @@
 import { playTerminal, typeTerminalLines, revealVerdict, dottedRow, horusText } from '../Battelog/intro-terminal.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { playBattleLogSound } from '../tah/sound.js';
 import { playSeasonalSound } from './sound.js';
 import { getSupabase } from '../setup/supabase-client.js';
@@ -52,14 +53,7 @@ function _isBirthdayWindow()
 
 function _setting(key, fallback = '')
 {
-    try
-    {
-        return game.settings.get(MODULE_ID, key) ?? fallback;
-    }
-    catch
-    {
-        return fallback;
-    }
+    return getModuleSetting(key) ?? fallback;
 }
 
 function _alreadySent()
@@ -82,7 +76,7 @@ function _balloonState()
     }
     catch
     {
-        console.warn('Lancer Automations | bad birthday balloon state, resetting.');
+        console.warn('lancer-automations | bad birthday balloon state, resetting.');
     }
     return { year: new Date().getFullYear(), lastDay: '', count: 0 };
 }
@@ -116,7 +110,7 @@ async function _lookupDaysOnRecord()
     }
     catch (err)
     {
-        console.warn('Lancer Automations | birthday registry lookup failed:', err);
+        console.warn('lancer-automations | birthday registry lookup failed:', err);
         return null;
     }
 }
@@ -129,7 +123,7 @@ async function _markYear(key, label)
     }
     catch
     {
-        console.warn(`Lancer Automations | ${label} setting not registered yet.`);
+        console.warn(`lancer-automations | ${label} setting not registered yet.`);
     }
 }
 
@@ -150,7 +144,7 @@ async function _storeWish(message)
     }
     catch (err)
     {
-        console.error('Lancer Automations | birthday wish not stored:', err);
+        console.error('lancer-automations | birthday wish not stored:', err);
         return false;
     }
 }
@@ -396,7 +390,7 @@ function _mountButton(footer)
     button.innerHTML = '<span class="la-bday-glyph" aria-hidden="true">&#127880;</span>' + '<span class="la-bday-mark" aria-hidden="true">?</span>';
     button.addEventListener('click', () =>
     {
-        _playBirthdayIntro().catch(err => console.error('Lancer Automations | birthday intro failed:', err));
+        _playBirthdayIntro().catch(err => console.error('lancer-automations | birthday intro failed:', err));
     });
     footer.querySelector('.la-config-save')?.before(button);
 }
@@ -414,7 +408,7 @@ function _spawnBalloon()
             year: state.year,
             lastDay: today,
             count: state.count + 1,
-        })).catch(() => console.warn('Lancer Automations | birthday balloon state not saved.'));
+        })).catch(() => console.warn('lancer-automations | birthday balloon state not saved.'));
     }
 
     const balloon = document.createElement('div');
@@ -593,7 +587,7 @@ function _spawnBalloon()
         setTimeout(() => balloon.remove(), 400);
         setTimeout(() =>
         {
-            _playBirthdayIntro().catch(err => console.error('Lancer Automations | birthday intro failed:', err));
+            _playBirthdayIntro().catch(err => console.error('lancer-automations | birthday intro failed:', err));
         }, 350);
     });
 }

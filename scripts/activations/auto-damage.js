@@ -1,4 +1,4 @@
-import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 const pendingRoll = new Set();
 const rollOnRender = new Set();
@@ -6,7 +6,7 @@ const pendingApply = new Set();
 
 function shouldAutoRoll(message)
 {
-    if (!game.settings.get(MODULE_ID, 'autoDamageRoll'))
+    if (!getModuleSetting('autoDamageRoll'))
         return false;
     if (message.author?.id !== game.user.id)
         return false;
@@ -15,7 +15,7 @@ function shouldAutoRoll(message)
 
 function shouldWatchApply(message)
 {
-    if (!game.settings.get(MODULE_ID, 'autoDamageApply'))
+    if (!getModuleSetting('autoDamageApply'))
         return false;
     return (message.flags?.lancer?.damageData?.targetDamageResults?.length ?? 0) > 0;
 }

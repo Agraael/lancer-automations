@@ -1,6 +1,7 @@
 // Shared status tooltip. The canvas icon hover and the status wheel render the same markup so an
 // effect reads identically wherever it is hovered.
 import { getGlobalBonuses, getBonusDetailString } from './genericBonuses.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 
 /**
  * @typedef {Object} StatusTooltipData
@@ -14,7 +15,7 @@ import { getGlobalBonuses, getBonusDetailString } from './genericBonuses.js';
 /** Shortest turn-based entry, null when the effect has none. */
 function bestTurnEntry(effect)
 {
-    const flags = effect?.flags?.['lancer-automations'];
+    const flags = getLAFlags(effect);
     const entries = [flags?.duration, ...(flags?.durationEntries ?? [])].filter(Boolean);
     let best = null;
     for (const entry of entries)
@@ -52,7 +53,7 @@ export function instanceCount(actor, effect)
 /** Shortest turn-based entry wins, otherwise the first entry decides the wording. */
 export function durationText(effect)
 {
-    const flags = effect?.flags?.['lancer-automations'];
+    const flags = getLAFlags(effect);
     const entries = [flags?.duration, ...(flags?.durationEntries ?? [])].filter(Boolean);
     const best = bestTurnEntry(effect);
     if (best)
@@ -74,7 +75,7 @@ export function durationText(effect)
 /** Detail line for the global bonus an effect is linked to, empty when it is not linked to one. */
 export function linkedBonusText(actor, effect)
 {
-    const linkedBonusId = effect?.flags?.['lancer-automations']?.linkedBonusId;
+    const linkedBonusId = getLAFlags(effect)?.linkedBonusId;
     if (!linkedBonusId || !actor)
         return '';
     const bonus = getGlobalBonuses(actor).find(entry => entry.id === linkedBonusId);

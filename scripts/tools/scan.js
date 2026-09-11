@@ -1,6 +1,9 @@
 /* global console, JournalEntry, ChatMessage, Folder, Dialog, game, ui, CONST, fromUuidSync, fromUuid, renderTemplate, Hooks, $ */
 
 import * as actionFX from '../fx/actionFX.js';
+import { getModuleSetting } from './settings-utils.js';
+import { getLAFlags } from './flag-utils.js';
+import { MODULE_ID } from './constants.js';
 import { getStatIcon, getTierIcon } from './scan-icons.js';
 
 const TPL = {
@@ -255,7 +258,7 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null)
     let mode;
     try
     {
-        mode = game.settings.get('lancer-automations', 'scanPlayerOwnershipMode') || 'all';
+        mode = getModuleSetting('scanPlayerOwnershipMode') || 'all';
     }
     catch
     {
@@ -785,7 +788,7 @@ function _useLAJournal()
 {
     try
     {
-        return game.settings.get('lancer-automations', 'scanJournalSource') === 'lancer-automations';
+        return getModuleSetting('scanJournalSource') === 'lancer-automations';
     }
     catch
     {
@@ -1105,7 +1108,7 @@ export async function showSystemScanDialog(targets)
 /** @returns {Promise<void>} */
 export async function executeScanOnActivation(reactorToken)
 {
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     let targets = Array.from(game.user.targets);
 
     if (!targets.length && api?.chooseToken && reactorToken)
@@ -1362,7 +1365,7 @@ export async function regenerateScans(opts = {})
             continue;
         }
 
-        const flag = entry.flags?.['lancer-automations']?.scan;
+        const flag = getLAFlags(entry)?.scan;
         let actor = null;
         if (flag?.actorUuid)
         {

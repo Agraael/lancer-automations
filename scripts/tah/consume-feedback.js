@@ -4,6 +4,7 @@ import { playStatsSound } from './sound.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 const _lastConsume = new Map();
 const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene' };
 // Per-X fields count uses spent, so their delta is shown inverted (spend = -1).
@@ -12,7 +13,7 @@ const USED_COUNTER_TYPES = new Set(Object.values(SUB_FIELDS));
 // Per-action / per-rank counters stored under the perFreqSub flag.
 function _subEntries(item)
 {
-    const map = item.getFlag?.(MODULE_ID, 'perFreqSub') ?? {};
+    const map = getLAFlag(item,'perFreqSub') ?? {};
     const out = [];
     for (const [subKey, entry] of Object.entries(map))
     {
@@ -96,7 +97,7 @@ function _canSeeConsume(actor)
         return true;
     if (actor?.type === 'pilot' || actor?.type === 'mech')
         return true;
-    if (actor?.getFlag?.(MODULE_ID, 'scannedByAll'))
+    if (getLAFlag(actor,'scannedByAll'))
         return true;
     return isActorScannedForUser(actor, game.user);
 }

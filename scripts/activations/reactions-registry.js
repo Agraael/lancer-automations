@@ -1,5 +1,8 @@
 ﻿import * as actionFX from '../fx/actionFX.js';
 import { gainAction } from '../tools/misc-tools.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlags } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 import { applyStandingUp } from '../tools/movement-tools.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
 
@@ -136,8 +139,8 @@ export function getDefaultItemReactionRegistry()
                     return;
                 const sourceId = `treads-or-hover-${item.id}`;
                 const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
-                    .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
-                if (templates.some(template => template.flags?.['lancer-automations']?.treadsOrHoverSourceId === sourceId))
+                    .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
+                if (templates.some(template => getLAFlags(template)?.treadsOrHoverSourceId === sourceId))
                     return;
                 await api.linkEffectToItem({
                     items: [item],
@@ -1219,12 +1222,7 @@ export function getDefaultGeneralReactionRegistry()
             evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 if (triggerType === "onUpdate")
-                {
-                    const change = triggerData.change || {};
-                    if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
-                        return true;
-                    return false;
-                }
+                    return api.isPositionChange(triggerData.change);
 
                 if (triggerType === "onTokenCreated" || triggerType === "onTokenRemoved" || triggerType === "onTokenVisibility")
                     return true;
@@ -1294,14 +1292,7 @@ export function getDefaultGeneralReactionRegistry()
                     // Mover Z per step: flying/hover uses end elevation; walking uses THT terrain top so engagement tracks ground height.
                     const is3D = (() =>
                     {
-                        try
-                        {
-                            return !!game.settings.get('lancer-automations', 'count3DDistance');
-                        }
-                        catch
-                        {
-                            return false;
-                        }
+                        return !!getModuleSetting('count3DDistance');
                     })();
                     const terrainAPI = globalThis.terrainHeightTools;
                     const sceneGridDist = canvas.scene?.grid?.distance ?? 1;
@@ -1746,7 +1737,7 @@ export function getDefaultGeneralReactionRegistry()
                                         return;
                                     if ((mover.document?.elevation ?? 0) !== (mine.document?.elevation ?? 0))
                                         return;
-                                    const api = game.modules.get('lancer-automations')?.api;
+                                    const api = game.modules.get(MODULE_ID)?.api;
                                     if (!api)
                                         return;
                                     if (!api.findEffectOnToken(mine, "armed"))
@@ -1848,7 +1839,7 @@ export function getDefaultGeneralReactionRegistry()
             {
                 const squeezeProne = api.findEffectOnToken(reactorToken, e =>
                     e.statuses?.has("prone") &&
-                    e.flags?.['lancer-automations']?.squeezeSource === reactorToken.id
+                    getLAFlags(e)?.squeezeSource === reactorToken.id
                 );
                 if (squeezeProne)
                 {
@@ -2048,7 +2039,7 @@ export function getDefaultGeneralReactionRegistry()
             if (triggerType === "onStatusRemoved")
             {
                 // Respawn pilot on dismount
-                const pilotActorId = triggerData.effect?.flags?.['lancer-automations']?.pilotActorId;
+                const pilotActorId = getLAFlags(triggerData.effect)?.pilotActorId;
                 if (!pilotActorId)
                     return;
                 const pilotActor = game.actors.get(pilotActorId);
@@ -2222,14 +2213,7 @@ export function getDefaultGeneralReactionRegistry()
 
     function _guardianBulwarkAuraMode()
     {
-        try
-        {
-            return game.settings.get('lancer-automations', 'guardianBulwarkAuraMode') || 'always';
-        }
-        catch
-        {
-            return 'always';
-        }
+        return getModuleSetting('guardianBulwarkAuraMode') || 'always';
     }
 
     const _guardianAuraPending = new Set();

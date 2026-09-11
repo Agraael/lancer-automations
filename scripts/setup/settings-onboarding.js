@@ -1,6 +1,7 @@
 // GM setup wizard: yes/no questions that flip the module's main settings, launched from the tour welcome dialog and re-runnable from the settings menu.
 
 import { isFCSActive, getFCSData, getFCSMode, setFCSForceBulk } from './fcs.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { ReactionManager } from '../activations/reaction-manager.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -103,7 +104,7 @@ const GROUPS = [
                     { value: 'owner', label: 'Owners only' },
                     { value: 'scanned', label: 'Owners + scanned' },
                 ],
-                read: () => game.settings.get(MODULE_ID, 'statBarVisibilityInCombat') === 'scanned' ? 'scanned' : 'owner',
+                read: () => getModuleSetting('statBarVisibilityInCombat') === 'scanned' ? 'scanned' : 'owner',
                 apply: (value) => value === 'scanned'
                     ? { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'scanned', tokenStatHintHideCurrentOnScan: false }
                     : { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'owner', tokenStatHintHideCurrentOnScan: true },
@@ -145,7 +146,7 @@ const GROUPS = [
                 label: 'Slim down the token right-click HUD?',
                 explain: 'Hides Foundry\'s status, combat, and target buttons plus the module\'s extra HUD buttons.',
                 keys: ['showStatusEffectsHudButton', 'showCombatStateHudButton', 'showTargetStateHudButton', 'showBonusHudButton', 'showRevertMovementHudButton'],
-                read: () => !game.settings.get(MODULE_ID, 'showStatusEffectsHudButton'),
+                read: () => !getModuleSetting('showStatusEffectsHudButton'),
                 apply: (yes) => ({
                     showStatusEffectsHudButton: !yes,
                     showCombatStateHudButton: !yes,
@@ -331,7 +332,7 @@ const GROUPS = [
                 label: 'Track terrain height under tokens as they move?',
                 explain: 'Tokens follow Terrain Height Tools elevation during ruler moves and measurements.',
                 keys: ['disableAutoTerrainElevation', 'disableAutoElevationOnMeasure'],
-                read: () => !game.settings.get(MODULE_ID, 'disableAutoTerrainElevation'),
+                read: () => !getModuleSetting('disableAutoTerrainElevation'),
                 apply: (yes) => ({ disableAutoTerrainElevation: !yes, disableAutoElevationOnMeasure: !yes }),
             },
             {
@@ -556,7 +557,7 @@ const GROUPS = [
                 label: 'Lower that height for vehicles and squads?',
                 explain: 'Vehicles and squads get a reduced height (my take, not an official rule).',
                 keys: ['autoTokenHeightVehicleSquad'],
-                condition: () => game.modules.get('wall-height')?.active && game.settings.get(MODULE_ID, 'autoTokenHeight'),
+                condition: () => game.modules.get('wall-height')?.active && getModuleSetting('autoTokenHeight'),
             },
         ],
     },
@@ -651,7 +652,7 @@ const GROUPS = [
                 label: 'Play the explosion and sound on wreck?',
                 explain: 'A cinematic boom when a unit is wrecked. Per-player.',
                 keys: ['enableWreckAnimation', 'enableWreckAudio'],
-                condition: () => game.settings.get(MODULE_ID, 'enableWrecks') !== false,
+                condition: () => getModuleSetting('enableWrecks') !== false,
             },
             {
                 id: 'remove-wrecks-combat',
@@ -806,7 +807,7 @@ function _currentValue(question)
 {
     if (question.kind === 'sfx')
     {
-        const cfg = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+        const cfg = getModuleSetting('statusFXConfig') ?? {};
         return cfg[question.sfxSub] !== undefined ? !!cfg[question.sfxSub] : true;
     }
     if (question.kind === 'reactions')
@@ -883,7 +884,7 @@ function _valueLabel(questionEl, value)
 // Apply general-reaction enabled toggles: [{ name, index, enabled }] into the saved config.
 async function _applyReactionToggles(toggles)
 {
-    const saved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    const saved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
     const byName = {};
     for (const { name, index, enabled } of toggles)
     {
@@ -1224,7 +1225,7 @@ export class SettingsOnboarding extends FormApplication
         {
             try
             {
-                const existing = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+                const existing = getModuleSetting('statusFXConfig') ?? {};
                 const merged = { ...existing, ...sfxDelta };
                 if (!foundry.utils.objectsEqual(existing, merged))
                 {

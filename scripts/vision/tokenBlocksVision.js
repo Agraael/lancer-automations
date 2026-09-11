@@ -4,6 +4,7 @@ import { laLosFlagOnly } from './laWallLos.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 const FLAG_KEY = 'blocksLineOfSight';
 const LA_ONLY_FLAG_KEY = 'blocksLaLosOnly';
 const EDGE_PREFIX = 'la-block-los';
@@ -16,7 +17,7 @@ function shouldTokenBlock(token)
     const doc = token?.document ?? token;
     if (!doc)
         return false;
-    if (doc.getFlag?.(MODULE_ID, FLAG_KEY))
+    if (getLAFlag(doc,FLAG_KEY))
         return true;
     const actor = (doc.actor) ?? token.actor;
     if (actor?.statuses?.has?.('bulwark'))
@@ -29,7 +30,7 @@ function shouldTokenBlock(token)
 function shouldTokenBlockLaOnly(token)
 {
     const doc = token?.document ?? token;
-    if (!doc?.getFlag?.(MODULE_ID, LA_ONLY_FLAG_KEY))
+    if (!getLAFlag(doc,LA_ONLY_FLAG_KEY))
         return false;
     // The full blocker covers LA too, no second set of edges needed.
     return !shouldTokenBlock(token);
@@ -197,8 +198,8 @@ function _onRenderTokenConfig(app, html)
     if (!$visionTab.length)
         return;
     const tokenDoc = app.token ?? app.object ?? app.document;
-    const checked = !!tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
-    const laOnlyChecked = !!tokenDoc?.getFlag?.(MODULE_ID, LA_ONLY_FLAG_KEY);
+    const checked = !!getLAFlag(tokenDoc,FLAG_KEY);
+    const laOnlyChecked = !!getLAFlag(tokenDoc,LA_ONLY_FLAG_KEY);
     const block = `
         <hr/>
         <div class="form-group">
@@ -250,8 +251,8 @@ export function initTokenBlocksVision()
         const token = canvas.tokens?.get(tokenDoc.id);
         if (!token)
             return;
-        const flagChanged = change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined
-            || change?.flags?.[MODULE_ID]?.[LA_ONLY_FLAG_KEY] !== undefined;
+        const flagChanged = getLAFlags(change)?.[FLAG_KEY] !== undefined
+            || getLAFlags(change)?.[LA_ONLY_FLAG_KEY] !== undefined;
         const heightFlagChanged = change?.flags?.['wall-height']?.tokenHeight !== undefined;
         const moved = ['x', 'y', 'width', 'height', 'elevation'].some(k => k in change);
         if (flagChanged || heightFlagChanged || moved)

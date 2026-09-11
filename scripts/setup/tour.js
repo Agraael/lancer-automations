@@ -1,6 +1,7 @@
 /* global Tour, game, ui, Dialog, Hooks, FormApplication, $, fetch */
 
 import { maybeRunSettingsOnboarding } from './settings-onboarding.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { getWeapons } from '../interactive/deployables.js';
 
 const SETTING_TOUR_DONE = 'tourCompleted';
@@ -1098,7 +1099,7 @@ async function _ensureTAHOpen({ withCombat = true } = {})
         return true;
 
     // tahEnabled is client-scope, defaults off. Offer to turn it on for the tour.
-    if (!game.settings.get(MODULE_ID, 'tahEnabled'))
+    if (!getModuleSetting('tahEnabled'))
     {
         const enable = await new Promise((resolve) =>
         {
@@ -1677,7 +1678,7 @@ async function _maybeShowMovementWarning()
     let shown = false;
     try
     {
-        shown = !!game.settings.get(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN);
+        shown = !!getModuleSetting(SETTING_MOVEMENT_WARNING_SHOWN);
     }
     catch
     { /* not registered yet */ }
@@ -1873,7 +1874,7 @@ export function registerTourBootstrap()
         let done = true;
         try
         {
-            done = !!game.settings.get(MODULE_ID, SETTING_TOUR_DONE);
+            done = !!getModuleSetting(SETTING_TOUR_DONE);
         }
         catch
         { /* not ready */ }

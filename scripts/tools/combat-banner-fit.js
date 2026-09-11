@@ -1,4 +1,4 @@
-import { MODULE_ID } from './constants.js';
+import { getModuleSetting } from './settings-utils.js';
 
 function applyBannerFit()
 {
@@ -13,7 +13,7 @@ function applyBannerFit()
     {
         const rect = hudEl.getBoundingClientRect();
         // saved position beats the rect: the hud may still be mid slide-in
-        const savedLeft = game.settings.get(MODULE_ID, 'tah.position')?.left;
+        const savedLeft = getModuleSetting('tah.position')?.left;
         const left = typeof savedLeft === 'number' ? savedLeft : rect.left;
         if (rect.width && left < 300 && rect.top < 400)
         {

@@ -1,6 +1,8 @@
 /* global canvas, ui, game, ChatMessage */
 
 import { injectExtraDataUtility } from './flows.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { accDiffTargetToken } from '../combat/grid-helpers.js';
 import { applyDamageImmunities, convertHeatToEnergyIfHeatless, hasCritImmunity, hasHitImmunity, hasMissImmunity, consumeImmunityUse, burnBonusUsageForFlow } from '../bonuses/genericBonuses.js';
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
@@ -892,7 +894,7 @@ export async function onActivationStep(state)
     };
 
     let reactionJustConsumed = false;
-    if (actionType === 'Reaction' && token?.actor && game.settings.get('lancer-automations', 'consumeReaction'))
+    if (actionType === 'Reaction' && token?.actor && getModuleSetting('consumeReaction'))
     {
         if (hasReactionAvailable(token))
         {
@@ -938,21 +940,21 @@ export async function onActivationStep(state)
     {
         for (const actorItem of (state.actor?.items ?? []))
         {
-            const itemExtraActions = actorItem.getFlag('lancer-automations', 'extraActions') || [];
+            const itemExtraActions = getLAFlag(actorItem,'extraActions') || [];
             const match = itemExtraActions.find(action => action.name === activatedAction.name && action.recharge);
             if (match)
             {
                 match.charged = false;
-                await actorItem.setFlag('lancer-automations', 'extraActions', itemExtraActions);
+                await setLAFlag(actorItem,'extraActions', itemExtraActions);
                 break;
             }
         }
-        const actorExtraActions = state.actor?.getFlag('lancer-automations', 'extraActions') || [];
+        const actorExtraActions = getLAFlag(state.actor,'extraActions') || [];
         const actorMatch = actorExtraActions.find(action => action.name === activatedAction.name && action.recharge);
         if (actorMatch)
         {
             actorMatch.charged = false;
-            await state.actor.setFlag('lancer-automations', 'extraActions', actorExtraActions);
+            await setLAFlag(state.actor,'extraActions', actorExtraActions);
         }
     }
 

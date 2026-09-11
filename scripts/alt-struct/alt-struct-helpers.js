@@ -34,7 +34,7 @@ export async function destroyMech(actor, errorText = "The mech is DESTROYED.")
     }
     catch (error)
     {
-        console.error("lancer-automations (alt-struct): Failed to destroy mech:", error);
+        console.error("lancer-automations | alt-struct |Failed to destroy mech:", error);
         ui.notifications.error(errorText);
     }
 }

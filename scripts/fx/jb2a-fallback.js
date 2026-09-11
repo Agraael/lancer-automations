@@ -1,5 +1,7 @@
 /* global game, Sequencer, Sequence */
 
+import { getModuleSetting } from '../tools/settings-utils.js';
+
 // Free-user JB2A fallbacks. Only assets that need a substitution are listed.
 // Anything not here goes through Sequencer.Database; if even that can't find
 // it we fall back to the placeholder image and warn once.
@@ -53,13 +55,8 @@ const _warnedIds = new Set();
 
 function _hasPatreon()
 {
-    try
-    {
-        if (game.settings.get('lancer-automations', 'debugForceJb2aFree'))
-            return false;
-    }
-    catch
-    { /* setting not registered yet */ }
+    if (getModuleSetting('debugForceJb2aFree'))
+        return false;
     return !!game.modules.get('jb2a_patreon')?.active;
 }
 

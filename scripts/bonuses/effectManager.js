@@ -75,6 +75,9 @@ import {
     linkEffectToActor
 } from "./flagged-effects.js";
 import { createDurationMarks, buildDuration } from "./duration-widget.js";
+import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import {
     addGlobalBonus,
     addConstantBonus,
@@ -181,13 +184,13 @@ function presetCategoryFor(prefix)
 
 function getStoredPresets()
 {
-    const raw = game.user.getFlag('lancer-automations', 'effectManagerPresets') || {};
+    const raw = getLAFlag(game.user,'effectManagerPresets') || {};
     return { standard: raw.standard || [], custom: raw.custom || [], bonus: raw.bonus || [] };
 }
 
 async function setStoredPresets(presets)
 {
-    await game.user.setFlag('lancer-automations', 'effectManagerPresets', presets);
+    await setLAFlag(game.user,'effectManagerPresets', presets);
 }
 
 function gatherPresetData(html, prefix)
@@ -1081,7 +1084,7 @@ export async function executeEffectManager(options = {})
         { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
         { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
     ];
-    if (game.settings.get('lancer-automations', 'enableInfectionDamageIntegration'))
+    if (getModuleSetting('enableInfectionDamageIntegration'))
         damageTypes.push({ name: 'Infection', icon: 'modules/lancer-automations/icons/infection.svg' });
     const damageTypeIconsHtml = damageTypes.map(dmgType => `
         <div class="bonus-immunity-damage-option te-icon-option" data-type="${dmgType.name}" title="${dmgType.name}">
@@ -2703,7 +2706,7 @@ export async function executeEffectManager(options = {})
             // Manage Tab. Templates are `disabled:true` by design; still show them so users can remove.
             const isTemplateAE = (effect) =>
             {
-                const laFlags = effect?.flags?.['lancer-automations'];
+                const laFlags = getLAFlags(effect);
                 return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
             };
 
@@ -2717,11 +2720,11 @@ export async function executeEffectManager(options = {})
                     return;
                 }
                 const effectCount = actor.effects.filter(effect =>
-                    (isTemplateAE(effect) || !effect.disabled) && (effect.icon || effect.img) && !effect.getFlag("lancer-automations", "linkedBonusId")
+                    (isTemplateAE(effect) || !effect.disabled) && (effect.icon || effect.img) && !getLAFlag(effect,"linkedBonusId")
                 ).length;
-                const bonusCount = (actor.getFlag("lancer-automations", "global_bonuses") || []).length
-                    + (actor.getFlag("lancer-automations", "constant_bonuses") || []).length
-                    + (actor.getFlag("lancer-automations", "bonusTemplates") || []).length;
+                const bonusCount = (getLAFlag(actor,"global_bonuses") || []).length
+                    + (getLAFlag(actor,"constant_bonuses") || []).length
+                    + (getLAFlag(actor,"bonusTemplates") || []).length;
                 const total = effectCount + bonusCount;
                 html.find('#manage-tab-count').text(total > 0 ? `(${total})` : '');
             };
@@ -2739,7 +2742,7 @@ export async function executeEffectManager(options = {})
                 const effects = actor.effects.filter(effect =>
                     (isTemplateAE(effect) || !effect.disabled) &&
                     (effect.icon || effect.img) &&
-                    !effect.getFlag("lancer-automations", "linkedBonusId")
+                    !getLAFlag(effect,"linkedBonusId")
                 );
 
                 if (effects.length === 0)
@@ -2747,8 +2750,8 @@ export async function executeEffectManager(options = {})
 
                 effects.forEach(effect =>
                 {
-                    const dur = effect.getFlag('lancer-automations', 'duration') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'duration') : null);
-                    const consumption = effect.getFlag('lancer-automations', 'consumption');
+                    const dur = getLAFlag(effect,'duration') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'duration') : null);
+                    const consumption = getLAFlag(effect,'consumption');
                     const stack = effect.flags?.statuscounter?.value ||
                         effect.flags?.['temporary-custom-statuses']?.stack || 0;
 
@@ -2779,7 +2782,7 @@ export async function executeEffectManager(options = {})
                                 ${stack > 0 ? `<span style="font-weight:bold; margin-left:4px;">x${stack}</span>` : ''}
                             </div>
                             <div style="display:flex; gap: 5px; align-items: center;">
-                                ${isTemplateAE(effect) && tierGateApplies(actor) ? tierGateControl(effect.getFlag('lancer-automations', 'tier'), `data-effect-id="${effect.id}"`) : ''}
+                                ${isTemplateAE(effect) && tierGateApplies(actor) ? tierGateControl(getLAFlag(effect,'tier'), `data-effect-id="${effect.id}"`) : ''}
                                 ${stack > 0 ? `
                                 <div class="te-stack-ctrl">
                                     <i class="fas fa-minus stack-btn" data-action="dec"></i>
@@ -2793,9 +2796,9 @@ export async function executeEffectManager(options = {})
                     bindTierGate(item, async (tier) =>
                     {
                         if (tier)
-                            await effect.setFlag('lancer-automations', 'tier', tier);
+                            await setLAFlag(effect,'tier', tier);
                         else
-                            await effect.unsetFlag('lancer-automations', 'tier');
+                            await unsetLAFlag(effect,'tier');
                     });
 
                     item.find('.te-delete-btn').click(async () =>
@@ -2817,9 +2820,9 @@ export async function executeEffectManager(options = {})
 
                 const bonusList = html.find('#manage-bonus-list');
                 bonusList.empty();
-                const globalBonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
-                const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
-                const bonusTemplates = actor.getFlag("lancer-automations", "bonusTemplates") || [];
+                const globalBonuses = getLAFlag(actor,"global_bonuses") || [];
+                const constantBonuses = getLAFlag(actor,"constant_bonuses") || [];
+                const bonusTemplates = getLAFlag(actor,"bonusTemplates") || [];
                 const allBonuses = [
                     ...globalBonuses.map(bonus => ({ ...bonus, _kind: 'global' })),
                     ...constantBonuses.map(bonus => ({ ...bonus, _kind: 'constant' })),
@@ -2846,7 +2849,7 @@ export async function executeEffectManager(options = {})
                         let usesInfo = '';
                         if (bonus.uses !== undefined)
                         {
-                            const linkedEffect = actor.effects.find(effect => effect.getFlag("lancer-automations", "linkedBonusId") === bonus.id);
+                            const linkedEffect = actor.effects.find(effect => getLAFlag(effect,"linkedBonusId") === bonus.id);
                             const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
                             usesInfo = remaining === null ? ` <span style="color:var(--la-accent);">[uses: ${bonus.uses}]</span>` : ` <span style="color:var(--la-accent);">[${remaining}/${bonus.uses}]</span>`;
                             const onUse = bonus.type === 'immunity' ? bonus.consumeOnUsage === true : bonus.consumeOnUsage !== false;
@@ -2866,7 +2869,7 @@ export async function executeEffectManager(options = {})
                         {
                             if (bonus._kind === 'template')
                             {
-                                const templates = foundry.utils.deepClone(actor.getFlag('lancer-automations', 'bonusTemplates') || []);
+                                const templates = foundry.utils.deepClone(getLAFlag(actor,'bonusTemplates') || []);
                                 const record = templates.find((/** @type {any} */ tpl) => tpl.id === bonus._templateId);
                                 if (!record)
                                     return;
@@ -2875,11 +2878,11 @@ export async function executeEffectManager(options = {})
                                     record.bonusData.tier = tier;
                                 else
                                     delete record.bonusData.tier;
-                                await actor.setFlag('lancer-automations', 'bonusTemplates', templates);
+                                await setLAFlag(actor,'bonusTemplates', templates);
                                 return;
                             }
                             const flagKey = bonus._kind === 'constant' ? 'constant_bonuses' : 'global_bonuses';
-                            const listCopy = foundry.utils.deepClone(actor.getFlag('lancer-automations', flagKey) || []);
+                            const listCopy = foundry.utils.deepClone(getLAFlag(actor,flagKey) || []);
                             const entry = listCopy.find((/** @type {any} */ stored) => stored.id === bonus.id);
                             if (!entry)
                                 return;
@@ -2887,7 +2890,7 @@ export async function executeEffectManager(options = {})
                                 entry.tier = tier;
                             else
                                 delete entry.tier;
-                            await actor.setFlag('lancer-automations', flagKey, listCopy);
+                            await setLAFlag(actor,flagKey, listCopy);
                         });
 
                         bonusRow.find('.manage-bonus-remove-btn').click(async () =>
@@ -2939,9 +2942,9 @@ export async function executeEffectManager(options = {})
                     return;
                 }
                 const actor = resolvedActor;
-                const bonuses = actor.getFlag("lancer-automations", "global_bonuses") || [];
-                const constantBonuses = actor.getFlag("lancer-automations", "constant_bonuses") || [];
-                const bonusTemplates = actor.getFlag("lancer-automations", "bonusTemplates") || [];
+                const bonuses = getLAFlag(actor,"global_bonuses") || [];
+                const constantBonuses = getLAFlag(actor,"constant_bonuses") || [];
+                const bonusTemplates = getLAFlag(actor,"bonusTemplates") || [];
                 const total = bonuses.length + constantBonuses.length + bonusTemplates.length;
                 if (total > 0)
                     summary.text(`${total} active`).addClass('has-bonuses').attr('title', `${total} active bonus${total > 1 ? 'es' : ''} — see Manage tab.`);
@@ -3053,7 +3056,7 @@ export async function executeEffectManager(options = {})
                 const targetId = $(this).data('target');
                 // Origin fields hold one token, so Shift-click can't extend them.
                 const single = !['std-target', 'cust-target', 'bonus-target', 'bonus-applyTo'].includes(targetId);
-                const api = game.modules.get('lancer-automations').api;
+                const api = game.modules.get(MODULE_ID).api;
                 const currentIds = _emTargetIds(html.find(`#${targetId}`).val());
 
                 // Use currently selected token as caster for the selection tool context if possible
@@ -3084,7 +3087,7 @@ export async function executeEffectManager(options = {})
             {
                 e.preventDefault();
                 const targetId = $(this).data('target');
-                const api = game.modules.get('lancer-automations').api;
+                const api = game.modules.get(MODULE_ID).api;
 
                 // trace token from bonus-applyTo or currently controlled
                 const applyToStr = String(html.find('#bonus-applyTo').val());
@@ -3579,7 +3582,7 @@ export async function executeEffectManager(options = {})
                 const { actor } = _resolveEmTarget(targetID);
                 if (!actor)
                     return;
-                await actor.unsetFlag("lancer-automations", "global_bonuses");
+                await unsetLAFlag(actor,"global_bonuses");
                 setTimeout(updateBonusList, 200);
                 setTimeout(updateManageTabCount, 200);
             });

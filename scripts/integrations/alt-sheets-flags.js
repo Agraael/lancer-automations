@@ -1,5 +1,7 @@
 // Sole coupling to lancer-alternative-sheets custom flags; change here if Annoying's api/paths move.
 
+import { getLAFlag } from '../tools/flag-utils.js';
+
 const ID = 'lancer-alternative-sheets';
 
 // actor.type -> alt-sheets CustomFlagKey
@@ -162,7 +164,7 @@ const LINK_FLAG = 'customFlagBars';
 
 export function getBarLinks(actor)
 {
-    return actor?.getFlag?.('lancer-automations', LINK_FLAG) ?? [];
+    return getLAFlag(actor,LINK_FLAG) ?? [];
 }
 
 export function isBarLinked(actor, id)

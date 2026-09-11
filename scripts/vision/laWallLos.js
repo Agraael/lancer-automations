@@ -3,6 +3,7 @@ import { refreshTokenBlockEdges } from './tokenBlocksVision.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 const FLAG_KEY = 'losBlock';
 const SETTING_FLAG_ONLY = 'lancerLosFlagOnly';
 const EDGE_PREFIX = 'la-wall-los-';
@@ -22,7 +23,7 @@ export function laSightEdgeOptions()
 
 function _shouldMirror(wallDoc)
 {
-    if (!wallDoc?.getFlag?.(MODULE_ID, FLAG_KEY))
+    if (!getLAFlag(wallDoc,FLAG_KEY))
         return false;
     // Outside flag-only mode a wall that already blocks sight is in every test, a mirror would double its edges.
     if (!laLosFlagOnly() && (wallDoc.sight ?? 0) > 0)
@@ -119,7 +120,7 @@ function _patchWallColor()
     proto._getWallColor = function ()
     {
         const doc = this.document;
-        if (doc?.getFlag?.(MODULE_ID, FLAG_KEY) && !(doc.door > 0))
+        if (getLAFlag(doc,FLAG_KEY) && !(doc.door > 0))
             return WALL_COLOR;
         return original.call(this);
     };
@@ -132,7 +133,7 @@ function _onRenderWallConfig(app, html)
     if (!el || el.querySelector(`input[name="flags.${MODULE_ID}.${FLAG_KEY}"]`))
         return;
     const doc = app.document;
-    const checked = !!doc?.getFlag?.(MODULE_ID, FLAG_KEY);
+    const checked = !!getLAFlag(doc,FLAG_KEY);
     const anchor = el.querySelector('[name="door"]')?.closest('fieldset');
     if (!anchor)
         return;
@@ -187,7 +188,7 @@ export function initLaWallLos()
     {
         if (wallDoc.parent !== canvas?.scene)
             return;
-        const flagChanged = change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined;
+        const flagChanged = getLAFlags(change)?.[FLAG_KEY] !== undefined;
         const relevant = ['c', 'sight', 'door', 'ds', 'dir'].some(key => key in change)
             || flagChanged
             || change?.flags?.['wall-height'] !== undefined;

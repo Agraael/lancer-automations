@@ -1,6 +1,7 @@
 // Deprecation scans over saved world data. A world that upgrades gets told what stopped working
 // instead of finding out mid-session.
 import { ReactionManager } from "../activations/reaction-manager.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 
 /**
  * @typedef {Object} DeprecationCheck
@@ -12,12 +13,12 @@ import { ReactionManager } from "../activations/reaction-manager.js";
 /** Every saved reaction, labelled by where it lives. Defaults are skipped, they ship already migrated. */
 function* savedReactions()
 {
-    const items = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
     for (const [lid, entry] of Object.entries(items))
         for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : []))
             yield { label: `item ${lid} / ${reaction?.name || 'unnamed'}`, reaction };
 
-    const general = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    const general = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
     for (const [name, entry] of Object.entries(general))
         for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
             yield { label: `general ${name}`, reaction };

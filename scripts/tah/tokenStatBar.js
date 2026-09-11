@@ -116,6 +116,7 @@ const BAR_DEFS = [
 
 
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
 
 function isEnabled()
 {
@@ -124,15 +125,8 @@ function isEnabled()
 
 function _getIsoState(token, settingKey = ISO_SETTING_STATBAR)
 {
-    try
-    {
-        if (!game.settings.get(MODULE_ID, settingKey))
-            return null;
-    }
-    catch
-    {
+    if (!getModuleSetting(settingKey))
         return null;
-    }
     return getIsoStateForToken(token);
 }
 
@@ -170,21 +164,13 @@ async function _resolveTokenDocument(arg)
 
 function getWorldSetting(key, fallback)
 {
-    try
-    {
-        const value = game.settings.get(MODULE_ID, key);
-        return value ?? fallback;
-    }
-    catch
-    {
-        return fallback;
-    }
+    return getModuleSetting(key) ?? fallback;
 }
 
 // Per-token boolean flag; token override wins, else the world setting.
 function tokenBoolFlag(tokenDoc, flag, settingKey)
 {
-    const value = tokenDoc?.getFlag?.(MODULE_ID, flag);
+    const value = getLAFlag(tokenDoc,flag);
     if (value === true || value === false)
         return value;
     return getWorldSetting(settingKey, false) === true;
@@ -196,7 +182,7 @@ function statBarHidden(tokenDoc)
 }
 function statBarDisabled(tokenDoc)
 {
-    return tokenDoc?.getFlag?.(MODULE_ID, FLAG_DISABLED) === true;
+    return getLAFlag(tokenDoc,FLAG_DISABLED) === true;
 }
 function statBarCombatOnly(tokenDoc)
 {
@@ -209,7 +195,7 @@ function showsPilotStress(tokenDoc)
 
 function statBarRowHeight(tokenDoc)
 {
-    const flagValue = tokenDoc?.getFlag?.(MODULE_ID, FLAG_ROW_HEIGHT);
+    const flagValue = getLAFlag(tokenDoc,FLAG_ROW_HEIGHT);
     if (Number.isFinite(flagValue) && flagValue > 0)
         return Number(flagValue);
     const fallback = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
@@ -221,7 +207,7 @@ function resolveVisibilityMode(tokenDoc, inCombat)
 {
     const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
     const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
-    const mode = tokenDoc?.getFlag?.(MODULE_ID, flagKey);
+    const mode = getLAFlag(tokenDoc,flagKey);
     if (mode === VIS_ALL || mode === VIS_OWNER || mode === VIS_NONE || mode === VIS_SCANNED)
         return mode;
     return getWorldSetting(settingKey, VIS_ALL);
@@ -372,7 +358,7 @@ function _isActorScannedByUser(actor, user)
 {
     if (!actor || !user)
         return false;
-    if (actor.getFlag?.(MODULE_ID, 'scannedByAll'))
+    if (getLAFlag(actor,'scannedByAll'))
         return true;
     try
     {
@@ -498,19 +484,19 @@ async function _autoInjectCounters(tokenDoc)
         if (!actor || !['mech', 'pilot', 'npc', 'deployable'].includes(actor.type))
             return;
 
-        const existing = doc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
-        const seen = doc.getFlag(MODULE_ID, FLAG_AUTO_KEYS) ?? {};
+        const existing = getLAFlag(doc,FLAG_EXTRAS) ?? [];
+        const seen = getLAFlag(doc,FLAG_AUTO_KEYS) ?? {};
         const liveKeys = new Set(existing.filter(/** @type {any} */ entry => entry?.autoKey).map(/** @type {any} */ entry => entry.autoKey));
 
         // Talent/frame counters (gated by world setting).
         let toAddCounters = [];
         let counterStyle = null;
-        if (game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS))
+        if (getModuleSetting(SETTING_AUTO_INJECT_TALENTS))
         {
             counterStyle = {
-                color: game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161',
-                widthPct: Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100)),
-                feedback: !!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_FEEDBACK),
+                color: getModuleSetting(SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161',
+                widthPct: Math.max(1, Math.min(100, Number(getModuleSetting(SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100)),
+                feedback: !!getModuleSetting(SETTING_AUTO_INJECT_TALENT_FEEDBACK),
             };
             const counters = _enumerateAutoCounters(actor);
             toAddCounters = counters.filter(counter => !liveKeys.has(counter.autoKey) && !seen[counter.autoKey]);
@@ -522,7 +508,7 @@ async function _autoInjectCounters(tokenDoc)
 
         // alt-sheets fraction custom flags -> derived path-bound bars.
         let toAddFlags = [];
-        if (altFlags.isActive() && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_CUSTOM_FLAGS))
+        if (altFlags.isActive() && getModuleSetting(SETTING_AUTO_INJECT_CUSTOM_FLAGS))
         {
             toAddFlags = altFlags.listLinkedFractionFlags(actor)
                 .map(flag => _buildCustomFlagBar(actor, flag))
@@ -531,7 +517,7 @@ async function _autoInjectCounters(tokenDoc)
 
         // Bond XP bar on bonded pilots (gated by world setting).
         let toAddBondXp = [];
-        if (actor.type === 'pilot' && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_BOND_XP)
+        if (actor.type === 'pilot' && getModuleSetting(SETTING_AUTO_INJECT_BOND_XP)
             && actor.items.some(/** @type {any} */ ownedItem => ownedItem.type === 'bond')
             && !liveKeys.has('bondXp') && !seen['bondXp'])
         {
@@ -664,17 +650,17 @@ async function _resetAutoInjectedExtras(tokenDoc)
         const doc = /** @type {any} */ (tokenDoc)?.document ?? tokenDoc;
         if (!doc)
             return false;
-        const existing = doc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+        const existing = getLAFlag(doc,FLAG_EXTRAS) ?? [];
         const kept = existing.filter(/** @type {any} */ entry => !entry?.autoKey);
         const fresh = [];
         const nextSeen = {};
         const actor = doc.actor;
         const isLancer = actor && ['mech', 'pilot', 'npc'].includes(actor.type);
-        if (isLancer && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS))
+        if (isLancer && getModuleSetting(SETTING_AUTO_INJECT_TALENTS))
         {
-            const color = game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161';
-            const widthPct = Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
-            const feedback = !!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_FEEDBACK);
+            const color = getModuleSetting(SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161';
+            const widthPct = Math.max(1, Math.min(100, Number(getModuleSetting(SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
+            const feedback = !!getModuleSetting(SETTING_AUTO_INJECT_TALENT_FEEDBACK);
             for (const counter of _enumerateAutoCounters(actor))
             {
                 fresh.push(_buildAutoInjectedEntry(counter, color, widthPct, feedback));
@@ -688,7 +674,7 @@ async function _resetAutoInjectedExtras(tokenDoc)
                 fresh.push(_materializeLinkedTemplate(template));
                 nextSeen[template.autoKey] = true;
             }
-            if (altFlags.isActive() && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_CUSTOM_FLAGS))
+            if (altFlags.isActive() && getModuleSetting(SETTING_AUTO_INJECT_CUSTOM_FLAGS))
             {
                 for (const flag of altFlags.listLinkedFractionFlags(actor))
                 {
@@ -800,7 +786,7 @@ function _enumerateLinkedTemplates(actor)
     const out = [];
     if (!actor)
         return out;
-    const actorList = /** @type {any} */ (actor).getFlag?.(MODULE_ID, FLAG_TEMPLATES) ?? [];
+    const actorList = getLAFlag(actor,FLAG_TEMPLATES) ?? [];
     const actorSrc = `actor:${actor.id}`;
     for (const record of actorList)
     {
@@ -810,7 +796,7 @@ function _enumerateLinkedTemplates(actor)
     }
     for (const item of actor.items ?? [])
     {
-        const itemList = /** @type {any} */ (item).getFlag?.(MODULE_ID, FLAG_TEMPLATES) ?? [];
+        const itemList = getLAFlag(item,FLAG_TEMPLATES) ?? [];
         for (const record of itemList)
         {
             if (!record?.id || !record.entry || !linkTierGate(record.entry, actor, item))
@@ -826,11 +812,11 @@ function _materializeLinkedTemplate(record)
     const merged = foundry.utils.mergeObject(_defaultExtraBar(), record.entry ?? {}, { inplace: false });
     // Fall back to the auto-inject world settings for fields the template didn't specify.
     if (record.entry?.widthPct === undefined)
-        merged.widthPct = Math.max(1, Math.min(100, Number(game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
+        merged.widthPct = Math.max(1, Math.min(100, Number(getModuleSetting(SETTING_AUTO_INJECT_TALENT_WIDTH)) || 100));
     if (record.entry?.color === undefined)
-        merged.color = { kind: 'solid', stops: [game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161'] };
+        merged.color = { kind: 'solid', stops: [getModuleSetting(SETTING_AUTO_INJECT_TALENT_COLOR) || '#196161'] };
     if (record.entry?.audioTextFeedback === undefined)
-        merged.audioTextFeedback = !!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENT_FEEDBACK);
+        merged.audioTextFeedback = !!getModuleSetting(SETTING_AUTO_INJECT_TALENT_FEEDBACK);
     merged.id = foundry.utils.randomID();
     merged.autoKey = record.autoKey;
     merged.linkedItemUuid = merged.linkedItemUuid || record.sourceUuid;
@@ -937,18 +923,18 @@ export function getExtraBars(target)
         return [];
     const documentName = /** @type {any} */ (target).documentName;
     if (documentName === 'Item' || documentName === 'Actor')
-        return /** @type {any} */ (target).getFlag?.(MODULE_ID, FLAG_TEMPLATES) ?? [];
+        return getLAFlag(target,FLAG_TEMPLATES) ?? [];
     if (documentName === 'Token')
-        return /** @type {any} */ (target).getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+        return getLAFlag(target,FLAG_EXTRAS) ?? [];
     const inner = /** @type {any} */ (target).document;
     if (inner?.documentName === 'Token')
-        return inner.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+        return getLAFlag(inner,FLAG_EXTRAS) ?? [];
     return [];
 }
 
 async function _updateExtraBarValueOnToken(tokenDoc, entryId, value)
 {
-    const extras = foundry.utils.deepClone(/** @type {any} */ (tokenDoc).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const extras = foundry.utils.deepClone(getLAFlag(tokenDoc,FLAG_EXTRAS) ?? []);
     const entry = extras.find(/** @type {any} */ item => item.id === entryId);
     if (!entry)
     {
@@ -977,7 +963,7 @@ async function _updateExtraBarValueOnToken(tokenDoc, entryId, value)
     entry.valueSource.value = next;
     try
     {
-        await /** @type {any} */ (tokenDoc).setFlag(MODULE_ID, FLAG_EXTRAS, extras);
+        await setLAFlag(tokenDoc,FLAG_EXTRAS, extras);
     }
     catch (err)
     {
@@ -989,7 +975,7 @@ async function _updateExtraBarValueOnToken(tokenDoc, entryId, value)
 
 async function _updateExtraBarValueOnTemplate(sourceDoc, templateId, value)
 {
-    const list = foundry.utils.deepClone(/** @type {any} */ (sourceDoc).getFlag(MODULE_ID, FLAG_TEMPLATES) ?? []);
+    const list = foundry.utils.deepClone(getLAFlag(sourceDoc,FLAG_TEMPLATES) ?? []);
     const record = list.find(/** @type {any} */ item => item.id === templateId);
     if (!record)
     {
@@ -1006,7 +992,7 @@ async function _updateExtraBarValueOnTemplate(sourceDoc, templateId, value)
         record.entry.valueSource = valueSource;
         try
         {
-            await /** @type {any} */ (sourceDoc).setFlag(MODULE_ID, FLAG_TEMPLATES, list);
+            await setLAFlag(sourceDoc,FLAG_TEMPLATES, list);
         }
         catch (err)
         {
@@ -1039,7 +1025,7 @@ async function _updateExtraBarValueOnTemplate(sourceDoc, templateId, value)
 
 async function _addExtraBarToToken(tokenDoc, partial)
 {
-    const extras = foundry.utils.deepClone(/** @type {any} */ (tokenDoc).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const extras = foundry.utils.deepClone(getLAFlag(tokenDoc,FLAG_EXTRAS) ?? []);
     const base = { ..._defaultExtraBar(), visibility: 'scanned', audioTextFeedback: true };
     const entry = foundry.utils.mergeObject(base, partial ?? {}, { inplace: false });
     if (!entry.id || extras.some(/** @type {any} */ item => item.id === entry.id))
@@ -1047,7 +1033,7 @@ async function _addExtraBarToToken(tokenDoc, partial)
     extras.push(entry);
     try
     {
-        await /** @type {any} */ (tokenDoc).setFlag(MODULE_ID, FLAG_EXTRAS, extras);
+        await setLAFlag(tokenDoc,FLAG_EXTRAS, extras);
     }
     catch (err)
     {
@@ -1059,7 +1045,7 @@ async function _addExtraBarToToken(tokenDoc, partial)
 
 async function _addExtraBarToTemplate(sourceDoc, partial)
 {
-    const list = foundry.utils.deepClone(/** @type {any} */ (sourceDoc).getFlag(MODULE_ID, FLAG_TEMPLATES) ?? []);
+    const list = foundry.utils.deepClone(getLAFlag(sourceDoc,FLAG_TEMPLATES) ?? []);
     // Templates store ONLY user-authored fields; settings + _defaultExtraBar fill the rest at inject time.
     const entry = { ...(partial ?? {}) };
     if (!entry.valueSource)
@@ -1072,7 +1058,7 @@ async function _addExtraBarToTemplate(sourceDoc, partial)
     list.push({ id: templateId, entry });
     try
     {
-        await /** @type {any} */ (sourceDoc).setFlag(MODULE_ID, FLAG_TEMPLATES, list);
+        await setLAFlag(sourceDoc,FLAG_TEMPLATES, list);
     }
     catch (err)
     {
@@ -1086,14 +1072,14 @@ async function _addExtraBarToTemplate(sourceDoc, partial)
 
 async function _removeExtraBarFromToken(tokenDoc, entryId)
 {
-    const extras = foundry.utils.deepClone(/** @type {any} */ (tokenDoc).getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+    const extras = foundry.utils.deepClone(getLAFlag(tokenDoc,FLAG_EXTRAS) ?? []);
     const removed = extras.find(/** @type {any} */ item => item.id === entryId);
     const next = extras.filter(/** @type {any} */ item => item.id !== entryId);
     if (next.length === extras.length)
         return false;
     try
     {
-        await /** @type {any} */ (tokenDoc).setFlag(MODULE_ID, FLAG_EXTRAS, next);
+        await setLAFlag(tokenDoc,FLAG_EXTRAS, next);
     }
     catch (err)
     {
@@ -1120,13 +1106,13 @@ async function _removeExtraBarFromToken(tokenDoc, entryId)
 
 async function _removeExtraBarFromTemplate(sourceDoc, templateId)
 {
-    const list = /** @type {any} */ (sourceDoc).getFlag(MODULE_ID, FLAG_TEMPLATES) ?? [];
+    const list = getLAFlag(sourceDoc,FLAG_TEMPLATES) ?? [];
     const next = list.filter(/** @type {any} */ record => record.id !== templateId);
     if (next.length === list.length)
         return false;
     try
     {
-        await /** @type {any} */ (sourceDoc).setFlag(MODULE_ID, FLAG_TEMPLATES, next);
+        await setLAFlag(sourceDoc,FLAG_TEMPLATES, next);
     }
     catch (err)
     {
@@ -1142,16 +1128,16 @@ async function _removeExtraBarFromTemplate(sourceDoc, templateId)
         {
             if (tokenDoc.actor?.id !== actor?.id)
                 continue;
-            const cur = tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+            const cur = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
             if (!cur.some(/** @type {any} */ entry => entry.autoKey === autoKey))
                 continue;
             const pruned = cur.filter(/** @type {any} */ entry => entry.autoKey !== autoKey);
             try
             {
-                await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, pruned);
-                const seen = { ...(tokenDoc.getFlag(MODULE_ID, FLAG_AUTO_KEYS) ?? {}) };
+                await setLAFlag(tokenDoc,FLAG_EXTRAS, pruned);
+                const seen = { ...(getLAFlag(tokenDoc,FLAG_AUTO_KEYS) ?? {}) };
                 delete seen[autoKey];
-                await tokenDoc.setFlag(MODULE_ID, FLAG_AUTO_KEYS, seen);
+                await setLAFlag(tokenDoc,FLAG_AUTO_KEYS, seen);
             }
             catch (err)
             {
@@ -1306,8 +1292,8 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
 
     // Default reads/writes FLAG_EXTRAS; callers pass storeOverride for prototype config.
     const store = storeOverride ?? {
-        read: () => tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [],
-        write: (working) => tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, working),
+        read: () => getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [],
+        write: (working) => setLAFlag(tokenDoc,FLAG_EXTRAS, working),
         onReset: () => _resetAutoInjectedExtras(tokenDoc),
     };
 
@@ -1535,7 +1521,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     const resetBtn = root.querySelector?.('.la-extra-bars-reset');
     resetBtn?.addEventListener('click', async () =>
     {
-        const settingOn = !!game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS);
+        const settingOn = !!getModuleSetting(SETTING_AUTO_INJECT_TALENTS);
         // Persist the in-memory edits first so user changes aren't blown away by races.
         try
         {
@@ -1588,7 +1574,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
 function _makeActorTemplateStore(actor)
 {
     return {
-        read: () => (actor.getFlag(MODULE_ID, FLAG_TEMPLATES) ?? [])
+        read: () => (getLAFlag(actor,FLAG_TEMPLATES) ?? [])
             .map(/** @type {any} */ record => ({ ...(record.entry ?? {}), _tid: record.id })),
         write: async (entries) =>
         {
@@ -1597,7 +1583,7 @@ function _makeActorTemplateStore(actor)
                 const { _tid, ...rest } = entry;
                 return { id: _tid ?? foundry.utils.randomID(), entry: rest };
             });
-            await actor.setFlag(MODULE_ID, FLAG_TEMPLATES, records);
+            await setLAFlag(actor,FLAG_TEMPLATES, records);
             await reinjectAutoBarsForActor(actor);
         },
         onReset: async () =>
@@ -1620,12 +1606,12 @@ function _makeSceneTokenStore(actor, tokenDoc)
             return null;
         return autoKey.split(':')[1] || null;
     };
-    const initialArr = tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const initialArr = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     const initiallyVisibleTids = new Set(
         initialArr.map(/** @type {any} */ entry => linkedActorTid(entry?.autoKey)).filter(Boolean),
     );
     return {
-        read: () => tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [],
+        read: () => getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [],
         write: async (working) =>
         {
             const workingTids = new Set();
@@ -1652,7 +1638,7 @@ function _makeSceneTokenStore(actor, tokenDoc)
                 }
                 tokenRows.push(entry);
             }
-            const existing = actor.getFlag(MODULE_ID, FLAG_TEMPLATES) ?? [];
+            const existing = getLAFlag(actor,FLAG_TEMPLATES) ?? [];
             const merged = [];
             for (const record of existing)
             {
@@ -1667,8 +1653,8 @@ function _makeSceneTokenStore(actor, tokenDoc)
             }
             for (const rest of newManuals)
                 merged.push({ id: foundry.utils.randomID(), entry: rest });
-            await actor.setFlag(MODULE_ID, FLAG_TEMPLATES, merged);
-            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, tokenRows);
+            await setLAFlag(actor,FLAG_TEMPLATES, merged);
+            await setLAFlag(tokenDoc,FLAG_EXTRAS, tokenRows);
             await reinjectAutoBarsForActor(actor);
         },
         onReset: () => _resetAutoInjectedExtras(tokenDoc),
@@ -1677,7 +1663,7 @@ function _makeSceneTokenStore(actor, tokenDoc)
 
 function snapshotValues(actor, tokenDoc = null)
 {
-    const extras = tokenDoc?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     const extrasSnap = {};
     for (const extra of extras)
     {
@@ -2011,7 +1997,7 @@ function fireExtraFeedback(token, entryId, oldVal, newVal)
         return;
     try
     {
-        const extras = /** @type {any} */ (token).document?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+        const extras = getLAFlag(token.document, FLAG_EXTRAS) ?? [];
         const entry = extras.find(/** @type {any} */ extra => extra?.id === entryId);
         if (!entry?.audioTextFeedback)
             return;
@@ -2708,7 +2694,7 @@ function drawStatHub()
     }
 
     // Extra bars (user-defined via Resources tab): drawn live post-bake so value redraws don't invalidate the baked chrome.
-    const extras = /** @type {any} */ (token).document?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extras = getLAFlag(token.document, FLAG_EXTRAS) ?? [];
     const visibleExtras = extras.filter(/** @type {any} */ extra => _resolveExtraBarValues(actor, extra).ownerOk);
     const extraLines = _groupExtrasIntoLines(visibleExtras);
     const extrasGeom = [];
@@ -3129,12 +3115,7 @@ function injectLancerHud(hud, html, actor)
 
     // Top: Overshield, [Infection], Burn. Infection cell hidden when integration is disabled or pilot.
     let infectionOn = false;
-    try
-    {
-        infectionOn = !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration');
-    }
-    catch
-    { /* setting not registered */ }
+    infectionOn = !!getModuleSetting('enableInfectionDamageIntegration');
     const topInner =
         cell('system.overshield.value', sys?.overshield?.value ?? 0, COLORS.overshield, 'Overshield') +
         (infectionOn && !isPilot ? cell('system.infection', sys?.infection ?? 0, COLORS.infection, 'Infection') : '') +
@@ -3213,7 +3194,7 @@ function injectLancerHud(hud, html, actor)
 
     // Extras column, mirrored from the reaction box on the left.
     const tokenDoc = hud.object?.document;
-    const extras = tokenDoc?.getFlag(MODULE_ID, FLAG_EXTRAS) ?? [];
+    const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     const visibleExtras = extras.filter(/** @type {any} */ extra => _resolveExtraBarValues(actor, extra).ownerOk);
     if (visibleExtras.length)
     {
@@ -3241,7 +3222,7 @@ function injectLancerHud(hud, html, actor)
             const num = Number(raw);
             if (!Number.isFinite(num))
                 return;
-            const extras = foundry.utils.deepClone(tokenDoc.getFlag(MODULE_ID, FLAG_EXTRAS) ?? []);
+            const extras = foundry.utils.deepClone(getLAFlag(tokenDoc,FLAG_EXTRAS) ?? []);
             const entry = extras.find(/** @type {any} */ x => x.id === entryId);
             if (!entry || entry.valueSource?.kind !== 'manual')
                 return;
@@ -3249,7 +3230,7 @@ function injectLancerHud(hud, html, actor)
             if (raw.startsWith('+') || raw.startsWith('-'))
                 next = (Number(entry.valueSource.value) || 0) + num;
             entry.valueSource.value = next;
-            await tokenDoc.setFlag(MODULE_ID, FLAG_EXTRAS, extras);
+            await setLAFlag(tokenDoc,FLAG_EXTRAS, extras);
             hud.clear();
         };
 
@@ -3621,7 +3602,7 @@ export function initTokenStatBar()
                 }
                 catch
                 { /* ignore */ }
-                const extras = tok.document?.getFlag?.(MODULE_ID, FLAG_EXTRAS) ?? [];
+                const extras = getLAFlag(tok.document,FLAG_EXTRAS) ?? [];
                 const barCoversIt = extras.some(/** @type {any} */ extra => extra?.autoKey === 'bondXp' && extra.audioTextFeedback);
                 if (showScroll && !barCoversIt)
                 {
@@ -3991,8 +3972,8 @@ export function initTokenStatBar()
             return;
         if (!game.users?.activeGM?.isSelf)
             return;
-        const talentsOn = game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_TALENTS);
-        const flagsOn = altFlags.isActive() && game.settings.get(MODULE_ID, SETTING_AUTO_INJECT_CUSTOM_FLAGS);
+        const talentsOn = getModuleSetting(SETTING_AUTO_INJECT_TALENTS);
+        const flagsOn = altFlags.isActive() && getModuleSetting(SETTING_AUTO_INJECT_CUSTOM_FLAGS);
         if (!talentsOn && !flagsOn)
             return;
         for (const token of canvas.tokens?.placeables ?? [])
@@ -4089,8 +4070,8 @@ export function initTokenStatBar()
         const disabled = statBarDisabled(tokenDoc);
         const combatOnly = statBarCombatOnly(tokenDoc);
         const rowHeight = statBarRowHeight(tokenDoc);
-        const visOut = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_OUT_OF_COMBAT) ?? '';
-        const visIn = tokenDoc.getFlag(MODULE_ID, FLAG_VIS_IN_COMBAT) ?? '';
+        const visOut = getLAFlag(tokenDoc,FLAG_VIS_OUT_OF_COMBAT) ?? '';
+        const visIn = getLAFlag(tokenDoc,FLAG_VIS_IN_COMBAT) ?? '';
         const isPilotActor = tokenDoc?.actor?.type === 'pilot';
         const pilotStress = showsPilotStress(tokenDoc);
         const visOption = (val, label, current) =>

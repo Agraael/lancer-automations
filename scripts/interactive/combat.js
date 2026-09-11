@@ -1,6 +1,8 @@
 /* global canvas, PIXI, game, ui, $ */
 
 import { startChoiceCard, startVoteCard } from "./network.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { isWhiteSvgIcon } from "./cards.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
 import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
@@ -90,7 +92,7 @@ export async function openThrowMenu(actor)
     if (!weapon)
         return;
 
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (api?.beginWeaponThrowFlow)
         await api.beginWeaponThrowFlow(weapon);
     else if (/** @type {any} */ (weapon).beginWeaponAttackFlow)
@@ -130,7 +132,7 @@ export async function revertMovement(token, destination = null)
     {
         try
         {
-            return !!game.settings.get('lancer-automations', 'debugMovement');
+            return !!getModuleSetting('debugMovement');
         }
         catch
         {
@@ -153,7 +155,7 @@ export async function revertMovement(token, destination = null)
         const isClean = await revertLastMovement(token);
         const newPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, newPos);
-        game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
+        game.modules.get(MODULE_ID)?.api?.undoMoveData(token.id, dist);
         return isClean;
     }
 
@@ -162,7 +164,7 @@ export async function revertMovement(token, destination = null)
         const currentPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, destination);
         await token.document.update(destination, /** @type {any} */ ({ isUndo: true }));
-        game.modules.get("lancer-automations")?.api?.undoMoveData(token.id, dist);
+        game.modules.get(MODULE_ID)?.api?.undoMoveData(token.id, dist);
         return true;
     }
 
@@ -182,7 +184,7 @@ export async function clearMovementHistory(tokens, revert = false)
     if (tokenList.length === 0)
         return;
 
-    const lancerAutomations = game.modules.get('lancer-automations');
+    const lancerAutomations = game.modules.get(MODULE_ID);
 
     for (const token of tokenList)
     {
@@ -206,7 +208,7 @@ export async function clearMovementHistory(tokens, revert = false)
 
 export async function resetMovementCap(token)
 {
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     api.initMovementCap(token.document.id);
 }
 

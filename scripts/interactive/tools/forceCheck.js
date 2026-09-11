@@ -1,4 +1,5 @@
 import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
+import { MODULE_ID } from "../../tools/constants.js";
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
@@ -35,7 +36,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
 {
     return _queueCard(() => new Promise((resolve) =>
     {
-        const api = game.modules.get('lancer-automations')?.api;
+        const api = game.modules.get(MODULE_ID)?.api;
         const caster = tokenA ?? canvas.tokens?.controlled?.[0] ?? null;
         const state = {
             skill: skill ? String(skill).toUpperCase() : 'HULL',

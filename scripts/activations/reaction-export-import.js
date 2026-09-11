@@ -1,6 +1,7 @@
 /*global FormApplication, Dialog, $, game, ui, saveDataToFile */
 
 import { ReactionManager, clearScriptCache } from "./reaction-manager.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { escapeHtml as esc } from "../tools/string-utils.js";
 
 export class ReactionExport extends FormApplication
@@ -154,14 +155,7 @@ function openImportSummary(data)
     {
         const current = (() =>
         {
-            try
-            {
-                return game.settings.get('lancer-automations', k);
-            }
-            catch
-            {
-                return undefined;
-            }
+            return getModuleSetting(k);
         })();
         return settingRow('settings', k, current, settings[k]);
     });
@@ -561,7 +555,7 @@ function openPackImportSummary(data, onDone)
     const packName = String(data.name ?? '').trim() || 'Imported Pack';
 
     const existingStartups = new Set(
-        (game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
+        (getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
             .flatMap(s => [s.id, s.name].filter(Boolean))
     );
 
@@ -655,14 +649,14 @@ async function applyPackImport(packName, itemReactions, generalReactions, startu
 
     if (Object.keys(itemReactions).length)
     {
-        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+        const current = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
         for (const [lid, group] of Object.entries(itemReactions))
             current[lid] = group;
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, current);
     }
     if (Object.keys(generalReactions).length)
     {
-        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const current = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         for (const [name, reaction] of Object.entries(generalReactions))
             current[name] = reaction;
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, current);
@@ -680,7 +674,7 @@ async function applyPackImport(packName, itemReactions, generalReactions, startu
     let addedStartups = 0;
     if (startupScripts.length)
     {
-        const current = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+        const current = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
         const seen = new Set(current.flatMap(s => [s.id, s.name].filter(Boolean)));
         for (const s of startupScripts)
         {

@@ -1,6 +1,7 @@
 /* global game, Hooks, libWrapper, foundry, canvas, PIXI, CONST */
 
 import { elevationForPreview, getDragElevationOffset } from './elevation.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { getImmunityBonuses } from '../bonuses/genericBonuses.js';
 import { isForceFreeMovement, getCurrentMovementType } from './keybindings.js';
 import { freeTwinOf, parseAction } from './movement-actions.js';
@@ -13,7 +14,7 @@ function debugOn()
 {
     try
     {
-        return !!game.settings.get('lancer-automations', 'debugMovement');
+        return !!getModuleSetting('debugMovement');
     }
     catch
     {
@@ -1025,7 +1026,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
             debug.push(`ERROR: ${e.message}`);
         }
         if (debugOn())
-            console.log('LA-COST', { fromWp, toWp, horizontalCost, verticalCost, terrainCost, malus, debug });
+            console.log('lancer-automations | cost |',{ fromWp, toWp, horizontalCost, verticalCost, terrainCost, malus, debug });
         if (horizontalCost === 0)
             horizontalCost = Number(seg.distance) || 0;
 
@@ -1214,7 +1215,7 @@ function _autoElevDisabled()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'disableAutoTerrainElevation');
+        return !!getModuleSetting('disableAutoTerrainElevation');
     }
     catch
     {
@@ -1228,7 +1229,7 @@ function _isLancerCostActive()
 {
     try
     {
-        if (!game.settings.get(MODULE_ID, 'enableBuiltinSpeedProvider'))
+        if (!getModuleSetting('enableBuiltinSpeedProvider'))
             return false;
     }
     catch

@@ -1,4 +1,5 @@
 import { getOccupiedOffsets } from "./grid-helpers.js";
+import { getLAFlag, setLAFlag, unsetLAFlag } from "../tools/flag-utils.js";
 import { getImmunityBonuses, consumeImmunityUse } from "../bonuses/genericBonuses.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/network.js";
 
@@ -143,15 +144,15 @@ async function _runDangerousZone(token, damageType, damageValue)
     if (!actor)
         return;
     const currentRound = game.combat?.round || 0;
-    const lastTriggeredRound = actor.getFlag("lancer-automations", "dangerousZoneRound");
+    const lastTriggeredRound = getLAFlag(actor,"dangerousZoneRound");
 
     if (lastTriggeredRound === currentRound && game.combat?.started)
         return;
 
     if (game.combat?.started)
-        await actor.setFlag("lancer-automations", "dangerousZoneRound", currentRound);
+        await setLAFlag(actor,"dangerousZoneRound", currentRound);
     else if (lastTriggeredRound !== undefined)
-        await actor.unsetFlag("lancer-automations", "dangerousZoneRound");
+        await unsetLAFlag(actor,"dangerousZoneRound");
 
     const damageTypeLabels = { kinetic: "Kinetic", energy: "Energy", explosive: "Explosive", burn: "Burn", heat: "Heat", variable: "Variable" };
 

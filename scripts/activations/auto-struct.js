@@ -1,4 +1,4 @@
-import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 // The system's structure/overheat buttons and alt-struct's own. Neither matches .lancer-flow-button.
 const BUTTON_SELECTOR = '.flow-button[data-flow-type], .alt-struct-flow-button[data-flow-type]';
@@ -10,7 +10,7 @@ export function initAutoStruct()
 {
     Hooks.on('createChatMessage', message =>
     {
-        if (!game.settings.get(MODULE_ID, 'autoStructFollowup'))
+        if (!getModuleSetting('autoStructFollowup'))
             return;
         if (message.author?.id !== game.user.id)
             return;

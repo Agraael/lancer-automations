@@ -1,4 +1,5 @@
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus, mutateDamageWithBonus, getConstantBonuses, getGlobalBonuses } from "../bonuses/genericBonuses.js";
+import { getLAFlag } from "./flag-utils.js";
 
 const REACH_RANGE_TYPES = new Set(["Range", "Threat", "Line", "Burst", "Cone"]);
 
@@ -291,7 +292,7 @@ export async function getMaxItemRanges_WithBonus(item, actor)
             allRanges.push({ type: "Thrown", val: throwVal });
     }
 
-    const deployRange = item.getFlag?.("lancer-automations", "deployRange");
+    const deployRange = getLAFlag(item,"deployRange");
     if (deployRange)
         allRanges.push({ type: "Deploy", val: deployRange });
 

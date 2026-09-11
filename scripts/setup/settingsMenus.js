@@ -1,6 +1,8 @@
 /* global game, ui, canvas, FormApplication, foundry, jQuery, Dialog, $ */
 
 import { ReactionReset } from '../activations/reaction-reset.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { setLAFlag } from '../tools/flag-utils.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
 import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
 import { openNewsHistory } from './news.js';
@@ -63,7 +65,7 @@ const ACTIVATIONS_FIELDS = [
         hint: 'Walk every entry in the SCAN Database folder and re-render its page using the current template (LA legacy mode).',
         onClick: async () =>
         {
-            const api = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+            const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
             await api?.regenerateScans?.();
         },
     },
@@ -153,7 +155,7 @@ const WRECKS_FIELDS = [
         label: 'Wreck Terrain Type',
         getChoices: () =>
         {
-            const current = game.settings.get(MODULE_ID, 'wreckTerrainType') || '';
+            const current = getModuleSetting('wreckTerrainType') || '';
             const choices = [{ value: '', label: 'None', selected: current === '' }];
             try
             {
@@ -174,7 +176,7 @@ const WRECKS_FIELDS = [
         {
             const modeChoices = (key) =>
             {
-                const cur = game.settings.get(MODULE_ID, key);
+                const cur = getModuleSetting(key);
                 return [
                     { value: 'token', label: 'Token', selected: cur === 'token' },
                     { value: 'tile', label: 'Tile', selected: cur === 'tile' },
@@ -183,7 +185,7 @@ const WRECKS_FIELDS = [
             };
             const terrainChoices = (key) =>
             {
-                let cur = game.settings.get(MODULE_ID, key);
+                let cur = getModuleSetting(key);
                 if (cur === true)
                     cur = 'terrain';
                 else if (cur === false)
@@ -233,7 +235,7 @@ const WRECKS_FIELDS = [
         label: 'Wreck Faction On Death',
         getChoices: () =>
         {
-            const cur = game.settings.get(MODULE_ID, 'wreckFactionOnDeath') || 'same';
+            const cur = getModuleSetting('wreckFactionOnDeath') || 'same';
             const choices = [
                 { value: 'same', label: 'Same Team / Disposition', selected: cur === 'same' },
                 { value: 'neutral', label: 'Neutral (No Team)', selected: cur === 'neutral' },
@@ -260,7 +262,7 @@ function _statBarVisChoices(key)
     let cur = 'all';
     try
     {
-        cur = game.settings.get(MODULE_ID, key);
+        cur = getModuleSetting(key);
     }
     catch
     { /* not ready */ }
@@ -474,8 +476,8 @@ const TAH_FIELDS = [
             });
             if (!confirmed)
                 return;
-            await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites', []);
-            await /** @type {any} */ (game.user).setFlag(MODULE_ID, 'tahFavorites2', []);
+            await setLAFlag(game.user,'tahFavorites', []);
+            await setLAFlag(game.user,'tahFavorites2', []);
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info('TAH Favorites cleared.');
         } },
@@ -738,8 +740,8 @@ const TOOLS_FIELDS = [
     },
 ];
 
-const laKb = (key) => ({ type: 'keybinding', module: 'lancer-automations', key });
-const laTour = (key) => ({ type: 'tour', module: 'lancer-automations', key });
+const laKb = (key) => ({ type: 'keybinding', module: MODULE_ID, key });
+const laTour = (key) => ({ type: 'tour', module: MODULE_ID, key });
 
 const TUTORIALS_FIELDS = [
     { type: 'section', label: 'Setup', hint: 'First-run setup and guided walkthroughs.' },
@@ -1014,7 +1016,7 @@ function _isRequirementMet($html, key, seen = new Set())
     {
         try
         {
-            on = !!game.settings.get(MODULE_ID, key);
+            on = !!getModuleSetting(key);
         }
         catch
         {
@@ -1148,7 +1150,7 @@ function _readStatusFx(sub, fallback = true)
 {
     try
     {
-        const cfg = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+        const cfg = getModuleSetting('statusFXConfig') ?? {};
         return cfg[sub] !== undefined ? cfg[sub] : fallback;
     }
     catch
@@ -1298,7 +1300,7 @@ function _buildItem(field)
                 let value = true;
                 try
                 {
-                    value = !!game.settings.get(MODULE_ID, it.key);
+                    value = !!getModuleSetting(it.key);
                 }
                 catch
                 { /* not ready */ }
@@ -1350,7 +1352,7 @@ function _buildItem(field)
     let value;
     try
     {
-        value = game.settings.get(MODULE_ID, field.key);
+        value = getModuleSetting(field.key);
     }
     catch
     {
@@ -2404,7 +2406,7 @@ export class LancerAutomationsConfig extends FormApplication
         {
             try
             {
-                const existing = game.settings.get(MODULE_ID, 'statusFXConfig') ?? {};
+                const existing = getModuleSetting('statusFXConfig') ?? {};
                 /** @type {any} */
                 const next = { ...existing };
                 let changed = false;
@@ -2486,7 +2488,7 @@ export class LancerAutomationsConfig extends FormApplication
             try
             {
                 const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`);
-                const prev = game.settings.get(MODULE_ID, f.key);
+                const prev = getModuleSetting(f.key);
                 if (prev !== newValue && setting?.requiresReload)
                     this._needsReload = true;
                 await game.settings.set(MODULE_ID, f.key, newValue);

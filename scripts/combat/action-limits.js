@@ -1,6 +1,7 @@
 /* global game, canvas, foundry, Hooks */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag, setLAFlag, unsetLAFlag } from '../tools/flag-utils.js';
 const RESTORE_FLAG = 'actionTrackerRestore';
 
 // brace / dazed: 1 quick action only (Lancer "prefer full, then quick" spend logic means
@@ -40,7 +41,7 @@ export function getItemActionLocks(actor, actionName = null)
     {
         if (item.system?.destroyed || item.system?.disabled)
             continue;
-        for (const lock of (item.getFlag?.('lancer-automations', 'actionLocks') ?? []))
+        for (const lock of (getLAFlag(item,'actionLocks') ?? []))
         {
             if (!lock?.actionName || (actionName && lock.actionName !== actionName))
                 continue;
@@ -68,7 +69,7 @@ export function getItemActionTypeLocks(actor, actionName = null, activation = nu
     {
         if (item.system?.destroyed || item.system?.disabled)
             continue;
-        for (const lock of (item.getFlag?.('lancer-automations', 'actionTypeLocks') ?? []))
+        for (const lock of (getLAFlag(item,'actionTypeLocks') ?? []))
         {
             if (typeLockApplies(lock, activation, actionName))
                 out.push({ item, actionName, activation, reason: lock.reason ?? null, kind: lock.kind ?? null });
@@ -82,7 +83,7 @@ export function getActorActionTypeLocks(actor, actionName = null, activation = n
 {
     if (!activation)
         return [];
-    const byType = /** @type {Record<string,any[]>} */ (actor?.getFlag?.('lancer-automations', 'lockedActionTypes')) ?? {};
+    const byType = /** @type {Record<string,any[]>} */ (getLAFlag(actor,'lockedActionTypes')) ?? {};
     const out = [];
     for (const [type, entries] of Object.entries(byType))
     {
@@ -123,7 +124,7 @@ const STATUS_DISABLING_ACTION = (() =>
 export function getActionLockInfo(actor, actionName, activation = null)
 {
     const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(statusId => actor?.statuses?.has?.(statusId));
-    const tracker = /** @type {any[]} */ ((actor?.getFlag?.('lancer-automations', 'lockedActions') ?? {})[actionName] ?? []);
+    const tracker = /** @type {any[]} */ ((getLAFlag(actor,'lockedActions') ?? {})[actionName] ?? []);
     const sources = [
         ...tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry))),
         ...getActorActionTypeLocks(actor, actionName, activation)
@@ -176,7 +177,7 @@ export async function refreshActionLimits(token, { turnStart = false } = {})
         for (const field of locks)
             lockedFields.add(field);
     }
-    const prevRestore = actor.getFlag(MODULE_ID, RESTORE_FLAG) ?? {};
+    const prevRestore = getLAFlag(actor,RESTORE_FLAG) ?? {};
     const restore = { ...prevRestore };
     const tracker = actor.system?.action_tracker ?? {};
     const updates = {};
@@ -205,7 +206,7 @@ export async function refreshActionLimits(token, { turnStart = false } = {})
     if (Object.keys(updates).length > 0)
         await actor.update(updates, { _laActionLimits: true });
     if (restoreChanged && Object.keys(restore).length === 0)
-        await actor.unsetFlag(MODULE_ID, RESTORE_FLAG);
+        await unsetLAFlag(actor,RESTORE_FLAG);
 }
 
 function _findTokenForActor(actor)
@@ -233,7 +234,7 @@ async function _cleanupStaleStatusLocks()
         return;
     for (const actor of game.actors ?? [])
     {
-        const locks = actor.getFlag(MODULE_ID, 'lockedActions');
+        const locks = getLAFlag(actor,'lockedActions');
         if (!locks || typeof locks !== 'object')
             continue;
         const next = {};
@@ -249,11 +250,11 @@ async function _cleanupStaleStatusLocks()
         }
         if (changed)
         {
-            console.log(`LA action-limits cleanup: ${actor.name} had stale status: locks`, locks, '→', next);
+            console.log(`lancer-automations | action-limits | cleanup:${actor.name} had stale status: locks`, locks, '→', next);
             if (Object.keys(next).length)
-                await actor.setFlag(MODULE_ID, 'lockedActions', next);
+                await setLAFlag(actor,'lockedActions', next);
             else
-                await actor.unsetFlag(MODULE_ID, 'lockedActions');
+                await unsetLAFlag(actor,'lockedActions');
         }
     }
 }
@@ -283,7 +284,7 @@ export function registerActionLimitsHooks()
             return;
         if (!game.users.activeGM?.isSelf)
             return;
-        const hasCapture = !!actor.getFlag(MODULE_ID, RESTORE_FLAG);
+        const hasCapture = !!getLAFlag(actor,RESTORE_FLAG);
         const hasLimiting = ACTION_LIMITING_EFFECTS.some(e => e.locks?.length && _hasStatus(actor, e.statusId));
         if (!hasCapture && !hasLimiting)
             return;
@@ -312,7 +313,7 @@ export function registerActionLimitsHooks()
         }
         if (!lockedFields.size)
             return;
-        const prevRestore = actor.getFlag(MODULE_ID, RESTORE_FLAG) ?? {};
+        const prevRestore = getLAFlag(actor,RESTORE_FLAG) ?? {};
         const restore = { ...prevRestore };
         let restoreChanged = false;
         for (const field of lockedFields)

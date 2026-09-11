@@ -6,6 +6,7 @@ import {
     addGraphicsBelowTokens, destroyGraphics, paintCellRegion, createFadeInOut,
 } from "./canvas-helpers.js";
 import { computeMovementReach } from "../movement/reachability.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { liveDragState } from "../movement/token-ruler.js";
 import { getSpeedRanges, tokenSpeed } from "../combat/speed-provider.js";
 
@@ -18,7 +19,7 @@ function forceReachColor()
 {
     try
     {
-        const hex = game.settings.get(MODULE_ID, 'speedProvider.colorForceMovement') || '#8B5CF6';
+        const hex = getModuleSetting('speedProvider.colorForceMovement') || '#8B5CF6';
         return Number.parseInt(hex.replace('#', ''), 16);
     }
     catch

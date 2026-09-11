@@ -1,4 +1,5 @@
 import * as actionFX from '../fx/actionFX.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 
 // IMMOBILIZED uses flagged-effects; ENGAGED is managed by overwatch.js, not here.
 
@@ -12,7 +13,7 @@ function getGrappleState(token)
 {
     if (!token)
         return {};
-    return token.document.getFlag(MODULE_ID, 'grappleState') || {};
+    return getLAFlag(token.document,'grappleState') || {};
 }
 
 async function setGrappleState(token, state)
@@ -218,7 +219,7 @@ async function cleanupGrappleReferences(api, deletedTokenId)
             const token = canvas.tokens.get(tokenDoc.id);
             if (!token)
                 continue;
-            const state = tokenDoc.getFlag(MODULE_ID, 'grappleState');
+            const state = getLAFlag(tokenDoc,'grappleState');
             if (!state)
                 continue;
             if (state.grapplerIds?.includes(deletedTokenId))
@@ -552,7 +553,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     {
                         if (_laInternalGuard > 0)
                             return false;
-                        if (!triggerData.effect?.getFlag?.('lancer-automations', 'grappleSource'))
+                        if (!getLAFlag(triggerData.effect,'grappleSource'))
                             return false;
                         const state = getGrappleState(reactorToken);
                         return !!(state.grapplerIds?.length || state.grappledIds?.length);

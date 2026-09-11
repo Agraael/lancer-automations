@@ -1,6 +1,7 @@
 import { _flowSourceToken } from '../fx/actionFX.js';
+import { getModuleSetting } from './settings-utils.js';
+import { getLAFlags } from './flag-utils.js';
 
-import { MODULE_ID } from './constants.js';
 const SOCKET_CHANNEL = 'module.lancer-automations';
 const DEFAULT_PAN_DURATION_MS = 1000;
 const ACTIVATION_DEBOUNCE_MS = 300;
@@ -20,7 +21,7 @@ function isFocusEnabled(focusKind)
         return false;
     try
     {
-        return game.settings.get(MODULE_ID, settingKey) === true;
+        return getModuleSetting(settingKey) === true;
     }
     catch
     {
@@ -32,7 +33,7 @@ function panDurationMs()
 {
     try
     {
-        const duration = Number(game.settings.get(MODULE_ID, 'autoFocusDuration'));
+        const duration = Number(getModuleSetting('autoFocusDuration'));
         return Number.isFinite(duration) && duration > 0 ? duration : DEFAULT_PAN_DURATION_MS;
     }
     catch
@@ -117,7 +118,7 @@ function isActionFocusEnabled(actionKey)
         return true;
     try
     {
-        return game.settings.get(MODULE_ID, `autoFocusAction.${FOCUS_CATEGORY_BY_FX[actionKey] ?? 'activation'}`) !== false;
+        return getModuleSetting(`autoFocusAction.${FOCUS_CATEGORY_BY_FX[actionKey] ?? 'activation'}`) !== false;
     }
     catch
     {
@@ -177,7 +178,7 @@ export function initAutoFocus()
     // The roller focused at the roll itself, everyone else follows the card they can see.
     Hooks.on('createChatMessage', chatMessage =>
     {
-        const focus = chatMessage.flags?.[MODULE_ID]?.focus;
+        const focus = getLAFlags(chatMessage)?.focus;
         if (!focus?.kind || !Array.isArray(focus.tokenIds))
             return;
         if (chatMessage.author?.id === game.user.id || !chatMessage.visible)

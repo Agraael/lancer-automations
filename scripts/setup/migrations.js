@@ -1,6 +1,7 @@
 /* global game, globalThis, Hooks */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 const MIGRATIONS = [
     {
@@ -12,7 +13,7 @@ const MIGRATIONS = [
                 ?.some(setting => setting.key?.startsWith(`${MODULE_ID}.`));
             if (!priorInstall)
                 return;
-            const saved = game.settings.get(MODULE_ID, 'generalReactions') || {};
+            const saved = getModuleSetting('generalReactions') || {};
             if (saved.Overwatch?.reactions?.some(sub => sub?.enabled !== undefined))
                 return;
             saved.Overwatch = { ...saved.Overwatch, reactions: [{ enabled: true }] };
@@ -24,7 +25,7 @@ const MIGRATIONS = [
         id: 'visionRangeScrub_v1',
         async run()
         {
-            if (!game.settings.get(MODULE_ID, 'lancerVisionAutoAdd'))
+            if (!getModuleSetting('lancerVisionAutoAdd'))
                 return;
             await globalThis.lancerAutoVisionSetup?.();
         },
@@ -33,7 +34,7 @@ const MIGRATIONS = [
         id: 'lancerLosModes_v1',
         async run()
         {
-            if (!game.settings.get(MODULE_ID, 'lancerVisionAutoAdd'))
+            if (!getModuleSetting('lancerVisionAutoAdd'))
                 return;
             await globalThis.lancerAutoVisionSetup?.();
         },
@@ -43,7 +44,7 @@ const MIGRATIONS = [
         id: 'boostOfferMode_v1',
         async run()
         {
-            const stored = game.settings.get(MODULE_ID, 'enableBoostOffer');
+            const stored = getModuleSetting('enableBoostOffer');
             if (typeof stored !== 'boolean')
                 return;
             await game.settings.set(MODULE_ID, 'enableBoostOffer', stored ? 'yes' : 'no');
@@ -94,7 +95,7 @@ Hooks.once('ready', async () =>
     await new Promise(resolve => globalThis.setTimeout(resolve, 0));
     for (const m of MIGRATIONS)
     {
-        if (game.settings.get(MODULE_ID, m.id))
+        if (getModuleSetting(m.id))
             continue;
         try
         {
@@ -102,7 +103,7 @@ Hooks.once('ready', async () =>
         }
         catch (e)
         {
-            console.error(`LA migration "${m.id}" failed`, e);
+            console.error(`lancer-automations | migration "${m.id}" failed`, e);
             continue;
         }
         await game.settings.set(MODULE_ID, m.id, true);

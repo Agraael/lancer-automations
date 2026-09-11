@@ -4,6 +4,7 @@
 // returns the shape the recap and GM card render.
 
 import { AWARDS } from './awards.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { attributeKill } from './kill-attribution.js';
 
 const ACCENT_PALETTE = [
@@ -95,13 +96,7 @@ export function deriveDisplayBattle(telemetry, { outcome = 'VICTORY', mvpId = nu
     const rounds = Array.from({ length: telemetry.roundCount }, (_, i) => i + 1);
     const mission = _buildMission(telemetry, outcome, players, hostiles);
     mission.turns = turnAxis.length || null;
-    let disableAwards = false;
-    try
-    {
-        disableAwards = !!game.settings.get('lancer-automations', 'tah.disableAwards');
-    }
-    catch
-    { /* not ready */ }
+    const disableAwards = !!getModuleSetting('tah.disableAwards');
     const { awards, mvpId: derivedMvpId } = disableAwards
         ? { awards: [], mvpId: mvpId ?? null }
         : _buildAwards(players, mvpId);

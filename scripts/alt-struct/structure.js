@@ -1,6 +1,7 @@
 /* global game, ui, canvas, $ */
 
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
 import { rollCard } from "../interactive/tools/rollCard.js";
@@ -151,7 +152,7 @@ async function createDirectHitRoll(damage)
 /** 1-struct NPC bypass: skip table, show immediate Crushing Hit card (mirrors csm-lancer-qol oneStructFlowStep). */
 export async function npcOneStructStep(state)
 {
-    if (!game.settings.get("lancer-automations", "enableOneStructNpc"))
+    if (!getModuleSetting("enableOneStructNpc"))
         return true;
     const actor = state.actor;
     if (!actor?.is_npc() || actor.system.structure.max !== 1)
@@ -815,7 +816,7 @@ export async function manualSystemTrauma()
 
     if (!traumaType)
         return;
-    console.log(`lancer-automations (alt-struct): Manual System Trauma - ${traumaType}`);
+    console.log(`lancer-automations | alt-struct |Manual System Trauma - ${traumaType}`);
 
     const choice = await showSystemTraumaDialog(actor, traumaType);
     if (!choice)
@@ -840,7 +841,7 @@ export async function manualSystemTrauma()
       </div>
     `
     });
-    console.log(`lancer-automations (alt-struct): Manual System Trauma complete - ${itemsList}`);
+    console.log(`lancer-automations | alt-struct |Manual System Trauma complete - ${itemsList}`);
 }
 
 /**
@@ -961,7 +962,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
             new GenericFlow(actor.uuid, { overrideRoll: simulatedRoll }).begin();
         }
         else
-            console.error("lancer-automations (alt-struct): SimulatedStructureFlow not found!");
+            console.error("lancer-automations | alt-struct |SimulatedStructureFlow not found!");
         return false;
     }
 
@@ -1042,11 +1043,11 @@ export async function tearOffDirectHitFlow(state)
 
     if (!confirmed)
     {
-        console.log("lancer-automations (alt-struct): Player cancelled Direct Hit");
+        console.log("lancer-automations | alt-struct |Player cancelled Direct Hit");
         return true;
     }
 
-    console.log("lancer-automations (alt-struct): No weapons/systems, launching SimulatedStructureFlow with Direct Hit");
+    console.log("lancer-automations | alt-struct |No weapons/systems, launching SimulatedStructureFlow with Direct Hit");
     const directHitRoll = await createDirectHitRoll(damage);
     const SimulatedStructureFlow = game.lancer?.flows?.get("SimulatedStructureFlow");
     if (SimulatedStructureFlow && typeof SimulatedStructureFlow === "function")
@@ -1064,7 +1065,7 @@ export async function tearOffDirectHitFlow(state)
         new GenericFlow(actor.uuid, { overrideRoll: directHitRoll }).begin();
     }
     else
-        console.error("lancer-automations (alt-struct): SimulatedStructureFlow not found!");
+        console.error("lancer-automations | alt-struct |SimulatedStructureFlow not found!");
     return true;
 }
 
@@ -1129,11 +1130,11 @@ export async function tearOffCrushingHitFlow(state)
 
     if (!confirmed)
     {
-        console.log("lancer-automations (alt-struct): Player cancelled Crushing Hit");
+        console.log("lancer-automations | alt-struct |Player cancelled Crushing Hit");
         return true;
     }
 
-    console.log("lancer-automations (alt-struct): No weapons/systems, launching SimulatedStructureFlow with Crushing Hit");
+    console.log("lancer-automations | alt-struct |No weapons/systems, launching SimulatedStructureFlow with Crushing Hit");
     const crushingRoll = await createCrushingHitRoll(damage);
     const SimulatedStructureFlow = game.lancer?.flows?.get("SimulatedStructureFlow");
     if (SimulatedStructureFlow && typeof SimulatedStructureFlow === "function")
@@ -1151,7 +1152,7 @@ export async function tearOffCrushingHitFlow(state)
         new GenericFlow(actor.uuid, { overrideRoll: crushingRoll }).begin();
     }
     else
-        console.error("lancer-automations (alt-struct): SimulatedStructureFlow not found!");
+        console.error("lancer-automations | alt-struct |SimulatedStructureFlow not found!");
     return true;
 }
 
@@ -1187,7 +1188,7 @@ export async function handleDirectHitHullCheckResult(actor, success)
         }
         catch (error)
         {
-            console.warn("lancer-automations (alt-struct): Could not apply effects:", error);
+            console.warn("lancer-automations | alt-struct |Could not apply effects:", error);
         }
     };
     const tearOff = () => hasWeaponsOrSystems
@@ -1242,7 +1243,7 @@ export async function handleCrushingHitHullCheckResult(actor, success)
             }
             catch (error)
             {
-                console.warn("lancer-automations (alt-struct): Could not apply Dazed effect:", error);
+                console.warn("lancer-automations | alt-struct |Could not apply Dazed effect:", error);
             }
         }
         return { title, description: "HULL check passed. Dazed until the end of your next turn." };
@@ -1272,7 +1273,7 @@ export async function applyStructureEffects(state)
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
-        console.log("lancer-automations (alt-struct): No active token found for actor");
+        console.log("lancer-automations | alt-struct |No active token found for actor");
         return true;
     }
     const token = tokens[0];
@@ -1294,7 +1295,7 @@ export async function applyStructureEffects(state)
                 }
                 catch (error)
                 {
-                    console.warn("lancer-automations (alt-struct): Could not apply Direct Hit effects:", error);
+                    console.warn("lancer-automations | alt-struct |Could not apply Direct Hit effects:", error);
                 }
             }
             break;
@@ -1312,7 +1313,7 @@ export async function applyStructureEffects(state)
             }
             catch (error)
             {
-                console.warn("lancer-automations (alt-struct): Could not apply IMPAIRED effect:", error);
+                console.warn("lancer-automations | alt-struct |Could not apply IMPAIRED effect:", error);
             }
             break;
     }

@@ -1,6 +1,7 @@
 /* global canvas, game, Hooks */
 
 import { getSpeedRanges } from '../combat/speed-provider.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { computeMovementRoute } from './reachability.js';
 import { pathfindDragEnabled } from './keybindings.js';
 
@@ -372,7 +373,7 @@ function _settingOn(key)
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, key);
+        return !!getModuleSetting(key);
     }
     catch
     {

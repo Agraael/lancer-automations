@@ -1,4 +1,5 @@
 import { getHexGroundElevation } from '../combat/terrain-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 
 const THT_ID = 'terrain-height-tools';
@@ -21,7 +22,7 @@ const OBSTRUCTION_TEMPLATE_SETTINGS = {
 // Mechs step over sub-SIZE walls; the settings pick which NPC templates do not.
 export function canPassObstructions(tokenDoc)
 {
-    if (tokenDoc.getFlag?.('lancer-automations', 'noObstructionPass') || tokenDoc.actor?.getFlag?.('lancer-automations', 'noObstructionPass'))
+    if (getLAFlag(tokenDoc,'noObstructionPass') || getLAFlag(tokenDoc.actor,'noObstructionPass'))
         return false;
     const actor = tokenDoc?.actor;
     if (!actor || actor.type === 'pilot')

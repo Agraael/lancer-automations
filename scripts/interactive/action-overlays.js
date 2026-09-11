@@ -1,6 +1,7 @@
 // Combat data attached to an item's native actions, kept in a flag so re-imports don't wipe it.
 
 import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 const FLAG_KEY = 'actionOverlays';
 
 // setFlag treats dots in keys as paths; action names can contain them.
@@ -37,7 +38,7 @@ function _resolveDoc(target)
 export function getActionOverlays(target)
 {
     const doc = _resolveDoc(target);
-    const map = doc?.getFlag?.(MODULE_ID, FLAG_KEY) || {};
+    const map = getLAFlag(doc,FLAG_KEY) || {};
     const out = {};
     for (const [key, value] of Object.entries(map))
         out[String(key).replace(/\$DOT\$/g, '.')] = value;
@@ -55,7 +56,7 @@ export function getActionOverlay(target, actionName)
     const doc = _resolveDoc(target);
     if (!doc || !actionName)
         return null;
-    const map = doc.getFlag?.(MODULE_ID, FLAG_KEY) || {};
+    const map = getLAFlag(doc,FLAG_KEY) || {};
     return map[_encodeKey(actionName)] ?? null;
 }
 
@@ -75,7 +76,7 @@ export async function setActionOverlay(target, actionName, overlay)
         ui.notifications.error("setActionOverlay: target and actionName are required.");
         return null;
     }
-    const map = doc.getFlag?.(MODULE_ID, FLAG_KEY) || {};
+    const map = getLAFlag(doc,FLAG_KEY) || {};
     const encoded = _encodeKey(actionName);
     let next = null;
     if (overlay !== null)
@@ -95,7 +96,7 @@ export async function setActionOverlay(target, actionName, overlay)
     if (map[encoded] !== undefined)
         await doc.update({ [`flags.${MODULE_ID}.${FLAG_KEY}.-=${encoded}`]: null });
     if (next)
-        await doc.setFlag(MODULE_ID, FLAG_KEY, { [encoded]: next });
+        await setLAFlag(doc,FLAG_KEY, { [encoded]: next });
     return doc;
 }
 
@@ -158,7 +159,7 @@ export function applyActionOverlays(item, actions)
 {
     if (!item || !actions?.length)
         return actions ?? [];
-    const map = item.getFlag?.(MODULE_ID, FLAG_KEY) || {};
+    const map = getLAFlag(item,FLAG_KEY) || {};
     if (!Object.keys(map).length)
         return actions;
     return actions.map(action =>

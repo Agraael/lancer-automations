@@ -2,6 +2,7 @@
 
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { MODULE_ID } from "../tools/constants.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
@@ -228,7 +229,7 @@ export class ReactionManager
 
     static getFolders()
     {
-        return game.settings.get(ReactionManager.ID, ReactionManager.SETTING_FOLDERS) || [];
+        return getModuleSetting(ReactionManager.SETTING_FOLDERS) || [];
     }
 
     static async saveFolders(folders)
@@ -238,7 +239,7 @@ export class ReactionManager
 
     static getStartupScripts()
     {
-        return game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+        return getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
     }
 
     static async saveStartupScripts(scripts)
@@ -293,7 +294,7 @@ export class ReactionManager
     static getAllReactions()
     {
         const defaults = getDefaultItemReactionRegistry();
-        const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+        const userSaved = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
         const merged = { ...defaults };
         for (const [lid, userEntry] of Object.entries(userSaved))
         {
@@ -324,7 +325,7 @@ export class ReactionManager
     static getGeneralReactions()
     {
         const defaults = getDefaultGeneralReactionRegistry();
-        const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
         const result = {};
         for (const [name, def] of Object.entries(defaults))
@@ -374,7 +375,7 @@ export class ReactionManager
 
     static async saveGeneralReaction(name, reaction)
     {
-        const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         userSaved[name] = reaction;
         clearScriptCache();
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, userSaved);
@@ -382,7 +383,7 @@ export class ReactionManager
 
     static async deleteGeneralReaction(name, index = null)
     {
-        const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         if (!userSaved[name])
             return;
         const idx = (index === null || index === undefined || index === '') ? null : Number.parseInt(index);
@@ -424,9 +425,9 @@ export class ReactionManager
 
     static async exportReactions()
     {
-        const itemReactions = ReactionManager.stripWorkshopIds(game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {});
-        const generalReactions = ReactionManager.stripWorkshopIds(game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {});
-        const startupScripts = ReactionManager.stripWorkshopIds((game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
+        const itemReactions = ReactionManager.stripWorkshopIds(getModuleSetting(ReactionManager.SETTING_REACTIONS) || {});
+        const generalReactions = ReactionManager.stripWorkshopIds(getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {});
+        const startupScripts = ReactionManager.stripWorkshopIds((getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [])
             .filter(script => !script.builtin));
 
         const skip = new Set([
@@ -442,12 +443,9 @@ export class ReactionManager
                 continue;
             if (skip.has(setting.key))
                 continue;
-            try
-            {
-                settings[setting.key] = game.settings.get(ReactionManager.ID, setting.key);
-            }
-            catch
-            { /* skip unreadable */ }
+            const value = getModuleSetting(setting.key);
+            if (value !== undefined)
+                settings[setting.key] = value;
         }
 
         const externalSettings = {};
@@ -507,7 +505,7 @@ export class ReactionManager
 
             if (pickedItem.size && data.itemReactions)
             {
-                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+                const existing = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
                 const merged = { ...existing };
                 for (const lid of pickedItem)
                 {
@@ -519,7 +517,7 @@ export class ReactionManager
 
             if (pickedGeneral.size && data.generalReactions)
             {
-                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+                const existing = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
                 const merged = { ...existing };
                 for (const name of pickedGeneral)
                 {
@@ -531,7 +529,7 @@ export class ReactionManager
 
             if (pickedStartup.size && Array.isArray(data.startupScripts))
             {
-                const existing = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+                const existing = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
                 const existingKeys = new Set(existing.map(script => script.id ?? script.name));
                 const merged = [...existing];
                 for (let i = 0; i < data.startupScripts.length; i++)
@@ -562,7 +560,7 @@ export class ReactionManager
                     }
                     catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore setting ${settingKey}:`, error);
+                        console.warn(`lancer-automations | failed to restore setting ${settingKey}:`, error);
                     }
                 }
             }
@@ -588,7 +586,7 @@ export class ReactionManager
                     }
                     catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore ${moduleId}.${settingKey}:`, error);
+                        console.warn(`lancer-automations | failed to restore ${moduleId}.${settingKey}:`, error);
                     }
                 }
             }
@@ -615,7 +613,7 @@ export class ReactionManager
                     }
                     catch (error)
                     {
-                        console.warn(`[lancer-automations] failed to restore keybinding ${moduleId}.${settingKey}:`, error);
+                        console.warn(`lancer-automations | failed to restore keybinding ${moduleId}.${settingKey}:`, error);
                     }
                 }
             }
@@ -666,8 +664,8 @@ export class ReactionConfig extends FormApplication
 
     async getData()
     {
-        const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
-        const userGeneralSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const userItemSettings = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
+        const userGeneralSettings = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
         const defaultGeneralRegistry = getDefaultGeneralReactionRegistry();
         const defaultItemRegistry = getDefaultItemReactionRegistry();
@@ -1527,7 +1525,7 @@ export class ReactionConfig extends FormApplication
                         else if (key.startsWith("item::"))
                         {
                             const lid = key.replace("item::", "");
-                            let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);
+                            let userReactions = getModuleSetting(ReactionManager.SETTING_REACTIONS);
                             if (userReactions[lid])
                             {
                                 delete userReactions[lid];
@@ -1656,7 +1654,7 @@ export class ReactionConfig extends FormApplication
                 else
                 {
                     // Legacy flat save over a grouped default: open the save, aimed at its trigger-matched sub
-                    const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+                    const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
                     reaction = (userSaved[name]?.triggers !== undefined) ? userSaved[name] : entry;
                     const legacyIdx = entry.reactions.findIndex(sub => sameTriggerSet(sub.triggers, reaction.triggers));
                     reactionIndex = legacyIdx >= 0 ? legacyIdx : undefined;
@@ -1700,7 +1698,7 @@ export class ReactionConfig extends FormApplication
         else
         {
             const lid = li.data("lid");
-            const userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+            const userReactions = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
             const entry = userReactions[lid];
             if (entry)
             {
@@ -1765,7 +1763,7 @@ export class ReactionConfig extends FormApplication
         {
             const name = li.data("name");
             const index = li.data("index");
-            const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+            const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
 
             if (!userSaved[name])
                 userSaved[name] = {};
@@ -1790,7 +1788,7 @@ export class ReactionConfig extends FormApplication
             const reactionIndex = (rawIndex === undefined || rawIndex === null || rawIndex === '') ? 0 : Number.parseInt(rawIndex);
             if (!Number.isFinite(reactionIndex))
                 return;
-            const userItemSettings = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+            const userItemSettings = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
 
             if (userItemSettings[lid])
             {
@@ -2187,7 +2185,7 @@ export class ReactionEditor extends FormApplication
             onInvoluntaryMove: "{ triggeringToken, token, distance, actionName, item, destination: {x,y}, cancel(reason), distanceToTrigger, canTriggerReaction}",
             onRoll: "{ triggeringToken, rollType: 'attackRoll'|'techAttackRoll'|'damageRoll'|'skillRoll'|'structureRoll'|'stressRoll', roll, total, success, targets, item, isReroll, rerollCount, hitTokens, reroll(reasonText, subtype, title, allowConfirm, userIdControl), changeRoll(newTotal, reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger, canTriggerReaction}",
-            onUpdate: "{ triggeringToken, document, change, options, canTriggerReaction}",
+            onUpdate: "{ triggeringToken, document, change, options, distanceToTrigger, canTriggerReaction}",
             onEnterCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onExitCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}"
         };
@@ -3669,7 +3667,7 @@ export class ReactionEditor extends FormApplication
 
             if (newReaction.workshopId)
             {
-                const savedGenerals = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS);
+                const savedGenerals = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS);
                 let staleRemoved = false;
                 for (const [otherName, other] of Object.entries(savedGenerals))
                 {
@@ -3688,7 +3686,7 @@ export class ReactionEditor extends FormApplication
             if (Array.isArray(defEntry?.reactions) && Number.isFinite(subIdx) && defEntry.reactions[subIdx])
             {
                 // Overriding one sub of a grouped default: store in its slot, keep the others on defaults
-                const userSaved = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+                const userSaved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
                 const existing = userSaved[name];
                 const subs = Array.isArray(existing?.reactions) ? existing.reactions : [];
                 subs[subIdx] = newReaction;
@@ -3739,7 +3737,7 @@ export class ReactionEditor extends FormApplication
             if (formData.workshopId)
                 newReaction.workshopId = formData.workshopId;
 
-            let userReactions = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS);
+            let userReactions = getModuleSetting(ReactionManager.SETTING_REACTIONS);
 
             if (!userReactions[lid])
                 userReactions[lid] = { itemType: "any", reactions: [] };

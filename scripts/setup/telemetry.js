@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase-client.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 
 import { MODULE_ID } from '../tools/constants.js';
 const INSTALL_ID_SETTING = "dataInstallId";
@@ -33,7 +34,7 @@ async function _upsertUser(userHash, role)
     }
     catch (err)
     {
-        console.error("Lancer Automation | Supabase error:", err);
+        console.error("lancer-automations | Supabase error:", err);
     }
 }
 
@@ -47,7 +48,7 @@ async function _pingDaily(_userHash, role)
     }
     catch (err)
     {
-        console.error("Lancer Automation | Supabase daily ping error:", err);
+        console.error("lancer-automations | Supabase daily ping error:", err);
     }
 }
 
@@ -57,7 +58,7 @@ async function _maybeDailyTouch(userHash, role)
     let last = "";
     try
     {
-        last = game.settings.get(MODULE_ID, LAST_PING_SETTING) || "";
+        last = getModuleSetting(LAST_PING_SETTING) || "";
     }
     catch
     {
@@ -134,14 +135,14 @@ async function _runFirstLaunch()
     if (role === CONSENT_DECLINED)
     {
         await game.settings.set(MODULE_ID, CONSENT_SETTING, CONSENT_DECLINED);
-        console.log("Lancer Automation | User declined; no data sent.");
+        console.log("lancer-automations | User declined; no data sent.");
         return;
     }
     const installId = foundry.utils.randomID();
     await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, installId);
     await game.settings.set(MODULE_ID, CONSENT_SETTING, role);
     await _upsertUser(installId, role);
-    console.log(`Lancer Automation | Counted as ${role}.`);
+    console.log(`lancer-automations | Counted as ${role}.`);
 }
 
 async function _handleStartup()
@@ -152,7 +153,7 @@ async function _handleStartup()
     let consent = CONSENT_PENDING;
     try
     {
-        consent = game.settings.get(MODULE_ID, CONSENT_SETTING) || CONSENT_PENDING;
+        consent = getModuleSetting(CONSENT_SETTING) || CONSENT_PENDING;
     }
     catch
     {
@@ -171,7 +172,7 @@ async function _handleStartup()
         let installId = "";
         try
         {
-            installId = game.settings.get(MODULE_ID, INSTALL_ID_SETTING) || "";
+            installId = getModuleSetting(INSTALL_ID_SETTING) || "";
         }
         catch
         { /* not registered yet */ }
@@ -191,7 +192,7 @@ class ConsentMenu extends FormApplication
 {
     render()
     {
-        const current = game.settings.get(MODULE_ID, CONSENT_SETTING);
+        const current = getModuleSetting(CONSENT_SETTING);
         const label = current === ROLE_GM ? "currently counted as GM"
             : current === ROLE_PLAYER ? "currently counted as Player"
                 : current === CONSENT_DECLINED ? "currently opted out"
@@ -199,7 +200,7 @@ class ConsentMenu extends FormApplication
 
         const switchTo = async (role) =>
         {
-            let installId = game.settings.get(MODULE_ID, INSTALL_ID_SETTING) || "";
+            let installId = getModuleSetting(INSTALL_ID_SETTING) || "";
             if (!installId)
             {
                 installId = foundry.utils.randomID();

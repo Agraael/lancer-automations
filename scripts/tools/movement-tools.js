@@ -1,4 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
+import { MODULE_ID } from "./constants.js";
+import { getLAFlag, setLAFlag, unsetLAFlag } from "./flag-utils.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { playStandingUpFX, playTeleportFX } from "../fx/actionFX.js";
 import { executeDamageRoll, executeSimpleActivation } from "./misc-tools.js";
@@ -7,7 +9,7 @@ import { executeDamageRoll, executeSimpleActivation } from "./misc-tools.js";
 async function addVirtualMovement(token, cost)
 {
     const tokenDoc = token.document;
-    const laHistory = tokenDoc.getFlag('lancer-automations', 'moveHistory') ?? { moves: [] };
+    const laHistory = getLAFlag(tokenDoc,'moveHistory') ?? { moves: [] };
     const moves = laHistory.moves || [];
     moves.push({
         distanceMoved: cost,
@@ -62,7 +64,7 @@ export async function boostMove(token, options = {})
 {
     if (!token?.actor)
         return null;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (!api)
         return null;
     const activation = await api.activateGeneralAction(token, "Boost");
@@ -81,7 +83,7 @@ export async function executeTeleport(token, cost)
 {
     if (!token?.actor)
         return;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (!api)
         return;
     const speed = token.actor.system?.speed ?? 0;
@@ -143,7 +145,7 @@ export async function executeFall(targetToken)
         return;
     }
 
-    let fallStartElevation = Math.max(tokenElevation, tokenDoc.getFlag('lancer-automations', 'fallStartElevation') || 0);
+    let fallStartElevation = Math.max(tokenElevation, getLAFlag(tokenDoc,'fallStartElevation') || 0);
     const fallDistance = tokenElevation - maxGroundHeight;
     const fallAmount = Math.min(10, fallDistance);
     const newElevation = tokenElevation - fallAmount;
@@ -171,7 +173,7 @@ export async function executeFall(targetToken)
         if (newElevation < maxGroundHeight)
             await tokenDoc.update({ elevation: maxGroundHeight });
 
-        await tokenDoc.unsetFlag('lancer-automations', 'fallStartElevation');
+        await unsetLAFlag(tokenDoc,'fallStartElevation');
 
     }
     else if (!hasFallingEffect)
@@ -181,8 +183,8 @@ export async function executeFall(targetToken)
             effectNames: ["Falling"],
             duration: { label: "indefinite" }
         });
-        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
+        await setLAFlag(tokenDoc,'fallStartElevation', fallStartElevation);
     }
     else
-        await tokenDoc.setFlag('lancer-automations', 'fallStartElevation', fallStartElevation);
+        await setLAFlag(tokenDoc,'fallStartElevation', fallStartElevation);
 }

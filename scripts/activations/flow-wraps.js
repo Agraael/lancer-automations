@@ -1,6 +1,8 @@
 /* global document, MutationObserver, Roll, game, ui, Number */
 
 import { ActiveFlowState } from './flows.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import {
     injectNoBonusDmgCheckbox,
     injectThrottledCheckbox,
@@ -357,14 +359,7 @@ export function wrapRollReliable(flowSteps)
 function getHeatMitigation(actor)
 {
     let enabled = true;
-    try
-    {
-        enabled = !!game.settings.get('lancer-automations', 'resistSelfHeat');
-    }
-    catch
-    {
-        enabled = true;
-    }
+    enabled = !!getModuleSetting('resistSelfHeat', true);
     if (!enabled)
         return { immune: false, resisted: false };
 
@@ -512,7 +507,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
             let hasExtraRechargeables = false;
             for (const item of state.actor.items)
             {
-                const extraActions = item.getFlag('lancer-automations', 'extraActions') || [];
+                const extraActions = getLAFlag(item,'extraActions') || [];
                 if (extraActions.some(action => action.recharge && action.charged === false))
                 {
                     hasExtraRechargeables = true; break;
@@ -520,7 +515,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
             }
             if (!hasExtraRechargeables)
             {
-                const actorExtraActions = state.actor.getFlag('lancer-automations', 'extraActions') || [];
+                const actorExtraActions = getLAFlag(state.actor,'extraActions') || [];
                 if (actorExtraActions.some(action => action.recharge && action.charged === false))
                     hasExtraRechargeables = true;
             }
@@ -544,7 +539,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
 
         for (const item of state.actor.items)
         {
-            const extraActions = item.getFlag('lancer-automations', 'extraActions') || [];
+            const extraActions = getLAFlag(item,'extraActions') || [];
             let changed = false;
             for (const action of extraActions)
             {
@@ -557,9 +552,9 @@ export function wrapExtraActionRecharge(flowSteps, flows)
                 }
             }
             if (changed)
-                await item.setFlag('lancer-automations', 'extraActions', extraActions);
+                await setLAFlag(item,'extraActions', extraActions);
         }
-        const actorActions = state.actor.getFlag('lancer-automations', 'extraActions') || [];
+        const actorActions = getLAFlag(state.actor,'extraActions') || [];
         let actorChanged = false;
         for (const action of actorActions)
         {
@@ -572,7 +567,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
             }
         }
         if (actorChanged)
-            await state.actor.setFlag('lancer-automations', 'extraActions', actorActions);
+            await setLAFlag(state.actor,'extraActions', actorActions);
         return true;
     });
     flows.get('NPCRechargeFlow')?.insertStepAfter('applyRecharge', 'lancer-automations:rechargeExtraActions');

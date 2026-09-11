@@ -195,7 +195,7 @@ export async function applyStressEffects(state)
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
-        console.log("lancer-automations (alt-struct): No active token found for actor");
+        console.log("lancer-automations | alt-struct |No active token found for actor");
         return true;
     }
 
@@ -224,7 +224,7 @@ export async function applyStressEffects(state)
         }
         catch (error)
         {
-            console.warn("lancer-automations (alt-struct): Could not apply EXPOSED + THROTTLED effects:", error);
+            console.warn("lancer-automations | alt-struct |Could not apply EXPOSED + THROTTLED effects:", error);
         }
 
         // Add Critical Meltdown button
@@ -249,7 +249,7 @@ export async function applyStressEffects(state)
                 }
                 catch (error)
                 {
-                    console.warn("lancer-automations (alt-struct): Could not apply SLOW + THROTTLED effects:", error);
+                    console.warn("lancer-automations | alt-struct |Could not apply SLOW + THROTTLED effects:", error);
                 }
                 break;
 
@@ -267,7 +267,7 @@ export async function applyStressEffects(state)
                 }
                 catch (error)
                 {
-                    console.warn("lancer-automations (alt-struct): Could not apply IMPAIRED effect:", error);
+                    console.warn("lancer-automations | alt-struct |Could not apply IMPAIRED effect:", error);
                 }
                 break;
 
@@ -285,7 +285,7 @@ export async function applyStressEffects(state)
                     }
                     catch (error)
                     {
-                        console.warn("lancer-automations (alt-struct): Could not apply EXPOSED effect:", error);
+                        console.warn("lancer-automations | alt-struct |Could not apply EXPOSED effect:", error);
                     }
                 }
                 break;
@@ -303,7 +303,7 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
-        console.log("lancer-automations (alt-struct): No active token found for actor");
+        console.log("lancer-automations | alt-struct |No active token found for actor");
         return description;
     }
 
@@ -386,7 +386,7 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
     }
     catch (error)
     {
-        console.warn("lancer-automations (alt-struct): Could not apply engineering check effects:", error);
+        console.warn("lancer-automations | alt-struct |Could not apply engineering check effects:", error);
     }
 
     return description;
@@ -457,7 +457,7 @@ export async function executeMeltdown(state)
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
-        console.log("lancer-automations (alt-struct): No active token found for actor");
+        console.log("lancer-automations | alt-struct |No active token found for actor");
         return false;
     }
 
@@ -485,7 +485,7 @@ export async function executeCriticalMeltdown(state)
     const tokens = actor.getActiveTokens();
     if (!tokens || tokens.length === 0)
     {
-        console.log("lancer-automations (alt-struct): No active token found for actor");
+        console.log("lancer-automations | alt-struct |No active token found for actor");
         return false;
     }
 
@@ -522,7 +522,7 @@ export async function handleNoStressRemaining(state)
             }
             catch (error)
             {
-                console.warn("lancer-automations (alt-struct): Could not apply EXPOSED effect:", error);
+                console.warn("lancer-automations | alt-struct |Could not apply EXPOSED effect:", error);
             }
         }
     }

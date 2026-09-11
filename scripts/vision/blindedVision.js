@@ -1,5 +1,6 @@
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 const SETTING_BLINDED_VISION = 'blindedSetsVision';
 const FLAG_CLAMPED = 'blindedClampedSight';
 const STATUS_ID = 'blinded';
@@ -50,7 +51,7 @@ async function applyBlindSight(token)
     if (!doc?.sight?.enabled)
         return;
     const target = blindRange();
-    const marked = doc.getFlag(MODULE_ID, FLAG_CLAMPED) !== undefined;
+    const marked = getLAFlag(doc,FLAG_CLAMPED) !== undefined;
     if (marked && doc.sight.range === target && !(doc.detectionModes ?? []).some(mode => overRange(mode, target)))
         return;
     await doc.update({
@@ -63,7 +64,7 @@ async function applyBlindSight(token)
 async function restoreSight(token)
 {
     const doc = token?.document ?? token;
-    if (doc?.getFlag?.(MODULE_ID, FLAG_CLAMPED) === undefined)
+    if (getLAFlag(doc,FLAG_CLAMPED) === undefined)
         return;
     await doc.update({
         [`flags.${MODULE_ID}.-=${FLAG_CLAMPED}`]: null,

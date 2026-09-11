@@ -1,4 +1,5 @@
 import { startChoiceCard, deployWeaponToken, knockBackToken } from "../interactive/index.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
 import { accDiffTargetToken, getMinGridDistance } from "../combat/grid-helpers.js";
 import { injectKnockbackCheckbox } from "../bonuses/genericBonuses.js";
@@ -7,7 +8,7 @@ import { ActiveFlowState } from "./flows.js";
 
 export async function throwChoiceStep(state)
 {
-    if (!game.settings.get('lancer-automations', 'enableThrowFlow'))
+    if (!getModuleSetting('enableThrowFlow'))
         return true;
     if (state.la_extraData?.is_throw)
         return true;
@@ -123,7 +124,7 @@ export async function throwDeployStep(state)
 
 export async function knockbackInjectStep(state)
 {
-    if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
+    if (!getModuleSetting('enableKnockbackFlow'))
         return true;
     injectKnockbackCheckbox(state);
     return true;
@@ -131,7 +132,7 @@ export async function knockbackInjectStep(state)
 
 export async function knockbackDamageStep(state)
 {
-    if (!game.settings.get('lancer-automations', 'enableKnockbackFlow'))
+    if (!getModuleSetting('enableKnockbackFlow'))
         return true;
     const knockback = state.data?._csmKnockback;
     if (!knockback?.enabled)

@@ -28,7 +28,7 @@ function createRange(start, end)
 {
     if (start > end)
     {
-        console.error("Start value should be less than or equal to the end value.");
+        console.error("lancer-automations | downtime | start value should be less than or equal to the end value.");
         return [];
     }
 
@@ -393,7 +393,7 @@ export async function executeDowntime()
         pilotNoteTermName = termOptions.pilotNote[termMode];
         gmNoteTermName = termOptions.gmNote[termMode];
 
-        console.log(`Terms set to ${termMode} (valid options are 'diegetic or 'rulebook')`);
+        console.log(`lancer-automations | downtime | terms set to ${termMode}(valid options are 'diegetic or 'rulebook')`);
     }
 
     termSet('diegetic');
@@ -632,7 +632,7 @@ export async function executeDowntime()
                                         {
                                             overrideRoll = true;
                                             rollResult = Number.parseInt(manualRollValue);
-                                            console.log(`Manual roll mode: Using physical dice result of ${rollResult}`);
+                                            console.log(`lancer-automations | downtime | manual roll mode, using physical dice result of ${rollResult}`);
 
                                             roll = await new Roll(rollResult.toString()).evaluate();
                                             chatMessage.rolls = roll;
@@ -684,7 +684,7 @@ export async function executeDowntime()
                                     }
                                     else
                                     {
-                                        console.log('non-rollable activity');
+                                        console.log('lancer-automations | downtime | non-rollable activity');
                                         activeOutcome = activityResults;
                                         chatMessage.flavor = `${activity} : Success`;
                                         chatMessage.content = `${pilotData.name} downtime activity completed`;

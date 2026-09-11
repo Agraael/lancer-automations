@@ -1,13 +1,13 @@
 import { openCursorMenu } from './cursor-menu.js';
 
-import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2'];
 
 export const WHEEL_COUNT = WHEEL_FLAGS.length;
 
 export function favoriteKeys(wheel)
 {
-    return /** @type {any} */ (game.user).getFlag(MODULE_ID, WHEEL_FLAGS[wheel - 1]) || [];
+    return getLAFlag(game.user,WHEEL_FLAGS[wheel - 1]) || [];
 }
 
 /**
@@ -48,7 +48,7 @@ export async function setFavoriteWheel(key, wheel)
         if (wanted === keys.includes(key))
             continue;
         const next = wanted ? [...keys, key] : keys.filter(entry => entry !== key);
-        await /** @type {any} */ (game.user).setFlag(MODULE_ID, WHEEL_FLAGS[target - 1], next);
+        await setLAFlag(game.user,WHEEL_FLAGS[target - 1], next);
     }
     return wheel;
 }

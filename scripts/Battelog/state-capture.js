@@ -1,6 +1,7 @@
 import { appendEvent, appendEventComputed, getTelemetry, findEntry, pushEvent } from './telemetry-store.js';
 import { findActiveCombatForToken, findTelemetryCombatForToken, resolveEntryTokenId, numOr } from './battelog-utils.js';
 import { attributeKill } from './kill-attribution.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 
 let _registered = false;
 const _gearEmitted = new Set();
@@ -98,7 +99,7 @@ export function handleRemoteStateEvent(payload)
     if (!game.user?.isGM)
         return;
     const combat = game.combats?.get(payload?.combatId);
-    if (!combat?.getFlag?.('lancer-automations', 'telemetry'))
+    if (!getLAFlag(combat,'telemetry'))
         return;
     const event = payload.event;
     if (event?.type === 'destroyed')

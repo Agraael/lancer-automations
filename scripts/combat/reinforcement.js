@@ -1,5 +1,7 @@
 /* global Sequence, Sequencer, canvas, game, ui, Hooks, Dialog, ChatMessage, CONST */
 
+import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
+
 export async function delayedTokenAppearance()
 {
     if (!game.combat)
@@ -98,8 +100,8 @@ export async function delayedTokenAppearance()
         });
     }
 
-    const currentFlags = (game.combat.getFlag("lancer-automations", "delayedAppearances")) || [];
-    await game.combat.setFlag("lancer-automations", "delayedAppearances", [...(Array.isArray(currentFlags) ? currentFlags : []), ...placeholderData]);
+    const currentFlags = (getLAFlag(game.combat,"delayedAppearances")) || [];
+    await setLAFlag(game.combat,"delayedAppearances", [...(Array.isArray(currentFlags) ? currentFlags : []), ...placeholderData]);
 
     // Synchronize video playback for all clients
     if (placeholderData.length > 0)
@@ -145,7 +147,7 @@ export function initDelayedAppearanceHook()
         if (!changed.round)
             return;
 
-        let delayedAppearances = (combat.getFlag("lancer-automations", "delayedAppearances")) || [];
+        let delayedAppearances = (getLAFlag(combat,"delayedAppearances")) || [];
         const currentRound = combat.round;
 
         const validAppearances = (Array.isArray(delayedAppearances) ? delayedAppearances : []).filter(appearance =>
@@ -166,7 +168,7 @@ export function initDelayedAppearanceHook()
 
         if (validAppearances.length !== (Array.isArray(delayedAppearances) ? delayedAppearances.length : 0))
         {
-            await combat.setFlag("lancer-automations", "delayedAppearances", validAppearances);
+            await setLAFlag(combat,"delayedAppearances", validAppearances);
             delayedAppearances = validAppearances;
         }
 
@@ -292,7 +294,7 @@ export function initDelayedAppearanceHook()
 
         // Clean up ALL processed appearances (both confirmed and cancelled)
         const remaining = (Array.isArray(delayedAppearances) ? delayedAppearances : []).filter(appearance => appearance.targetRound !== currentRound);
-        await combat.setFlag("lancer-automations", "delayedAppearances", remaining);
+        await setLAFlag(combat,"delayedAppearances", remaining);
     });
 }
 

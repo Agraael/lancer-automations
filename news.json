@@ -2,6 +2,18 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-09-11-lancer-4-2-4",
+            "date": "2026-09-11",
+            "title": "Lancer Automations 4.2.4",
+            "body": [
+                "<p>New <b>status wheel</b> on the Action Wheel, a line of sight draw tool, redesigned ruler, token size ignoring smaller terrain, and the Roll Uplink.</p>",
+                "<p>THT, GAA and Template Macro updated too.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-2-4-tht-169090184",
+            "linkLabel": "Lancer Automations 4.2.4 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-09-04-lancer-4-2-0",
             "date": "2026-09-04",
             "title": "Lancer Automations 4.2.0",

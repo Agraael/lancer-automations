@@ -857,16 +857,19 @@ Fires when the end action from `setItemAsActivated` runs, in place of `onActivat
 
 </details>
 
-<details id="onUpdate"><summary><b><code>onUpdate</code></b> - any token document update (high frequency, gate tightly)</summary>
+<details id="onUpdate"><summary><b><code>onUpdate</code></b> - token document update, after it settles (movement animation done, final ruler segment only)</summary>
 
 ```js
 {
     triggeringToken: Token,
     document: TokenDocument,
     change: Record<string, any>,
-    options: Record<string, any>
+    options: Record<string, any>,
+    distanceToTrigger: number | null
 }
 ```
+
+Fires for any token update, so gate on `change`. For movement that means `x`, `y` or `elevation` present. The hook waits for `movementAnimationPromise` and skips non-final ruler segments, so `distanceToTrigger` is the settled end-of-move distance. Engagement runs on this trigger.
 
 </details>
 

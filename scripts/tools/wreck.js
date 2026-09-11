@@ -1,6 +1,8 @@
 /* global CONST, Hooks, console, game, canvas, loadTexture, FilePicker, TokenMagic, Sequence, foundry */
 
 import { MODULE_ID } from './constants.js';
+import { getModuleSetting } from './settings-utils.js';
+import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
 
 function log(...args)
 {
@@ -53,7 +55,7 @@ let _lwfxStructWrapped = false;
 
 function _shouldSuppressLwfxStructure(flow)
 {
-    if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+    if (!getModuleSetting('enableWrecks'))
         return false;
     return flow?.state?.data?.remStruct === 0;
 }
@@ -94,7 +96,7 @@ function _wrapLwfxStructureHook()
 
 Hooks.once('ready', () =>
 {
-    if (!game.settings.get(MODULE_ID, 'enableWrecks'))
+    if (!getModuleSetting('enableWrecks'))
         return;
     if (!game.modules.get('lancer-weapon-fx')?.active)
         return;
@@ -168,7 +170,7 @@ function getWreckMode(category)
     const settingCat = (category === 'squad' || category === 'pilot') ? 'human' : category;
     try
     {
-        return game.settings.get(MODULE_ID, `wreckMode_${settingCat}`) || 'token';
+        return getModuleSetting(`wreckMode_${settingCat}`) || 'token';
     }
     catch
     {
@@ -183,7 +185,7 @@ function getWreckTerrainMode(category)
     let raw;
     try
     {
-        raw = game.settings.get(MODULE_ID, `wreckTerrain_${settingCat}`);
+        raw = getModuleSetting(`wreckTerrain_${settingCat}`);
     }
     catch
     {
@@ -205,8 +207,8 @@ function buildWreckAuraFlag()
     let fillOpacity = 0.2;
     try
     {
-        color = game.settings.get(MODULE_ID, 'wreckAuraColor') || color;
-        const raw = Number(game.settings.get(MODULE_ID, 'wreckAuraOpacity'));
+        color = getModuleSetting('wreckAuraColor') || color;
+        const raw = Number(getModuleSetting('wreckAuraOpacity'));
         if (Number.isFinite(raw))
             fillOpacity = Math.min(1, Math.max(0, raw));
     }
@@ -300,7 +302,7 @@ function _getWreckBasePath()
 {
     try
     {
-        const custom = game.settings.get(MODULE_ID, 'wreckAssetsPath');
+        const custom = getModuleSetting('wreckAssetsPath');
         if (custom && custom.trim())
             return custom.trim();
     }
@@ -379,7 +381,7 @@ async function spawnDifficultTerrain(token)
 {
     if (!game.modules.get('terrain-height-tools')?.active)
         return;
-    const terrainTypeId = game.settings.get(MODULE_ID, 'wreckTerrainType');
+    const terrainTypeId = getModuleSetting('wreckTerrainType');
     if (!terrainTypeId)
         return;
     try
@@ -474,7 +476,7 @@ export async function updateStructure(token)
     if (structure <= 0)
     {
         response = `${token.name} structure is zero or less.`;
-        if (game.combat && token.combatant && game.settings.get(MODULE_ID, 'enableRemoveFromCombat'))
+        if (game.combat && token.combatant && getModuleSetting('enableRemoveFromCombat'))
         {
             log(`${token.name} is dead, removing from combat.`);
             await game.combat.combatants.get(token.combatant._id)?.delete();
@@ -490,7 +492,7 @@ export async function updateStructure(token)
         });
         log(`${token.name} is a wreck!`);
         token = await wreckIt(token);
-        if (isSquad(token) && game.settings.get(MODULE_ID, 'squadLostOnDeath'))
+        if (isSquad(token) && getModuleSetting('squadLostOnDeath'))
             await token.actor.toggleStatusEffect('mia', { active: true, overlay: true });
         if (token)
             await macroEffect('Wreck', token.actor, token, true);
@@ -498,9 +500,9 @@ export async function updateStructure(token)
     else
     {
         response = `${token.name} structure is greater than zero.`;
-        if (isSquad(token) && game.settings.get(MODULE_ID, 'squadLostOnDeath'))
+        if (isSquad(token) && getModuleSetting('squadLostOnDeath'))
             await token.actor.toggleStatusEffect('mia', { active: false, overlay: true });
-        if (game.combat && !token.combatant && game.settings.get(MODULE_ID, 'enableRemoveFromCombat'))
+        if (game.combat && !token.combatant && getModuleSetting('enableRemoveFromCombat'))
             await token.document.toggleCombatant();
         await macroEffect('Wreck', token.actor, token, false);
     }
@@ -509,7 +511,7 @@ export async function updateStructure(token)
 
 function resolveWreckFaction(token)
 {
-    const choice = game.settings.get(MODULE_ID, 'wreckFactionOnDeath') || 'same';
+    const choice = getModuleSetting('wreckFactionOnDeath') || 'same';
     const origDisposition = token.document.disposition;
     const origFlag = token.document.flags?.['token-factions'] ?? null;
 
@@ -534,8 +536,8 @@ function resolveWreckFaction(token)
 
 async function wreckIt(token)
 {
-    const isDead = token.document.getFlag(MODULE_ID, 'isDead')
-        || token.document.getFlag(MODULE_ID, 'isWreck');
+    const isDead = getLAFlag(token.document,'isDead')
+        || getLAFlag(token.document,'isWreck');
     if (isDead)
     {
         log(`${token.name} is already wrecked.`);
@@ -548,10 +550,10 @@ async function wreckIt(token)
     const category = getTokenCategory(token);
     const wreckLabel = isBiological(token) ? 'Corpse' : 'Wreck';
 
-    const spawnWreckImage = token.document.getFlag(MODULE_ID, 'spawnWreckImage') ?? true;
-    const playWreckSound = token.document.getFlag(MODULE_ID, 'playWreckSound') ?? true;
-    const playWreckEffect = token.document.getFlag(MODULE_ID, 'playWreckEffect') ?? true;
-    const terrainOverride = token.document.getFlag(MODULE_ID, 'terrainOverride');
+    const spawnWreckImage = getLAFlag(token.document,'spawnWreckImage') ?? true;
+    const playWreckSound = getLAFlag(token.document,'playWreckSound') ?? true;
+    const playWreckEffect = getLAFlag(token.document,'playWreckEffect') ?? true;
+    const terrainOverride = getLAFlag(token.document,'terrainOverride');
     // Per-token override accepts: 'none'/'terrain'/'aura' (explicit), 'yes'/'no' (legacy boolean).
     const categoryMode = getWreckTerrainMode(category);
     let terrainMode = categoryMode;
@@ -564,12 +566,12 @@ async function wreckIt(token)
     const shouldSpawnTerrain = terrainMode === 'terrain';
     const shouldAttachAura = terrainMode === 'aura';
 
-    const imagePath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckImgPath'));
-    const effectPath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckEffectPath'));
-    const soundPath = await _resolveMaybeFolder(token.document.getFlag(MODULE_ID, 'wreckSoundPath'));
-    const wreckScale = token.document.getFlag(MODULE_ID, 'wreckScale') ?? 1;
+    const imagePath = await _resolveMaybeFolder(getLAFlag(token.document,'wreckImgPath'));
+    const effectPath = await _resolveMaybeFolder(getLAFlag(token.document,'wreckEffectPath'));
+    const soundPath = await _resolveMaybeFolder(getLAFlag(token.document,'wreckSoundPath'));
+    const wreckScale = getLAFlag(token.document,'wreckScale') ?? 1;
 
-    const tokenWreckMode = token.document.getFlag(MODULE_ID, 'wreckMode');
+    const tokenWreckMode = getLAFlag(token.document,'wreckMode');
     const wreckMode = (tokenWreckMode && tokenWreckMode !== 'default')
         ? tokenWreckMode
         : getWreckMode(category);
@@ -583,9 +585,9 @@ async function wreckIt(token)
     if (tileWreck)
     {
         new Sequence()
-            .sound().file(soundPath).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
+            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && getModuleSetting('enableWreckAudio') && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
             .effect().file(effectPath).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
-            .playIf(!!effectPath && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
+            .playIf(!!effectPath && playWreckEffect && getModuleSetting('enableWreckAnimation'))
             .thenDo(async () =>
             {
                 const gridSize = canvas.scene.grid.size;
@@ -614,9 +616,9 @@ async function wreckIt(token)
     else
     {
         new Sequence()
-            .sound().file(soundPath).volume(game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && game.settings.get(MODULE_ID, 'enableWreckAudio') && (game.settings.get(MODULE_ID, 'wreckMasterVolume') ?? 1) > 0)
+            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && getModuleSetting('enableWreckAudio') && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
             .effect().file(effectPath).scaleToObject(2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
-            .playIf(!!effectPath && playWreckEffect && game.settings.get(MODULE_ID, 'enableWreckAnimation'))
+            .playIf(!!effectPath && playWreckEffect && getModuleSetting('enableWreckAnimation'))
             .thenDo(async () =>
             {
                 try
@@ -694,14 +696,14 @@ async function wreckIt(token)
 
 export async function resurrect(token)
 {
-    const isWreck = token.document.getFlag(MODULE_ID, 'isWreck');
+    const isWreck = getLAFlag(token.document,'isWreck');
     if (!isWreck)
     {
         log(`${token.name} is not a wreck.`);
         return token;
     }
     log(`Resurrecting ${token.name}!`);
-    const tokenData = token.document.getFlag(MODULE_ID, 'tokenDocument');
+    const tokenData = getLAFlag(token.document,'tokenDocument');
     if (!tokenData)
         return token;
     const actor = game.actors.get(tokenData.actorId);
@@ -742,7 +744,7 @@ export async function resurrect(token)
 export function tileHUDButton(app, html)
 {
     const tile = app?.object?.document;
-    if (!tile || !tile.getFlag(MODULE_ID, 'isWreck'))
+    if (!tile || !getLAFlag(tile,'isWreck'))
         return;
     const button = document.createElement('div');
     button.classList.add('control-icon', MODULE_ID);
@@ -759,10 +761,10 @@ export function tileHUDButton(app, html)
 
 async function unWreckTile(tile)
 {
-    const isWreck = tile.getFlag(MODULE_ID, 'isWreck');
+    const isWreck = getLAFlag(tile,'isWreck');
     if (!isWreck)
         return;
-    const tokenData = tile.getFlag(MODULE_ID, 'tokenDocument');
+    const tokenData = getLAFlag(tile,'tokenDocument');
     const actor = game.actors.get(tokenData?.actorId);
     if (!actor)
     {
@@ -794,9 +796,9 @@ export async function preWreck(document, _change, userId)
     if (!game.users.activeGM?.isSelf)
         return;
     const size = document.actor?.system?.size ?? 1;
-    let wreckImgPath = document.getFlag(MODULE_ID, 'wreckImgPath');
-    let wreckEffectPath = document.getFlag(MODULE_ID, 'wreckEffectPath');
-    let wreckSoundPath = document.getFlag(MODULE_ID, 'wreckSoundPath');
+    let wreckImgPath = getLAFlag(document,'wreckImgPath');
+    let wreckEffectPath = getLAFlag(document,'wreckEffectPath');
+    let wreckSoundPath = getLAFlag(document,'wreckSoundPath');
 
     const noImg = !wreckImgPath || wreckImgPath.trim() === '';
     const noEffect = !wreckEffectPath || wreckEffectPath.trim() === '';
@@ -805,7 +807,7 @@ export async function preWreck(document, _change, userId)
     const category = getTokenCategory(document);
     const useCorpse = category !== 'mech';
     const muteHumanSound = ['human', 'pilot', 'squad'].includes(category)
-        && game.settings.get(MODULE_ID, 'disableHumanDeathSound');
+        && getModuleSetting('disableHumanDeathSound');
     if (useCorpse)
     {
         if (noImg)
@@ -829,15 +831,15 @@ export async function preWreck(document, _change, userId)
     if (wreckEffectPath)
         await preLoadImageForAll(wreckEffectPath, true);
     if (wreckImgPath)
-        await document.setFlag(MODULE_ID, 'wreckImgPath', wreckImgPath);
+        await setLAFlag(document,'wreckImgPath', wreckImgPath);
     if (wreckEffectPath)
-        await document.setFlag(MODULE_ID, 'wreckEffectPath', wreckEffectPath);
+        await setLAFlag(document,'wreckEffectPath', wreckEffectPath);
     if (wreckSoundPath)
-        await document.setFlag(MODULE_ID, 'wreckSoundPath', wreckSoundPath);
+        await setLAFlag(document,'wreckSoundPath', wreckSoundPath);
 
-    const wreckScale = document.getFlag(MODULE_ID, 'wreckScale');
+    const wreckScale = getLAFlag(document,'wreckScale');
     if (wreckScale === undefined || wreckScale === null)
-        await document.setFlag(MODULE_ID, 'wreckScale', 1);
+        await setLAFlag(document,'wreckScale', 1);
     if (userId)
         log(`Preloaded wreck for ${document.name} (${category})`);
 }
@@ -876,8 +878,8 @@ function _renderWreckTab(app, html, data)
     if (rootEl.querySelector('div.tab[data-tab="la"]'))
         return;
 
-    const flags = data.object?.flags?.[MODULE_ID] ?? data.source?.flags?.[MODULE_ID] ?? {};
-    const showWreck = game.settings.get(MODULE_ID, 'enableWrecks') && actorType !== 'deployable';
+    const flags = getLAFlags(data.object) ?? getLAFlags(data.source) ?? {};
+    const showWreck = getModuleSetting('enableWrecks') && actorType !== 'deployable';
 
     const sections = [];
     if (showWreck)
@@ -1110,7 +1112,7 @@ function _linkedScanDocsFor(actorUuid)
         return docs;
     for (const entry of game.journal ?? [])
     {
-        const scan = entry.getFlag?.(MODULE_ID, 'scan');
+        const scan = getLAFlag(entry,'scan');
         if (scan?.actorUuid === actorUuid)
             docs.push(entry);
     }
@@ -1120,7 +1122,7 @@ function _linkedScanDocsFor(actorUuid)
 function _buildScanSectionHtml(tokenDoc)
 {
     const actor = tokenDoc?.actor;
-    const scannedByAll = !!actor?.getFlag?.(MODULE_ID, 'scannedByAll');
+    const scannedByAll = !!getLAFlag(actor,'scannedByAll');
     const linkedDocs = _linkedScanDocsFor(actor?.uuid);
     const hasDoc = linkedDocs.length > 0;
     const docLabel = hasDoc
@@ -1170,9 +1172,9 @@ function _wireScanControls(rootEl, tokenDoc, app)
                 return;
             const enabled = ev.currentTarget.checked;
             if (enabled)
-                await actor.setFlag(MODULE_ID, 'scannedByAll', true);
+                await setLAFlag(actor,'scannedByAll', true);
             else
-                await actor.unsetFlag(MODULE_ID, 'scannedByAll');
+                await unsetLAFlag(actor,'scannedByAll');
         });
     }
     const linkBtn = laTab.querySelector('.la-scan-link-btn');
@@ -1309,7 +1311,7 @@ function _promptLinkScanDoc(rootEl, tokenDoc, app)
                         globalThis.ui?.notifications?.warn('Select a journal to link first.');
                         return;
                     }
-                    await entry.setFlag(MODULE_ID, 'scan', {
+                    await setLAFlag(entry,'scan', {
                         actorUuid: actor.uuid,
                         actorName: actor.name,
                         actorImg: actor.img,
@@ -1350,7 +1352,7 @@ async function _unlinkScanDocs(rootEl, tokenDoc, app)
     if (!confirmed)
         return;
     for (const entry of docs)
-        await entry.unsetFlag(MODULE_ID, 'scan');
+        await unsetLAFlag(entry,'scan');
     globalThis.ui?.notifications?.info(`Unlinked scan document(s) from ${actor.name}.`);
     _refreshScanSection(rootEl, tokenDoc, app);
 }
@@ -1361,8 +1363,8 @@ export async function canvasReadyWreck()
 {
     for (const token of canvas.tokens.placeables)
     {
-        const wreckImgPath = token.document.flags[MODULE_ID]?.wreckImgPath;
-        const wreckEffectPath = token.document.flags[MODULE_ID]?.wreckEffectPath;
+        const wreckImgPath = getLAFlags(token.document)?.wreckImgPath;
+        const wreckEffectPath = getLAFlags(token.document)?.wreckEffectPath;
         if (wreckImgPath === undefined || wreckEffectPath === undefined)
             await preWreck(token.document);
         else

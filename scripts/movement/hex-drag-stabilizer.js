@@ -201,5 +201,5 @@ export function initHexDragStabilizer()
         'MIXED'
     );
 
-    console.log('[LA-HEX] per-cell parity override active');
+    console.log('lancer-automations | hex |per-cell parity override active');
 }

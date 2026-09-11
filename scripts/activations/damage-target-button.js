@@ -7,6 +7,7 @@ import {
     beginTargetSession, isTargetSessionActive, createTokenMark,
 } from '../interactive/canvas.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed } from './targeting-ui.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 
 const _formulaBounds = new Map();
@@ -182,14 +183,7 @@ export function registerDamageTargetButton()
             // Defer if another HUD already owns the shared shape session.
             const active = state?.name === 'DamageRollFlow' && !isTargetSessionActive() && (() =>
             {
-                try
-                {
-                    return game.settings.get('lancer-automations', 'enableDamageTargeting');
-                }
-                catch
-                {
-                    return false;
-                }
+                return getModuleSetting('enableDamageTargeting');
             })();
             let attackerMark = null;
             if (active)
@@ -234,17 +228,10 @@ export function registerDamageTargetButton()
 
         const clearTargetsAfterRoll = () =>
         {
-            try
-            {
-                if (!game.settings.get('lancer-automations', 'enableDamageTargeting'))
-                    return;
-                if (!game.settings.get('lancer-automations', 'clearTargetsAfterRoll'))
-                    return;
-            }
-            catch
-            {
+            if (!getModuleSetting('enableDamageTargeting'))
                 return;
-            }
+            if (!getModuleSetting('clearTargetsAfterRoll'))
+                return;
             for (const target of [...(game.user.targets ?? [])])
                 target.setTarget(false, { releaseOthers: false });
         };

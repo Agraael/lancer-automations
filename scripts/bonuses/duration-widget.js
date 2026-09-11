@@ -1,4 +1,5 @@
 import { TG, createTokenTether } from '../interactive/canvas-helpers.js';
+import { MODULE_ID } from '../tools/constants.js';
 import { createTokenMark } from '../interactive/target-shapes.js';
 
 export function durationOptionsHtml()
@@ -55,7 +56,7 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
     {
         e.preventDefault();
         e.stopPropagation();
-        const api = game.modules.get('lancer-automations').api;
+        const api = game.modules.get(MODULE_ID).api;
         const currentVal = String($root.find(`#${prefix}-origin`).val());
         const caster = canvas.tokens.get(currentVal) || canvas.tokens.controlled[0];
         onPickStart?.();

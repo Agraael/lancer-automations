@@ -21,6 +21,7 @@ import { laSightEdgeOptions } from './laWallLos.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 const FLAG_KEY = 'visionFromEdge';
 const SETTING_ENABLED = 'visionFromEdgeEnabled';
 const SETTING_SAMPLE_MODE = 'visionFromEdgeSampleMode';
@@ -37,7 +38,7 @@ function _getVisionSourceClass()
 
 function _isEdgeVisionEnabled(tokenDoc)
 {
-    const flag = tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
+    const flag = getLAFlag(tokenDoc,FLAG_KEY);
     if (flag === 'on')
         return true;
     if (flag === 'off')
@@ -400,7 +401,7 @@ function _isVisionRelevantChange(change)
         return false;
     if (['x', 'y', 'width', 'height', 'shape', 'rotation', 'elevation', 'sight'].some(key => key in change))
         return true;
-    if (change?.flags?.[MODULE_ID]?.[FLAG_KEY] !== undefined)
+    if (getLAFlags(change)?.[FLAG_KEY] !== undefined)
         return true;
     return false;
 }
@@ -511,7 +512,7 @@ function _onRenderTokenConfig(app, html)
         return;
 
     const tokenDoc = app.token ?? app.object ?? app.document;
-    const current = tokenDoc?.getFlag?.(MODULE_ID, FLAG_KEY);
+    const current = getLAFlag(tokenDoc,FLAG_KEY);
     const selected = current === 'on' ? 'on' : current === 'off' ? 'off' : 'default';
 
     const block = `

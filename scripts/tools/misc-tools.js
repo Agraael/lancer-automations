@@ -1,4 +1,6 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
+import { MODULE_ID } from "./constants.js";
+import { getLAFlag } from "./flag-utils.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "../bonuses/genericBonuses.js";
@@ -297,7 +299,7 @@ export function getActorActionItems(actor, activationType)
     }
 
     // Actor-level extra actions (stored on actor flag via addExtraActions(actor, ...))
-    const actorExtraActions = actor?.getFlag?.('lancer-automations', 'extraActions') || [];
+    const actorExtraActions = getLAFlag(actor,'extraActions') || [];
     for (const action of actorExtraActions)
     {
         if (action.activation === activationType && linkTierGate(action, actor))
@@ -1088,7 +1090,7 @@ export async function attackWith(weapon, targets = null, options = {})
     {
         const holder = weapon.parent?.getActiveTokens?.()?.[0] ?? null;
         if (holder)
-            await game.modules.get('lancer-automations')?.api?.reloadOneWeapon?.(holder);
+            await game.modules.get(MODULE_ID)?.api?.reloadOneWeapon?.(holder);
         return { completed: false, reloaded: true };
     }
     if (fxSourceToken)
@@ -1350,7 +1352,7 @@ export function checkGate(owner, key, subject = null)
     const actor = _gateActor(owner);
     if (!actor || !key)
         return true;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     const gates = api?.getActorFlags(actor, GATE_FLAG) || {};
     return !_gateBlocked(gates[key]?.[_gateSubject(subject)]);
 }
@@ -1370,7 +1372,7 @@ export async function consumeGate(owner, key, options = {})
     const actor = _gateActor(owner);
     if (!actor || !key)
         return true;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     const gates = api.getActorFlags(actor, GATE_FLAG) || {};
     const subjectId = _gateSubject(options.subject);
     if (_gateBlocked(gates[key]?.[subjectId]))
@@ -1398,7 +1400,7 @@ export async function clearGate(owner, key, subject = null)
     const actor = _gateActor(owner);
     if (!actor || !key)
         return;
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     // setFlag merges, so null the entries instead of deleting them
     const value = subject === null ? null : { [_gateSubject(subject)]: null };
     await api.addActorFlags(actor, { [GATE_FLAG]: { [key]: value } });
@@ -2458,15 +2460,15 @@ export function debugActivation(triggerType, triggerData, token, item, activatio
         helpers,
         fieldKeys: Object.keys(fields)
     };
-    console.group(`[LA debugActivation] ${label ?? activationName ?? triggerType ?? "activation"}`);
-    console.log("triggerType:", triggerType);
-    console.log("activationName:", activationName);
-    console.log("reactorToken:", token);
-    console.log("item:", item);
-    console.log("triggerData:", triggerData);
-    console.log("helpers (functions on triggerData):", helpers);
-    console.log("fields:", fields);
-    console.log("summary:", summary);
+    console.group(`lancer-automations | debugActivation | ${label ?? activationName ?? triggerType ?? "activation"}`);
+    console.log("lancer-automations | triggerType:", triggerType);
+    console.log("lancer-automations | activationName:", activationName);
+    console.log("lancer-automations | reactorToken:", token);
+    console.log("lancer-automations | item:", item);
+    console.log("lancer-automations | triggerData:", triggerData);
+    console.log("lancer-automations | helpers (functions on triggerData):", helpers);
+    console.log("lancer-automations | fields:", fields);
+    console.log("lancer-automations | summary:", summary);
     console.groupEnd();
     return summary;
 }

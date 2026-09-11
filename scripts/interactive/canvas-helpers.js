@@ -7,6 +7,8 @@ import {
     getInRangeOffsets, isPositionInRange, neighborKeys
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester } from "../vision/lancerDetectionModes.js";
 import { laSightEdgeOptions } from "../vision/laWallLos.js";
 import { getShapeSamplePoints, getTokenVisionLOS } from "../vision/visionFromEdge.js";
@@ -137,7 +139,7 @@ function applyPaletteColorSettings()
 {
     for (const [key, obj, prop] of _PALETTE_DEFS)
     {
-        const value = _fromHex(game.settings.get('lancer-automations', key));
+        const value = _fromHex(getModuleSetting(key));
         if (value !== null)
             obj[prop] = value;
     }
@@ -157,7 +159,7 @@ export async function resetPaletteColorSettings(extraKeys = [])
         const defaultValue = registered?.default;
         if (defaultValue == null)
             continue;
-        await game.settings.set('lancer-automations', key, defaultValue);
+        await game.settings.set(MODULE_ID,key, defaultValue);
         const input = /** @type {HTMLInputElement|null} */ (document.querySelector(`[name="${key}"]`));
         if (!input)
             continue;
@@ -171,7 +173,7 @@ Hooks.once('init', () =>
 {
     for (const [key, obj, prop, label] of _PALETTE_DEFS)
     {
-        game.settings.register('lancer-automations', key, {
+        game.settings.register(MODULE_ID,key, {
             name: label,
             scope: 'client',
             config: false,
@@ -293,7 +295,7 @@ export function makeSafe(label, onError)
         }
         catch (e)
         {
-            console.error(`${label} handler crash, cleaning up:`, e);
+            console.error(`lancer-automations | ${label} handler crash, cleaning up:`, e);
             try
             {
                 onError?.();
@@ -844,7 +846,7 @@ function _rangePulseWidthMul()
 {
     try
     {
-        return Number(game.settings.get('lancer-automations', 'rangePulseLineWidth')) || 1;
+        return Number(getModuleSetting('rangePulseLineWidth')) || 1;
     }
     catch
     {
@@ -856,7 +858,7 @@ function _rangePulseSetting(settingKey, fallback)
 {
     try
     {
-        return String(game.settings.get('lancer-automations', settingKey) || fallback);
+        return String(getModuleSetting(settingKey) || fallback);
     }
     catch
     {
@@ -1090,7 +1092,7 @@ globalThis.laSkimDraw = () =>
     const origin = canvas.tokens.controlled[0] ?? null;
     if (!origin)
     {
-        console.warn('laSkimDraw: select a token');
+        console.warn('lancer-automations | laSkimDraw | select a token');
         return null;
     }
     const caster = makeSkimRayCaster(origin);
@@ -1176,7 +1178,7 @@ globalThis.laSkimDraw = () =>
         gfx.drawPolygon(_cellCorners(col, row).flatMap(corner => [corner.x, corner.y]));
     }
     gfx.endFill();
-    console.log(`laSkimDraw: ${litCells.size} cells lit by skim lines`);
+    console.log(`lancer-automations | laSkimDraw | ${litCells.size} cells lit by skim lines`);
     if (tickRows.length)
         console.table(tickRows);
     return litCells;
@@ -1196,7 +1198,7 @@ globalThis.laAreaDraw = (range = 10) =>
     const origin = canvas.tokens.controlled[0] ?? null;
     if (!origin)
     {
-        console.warn('laAreaDraw: select a token');
+        console.warn('lancer-automations | laAreaDraw | select a token');
         return null;
     }
     const visible = _visibilityTester(origin);
@@ -1267,7 +1269,7 @@ globalThis.laAreaDraw = (range = 10) =>
     }
     rows.sort((first, second) => second.percent - first.percent);
     const grantedCount = rows.filter(entry => entry.granted).length;
-    console.log(`laAreaDraw: ${rows.length} cells, ${grantedCount} granted (green), ${mismatches} refused but inside Foundry's own vision (blue outline), ${Math.round(performance.now() - started)} ms`);
+    console.log(`lancer-automations | laAreaDraw | ${rows.length} cells,${grantedCount} granted (green), ${mismatches} refused but inside Foundry's own vision (blue outline), ${Math.round(performance.now() - started)} ms`);
     if (rows.length)
         console.table(rows);
     return rows;
@@ -1530,7 +1532,7 @@ function _rangePulseSpeed()
 {
     try
     {
-        const speed = Number(game.settings.get('lancer-automations', 'rangePulseSpeed'));
+        const speed = Number(getModuleSetting('rangePulseSpeed'));
         return Number.isFinite(speed) && speed > 0 ? speed : 1;
     }
     catch
@@ -1544,7 +1546,7 @@ function _rangePulseOpacity(settingKey)
 {
     try
     {
-        const opacity = Number(game.settings.get('lancer-automations', settingKey));
+        const opacity = Number(getModuleSetting(settingKey));
         return Number.isFinite(opacity) ? Math.min(1, Math.max(0, opacity)) : 1;
     }
     catch
@@ -2569,7 +2571,7 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
 
     const asVoluntary = !!options.asVoluntary;
     const setElevation = !!options.setElevation;
-    const api = game.modules.get('lancer-automations').api;
+    const api = game.modules.get(MODULE_ID).api;
 
     const extraOpts = {
         ignoreMovementCap: true,

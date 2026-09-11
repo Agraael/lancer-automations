@@ -1,6 +1,7 @@
 /* global CodeMirror, game */
 
 import { AUTO_API_MANIFEST, AUTO_OPTION_SCHEMAS, AUTO_DOC_INDEX, AUTO_DOC_REF, AUTO_DOC_PARAMS } from '../../tools/codemirror-hints-data.generated.js';
+import { MODULE_ID } from '../tools/constants.js';
 
 const HAND_SIGNATURE_OVERRIDES = {
 };
@@ -646,7 +647,7 @@ function _getApiList()
 {
     if (_apiCache)
         return _apiCache;
-    const apiObj = game?.modules?.get?.('lancer-automations')?.api ?? {};
+    const apiObj = game?.modules?.get?.(MODULE_ID)?.api ?? {};
     const entries = [];
     for (const apiName of Object.keys(apiObj))
     {

@@ -1,4 +1,7 @@
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./reaction-manager.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
@@ -194,7 +197,7 @@ export async function checkSceneOnInitReactions(scene)
         return;
     return runInOnInitTriggerContext(async () =>
     {
-        const api = game.modules.get('lancer-automations').api;
+        const api = game.modules.get(MODULE_ID).api;
         const sceneReactor = makeSceneReactor(scene);
         for (const [reactionName, reaction] of candidates)
         {
@@ -219,14 +222,14 @@ export async function checkSceneOnInitReactions(scene)
 // First load: canvasReady fires before the api exists, the ready hook covers that pass.
 Hooks.on('canvasReady', () =>
 {
-    if (game.modules.get('lancer-automations')?.api)
+    if (game.modules.get(MODULE_ID)?.api)
         checkSceneOnInitReactions(canvas.scene);
 });
 Hooks.on('lancer-automations.ready', () => checkSceneOnInitReactions(canvas.scene));
 
 async function _checkOnInitReactionsBody(token, filterItem = null)
 {
-    const api = game.modules.get('lancer-automations').api;
+    const api = game.modules.get(MODULE_ID).api;
     const items = filterItem ? [filterItem] : getReactionItems(token);
 
     for (const item of items)
@@ -294,7 +297,7 @@ async function _checkOnInitReactionsBody(token, filterItem = null)
 
 export async function checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data)
 {
-    const api = game.modules.get('lancer-automations').api;
+    const api = game.modules.get(MODULE_ID).api;
     if (itemLid)
     {
         const items = getReactionItems(token);
@@ -394,7 +397,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
     if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
     {
         dbgAuto('skip:', token.name, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
-        if ((token?.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
+        if ((token?.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered, out of combat.`);
         return null;
     }
@@ -421,7 +424,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
 
     try
     {
-        const api = game.modules.get('lancer-automations').api;
+        const api = game.modules.get(MODULE_ID).api;
         const sourceToken = data.triggeringToken;
         const distanceToTrigger = (sourceToken && token) ? getTokenDistance(token, sourceToken) : null;
         const provokeReasons = [];
@@ -541,14 +544,14 @@ function evaluateSceneReaction(reactionName, reaction, triggerType, data, sceneR
     if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
     {
         dbgAuto('skip:', sceneName, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
-        if (game.settings.get('lancer-automations', 'debugOutOfCombat'))
+        if (getModuleSetting('debugOutOfCombat'))
             ui.notifications.warn(`${reactionName} (${sceneName}): not triggered, out of combat.`);
         return null;
     }
 
     try
     {
-        const api = game.modules.get('lancer-automations').api;
+        const api = game.modules.get(MODULE_ID).api;
         const enrichedData = { ...data, isSceneReactor: true, scene: sceneReactor.scene, distanceToTrigger: null, canTriggerReaction: true, isTarget: false, targetEntry: null };
         enrichedData.debugActivation = function (label)
         {
@@ -733,20 +736,13 @@ const CANCELLABLE_TRIGGERS = new Set([
 
 function debugAutomationOn()
 {
-    try
-    {
-        return !!game.settings.get('lancer-automations', 'debugAutomation');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('debugAutomation');
 }
 
 function dbgAuto(...args)
 {
     if (debugAutomationOn())
-        console.log('[LA debug]', ...args);
+        console.log('lancer-automations | debug |', ...args);
 }
 
 const _laConfigWarnedSet = new Set();
@@ -777,7 +773,7 @@ async function checkReactions(triggerType, data)
             }
         }
     };
-    const api = game.modules.get('lancer-automations').api;
+    const api = game.modules.get(MODULE_ID).api;
 
     const flatGeneralReactions = getFlatGeneralReactions();
 
@@ -950,7 +946,7 @@ async function checkReactions(triggerType, data)
 
                 if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
                 {
-                    if ((token.isOwner || game.user.isGM) && game.settings.get('lancer-automations', 'debugOutOfCombat'))
+                    if ((token.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
                     if (triggerType === 'onActivation' && (token.isOwner || game.user.isGM))
                         _warnReactionConfigOnce(`ooc|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" only triggers in combat. Enable "Out of Combat" to allow it outside.`);
@@ -1008,8 +1004,8 @@ async function checkReactions(triggerType, data)
                     const hasLoading = hasTag('tg_loading');
                     const hasRecharge = hasTag('tg_recharge');
                     const hasUses = sys?.uses?.max > 0;
-                    const perRoundLimit = game.combat?.started && game.settings.get('lancer-automations', 'enablePerRoundTurnTags') ? tagVal('tg_round') : 0;
-                    const perTurnLimit = game.combat?.started && game.settings.get('lancer-automations', 'enablePerRoundTurnTags') ? tagVal('tg_turn') : 0;
+                    const perRoundLimit = game.combat?.started && getModuleSetting('enablePerRoundTurnTags') ? tagVal('tg_round') : 0;
+                    const perTurnLimit = game.combat?.started && getModuleSetting('enablePerRoundTurnTags') ? tagVal('tg_turn') : 0;
                     if (!hasLoading && !hasRecharge && !hasUses && !perRoundLimit && !perTurnLimit && (token.isOwner || game.user.isGM))
                         _warnReactionConfigOnce(`usage|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" has Check Usage enabled but no loading, recharge, limited uses, or per-round/turn tag. The check has no effect.`);
                     if (hasLoading && sys?.loaded === false)
@@ -1059,7 +1055,7 @@ async function checkReactions(triggerType, data)
                         if (reactionPath.startsWith("extraActions."))
                         {
                             const actionName = reactionPath.slice("extraActions.".length);
-                            const extraActions = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                            const extraActions = getLAFlag(item,'extraActions') || [];
                             actionData = extraActions.find(action => action.name === actionName) ?? null;
                         }
                         else if (reactionPath.startsWith("actions."))
@@ -1408,7 +1404,7 @@ async function checkReactions(triggerType, data)
 
             if (manualReactions.length > 0)
             {
-                const mode = game.settings.get('lancer-automations', 'reactionNotificationMode');
+                const mode = getModuleSetting('reactionNotificationMode');
                 const distribution = new Map();
 
                 const allGMs = game.users.filter(user => user.active && user.isGM);
@@ -1551,7 +1547,7 @@ export async function processEffectConsumption(triggerType, data)
 
         const consumableEffects = actor.effects.filter(effect =>
         {
-            const consumption = effect.flags?.['lancer-automations']?.consumption;
+            const consumption = getLAFlags(effect)?.consumption;
             const trigger = consumption?.trigger;
             if (!trigger)
                 return false;
@@ -1565,7 +1561,7 @@ export async function processEffectConsumption(triggerType, data)
 
         for (const effect of consumableEffects)
         {
-            const consumption = effect.getFlag('lancer-automations', 'consumption');
+            const consumption = getLAFlag(effect,'consumption');
             if (!consumption)
                 continue;
 

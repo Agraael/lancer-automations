@@ -8,6 +8,7 @@ import {
     cubeRound,
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+import { getModuleSetting } from "../../tools/settings-utils.js";
 
 import {
     _queueCard, _queueCardUrgent, _createInfoCard, _updateInfoCard, _removeInfoCard,
@@ -90,14 +91,14 @@ export function chooseToken(casterToken, options = {})
         const CONE_HALF_SLOPE = 0.5;
         if (isAreaMode && (!areaRange || areaRange < 1))
         {
-            console.error(`chooseToken: pattern="${pattern}" requires areaRange >= 1`);
+            console.error(`lancer-automations | chooseToken | pattern="${pattern}" requires areaRange >= 1`);
             resolve(null);
             return;
         }
         const effectiveAreaCount = isAreaMode ? (areaCount === 0 ? 1 : areaCount) : 0;
 
         let elevationAware = (optElevationAware === null || optElevationAware === undefined)
-            ? !!game.settings.get('lancer-automations', 'tah.areaElevationAware')
+            ? !!getModuleSetting('tah.areaElevationAware')
             : !!optElevationAware;
         let autoElevation = (optAutoElevation === null || optAutoElevation === undefined)
             ? true

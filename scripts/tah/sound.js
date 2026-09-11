@@ -1,6 +1,7 @@
 /* global game, foundry, Hooks, $, fromUuidSync, FilePicker, canvas */
 
 import { playDamageImpactFX, damageImpactHits, DAMAGE_IMPACT_DELAY_MS } from '../fx/actionFX.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 const _lastSoundAt = new Map();
 let _lastTargetingCell = null;
@@ -54,16 +55,9 @@ export function playUiSound(variant = 'open', { force = false } = {})
     const isTokenFeedback = TOKEN_FEEDBACK_VARIANTS.has(variant);
     const settingKey = isTokenFeedback ? 'tah.tokenFeedbackVolume' : 'tah.uiSoundVolume';
     const muteKey = isTokenFeedback ? `tah.tokenSound.${variant}` : `tah.uiSound.${variant}`;
-    try
-    {
-        if (!force && game.settings.get('lancer-automations', muteKey) === false)
-            return;
-        vol = Number(game.settings.get('lancer-automations', settingKey)) || 0;
-    }
-    catch
-    {
-        /* not ready */
-    }
+    if (!force && getModuleSetting(muteKey) === false)
+        return;
+    vol = Number(getModuleSetting(settingKey)) || 0;
     if (vol <= 0)
         return;
     const now = Date.now();
@@ -129,16 +123,9 @@ export function playBattleLogSound(variant, { loop = false, volumeScale = 1 } = 
     const noop = { stop: () =>
     {} };
     let vol = 0;
-    try
-    {
-        if (game.settings.get('lancer-automations', `tah.battleLog.${variant}`) === false)
-            return noop;
-        vol = Number(game.settings.get('lancer-automations', 'tah.battleLogVolume')) || 0;
-    }
-    catch
-    {
-        /* not ready */
-    }
+    if (getModuleSetting(`tah.battleLog.${variant}`) === false)
+        return noop;
+    vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
     if (vol <= 0)
         return noop;
     const entry = BATTLELOG_SOUNDS[variant];
@@ -179,28 +166,14 @@ function _themeSrcForOutcome(outcome)
     const specificKey = map[outcome];
     const get = (settingKey) =>
     {
-        try
-        {
-            return String(game.settings.get('lancer-automations', `tah.battleLog.${settingKey}`) ?? '').trim();
-        }
-        catch
-        {
-            return '';
-        }
+        return String(getModuleSetting(`tah.battleLog.${settingKey}`) ?? '').trim();
     };
     return (specificKey && get(specificKey)) || get('themeDefault') || '';
 }
 
 function _themeLoops()
 {
-    try
-    {
-        return game.settings.get('lancer-automations', 'tah.battleLog.themeLoop') !== false;
-    }
-    catch
-    {
-        return true;
-    }
+    return getModuleSetting('tah.battleLog.themeLoop') !== false;
 }
 
 /**
@@ -215,26 +188,11 @@ export function playBattleLogTheme(outcome)
     if (!src)
         return;
     let vol = 0;
-    try
-    {
-        vol = Number(game.settings.get('lancer-automations', 'tah.battleLogVolume')) || 0;
-    }
-    catch
-    {
-        /* not ready */
-    }
+    vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
     if (vol <= 0)
         return;
-    let themeVol = 1;
-    try
-    {
-        const raw = Number(game.settings.get('lancer-automations', 'tah.battleLog.themeVolume'));
-        themeVol = Number.isFinite(raw) ? Math.min(2, Math.max(0.5, raw)) : 1;
-    }
-    catch
-    {
-        themeVol = 1;
-    }
+    const raw = Number(getModuleSetting('tah.battleLog.themeVolume'));
+    const themeVol = Number.isFinite(raw) ? Math.min(2, Math.max(0.5, raw)) : 1;
     const target = vol * 0.51 * themeVol;
     const promise = Promise.resolve(foundry.audio.AudioHelper.play(
         /** @type {any} */ ({ src, volume: _battleLogThemeMuted ? 0 : target, autoplay: true, loop: _themeLoops() }),
@@ -372,14 +330,7 @@ const DAMAGE_APPLY_WINDOW_MS = 1500;
 
 function _damageVolume()
 {
-    try
-    {
-        return Number(game.settings.get('lancer-automations', 'tah.damageSoundVolume')) || 0;
-    }
-    catch
-    {
-        return 0;
-    }
+    return Number(getModuleSetting('tah.damageSoundVolume')) || 0;
 }
 
 function _playDamageAudio(src, scale)
@@ -420,13 +371,8 @@ export async function playDamageSound(type, { force = false } = {})
         return;
     if (!force)
     {
-        try
-        {
-            if (game.settings.get('lancer-automations', `tah.damageSound.${key}`) === false)
-                return;
-        }
-        catch
-        { /* not ready */ }
+        if (getModuleSetting(`tah.damageSound.${key}`) === false)
+            return;
     }
     const files = await _listFolderFiles(cfg.folder);
     if (!files.length)
@@ -443,13 +389,8 @@ export async function playStatsSound(key, { force = false } = {})
         return;
     if (!force)
     {
-        try
-        {
-            if (game.settings.get('lancer-automations', `tah.statSound.${key}`) === false)
-                return;
-        }
-        catch
-        { /* not ready */ }
+        if (getModuleSetting(`tah.statSound.${key}`) === false)
+            return;
     }
     if (single)
     {
@@ -469,13 +410,8 @@ export function playStatusSfxSound(key, { force = false } = {})
         return;
     if (!force)
     {
-        try
-        {
-            if (game.settings.get('lancer-automations', `tah.statusSfx.${key}`) === false)
-                return;
-        }
-        catch
-        { /* not ready */ }
+        if (getModuleSetting(`tah.statusSfx.${key}`) === false)
+            return;
     }
     _playDamageAudio(cfg.src, cfg.scale);
 }

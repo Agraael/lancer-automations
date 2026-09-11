@@ -13,6 +13,8 @@ import {
     openDeployablePicker,
 } from './deployables.js';
 import { getActionOverlays, getActionOverlay, setActionOverlay, removeActionOverlay } from './action-overlays.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { addExtraBar, removeExtraBar, getExtraBars } from '../tah/tokenStatBar.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
 import { tierGateControl, bindTierGate, tierGateApplies, readTierGate } from './tier-gate.js';
@@ -109,9 +111,9 @@ function openActorPickerPopup(target, onAdded)
                 if (doc?.documentName !== 'Actor')
                     return;
                 await addExtraDeploymentActor(target, doc);
-                const cur = target.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+                const cur = getLAFlag(target,'extraDeployableActorsViaUI') || [];
                 if (!cur.includes(uuid))
-                    await target.setFlag('lancer-automations', 'extraDeployableActorsViaUI', [...cur, uuid]);
+                    await setLAFlag(target,'extraDeployableActorsViaUI', [...cur, uuid]);
                 dlg.close();
                 onAdded();
             });
@@ -128,7 +130,7 @@ function renderExtraBarsSection(target)
     {
         try
         {
-            return !!game.settings.get('lancer-automations', 'tokenStatBar');
+            return !!getModuleSetting('tokenStatBar');
         }
         catch
         {
@@ -180,11 +182,11 @@ export function openExtrasDialog(target)
     {
         const allActions = getActorActions(target) || [];
         const uiActions = allActions.filter((/** @type {any} */ action) => action._addedViaExtrasUI === true);
-        const allDepUuids = new Set(target.getFlag('lancer-automations', 'extraDeployableActors') || []);
-        const uiMarkerUuids = (target.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [])
+        const allDepUuids = new Set(getLAFlag(target,'extraDeployableActors') || []);
+        const uiMarkerUuids = (getLAFlag(target,'extraDeployableActorsViaUI') || [])
             .filter((/** @type {string} */ uuid) => allDepUuids.has(uuid));
-        const allDepLids = new Set(target.getFlag('lancer-automations', 'extraDeployables') || []);
-        const uiMarkerLids = (target.getFlag('lancer-automations', 'extraDeployableLidsViaUI') || [])
+        const allDepLids = new Set(getLAFlag(target,'extraDeployables') || []);
+        const uiMarkerLids = (getLAFlag(target,'extraDeployableLidsViaUI') || [])
             .map((/** @type {any} */ entry) => (typeof entry === 'string' ? { lid: entry, name: entry, img: null } : entry))
             .filter((/** @type {any} */ lidEntry) => lidEntry?.lid && allDepLids.has(lidEntry.lid));
 
@@ -424,7 +426,7 @@ export function openExtrasDialog(target)
     const encodeKey = (key) => String(key).replace(/\./g, '$DOT$');
     const commitAllInputs = async (html) =>
     {
-        const map = { ...(target.getFlag('lancer-automations', 'extraDeployableOpts') || {}) };
+        const map = { ...(getLAFlag(target,'extraDeployableOpts') || {}) };
         const readOne = (sel, prop, dataKey) =>
         {
             html.find(sel).each((_i, el) =>
@@ -450,7 +452,7 @@ export function openExtrasDialog(target)
         readOne('.la-extras-dep-count', 'count', 'uuid');
         readOne('.la-extras-dep-lid-range', 'range', 'lid');
         readOne('.la-extras-dep-lid-count', 'count', 'lid');
-        await target.setFlag('lancer-automations', 'extraDeployableOpts', map);
+        await setLAFlag(target,'extraDeployableOpts', map);
     };
 
     let floatingDrawer = null;
@@ -678,9 +680,9 @@ export function openExtrasDialog(target)
                     if (doc?.documentName !== 'Actor')
                         return;
                     await addExtraDeploymentActor(target, doc);
-                    const cur = target.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+                    const cur = getLAFlag(target,'extraDeployableActorsViaUI') || [];
                     if (!cur.includes(doc.uuid))
-                        await target.setFlag('lancer-automations', 'extraDeployableActorsViaUI', [...cur, doc.uuid]);
+                        await setLAFlag(target,'extraDeployableActorsViaUI', [...cur, doc.uuid]);
                     rerender();
                 });
                 drawerFind('.la-extras-dmg-add').on('click', () => drawerFind('.la-extras-dmg-rows').append(dmgRowHtml()));
@@ -854,9 +856,9 @@ export function openExtrasDialog(target)
                         onPick: async (entry) =>
                         {
                             await addExtraDeploymentLids(target, entry.lid);
-                            const cur = target.getFlag('lancer-automations', 'extraDeployableLidsViaUI') || [];
+                            const cur = getLAFlag(target,'extraDeployableLidsViaUI') || [];
                             if (!cur.some((/** @type {any} */ e) => (typeof e === 'string' ? e : e?.lid) === entry.lid))
-                                await target.setFlag('lancer-automations', 'extraDeployableLidsViaUI', [...cur, { lid: entry.lid, name: entry.name, img: entry.img }]);
+                                await setLAFlag(target,'extraDeployableLidsViaUI', [...cur, { lid: entry.lid, name: entry.name, img: entry.img }]);
                             rerender();
                         },
                     });
@@ -874,10 +876,10 @@ export function openExtrasDialog(target)
                     const lid = String($(ev.currentTarget).data('lid') ?? '');
                     if (!lid)
                         return;
-                    const cur = target.getFlag('lancer-automations', 'extraDeployables') || [];
-                    await target.setFlag('lancer-automations', 'extraDeployables', cur.filter((/** @type {string} */ existingLid) => existingLid !== lid));
-                    const marker = target.getFlag('lancer-automations', 'extraDeployableLidsViaUI') || [];
-                    await target.setFlag('lancer-automations', 'extraDeployableLidsViaUI', marker.filter((/** @type {any} */ e) => (typeof e === 'string' ? e : e?.lid) !== lid));
+                    const cur = getLAFlag(target,'extraDeployables') || [];
+                    await setLAFlag(target,'extraDeployables', cur.filter((/** @type {string} */ existingLid) => existingLid !== lid));
+                    const marker = getLAFlag(target,'extraDeployableLidsViaUI') || [];
+                    await setLAFlag(target,'extraDeployableLidsViaUI', marker.filter((/** @type {any} */ e) => (typeof e === 'string' ? e : e?.lid) !== lid));
                     rerender();
                 });
                 html.find('.la-extras-dep-range').on('change', async (ev) =>
@@ -923,7 +925,7 @@ export function openExtrasDialog(target)
                     const actionName = gate.getAttribute('data-action-name');
                     if (actionName)
                     {
-                        const list = foundry.utils.deepClone(target.getFlag('lancer-automations', 'extraActions') || []);
+                        const list = foundry.utils.deepClone(getLAFlag(target,'extraActions') || []);
                         const entry = list.find((/** @type {any} */ a) => a.name === actionName && a._addedViaExtrasUI === true);
                         if (entry)
                         {
@@ -931,14 +933,14 @@ export function openExtrasDialog(target)
                                 entry.tier = tier;
                             else
                                 delete entry.tier;
-                            await target.setFlag('lancer-automations', 'extraActions', list);
+                            await setLAFlag(target,'extraActions', list);
                         }
                         return;
                     }
                     const barId = gate.getAttribute('data-bar-id');
                     if (barId)
                     {
-                        const records = foundry.utils.deepClone(target.getFlag('lancer-automations', 'extraBarTemplates') || []);
+                        const records = foundry.utils.deepClone(getLAFlag(target,'extraBarTemplates') || []);
                         const record = records.find((/** @type {any} */ r) => r.id === barId);
                         if (record)
                         {
@@ -947,7 +949,7 @@ export function openExtrasDialog(target)
                                 record.entry.tier = tier;
                             else
                                 delete record.entry.tier;
-                            await target.setFlag('lancer-automations', 'extraBarTemplates', records);
+                            await setLAFlag(target,'extraBarTemplates', records);
                         }
                         return;
                     }
@@ -972,9 +974,9 @@ export function openExtrasDialog(target)
                         if (doc?.documentName === 'Actor')
                         {
                             await addExtraDeploymentActor(target, doc);
-                            const cur = target.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+                            const cur = getLAFlag(target,'extraDeployableActorsViaUI') || [];
                             if (!cur.includes(doc.uuid))
-                                await target.setFlag('lancer-automations', 'extraDeployableActorsViaUI', [...cur, doc.uuid]);
+                                await setLAFlag(target,'extraDeployableActorsViaUI', [...cur, doc.uuid]);
                             rerender();
                         }
                     }

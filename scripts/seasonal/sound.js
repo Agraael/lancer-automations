@@ -1,4 +1,5 @@
 import { MODULE_ID } from '../tools/constants.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 const BASE = 'modules/lancer-automations/FX/audio/Mmmmmm';
 const VOLUME_SETTING = 'seasonalVolume';
 
@@ -17,15 +18,7 @@ export function playSeasonalSound(variant, { volumeScale = 1 } = {})
     const entry = SOUNDS[variant];
     if (!entry)
         return;
-    let vol = 0;
-    try
-    {
-        vol = Number(game.settings.get(MODULE_ID, VOLUME_SETTING)) || 0;
-    }
-    catch
-    {
-        return;
-    }
+    const vol = Number(getModuleSetting(VOLUME_SETTING)) || 0;
     if (vol <= 0)
         return;
     const src = entry.srcs ? entry.srcs[Math.floor(Math.random() * entry.srcs.length)] : entry.src;

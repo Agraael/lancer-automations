@@ -1,4 +1,5 @@
 import { playUiSound } from '../tah/sound.js';
+import { getModuleSetting } from './settings-utils.js';
 
 const INNER_RING_MAX = 8;
 const BUTTON_SIZE = 44;
@@ -102,7 +103,7 @@ function layoutWheel()
     const scale = canvas.stage.scale.x || 1;
     const tokenDim = _token ? Math.max(_token.w ?? 0, _token.h ?? 0) * scale : 0;
     // Offset lands after the clamp, so it still moves the ring on tokens already at the ceiling.
-    const offset = Number(game.settings.get('lancer-automations', 'tah.wheelRadiusOffset')) || 0;
+    const offset = Number(getModuleSetting('tah.wheelRadiusOffset')) || 0;
     const innerRadius = Math.max(BUTTON_SIZE, Math.min(160, Math.max(70, tokenDim / 2 + 36)) + offset);
     const outerCount = Math.max(0, _items.length - INNER_RING_MAX);
     const outerRadius = innerRadius + OUTER_RING_OFFSET;

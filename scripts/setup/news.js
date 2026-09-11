@@ -1,8 +1,9 @@
 import { getPendingUpdate } from "./version-check.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { getSupabase } from "./supabase-client.js";
 import { escapeAttr as _escAttr } from "../tools/misc-tools.js";
 
-const NEWS_MODULE_ID = "lancer-automations";
+import { MODULE_ID } from "../tools/constants.js";
 const NEWS_REPO = "Agraael/lancer-automations";
 const NEWS_BRANCH = "main";
 const NEWS_URL = `https://raw.githubusercontent.com/${NEWS_REPO}/${NEWS_BRANCH}/news.json`;
@@ -22,7 +23,7 @@ function _getRole()
 {
     try
     {
-        const consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
+        const consent = getModuleSetting(NEWS_CONSENT_KEY);
         if (consent === "gm" || consent === "player")
             return consent;
     }
@@ -44,7 +45,7 @@ async function _fetchNews()
         }
         catch (err)
         {
-            console.warn(`Lancer Automations | News fetch failed (${url}):`, err);
+            console.warn(`lancer-automations | News fetch failed (${url}):`, err);
         }
     }
     return null;
@@ -61,7 +62,7 @@ async function _fetchReleases()
     }
     catch (err)
     {
-        console.warn("Lancer Automations | Releases fetch failed:", err);
+        console.warn("lancer-automations | Releases fetch failed:", err);
         return [];
     }
 }
@@ -153,7 +154,7 @@ function _pollState(entry)
     let responded = false;
     try
     {
-        const list = game.settings.get(NEWS_MODULE_ID, POLL_RESPONDED_SETTING) || [];
+        const list = getModuleSetting(POLL_RESPONDED_SETTING) || [];
         responded = list.includes(entry.id);
     }
     catch
@@ -236,7 +237,7 @@ function _collectInstallContext()
     const ctx = {};
     try
     {
-        const consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY);
+        const consent = getModuleSetting(NEWS_CONSENT_KEY);
         if (consent === "gm" || consent === "player")
             ctx.role = consent;
     }
@@ -260,11 +261,11 @@ async function _getOrCreateInstallId()
 {
     try
     {
-        let id = game.settings.get(NEWS_MODULE_ID, INSTALL_ID_SETTING) || "";
+        let id = getModuleSetting(INSTALL_ID_SETTING) || "";
         if (!id)
         {
             id = foundry.utils.randomID();
-            await game.settings.set(NEWS_MODULE_ID, INSTALL_ID_SETTING, id);
+            await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, id);
         }
         return id;
     }
@@ -299,15 +300,15 @@ async function _submitPoll(pollEl)
         const { error } = await getSupabase().from(table).upsert(payload, { onConflict: "install_id" });
         if (error)
             throw error;
-        const list = new Set(game.settings.get(NEWS_MODULE_ID, POLL_RESPONDED_SETTING) || []);
+        const list = new Set(getModuleSetting(POLL_RESPONDED_SETTING) || []);
         list.add(pollId);
-        await game.settings.set(NEWS_MODULE_ID, POLL_RESPONDED_SETTING, [...list]);
+        await game.settings.set(MODULE_ID, POLL_RESPONDED_SETTING, [...list]);
         form.remove();
         status.innerHTML = `<i class="fas fa-check"></i> Thanks, your response was recorded.`;
     }
     catch (err)
     {
-        console.warn("Lancer Automations | Poll submit failed:", err);
+        console.warn("lancer-automations | Poll submit failed:", err);
         status.textContent = "Could not submit. Try again later.";
         form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = false);
     }
@@ -357,10 +358,10 @@ function _renderRelease(release)
 
 async function _markSeen(entries)
 {
-    const current = new Set(game.settings.get(NEWS_MODULE_ID, SEEN_SETTING) || []);
+    const current = new Set(getModuleSetting(SEEN_SETTING) || []);
     for (const entry of entries)
         current.add(entry.id);
-    await game.settings.set(NEWS_MODULE_ID, SEEN_SETTING, [...current]);
+    await game.settings.set(MODULE_ID, SEEN_SETTING, [...current]);
 }
 
 function _renderUpdate(update)
@@ -508,19 +509,19 @@ async function _runNews()
     let consent = NEWS_PENDING;
     try
     {
-        consent = game.settings.get(NEWS_MODULE_ID, NEWS_CONSENT_KEY) || NEWS_PENDING;
+        consent = getModuleSetting(NEWS_CONSENT_KEY) || NEWS_PENDING;
     }
     catch
     { /* not registered */ }
     if (consent === NEWS_PENDING)
         return;
 
-    const [payload, update] = await Promise.all([_fetchNews(), getPendingUpdate(NEWS_MODULE_ID)]);
+    const [payload, update] = await Promise.all([_fetchNews(), getPendingUpdate(MODULE_ID)]);
     const entries = _sortByDateDesc(Array.isArray(payload?.entries) ? payload.entries : []);
 
-    const seenRaw = game.settings.get(NEWS_MODULE_ID, SEEN_SETTING) || [];
+    const seenRaw = getModuleSetting(SEEN_SETTING) || [];
     const role = _getRole();
-    const version = game.modules.get(NEWS_MODULE_ID)?.version || "0.0.0";
+    const version = game.modules.get(MODULE_ID)?.version || "0.0.0";
     const isGM = !!game.user?.isGM;
 
     let news = [];
@@ -534,7 +535,7 @@ async function _runNews()
         if (sorted[0])
             news = [sorted[0]];
         if (allIds.length)
-            await game.settings.set(NEWS_MODULE_ID, SEEN_SETTING, allIds);
+            await game.settings.set(MODULE_ID, SEEN_SETTING, allIds);
     }
     else
         news = _filterEntries(entries, { seen: new Set(seenRaw), role, version, isGM });
@@ -594,13 +595,13 @@ export async function openNewsHistory()
 
 Hooks.once("setup", () =>
 {
-    game.settings.register(NEWS_MODULE_ID, SEEN_SETTING, {
+    game.settings.register(MODULE_ID, SEEN_SETTING, {
         scope: "client",
         config: false,
         type: Array,
         default: [],
     });
-    game.settings.register(NEWS_MODULE_ID, POLL_RESPONDED_SETTING, {
+    game.settings.register(MODULE_ID, POLL_RESPONDED_SETTING, {
         scope: "client",
         config: false,
         type: Array,

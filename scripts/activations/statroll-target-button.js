@@ -5,6 +5,7 @@ import {
     clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel,
 } from '../interactive/canvas.js';
 import { createTokenTether } from '../interactive/canvas-helpers.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
 
@@ -154,14 +155,7 @@ export function registerStatRollTargetButton()
                 || state?.data?.path === 'system.__generic_skill_trigger';
             const active = isStatOrSkillRoll && !isTargetSessionActive() && (() =>
             {
-                try
-                {
-                    return game.settings.get('lancer-automations', 'statRollTargeting') || !!state.la_extraData?.forceTargeting;
-                }
-                catch
-                {
-                    return false;
-                }
+                return getModuleSetting('statRollTargeting') || !!state.la_extraData?.forceTargeting;
             })();
             const preId = active ? state.la_extraData?.targetTokenId : null;
             let rollerMark = null;

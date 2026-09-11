@@ -1,9 +1,11 @@
 import { isForceDebugMovement } from "./keybindings.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag } from "../tools/flag-utils.js";
 import { getOriginalMovePath, trimPathToPosition } from "./path-replay.js";
 import {
     _moveHasForcedAction, _moveHasTeleportAction, _computeMoveData, _rulerMove,
     _handleMovementCapExceeded, handleTokenMove,
-    _isActiveMoveStackFor, _wipeMoveStack, _moveHistoryCache
+    _isActiveMoveStackFor, _wipeMoveStack, _moveHistoryCache, isPositionChange
 } from "./move-tracking.js";
 import { getMovementPathHexes, drawDebugPath } from "../combat/grid-helpers.js";
 import { cancelRulerDrag, getActiveGMId, drawMovementTrace, startChoiceCard } from "../interactive/index.js";
@@ -21,7 +23,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
     if (options.lancerDebugMovement || isForceDebugMovement())
     {
         options.lancerDebugMovement = true;
-        if (change.x !== undefined || change.y !== undefined || change.elevation !== undefined)
+        if (isPositionChange(change))
             options.animate = false;
         return true;
     }
@@ -274,7 +276,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
 
         handleTokenMove(token, change, options, userId);
 
-        if (game.settings.get('lancer-automations', 'debugPathHexCalculation') && moveInfo.pathHexes.length > 0)
+        if (getModuleSetting('debugPathHexCalculation') && moveInfo.pathHexes.length > 0)
         {
             try
             {
@@ -310,7 +312,7 @@ Hooks.on('updateToken', async function(document, change, options, userId)
     const moveId = document.movement?.id;
     if (moveId && !options.lancerDebugMovement)
     {
-        const moveHistory = _moveHistoryCache.get(document.id) ?? document.getFlag('lancer-automations', 'moveHistory');
+        const moveHistory = _moveHistoryCache.get(document.id) ?? getLAFlag(document,'moveHistory');
         const lastEntry = moveHistory?.moves?.at(-1);
         if (lastEntry && !lastEntry.movementId)
         {
@@ -329,7 +331,7 @@ Hooks.on('updateToken', async function(document, change, options, userId)
             await handleTrigger('onTokenVisibility', { triggeringToken: hiddenToken, isHidden: !!change.hidden });
     }
 
-    const hasPositionChange = change.x !== undefined || change.y !== undefined || change.elevation !== undefined;
+    const hasPositionChange = isPositionChange(change);
     if (!hasPositionChange)
         return;
     if (options.lancerDebugMovement)

@@ -8,6 +8,7 @@ import {
     rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW,
 } from '../interactive/canvas.js';
 import { firstKeyFor, eventMatchesKeybind } from '../interactive/keybindings.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
@@ -22,14 +23,7 @@ const AOE_TYPES = ['Blast', 'Burst', 'Cone', 'Line'];
 export function targetInfoAllowed()
 {
     let mode = 'gm';
-    try
-    {
-        mode = game.settings.get('lancer-automations', 'targetInfoDisplay') ?? 'gm';
-    }
-    catch
-    {
-        mode = 'gm';
-    }
+    mode = getModuleSetting('targetInfoDisplay') ?? 'gm';
     return mode === 'all' || (mode === 'gm' && !!game.user?.isGM);
 }
 
@@ -52,14 +46,7 @@ export function targetInfoAllowedFor(actor)
 
 export function chanceLabelsOn()
 {
-    try
-    {
-        return game.settings.get('lancer-automations', 'haseChanceLabels') === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('haseChanceLabels') === true;
 }
 
 const HASE_PATHS = { HULL: 'system.hull', AGI: 'system.agi', SYS: 'system.sys', ENG: 'system.eng', GRIT: 'system.grit' };
@@ -859,15 +846,8 @@ function maybeAutoStart($form, $row, { mode = 'setting', hudHasTargets = null } 
         return;
     if (mode === 'setting')
     {
-        try
-        {
-            if (!game.settings.get('lancer-automations', 'autoStartTargetPicking'))
-                return;
-        }
-        catch
-        {
+        if (!getModuleSetting('autoStartTargetPicking'))
             return;
-        }
     }
     if (mode !== 'force')
     {

@@ -1,6 +1,7 @@
 /* global game, canvas, PIXI, performance */
 
 import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
+import { MODULE_ID } from "../../tools/constants.js";
 import { isSingleTargetPickerActive, cancelSingleTargetPicker, createChanceLabel } from "../canvas.js";
 import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { TG, paintDashedFootprint, createTokenTether } from "../canvas-helpers.js";
@@ -29,7 +30,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
 {
     return _queueCard(() => new Promise((resolve) =>
     {
-        const api = game.modules.get('lancer-automations')?.api;
+        const api = game.modules.get(MODULE_ID)?.api;
         const state = {
             a: { token: tokenA ?? null, skill: skillA ? String(skillA).toUpperCase() : null, mark: null, chance: null },
             b: { token: tokenB ?? null, skill: skillB ? String(skillB).toUpperCase() : null, mark: null, chance: null },

@@ -2,6 +2,7 @@
 
 import { playBattleLogSound, playUiSound, stopBattleLogTheme, setBattleLogThemeMuted, getBattleLogThemeSrc } from '../tah/sound.js';
 import { getStatsForActor, buildTwoZoneStatsHtml, ensureStyleSheet } from '../tah/tokenStatHint.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
 
@@ -1504,11 +1505,11 @@ function _isActorForceScanned(actorId)
     const actor = game.actors?.get(actorId);
     if (!actor)
         return false;
-    if (/** @type {any} */ (actor).getFlag?.('lancer-automations', 'scannedByAll'))
+    if (getLAFlag(actor, 'scannedByAll'))
         return true;
     // Unlinked tokens carry the flag on their delta actor, not the base sheet recap reads.
     const tokens = /** @type {any} */ (actor).getActiveTokens?.() ?? [];
-    return tokens.some((token) => /** @type {any} */ (token)?.actor?.getFlag?.('lancer-automations', 'scannedByAll'));
+    return tokens.some((token) => getLAFlag(token?.actor, 'scannedByAll'));
 }
 
 function _tierTone(tier)

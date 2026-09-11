@@ -1,6 +1,7 @@
 /* global canvas, game, Hooks, libWrapper */
 
 import { showOverlapStackPicker } from './canvas.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 
@@ -37,7 +38,7 @@ Hooks.once('init', () =>
         let enabled = false;
         try
         {
-            enabled = !!game.settings.get(MODULE_ID, 'overlapTokenPicker');
+            enabled = !!getModuleSetting('overlapTokenPicker');
         }
         catch
         {

@@ -104,7 +104,7 @@ Press **Shift+R** to toggle a standalone measure toolbar, docked above the macro
 - the **range source** selector - **Threat**, **Sensor**, **Max Reach**, **Weapon**, **Manual**, or **None**, pulsing that range around the reference token. The reference is whatever you have selected. [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips it, with an eye toggle on the manual radius.
 - **Movement reach** - the reference token's movement, in the ruler's speed tiers.
 - **Tactical distance labels** - distances from the reference token.
-- the **eye** - [line of sight](./VISION.md#lancer-line-of-sight) to your marks, or to your targets when nothing is marked.
+- the **eye** - [line of sight](./VISION.md#lancer-line-of-sight) to your marks, or to your targets when nothing is marked. [What the colors mean](./VISION.md#reading-the-sightlines).
 
 **Shift+click** marks a token (which targets it) or a hex (which sets the Manual range).
 

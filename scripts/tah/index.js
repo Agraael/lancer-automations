@@ -1,6 +1,8 @@
 /* global Hooks, game, canvas, libWrapper, Token, document, CONST */
 
 import { LancerHUD } from './hud.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from './sound.js';
 import { forceHideStatHint } from './tokenStatHint.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
@@ -13,7 +15,7 @@ export { hud };
 
 function enabled()
 {
-    return getSettingEnabled(SETTING, MODULE_ID);
+    return getSettingEnabled(SETTING);
 }
 
 /** True if actor is any bound token's actor OR its linked pilot. */
@@ -31,14 +33,7 @@ const SETTING_ABOVE_SHEETS = 'tah.aboveActorSheets';
 
 function _isAboveSheetsEnabled()
 {
-    try
-    {
-        return !!game.settings.get(MODULE_ID, SETTING_ABOVE_SHEETS);
-    }
-    catch
-    {
-        return true;
-    }
+    return !!getModuleSetting(SETTING_ABOVE_SHEETS, true);
 }
 
 function _updateTahZIndex()
@@ -166,7 +161,7 @@ Hooks.on('init', () =>
                 ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type) && token.actor?.isOwner);
             if (tokens.length === 0)
             {
-                if (game.settings.get(MODULE_ID, 'tah.narrativeMode'))
+                if (getModuleSetting('tah.narrativeMode'))
                     hud.bindNarrative();
                 else
                     hud.unbind();
@@ -523,15 +518,8 @@ Hooks.once('ready', () =>
     const ELEVATION_KEYS = new Set(['KeyQ', 'KeyE']);
     document.addEventListener('keydown', (ev) =>
     {
-        try
-        {
-            if (!game.settings.get(MODULE_ID, 'tah.preventWasdMovement'))
-                return;
-        }
-        catch
-        {
+        if (!getModuleSetting('tah.preventWasdMovement'))
             return;
-        }
         if (ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.repeat)
             return;
         if (!WASD_QE.has(ev.code))
@@ -554,7 +542,7 @@ Hooks.once('ready', () =>
 {
     if (!game.modules.get('lib-wrapper')?.active)
         return;
-    libWrapper.register('lancer-automations', 'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args)
+    libWrapper.register(MODULE_ID,'MouseInteractionManager.prototype.callback', function (wrapped, action, event, ...args)
     {
         if (this.object instanceof foundry.canvas.placeables.Token)
         {
@@ -595,7 +583,7 @@ Hooks.once('ready', () =>
     }, 'WRAPPER');
 
     // Waypoint feedback on token drag (F key / Ctrl+click add, right-click remove), matching the ruler.
-    libWrapper.register('lancer-automations', 'foundry.canvas.placeables.Token.prototype._addDragWaypoint', function (wrapped, ...args)
+    libWrapper.register(MODULE_ID,'foundry.canvas.placeables.Token.prototype._addDragWaypoint', function (wrapped, ...args)
     {
         const before = _sumDragWaypoints(this);
         const result = wrapped.call(this, ...args);
@@ -603,7 +591,7 @@ Hooks.once('ready', () =>
             playUiSound(WAYPOINT_ADD_SOUND);
         return result;
     }, 'WRAPPER');
-    libWrapper.register('lancer-automations', 'foundry.canvas.placeables.Token.prototype._removeDragWaypoint', function (wrapped, ...args)
+    libWrapper.register(MODULE_ID,'foundry.canvas.placeables.Token.prototype._removeDragWaypoint', function (wrapped, ...args)
     {
         const before = _sumDragWaypoints(this);
         const result = wrapped.call(this, ...args);
@@ -669,7 +657,7 @@ Hooks.on('controlToken', (_token, controlled) =>
         );
         if (ownedTokens.length > 0)
             hud.bind(ownedTokens);
-        else if (game.settings.get('lancer-automations', 'tah.narrativeMode'))
+        else if (getModuleSetting('tah.narrativeMode'))
             hud.bindNarrative();
         else
             hud.unbind();
@@ -682,7 +670,7 @@ Hooks.on('canvasReady', () =>
         return;
     if ((canvas?.tokens?.controlled ?? []).length > 0)
         return;
-    if (game.settings.get('lancer-automations', 'tah.narrativeMode'))
+    if (getModuleSetting('tah.narrativeMode'))
         hud.bindNarrative();
 });
 
@@ -693,7 +681,7 @@ Hooks.on('updateActor', (actor, change) =>
         return;
     if (!isRelevantActor(actor.id))
         return;
-    if (change?.flags?.['lancer-automations']?.lockedActions !== undefined)
+    if (getLAFlags(change)?.lockedActions !== undefined)
         hud.scheduleRefresh();
     else if (change?.system?.core_energy !== undefined)
         hud.scheduleRefresh();
@@ -950,7 +938,7 @@ Hooks.once('ready', () =>
     game.lancer.flowSteps.set('showAttackHUD', async function(state, options)
     {
         let poll = null;
-        const token = game.settings.get(MODULE_ID, 'tah.rangePreviewOnAttackCard')
+        const token = getModuleSetting('tah.rangePreviewOnAttackCard')
             ? state.actor?.getActiveTokens?.()[0]
             : null;
         const redraw = async () =>
@@ -1001,7 +989,7 @@ Hooks.once('ready', () =>
         {
             try
             {
-                if (game.settings.get(MODULE_ID, 'tah.rangePreviewOnAttackCard'))
+                if (getModuleSetting('tah.rangePreviewOnAttackCard'))
                 {
                     const actor = state.actor;
                     const actionName = state.data?.action?.name ?? state.data?.title ?? '';

@@ -1,6 +1,7 @@
 /* global Dialog, ui, game */
 
 import { playTerminalIntro } from './intro-terminal.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { openBattleLogRecap } from './recap.js';
 
 const _escape = s => String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -10,13 +11,7 @@ export function openBattleLogGMCard(battle)
 {
     const players = battle?.players ?? [];
     const mission = battle?.mission ?? {};
-    let awardsDisabled = false;
-    try
-    {
-        awardsDisabled = !!game.settings.get('lancer-automations', 'tah.disableAwards');
-    }
-    catch
-    { /* not ready */ }
+    const awardsDisabled = !!getModuleSetting('tah.disableAwards');
     const state = {
         outcome: mission.outcome ?? 'VICTORY',
         mvpId: null,

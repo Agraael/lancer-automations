@@ -2,6 +2,8 @@
 // (Persistent GAA-based range auras were removed; range toggles now proxy the Advanced Measure tool.)
 
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 import { resolveDeployRangeCount } from '../interactive/deployables.js';
@@ -176,7 +178,7 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
     {
         if (deployLid)
             return resolveDeployRangeCount(item ?? null, deployLid, actor).range;
-        const deployRange = item?.getFlag?.('lancer-automations', 'deployRange') ?? 1;
+        const deployRange = getLAFlag(item,'deployRange') ?? 1;
         return Math.max(1, deployRange);
     }
     if (action?.range?.length)
@@ -223,15 +225,8 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
 {
     if (!token)
         return;
-    try
-    {
-        if (!game.settings.get('lancer-automations', 'tah.rangePreview'))
-            return;
-    }
-    catch
-    {
+    if (!getModuleSetting('tah.rangePreview'))
         return;
-    }
     if (isEntering)
     {
         const range = await computePreviewRange(category, action ?? null, actor, item ?? null, profile ?? null, deployLid);

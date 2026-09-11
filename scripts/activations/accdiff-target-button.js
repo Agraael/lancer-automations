@@ -6,6 +6,7 @@ import {
     beginTargetSession, createTokenMark,
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 
@@ -81,15 +82,8 @@ function swapHeaderIcon(state, $form)
 
 async function injectButton(state, $form)
 {
-    try
-    {
-        if (!game.settings.get('lancer-automations', 'enableAttackTargeting'))
-            return;
-    }
-    catch
-    {
-        // settings not ready
-    }
+    if (!getModuleSetting('enableAttackTargeting', true))
+        return;
     $form = $form || $('form[id^="accdiff"]');
     if (!$form.length)
         return;
@@ -138,7 +132,7 @@ export function registerAccDiffTargetButton()
             {
                 injectWhenReady(state, () => $('form[id^="accdiff"]'), injectButton, 'targeting');
                 injectWhenReady(state, () => $('form[id^="accdiff"]'), swapHeaderIcon, 'weapon header icon');
-                if (game.settings.get('lancer-automations', 'enableAttackTargeting'))
+                if (getModuleSetting('enableAttackTargeting'))
                 {
                     const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
                     beginTargetSession(buildHitChanceFor(state), attackerToken); // shapes + live hit-% + distances
@@ -170,17 +164,10 @@ export function registerAccDiffTargetButton()
         // postFlow fires after roll; weapon-fx snapshots flow-state, so clearing here is safe.
         const clearTargetsAfterRoll = () =>
         {
-            try
-            {
-                if (!game.settings.get('lancer-automations', 'enableAttackTargeting'))
-                    return;
-                if (!game.settings.get('lancer-automations', 'clearTargetsAfterRoll'))
-                    return;
-            }
-            catch
-            {
+            if (!getModuleSetting('enableAttackTargeting'))
                 return;
-            }
+            if (!getModuleSetting('clearTargetsAfterRoll'))
+                return;
             for (const target of [...(game.user.targets ?? [])])
                 target.setTarget(false, { releaseOthers: false });
         };

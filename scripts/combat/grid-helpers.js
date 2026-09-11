@@ -1,5 +1,6 @@
 /* global canvas, CONST, game, fromUuidSync */
 import { getHexGroundElevation } from "./terrain-utils.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 
 // Lancer v3 changed acc_diff targets from `{target: Token}` to `{targetUuid: string}`.
 export function accDiffTargetToken(accDiffTarget)
@@ -368,14 +369,7 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
 {
     if (includeElevation === undefined)
     {
-        try
-        {
-            includeElevation = !!game.settings.get('lancer-automations', 'count3DDistance');
-        }
-        catch
-        {
-            includeElevation = false;
-        }
+        includeElevation = !!getModuleSetting('count3DDistance');
     }
     let planarDist;
     if (!isHexGrid())
@@ -430,14 +424,7 @@ export function isElevationCheckActive()
 {
     if (!globalThis.terrainHeightTools)
         return false;
-    try
-    {
-        return !!game.settings.get('lancer-automations', 'count3DDistance');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('count3DDistance');
 }
 
 /**

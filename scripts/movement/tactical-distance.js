@@ -1,6 +1,7 @@
 /* global game, canvas, foundry, Hooks, PIXI */
 
 import { getMinGridDistance, getDistanceTokenToPoint } from '../combat/grid-helpers.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoStateForToken } from '../setup/iso-settings.js';
 import { hasLineOfSight } from '../vision/lancerDetectionModes.js';
 import { belowBarsY } from '../tah/tokenStatBar.js';
@@ -26,7 +27,7 @@ function getMode()
 {
     try
     {
-        const raw = game.settings.get(MODULE_ID, MODE_KEY);
+        const raw = getModuleSetting(MODE_KEY);
         if (raw === true)
             return 'always'; // legacy bool
         if (raw === false)
@@ -239,7 +240,7 @@ function losEyeEnabled()
 {
     try
     {
-        return game.settings.get(MODULE_ID, 'lancerLos') === true;
+        return getModuleSetting('lancerLos') === true;
     }
     catch
     {
@@ -293,7 +294,7 @@ export function snapElevationForDisplay(rawElev)
     const isGridless = canvas.grid?.type === globalThis.CONST.GRID_TYPES.GRIDLESS;
     if (isGridless)
         return Math.round(value * 100) / 100;
-    const step = Number(game.settings.get(MODULE_ID, 'tacticalElevationStep')) || 0.5;
+    const step = Number(getModuleSetting('tacticalElevationStep')) || 0.5;
     return Number((Math.round(value / step) * step).toFixed(3));
 }
 
@@ -352,7 +353,7 @@ function labelBelow()
 {
     try
     {
-        return game.settings.get(MODULE_ID, 'tacticalLabelPosition') === 'below';
+        return getModuleSetting('tacticalLabelPosition') === 'below';
     }
     catch
     {
@@ -375,7 +376,7 @@ function zoomCounterScale()
     let minZoom = 0;
     try
     {
-        minZoom = Number(game.settings.get(MODULE_ID, 'tacticalMinZoomScale')) || 0;
+        minZoom = Number(getModuleSetting('tacticalMinZoomScale')) || 0;
     }
     catch
     {

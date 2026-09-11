@@ -1,6 +1,7 @@
 /* global $, game, fromUuid */
 
 import { playUiSound } from './sound.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 import { HudPanel } from './hud-panel.js';
 
 /** Pull every visible scan journal entry. */
@@ -10,7 +11,7 @@ function _collectVisibleScans()
     const out = [];
     for (const entry of game.journal ?? [])
     {
-        const flag = entry.flags?.['lancer-automations']?.scan;
+        const flag = getLAFlags(entry)?.scan;
         if (!flag)
             continue;
         if (!entry.testUserPermission(game.user, 'OBSERVER'))

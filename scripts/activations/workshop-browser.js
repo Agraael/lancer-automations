@@ -1,4 +1,5 @@
 import { ReactionManager, ReactionEditor, StartupScriptEditor, clearScriptCache } from "./reaction-manager.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { escapeHtml as esc } from "../tools/string-utils.js";
 
 const REPO_OWNER = 'Agraael';
@@ -112,7 +113,7 @@ function classifyPayload(json)
 
 function findLocalByWorkshopId(workshopId)
 {
-    const items = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
     for (const [lid, group] of Object.entries(items))
     {
         const reactions = group?.reactions || [];
@@ -122,13 +123,13 @@ function findLocalByWorkshopId(workshopId)
                 return { kind: 'item', lid, index, entry: reactions[index] };
         }
     }
-    const generals = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    const generals = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
     for (const [name, entry] of Object.entries(generals))
     {
         if (entry?.workshopId === workshopId)
             return { kind: 'general', name, entry };
     }
-    const startups = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+    const startups = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
     for (const script of startups)
     {
         if (script?.workshopId === workshopId)
@@ -241,7 +242,7 @@ function packEntries(json, packWorkshopId)
 
 function packItemStatus(workshopId, group)
 {
-    const items = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
     const localReactions = [];
     for (const localGroup of Object.values(items))
     {
@@ -269,7 +270,7 @@ async function importAutomationPayload(json, workshopId)
         const name = json.name || json.lid;
         if (!name)
             throw new Error('General activation without a name.');
-        const generals = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+        const generals = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
         for (const [otherName, other] of Object.entries(generals))
         {
             if (other?.workshopId === workshopId && otherName !== name)
@@ -285,7 +286,7 @@ async function importAutomationPayload(json, workshopId)
         const lid = json.lid;
         if (!lid)
             throw new Error('Item activation without a LID.');
-        const items = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+        const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
         const newReaction = { ...json.reaction, workshopId };
         let placed = false;
         for (const [otherLid, group] of Object.entries(items))
@@ -317,7 +318,7 @@ async function importAutomationPayload(json, workshopId)
 async function importStartupPayload(json, workshopId, fileName)
 {
     const author = authorOfId(workshopId);
-    const scripts = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+    const scripts = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
     const name = `${author} - ${String(fileName).replace(/\.json$/i, '')}`;
     const index = scripts.findIndex(script => script?.workshopId === workshopId);
     const entry = {
@@ -340,7 +341,7 @@ async function importPackEntry(entry)
     const author = authorOfId(entry.workshopId);
     if (entry.section === 'item')
     {
-        const items = game.settings.get(ReactionManager.ID, ReactionManager.SETTING_REACTIONS) || {};
+        const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
         for (const group of Object.values(items))
         {
             const reactions = group?.reactions || [];

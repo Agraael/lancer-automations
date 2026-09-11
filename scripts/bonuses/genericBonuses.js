@@ -1,4 +1,7 @@
 import { applyEffectsToTokens, consumeEffectCharge } from "./flagged-effects.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag, setLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "../activations/reaction-manager.js";
 import { getWeaponType } from "../tools/misc-tools.js";
@@ -103,7 +106,7 @@ function resolveReactorToken(bonus, state)
 {
     const ownerTokenId = bonus?.context?.ownerTokenId;
     if (ownerTokenId)
-        return canvas.tokens.get(ownerTokenId) ?? canvas.tokens.placeables.find(t => t.id === ownerTokenId) ?? null;
+        return canvas.tokens.get(ownerTokenId) ?? null;
     return state?.actor?.getActiveTokens?.()?.[0] ?? null;
 }
 
@@ -126,7 +129,7 @@ function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
                 mod.applyToCondition.slice('@@fn:'.length),
                 applyToConditionCache,
                 ['target', 'state', 'reactorToken', 'entry'],
-                `const api=game.modules.get('lancer-automations')?.api;`
+                `const api=game.modules.get(MODULE_ID)?.api;`
             );
         }
         else
@@ -391,7 +394,7 @@ Hooks.on('updateActor', (actor, change) =>
 {
     if (liveBonusSessions.size === 0)
         return;
-    const laFlags = change.flags?.['lancer-automations'];
+    const laFlags = getLAFlags(change);
     if (!laFlags || (laFlags.constant_bonuses === undefined && laFlags.global_bonuses === undefined))
         return;
     clearTimeout(liveBonusRefreshTimer);
@@ -426,8 +429,8 @@ function createGenericBonusStep(flowType)
 
             const tags = getFlowTags(flowType, state);
             const collected = {
-                netBonus: (actor.getFlag("lancer-automations", "generic_accuracy") || 0) -
-                           (actor.getFlag("lancer-automations", "generic_difficulty") || 0) +
+                netBonus: (getLAFlag(actor,"generic_accuracy") || 0) -
+                           (getLAFlag(actor,"generic_difficulty") || 0) +
                            (actor.getFlag("world", "generic_accuracy") || 0) -
                            (actor.getFlag("world", "generic_difficulty") || 0),
                 activeBonuses: [],
@@ -1574,9 +1577,9 @@ export function isBonusApplicable(bonus, flowTags, state)
                         bonus.condition.slice('@@fn:'.length),
                         serializedConditionCache,
                         ['state', 'actor', 'data', 'context'],
-                        `const api=game.modules.get('lancer-automations')?.api;` +
+                        `const api=game.modules.get(MODULE_ID)?.api;` +
                         `const ownerTokenId=context?.ownerTokenId;` +
-                        `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??canvas.tokens.placeables.find(t=>t.id===ownerTokenId):null;`
+                        `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??null:null;`
                     );
                     result = fn(state, state.actor, state.data, context);
                 }
@@ -2615,7 +2618,7 @@ export function injectNoBonusDmgCheckbox(state)
 
     if (!state.la_extraData._csmNoBonusDmg?.enabled)
     {
-        const hasFlag = !!(state.item?.getFlag('lancer-automations', 'noBonusDmg'));
+        const hasFlag = !!(getLAFlag(state.item,'noBonusDmg'));
         state.la_extraData._csmNoBonusDmg = { enabled: hasFlag };
     }
 
@@ -2780,7 +2783,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
 {
     if (!actor)
         return;
-    const bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
+    const bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
 
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();
@@ -2795,7 +2798,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
     else
         bonuses.push(bonusData);
 
-    await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
+    await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
 
     options.duration = options.duration || { label: 'indefinite', turns: null, rounds: null };
     if (options.duration)
@@ -2860,13 +2863,13 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                     checkBelow: options.consumption.checkBelow ?? null,
                 };
             }
-            const effectData = { name: bonusData.name, img: icon, changes, flags: { 'lancer-automations': laFlags } };
+            const effectData = { name: bonusData.name, img: icon, changes, flags: { [MODULE_ID]: laFlags } };
             if (bonusData.uses && bonusData.uses > 0)
             {
                 foundry.utils.setProperty(effectData, 'flags.statuscounter.value', bonusData.uses);
                 foundry.utils.setProperty(effectData, 'flags.statuscounter.visible', bonusData.uses > 1);
             }
-            if (options.refresh && actor.effects.some(effect => effect.flags?.['lancer-automations']?.linkedBonusId === bonusData.id))
+            if (options.refresh && actor.effects.some(effect => getLAFlags(effect)?.linkedBonusId === bonusData.id))
                 return;
             await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
 
@@ -3019,7 +3022,7 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
 {
     if (!actor)
         return;
-    let bonuses = duplicate(actor.getFlag("lancer-automations", "global_bonuses") || []);
+    let bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
     const initialLength = bonuses.length;
 
     const predicate = typeof bonusIdOrPredicate === 'function'
@@ -3033,13 +3036,13 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
 
     if (bonuses.length !== initialLength)
     {
-        await delegateSetActorFlag(actor, "lancer-automations", "global_bonuses", bonuses);
+        await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
 
         if (!skipEffectRemoval && bonusesToRemove.length > 0)
         {
             const removedIds = new Set(bonusesToRemove.map(b => b.id));
             const linkedEffects = actor.effects.filter(e =>
-                removedIds.has(e.getFlag('lancer-automations', 'linkedBonusId'))
+                removedIds.has(getLAFlag(e,'linkedBonusId'))
             );
             for (const e of linkedEffects)
                 await e.delete();
@@ -3055,7 +3058,7 @@ export function getGlobalBonuses(actor)
 {
     if (!actor)
         return [];
-    return (actor.getFlag("lancer-automations", "global_bonuses") || [])
+    return (getLAFlag(actor,"global_bonuses") || [])
         .filter(bonus => linkTierGate(bonus, actor));
 }
 
@@ -3064,7 +3067,7 @@ export function getGlobalBonus(actor, bonusId)
 {
     if (!actor)
         return null;
-    const bonuses = actor ? (actor.getFlag("lancer-automations", "global_bonuses") || []) : [];
+    const bonuses = actor ? (getLAFlag(actor,"global_bonuses") || []) : [];
     return bonuses.find(b => b.id === bonusId) || null;
 }
 
@@ -3073,14 +3076,14 @@ Hooks.on("deleteActiveEffect", (effect) =>
     // Item-source AEs: reversal runs when the transferred copy leaves the actor; removeGlobalBonus on an item no-ops via the flag branch.
     const isItemParent = effect.parent?.documentName === 'Item';
 
-    const linkedBonusId = effect.getFlag("lancer-automations", "linkedBonusId");
+    const linkedBonusId = getLAFlag(effect,"linkedBonusId");
     if (linkedBonusId && effect.parent)
         removeGlobalBonus(effect.parent, linkedBonusId, true);
 
     if (isItemParent)
         return;
 
-    const statDirect = effect.getFlag('lancer-automations', 'statDirect');
+    const statDirect = getLAFlag(effect,'statDirect');
     if (statDirect && effect.parent)
     {
         setTimeout(async () =>
@@ -3166,11 +3169,11 @@ export function initConstantStatHooks()
 {
     if (typeof libWrapper === 'undefined')
         return;
-    libWrapper.register('lancer-automations', 'CONFIG.Actor.documentClass.prototype.prepareDerivedData',
+    libWrapper.register(MODULE_ID,'CONFIG.Actor.documentClass.prototype.prepareDerivedData',
         function (wrapped)
         {
             wrapped();
-            const bonuses = this.flags?.['lancer-automations']?.constant_bonuses;
+            const bonuses = getLAFlags(this)?.constant_bonuses;
             if (!bonuses?.length)
                 return;
             for (const bonus of bonuses)
@@ -3192,7 +3195,7 @@ export async function addConstantBonus(target, bonusData)
 {
     if (!target)
         return;
-    const bonuses = duplicate(target.getFlag("lancer-automations", "constant_bonuses") || []);
+    const bonuses = duplicate(getLAFlag(target,"constant_bonuses") || []);
     if (!bonusData.id)
         bonusData.id = foundry.utils.randomID();
 
@@ -3208,7 +3211,7 @@ export async function addConstantBonus(target, bonusData)
         bonuses[existingIndex] = bonusData;
     else
         bonuses.push(bonusData);
-    await delegateSetActorFlag(target, "lancer-automations", "constant_bonuses", bonuses);
+    await delegateSetActorFlag(target, MODULE_ID,"constant_bonuses", bonuses);
 }
 
 /** @returns {object[]} */
@@ -3216,7 +3219,7 @@ export function getConstantBonuses(actor)
 {
     if (!actor)
         return [];
-    return (actor.getFlag("lancer-automations", "constant_bonuses") || [])
+    return (getLAFlag(actor,"constant_bonuses") || [])
         .filter(bonus => linkTierGate(bonus, actor));
 }
 
@@ -3231,7 +3234,7 @@ export async function removeConstantBonus(target, bonusIdOrPredicate)
 {
     if (!target)
         return;
-    const bonuses = duplicate(target.getFlag("lancer-automations", "constant_bonuses") || []);
+    const bonuses = duplicate(getLAFlag(target,"constant_bonuses") || []);
     const predicate = typeof bonusIdOrPredicate === 'function'
         ? bonusIdOrPredicate
         : bonus => bonus.id === bonusIdOrPredicate;
@@ -3239,9 +3242,9 @@ export async function removeConstantBonus(target, bonusIdOrPredicate)
     if (filtered.length !== bonuses.length)
     {
         if (target.documentName === 'Item')
-            await target.setFlag("lancer-automations", "constant_bonuses", filtered);
+            await setLAFlag(target,"constant_bonuses", filtered);
         else
-            await delegateSetActorFlag(target, "lancer-automations", "constant_bonuses", filtered);
+            await delegateSetActorFlag(target, MODULE_ID,"constant_bonuses", filtered);
     }
 }
 
@@ -3254,7 +3257,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
 {
     if (!sourceDoc || !tokens?.length)
         return;
-    const templates = sourceDoc.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+    const templates = getLAFlag(sourceDoc,'bonusTemplates') || [];
     if (!templates.length)
         return;
     for (const template of templates)
@@ -3279,7 +3282,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
             const markers = { [sourceKey]: sourceDoc.uuid, sourceTemplateId: template.id };
             if (isConstant)
             {
-                const existing = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'constant_bonuses') || []);
+                const existing = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
                 if (existing.some(bonus => bonus.id === runtimeId))
                     continue;
                 const bonusDataOut = { ...(template.bonusData || {}), id: runtimeId, ...markers };
@@ -3287,7 +3290,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
                     bonusDataOut.uses = uses;
                 try
                 {
-                    await delegateSetActorFlag(actor, 'lancer-automations', 'constant_bonuses', [...existing, bonusDataOut]);
+                    await delegateSetActorFlag(actor, MODULE_ID,'constant_bonuses', [...existing, bonusDataOut]);
                 }
                 catch (err)
                 {
@@ -3295,7 +3298,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
                 }
                 continue;
             }
-            const already = (actor.getFlag?.('lancer-automations', 'global_bonuses') || []).some(bonus => bonus.id === runtimeId);
+            const already = (getLAFlag(actor,'global_bonuses') || []).some(bonus => bonus.id === runtimeId);
             if (already)
                 continue;
             const bonusDataOut = { ...(template.bonusData || {}), id: runtimeId, ...markers };
@@ -3350,7 +3353,7 @@ async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = u
         const source = /** @type {any} */ (await fromUuid(sourceUuid));
         if (!source)
             return;
-        const templates = source.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const templates = getLAFlag(source,'bonusTemplates') || [];
         const template = templates.find(candidate => candidate.id === sourceTemplateId);
         if (!template)
             return;
@@ -3365,14 +3368,14 @@ async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = u
             if (durationLabel === 'constant')
                 return;
             const linkedAE = /** @type {any[]} */ (Array.from(actor?.effects ?? [])).find(effect =>
-                effect.flags?.['lancer-automations']?.linkedBonusId === runtimeBonus.id);
+                getLAFlags(effect)?.linkedBonusId === runtimeBonus.id);
             const rawUses = linkedAE?.flags?.statuscounter?.value;
             currentUses = Number.isFinite(Number(rawUses)) ? Number(rawUses) : (linkedAE ? undefined : 0);
             if (currentUses === undefined)
                 return;
         }
         const updated = templates.map(candidate => candidate.id === sourceTemplateId ? { ...candidate, lastRuntimeUses: currentUses } : candidate);
-        await source.setFlag('lancer-automations', 'bonusTemplates', updated);
+        await setLAFlag(source,'bonusTemplates', updated);
     }
     catch (err)
     {
@@ -3403,8 +3406,8 @@ function _findStoredBonus(actor, bonusId)
         }
         return null;
     };
-    return search(actor.getFlag('lancer-automations', 'global_bonuses') || [], 'global')
-        ?? search(actor.getFlag('lancer-automations', 'constant_bonuses') || [], 'constant');
+    return search(getLAFlag(actor,'global_bonuses') || [], 'global')
+        ?? search(getLAFlag(actor,'constant_bonuses') || [], 'constant');
 }
 
 // Burn one use of a bonus (dual-write uses + linked AE); removes it when exhausted. Auto-consume-triggered bonuses are skipped (their charges belong to the trigger engine).
@@ -3418,8 +3421,8 @@ export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false }
         return false;
     const { stored, source } = found;
     const linkedEffect = /** @type {any} */ (Array.from(actor.effects ?? []).find(effect =>
-        effect.flags?.['lancer-automations']?.linkedBonusId === stored.id));
-    if (linkedEffect?.flags?.['lancer-automations']?.consumption?.trigger)
+        getLAFlags(effect)?.linkedBonusId === stored.id));
+    if (getLAFlags(linkedEffect)?.consumption?.trigger)
         return false;
     const currentUses = typeof stored.uses === 'number' ? stored.uses : null;
     if (currentUses === null && !removeWhenNoUses)
@@ -3431,9 +3434,9 @@ export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false }
             await addConstantBonus(actor, { ...stored, uses: newUses });
         else
         {
-            const bonuses = actor.getFlag('lancer-automations', 'global_bonuses') || [];
+            const bonuses = getLAFlag(actor,'global_bonuses') || [];
             const updated = bonuses.map(existing => existing.id === stored.id ? { ...existing, uses: newUses } : existing);
-            await actor.setFlag('lancer-automations', 'global_bonuses', updated);
+            await setLAFlag(actor,'global_bonuses', updated);
             if (linkedEffect)
                 await linkedEffect.update({ 'flags.statuscounter.value': newUses });
         }
@@ -3522,7 +3525,7 @@ async function _cleanupBonusRuntimes(actor, predicate)
 {
     if (!actor)
         return;
-    const globals = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'global_bonuses') || [])
+    const globals = /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || [])
         .filter(predicate);
     for (const runtime of globals)
     {
@@ -3543,13 +3546,13 @@ async function _cleanupBonusRuntimes(actor, predicate)
             console.warn('lancer-automations | bonus cleanup remove:', err);
         }
     }
-    const constants = /** @type {any[]} */ (actor.getFlag?.('lancer-automations', 'constant_bonuses') || []);
+    const constants = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
     if (constants.some(predicate))
     {
         const remaining = constants.filter(bonus => !predicate(bonus));
         try
         {
-            await delegateSetActorFlag(actor, 'lancer-automations', 'constant_bonuses', remaining);
+            await delegateSetActorFlag(actor, MODULE_ID,'constant_bonuses', remaining);
         }
         catch (err)
         {
@@ -3637,8 +3640,8 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
             continue;
         const templateId = foundry.utils.randomID();
         const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { ...addOptions, ...extraOptions } };
-        const existing = item.getFlag?.('lancer-automations', 'bonusTemplates') || [];
-        await item.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
+        const existing = getLAFlag(item,'bonusTemplates') || [];
+        await setLAFlag(item,'bonusTemplates', [...existing, template]);
         stamped.push({ item, templateId });
         const parent = item.parent;
         if (parent?.documentName === 'Actor')
@@ -3663,7 +3666,7 @@ export async function ensureLinkedBonus(options = /** @type {any} */ ({}), extra
         return linkBonusToItem(options, extraOptions);
     }
     const missing = items.filter(item => item?.documentName === 'Item'
-        && !(item.getFlag?.('lancer-automations', 'bonusTemplates') || []).some(template => template.bonusData?.id === bonusData.id));
+        && !(getLAFlag(item,'bonusTemplates') || []).some(template => template.bonusData?.id === bonusData.id));
     if (!missing.length)
         return [];
     return linkBonusToItem({ ...options, items: missing }, extraOptions);
@@ -3691,8 +3694,8 @@ export async function linkBonusToActor(options = /** @type {any} */ ({}), extraO
             continue;
         const templateId = foundry.utils.randomID();
         const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { ...addOptions, ...extraOptions } };
-        const existing = actor.getFlag?.('lancer-automations', 'bonusTemplates') || [];
-        await actor.setFlag('lancer-automations', 'bonusTemplates', [...existing, template]);
+        const existing = getLAFlag(actor,'bonusTemplates') || [];
+        await setLAFlag(actor,'bonusTemplates', [...existing, template]);
         stamped.push({ actor, templateId });
         await applyActorBonusTemplatesToTokens(actor, actor.getActiveTokens?.() ?? []);
     }
@@ -3716,11 +3719,11 @@ export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
     {
         if (!item || item.documentName !== 'Item')
             continue;
-        const existing = item.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const existing = getLAFlag(item,'bonusTemplates') || [];
         const filtered = existing.filter(template => template.id !== templateId);
         if (filtered.length === existing.length)
             continue;
-        await item.setFlag('lancer-automations', 'bonusTemplates', filtered);
+        await setLAFlag(item,'bonusTemplates', filtered);
         const parent = item.parent;
         if (parent?.documentName === 'Actor')
             await _cleanupItemBonusTemplateFromActor(item, parent, templateId);
@@ -3746,11 +3749,11 @@ export async function unlinkBonusFromActor(options = /** @type {any} */ ({}))
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
-        const existing = actor.getFlag?.('lancer-automations', 'bonusTemplates') || [];
+        const existing = getLAFlag(actor,'bonusTemplates') || [];
         const filtered = existing.filter(template => template.id !== templateId);
         if (filtered.length === existing.length)
             continue;
-        await actor.setFlag('lancer-automations', 'bonusTemplates', filtered);
+        await setLAFlag(actor,'bonusTemplates', filtered);
         await _cleanupActorBonusTemplateFromTokens(actor, templateId);
         removed.push({ actor, templateId });
     }
@@ -3778,9 +3781,9 @@ export function getImmunityBonuses(actor, subtype = null, state = null)
     if (subtype && !IMMUNITY_SUBTYPES.has(subtype))
         console.warn(`lancer-automations | getImmunityBonuses: unknown subtype "${subtype}"`);
 
-    const constants = actor.getFlag("lancer-automations", "constant_bonuses") || [];
-    const globals = actor.getFlag("lancer-automations", "global_bonuses") || [];
-    const ephemerals = actor.getFlag("lancer-automations", "ephemeral_bonuses") || [];
+    const constants = getLAFlag(actor,"constant_bonuses") || [];
+    const globals = getLAFlag(actor,"global_bonuses") || [];
+    const ephemerals = getLAFlag(actor,"ephemeral_bonuses") || [];
     const flowBonuses = state?.la_extraData?.flow_bonus || [];
 
     return flattenBonuses([...constants, ...globals, ...ephemerals, ...flowBonuses])
@@ -3823,7 +3826,7 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null, stat
                 if (effect.statuses?.has(immuneTail) || effect.statuses?.has(immuneLower))
                     return true;
 
-                const flagName = effect.getFlag('lancer-automations', 'effect') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null);
+                const flagName = getLAFlag(effect,'effect') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null);
                 if (flagName)
                 {
                     const flagLower = flagName.toLowerCase();
@@ -3913,7 +3916,7 @@ export function initDamageCalcWrapper()
             _pendingApplyHalvedActorUuid = /** @type {any} */ (fromUuidSync(targetUuid))?.actor?.uuid ?? null;
     }, { capture: true });
 
-    libWrapper.register('lancer-automations', 'CONFIG.Actor.documentClass.prototype.damageCalc',
+    libWrapper.register(MODULE_ID,'CONFIG.Actor.documentClass.prototype.damageCalc',
         async function (wrapped, damage, options)
         {
             const alreadyHalved = _pendingApplyHalvedActorUuid !== null && _pendingApplyHalvedActorUuid === this.uuid;
@@ -4007,7 +4010,7 @@ export function convertHeatToEnergyIfHeatless(actor, damages)
         return damages;
     try
     {
-        if (!game.settings.get('lancer-automations', 'convertHeatToEnergyOnHeatless'))
+        if (!getModuleSetting('convertHeatToEnergyOnHeatless'))
             return damages;
     }
     catch (_)
@@ -4089,7 +4092,7 @@ export function getLinkedBonuses(source)
 {
     if (!source)
         return [];
-    return /** @type {any[]} */ (source.getFlag?.('lancer-automations', 'bonusTemplates') || []);
+    return /** @type {any[]} */ (getLAFlag(source,'bonusTemplates') || []);
 }
 
 export const BonusesAPI = {

@@ -7,6 +7,7 @@
  */
 
 import { getActivationIcon } from '../tools/misc-tools.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
 
 function activationChipContent(action)
@@ -273,7 +274,7 @@ export function laRenderDeployables(deployableActors, opts = {})
 export function laRenderItemStatusTemplates(item)
 {
     const templates = /** @type {any[]} */ (Array.from(item?.effects ?? []))
-        .filter(effect => effect.flags?.['lancer-automations']?.isItemTemplate === true);
+        .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
     if (!templates.length)
         return '';
     const rows = templates.map(effect =>
@@ -313,13 +314,13 @@ function _summarizeBonusData(bonus)
 
 /**
  * Renders LA extra bonuses attached to an item as bonus templates
- * (`item.flags['lancer-automations'].bonusTemplates`).
+ * (`getLAFlags(item).bonusTemplates`).
  * @param {any} item
  * @returns {string}
  */
 export function laRenderItemBonusTemplates(item)
 {
-    const templates = /** @type {any[]} */ (item?.getFlag?.('lancer-automations', 'bonusTemplates') || []);
+    const templates = /** @type {any[]} */ (getLAFlag(item,'bonusTemplates') || []);
     if (!templates.length)
         return '';
     const rows = templates.map(template =>
@@ -353,7 +354,7 @@ export async function laRenderItemExtras(item)
 {
     if (!item)
         return '';
-    const laFlags = item.flags?.['lancer-automations'] ?? {};
+    const laFlags = getLAFlags(item) ?? {};
     let html = '';
 
     // Auto-consume status block (always shown when the item has any consumable resources).

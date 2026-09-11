@@ -1,6 +1,7 @@
 /* global $ */
 
 import { laDetailPopup, laBindPopupBehavior, laRenderItemExtras } from '../interactive/detail-renderers.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { ReactionManager } from '../activations/reaction-manager.js';
 import { playUiSound } from './sound.js';
 import { bindConsumeStatusToggles } from '../interactive/extra-config.js';
@@ -59,14 +60,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
 {
     $('body').append(popup);
     let uiScale = 1;
-    try
-    {
-        uiScale = Number(game.settings.get('lancer-automations', 'tah.uiScale')) || 1;
-    }
-    catch
-    {
-        uiScale = 1;
-    }
+    uiScale = Number(getModuleSetting('tah.uiScale')) || 1;
     if (uiScale !== 1)
         popup.css({ transform: `scale(${uiScale})`, 'transform-origin': 'top left' });
     const rect = anchorEl[0]?.getBoundingClientRect() ?? { left: 300, top: 100, right: 380, height: 30 };

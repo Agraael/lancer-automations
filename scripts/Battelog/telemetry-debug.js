@@ -1,4 +1,5 @@
 import { getTelemetry, BUCKETS } from './telemetry-store.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { EVENT_TYPES } from './combat-telemetry.js';
 
 const _escape = str => String(str ?? '')
@@ -21,7 +22,7 @@ const _hiddenTypes = new Set();
 
 function _telemetryCombats()
 {
-    return [...(game.combats ?? [])].filter(combat => combat.getFlag?.('lancer-automations', 'telemetry'));
+    return [...(game.combats ?? [])].filter(combat => getLAFlag(combat,'telemetry'));
 }
 
 function _pickCombat()
@@ -140,7 +141,7 @@ function _onCombatChange(combat, changed)
 {
     if (!_dialog)
         return;
-    if (changed?.flags?.['lancer-automations']?.telemetry === undefined && changed?.round === undefined)
+    if (getLAFlags(changed)?.telemetry === undefined && changed?.round === undefined)
         return;
     _rerender();
 }

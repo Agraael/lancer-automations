@@ -1,5 +1,7 @@
 /* global $ */
 import { playUiSound } from './sound.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 // HUD item helpers: status badges, icons, col4 action/profile lists, and detail-popup pips.
 
 import { getItemActions } from '../interactive/deployables.js';
@@ -121,14 +123,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
 
     const perFreqOn = (() =>
     {
-        try
-        {
-            return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags');
-        }
-        catch
-        {
-            return false;
-        }
+        return !!getModuleSetting('enablePerRoundTurnTags');
     })();
     const pushPerFreq = (max, used, iconReady, iconConsumed) =>
     {
@@ -201,14 +196,7 @@ export function isWhiteIcon(icon)
 
 export function tahScale()
 {
-    try
-    {
-        return Number(game.settings.get('lancer-automations', 'tah.uiScale')) || 1;
-    }
-    catch
-    {
-        return 1;
-    }
+    return Number(getModuleSetting('tah.uiScale')) || 1;
 }
 
 export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
@@ -499,14 +487,7 @@ export function appendItemPips(item, popup, depthCallbacks)
     const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited');
     const perFreqOn = (() =>
     {
-        try
-        {
-            return !!game.settings.get('lancer-automations', 'enablePerRoundTurnTags');
-        }
-        catch
-        {
-            return false;
-        }
+        return !!getModuleSetting('enablePerRoundTurnTags');
     })();
     const subEntry = scoped.sub;
     const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry) : getPerRoundLimit(item)) : 0;
@@ -540,7 +521,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             return getSubUses(item, subKey);
         if (isActorExtra)
         {
-            const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+            const list = getLAFlag(item,'extraActions') || [];
             return list.find(entry => entry.name === action.name) ?? action;
         }
         return item.system;
@@ -554,13 +535,13 @@ export function appendItemPips(item, popup, depthCallbacks)
         }
         if (isActorExtra)
         {
-            const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+            const list = getLAFlag(item,'extraActions') || [];
             const idx = list.findIndex(entry => entry.name === action.name);
             if (idx < 0)
                 return;
             const next = list.slice();
             next[idx] = { ...next[idx], ...patch };
-            await item.setFlag('lancer-automations', 'extraActions', next);
+            await setLAFlag(item,'extraActions', next);
         }
         else
         {
@@ -678,17 +659,17 @@ export function appendItemPips(item, popup, depthCallbacks)
         const actionHasLimited  = action.tags.some(tag => tag.lid === 'tg_limited');
         if (actionHasLoading || actionHasRecharge || actionHasLimited)
         {
-            const readActionState = () => (item.getFlag?.('lancer-automations', 'extraActions') || [])
+            const readActionState = () => (getLAFlag(item,'extraActions') || [])
                 .find(entry => entry.name === action.name) ?? action;
             const patchActionState = async (patch) =>
             {
-                const list = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                const list = getLAFlag(item,'extraActions') || [];
                 const idx = list.findIndex(entry => entry.name === action.name);
                 if (idx < 0)
                     return;
                 const next = list.slice();
                 next[idx] = { ...next[idx], ...patch };
-                await item.setFlag('lancer-automations', 'extraActions', next);
+                await setLAFlag(item,'extraActions', next);
             };
             const actionWrap = $(`<div class="la-ea-pips" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
             popup.children().last().prepend(actionWrap);
@@ -754,7 +735,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             popup.children().last().prepend(extraActionWrap);
         const rebuildExtraAction = () =>
         {
-            const extraActionEntry = (item.getFlag?.('lancer-automations', 'extraActions') || []).find(entry => entry.name === extraAction.name);
+            const extraActionEntry = (getLAFlag(item,'extraActions') || []).find(entry => entry.name === extraAction.name);
             const charged = extraActionEntry ? extraActionEntry.charged !== false : extraAction.charged !== false;
             extraActionWrap.find('.la-ea-recharge-row').remove();
             const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
@@ -763,12 +744,12 @@ export function appendItemPips(item, popup, depthCallbacks)
             pip.on('click', async () =>
             {
                 playUiSound('toggle');
-                const actions = item.getFlag?.('lancer-automations', 'extraActions') || [];
+                const actions = getLAFlag(item,'extraActions') || [];
                 const match = actions.find(entry => entry.name === extraAction.name);
                 if (match)
                 {
                     match.charged = !match.charged;
-                    await item.setFlag('lancer-automations', 'extraActions', actions);
+                    await setLAFlag(item,'extraActions', actions);
                     extraAction.charged = match.charged;
                 }
                 rebuildExtraAction();

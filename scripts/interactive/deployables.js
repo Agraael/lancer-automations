@@ -5,6 +5,9 @@ import {
 } from "./canvas.js";
 
 import { startChoiceCard } from "./network.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
+import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { MODULE_ID } from "../tools/constants.js";
 import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX, playReloadFX } from "../fx/actionFX.js";
 import { stripDeployOwner } from "./detail-renderers.js";
@@ -70,7 +73,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
                 displayBars: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
                 disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
                 bar1: { attribute: 'hp' },
-                flags: { 'lancer-automations': { awarenessMode: 'simple' } }
+                flags: { [MODULE_ID]: { awarenessMode: 'simple' } }
             }
         });
 
@@ -89,7 +92,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         name: weapon.name,
         actorData: { name: `${weapon.name} [${ownerName}]` },
         flags: {
-            'lancer-automations': {
+            [MODULE_ID]: {
                 thrownWeapon: true,
                 weaponName: weapon.name,
                 weaponId: weapon.id,
@@ -116,7 +119,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     if (result)
     {
         await stampDeployableSource(result, weapon);
-        const api = game.modules.get('lancer-automations')?.api;
+        const api = game.modules.get(MODULE_ID)?.api;
         if (api?.handleTrigger)
         {
             await api.handleTrigger('onDeploy', {
@@ -184,7 +187,7 @@ export async function spawnHardCover(originToken, options = {})
                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                 disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
                 bar1: { attribute: 'hp' },
-                flags: { 'lancer-automations': { awarenessMode: 'simple' } }
+                flags: { [MODULE_ID]: { awarenessMode: 'simple' } }
             }
         });
 
@@ -206,7 +209,7 @@ export async function spawnHardCover(originToken, options = {})
         width: size,
         height: size,
         flags: {
-            'lancer-automations': {
+            [MODULE_ID]: {
                 hardCover: true
             }
         }
@@ -253,7 +256,7 @@ export async function pickupWeaponToken(ownerToken)
     const ownerActor = ownerToken.actor;
     const thrownTokens = canvas.tokens.placeables.filter(token =>
     {
-        const flags = token.document.flags?.['lancer-automations'];
+        const flags = getLAFlags(token.document);
         return flags?.thrownWeapon && flags?.ownerActorUuid === ownerActor.uuid;
     });
 
@@ -276,7 +279,7 @@ export async function pickupWeaponToken(ownerToken)
         return null;
 
     const pickedToken = selected[0];
-    const flags = pickedToken.document?.flags?.['lancer-automations'];
+    const flags = getLAFlags(pickedToken.document);
     const weaponId = flags?.weaponId;
     const weaponName = flags?.weaponName || "Weapon";
 
@@ -465,7 +468,7 @@ export async function resolveDeployableSourceItem(deployableActor)
         const tokens = deployableActor.getActiveTokens?.() ?? [];
         for (const token of tokens)
         {
-            const uuid = token?.document?.flags?.['lancer-automations']?.sourceItemUuid;
+            const uuid = getLAFlags(token?.document)?.sourceItemUuid;
             if (uuid)
             {
                 const item = await fromUuid(uuid);
@@ -767,7 +770,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
                 height: tokenHeight,
                 actorData: { name: `${actualDeployable.name}` },
                 flags: {
-                    'lancer-automations': {
+                    [MODULE_ID]: {
                         deployedItem: true,
                         deployableName: actualDeployable.name,
                         deployableId: actualDeployable.id,
@@ -862,7 +865,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
     if (result)
     {
         await stampDeployableSource(result, systemItem);
-        const api = game.modules.get('lancer-automations')?.api;
+        const api = game.modules.get(MODULE_ID)?.api;
         if (api?.handleTrigger)
         {
             await api.handleTrigger('onDeploy', {
@@ -913,7 +916,7 @@ function _printFlowConsumedUses(item)
         return false;
     try
     {
-        return !!game.settings.get('lancer-automations', 'treatGenericPrintAsActivation');
+        return !!getModuleSetting('treatGenericPrintAsActivation');
     }
     catch
     {
@@ -957,7 +960,7 @@ export async function addItemFlags(item, flags)
         return null;
     }
     for (const [key, flagValue] of Object.entries(flags))
-        await setItemFlag(item, 'lancer-automations', key, flagValue);
+        await setItemFlag(item, MODULE_ID,key, flagValue);
     return item;
 }
 
@@ -975,7 +978,7 @@ export async function removeItemFlags(item, flags)
         return null;
     }
     for (const key of Object.keys(flags))
-        await unsetItemFlag(item, 'lancer-automations', key);
+        await unsetItemFlag(item, MODULE_ID,key);
     return item;
 }
 
@@ -993,7 +996,7 @@ export async function addActorFlags(actor, flags)
         return null;
     }
     for (const [key, value] of Object.entries(flags))
-        await setActorFlag(actor, 'lancer-automations', key, value);
+        await setActorFlag(actor, MODULE_ID,key, value);
     return actor;
 }
 
@@ -1011,7 +1014,7 @@ export async function removeActorFlags(actor, flags)
         return null;
     }
     for (const key of Object.keys(flags))
-        await unsetActorFlag(actor, 'lancer-automations', key);
+        await unsetActorFlag(actor, MODULE_ID,key);
     return actor;
 }
 
@@ -1029,7 +1032,7 @@ export async function addTokenFlags(tokenOrDoc, flags)
         return null;
     }
     for (const [key, value] of Object.entries(flags))
-        await setTokenFlag(td, 'lancer-automations', key, value);
+        await setTokenFlag(td, MODULE_ID,key, value);
     return td;
 }
 
@@ -1047,7 +1050,7 @@ export async function removeTokenFlags(tokenOrDoc, flags)
         return null;
     }
     for (const key of Object.keys(flags))
-        await unsetTokenFlag(td, 'lancer-automations', key);
+        await unsetTokenFlag(td, MODULE_ID,key);
     return td;
 }
 
@@ -1065,8 +1068,8 @@ export function getTokenFlags(tokenOrDoc, flagName = null)
         return null;
     }
     if (flagName)
-        return td.getFlag('lancer-automations', flagName);
-    return td.flags?.['lancer-automations'] || {};
+        return getLAFlag(td,flagName);
+    return getLAFlags(td) || {};
 }
 
 function _resolveActor(target)
@@ -1089,10 +1092,10 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
             return null;
         }
         const reason = (typeof sourceIdOrOpts === 'string' ? sourceIdOrOpts : sourceIdOrOpts?.reason) ?? null;
-        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionLocks') ?? []);
+        const locks = /** @type {any[]} */ (getLAFlag(target,'actionLocks') ?? []);
         if (locks.some(lock => lock?.actionName === actionName))
             return target;
-        await target.setFlag('lancer-automations', 'actionLocks', [...locks, { actionName, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) }]);
+        await setLAFlag(target,'actionLocks', [...locks, { actionName, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) }]);
         return target;
     }
     const actor = _resolveActor(target);
@@ -1103,7 +1106,7 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
         return null;
     }
     const reason = opts?.reason ?? null;
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const entries = Array.isArray(current[actionName]) ? current[actionName].slice() : [];
     const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
     const entry = (reason || kind) ? { id: sourceId, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) } : sourceId;
@@ -1137,14 +1140,14 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
 
     if (target?.documentName === 'Item')
     {
-        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
+        const locks = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
         const kept = locks.filter(lock => String(lock?.types) !== String(types));
         const entry = /** @type {any} */ ({ types, except });
         if (reason)
             entry.reason = reason;
         if (kind)
             entry.kind = kind;
-        await target.setFlag('lancer-automations', 'actionTypeLocks', [...kept, entry]);
+        await setLAFlag(target,'actionTypeLocks', [...kept, entry]);
         return target;
     }
 
@@ -1155,7 +1158,7 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
         ui.notifications.error("lockActorActionTypes: actor, activationTypes and sourceId are required.");
         return null;
     }
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActionTypes')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActionTypes')) ?? {};
     const next = { ...current };
     for (const type of types)
     {
@@ -1185,15 +1188,15 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
         {
             if (kind === null)
             {
-                await target.unsetFlag('lancer-automations', 'actionTypeLocks');
+                await unsetLAFlag(target,'actionTypeLocks');
                 return target;
             }
-            const all = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
-            await target.setFlag('lancer-automations', 'actionTypeLocks', all.filter(lock => (lock?.kind ?? null) !== kind));
+            const all = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
+            await setLAFlag(target,'actionTypeLocks', all.filter(lock => (lock?.kind ?? null) !== kind));
             return target;
         }
-        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionTypeLocks') ?? []);
-        await target.setFlag('lancer-automations', 'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types) || (lock?.kind ?? null) !== kind));
+        const locks = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
+        await setLAFlag(target,'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types) || (lock?.kind ?? null) !== kind));
         return target;
     }
 
@@ -1203,7 +1206,7 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
         ui.notifications.error("unlockActorActionTypes: actor, activationTypes and sourceId are required.");
         return null;
     }
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActionTypes')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActionTypes')) ?? {};
     const next = { ...current };
     for (const type of types)
     {
@@ -1222,10 +1225,10 @@ export async function unlockActorAction(target, actionName, sourceId = null, kin
 {
     if (target?.documentName === 'Item')
     {
-        const locks = /** @type {any[]} */ (target.getFlag('lancer-automations', 'actionLocks') ?? []);
+        const locks = /** @type {any[]} */ (getLAFlag(target,'actionLocks') ?? []);
         const kept = locks.filter(lock => lock?.actionName !== actionName || (lock?.kind ?? null) !== kind);
         if (kept.length !== locks.length)
-            await target.setFlag('lancer-automations', 'actionLocks', kept);
+            await setLAFlag(target,'actionLocks', kept);
         return target;
     }
     const actor = _resolveActor(target);
@@ -1234,7 +1237,7 @@ export async function unlockActorAction(target, actionName, sourceId = null, kin
         ui.notifications.error("unlockActorAction: actor, actionName and sourceId are required.");
         return null;
     }
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const entries = Array.isArray(current[actionName]) ? current[actionName].filter(entry => lockEntryId(entry) !== sourceId || (entry?.kind ?? null) !== kind) : [];
     const next = { ...current };
     if (entries.length)
@@ -1301,7 +1304,7 @@ export function isActionLocked(target, actionName)
     const actor = _resolveActor(target);
     if (!actor || !actionName)
         return false;
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     if (Array.isArray(current[actionName]) && current[actionName].length > 0)
         return true;
     return getItemActionLocks(actor, actionName).length > 0;
@@ -1312,7 +1315,7 @@ export function getLockedActions(target)
     const actor = _resolveActor(target);
     if (!actor)
         return [];
-    const current = /** @type {Record<string,any[]>} */(actor.getFlag('lancer-automations', 'lockedActions')) ?? {};
+    const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const names = new Set(Object.keys(current).filter(key => Array.isArray(current[key]) && current[key].length > 0));
     for (const lock of getItemActionLocks(actor))
         names.add(lock.actionName);
@@ -1391,7 +1394,7 @@ export async function endItemActivation(item, token)
     if (blockedAction)
         await unlockActorAction(item, blockedAction);
 
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (api?.executeSimpleActivation)
     {
         const result = await api.executeSimpleActivation(token.actor, {
@@ -1462,7 +1465,7 @@ export function getItemActions(item, opts = {})
     if (!item)
         return [];
     const owner = item.parent?.documentName === 'Actor' ? item.parent : null;
-    const extraActions = (item.getFlag?.('lancer-automations', 'extraActions') || [])
+    const extraActions = (getLAFlag(item,'extraActions') || [])
         .filter(action => linkTierGate(action, owner, item));
     if (opts.extraOnly)
         return extraActions;
@@ -1549,13 +1552,13 @@ export async function addExtraActions(target, actions)
         }
     }
 
-    const existing = doc.getFlag('lancer-automations', 'extraActions') || [];
+    const existing = getLAFlag(doc,'extraActions') || [];
     // Same-name entries keep their stored state, so onInit re-runs stay idempotent.
     const fresh = newActions.filter(action => !existing.some(entry => entry.name === action.name));
     if (!fresh.length)
         return doc;
 
-    await doc.setFlag('lancer-automations', 'extraActions', [...existing, ...fresh]);
+    await setLAFlag(doc,'extraActions', [...existing, ...fresh]);
     console.log(`lancer-automations | addExtraActions: Added action(s) to ${doc.name}:`, fresh);
     return doc;
 }
@@ -1573,7 +1576,7 @@ export function getActorActions(target)
         return [];
     const asAny = /** @type {any} */ (target);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
-    return doc.getFlag?.('lancer-automations', 'extraActions') || [];
+    return getLAFlag(doc,'extraActions') || [];
 }
 
 /**
@@ -1590,7 +1593,7 @@ export async function removeExtraActions(target, filter = null)
         return;
     const asAny = /** @type {any} */ (target);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
-    const existing = doc.getFlag?.('lancer-automations', 'extraActions') || [];
+    const existing = getLAFlag(doc,'extraActions') || [];
     if (existing.length === 0)
         return;
 
@@ -1605,7 +1608,7 @@ export async function removeExtraActions(target, filter = null)
         kept = existing.filter(action => !names.includes(action.name));
     }
 
-    await doc.setFlag('lancer-automations', 'extraActions', kept);
+    await setLAFlag(doc,'extraActions', kept);
 }
 
 // Spend the consumable state on an actor-level extra action. Returns false when depleted so the caller bails.
@@ -1613,7 +1616,7 @@ export async function consumeExtraAction(actor, actionName)
 {
     if (!actor)
         return true;
-    const all = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const all = getLAFlag(actor,'extraActions') || [];
     const idx = all.findIndex(action => action.name === actionName);
     if (idx < 0)
         return true;
@@ -1684,7 +1687,7 @@ export async function consumeExtraAction(actor, actionName)
     {
         const next = all.slice();
         next[idx] = entry;
-        await actor.setFlag('lancer-automations', 'extraActions', next);
+        await setLAFlag(actor,'extraActions', next);
     }
     return true;
 }
@@ -1694,7 +1697,7 @@ export async function reloadExtraAction(actor, actionName)
 {
     if (!actor)
         return;
-    const all = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const all = getLAFlag(actor,'extraActions') || [];
     const idx = all.findIndex(action => action.name === actionName);
     if (idx < 0)
         return;
@@ -1730,7 +1733,7 @@ export async function reloadExtraAction(actor, actionName)
     {
         const next = all.slice();
         next[idx] = entry;
-        await actor.setFlag('lancer-automations', 'extraActions', next);
+        await setLAFlag(actor,'extraActions', next);
     }
 }
 
@@ -1746,7 +1749,7 @@ export function getExtraDeployableOpts(target, key)
         return null;
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
-    const map = doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {};
+    const map = getLAFlag(doc,'extraDeployableOpts') || {};
     return map[_encodeOptsKey(key)] ?? null;
 }
 
@@ -1756,7 +1759,7 @@ export async function setExtraDeployableOpts(target, key, opts)
         return null;
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
-    const map = { ...(doc.getFlag?.('lancer-automations', 'extraDeployableOpts') || {}) };
+    const map = { ...(getLAFlag(doc,'extraDeployableOpts') || {}) };
     const encoded = _encodeOptsKey(key);
     const cur = { ...map[encoded] };
     for (const [optKey, optValue] of Object.entries(opts || {}))
@@ -1770,7 +1773,7 @@ export async function setExtraDeployableOpts(target, key, opts)
         delete map[encoded];
     else
         map[encoded] = cur;
-    await doc.setFlag('lancer-automations', 'extraDeployableOpts', map);
+    await setLAFlag(doc,'extraDeployableOpts', map);
     return doc;
 }
 
@@ -1798,7 +1801,7 @@ export function resolveDeployRangeCount(item, lid, actor)
 // True if the item's primary (base) action is hidden in the TAH, leaving only its deployables/extras.
 export function isPrimaryActionHidden(item)
 {
-    return !!(item?.getFlag?.('lancer-automations', 'hidePrimaryAction'));
+    return !!(getLAFlag(item,'hidePrimaryAction'));
 }
 
 /**
@@ -1817,9 +1820,9 @@ export async function setHidePrimaryAction(itemOrUuid, hidden = true)
         return null;
     }
     if (hidden)
-        await setItemFlag(item, 'lancer-automations', 'hidePrimaryAction', true);
+        await setItemFlag(item, MODULE_ID,'hidePrimaryAction', true);
     else
-        await unsetItemFlag(item, 'lancer-automations', 'hidePrimaryAction');
+        await unsetItemFlag(item, MODULE_ID,'hidePrimaryAction');
     return item;
 }
 
@@ -1854,21 +1857,21 @@ export async function rechargeExtraActionsForActor(actor)
         });
         return { next, mutated };
     };
-    const actorList = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const actorList = getLAFlag(actor,'extraActions') || [];
     if (actorList.length)
     {
         const { next, mutated } = rollFor(actorList);
         if (mutated)
-            await actor.setFlag('lancer-automations', 'extraActions', next);
+            await setLAFlag(actor,'extraActions', next);
     }
     for (const item of (actor.items ?? []))
     {
-        const itemList = item.getFlag?.('lancer-automations', 'extraActions') || [];
+        const itemList = getLAFlag(item,'extraActions') || [];
         if (!itemList.length)
             continue;
         const { next, mutated } = rollFor(itemList);
         if (mutated)
-            await item.setFlag('lancer-automations', 'extraActions', next);
+            await setLAFlag(item,'extraActions', next);
     }
 }
 
@@ -1891,21 +1894,21 @@ export async function resetPerRoundExtraActionsForActor(actor)
         });
         return { next, mutated };
     };
-    const actorList = actor.getFlag('lancer-automations', 'extraActions') || [];
+    const actorList = getLAFlag(actor,'extraActions') || [];
     if (actorList.length)
     {
         const { next, mutated } = resetList(actorList);
         if (mutated)
-            await actor.setFlag('lancer-automations', 'extraActions', next);
+            await setLAFlag(actor,'extraActions', next);
     }
     for (const item of (actor.items ?? []))
     {
-        const itemList = item.getFlag?.('lancer-automations', 'extraActions') || [];
+        const itemList = getLAFlag(item,'extraActions') || [];
         if (!itemList.length)
             continue;
         const { next, mutated } = resetList(itemList);
         if (mutated)
-            await item.setFlag('lancer-automations', 'extraActions', next);
+            await setLAFlag(item,'extraActions', next);
     }
 }
 
@@ -1939,12 +1942,12 @@ export async function addExtraDeploymentLids(target, lids)
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
 
-    const existingFlags = doc.getFlag('lancer-automations', 'extraDeployables') || [];
+    const existingFlags = getLAFlag(doc,'extraDeployables') || [];
     const merged = [...new Set([...existingFlags, ...newLids])];
 
     if (merged.length !== existingFlags.length)
     {
-        await doc.setFlag('lancer-automations', 'extraDeployables', merged);
+        await setLAFlag(doc,'extraDeployables', merged);
         console.log(`lancer-automations | addExtraDeploymentLids: Added LID(s) to ${doc.name}:`, newLids);
     }
 
@@ -1962,7 +1965,7 @@ export async function addExtraDeploymentLids(target, lids)
     }
 
     const actorForInfo = (doc.documentName === 'Item') ? (doc.actor ?? null) : doc;
-    const uiMarker = doc.getFlag('lancer-automations', 'extraDeployableLidsViaUI') || [];
+    const uiMarker = getLAFlag(doc,'extraDeployableLidsViaUI') || [];
     const markerLids = new Set(uiMarker.map((/** @type {any} */ entry) => (typeof entry === 'string' ? entry : entry?.lid)));
     const addedMarkers = [];
     for (const lid of merged)
@@ -1973,7 +1976,7 @@ export async function addExtraDeploymentLids(target, lids)
         addedMarkers.push({ lid, name: info?.name ?? lid, img: info?.img ?? null });
     }
     if (addedMarkers.length)
-        await doc.setFlag('lancer-automations', 'extraDeployableLidsViaUI', [...uiMarker, ...addedMarkers]);
+        await setLAFlag(doc,'extraDeployableLidsViaUI', [...uiMarker, ...addedMarkers]);
 
     return doc;
 }
@@ -2035,19 +2038,19 @@ export async function addExtraDeploymentActor(target, actors)
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
 
-    const existing = doc.getFlag('lancer-automations', 'extraDeployableActors') || [];
+    const existing = getLAFlag(doc,'extraDeployableActors') || [];
     const merged = [...new Set([...existing, ...validUuids])];
 
     if (merged.length !== existing.length)
     {
-        await doc.setFlag('lancer-automations', 'extraDeployableActors', merged);
+        await setLAFlag(doc,'extraDeployableActors', merged);
         console.log(`lancer-automations | addExtraDeploymentActor: Added actor UUID(s) to ${doc.name}:`, validUuids);
     }
 
-    const uiMarker = doc.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+    const uiMarker = getLAFlag(doc,'extraDeployableActorsViaUI') || [];
     const mergedMarker = [...new Set([...uiMarker, ...merged])];
     if (mergedMarker.length !== uiMarker.length)
-        await doc.setFlag('lancer-automations', 'extraDeployableActorsViaUI', mergedMarker);
+        await setLAFlag(doc,'extraDeployableActorsViaUI', mergedMarker);
 
     return doc;
 }
@@ -2368,17 +2371,17 @@ export async function removeExtraDeploymentActor(target, actors)
     const anyTarget = /** @type {any} */ (target);
     const doc = (anyTarget.documentName === 'Item') ? anyTarget : (anyTarget.actor ?? anyTarget.document ?? anyTarget);
 
-    const existing = doc.getFlag('lancer-automations', 'extraDeployableActors') || [];
+    const existing = getLAFlag(doc,'extraDeployableActors') || [];
     const kept = existing.filter(uuid => !removeSet.has(uuid));
     let mutated = kept.length !== existing.length;
     if (mutated)
-        await doc.setFlag('lancer-automations', 'extraDeployableActors', kept);
+        await setLAFlag(doc,'extraDeployableActors', kept);
 
-    const uiMarkers = doc.getFlag('lancer-automations', 'extraDeployableActorsViaUI') || [];
+    const uiMarkers = getLAFlag(doc,'extraDeployableActorsViaUI') || [];
     const keptMarkers = uiMarkers.filter(uuid => !removeSet.has(uuid));
     if (keptMarkers.length !== uiMarkers.length)
     {
-        await doc.setFlag('lancer-automations', 'extraDeployableActorsViaUI', keptMarkers);
+        await setLAFlag(doc,'extraDeployableActorsViaUI', keptMarkers);
         mutated = true;
     }
 
@@ -2405,7 +2408,7 @@ export async function promptLinkOrUnlinkActor(ownerToken)
     }
     const ownerUuid = owner.uuid;
     const isLinkedToOwner = (/** @type {any} */ token) =>
-        token?.document?.getFlag?.('lancer-automations', 'ownerActorUuid') === ownerUuid;
+        getLAFlag(token?.document,'ownerActorUuid') === ownerUuid;
 
     const picked = await chooseToken(ownerToken, {
         count: 1,
@@ -2421,14 +2424,14 @@ export async function promptLinkOrUnlinkActor(ownerToken)
         return;
     if (isLinkedToOwner(target))
     {
-        await target.document.unsetFlag('lancer-automations', 'ownerActorUuid');
-        await target.document.unsetFlag('lancer-automations', 'ownerName');
+        await unsetLAFlag(target.document,'ownerActorUuid');
+        await unsetLAFlag(target.document,'ownerName');
         ui.notifications.info(`Unlinked ${target.actor?.name ?? target.name} from ${owner.name}.`);
     }
     else
     {
-        await target.document.setFlag('lancer-automations', 'ownerActorUuid', ownerUuid);
-        await target.document.setFlag('lancer-automations', 'ownerName', owner.name ?? '');
+        await setLAFlag(target.document,'ownerActorUuid', ownerUuid);
+        await setLAFlag(target.document,'ownerName', owner.name ?? '');
         ui.notifications.info(`Linked ${target.actor?.name ?? target.name} to ${owner.name}.`);
     }
 }
@@ -2446,8 +2449,8 @@ export function getActorDeployables(tokenOrActor)
     const asAny = /** @type {any} */ (tokenOrActor);
     const doc = asAny.actor ?? asAny.document ?? asAny;
     const keys = [
-        ...(doc.getFlag?.('lancer-automations', 'extraDeployables') || []),
-        ...(doc.getFlag?.('lancer-automations', 'extraDeployableActors') || []),
+        ...(getLAFlag(doc,'extraDeployables') || []),
+        ...(getLAFlag(doc,'extraDeployableActors') || []),
     ];
     return keys.filter(key => linkTierGate(getExtraDeployableOpts(doc, key), doc));
 }
@@ -2465,7 +2468,7 @@ export function getLinkedActions(source)
         return [];
     const asAny = /** @type {any} */ (source);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
-    return /** @type {any[]} */ (doc.getFlag?.('lancer-automations', 'extraActions') || []);
+    return /** @type {any[]} */ (getLAFlag(doc,'extraActions') || []);
 }
 
 /**
@@ -2483,8 +2486,8 @@ export function getLinkedDeployables(source)
     const asAny = /** @type {any} */ (source);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
     return [
-        ...(doc.getFlag?.('lancer-automations', 'extraDeployables') || []),
-        ...(doc.getFlag?.('lancer-automations', 'extraDeployableActors') || []),
+        ...(getLAFlag(doc,'extraDeployables') || []),
+        ...(getLAFlag(doc,'extraDeployableActors') || []),
     ];
 }
 
@@ -2532,8 +2535,8 @@ export function getAllItemDeployables(item)
     const systemDeployables = item.type === 'frame'
         ? item.system?.core_system?.deployables || []
         : item.system?.deployables || [];
-    const extraDeployables = item.getFlag?.('lancer-automations', 'extraDeployables') || [];
-    const extraDeployableActors = item.getFlag?.('lancer-automations', 'extraDeployableActors') || [];
+    const extraDeployables = getLAFlag(item,'extraDeployables') || [];
+    const extraDeployableActors = getLAFlag(item,'extraDeployableActors') || [];
     // Dedupe exact-duplicate LIDs so a native deployable re-added via the old flow spawns once.
     return [...new Set([...systemDeployables, ...extraDeployables, ...extraDeployableActors])];
 }
@@ -2568,8 +2571,8 @@ export function getItemFlags(item, flagName = null)
         return null;
     }
     if (flagName)
-        return item.getFlag('lancer-automations', flagName);
-    return item.flags?.['lancer-automations'] || {};
+        return getLAFlag(item,flagName);
+    return getLAFlags(item) || {};
 }
 
 /**
@@ -2586,8 +2589,8 @@ export function getActorFlags(actor, flagName = null)
         return null;
     }
     if (flagName)
-        return actor.getFlag('lancer-automations', flagName);
-    return actor.flags?.['lancer-automations'] || {};
+        return getLAFlag(actor,flagName);
+    return getLAFlags(actor) || {};
 }
 
 /**
@@ -3107,7 +3110,7 @@ export async function recallDeployable(ownerToken)
     const ownerActor = ownerToken.actor;
     const deployedTokens = canvas.tokens.placeables.filter(token =>
     {
-        const flags = token.document.flags?.['lancer-automations'];
+        const flags = getLAFlags(token.document);
         return flags?.deployedItem && flags?.ownerActorUuid === ownerActor.uuid;
     });
 
@@ -3164,7 +3167,7 @@ export async function recallDeployable(ownerToken)
         return null;
 
     const pickedToken = selected[0];
-    const flags = pickedToken.document?.flags?.['lancer-automations'];
+    const flags = getLAFlags(pickedToken.document);
     const deployableName = flags?.deployableName || "Deployable";
     const deployableId = flags?.deployableId;
 
@@ -3413,12 +3416,12 @@ export async function rechargeSystem(actorOrToken, targetName)
  */
 export async function handleManualDeployLink(tokenDocument, { force = false } = {})
 {
-    if (!force && !game.settings.get('lancer-automations', 'linkManualDeploy'))
+    if (!force && !getModuleSetting('linkManualDeploy'))
         return;
     if (tokenDocument.actor?.type !== 'deployable')
         return;
     // Skip if already linked by placeDeployable
-    if (tokenDocument.flags?.['lancer-automations']?.deployedItem)
+    if (getLAFlags(tokenDocument)?.deployedItem)
         return;
 
     const deployableActor = tokenDocument.actor;
@@ -3501,7 +3504,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
 
     await tokenDocument.update({
         flags: {
-            'lancer-automations': {
+            [MODULE_ID]: {
                 deployedItem: true,
                 deployableName: deployableActor.name,
                 deployableId: deployableActor.id,
@@ -3513,7 +3516,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
         }
     });
 
-    const api = game.modules.get('lancer-automations')?.api;
+    const api = game.modules.get(MODULE_ID)?.api;
     if (api?.handleTrigger)
     {
         const deployableToken = canvas.tokens.get(tokenDocument.id);

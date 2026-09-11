@@ -1,4 +1,6 @@
 import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWheel } from '../tools/radial-wheel.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
 import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
 import { removeGlobalBonus, getBonusIcon } from '../bonuses/genericBonuses.js';
@@ -28,14 +30,7 @@ const getStack = (effect) => hasStatusCounter() ? (effect.getFlag?.('statuscount
 
 function statusFavorites()
 {
-    try
-    {
-        return new Set(/** @type {any} */ (game.settings.get(MODULE_ID, 'tah.statusFavorites')) ?? []);
-    }
-    catch
-    {
-        return new Set();
-    }
+    return new Set(/** @type {any} */ (getModuleSetting('tah.statusFavorites')) ?? []);
 }
 
 function liveEffects(actor)
@@ -118,7 +113,7 @@ function collectEntries(actor)
     entries.push(...customs.values());
 
     // Constant bonuses carry no token icon on purpose, so they stay off a ring that shows what is applied.
-    for (const bonus of /** @type {any[]} */ (actor.getFlag(MODULE_ID, 'global_bonuses') || []))
+    for (const bonus of /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || []))
     {
         entries.push({
             kind: 'bonus',
@@ -331,7 +326,7 @@ export function toggleStatusWheel()
         closeRadialWheel();
         return;
     }
-    if (!game.settings.get(MODULE_ID, 'tahEnabled'))
+    if (!getModuleSetting('tahEnabled'))
     {
         ui.notifications.info('Enable the Token Action HUD to use the status wheel.');
         return;

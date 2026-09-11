@@ -1,6 +1,9 @@
 /* global $, game, CONFIG */
 
 import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString } from '../bonuses/genericBonuses.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
 import { durationFieldsHtml, setupDurationUI, getDurationConfig, createDurationMarks } from '../bonuses/duration-widget.js';
 import { playUiSound } from './sound.js';
@@ -23,7 +26,7 @@ export function isPermanentEffect(effects)
 {
     for (const effect of (effects ?? []))
     {
-        const laFlags = /** @type {any} */ (effect.flags)?.['lancer-automations'];
+        const laFlags = getLAFlags(effect);
         const duration = laFlags?.duration ?? /** @type {any} */ (effect.flags)?.['csm-lancer-qol']?.duration;
         if (duration?.label === 'permanent')
             return true;
@@ -108,7 +111,7 @@ export class StatusPanel extends HudPanel
             const nowActive = effects.length > 0;
             const nowPerm = nowActive && effects.some(/** @type {any} */ eff =>
             {
-                const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                const laFlags = getLAFlags(eff);
                 const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
                 return dur?.label === 'permanent';
             });
@@ -143,7 +146,7 @@ export class StatusPanel extends HudPanel
         const activeCustomEffects = hasTempCustomStatuses
             ? /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff =>
                 eff.getFlag?.('temporary-custom-statuses', 'isCustom') &&
-                !eff.getFlag?.('lancer-automations', 'linkedBonusId')
+                !getLAFlag(eff,'linkedBonusId')
             )
             : [];
         const customMap = new Map();
@@ -159,14 +162,7 @@ export class StatusPanel extends HudPanel
         // active first, then favorites, alphabetic within each group
         const readFavorites = () =>
         {
-            try
-            {
-                return new Set(game.settings.get('lancer-automations', 'tah.statusFavorites') ?? []);
-            }
-            catch
-            {
-                return new Set();
-            }
+            return new Set(getModuleSetting('tah.statusFavorites') ?? []);
         };
         const favoriteIds = readFavorites();
         const toggleStatusFavorite = async (/** @type {string} */ sid) =>
@@ -177,7 +173,7 @@ export class StatusPanel extends HudPanel
                 current.add(sid);
             else
                 current.delete(sid);
-            await game.settings.set('lancer-automations', 'tah.statusFavorites', [...current]);
+            await game.settings.set(MODULE_ID,'tah.statusFavorites', [...current]);
             return nowFav;
         };
         const activeStatusIds = new Set();
@@ -249,7 +245,7 @@ export class StatusPanel extends HudPanel
                 lines.push(`<div class="la-tooltip-line">${status.description}</div>`);
             for (const eff of effects)
             {
-                const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                const laFlags = getLAFlags(eff);
                 const stackCount = hasStatusCounter ? (eff.getFlag?.('statuscounter', 'value') ?? 1) : null;
                 let label = 'Base Effect';
                 if (laFlags?.consumption)
@@ -489,7 +485,7 @@ export class StatusPanel extends HudPanel
 
         const rightEl =$(`<div class="la-hud-right-col"></div>`);
 
-        const laApi = /** @type {any} */ (game.modules.get('lancer-automations'))?.api;
+        const laApi = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
         if (laApi?.executeEffectManager)
         {
             const effectManagerBtn = $(`<button class="la-hud-util-btn">Effect Manager</button>`);
@@ -679,8 +675,8 @@ export class StatusPanel extends HudPanel
             rightEl.append(customListEl);
         }
 
-        const globalBonuses   =/** @type {any[]} */ (actor.getFlag('lancer-automations', 'global_bonuses')   || []);
-        const constantBonuses = /** @type {any[]} */ (actor.getFlag('lancer-automations', 'constant_bonuses') || []);
+        const globalBonuses   =/** @type {any[]} */ (getLAFlag(actor,'global_bonuses')   || []);
+        const constantBonuses = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
         const allBonuses = [
             ...globalBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'global', idx: i })),
             ...constantBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'constant', idx: i })),
@@ -788,7 +784,7 @@ export class StatusPanel extends HudPanel
             body.empty();
             for (const eff of current)
             {
-                const laFlags = /** @type {any} */ (eff.flags)?.['lancer-automations'];
+                const laFlags = getLAFlags(eff);
                 let label = 'Base';
                 if (laFlags?.consumption)
                     label = 'Consume';

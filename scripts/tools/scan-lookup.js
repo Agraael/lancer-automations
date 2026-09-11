@@ -1,7 +1,7 @@
 import { getModuleSetting } from './settings-utils.js';
+import { getLAFlag } from './flag-utils.js';
 import { isFriendly } from '../combat/overwatch.js';
 
-import { MODULE_ID } from './constants.js';
 const SCAN_NAME_RE = /^SCAN:\s/i;
 
 function _observes(entry, user, allowGm)
@@ -22,7 +22,7 @@ export function getScanJournalsForActor(actor, options = {})
     const name = (actor.name ?? '').toLowerCase();
     for (const entry of globalThis.game?.journal ?? [])
     {
-        let matched = entry.getFlag?.(MODULE_ID, 'scan')?.actorUuid === uuid;
+        let matched = getLAFlag(entry,'scan')?.actorUuid === uuid;
         if (!matched && name && SCAN_NAME_RE.test(entry.name ?? ''))
             matched = (entry.name ?? '').toLowerCase().includes(name);
         if (!matched)
@@ -39,7 +39,7 @@ function _revealWithoutScan()
 {
     try
     {
-        return !!game.settings.get('lancer-automations', 'revealStatsWithoutScan');
+        return !!getModuleSetting('revealStatsWithoutScan');
     }
     catch
     {

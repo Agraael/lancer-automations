@@ -22,9 +22,9 @@ registerMoveCapture();
 function _mockAndLog()
 {
     const telemetry = mockCombatTelemetry();
-    console.log('[Battle Log] CombatTelemetry:', telemetry);
+    console.log('lancer-automations | Battle Log |CombatTelemetry:', telemetry);
     const battle = deriveDisplayBattle(telemetry);
-    console.log('[Battle Log] Derived display battle:', battle);
+    console.log('lancer-automations | Battle Log |Derived display battle:', battle);
     return battle;
 }
 
@@ -50,8 +50,8 @@ Hooks.on('deleteCombat', (combat) =>
         return;
     if ((telemetry.players?.length ?? 0) === 0 && (telemetry.hostiles?.length ?? 0) === 0)
         return;
-    console.log('[Battle Log] Real combat telemetry:', telemetry);
+    console.log('lancer-automations | Battle Log |Real combat telemetry:', telemetry);
     const battle = deriveDisplayBattle(telemetry);
-    console.log('[Battle Log] Derived battle:', battle);
+    console.log('lancer-automations | Battle Log |Derived battle:', battle);
     openBattleLogGMCard(battle);
 });

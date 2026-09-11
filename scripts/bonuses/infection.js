@@ -14,6 +14,7 @@
  */
 
 import { checkDamageResistances, consumeImmunityUse } from './genericBonuses.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -25,7 +26,7 @@ function _infectionEnabled()
 {
     try
     {
-        return !!game.settings.get(MODULE_ID, 'enableInfectionDamageIntegration');
+        return !!getModuleSetting('enableInfectionDamageIntegration');
     }
     catch
     {

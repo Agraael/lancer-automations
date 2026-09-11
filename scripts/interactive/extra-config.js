@@ -3,7 +3,7 @@
 
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
 
-import { MODULE_ID } from '../tools/constants.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 const FLAG_KEY = 'extraConfig';
 
 export const CANONICAL_TYPES = ['uses', 'loading', 'charged', 'perTurn', 'perRound', 'perScene', 'reserveUsed'];
@@ -55,7 +55,7 @@ export function getExtraConfig(item)
 {
     if (!item?.getFlag)
         return null;
-    return item.getFlag(MODULE_ID, FLAG_KEY) ?? null;
+    return getLAFlag(item,FLAG_KEY) ?? null;
 }
 
 // Deep-merge patch into Extra Config; prefer explicit helpers when they exist.
@@ -66,7 +66,7 @@ export async function configureItemExtraConfig(item, patch)
         throw new Error('configureItemExtraConfig: invalid item');
     const cur = getExtraConfig(item) ?? {};
     const next = { ...cur, ...(patch ?? {}) };
-    await item.setFlag(MODULE_ID, FLAG_KEY, next);
+    await setLAFlag(item,FLAG_KEY, next);
     return next;
 }
 

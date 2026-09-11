@@ -1,4 +1,5 @@
 import { laDetailPopup } from "../interactive/detail-renderers.js";
+import { getModuleSetting } from "../tools/settings-utils.js";
 import { chooseToken } from "../interactive/index.js";
 import { consumeAction } from "../tools/misc-tools.js";
 import { _flowSourceToken, _flowResolveActivationLabel } from "../fx/actionFX.js";
@@ -265,7 +266,7 @@ export async function laStabilizeExtras(state)
         }
     }
     if (state.data.option2 === 'ClearBurn'
-        && game.settings.get('lancer-automations', 'enableInfectionDamageIntegration')
+        && getModuleSetting('enableInfectionDamageIntegration')
         && actor?.system?.infection > 0)
     {
         try
@@ -284,7 +285,7 @@ async function _consumeFlowAction(flow, success)
 {
     if (!success)
         return;
-    if (!game.settings.get('lancer-automations', 'consumeAction'))
+    if (!getModuleSetting('consumeAction'))
         return;
     const token = _flowSourceToken(flow);
     if (!token)

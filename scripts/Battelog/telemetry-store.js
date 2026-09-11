@@ -4,8 +4,9 @@
 // dies with the encounter and survives F5s while the combat exists.
 
 import { getRelativeDisposition } from '../combat/overwatch.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 
-import { MODULE_ID } from '../tools/constants.js';
 const FLAG_TELEMETRY = 'telemetry';
 const SETTING_FRIENDLY_MECH_AS_SQUAD = 'tah.telemetryFriendlyMechAsSquad';
 
@@ -13,14 +14,7 @@ export const BUCKETS = ['players', 'hostiles', 'friendlies', 'neutrals', 'secret
 
 function friendlyMechAsSquad()
 {
-    try
-    {
-        return !!game.settings.get(MODULE_ID, SETTING_FRIENDLY_MECH_AS_SQUAD);
-    }
-    catch
-    {
-        return true;
-    }
+    return !!getModuleSetting(SETTING_FRIENDLY_MECH_AS_SQUAD, true);
 }
 
 const _canonical = new Map();
@@ -30,7 +24,7 @@ export function getTelemetry(combat)
 {
     if (combat?.id && _canonical.has(combat.id))
         return _canonical.get(combat.id);
-    return combat?.getFlag?.(MODULE_ID, FLAG_TELEMETRY) ?? null;
+    return getLAFlag(combat,FLAG_TELEMETRY) ?? null;
 }
 
 // Writers mutate one stable per-combat object; Foundry re-clones the flag on every update, so we never persist a re-read clone.
@@ -40,7 +34,7 @@ function _writable(combat)
         return null;
     if (!_canonical.has(combat.id))
     {
-        const current = combat.getFlag?.(MODULE_ID, FLAG_TELEMETRY);
+        const current = getLAFlag(combat,FLAG_TELEMETRY);
         if (current)
             _canonical.set(combat.id, current);
     }
@@ -53,7 +47,7 @@ function _enqueueWrite(combat)
     if (!telemetry)
         return Promise.resolve();
     const prev = _writeChains.get(combat.id) ?? Promise.resolve();
-    const next = prev.then(() => combat.setFlag(MODULE_ID, FLAG_TELEMETRY, telemetry))
+    const next = prev.then(() => setLAFlag(combat,FLAG_TELEMETRY, telemetry))
         .catch(error => console.error('lancer-automations | telemetry write failed:', error));
     _writeChains.set(combat.id, next);
     return next;
@@ -75,15 +69,8 @@ export function forgetCombat(combatId)
 
 function _debugLog(entryId, event)
 {
-    try
-    {
-        if (game.settings.get(MODULE_ID, 'tah.telemetryDebug'))
-            console.log('[Battle Log telemetry]', entryId, event);
-    }
-    catch
-    {
-        void 0;
-    }
+    if (getModuleSetting('tah.telemetryDebug'))
+        console.log('lancer-automations | Battle Log telemetry |', entryId, event);
 }
 
 /**
