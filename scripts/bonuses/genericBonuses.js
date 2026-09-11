@@ -129,7 +129,7 @@ function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
                 mod.applyToCondition.slice('@@fn:'.length),
                 applyToConditionCache,
                 ['target', 'state', 'reactorToken', 'entry'],
-                `const api=game.modules.get(MODULE_ID)?.api;`
+                `const api=game.modules.get('${MODULE_ID}')?.api;`
             );
         }
         else
@@ -1433,6 +1433,39 @@ export function getBonusDetailString(bonus)
 }
 
 /**
+ * Tooltip text for a gated bonus: its own condition, the per-target one and multi sub-bonus gates.
+ * @param {object} bonus
+ * @returns {string} Empty when the bonus always applies
+ */
+export function getBonusConditionHint(bonus)
+{
+    const sourceOf = (value) =>
+    {
+        if (typeof value === 'function')
+            return value.toString();
+        if (typeof value !== 'string')
+            return '';
+        return (value.startsWith('@@fn:') ? value.slice('@@fn:'.length) : value).trim();
+    };
+    const lines = [];
+    const collect = (entry, prefix) =>
+    {
+        const own = sourceOf(entry?.condition);
+        if (own)
+            lines.push(`${prefix}Condition: ${own}`);
+        const perTarget = sourceOf(entry?.applyToCondition);
+        if (perTarget)
+            lines.push(`${prefix}Per target: ${perTarget}`);
+    };
+    collect(bonus, '');
+    if (bonus?.type === 'multi' && Array.isArray(bonus.bonuses))
+        bonus.bonuses.forEach((sub, idx) => collect(sub, `#${idx + 1} `));
+    if (!lines.length)
+        return '';
+    return `Conditional: only applies while its condition passes.\n${lines.join('\n')}`;
+}
+
+/**
  * Determines the appropriate icon for a bonus based on its type and value.
  * @param {object} bonus
  * @returns {string} The path to the SVG icon
@@ -1577,7 +1610,7 @@ export function isBonusApplicable(bonus, flowTags, state)
                         bonus.condition.slice('@@fn:'.length),
                         serializedConditionCache,
                         ['state', 'actor', 'data', 'context'],
-                        `const api=game.modules.get(MODULE_ID)?.api;` +
+                        `const api=game.modules.get('${MODULE_ID}')?.api;` +
                         `const ownerTokenId=context?.ownerTokenId;` +
                         `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??null:null;`
                     );

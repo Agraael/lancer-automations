@@ -1097,6 +1097,12 @@ input.la-status-search {
     font-size: 0.85em;
 }
 
+.la-bonus-row__cond {
+    color: var(--la-accent);
+    font-size: 0.85em;
+    cursor: help;
+}
+
 .la-bonus-del {
     cursor: pointer;
     color: var(--primary-color);

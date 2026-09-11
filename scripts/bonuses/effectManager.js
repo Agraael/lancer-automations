@@ -89,6 +89,7 @@ import {
     unlinkBonusFromActor,
     supportsConsumeOnUsage,
     getBonusDetailString,
+    getBonusConditionHint,
 } from "./genericBonuses.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
@@ -2845,6 +2846,10 @@ export async function executeEffectManager(options = {})
                             : bonus._kind === 'template'
                                 ? ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(template)</span>'
                                 : '';
+                        const condHint = getBonusConditionHint(bonus);
+                        const condLabel = condHint
+                            ? ' <span class="te-bonus-cond" style="font-size:0.75em; color:var(--la-accent); cursor:help;"><i class="fas fa-code-branch"></i> conditional</span>'
+                            : '';
 
                         let usesInfo = '';
                         if (bonus.uses !== undefined)
@@ -2859,11 +2864,13 @@ export async function executeEffectManager(options = {})
 
                         const bonusRow = $(`
                             <div class="te-bonus-item">
-                                <span><strong>${bonus.name}</strong>${kindLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
+                                <span><strong>${bonus.name}</strong>${kindLabel}${condLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
                                 ${tierGateApplies(actor) ? tierGateControl(bonus.tier, `data-bonus-id="${bonus.id}"`) : ''}
                                 <div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>
                             </div>
                         `);
+                        if (condHint)
+                            bonusRow.find('.te-bonus-cond').attr('title', condHint);
 
                         bindTierGate(bonusRow, async (tier) =>
                         {
