@@ -197,7 +197,7 @@ api.currentTurnKey()                       // → "round:turn", null out of comb
 `currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn.
 
 ```js
-await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slowed'], duration: api.untilEndOfTurn(target) });
+await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slow'], duration: api.untilEndOfTurn(target) });
 ```
 
 </details>
@@ -477,6 +477,7 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 | <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty` and `target_modifier`. `target` is the Token, `entry` its HUD card (cover, prone). Evaluated per target when the HUD opens and again when its targets change or move. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
 | <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For a dynamic per-target gate, see `applyToCondition`. |
+| <kbd>applyToTargetter</kbd> | `boolean` | Reverse direction: the bonus sits on the defender and applies to anyone rolling against it, never to the owner's own rolls. `condition` then runs in the attacker's flow (`state.actor` is the attacker, the owner is `context.ownerTokenId`) and `applyTo` filters attacker token IDs instead. Not for `stat` or `range`. How Brace grants its +1 difficulty. |
 | <kbd>tier</kbd> | `1\|2\|3` | Gate to an NPC owner tier. Unset = any. Non-NPC owners ignore it |
 
 </details>
