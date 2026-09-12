@@ -2,6 +2,16 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-09-12-boost-offer-loop",
+            "date": "2026-09-12",
+            "title": "Boost offer looping?",
+            "gmOnly": true,
+            "body": [
+                "<p>If you have an issue with the Boost offer in an endless loop, check your default automations in the <b>Automation Manager</b>. <b>Boost</b> is probably set to false. It is the one that raises the movement cap, so with it off the offer never resolves and asks again.</p>",
+                "<p>I do not think something set all the default automations to false. Maybe it is isolated, I cannot find a reason.</p>"
+            ]
+        },
+        {
             "id": "2026-09-11-lancer-4-2-4",
             "date": "2026-09-11",
             "title": "Lancer Automations 4.2.4",
