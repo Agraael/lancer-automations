@@ -1623,15 +1623,22 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     margin: 6px 0;
 }
 
+/* Same treatment as .la-sub-head. Its wash is translucent and normally sits on the
+   .la-sub panel, so bake that panel colour in underneath to land on the same shade. */
 #lancer-automations-config .la-config-table th {
+    position: relative;
     text-align: left;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--la-accent, var(--primary-color));
-    font-size: 0.8em;
-    font-weight: bold;
-    letter-spacing: 0.05em;
+    padding: 5px 10px;
+    border: 0;
+    border-bottom: 1px solid var(--la-edge);
+    background-color: color-mix(in srgb, var(--la-config-card), var(--la-ink) 3%);
+    background-image: linear-gradient(color-mix(in srgb, var(--la-config-signal), transparent 88%) 0 100%);
+    font-size: 0.82em;
+    font-weight: 400;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--la-ink-dim);
+    color: var(--la-ink);
+    line-height: 1.2;
 }
 
 #lancer-automations-config .la-config-table td {
@@ -1641,6 +1648,15 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 
 #lancer-automations-config .la-config-table .la-table-label {
     font-weight: bold;
+}
+
+#lancer-automations-config .la-config-table .la-table-text {
+    font-size: 0.9em;
+}
+
+/* Second column is context, keep it behind the action text. */
+#lancer-automations-config .la-config-table td:nth-child(2) .la-table-text {
+    color: var(--la-ink-dim);
 }
 
 #lancer-automations-config .la-config-table select {

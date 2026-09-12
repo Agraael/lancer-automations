@@ -141,7 +141,9 @@ export function getTokenDispositionInfo(token)
         }
     }
     catch
-    { /* ignore */ }
+    {
+        // ignore
+    }
     return { color, label };
 }
 
@@ -332,6 +334,25 @@ const STAT_PATHS = {
     ENG: "system.eng",
     GRIT: "system.grit"
 };
+
+/**
+ * DC of a save forced by `targetActor`. A save is rolled against the aggressor's SAVE stat, which
+ * the system derives for every actor type (10 + GRIT on mechs and pilots, statblock value on NPCs).
+ * @param {any} targetActor
+ * @param {string|null} [statOverride] - Read this HASE stat raw instead, for contest-style checks.
+ * @returns {number}
+ */
+export function deriveSaveDc(targetActor, statOverride = null)
+{
+    if (!targetActor)
+        return 10;
+    if (statOverride)
+    {
+        const lookupStat = String(statOverride).toUpperCase();
+        return foundry.utils.getProperty(targetActor, STAT_PATHS[lookupStat] || lookupStat.toLowerCase()) || 10;
+    }
+    return targetActor.system?.save || 10;
+}
 
 
 export function getItemLID(item)
@@ -562,8 +583,8 @@ export function inDangerZone(tokenOrActor)
  * @param {Actor} actor - The rolling actor.
  * @param {string} stat - Stat key: "hull", "agi", "sys", "eng", or "grit".
  * @param {string} title - Chat card title (defaults to "<STAT> Check" or "<STAT> Save").
- * @param {number|"token"|Token|TokenDocument} [target=10] - Difficulty value, "token" to let the user pick, or a Token/TokenDocument to auto-derive difficulty from.
- * @param {{ targetStat?: string, sourceItemUuid?: string, sourceAction?: string, [key: string]: any }} [extraData={}] - Extra state passed to the flow. `targetStat` overrides which stat is read from a mech target.
+ * @param {number|"token"|Token|TokenDocument} [target=10] - Difficulty value, "token" to let the user pick, or the token forcing the save (its SAVE is the DC).
+ * @param {{ targetStat?: string, sourceItemUuid?: string, sourceAction?: string, [key: string]: any }} [extraData={}] - Extra state passed to the flow. `targetStat` reads that HASE stat off the target as the DC.
  * @returns {Promise<{ completed: boolean, [key: string]: any }>}
  */
 export async function executeStatRoll(actor, stat, title, target = 10, extraData = {})
@@ -592,13 +613,8 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
                 const requestId = foundry.utils.randomID();
                 const targetActor = (typeof target === 'object' && target) ? target.actor : null;
                 let targetVal = (typeof target === 'number') ? target : 10;
-                if (targetActor?.type === 'npc' || targetActor?.type === 'deployable')
-                    targetVal = targetActor.system?.save || 10;
-                else if (targetActor?.type === 'mech')
-                {
-                    const lookupStat = (targetStat ? targetStat.toUpperCase() : stat.toUpperCase());
-                    targetVal = foundry.utils.getProperty(targetActor, STAT_PATHS[lookupStat] || lookupStat.toLowerCase()) || 10;
-                }
+                if (targetActor)
+                    targetVal = deriveSaveDc(targetActor, targetStat);
 
                 game.socket.emit('module.lancer-automations', {
                     action: 'statRollRequest',
@@ -657,18 +673,8 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
 
     if (targetToken?.actor)
     {
-        const targetActor = targetToken.actor;
         rollTitle = rollTitle || `${upperStat} Save`;
-
-        // Dynamic Difficulty
-        if (targetActor.type === "npc" || targetActor.type === "deployable")
-            targetVal = targetActor.system.save || 10;
-        else if (targetActor.type === "mech")
-        {
-            const lookupStat = targetStat ? targetStat.toUpperCase() : upperStat;
-            const path = STAT_PATHS[lookupStat] || lookupStat.toLowerCase();
-            targetVal = foundry.utils.getProperty(targetActor, path) || 10;
-        }
+        targetVal = deriveSaveDc(targetToken.actor, targetStat);
     }
 
     rollTitle = rollTitle || `${upperStat} Check`;
@@ -931,7 +937,7 @@ export async function executeForceCheck(skill, targets = null, options = {})
     const saveVsToken = saveVs
         ? (saveVs.getActiveTokens ? (saveVs.getActiveTokens()[0] ?? null) : (saveVs.object ?? saveVs))
         : null;
-    const saveDc = saveVsToken ? (saveVsToken.actor?.system?.save || 10) : 10;
+    const saveDc = saveVsToken ? deriveSaveDc(saveVsToken.actor) : 10;
     const upperSkill = String(skill).toUpperCase();
     const saveVsName = saveVsToken?.actor?.name ?? saveVsToken?.name ?? null;
     const cardTitle = saveVsName ? `FORCE CHECK :: ${upperSkill} SAVE` : `FORCE CHECK :: ${upperSkill}`;

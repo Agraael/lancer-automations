@@ -273,11 +273,11 @@ await api.executeStatRoll(actor, stat, title, target, extraData)
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"`, `"AGI"`, `"SYS"`, `"ENG"`, `"GRIT"` |
 | <kbd>title</kbd> | `string` | auto | Roll title |
 | <kbd>target</kbd> | `number\|"token"\|Token\|TokenDocument` | `10` | Pass threshold or `"token"` for interactive choice |
-| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` to use a different stat for difficulty lookup. `sourceItemUuid` / `sourceAction` attribute the roll, surfacing as `item` / `actionName` on `onInitCheck` and `onCheck`. `sendToOwner` routes the roll to the owning player, `cardTitle` / `cardDescription` set the card text. Every other key is merged into `state.la_extraData` |
+| <kbd>extraData</kbd> | `Object` | `{}` | `{ targetStat: "HULL" }` reads that HASE stat off the target as the DC. `sourceItemUuid` / `sourceAction` attribute the roll, surfacing as `item` / `actionName` on `onInitCheck` and `onCheck`. `sendToOwner` routes the roll to the owning player, `cardTitle` / `cardDescription` set the card text. Every other key is merged into `state.la_extraData` |
 
 `extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD, the way a weapon's tags pre-fill an attack. They are added to whatever the HUD already computed and stay editable by the roller. No bonus needed for a one-off +1 Difficulty.
 
-`passed` is `total >= target`. A number target is that number. A token target is resolved at roll time: an NPC or deployable gives its SAVE, a mech gives its HASE value for the rolled stat (or the one named by `extraData.targetStat`), both falling back to 10. If the flow does not complete, only `{ completed: false }` comes back.
+`passed` is `total >= target`. A number target is that number. A token target is the aggressor and resolves at roll time to its SAVE, falling back to 10. `extraData.targetStat` reads a HASE stat off it instead. If the flow does not complete, only `{ completed: false }` comes back.
 
 ```js
 await api.executeStatRoll(actor, 'SYS', 'Blind', witchToken, { difficulty: 1 });
@@ -302,7 +302,7 @@ Save-or-effect over a target list: each target rolls the save (owner-routed by d
 | **inside `options`** | | | |
 | <kbd>stat</kbd> | `string` | *required* | `"HULL"` / `"AGI"` / `"SYS"` / `"ENG"` / `"GRIT"` |
 | <kbd>title</kbd> | `string` | *required* | Roll title |
-| <kbd>origin</kbd> | `number\|Token` | `10` | Difficulty value or token to derive it from |
+| <kbd>origin</kbd> | `number\|Token` | `10` | DC, or the token forcing the save (its SAVE is the DC) |
 | <kbd>effects</kbd> | `string\|Object\|Array` | `null` | Applied on fail (`applyEffectsToTokens` shape) |
 | <kbd>duration</kbd> | `Object` | `{ label: 'indefinite' }` | Forwarded to the effect application |
 | <kbd>note</kbd> | `string` | `title` | Note on the applied effects. Falls back to `title` |

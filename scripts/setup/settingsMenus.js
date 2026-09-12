@@ -318,7 +318,6 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statusUsageColor', type: 'color' },
     { key: 'statusDurationColor', type: 'color' },
     { key: 'statusBadgeFontScale', type: 'slider', min: 0.5, max: 2, step: 0.05 },
-    { key: 'statusHudStackClicks', type: 'boolean' },
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
@@ -560,7 +559,6 @@ const STATUSES_FIELDS = [
     { key: 'additionalStatuses', type: 'boolean' },
     { key: 'effectNotificationMode', type: 'select', label: 'Effect Notification Mode' },
     { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Master switch for all visual and auto-status effects.' },
-    { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
     { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
     { type: 'statusFx', sub: 'rollResultFX', label: 'Roll Result FX', hint: 'Miss and crit overlays on attacks, success and fail pulses on H.A.S.E.' },
     { type: 'statusFx', sub: 'damageImpactFX', label: 'Damage Impact FX', hint: 'Impact burst on the target, one per 3 damage, coloured by damage type.' },
@@ -651,9 +649,18 @@ const VISION_FIELDS = [
     { key: 'dragVisionMode', type: 'select' },
     { key: 'dragVisionMultiplier', type: 'number' },
 
-    { type: 'section', label: 'Performance', collapsible: true, collapsed: true },
+];
+
+const PERFORMANCE_FIELDS = [
+    { type: 'section', label: 'Vision', hint: 'Vision and light are the module\'s heaviest per-frame work. Both knobs trade fidelity for frame rate.' },
     { key: 'visionAnimationThrottleFps', type: 'number' },
     { key: 'disableVisionAboveControlled', type: 'number' },
+
+    { type: 'section', label: 'Settings cache' },
+    { key: 'settingsCacheAllModules', type: 'boolean' },
+
+    { type: 'section', label: 'Status FX' },
+    { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
 ];
 
 const TOOLS_FIELDS = [
@@ -756,6 +763,22 @@ const TUTORIALS_FIELDS = [
     laTour('add-extra-tour'),
 ];
 
+// [control, where, action]. Verified against the handlers, not the docs.
+const FIXED_CONTROLS = [
+    ['Right-click',        'HUD row, wheel item',  'Open its details popup'],
+    ['Ctrl+Right-click',   'HUD row',              'Assign it to a favorite wheel'],
+    ['Ctrl+Right-click',   'Status row',           'Star the status'],
+    ['Hover',              'HUD row',              'Preview its range on the canvas'],
+    ['Tab',                'Action, status wheel', 'Next favorite page'],
+    ['Escape',             'Any wheel',            'Close the wheel'],
+    ['Shift+Wheel',        'Shape placement',      'Resize the shape'],
+    ['Ctrl+Wheel',         'Shape placement',      'Rotate an aimed shape, cone or line'],
+    ['T',                  'Advanced Measure',     'Cycle the range source'],
+    ['G',                  'Advanced Measure',     'Clear every placement'],
+    ['Shift+Left-click',   'Advanced Measure',     'Paint marks, drag to continue. Not in area mode'],
+    ['Ctrl+F',             'This window',          'Search every setting'],
+];
+
 const CONTROL_FIELDS = [
     { type: 'section', label: 'Lancer Automations' },
     laKb('resetMovement'),
@@ -786,6 +809,17 @@ const CONTROL_FIELDS = [
     laKb('lineTiltUp'),
     laKb('lineTiltDown'),
     laKb('resetShape'),
+
+    { type: 'section', label: 'Fixed Controls', hint: 'Built-in gestures. These cannot be rebound.', collapsible: true, collapsed: true },
+    { type: 'table',
+        label: 'Mouse and Keyboard',
+        getTable: () => ({
+            columns: ['Control', 'Where', 'Action'],
+            rows: FIXED_CONTROLS.map(([control, where, action]) => ({
+                label: control,
+                cells: [{ isText: true, text: where }, { isText: true, text: action }],
+            })),
+        }) },
 ];
 
 const ISO_FIELDS = [
@@ -966,12 +1000,13 @@ const TAB_DEFS = [
     { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
     // Help & maintenance
     { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
+    { id: 'performance', label: 'Performance', icon: 'fas fa-gauge-high', fields: PERFORMANCE_FIELDS },
     { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
 ];
 
 const NAV_GROUPS = [
     { label: 'Core', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'statuses'] },
-    { label: 'Canvas', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso'] },
+    { label: 'Canvas', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso', 'performance'] },
     { label: 'Interface', icon: 'fas fa-window-maximize', tabs: ['tah', 'control', 'colors', 'sounds'] },
     { label: 'Extras', icon: 'fas fa-star', tabs: ['battelog', 'tools'] },
     { label: 'Help', icon: 'fas fa-circle-question', tabs: ['tutorials', 'debug'] },
@@ -988,7 +1023,7 @@ function _requiredKeys(field)
 // Compact boolean items count as fields so they can carry `requires` too.
 function _allKeyedFields()
 {
-    return TAB_DEFS.flatMap(tab => tab.fields ?? [])
+    return TAB_DEFS.flatMap(tab => /** @type {any[]} */ (tab.fields ?? []))
         .flatMap(field => field?.type === 'compactBooleans' ? (field.items ?? []) : [field]);
 }
 
@@ -1181,7 +1216,7 @@ function _buildItem(field)
         const table = field.getTable();
         const rows = table.rows.map(row => ({
             ...row,
-            cells: row.cells.map(cell => ({ ...cell, isLocked: _isLockedForUser(cell.name) }))
+            cells: row.cells.map(cell => ({ ...cell, isLocked: cell.name ? _isLockedForUser(cell.name) : false }))
         }));
         return { type: 'table', label: field.label, isTable: true, columns: table.columns, rows };
     }

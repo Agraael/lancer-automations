@@ -17,8 +17,8 @@ const TEMPLATE = `modules/${MODULE_ID}/templates/settings-onboarding.html`;
  * @property {'boolean'|'choice'|'sfx'|'reactions'} [kind]
  * @property {string} [sfxSub]
  * @property {{value:string,label:string}[]} [choices]
- * @property {(yes:boolean)=>Record<string, any>} [apply]
- * @property {()=>boolean} [read]
+ * @property {(yes:boolean|string)=>Record<string, any>} [apply]
+ * @property {()=>boolean|string} [read]
  * @property {()=>boolean} [condition]
  * @property {string} [warn]
  */
@@ -114,6 +114,36 @@ const GROUPS = [
                 label: 'Show enemy stats without scanning them first?',
                 explain: 'Otherwise the popup, the scanned stat bars, and the consume feedback keep an NPC\'s stats hidden until someone runs a SCAN on it.',
                 keys: ['revealStatsWithoutScan'],
+            },
+            {
+                id: 'scan-reveal',
+                label: 'Which tokens count as already scanned?',
+                explain: 'Their stats read as scanned without anyone running a SCAN on them.',
+                kind: 'choice',
+                keys: ['scanRevealPlayers', 'scanRevealAllies'],
+                choices: [
+                    { value: 'none', label: 'None' },
+                    { value: 'players', label: 'Player tokens' },
+                    { value: 'allies', label: 'Player tokens and allies' },
+                ],
+                read: () => getModuleSetting('scanRevealAllies') ? 'allies'
+                    : (getModuleSetting('scanRevealPlayers') ? 'players' : 'none'),
+                apply: (value) => ({
+                    scanRevealPlayers: value !== 'none',
+                    scanRevealAllies: value === 'allies',
+                }),
+            },
+            {
+                id: 'effect-notifications',
+                label: 'Post a chat message when a token gains or loses an effect?',
+                explain: 'Public tells the table, GM and Owner keeps it to the people involved.',
+                kind: 'choice',
+                keys: ['effectNotificationMode'],
+                choices: [
+                    { value: 'public', label: 'Public' },
+                    { value: 'whisper', label: 'GM and Owner' },
+                    { value: 'off', label: 'Off' },
+                ],
             },
             {
                 id: 'status-fx-master',
@@ -300,6 +330,12 @@ const GROUPS = [
                 explain: 'HULL, ENGINEERING, CASCADE, TEAR OFF and MELTDOWN fire on their own.',
                 keys: ['autoStructFollowup'],
             },
+            {
+                id: 'auto-focus',
+                label: 'Pan the canvas to the action?',
+                explain: 'Follows attacks, damage, stat rolls, activations and interactive cards. Each one can be set on its own in the settings.',
+                keys: ['autoFocusAttack', 'autoFocusDamage', 'autoFocusCheck', 'autoFocusActivation', 'autoFocusCards'],
+            },
         ],
     },
     {
@@ -396,6 +432,12 @@ const GROUPS = [
                 label: 'Show a ruler cursor while the Measure Distance tool is active?',
                 explain: 'Swaps the cursor and plays a sound when you toggle the measuring tool.',
                 keys: ['rulerToolCursor'],
+            },
+            {
+                id: 'obstruction-step-over',
+                label: 'Stop NPCs from stepping over terrain walls shorter than they are?',
+                explain: 'Applies to humans, specialists, squads and vehicles. Each class can be set on its own in the settings.',
+                keys: ['obstructionBlocksHuman', 'obstructionBlocksSpecialist', 'obstructionBlocksSquad', 'obstructionBlocksVehicle'],
             },
         ],
     },
@@ -666,6 +708,12 @@ const GROUPS = [
                 explain: 'Editing a prototype token\'s image or name updates the actor to match.',
                 keys: ['syncActorImgToToken', 'syncActorNameToToken'],
             },
+            {
+                id: 'roll-uplink',
+                label: 'Mirror players\' open roll dialogs to the GM? (beta)',
+                explain: 'A GM-only bar showing each player\'s attack, damage and stat roll dialog live, as it is being filled in.',
+                keys: ['uplinkEnabled'],
+            },
         ],
     },
 ];
@@ -706,6 +754,7 @@ const RECOMMENDED = {
     'ruler-cursor': true,
     'split-at-boundaries': true,
     'alt-struct': false,
+    'auto-struct-followup': true,
     'one-struct-npc': true,
     'heat-as-energy': true,
     'resist-self-heat': true,
@@ -727,6 +776,8 @@ const RECOMMENDED = {
     'wrecks': true,
     'wreck-cinematics': true,
     'remove-wrecks-combat': true,
+    'actor-token-sync': false,
+    'obstruction-step-over': true,
 };
 
 const QUICK_IDS = new Set([
@@ -737,6 +788,9 @@ const QUICK_IDS = new Set([
     'token-hud-buttons',
     'dialog-theme',
     'stat-privacy',
+    'reveal-without-scan',
+    'scan-reveal',
+    'effect-notifications',
     'ppg-actions',
     'infection-damage',
     'overwatch-style',

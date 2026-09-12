@@ -15,6 +15,7 @@ import { getActionOverlay } from '../interactive/action-overlays.js';
 import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency-tags.js';
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
+import { noteActivation } from '../movement/move-tracking.js';
 import { recordRollSnapshot } from '../uplink/snapshots.js';
 
 // Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
@@ -907,6 +908,9 @@ export async function onActivationStep(state)
     }
 
     const isEndActivation = !!state.la_extraData?.endActivation;
+
+    if (token)
+        noteActivation(token, actionName, isEndActivation);
 
     await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', {
         triggeringToken: token,

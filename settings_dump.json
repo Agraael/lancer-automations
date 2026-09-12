@@ -1,0 +1,1462 @@
+[
+ {
+  "key": "speedProvider.colorFreeMovement",
+  "file": "scripts/combat/speed-provider.js",
+  "scope": "client",
+  "type": "String",
+  "default": "'#ffffff'",
+  "config": "false",
+  "name": "Speed Color: Free Movement",
+  "hint": ""
+ },
+ {
+  "key": "speedProvider.colorForceMovement",
+  "file": "scripts/combat/speed-provider.js",
+  "scope": "client",
+  "type": "String",
+  "default": "'#8B5CF6'",
+  "config": "false",
+  "name": "Speed Color: Force Movement",
+  "hint": ""
+ },
+ {
+  "key": "disableAutoElevationOnMeasure",
+  "file": "scripts/movement/elevation.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tacticalElevationStep",
+  "file": "scripts/movement/tactical-distance.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0.5",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tacticalLabelPosition",
+  "file": "scripts/movement/tactical-distance.js",
+  "scope": "client",
+  "type": "String",
+  "default": "'below'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tacticalMinZoomScale",
+  "file": "scripts/movement/tactical-distance.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "reactionNotificationMode",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "\"both\"",
+  "config": "false",
+  "name": "Activation Notification Mode",
+  "hint": "Who sees the activation popup."
+ },
+ {
+  "key": "effectNotificationMode",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "\"public\"",
+  "config": "false",
+  "name": "Effect Notification Mode",
+  "hint": "Chat message when a token gains or loses an effect or bonus."
+ },
+ {
+  "key": "consumeReaction",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Consume Reaction on Activation",
+  "hint": "Auto-spend the token\\'s reaction when a Reaction activation fires."
+ },
+ {
+  "key": "qolAdvisoryShown",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "compatWarningsShown",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Array",
+  "default": "[]",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "consumeAction",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Consume Action on Activation",
+  "hint": "Auto-spend the token\\'s Quick / Full action when an activation flow succeeds."
+ },
+ {
+  "key": "overlapTokenPicker",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Overlapping Token Picker",
+  "hint": "When clicking a token at the same spot and size as others"
+ },
+ {
+  "key": "autoFocusDuration",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1000",
+  "config": "false",
+  "name": "Focus Pan Duration",
+  "hint": "How long the camera takes to reach the focused tokens"
+ },
+ {
+  "key": "autoFocusCards",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Focus on Interactive Cards",
+  "hint": "Pan the canvas to the card\\'s tokens when a choice"
+ },
+ {
+  "key": "autoFocusAttack",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Focus on Attack Rolls",
+  "hint": "Pan the canvas to the attacker and targets when the attack rolls"
+ },
+ {
+  "key": "autoFocusDamage",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Focus on Damage Rolls",
+  "hint": "Pan the canvas to the attacker and targets when damage rolls"
+ },
+ {
+  "key": "autoFocusCheck",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Focus on Stat Rolls",
+  "hint": "Pan the canvas to the roller and its target when a stat roll happens"
+ },
+ {
+  "key": "autoFocusActivation",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Focus on Activations",
+  "hint": "Pan the canvas to the acting token when its action FX plays."
+ },
+ {
+  "key": "showBonusHudButton",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Token HUD Bonus Button",
+  "hint": "Adds a button on the Token HUD to open the Effect Manager."
+ },
+ {
+  "key": "showStatusEffectsHudButton",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Token HUD Status Effects Button",
+  "hint": "Foundry\\'s default \"Assign Status Effects\" button on the Token HUD."
+ },
+ {
+  "key": "showCombatStateHudButton",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Token HUD Combat State Button",
+  "hint": "Foundry\\'s default \"Toggle Combat State\" button on the Token HUD."
+ },
+ {
+  "key": "showTargetStateHudButton",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Token HUD Target State Button",
+  "hint": "Foundry\\'s default \"Toggle Target State\" button on the Token HUD."
+ },
+ {
+  "key": "showRevertMovementHudButton",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Revert Movement Button",
+  "hint": "The Revert Last Movement / Reset Movement History button on the Token HUD."
+ },
+ {
+  "key": "statusHalo",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Status Icon Halo",
+  "hint": "Status icons circle around the token instead of stacking in a column."
+ },
+ {
+  "key": "statusHaloRadius",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "1.15",
+  "config": "false",
+  "name": "Halo Radius",
+  "hint": "Ring radius as a fraction of the token size."
+ },
+ {
+  "key": "statusIconMinZoomScale",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "0",
+  "config": "false",
+  "name": "Minimum Icon Zoom Scale",
+  "hint": "Below this zoom level the icons keep a constant screen size. 0 = disabled."
+ },
+ {
+  "key": "statusHaloStartAngle",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "135",
+  "config": "false",
+  "name": "Halo Start Angle",
+  "hint": "Angle of the first icon"
+ },
+ {
+  "key": "statusIconHover",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Status Icon Hover Info",
+  "hint": "Hovering a status icon enlarges it and shows its name"
+ },
+ {
+  "key": "statusCounterColor",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'#00aaff'",
+  "config": "false",
+  "name": "Instance Counter Color",
+  "hint": "Color of the instance count drawn on collapsed status icons."
+ },
+ {
+  "key": "statusUsageColor",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'#c39bff'",
+  "config": "false",
+  "name": "Usage Counter Color",
+  "hint": "Color of the usage number drawn on status icons and in the combat tracker."
+ },
+ {
+  "key": "statusDurationColor",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'#ffd700'",
+  "config": "false",
+  "name": "Duration Counter Color",
+  "hint": "Color of the remaining-turns number drawn on status icons."
+ },
+ {
+  "key": "statusBadgeFontScale",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Counter Font Scale",
+  "hint": "Size of the numbers drawn on status icons."
+ },
+ {
+  "key": "additionalStatuses",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "LaSossis Additional statuses and effects",
+  "hint": "Extra statuses (Resist All"
+ },
+ {
+  "key": "enablePerRoundTurnTags",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Per-Round / Per-Turn / Per-Scene Enforcement",
+  "hint": "Enforce per-round and per-turn tags (tg_round"
+ },
+ {
+  "key": "enableInfectionDamageIntegration",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Infection Damage Integration",
+  "hint": "Adds Infection as a fully integrated Lancer damage type. Requires reload."
+ },
+ {
+  "key": "convertHeatToEnergyOnHeatless",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Heat as Energy on heatless targets",
+  "hint": "Convert Heat damage to Energy when the target has no heat capacity (pilots"
+ },
+ {
+  "key": "resistSelfHeat",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Resist Self-Inflicted Heat",
+  "hint": "Halve self-inflicted heat from self-heat"
+ },
+ {
+  "key": "autoDamageRoll",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Auto Damage Roll",
+  "hint": "Open the Damage HUD automatically after an attack."
+ },
+ {
+  "key": "autoDamageApply",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Auto Apply Damage",
+  "hint": "Apply rolled damage to targets automatically. Unowned targets are applied by the GM client."
+ },
+ {
+  "key": "autoStructFollowup",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Auto Structure / Stress Follow-ups",
+  "hint": "Click the follow-up buttons on your own structure and stress cards automatically."
+ },
+ {
+  "key": "enableKnockbackFlow",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Automate Knockback on Hit",
+  "hint": "Auto-trigger the Knockback tool on hits with Knockback-tagged weapons."
+ },
+ {
+  "key": "enableThrowFlow",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Automate Throw Choice for Thrown Weapons",
+  "hint": "Thrown-tagged weapons prompt Attack or Throw at the start of the flow."
+ },
+ {
+  "key": "statRollTargeting",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Stat Roll Targeting",
+  "hint": "Adds an optional single-target picker to the stat-roll HUD to auto-calculate save difficulty."
+ },
+ {
+  "key": "uplinkEnabled",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Roll Uplink (Beta)",
+  "hint": "Streams players\\' open roll dialogs to the GM as live mirror cards."
+ },
+ {
+  "key": "uplinkAutoOpen",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Uplink Auto-Open",
+  "hint": "Open the uplink bar as soon as a roll dialog appears."
+ },
+ {
+  "key": "haseChanceLabels",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "actionBadgeItemName",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "weaponFxAboveTokens",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Weapon FX Above Tokens",
+  "hint": "Since Sequencer 4"
+ },
+ {
+  "key": "enableAttackTargeting",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "LA Attack Targeting",
+  "hint": "Adds an LA target/range picker to the attack HUD; hold Shift to target multiple."
+ },
+ {
+  "key": "enableDamageTargeting",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "LA Damage Targeting",
+  "hint": "Adds the LA target/range picker to the damage HUD; hold Shift to target multiple."
+ },
+ {
+  "key": "clearTargetsAfterRoll",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Clear Targets After Roll",
+  "hint": "Drop targets once an attack or damage roll resolves."
+ },
+ {
+  "key": "targetInfoDisplay",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'gm'",
+  "config": "false",
+  "name": "Target Info Labels",
+  "hint": "Who sees the hit-chance and damage-range labels while targeting."
+ },
+ {
+  "key": "autoStartTargetPicking",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Auto-Start Target Picking",
+  "hint": "Open the target picker automatically when an attack starts with no target set."
+ },
+ {
+  "key": "displayToolsToOthers",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Share Interactive Tools",
+  "hint": "Show your in-progress targeting / placement / movement tools to other clients (discreet overlay)"
+ },
+ {
+  "key": "treatGenericPrintAsActivation",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Treat Generic Prints as Activations",
+  "hint": "Items printed via the generic method also trigger onActivation events."
+ },
+ {
+  "key": "enableMovementCapDetection",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Movement Cap Detection",
+  "hint": "Cancel drag movement exceeding the token\\'s movement cap."
+ },
+ {
+  "key": "enableBoostOffer",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'no'",
+  "config": "false",
+  "name": "Boost & Move Offer",
+  "hint": "Offer to cover an over-cap move with Boost then Overcharge (Automatic accepts without asking)."
+ },
+ {
+  "key": "showDeployableLines",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Show Deployable Lines",
+  "hint": "Draw lines between owned tokens and their deployables on hover."
+ },
+ {
+  "key": "enableAltStruct",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Maria's Alternate Structure & Stress Rules",
+  "hint": "Integrated implementation of Maria's Alternate Structure & Stress rules. Disable if using the standalone lancer-alt-structure module."
+ },
+ {
+  "key": "enableOneStructNpc",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "One-Structure NPC Auto-Destroy",
+  "hint": "NPCs with max structure 1 skip the structure table and are destroyed on the first structure hit."
+ },
+ {
+  "key": "dragVisionMultiplier",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Drag Vision Radius Multiplier",
+  "hint": "1 = full vision while dragging"
+ },
+ {
+  "key": "rangePulseLineOpacity",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0",
+  "config": "false",
+  "name": "Range Pulse Grid Line Opacity",
+  "hint": "Opacity of the still grid lines inside the range."
+ },
+ {
+  "key": "rangePulseWaveOpacity",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0.75",
+  "config": "false",
+  "name": "Range Pulse Wave Opacity",
+  "hint": "Opacity of the wave running through the range and of its outline."
+ },
+ {
+  "key": "rangePulseLineWidth",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Range Pulse Wave Width",
+  "hint": "Thickness of the wave and its black outline. 1 = original."
+ },
+ {
+  "key": "rangePulseLos",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Range Pulse Line of Sight",
+  "hint": "Experimental. Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it."
+ },
+ {
+  "key": "rangePulseSpeed",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Range Pulse Speed",
+  "hint": "Speed of the wave and of the bloom. 1 = original."
+ },
+ {
+  "key": "rangePulseStyle",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "String",
+  "default": "'inset'",
+  "config": "false",
+  "name": "Range Pulse Style",
+  "hint": "Shape drawn for each ring of the pulse."
+ },
+ {
+  "key": "rangePulseMotion",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "String",
+  "default": "'bloom'",
+  "config": "false",
+  "name": "Range Pulse Motion",
+  "hint": "A bloom outward that repeats"
+ },
+ {
+  "key": "enableWrecks",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Wreck Automation",
+  "hint": "Automate wrecking on structure reaching 0."
+ },
+ {
+  "key": "wreckMode_${cat}",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'token'",
+  "config": "false",
+  "name": "`${label}: Wreck Mode`",
+  "hint": "`How ${label} wrecks are placed.`"
+ },
+ {
+  "key": "wreckTerrain_${cat}",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "(cat === 'mech' || cat === 'vehicle' || cat === 'monstrosity') ? 'aura' : 'none'",
+  "config": "false",
+  "name": "`${label}: Wreck Difficult Terrain`",
+  "hint": "`What to leave behind for movement cost when a ${label} is wrecked.`"
+ },
+ {
+  "key": "wreckAuraColor",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'#8B4513'",
+  "config": "false",
+  "name": "Wreck Aura Color",
+  "hint": "Line and fill color of the aura left on a wreck. Applies to new wrecks."
+ },
+ {
+  "key": "wreckAuraOpacity",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Number",
+  "default": "0.2",
+  "config": "false",
+  "name": "Wreck Aura Opacity",
+  "hint": "Fill opacity of the wreck aura. The outline scales with it."
+ },
+ {
+  "key": "wreckAssetsPath",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "''",
+  "config": "false",
+  "name": "Wreck Assets Folder",
+  "hint": "Custom folder for wreck images/effects/audio. Leave blank for built-in."
+ },
+ {
+  "key": "wreckFactionOnDeath",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'same'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "enableRemoveFromCombat",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Remove Wrecks from Combat",
+  "hint": "Remove wrecked tokens from the combat tracker."
+ },
+ {
+  "key": "enableWreckAnimation",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Wreck Explosion Effects",
+  "hint": "Play explosion effects when tokens are wrecked."
+ },
+ {
+  "key": "enableWreckAudio",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Wreck Explosion Audio",
+  "hint": "Play explosion sounds when tokens are wrecked."
+ },
+ {
+  "key": "squadLostOnDeath",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Squad MIA on Death",
+  "hint": "Apply MIA status to dead squads."
+ },
+ {
+  "key": "wreckTerrainType",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "''",
+  "config": "false",
+  "name": "Wreck Terrain Type",
+  "hint": "Terrain Height Tools terrain type ID for wreck difficult terrain."
+ },
+ {
+  "key": "guardianBulwarkAuraMode",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'always'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "syncActorImgToToken",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "syncActorNameToToken",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "scanJournalSource",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'system'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "scanPlayerOwnershipMode",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'all'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "revealStatsWithoutScan",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "scanRevealAllies",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "scanRevealPlayers",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "wreckMasterVolume",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Wreck Master Volume",
+  "hint": "Volume of wreck explosion sounds (0 = mute"
+ },
+ {
+  "key": "disableHumanDeathSound",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Disable Human Death Sound",
+  "hint": "Mute wreck sounds for human/pilot/squad deaths."
+ },
+ {
+  "key": "allowHalfSizeTokens",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Allow Half-Size Tokens",
+  "hint": "Size 0.5 actors get 0.5 grid token dimensions instead of being forced to 1."
+ },
+ {
+  "key": "autoTokenHeight",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "autoTokenHeightVehicleSquad",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "debugPathHexCalculation",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Debug: Path Hex Calculation",
+  "hint": "Draw temporary circles on the map highlighting the calculated path hex steps."
+ },
+ {
+  "key": "debugMovement",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Debug: Movement",
+  "hint": "Console logs from the Lancer cost-rules pipeline"
+ },
+ {
+  "key": "debugOutOfCombat",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Debug: Out of Combat Warnings",
+  "hint": "Show UI warnings when an activation is skipped because the token is not in combat."
+ },
+ {
+  "key": "debugAutomation",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Debug: Automation System",
+  "hint": "Console logs from the reaction / trigger pipeline: which trigger fires"
+ },
+ {
+  "key": "debugForceJb2aFree",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Debug: Force JB2A Free Fallbacks",
+  "hint": "Pretend the JB2A Patreon module is not installed; route all premium assets through the free-version fallback registry. For testing only."
+ },
+ {
+  "key": "lastNotifiedVersion",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "String",
+  "default": "\"\"",
+  "config": "false",
+  "name": "Last Notified Version",
+  "hint": ""
+ },
+ {
+  "key": "linkManualDeploy",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Link Manually Placed Deployables",
+  "hint": "Auto-link dragged deployable tokens to their owner and fire onDeploy."
+ },
+ {
+  "key": "count3DDistance",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Count Elevation in Combat Distance",
+  "hint": "Distance = max(horizontal"
+ },
+ {
+  "key": "obstructionBlocksVehicle",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "No Step-over: Vehicles",
+  "hint": "Vehicle NPCs cannot step over terrain walls lower than their size."
+ },
+ {
+  "key": "obstructionBlocksSquad",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "No Step-over: Squads",
+  "hint": "Squad NPCs cannot step over terrain walls lower than their size."
+ },
+ {
+  "key": "obstructionBlocksHuman",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "No Step-over: Humans",
+  "hint": "Human NPCs cannot step over terrain walls lower than their size."
+ },
+ {
+  "key": "obstructionBlocksSpecialist",
+  "file": "scripts/setup/settings-register.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "No Step-over: Specialists",
+  "hint": "Specialist NPCs cannot step over terrain walls lower than their size."
+ },
+ {
+  "key": "tah.clickToOpen",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Click to Open",
+  "hint": "Open categories on click instead of hover."
+ },
+ {
+  "key": "tah.narrativeMode",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.narrativeLinkedActorUuid",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "String",
+  "default": "''",
+  "config": "false",
+  "name": "Narrative Linked Actor",
+  "hint": ""
+ },
+ {
+  "key": "tah.areaElevationAware",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.hoverCloseDelay",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0.5",
+  "config": "false",
+  "name": "Hover Close Delay (seconds)",
+  "hint": "How long the HUD stays open after the mouse leaves."
+ },
+ {
+  "key": "tah.keyboardNav",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Keyboard Navigation",
+  "hint": "Move around the HUD with Shift+WASD"
+ },
+ {
+  "key": "tah.keyboardNavResetDelay",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "5",
+  "config": "false",
+  "name": "Keyboard Nav Reset Delay (seconds)",
+  "hint": "How long the keyboard cursor stays after the last Shift+WASD key."
+ },
+ {
+  "key": "tah.preventWasdMovement",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Block WASD / QE Movement",
+  "hint": "Stop bare W/A/S/D/Q/E from moving the token."
+ },
+ {
+  "key": "tah.maxColumnItems",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0",
+  "config": "false",
+  "name": "Max items per column",
+  "hint": "Rows per column before it scrolls (0 = no cap"
+ },
+ {
+  "key": "tah.wheelRadiusOffset",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "0",
+  "config": "false",
+  "name": "Wheel Radius Offset",
+  "hint": "Push the radial wheels further from the token"
+ },
+ {
+  "key": "tah.rangePreview",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Weapon Range Preview",
+  "hint": "Show weapon range on the map when hovering items in the HUD."
+ },
+ {
+  "key": "tah.uiScale",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "HUD Scale",
+  "hint": "Size of the Token Action HUD and its popups."
+ },
+ {
+  "key": "tah.statusFavorites",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Array",
+  "default": "[]",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.showAidHandleInteractSqueeze",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Aid / Handle / Interact / Squeeze Actions",
+  "hint": "Show these actions in the Actions category. They come from PPG (Prototype Pattern Group)."
+ },
+ {
+  "key": "tah.rangePreviewOnAttackCard",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "Range Preview on Attack Card",
+  "hint": "Pulse the attacker\\'s weapon/tech range on the canvas when an attack card prints."
+ },
+ {
+  "key": "tah.uiSoundVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "UI Sound Volume",
+  "hint": "Volume of TAH hover/click sounds."
+ },
+ {
+  "key": "tah.tokenFeedbackVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Token Feedback Volume",
+  "hint": "Volume of token feedback sounds (hover"
+ },
+ {
+  "key": "tah.damageSoundVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Damage / Stat Sound Volume",
+  "hint": "Volume of damage"
+ },
+ {
+  "key": "tah.actionFxVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Action FX Volume",
+  "hint": "Volume of action FX sounds (skirmish"
+ },
+ {
+  "key": "battleLogEnabled",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.battleLogVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "Battle Log Sound Volume",
+  "hint": "Volume of the Battle Log intro sounds (fade-in"
+ },
+ {
+  "key": "tah.battleLog.${soundKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.battleLog.${key}",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "String",
+  "default": "''",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.battleLog.themeVolume",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Number",
+  "default": "1",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.battleLog.themeLoop",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.battleLog.themeStart",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "String",
+  "default": "'intro'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.telemetryFriendlyMechAsSquad",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.disableAwards",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.telemetryDebug",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.uiSound.${soundKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.tokenSound.${soundKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.damageSound.${damageType}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.statSound.${statKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.statusSfx.${sfxKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.actionFxSound.${actionKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "true",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "autoFocusAction.${focusKey}",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "focusKey !== 'profile'",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.showDisposition",
+  "file": "scripts/tah/index.js",
+  "scope": "world",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.position",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Object",
+  "default": "null",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "tah.macroList",
+  "file": "scripts/tah/index.js",
+  "scope": "client",
+  "type": "Array",
+  "default": "[]",
+  "config": "false",
+  "name": "",
+  "hint": ""
+ },
+ {
+  "key": "visionFromEdgeDebug",
+  "file": "scripts/vision/visionFromEdge.js",
+  "scope": "client",
+  "type": "Boolean",
+  "default": "false",
+  "config": "false",
+  "name": "Vision From Edge: Debug Overlay",
+  "hint": "Draw the perimeter sample points on the canvas."
+ }
+]

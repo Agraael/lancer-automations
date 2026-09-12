@@ -306,56 +306,66 @@ function _buildEdgeSources(token)
 {
     if (!canvas?.effects?.visionSources || !token?.document)
         return false;
-    _destroyEdgeSources(token);
-
-    if (!token.document.sight?.enabled)
-        return false;
-    if (!token.vision || token.vision.disabled)
-        return false;
-    if (!_isEdgeVisionEnabled(token.document))
-        return false;
 
     const SourceClass = _getVisionSourceClass();
-    if (!SourceClass)
-        return false;
-
-    let primaryData;
-    try
+    let primaryData = null;
+    if (token.document.sight?.enabled && token.vision && !token.vision.disabled && _isEdgeVisionEnabled(token.document) && SourceClass)
     {
-        primaryData = token._getVisionSourceData();
-    }
-    catch (err)
-    {
-        return false;
+        try
+        {
+            primaryData = token._getVisionSourceData();
+        }
+        catch (err)
+        {
+            primaryData = null;
+        }
     }
     if (!primaryData)
+    {
+        _destroyEdgeSources(token);
         return false;
+    }
 
     const samples = _getSamplePoints(token);
+    const sources = canvas.effects.visionSources;
+    const keep = new Set();
     let added = false;
     samples.forEach((point, idx) =>
     {
         const sourceId = _edgeSourceId(token, idx);
         try
         {
-            // Lie about shape/bounds so Foundry's sweep filters don't
-            // claim the whole token footprint as "self area".
-            const tinyBounds = new PIXI.Rectangle(point.x - 1, point.y - 1, 2, 2);
-            const objectStandIn = new Proxy(token, {
-                get(target, prop)
-                {
-                    if (prop === 'shape')
-                        return null;
-                    if (prop === 'bounds')
-                        return tinyBounds;
-                    return Reflect.get(target, prop, target);
-                }
-            });
-            const source = new SourceClass({ sourceId, object: objectStandIn });
+            let source = sources.get(sourceId);
+            // A reused source keeps its shaders and meshes, only the sweep reruns. A redrawn token gets new ones.
+            if (source?._laEdgeToken !== token)
+            {
+                source?.destroy?.();
+                sources.delete(sourceId);
+                // Lie about shape/bounds so Foundry's sweep filters don't
+                // claim the whole token footprint as "self area".
+                const tinyBounds = new PIXI.Rectangle(point.x - 1, point.y - 1, 2, 2);
+                const objectStandIn = new Proxy(token, {
+                    get(target, prop)
+                    {
+                        if (prop === 'shape')
+                            return null;
+                        if (prop === 'bounds')
+                            return tinyBounds;
+                        return Reflect.get(target, prop, target);
+                    }
+                });
+                source = new SourceClass({ sourceId, object: objectStandIn });
+                source._laEdgeToken = token;
+                source._laEdgeBounds = tinyBounds;
+            }
+            else
+            {
+                source._laEdgeBounds.x = point.x - 1;
+                source._laEdgeBounds.y = point.y - 1;
+            }
             const halfSize = primaryData.externalRadius ?? 0;
             const clipRadius = primaryData.radius ?? 0;
-            if (clipRadius > 0)
-                source._laEdgeClipCircle = new PIXI.Circle(primaryData.x, primaryData.y, clipRadius);
+            source._laEdgeClipCircle = clipRadius > 0 ? new PIXI.Circle(primaryData.x, primaryData.y, clipRadius) : null;
             source.initialize({
                 ...primaryData,
                 x: point.x,
@@ -368,7 +378,8 @@ function _buildEdgeSources(token)
             if (typeof source.add === 'function')
                 source.add();
             else
-                canvas.effects.visionSources.set(sourceId, source);
+                sources.set(sourceId, source);
+            keep.add(sourceId);
             added = true;
         }
         catch (err)
@@ -376,6 +387,22 @@ function _buildEdgeSources(token)
             console.warn(`${MODULE_ID} | edge vision source ${idx} for token ${token.id} failed to initialize:`, err);
         }
     });
+    // The sample count can shrink on a mode change.
+    const prefix = `${token.sourceId}.${SOURCE_ID_PART}.`;
+    for (const id of sources.keys())
+    {
+        if (!id.startsWith(prefix) || keep.has(id))
+            continue;
+        try
+        {
+            sources.get(id)?.destroy?.();
+        }
+        catch (err)
+        {
+            // ignore
+        }
+        sources.delete(id);
+    }
     return added;
 }
 

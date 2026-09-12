@@ -101,7 +101,8 @@ const suppressArcherAutomation = {
                         {
                             name: "Suppress",
                             icon: "worlds/Lancer/VTT stuff/virtual-marker.svg",
-                            isCustom: true
+                            isCustom: true,
+                            description: "Impaired. Moving lets the Archer interrupt with an attack."
                         },
                         "impaired"
                     ],
@@ -438,7 +439,12 @@ const engineersMarkAutomation = {
             if (!chosen?.length)
                 return;
             await api.applyMark(reactorToken, [chosen[0]], {
-                effect: { name: ENGINEER_MARK_NAME, isCustom: true, icon: "modules/lancer-automations/icons/cross-mark.svg" },
+                effect: {
+                    name: ENGINEER_MARK_NAME,
+                    isCustom: true,
+                    icon: "modules/lancer-automations/icons/cross-mark.svg",
+                    description: "The engineer's turrets fire on this character."
+                },
                 note: "Turrets target this character",
                 duration: { label: 'start', turns: 1, rounds: 0, overrideTurnOriginId: reactorToken.id },
                 flagKey: 'engineersMarkSourceId'
@@ -1045,7 +1051,12 @@ const sniperMarkAutomation = {
                 if (!wasMarked)
                 {
                     await api.applyMark(reactorToken, [target], {
-                        effect: { name: SNIPER_MARK_NAME, isCustom: true, icon: "icons/svg/target.svg" },
+                        effect: {
+                            name: SNIPER_MARK_NAME,
+                            isCustom: true,
+                            icon: "icons/svg/target.svg",
+                            description: "Free action to fall prone. While marked with no cover and not prone, the Anti-Materiel Rifle can trade its damage for 1 structure."
+                        },
                         flagKey: 'sniperSourceId'
                     });
                     ui.notifications.info(`Sniper's Mark: ${target.name} is now marked.`);
@@ -1339,7 +1350,12 @@ const instinctModeAutomation = {
             {
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
-                    effectNames: [{ name: "Instinct Mode", isCustom: true, icon: whiteIcon(item.img) }],
+                    effectNames: [{
+                        name: "Instinct Mode",
+                        isCustom: true,
+                        icon: whiteIcon(item.img),
+                        description: "Once per turn, a ranged attack in line of sight lets the Ronin boost to the attacker and strike."
+                    }],
                     duration: api.untilEndOfTurn(reactorToken),
                     refresh: true
                 });
@@ -1455,7 +1471,12 @@ const counterBallisticAutomation = {
                 await triggerData.startRelatedFlow();
                 await api.clearMarks(reactorToken, RONIN_MARK_NAME, { flagKey: RONIN_MARK_FLAG });
                 await api.applyMark(reactorToken, [attacker], {
-                    effect: { name: RONIN_MARK_NAME, isCustom: true, icon: "modules/lancer-automations/icons/cross-mark.svg" },
+                    effect: {
+                        name: RONIN_MARK_NAME,
+                        isCustom: true,
+                        icon: "modules/lancer-automations/icons/cross-mark.svg",
+                        description: "Carbon Fiber Sword hits consume this for +1d6 bonus damage."
+                    },
                     note: "Carbon Fiber Sword hits can consume this for +1d6 bonus damage",
                     duration: { label: 'indefinite' },
                     flagKey: RONIN_MARK_FLAG
@@ -1630,7 +1651,12 @@ const SCOURER_MARK_FLAG = 'thermalLanceSourceId';
 async function _stampThermalLanceHits(api, reactorToken, targets)
 {
     await api.applyMark(reactorToken, targets, {
-        effect: { name: SCOURER_MARK_NAME, isCustom: true, icon: "modules/lancer-automations/icons/dice-fire.svg" },
+        effect: {
+            name: SCOURER_MARK_NAME,
+            isCustom: true,
+            icon: "modules/lancer-automations/icons/dice-fire.svg",
+            description: "Hit by the Thermal Lance. Another Thermal Lance hit this turn adds Focus Down burn."
+        },
         note: "Hit by the Thermal Lance",
         duration: api.untilEndOfTurn(reactorToken),
         flagKey: SCOURER_MARK_FLAG,
@@ -2084,7 +2110,12 @@ const fullSpectrumOverloadAutomation = {
                 {
                     await api.applyEffectsToTokens({
                         tokens: [target],
-                        effectNames: [{ name: "No Reactions", isCustom: true, icon: whiteIcon("systems/lancer/assets/icons/reaction.svg") }],
+                        effectNames: [{
+                            name: "No Reactions",
+                            isCustom: true,
+                            icon: whiteIcon("systems/lancer/assets/icons/reaction.svg"),
+                            description: "Cannot take reactions."
+                        }],
                         note: "Full-Spectrum Overload",
                         duration: api.untilEndOfTurn(target)
                     }, {
@@ -2867,7 +2898,12 @@ const witchTearDownAutomation = {
                 if (!fresh.length)
                     return;
                 await api.applyMark(reactorToken, fresh, {
-                    effect: { name: WITCH_TEAR_DOWN_EFFECT, icon: whiteIcon(item.img), isCustom: true },
+                    effect: {
+                        name: WITCH_TEAR_DOWN_EFFECT,
+                        icon: whiteIcon(item.img),
+                        isCustom: true,
+                        description: "4 Heat at the Witch's turn start. Someone adjacent can Stabilize to end it instead of cooling."
+                    },
                     note: "Tear Down",
                     duration: { label: 'indefinite' },
                     flagKey: WITCH_TEAR_DOWN_FLAG
@@ -3121,7 +3157,12 @@ const witchPetrifyAutomation = {
                     duration: api.untilEndOfTurn(target)
                 });
                 await api.applyMark(reactorToken, [target], {
-                    effect: { name: WITCH_PETRIFY_EFFECT, icon: whiteIcon(item.img), isCustom: true },
+                    effect: {
+                        name: WITCH_PETRIFY_EFFECT,
+                        icon: whiteIcon(item.img),
+                        isCustom: true,
+                        description: "Worsens at the end of each of this character's turns: slowed, then immobilized, then stunned."
+                    },
                     note: "Petrify",
                     duration: { label: 'indefinite' },
                     flagKey: WITCH_PETRIFY_FLAG,
@@ -3161,7 +3202,12 @@ const witchPetrifyAutomation = {
                     duration: api.untilEndOfTurn(target)
                 });
                 await api.applyMark(reactorToken, [target], {
-                    effect: { name: WITCH_PETRIFY_EFFECT, icon: whiteIcon(item.img), isCustom: true },
+                    effect: {
+                        name: WITCH_PETRIFY_EFFECT,
+                        icon: whiteIcon(item.img),
+                        isCustom: true,
+                        description: "Worsens at the end of each of this character's turns: slowed, then immobilized, then stunned."
+                    },
                     note: "Petrify",
                     duration: { label: 'indefinite' },
                     flagKey: WITCH_PETRIFY_FLAG,

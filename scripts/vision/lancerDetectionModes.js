@@ -82,15 +82,17 @@ let _losVertexMap = null;
 let _losPolyMap = null;
 let _losClosedPolys = null;
 const _losPairCache = new Map();
+let _losEdgeSignature = null;
 // Banded wall polygons per eye height, each with its bbox. Same lifetime as the edge cache.
 let _eyeSolidCache = null;
 
 /** Drops the cached sight edges and pair results so the next LOS query recollects them. */
 export function invalidateLosCaches()
 {
-    _losInvalidate();
+    _losInvalidateAll();
 }
 
+// Pair results outlive a sightRefresh: a drag preview fires one per cell and the walls rarely change.
 function _losInvalidate()
 {
     _losEdgeCache = null;
@@ -98,7 +100,17 @@ function _losInvalidate()
     _losPolyMap = null;
     _losClosedPolys = null;
     _eyeSolidCache = null;
+}
+
+function _losPairsClear()
+{
     _losPairCache.clear();
+}
+
+function _losInvalidateAll()
+{
+    _losInvalidate();
+    _losPairsClear();
 }
 
 function _losPosKey(doc)
@@ -134,6 +146,14 @@ function _collectSightEdges()
             minY: Math.min(edge.a.y, edge.b.y),
             maxY: Math.max(edge.a.y, edge.b.y),
         });
+    }
+    const signature = records.map(record => `${record.id}:${record.edge.a.x},${record.edge.a.y},${record.edge.b.x},${record.edge.b.y}:${record.edge.sight}:${record.bottom}:${record.top}`)
+        .sort((left, right) => (left < right ? -1 : (left > right ? 1 : 0)))
+        .join(';');
+    if (signature !== _losEdgeSignature)
+    {
+        _losEdgeSignature = signature;
+        _losPairsClear();
     }
     _losVertexMap = new Map();
     _losPolyMap = new Map();
@@ -791,6 +811,8 @@ export function lancerHasLineOfSight(tokenA, tokenB)
         };
         result = _denseLosClear(tokenB, tokenA, heightB, heightA, edges, ctxReverse);
     }
+    if (_losPairCache.size > 20000)
+        _losPairsClear();
     _losPairCache.set(pairKey, result);
     return result;
 }
@@ -1894,7 +1916,11 @@ export function initLancerDetectionModes()
         _markOverlayDirty();
         _drawLosDebug();
     });
-    Hooks.on('canvasTearDown', _losInvalidate);
+    Hooks.on('canvasTearDown', _losInvalidateAll);
+    // Token size and eye-height flags feed the rays but not the pair key.
+    Hooks.on('updateToken', _losPairsClear);
+    Hooks.on('clientSettingChanged', _losPairsClear);
+    Hooks.on('updateSetting', _losPairsClear);
     Hooks.on('createToken', _onCreateToken);
     Hooks.on('canvasReady', _installSilhouetteOverlayTicker);
     Hooks.on('canvasReady', _installLosDebug);

@@ -1,7 +1,7 @@
 /* global game, canvas, Hooks, libWrapper, PIXI, CONFIG, requestAnimationFrame */
 
 import { MODULE_ID } from '../tools/constants.js';
-import { getModuleSetting } from '../tools/settings-utils.js';
+import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
 
 export const ISO_PERSPECTIVE_ID = 'isometric-perspective';
 export const GRAPE_ISO_ID = 'grape_juice-isometrics';
@@ -109,14 +109,7 @@ function _isoPerspectiveActive()
     const mod = game.modules.get(ISO_PERSPECTIVE_ID);
     if (!mod?.active)
         return false;
-    try
-    {
-        return !!game.settings.get(ISO_PERSPECTIVE_ID, 'worldIsometricFlag');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getExternalSetting(ISO_PERSPECTIVE_ID, 'worldIsometricFlag', false);
 }
 
 function _grapeActive()

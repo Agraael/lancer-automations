@@ -2162,8 +2162,6 @@ export function getDefaultGeneralReactionRegistry()
         ...CODE_INSTEAD,
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
-            const speed = reactorToken.actor?.system?.speed ?? 0;
-            api.recordBoostCast?.(reactorToken, speed);
             await gainAction(reactorToken, 'move');
         }
     };

@@ -74,6 +74,9 @@
                 {{#if this.isNumber}}
                 <input type="number" name="{{this.name}}" value="{{this.value}}" step="0.1" {{#if this.isLocked}}disabled{{/if}} />
                 {{/if}}
+                {{#if this.isText}}
+                <span class="la-table-text">{{this.text}}</span>
+                {{/if}}
             </td>
             {{/each}}
         </tr>

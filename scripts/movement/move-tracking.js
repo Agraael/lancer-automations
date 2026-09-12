@@ -1,7 +1,7 @@
 import { moveTokenTo } from "./move-api.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag } from "../tools/flag-utils.js";
-import { MODULE_ID } from "../tools/constants.js";
+import { MODULE_ID, BOOST_DETAIL } from "../tools/constants.js";
 import { isForceFreeMovement } from "./keybindings.js";
 import { parseAction } from "./movement-actions.js";
 import { consumeAction, executeSimpleActivation } from "../tools/misc-tools.js";
@@ -195,6 +195,18 @@ export function recordBoostCast(tokenOrId, speed)
     const boostCasts = [...(data.boostCasts ?? []), { atMoveIndex: (data.moves ?? []).length, speed, extra: pending }];
     _writeMoveHistory(doc, { ...data, boostCasts, pendingExtra: 0 });
     _cacheMovementCap(doc);
+}
+
+/**
+ * Engine-side leg grant on every Boost, so the cap never depends on the toggleable Boost activation.
+ * @param {Token} token
+ * @param {string} actionName
+ * @param {boolean} isEnd
+ */
+export function noteActivation(token, actionName, isEnd)
+{
+    if (!isEnd && actionName === 'Boost')
+        recordBoostCast(token, tokenSpeed(token));
 }
 
 /**
@@ -636,7 +648,7 @@ export function _handleMovementCapExceeded(token, ctx)
     const fireBoost = () => executeSimpleActivation(token.actor, {
         title: 'Boost',
         action: { name: 'Boost', activation: 'Quick' },
-        detail: 'Move your speed.',
+        detail: BOOST_DETAIL,
     });
     const fireOvercharge = async () =>
     {

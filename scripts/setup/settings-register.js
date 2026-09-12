@@ -292,15 +292,6 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
-    game.settings.register(MODULE_ID,'statusHudStackClicks', {
-        name: 'Token HUD Stack Clicks',
-        hint: 'On the token HUD, left-click an active status to add a stack and right-click to remove one (shift-click keeps the default toggle).',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false
-    });
-
     // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register(MODULE_ID,'additionalStatuses', {

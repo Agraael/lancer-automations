@@ -180,13 +180,15 @@ function injectToggleRow($form)
 {
     if ($form.find('.la-accdiff-area-toggles').length)
         return;
+    // without flex:0 0 auto, Foundry's `.flexrow > * { flex: 1 }` stretches the labels and the row's centering does nothing
+    const labelStyle = 'flex:0 0 auto;display:flex;align-items:center;gap:4px;cursor:pointer;';
     const losToggle = getSettingEnabled('rangePulseLos')
-        ? `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-los" checked> Line of sight</label>`
+        ? `<label style="${labelStyle}"><input type="checkbox" class="la-tg-los" checked> Line of sight</label>`
         : '';
     const $toggleRow = $(`<div class="la-accdiff-area-toggles flexrow" style="gap:12px;justify-content:center;padding:4px 0 2px;font-size:11px;color:var(--dark-text, #fff);flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-elev" checked> Elevation aware</label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-autoelev" checked> Auto elevation</label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" class="la-tg-prop" checked> Propagation</label>
+        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-elev" checked> Elevation aware</label>
+        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-autoelev" checked> Auto elevation</label>
+        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-prop" checked> Propagation</label>
         ${losToggle}
     </div>`);
     const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
@@ -194,6 +196,27 @@ function injectToggleRow($form)
         $section.append($toggleRow);
     else
         $form.find('.accdiff-ranges').first().after($toggleRow);
+}
+
+// Elevation / propagation only bite on areas; a single-target pick keeps the Line of sight toggle alone.
+function syncAreaToggles($form, isArea)
+{
+    const $row = $form.find('.la-accdiff-area-toggles');
+    if (!$row.length)
+        return;
+    $row.find('.la-tg-area-lbl').toggle(!!isArea);
+    $row.toggle(!!isArea || $row.find('.la-tg-los').length > 0);
+}
+
+// The pulse reads state.__laLosPulse and redraws on the hook, so the toggle has to write both.
+function bindLosToggle($form, state, onChange)
+{
+    $form.find('.la-tg-los').prop('checked', state.__laLosPulse !== false).off('change.laLos').on('change.laLos', function ()
+    {
+        state.__laLosPulse = /** @type {HTMLInputElement} */ (this).checked;
+        Hooks.callAll('lancer-automations.attackRangeMode', state);
+        onChange?.();
+    });
 }
 
 // Shortcut hint shown below the buttons only while a picker is active.
@@ -259,6 +282,11 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     {
         if (pulseOwner)
             rangePulse.clear(pulseOwner);
+    };
+    const refreshPickPulse = () =>
+    {
+        if (pulseOwner && rangePulse.has(pulseOwner))
+            setPickPulse(lastPickRange);
     };
 
     if (aoe.length)
@@ -439,9 +467,16 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         };
         bindCardTargetingKey();
 
+        injectToggleRow($form);
+        bindLosToggle($form, state, refreshPickPulse);
+        // strip closed: the pattern buttons always place an area, so the elevation toggles stay relevant
+        const syncToggles = () => syncAreaToggles($form, !stripDrives() || (state.__laAttackShape?.pattern ?? 'target') !== 'target');
+        syncToggles();
+
         let restartTimer = null;
         const onShapeStripChange = () =>
         {
+            syncToggles();
             if (!stripDrives())
                 return;
             if (!isAreaPickerActive() && !isSingleTargetPickerActive())
@@ -474,18 +509,11 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             ev.stopPropagation();
             const next = !strip.$strip.is(':visible');
             state.__laAttackShapeVisible = next;
+            syncToggles();
             if (next)
                 strip.$strip.stop(true, true).slideDown(120);
             else
                 strip.$strip.stop(true, true).slideUp(120);
-        });
-        injectToggleRow($form);
-        $form.find('.la-tg-los').prop('checked', state.__laLosPulse !== false).on('change', function ()
-        {
-            state.__laLosPulse = /** @type {HTMLInputElement} */ (this).checked;
-            Hooks.callAll('lancer-automations.attackRangeMode', state);
-            if (pulseOwner && rangePulse.has(pulseOwner))
-                setPickPulse(lastPickRange);
         });
         maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
         return;
@@ -639,9 +667,15 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     $row.append($shapeToggle, $targetBtn, $switch);
     positionSideButtons();
 
+    injectToggleRow($form);
+    bindLosToggle($form, state, refreshPickPulse);
+    const syncToggles = () => syncAreaToggles($form, (state.__laAttackShape?.pattern ?? 'target') !== 'target');
+    syncToggles();
+
     let restartTimer = null;
     const onShapeStripChange = () =>
     {
+        syncToggles();
         relabel();
         if (!isAreaPickerActive() && !isSingleTargetPickerActive())
             return;

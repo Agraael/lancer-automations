@@ -51,7 +51,7 @@ function _gaaAuraHasBoundaryTrigger(auraCfg)
     return false;
 }
 
-function _getTriggerKeys(tokenDoc, pos)
+function _computeTriggerKeys(tokenDoc, pos)
 {
     const keys = new Set();
     const tht = /** @type {any} */ (globalThis).terrainHeightTools;
@@ -146,6 +146,29 @@ function _getTriggerKeys(tokenDoc, pos)
         }
         catch
         {}
+    }
+    return keys;
+}
+
+// Every drag update re-walks the dense path from the origin, so the containers per point are
+// memoized until a template, region, aura or the scene can change. Callers only read the sets.
+let _triggerKeyCache = new Map();
+function invalidateTriggerKeys()
+{
+    _triggerKeyCache = new Map();
+}
+for (const hook of ['canvasReady', 'updateScene', 'createToken', 'updateToken', 'deleteToken', 'updateActor', 'createItem', 'updateItem', 'deleteItem',
+    'createMeasuredTemplate', 'updateMeasuredTemplate', 'deleteMeasuredTemplate', 'createRegion', 'updateRegion', 'deleteRegion', 'createCombat', 'deleteCombat'])
+    Hooks.on(hook, invalidateTriggerKeys);
+
+function _getTriggerKeys(tokenDoc, pos)
+{
+    const key = `${tokenDoc.id}|${Math.round(pos.x)},${Math.round(pos.y)},${pos.elevation ?? tokenDoc._source.elevation ?? 0}`;
+    let keys = _triggerKeyCache.get(key);
+    if (!keys)
+    {
+        keys = _computeTriggerKeys(tokenDoc, pos);
+        _triggerKeyCache.set(key, keys);
     }
     return keys;
 }

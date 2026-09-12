@@ -1,52 +1,15 @@
-import { getModuleSetting } from '../tools/settings-utils.js';
 import { effectStack, usageBadgeColor } from './flagged-effects.js';
 
-// Stack counters off the canvas: token HUD click rebinds and combat tracker numbers.
+// Stack counts on the combat tracker rows.
 
 export function initStatusCounter()
 {
-    Hooks.on('renderTokenHUD', _onRenderTokenHud);
     Hooks.on('renderCombatTracker', _onRenderCombatTracker);
 }
 
 function _rootElement(htmlOrEl)
 {
     return htmlOrEl instanceof HTMLElement ? htmlOrEl : htmlOrEl?.[0];
-}
-
-function _onRenderTokenHud(hud, htmlOrEl)
-{
-    if (!getModuleSetting('statusHudStackClicks'))
-        return;
-    const palette = _rootElement(htmlOrEl)?.querySelector('.status-effects');
-    if (!palette)
-        return;
-    // capture phase, so the HUD's own toggle never sees a click on an active status
-    palette.addEventListener('click', event => _onEffectClick(hud, event), true);
-    palette.addEventListener('contextmenu', event => _onEffectClick(hud, event), true);
-}
-
-function _onEffectClick(hud, event)
-{
-    const statusId = event.target?.closest?.('.effect-control')?.dataset.statusId;
-    const actor = hud.object?.actor;
-    if (!statusId || !actor || event.shiftKey)
-        return;
-    const effect = actor.effects.find(candidate => candidate.statuses?.has(statusId) && !candidate.disabled);
-    if (!effect)
-        return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    _stepStack(effect, event.type === 'click' ? 1 : -1);
-}
-
-async function _stepStack(effect, delta)
-{
-    const next = effectStack(effect) + delta;
-    if (next <= 0)
-        return effect.delete();
-    return effect.update({ 'flags.statuscounter.value': next, 'flags.statuscounter.visible': next > 1 });
 }
 
 function _onRenderCombatTracker(_app, htmlOrEl)

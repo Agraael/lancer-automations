@@ -6,6 +6,7 @@ import {
 } from '../interactive/canvas.js';
 import { createTokenTether } from '../interactive/canvas-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { deriveSaveDc } from '../tools/misc-tools.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
 
@@ -46,7 +47,7 @@ function rollerLiveChance(state)
 // A Save is always rolled against the target's SAVE value.
 function deriveTargetVal(targetToken)
 {
-    return targetToken?.actor?.system?.save || 10;
+    return deriveSaveDc(targetToken?.actor);
 }
 
 // "HULL" / "HULL Save (>= 8)" -> "HULL Save (>= N)"; targetVal null strips the save/threshold back to the base stat.

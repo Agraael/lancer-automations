@@ -137,6 +137,16 @@ function gaaApi()
     return game.modules.get(GAA_ID)?.api ?? null;
 }
 
+// GAA rescans every aura per query and consecutive drag routes revisit the same cells, so
+// penalties are memoized until an aura input can change (same hooks GAA itself listens to).
+let _gaaPenaltyCache = new Map();
+function invalidateGaaPenalties()
+{
+    _gaaPenaltyCache = new Map();
+}
+for (const hook of ['canvasReady', 'createToken', 'updateToken', 'deleteToken', 'updateActor', 'createItem', 'updateItem', 'deleteItem', 'createCombat', 'deleteCombat'])
+    Hooks.on(hook, invalidateGaaPenalties);
+
 /** MAX GAA movementPenalty across the given grid cell centers, excluding auras owned by tokenDoc. */
 function gaaPenaltyAtCells(tokenDoc, offsets)
 {
@@ -146,8 +156,14 @@ function gaaPenaltyAtCells(tokenDoc, offsets)
     let maxPenalty = 0;
     for (const cellOffset of offsets)
     {
-        const cellCenter = canvas.grid.getCenterPoint(cellOffset);
-        const penalty = Number(api.getMovementPenaltyAt(cellCenter.x, cellCenter.y, { excludeToken: tokenDoc })) || 0;
+        const key = `${tokenDoc?.id}|${cellOffset.i},${cellOffset.j}`;
+        let penalty = _gaaPenaltyCache.get(key);
+        if (penalty === undefined)
+        {
+            const cellCenter = canvas.grid.getCenterPoint(cellOffset);
+            penalty = Number(api.getMovementPenaltyAt(cellCenter.x, cellCenter.y, { excludeToken: tokenDoc })) || 0;
+            _gaaPenaltyCache.set(key, penalty);
+        }
         if (penalty > maxPenalty)
             maxPenalty = penalty;
     }
