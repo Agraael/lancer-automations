@@ -1,6 +1,7 @@
 // Shared status tooltip. The canvas icon hover and the status wheel render the same markup so an
 // effect reads identically wherever it is hovered.
-import { getGlobalBonuses, getBonusDetailString } from './genericBonuses.js';
+import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './genericBonuses.js';
+import { linkedBonusConditionLines } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 
 /**
@@ -9,6 +10,7 @@ import { getLAFlags } from '../tools/flag-utils.js';
  * @property {number} [count]
  * @property {string} [duration]
  * @property {string} [bonus]
+ * @property {string[]} [conditional] - Gate lines of the linked bonus, non-empty means gated.
  * @property {string} [description] - Trusted HTML, comes from effect/status config.
  */
 
@@ -79,17 +81,21 @@ export function linkedBonusText(actor, effect)
     if (!linkedBonusId || !actor)
         return '';
     const bonus = getGlobalBonuses(actor).find(entry => entry.id === linkedBonusId);
-    return bonus ? bonusText(bonus) : '';
+    return bonus ? bonusText(bonus, actor) : '';
 }
 
-/** Detail line for a bonus object. */
-export function bonusText(bonus)
+/** Detail line for a bonus object, with its uses when it has a count. */
+export function bonusText(bonus, actor = null)
 {
     if (!bonus)
         return '';
-    if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
-        return bonus.bonuses.map(getBonusDetailString).join(' | ');
-    return getBonusDetailString(bonus);
+    const detail = bonus.type === 'multi' && Array.isArray(bonus.bonuses)
+        ? bonus.bonuses.map(getBonusDetailString).join(' | ')
+        : getBonusDetailString(bonus);
+    const uses = getBonusUsesInfo(actor, bonus);
+    if (!uses)
+        return detail;
+    return `${detail} [${uses.label}]${uses.onUse ? ' [on-use]' : ''}`;
 }
 
 /** Effect description, falling back to the status config it carries. */
@@ -118,6 +124,7 @@ export function effectTooltipData(actor, effect)
         count: instanceCount(actor, effect),
         duration: durationText(effect),
         bonus: linkedBonusText(actor, effect),
+        conditional: linkedBonusConditionLines(actor, effect),
         description: descriptionHtml(effect)
     };
 }
@@ -137,6 +144,8 @@ export function showStatusTooltip(data)
         parts.push(`<div class="la-status-tooltip-duration">${data.duration}</div>`);
     if (data.bonus)
         parts.push(`<div class="la-status-tooltip-bonus">${data.bonus}</div>`);
+    if (data.conditional?.length)
+        parts.push('<div class="la-status-tooltip-cond"><i class="fas fa-code-branch"></i> Conditional</div>');
     if (data.description)
         parts.push(`<div class="la-status-tooltip-desc">${data.description}</div>`);
     el.innerHTML = parts.join('');

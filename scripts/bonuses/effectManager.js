@@ -89,8 +89,9 @@ import {
     unlinkBonusFromActor,
     supportsConsumeOnUsage,
     getBonusDetailString,
-    getBonusConditionHint,
+    getBonusUsesInfo,
 } from "./genericBonuses.js";
+import { getBonusConditionHint } from "./bonus-condition.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
@@ -2852,13 +2853,11 @@ export async function executeEffectManager(options = {})
                             : '';
 
                         let usesInfo = '';
-                        if (bonus.uses !== undefined)
+                        const uses = getBonusUsesInfo(actor, bonus);
+                        if (uses)
                         {
-                            const linkedEffect = actor.effects.find(effect => getLAFlag(effect,"linkedBonusId") === bonus.id);
-                            const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
-                            usesInfo = remaining === null ? ` <span style="color:var(--la-accent);">[uses: ${bonus.uses}]</span>` : ` <span style="color:var(--la-accent);">[${remaining}/${bonus.uses}]</span>`;
-                            const onUse = bonus.type === 'immunity' ? bonus.consumeOnUsage === true : bonus.consumeOnUsage !== false;
-                            if (supportsConsumeOnUsage(bonus.type, bonus.subtype ?? null) && onUse)
+                            usesInfo = ` <span style="color:var(--la-accent);">[${uses.label}]</span>`;
+                            if (uses.onUse)
                                 usesInfo += ' <span style="font-size:0.75em; color:var(--la-ink-dim);">[on-use]</span>';
                         }
 

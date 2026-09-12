@@ -4,6 +4,7 @@ import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
 import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
 import { removeGlobalBonus, getBonusIcon } from '../bonuses/genericBonuses.js';
+import { getBonusConditionLines } from '../bonuses/bonus-condition.js';
 import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
 import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
 
@@ -113,8 +114,12 @@ function collectEntries(actor)
     entries.push(...customs.values());
 
     // Constant bonuses carry no token icon on purpose, so they stay off a ring that shows what is applied.
+    // A global bonus whose linked effect already sits on the ring would show twice.
+    const ringEffects = entries.flatMap(entry => entry.effects);
     for (const bonus of /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || []))
     {
+        if (ringEffects.some(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id))
+            continue;
         entries.push({
             kind: 'bonus',
             key: `bonus:${bonus.id}`,
@@ -239,7 +244,7 @@ function hideTip()
 function tooltipData(entry, actor)
 {
     if (entry.kind === 'bonus')
-        return { name: entry.name, bonus: bonusText(entry.bonus) };
+        return { name: entry.name, bonus: bonusText(entry.bonus, actor), conditional: getBonusConditionLines(entry.bonus) };
     if (entry.effects.length)
         return effectTooltipData(actor, entry.effects[0]);
     // Starred but not applied: only the status config has anything to say.

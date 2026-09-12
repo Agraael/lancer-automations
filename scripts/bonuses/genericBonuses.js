@@ -1433,36 +1433,20 @@ export function getBonusDetailString(bonus)
 }
 
 /**
- * Tooltip text for a gated bonus: its own condition, the per-target one and multi sub-bonus gates.
+ * Uses left on a bonus, read from its linked effect's counter.
+ * @param {Actor|null} actor
  * @param {object} bonus
- * @returns {string} Empty when the bonus always applies
+ * @returns {{ label: string, onUse: boolean } | null} null when the bonus has no use count
  */
-export function getBonusConditionHint(bonus)
+export function getBonusUsesInfo(actor, bonus)
 {
-    const sourceOf = (value) =>
-    {
-        if (typeof value === 'function')
-            return value.toString();
-        if (typeof value !== 'string')
-            return '';
-        return (value.startsWith('@@fn:') ? value.slice('@@fn:'.length) : value).trim();
-    };
-    const lines = [];
-    const collect = (entry, prefix) =>
-    {
-        const own = sourceOf(entry?.condition);
-        if (own)
-            lines.push(`${prefix}Condition: ${own}`);
-        const perTarget = sourceOf(entry?.applyToCondition);
-        if (perTarget)
-            lines.push(`${prefix}Per target: ${perTarget}`);
-    };
-    collect(bonus, '');
-    if (bonus?.type === 'multi' && Array.isArray(bonus.bonuses))
-        bonus.bonuses.forEach((sub, idx) => collect(sub, `#${idx + 1} `));
-    if (!lines.length)
-        return '';
-    return `Conditional: only applies while its condition passes.\n${lines.join('\n')}`;
+    if (bonus?.uses === undefined)
+        return null;
+    const linkedEffect = actor?.effects?.find(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id);
+    const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
+    const label = remaining === null ? `uses: ${bonus.uses}` : `${remaining}/${bonus.uses}`;
+    const onUse = bonus.type === 'immunity' ? bonus.consumeOnUsage === true : bonus.consumeOnUsage !== false;
+    return { label, onUse: supportsConsumeOnUsage(bonus.type, bonus.subtype ?? null) && onUse };
 }
 
 /**

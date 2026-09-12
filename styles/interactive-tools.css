@@ -3295,6 +3295,11 @@ form[id^="accdiff"] .lancer-header input,
     color: #00aaff;
 }
 
+.la-status-tooltip-cond {
+    margin-top: 3px;
+    color: #c39bff;
+}
+
 .la-status-tooltip-desc {
     margin-top: 3px;
     color: #c8c8c8;

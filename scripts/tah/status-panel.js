@@ -1,6 +1,7 @@
 /* global $, game, CONFIG */
 
-import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString, getBonusConditionHint } from '../bonuses/genericBonuses.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString, getBonusUsesInfo } from '../bonuses/genericBonuses.js';
+import { getBonusConditionHint } from '../bonuses/bonus-condition.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
@@ -693,11 +694,15 @@ export class StatusPanel extends HudPanel
                 const kindBadge = kind === 'constant' ? ' <span class="la-bonus-row__kind">(const)</span>' : '';
                 const condHint = getBonusConditionHint(bonus);
                 const condBadge = condHint ? ' <span class="la-bonus-row__cond"><i class="fas fa-code-branch"></i></span>' : '';
+                const uses = getBonusUsesInfo(actor, bonus);
+                const usesBadge = uses
+                    ? ` <span class="la-bonus-row__uses">[${uses.label}]</span>${uses.onUse ? ' <span class="la-bonus-row__kind">[on-use]</span>' : ''}`
+                    : '';
                 const row = $(`<div class="la-bonus-row" title="${bonus.name}: ${detail}">
                     ${laHudRenderIcon(bonus.icon || getBonusIcon(bonus))}
                     <div class="la-bonus-row__body">
                         <b>${bonus.name}</b>${kindBadge}${condBadge}<br>
-                        <span class="la-bonus-row__detail">${detail}</span>
+                        <span class="la-bonus-row__detail">${detail}</span>${usesBadge}
                     </div>
                     <i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>
                 </div>`);

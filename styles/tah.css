@@ -1103,6 +1103,10 @@ input.la-status-search {
     cursor: help;
 }
 
+.la-bonus-row__uses {
+    color: var(--la-accent);
+}
+
 .la-bonus-del {
     cursor: pointer;
     color: var(--primary-color);
