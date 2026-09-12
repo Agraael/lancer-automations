@@ -88,6 +88,28 @@ Hooks.on('lancer-automations.ready', (api) => {
 
 ---
 
+### How-To: Fire a Custom Trigger
+
+```javascript
+api.registerDefaultGeneralReactions({
+    "Supply Drop Pickup": {
+        triggers: ["onSupplyDrop"],
+        triggerSelf: true,
+        triggerOther: false,
+        activationType: "code",
+        activationCode: async (triggerType, data, reactor, item, name, api) => {
+            ui.notifications.info(`${reactor.name} recovered ${data.crate?.name ?? "the crate"}`);
+        }
+    }
+});
+
+api.dispatchCustomTrigger("onSupplyDrop", { triggeringToken: token, crate: crateToken });
+```
+
+`data` becomes `triggerData`. Reference: [Custom Triggers](API_REFERENCE.md#dispatchCustomTrigger).
+
+---
+
 ### How-To: Advanced Consumption
 
 **Shared Shield Charges:**

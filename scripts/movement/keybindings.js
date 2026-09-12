@@ -75,7 +75,7 @@ Hooks.once('init', () =>
             _forceFree = false; refreshActiveDragPreviews(); return true;
         },
         repeat: false,
-        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 
     game.keybindings.register(MODULE_ID, 'debugMovement', {
@@ -91,7 +91,7 @@ Hooks.once('init', () =>
             _forceDebug = false; refreshActiveDragPreviews(); return true;
         },
         repeat: false,
-        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 
     game.keybindings.register(MODULE_ID, 'togglePathfinding', {
@@ -102,12 +102,14 @@ Hooks.once('init', () =>
         {
             if (canvas?.activeLayer !== canvas?.tokens)
                 return false;
+            if (!canvas?.tokens?.preview?.children?.length)
+                return false;
             _pathfindOverride = !pathfindDragEnabled();
             playUiSound('toggle');
             refreshActiveDragPreviews();
             return true;
         },
         repeat: false,
-        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 });

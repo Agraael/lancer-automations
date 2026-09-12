@@ -15,15 +15,7 @@ export function getSettingEnabled(key)
  */
 export function getBoostOfferMode()
 {
-    let raw;
-    try
-    {
-        raw = getModuleSetting('enableBoostOffer');
-    }
-    catch
-    {
-        return 'no';
-    }
+    const raw = getModuleSetting('enableBoostOffer', false);
     if (raw === true)
         return 'yes';
     if (raw === false)
@@ -255,6 +247,60 @@ export function registerSettings()
         default: true
     });
 
+    game.settings.register(MODULE_ID,'statusCounterColor', {
+        name: 'Instance Counter Color',
+        hint: 'Color of the instance count drawn on collapsed status icons.',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#00aaff',
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register(MODULE_ID,'statusUsageColor', {
+        name: 'Usage Counter Color',
+        hint: 'Color of the usage number drawn on status icons and in the combat tracker.',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#c39bff',
+        onChange: () =>
+        {
+            canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }));
+            ui.combat?.render();
+        }
+    });
+
+    game.settings.register(MODULE_ID,'statusDurationColor', {
+        name: 'Duration Counter Color',
+        hint: 'Color of the remaining-turns number drawn on status icons.',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#ffd700',
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register(MODULE_ID,'statusBadgeFontScale', {
+        name: 'Counter Font Scale',
+        hint: 'Size of the numbers drawn on status icons.',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0.5, max: 2, step: 0.05 },
+        default: 1,
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
+    game.settings.register(MODULE_ID,'statusHudStackClicks', {
+        name: 'Token HUD Stack Clicks',
+        hint: 'On the token HUD, left-click an active status to add a stack and right-click to remove one (shift-click keeps the default toggle).',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
     // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register(MODULE_ID,'additionalStatuses', {
@@ -448,7 +494,7 @@ export function registerSettings()
 
     game.settings.register(MODULE_ID,'displayToolsToOthers', {
         name: 'Share Interactive Tools',
-        hint: 'Show your in-progress targeting / placement / movement tools to other clients (discreet overlay), and see theirs.',
+        hint: 'Show your in-progress targeting / placement / movement tools to other clients (discreet overlay), and see theirs. Follows the Display Mouse Cursor permission.',
         scope: 'client',
         config: false,
         type: Boolean,

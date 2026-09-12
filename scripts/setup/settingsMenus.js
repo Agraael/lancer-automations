@@ -259,13 +259,7 @@ const WRECKS_FIELDS = [
 /** @param {string} key */
 function _statBarVisChoices(key)
 {
-    let cur = 'all';
-    try
-    {
-        cur = getModuleSetting(key);
-    }
-    catch
-    { /* not ready */ }
+    const cur = getModuleSetting(key, 'all');
     return [
         { value: 'all',     label: 'All',              selected: cur === 'all' },
         { value: 'owner',   label: 'Owners only',      selected: cur === 'owner' },
@@ -320,6 +314,11 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale', min: 0.3, max: 2, step: 0.05 },
     { key: 'statusIconMinZoomScale', type: 'slider', label: 'Minimum Icon Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.' },
     { key: 'statusIconHover', type: 'boolean' },
+    { key: 'statusCounterColor', type: 'color' },
+    { key: 'statusUsageColor', type: 'color' },
+    { key: 'statusDurationColor', type: 'color' },
+    { key: 'statusBadgeFontScale', type: 'slider', min: 0.5, max: 2, step: 0.05 },
+    { key: 'statusHudStackClicks', type: 'boolean' },
 
     { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
     { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
@@ -489,7 +488,7 @@ const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
 const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
     'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
 const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'xp_gain', 'xp_loss', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
-const STATUS_SFX_EVENTS = ['bonus'];
+const STATUS_SFX_EVENTS = ['bonus', 'status'];
 
 function _toLabel(str)
 {
@@ -911,7 +910,8 @@ const COLORS_FIELDS = [
     { key: 'rangePulseStyle', type: 'select', label: 'Pulse Style', hint: 'Applies the next time a pulse is drawn.' },
     { key: 'rangePulseMotion', type: 'select', label: 'Pulse Motion' },
     { key: 'color.pulseLine', type: 'color', label: 'Grid Line Color' },
-    { key: 'rangePulseLineOpacity', type: 'slider', label: 'Grid Line Opacity', min: 0, max: 1, step: 0.05 },
+    // Retired 2026-09-12, forced to 0 in _staticGridAlpha. Uncomment both to bring it back.
+    // { key: 'rangePulseLineOpacity', type: 'slider', label: 'Grid Line Opacity', min: 0, max: 1, step: 0.05 },
     { key: 'rangePulseWaveOpacity', type: 'slider', label: 'Wave Opacity', min: 0.1, max: 1, step: 0.05 },
     { key: 'rangePulseLineWidth', type: 'slider', label: 'Wave Width', min: 1, max: 4, step: 0.25 },
     { key: 'rangePulseSpeed', type: 'slider', label: 'Pulse Speed', min: 0.25, max: 3, step: 0.05 },
@@ -1013,16 +1013,7 @@ function _isRequirementMet($html, key, seen = new Set())
     if (input)
         on = !!input.checked;
     else
-    {
-        try
-        {
-            on = !!getModuleSetting(key);
-        }
-        catch
-        {
-            on = false;
-        }
-    }
+        on = !!getModuleSetting(key);
     if (!on)
         return false;
     const parent = _fieldByKey(key);

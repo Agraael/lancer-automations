@@ -2,6 +2,7 @@
 
 import { appendEvent } from './telemetry-store.js';
 import { findActiveCombatForToken as _findActiveCombatForToken } from "./battelog-utils.js";
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 const TRACKED = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss']);
 
@@ -64,7 +65,7 @@ function _onTrigger(triggerType, data)
     if (basic)
         event.basic = true;
 
-    if (game.user?.isGM)
+    if (isExecutorGM())
         appendEvent(combat, attackerId, event);
     else
     {

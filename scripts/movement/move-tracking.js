@@ -602,13 +602,7 @@ export function _handleMovementCapExceeded(token, ctx)
         ? findOverchargeExtra(token.actor) ?? token.actor.items.map(findOverchargeExtra).find(Boolean) ?? null
         : null;
     // tier-split judges per tier leg. Otherwise regions/trigger silents may chunk the commit, so the whole remaining intent decides
-    let tierSplit = false;
-    try
-    {
-        tierSplit = !!getModuleSetting('splitMovementAtSpeedTiers');
-    }
-    catch
-    { /* not registered yet */ }
+    const tierSplit = !!getModuleSetting('splitMovementAtSpeedTiers');
     const lastLegOpts = tierSplit
         ? { isDrag: true, useRuler: true }
         : { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true };

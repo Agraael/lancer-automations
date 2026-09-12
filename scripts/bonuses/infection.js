@@ -24,14 +24,7 @@ let _pendingInfection = null;
 
 function _infectionEnabled()
 {
-    try
-    {
-        return !!getModuleSetting('enableInfectionDamageIntegration');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('enableInfectionDamageIntegration');
 }
 
 /** Inject `infection` NumberField into actors schemas. Call during `init`. */
@@ -192,7 +185,9 @@ export function injectInfectionCSS()
         i.i--dark.damage--infection.cci-infection::before,
         .damage-hud .cci-infection::before,
         #damage-hud .cci-infection::before,
-        .token-tooltip-alt-tooltip-container .cci-infection::before {
+        .token-tooltip-alt-tooltip-container .cci-infection::before,
+        form[id^="accdiff"] .cci-infection::before,
+        .lau-dmg .cci-infection::before {
             filter: brightness(0) saturate(100%) invert(45%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(0.9);
         }
     `;

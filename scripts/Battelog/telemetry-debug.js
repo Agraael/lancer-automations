@@ -1,12 +1,7 @@
 import { getTelemetry, BUCKETS } from './telemetry-store.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { EVENT_TYPES } from './combat-telemetry.js';
-
-const _escape = str => String(str ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+import { escapeHtml as _escape } from '../tools/string-utils.js';
 
 const BUCKET_COLOR = {
     players: '#7bd3ff',

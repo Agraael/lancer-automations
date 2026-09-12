@@ -7,6 +7,8 @@ import { linkTierGate } from '../interactive/deployables.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 import { untilEndOfTurn, untilStartOfTurn, currentTurnKey } from './duration-widget.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { hasExecutorGM, isExecutorGM } from '../tools/misc-tools.js';
+import { playStatusAddedFX } from '../fx/actionFX.js';
 
 function log(...args)
 {
@@ -39,14 +41,18 @@ export async function runInOnInitTriggerContext(fn)
 
 function _isStatBarActive()
 {
-    try
-    {
-        return getModuleSetting('tokenStatBar') === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('tokenStatBar') === true;
+}
+
+/**
+ * Stack held in `flags.statuscounter.value` (charges, uses, visual stacks). Raw read: getFlag
+ * throws when the statuscounter module is not active.
+ * @param {any} effect
+ * @returns {number}
+ */
+export function effectStack(effect)
+{
+    return Number(effect?.flags?.statuscounter?.value) || 1;
 }
 
 // Settings cache for external module lookups
@@ -177,7 +183,7 @@ export async function pushEffect(targetID, effect, duration, note, originID)
 {
     const target = canvas.tokens.get(targetID);
     const canActDirectly = game.user.isGM || target?.document?.isOwner;
-    if (!canActDirectly && game.users.filter(user => user.role === 4 && user.active).length < 1)
+    if (!canActDirectly && !hasExecutorGM())
     {
         log('There is no active GM.');
         return ui.notifications.error('There must be an active GM for this to work.');
@@ -292,7 +298,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                     const existingDur = getLAFlag(existingEffect,'duration');
                     const existingOrigin = getLAFlag(existingEffect,'originID');
                     const existingApplied = (game.modules.get(MODULE_ID)?.active && getLAFlag(existingEffect,'appliedStack'));
-                    const existingStack = (game.modules.get("statuscounter")?.active && existingEffect.getFlag("statuscounter", "value")) || 1;
+                    const existingStack = effectStack(existingEffect);
                     if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
                         entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied || existingStack });
                 }
@@ -313,7 +319,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 if (entries.length > 0)
                     flagsData.durationEntries = entries;
 
-                const totalStack = (existingEffect.flags?.statuscounter?.value || 1) + (extraOptions.stack || resolvedEffectData.stack || 1);
+                const totalStack = effectStack(existingEffect) + (extraOptions.stack || resolvedEffectData.stack || 1);
                 await existingEffect.update(/** @type {any} */ ({
                     "flags.lancer-automations": flagsData,
                     "flags.statuscounter.visible": totalStack > 1
@@ -342,6 +348,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 counterValue,
                 {
                     forceNew: !!(extraOptions.consumption || extraOptions.linkedBonusId || existingEffect),
+                    description: resolvedEffectData.description,
                     extraFlags: {
                         [MODULE_ID]: lancerFlags,
                         "statuscounter": { value: counterValue, visible: counterValue > 1 }
@@ -363,17 +370,8 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                     await existingEffect.update(/** @type {any} */ (updateData));
                 }
             }
-            else if (Array.isArray(activeEffects) && activeEffects[0])
-            {
-                // New effect created; statuscounter module may overwrite, re-set
-                const updateData = {
-                    "flags.statuscounter.value": counterValue,
-                    "flags.statuscounter.visible": counterValue > 1
-                };
-                if (extraOptions?.changes?.length)
-                    updateData.changes = extraOptions.changes;
-                await activeEffects[0].update(/** @type {any} */ (updateData));
-            }
+            else if (Array.isArray(activeEffects) && activeEffects[0] && extraOptions?.changes?.length)
+                await activeEffects[0].update(/** @type {any} */ ({ changes: extraOptions.changes }));
             return;
         }
 
@@ -381,6 +379,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         const effectData = {
             name: resolvedEffectData.name,
             img: resolvedEffectData.icon,
+            ...(resolvedEffectData.description ? { description: resolvedEffectData.description } : {}),
             statuses: [],
             changes: extraOptions.changes || resolvedEffectData.changes || [],
             flags: {
@@ -404,16 +403,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             }
         };
 
-        const fallbackStackVal = extraOptions.stack || resolvedEffectData.stack || 1;
-        const fallbackCreated = await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
-        if (fallbackCreated?.[0])
-        {
-            await fallbackCreated[0].update(/** @type {any} */ ({
-                "flags.statuscounter.value": fallbackStackVal,
-                "flags.statuscounter.visible": fallbackStackVal > 1
-            }));
-        }
-
+        await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
     }
     else
     {
@@ -440,7 +430,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 await _refreshEffectDuration(existingEffect, duration, note, originID);
                 return;
             }
-            const currentStack = (game.modules.get('statuscounter')?.active ? existingEffect.getFlag('statuscounter', 'value') : (existingEffect.flags?.statuscounter?.value)) || 1;
+            const currentStack = effectStack(existingEffect);
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
 
@@ -508,16 +498,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         };
         log(statusEffect);
         log(effectData);
-        const created = await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
-
-        // Post-creation update: statuscounter module may overwrite our flags, so re-set them
-        if (stackVal > 0 && created?.[0])
-        {
-            await created[0].update(/** @type {any} */ ({
-                "flags.statuscounter.value": stackVal,
-                "flags.statuscounter.visible": stackVal > 1
-            }));
-        }
+        await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
     }
 }
 
@@ -768,6 +749,10 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                 queueEffectNotification(token, effectName, notify, 'Gained', icon);
             }
         }
+
+        // bonus-linked effects get their own ping from addGlobalBonus
+        if (!extraOptions.linkedBonusId)
+            playStatusAddedFX(token, canvas.tokens?.get?.(originID) ?? null);
     }
 
     return validTokens;
@@ -823,6 +808,7 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
         effectData = {
             name: resolvedEffectData.name,
             img: resolvedEffectData.icon,
+            ...(resolvedEffectData.description ? { description: resolvedEffectData.description } : {}),
             statuses: [],
             changes: extraOptions.changes || resolvedEffectData.changes || [],
             flags: {
@@ -883,14 +869,6 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
         getLAFlags(effectData).isActorTemplate = true;
 
     const created = await /** @type {any} */ (doc).createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
-
-    if (stackVal > 0 && created?.[0])
-    {
-        await created[0].update(/** @type {any} */ ({
-            "flags.statuscounter.value": stackVal,
-            "flags.statuscounter.visible": stackVal > 1
-        }));
-    }
     return created?.[0] ?? null;
 }
 
@@ -1074,7 +1052,7 @@ export async function ensureLinkedEffect(options = /** @type {any} */ ({}), extr
  * @param {Token} sourceToken
  * @param {Token[]} targets
  * @param {Object} options
- * @param {string|Object} options.effect  Effect name or descriptor ({ name, icon, isCustom })
+ * @param {string|Object} options.effect  Effect name or descriptor ({ name, icon, isCustom, description })
  * @param {string} [options.note]
  * @param {Object} [options.duration]
  * @param {string} [options.flagKey='markSourceId']
@@ -1523,7 +1501,7 @@ export async function consumeEffectCharge(effect)
 export async function processDurationEffects(triggerLabel, triggeringTokenId)
 {
     // Only the active GM processes duration to avoid conflicts
-    if (game.user.id !== game.users.find(user => user.active && user.isGM)?.id)
+    if (!isExecutorGM())
         return;
 
     const allTokens = canvas.tokens.placeables.filter(token => token.actor);
@@ -1760,8 +1738,8 @@ export async function deleteAllEffects(tokens)
 
 /**
  * Register a libWrapper on Token._refreshEffects to collapse duplicate same-name
- * lancer-automations effects into a single visible icon with an aggregate counter badge.
- * Must be called in a 'ready' hook so it runs after statuscounter's wrapper (outermost).
+ * lancer-automations effects into a single visible icon, then draw the stack and duration badges.
+ * Called from 'ready' so it wraps outside anything that hooked _refreshEffects at setup.
  */
 export function initCollapseHook()
 {
@@ -1782,12 +1760,11 @@ export function initCollapseHook()
             const result = wrapped(...args);
             try
             {
-                const pairs = _matchCounterPairs(this);
+                _clearBadges(this);
                 _layoutHaloIcons(this);
                 _shrinkEffectIcons(this);
                 _repaintHaloBg(this);
-                _applyCounterPairs(pairs);
-                _collapseAddBadges(this);
+                _drawStackBadges(this);
                 _drawDurationBadges(this);
             }
             catch (err)
@@ -1842,14 +1819,7 @@ function _haloActive()
 {
     if (game.modules.get('status-halo')?.active)
         return true;
-    try
-    {
-        return !!getModuleSetting('statusHalo');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('statusHalo');
 }
 
 function _haloSprites(token)
@@ -1926,86 +1896,10 @@ function _repaintHaloBg(token)
     }
 }
 
-/**
- * Pair statuscounter's texts with their icons by inverting its placement formula,
- * before anything moves or resizes the sprites.
- * @param {Token} token
- * @returns {Array<{text: any, sprite: any, kind: string}>}
- */
-function _matchCounterPairs(token)
-{
-    const counters = token.effectCounters?.children;
-    if (!counters?.length)
-        return [];
-    const sprites = _haloSprites(token);
-    const pairs = [];
-    for (const text of counters)
-    {
-        for (const sprite of sprites)
-        {
-            const anchorX = sprite.anchor?.x ?? 0;
-            const anchorY = sprite.anchor?.y ?? 0;
-            if (!anchorX && !anchorY)
-                continue;
-            const sizeRatio = sprite.height / 20;
-            if (text.anchor?.x === 1
-                && Math.abs(sprite.x + sprite.width + sizeRatio - text.x) < 0.5
-                && Math.abs(sprite.y + sprite.height + 4 * sizeRatio - text.y) < 0.5)
-            {
-                pairs.push({ text, sprite, kind: 'value' });
-                break;
-            }
-            if (text.anchor?.x === 0
-                && Math.abs(sprite.x - sizeRatio - text.x) < 0.5
-                && Math.abs(sprite.y - 5.5 * sizeRatio - text.y) < 0.5)
-            {
-                pairs.push({ text, sprite, kind: 'duration' });
-                break;
-            }
-        }
-    }
-    return pairs;
-}
-
-/** Place and size paired counter texts from their icon's final geometry, so they match our own badges. */
-function _applyCounterPairs(pairs)
-{
-    for (const { text, sprite, kind } of pairs)
-    {
-        const anchorX = sprite.anchor?.x ?? 0;
-        const anchorY = sprite.anchor?.y ?? 0;
-        const left = sprite.x - anchorX * sprite.width;
-        const top = sprite.y - anchorY * sprite.height;
-        const sizeRatio = sprite.height / 20;
-        if (text.style)
-        {
-            text.style.fontSize = Math.max(9, Math.round(12 * sizeRatio));
-            text.style.strokeThickness = Math.max(1, Math.round(2 * sizeRatio));
-            text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
-        }
-        if (kind === 'value')
-        {
-            text.x = left + sprite.width * 1.3;
-            text.y = top + sprite.height * 1.3;
-        }
-        else
-        {
-            text.x = left - sizeRatio;
-            text.y = top - 5.5 * sizeRatio;
-        }
-    }
-}
-
 // Growth that holds the icons at a constant screen size once zoom drops below the setting.
 function _effectIconZoomBoost()
 {
-    let minZoom = 0;
-    try
-    {
-        minZoom = Number(getModuleSetting('statusIconMinZoomScale')) || 0;
-    }
-    catch
-    { /* not registered */ }
+    const minZoom = Number(getModuleSetting('statusIconMinZoomScale')) || 0;
     if (minZoom <= 0)
         return 1;
     const zoom = canvas.stage?.scale?.x || 1;
@@ -2015,13 +1909,7 @@ function _effectIconZoomBoost()
 /** Icon size in pixels before any zoom compensation. */
 function _effectIconBaseSize()
 {
-    let scale = 1;
-    try
-    {
-        scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
-    }
-    catch
-    { /* not registered */ }
+    const scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
     const gridPx = canvas.dimensions?.size ?? 100;
     const shrunk = gridPx * 0.1;
     const natural = gridPx * 0.2;
@@ -2059,13 +1947,7 @@ function _shrinkEffectIcons(token)
     if (!bg || !token.effects?.children)
         return;
 
-    let scale = 1;
-    try
-    {
-        scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
-    }
-    catch
-    { /* not registered */ }
+    const scale = Number(getModuleSetting('statBarEffectIconScale')) || 1;
 
     const overlay = token.effects.overlay;
     const sprites = /** @type {any[]} */ (token.effects.children.filter(child => child !== bg && child !== overlay && child instanceof PIXI.Sprite && !child.destroyed));
@@ -2165,11 +2047,15 @@ function _collapseRemoveDuplicates(token)
 }
 
 /**
- * Count badges per collapsed group, counted by name from actor data.
+ * Instance count and usage per icon. LA-managed same-name effects collapse into one icon: their
+ * document count is the instance count, their summed stack the usage. Anything else is one
+ * instance with its own stack as usage. Skipped while the statuscounter module draws its own.
  * @param {Token} token
  */
-function _collapseAddBadges(token)
+function _drawStackBadges(token)
 {
+    if (game.modules.get('statuscounter')?.active)
+        return;
     if (!token.actor || !token.effects?.children)
         return;
     const temporaryEffects = token.actor.temporaryEffects;
@@ -2188,39 +2074,84 @@ function _collapseAddBadges(token)
             spriteMap.set(temporaryEffects[zIdx].id, child);
     }
 
-    // Collect names managed by lancer-automations, then count ALL effects (flagged or HUD) sharing those names.
+    // Names managed by lancer-automations collapse, so their stacks sum across every effect sharing the name.
     const managedNames = new Set(
         temporaryEffects.filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name)
     );
-
-    const effectCountByName = new Map();
+    const stackByName = new Map();
+    const countByName = new Map();
     for (const effect of temporaryEffects)
     {
-        const name = effect.name;
-        if (!name || !managedNames.has(name))
+        if (!effect.name || !managedNames.has(effect.name))
             continue;
-        effectCountByName.set(name, (effectCountByName.get(name) ?? 0) + 1);
+        stackByName.set(effect.name, (stackByName.get(effect.name) ?? 0) + effectStack(effect));
+        countByName.set(effect.name, (countByName.get(effect.name) ?? 0) + 1);
     }
 
     const effectsOffsetX = token.effects?.x ?? 0;
     const effectsOffsetY = token.effects?.y ?? 0;
-
-    for (const [name, count] of effectCountByName)
+    const drawnNames = new Set();
+    for (const effect of temporaryEffects)
     {
-        if (count <= 1)
+        const sprite = spriteMap.get(effect.id);
+        if (!sprite)
             continue;
-        // Find the first effect with this name that still has a sprite (the primary).
-        const primaryEffect = temporaryEffects.find(effect => effect.name === name && spriteMap.has(effect.id));
-        if (!primaryEffect)
+        const managed = !!effect.name && managedNames.has(effect.name);
+        if (managed && drawnNames.has(effect.name))
             continue;
-        const sprite = spriteMap.get(primaryEffect.id);
+        if (managed)
+            drawnNames.add(effect.name);
+        const instances = managed ? countByName.get(effect.name) : 1;
+        const uses = managed ? stackByName.get(effect.name) : effectStack(effect);
+        if (instances <= 1 && uses <= 1)
+            continue;
         const entry = {
             posX: sprite.x - (sprite.anchor?.x ?? 0) * sprite.width,
             posY: sprite.y - (sprite.anchor?.y ?? 0) * sprite.height,
             width: sprite.width,
             height: sprite.height
         };
-        _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, count);
+        _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, instances, uses);
+    }
+}
+
+function _badgeFontSize(sizeRatio)
+{
+    const scale = Number(getModuleSetting('statusBadgeFontScale')) || 1;
+    return Math.max(9, Math.round(12 * sizeRatio * scale));
+}
+
+function _badgeColor(key, fallback)
+{
+    const value = String(getModuleSetting(key) ?? '');
+    return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+/** Colour of the instance count. */
+export function instanceBadgeColor()
+{
+    return _badgeColor('statusCounterColor', '#00aaff');
+}
+
+/** Colour of the usage number, shared with the combat tracker counters. */
+export function usageBadgeColor()
+{
+    return _badgeColor('statusUsageColor', '#c39bff');
+}
+
+/** Drop LA's own badges before a redraw. Texts statuscounter draws, when it runs, are left to it. */
+function _clearBadges(token)
+{
+    const container = token.effectCounters;
+    if (!container || container.destroyed)
+        return;
+    for (const child of [...container.children])
+    {
+        if (child._laStack || child._laDuration)
+        {
+            container.removeChild(child);
+            child.destroy();
+        }
     }
 }
 
@@ -2238,7 +2169,8 @@ function _syncCountersToEffects(token)
     counters.position.set(effects.position.x, effects.position.y);
 }
 
-function _addCounterBadge(token, entry, offsetX, offsetY, count)
+/** The counters container, created on first use and kept aligned with token.effects. */
+function _ensureCounters(token)
 {
     if (!token.effectCounters)
     {
@@ -2247,24 +2179,60 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count)
         token.effectCounters = token.addChild(container);
     }
     _syncCountersToEffects(token);
+    return token.effectCounters;
+}
 
-    const sizeRatio = entry.height / 20;
-    const badgeX = entry.posX + offsetX + entry.width * 1.3;
-    const badgeY = entry.posY + offsetY + entry.height * 1.3;
+function _badgeText(text, fill, sizeRatio, scale = 1)
+{
     const style = new PIXI.TextStyle({
         fontFamily: 'Signika, sans-serif',
-        fontSize: Math.max(9, Math.round(12 * sizeRatio)),
-        fill: '#00aaff',
+        fontSize: Math.max(6, Math.round(_badgeFontSize(sizeRatio) * scale)),
+        fill,
         stroke: '#000000',
-        strokeThickness: Math.max(1, Math.round(2 * sizeRatio)),
+        strokeThickness: Math.max(1, Math.round(2 * sizeRatio * scale)),
         fontWeight: 'bold'
     });
-    const text = new PIXI.Text(String(count), style);
-    text.anchor.set(1, 1);
-    text.x = badgeX;
-    text.y = badgeY;
-    text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
-    token.effectCounters.addChild(text);
+    const badge = new PIXI.Text(text, style);
+    badge.resolution = Math.max(1, 1 / (sizeRatio * scale) * 1.5);
+    return badge;
+}
+
+/**
+ * Instance count at the bottom-right with the usage in small beside it. A single instance shows
+ * only its usage, taking the corner at full size.
+ */
+function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses)
+{
+    const counters = _ensureCounters(token);
+    const sizeRatio = entry.height / 20;
+    const left = entry.posX + offsetX;
+    const cornerX = left + entry.width * 1.3;
+    const cornerY = entry.posY + offsetY + entry.height * 1.3;
+    const showUses = uses > instances;
+    if (instances > 1)
+    {
+        const instanceBadge = _badgeText(String(instances), instanceBadgeColor(), sizeRatio);
+        instanceBadge.anchor.set(1, 1);
+        instanceBadge.position.set(cornerX, cornerY);
+        instanceBadge._laStack = true;
+        counters.addChild(instanceBadge);
+        if (!showUses)
+            return;
+        const usesBadge = _badgeText(String(uses), usageBadgeColor(), sizeRatio, 0.6);
+        usesBadge.anchor.set(0, 1);
+        // text boxes carry half their stroke on each side, so the boxes overlap to keep the glyphs close
+        usesBadge.position.set(cornerX - 1.5 * sizeRatio, cornerY);
+        usesBadge._laStack = true;
+        counters.addChild(usesBadge);
+        return;
+    }
+    if (!showUses)
+        return;
+    const usesBadge = _badgeText(String(uses), usageBadgeColor(), sizeRatio);
+    usesBadge.anchor.set(1, 1);
+    usesBadge.position.set(cornerX, cornerY);
+    usesBadge._laStack = true;
+    counters.addChild(usesBadge);
 }
 
 /**
@@ -2274,18 +2242,6 @@ function _addCounterBadge(token, entry, offsetX, offsetY, count)
  */
 function _drawDurationBadges(token)
 {
-    const container = token.effectCounters;
-    if (container)
-    {
-        for (const child of [...container.children])
-        {
-            if (child._laDuration)
-            {
-                container.removeChild(child);
-                child.destroy();
-            }
-        }
-    }
     const temporaryEffects = token.actor?.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
@@ -2318,31 +2274,15 @@ function _drawDurationBadges(token)
         if (!sprite)
             continue;
 
-        if (!token.effectCounters)
-        {
-            const fresh = new PIXI.Container();
-            fresh.name = "effectCounters";
-            token.effectCounters = token.addChild(fresh);
-        }
-        _syncCountersToEffects(token);
+        const counters = _ensureCounters(token);
         const sizeRatio = sprite.height / 20;
         const left = sprite.x - (sprite.anchor?.x ?? 0) * sprite.width;
         const top = sprite.y - (sprite.anchor?.y ?? 0) * sprite.height;
-        const style = new PIXI.TextStyle({
-            fontFamily: 'Signika, sans-serif',
-            fontSize: Math.max(9, Math.round(12 * sizeRatio)),
-            fill: '#ffd700',
-            stroke: '#000000',
-            strokeThickness: Math.max(1, Math.round(2 * sizeRatio)),
-            fontWeight: 'bold'
-        });
-        const text = new PIXI.Text(String(Math.min(...candidates)), style);
+        const text = _badgeText(String(Math.min(...candidates)), _badgeColor('statusDurationColor', '#ffd700'), sizeRatio);
         text.anchor.set(0, 0);
-        text.x = left - sprite.width * 0.3;
-        text.y = top - sprite.height * 0.3;
-        text.resolution = Math.max(1, 1 / sizeRatio * 1.5);
+        text.position.set(left - sprite.width * 0.3, top - sprite.height * 0.3);
         text._laDuration = true;
-        token.effectCounters.addChild(text);
+        counters.addChild(text);
     }
 }
 

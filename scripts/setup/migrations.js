@@ -2,6 +2,7 @@
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 const MIGRATIONS = [
     {
@@ -90,7 +91,7 @@ Hooks.once('init', () =>
 
 Hooks.once('ready', async () =>
 {
-    if (!game.user.isGM)
+    if (!isExecutorGM())
         return;
     await new Promise(resolve => globalThis.setTimeout(resolve, 0));
     for (const m of MIGRATIONS)

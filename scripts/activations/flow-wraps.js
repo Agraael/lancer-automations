@@ -9,6 +9,8 @@ import {
     getImmunityBonuses,
     checkDamageResistances,
     mutateDamageWithBonus,
+    mutatesBaseDamage,
+    mutatesBonusDamage,
     isBonusApplicable,
     flattenBonuses,
     getConstantBonuses,
@@ -210,7 +212,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
     });
 }
 
-async function _collectBaseDamageMutations(state)
+async function _collectDamageMutations(state, applies)
 {
     const actor = state.actor;
     if (!actor)
@@ -223,15 +225,69 @@ async function _collectBaseDamageMutations(state)
     const applicableBonuses = [];
     for (const bonus of raw)
     {
-        if (bonus.type !== 'damage')
-            continue;
-        const mode = bonus.damageMode || 'add';
-        if (mode !== 'replace' && mode !== 'change_type' && mode !== 'add_base')
+        if (bonus.type !== 'damage' || !applies(bonus))
             continue;
         if (await isBonusApplicable(bonus, flowTags, state))
             applicableBonuses.push(bonus);
     }
     return applicableBonuses;
+}
+
+/** Plain copies of the entries with the given bonus-scope change_type bonuses applied. */
+export function convertBonusDamageEntries(entries, bonuses, state)
+{
+    const cloned = foundry.utils.duplicate(entries ?? []);
+    if (!bonuses.length)
+        return cloned;
+    const mockState = { actor: state.actor, item: state.item, data: { damage: cloned } };
+    for (const bonus of bonuses)
+        mutateDamageWithBonus(mockState, bonus);
+    return cloned;
+}
+
+// What the damage HUD will add on top of the weapon's own line, as far as an attack-time evaluation can tell.
+export async function predictBonusDamage(state)
+{
+    const actor = state?.actor;
+    if (!actor)
+        return [];
+    const flowTags = new Set(['all', 'damage']);
+    const targetIds = Array.from(game.user?.targets || []).map(target => target.id);
+    const entries = [];
+    for (const bonus of flattenBonuses([...getGlobalBonuses(actor), ...getConstantBonuses(actor)]))
+    {
+        if (bonus.type !== 'damage' || (bonus.damageMode || 'add') !== 'add')
+            continue;
+        if (Array.isArray(bonus.applyTo) && bonus.applyTo.length && !bonus.applyTo.some(tokenId => targetIds.includes(tokenId)))
+            continue;
+        if (!isBonusApplicable(bonus, flowTags, state))
+            continue;
+        for (const entry of bonus.damage || [])
+            entries.push({ type: entry.type, val: entry.val });
+    }
+    const converters = await _collectDamageMutations(state, mutatesBonusDamage);
+    return convertBonusDamageEntries(entries, converters, state);
+}
+
+// Runs after rollReliable: by then the HUD's global and per-target bonus rows are back in the flow state, and both feed the roll.
+export async function bonusDamageMutateStep(state)
+{
+    if (!state?.data)
+        return true;
+    const bonuses = await _collectDamageMutations(state, mutatesBonusDamage);
+    if (bonuses.length === 0)
+        return true;
+    try
+    {
+        state.data.bonus_damage = convertBonusDamageEntries(state.data.bonus_damage, bonuses, state);
+        for (const target of state.data.damage_hud_data?.targets ?? [])
+            target.bonusDamage = convertBonusDamageEntries(target.bonusDamage, bonuses, state);
+    }
+    catch (e)
+    {
+        console.warn('lancer-automations | bonus damage mutation failed:', e);
+    }
+    return true;
 }
 
 // fromParams reads the weapon's damage from item.system, so we swap it before the HUD builds and restore after.
@@ -243,7 +299,7 @@ export function wrapShowDamageHUD(flowSteps)
 
     flowSteps.set('showDamageHUD', async function wrappedShowDamageHUD(state)
     {
-        const bonuses = await _collectBaseDamageMutations(state);
+        const bonuses = await _collectDamageMutations(state, mutatesBaseDamage);
         if (bonuses.length === 0)
             return orig(state);
 
@@ -252,6 +308,8 @@ export function wrapShowDamageHUD(flowSteps)
             return orig(state);
 
         let restore = null;
+        // currentProfile() reads the swapped array, so its own wrap must not mutate it a second time.
+        item._laBaseDamageSwapped = true;
         try
         {
             if (item.type === 'mech_weapon' && item.system.active_profile)
@@ -323,6 +381,7 @@ export function wrapShowDamageHUD(flowSteps)
         }
         finally
         {
+            delete item._laBaseDamageSwapped;
             if (restore)
             {
                 try

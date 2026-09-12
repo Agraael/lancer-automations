@@ -1,4 +1,4 @@
-import { ReactionManager, stringToFunction, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./reaction-manager.js";
+import { ReactionManager, stringToFunction, stringToAsyncFunction, ACTIVATION_TRIGGERS, BUILT_IN_TRIGGERS } from "./reaction-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
@@ -20,6 +20,8 @@ const cachedNonActionReactionsByTrigger = new Map();
 /** @type {Map<string, Array>} triggerType to general reactions with sceneReactor on, evaluated once as the scene */
 const cachedSceneReactionsByTrigger = new Map();
 const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart']);
+// Custom triggers are fired on purpose by their caller, who owns the combat gating.
+const firesRegardlessOfCombat = triggerType => COMBAT_INHERENT_TRIGGERS.has(triggerType) || !BUILT_IN_TRIGGERS.has(triggerType);
 const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "weapon_mod", "npc_feature", "pilot_gear", "talent", "bond"]);
 const sceneReactorMode = reaction => reaction.sceneReactor || 'off';
 const onViewedScene = reaction => !reaction.sceneId || reaction.sceneId === canvas.scene?.id;
@@ -394,7 +396,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         }
     }
     dbgAuto('candidate:', token.name, reactionName, '(general)', { triggers: reaction.triggers });
-    if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
+    if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
     {
         dbgAuto('skip:', token.name, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
         if ((token?.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
@@ -541,7 +543,7 @@ function evaluateSceneReaction(reactionName, reaction, triggerType, data, sceneR
     }
     dbgAuto('candidate:', sceneName, reactionName, '(scene)', { triggers: reaction.triggers });
     const isInCombat = !!game.combat?.started;
-    if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
+    if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
     {
         dbgAuto('skip:', sceneName, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
         if (getModuleSetting('debugOutOfCombat'))
@@ -944,7 +946,7 @@ async function checkReactions(triggerType, data)
                     }
                 }
 
-                if (!isInCombat && !reaction.outOfCombat && !COMBAT_INHERENT_TRIGGERS.has(triggerType))
+                if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
                 {
                     if ((token.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
                         ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
@@ -1634,6 +1636,24 @@ export async function handleTrigger(triggerType, data)
     if (triggerType?.startsWith('onInit'))
         return runInOnInitTriggerContext(() => _handleTriggerBody(triggerType, data));
     return _handleTriggerBody(triggerType, data);
+}
+
+/**
+ * Fire a user-defined trigger. Automations listing `name` in their triggers react to it, in or out of combat.
+ * Built-in names and the onInit prefix are refused.
+ * @param {string} name
+ * @param {object} [data] trigger payload, `triggeringToken` enables the self/other, disposition and distance filters
+ * @returns {Promise<void>}
+ */
+export async function dispatchCustomTrigger(name, data = {})
+{
+    const triggerType = typeof name === 'string' ? name.trim() : '';
+    if (!triggerType || BUILT_IN_TRIGGERS.has(triggerType) || triggerType.startsWith('onInit'))
+    {
+        ui.notifications.warn(`lancer-automations | dispatchCustomTrigger: "${name}" is not a valid custom trigger name.`);
+        return;
+    }
+    return handleTrigger(triggerType, (data && typeof data === 'object') ? data : {});
 }
 
 async function _handleTriggerBody(triggerType, data)

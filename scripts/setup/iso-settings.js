@@ -204,14 +204,7 @@ export function isIsoFeatureEnabled(featureKey)
 {
     if (!isAnyIsoModuleActive())
         return false;
-    try
-    {
-        return !!getModuleSetting(featureKey);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(featureKey);
 }
 
 // Some features only make sense for iso-perspective (elevationAnimation, restoreAnchor).
@@ -219,14 +212,7 @@ export function isIsoPerspectiveFeatureEnabled(featureKey)
 {
     if (!_isoPerspectiveActive())
         return false;
-    try
-    {
-        return !!getModuleSetting(featureKey);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(featureKey);
 }
 
 // Skew/scale that cancels the iso stage so a label reads flat (set via obj.skew/scale, rotation 0).

@@ -506,13 +506,7 @@ async function _runNews()
     if (!game.user?.isGM)
         return;
 
-    let consent = NEWS_PENDING;
-    try
-    {
-        consent = getModuleSetting(NEWS_CONSENT_KEY) || NEWS_PENDING;
-    }
-    catch
-    { /* not registered */ }
+    const consent = getModuleSetting(NEWS_CONSENT_KEY) || NEWS_PENDING;
     if (consent === NEWS_PENDING)
         return;
 

@@ -19,14 +19,7 @@ export function initStatusIconHover()
 
 function _enabled()
 {
-    try
-    {
-        return !!getModuleSetting('statusIconHover');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('statusIconHover');
 }
 
 function _onPointerMove(event)

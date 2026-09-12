@@ -2,6 +2,7 @@
 // while its dialog is on screen, streamed from player clients to the GM.
 
 import { getMaxItemRanges_WithBonus } from '../tools/weapon-bonus-utils.js';
+import { predictBonusDamage } from '../activations/flow-wraps.js';
 import { captureSnapshot } from './snapshots.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 
@@ -30,6 +31,7 @@ const REMOTE_SWEEP_MS = 2000;
 const _slots = new Map();
 const _remote = new Map();
 const _rangeCache = new WeakMap();
+const _bonusDamageCache = new WeakMap();
 let _watch = null;
 let _remoteSweep = null;
 let _streamCounter = 0;
@@ -57,6 +59,12 @@ function emitClose(entry)
 export function getCachedRanges(state)
 {
     return _rangeCache.get(state) || null;
+}
+
+/** Predicted bonus damage for an attack roll, computed once at registration. */
+export function getCachedBonusDamage(state)
+{
+    return _bonusDamageCache.get(state) || null;
 }
 
 /** Display label for a StatRollFlow: the HASE stat, Skill, Grit, or Check. */
@@ -160,6 +168,8 @@ export async function uplinkHudOpenStep(state)
             _watch ??= setInterval(watchTick, WATCH_MS);
             if (state.item && !_rangeCache.has(state))
                 _rangeCache.set(state, await getMaxItemRanges_WithBonus(state.item, state.actor));
+            if ((kind === 'attack' || kind === 'tech') && !_bonusDamageCache.has(state))
+                _bonusDamageCache.set(state, await predictBonusDamage(state));
         }
     }
     catch (err)

@@ -126,17 +126,7 @@ function openActorPickerPopup(target, onAdded)
 function renderExtraBarsSection(target)
 {
     const bars = getExtraBars(target) || [];
-    const settingOn = (() =>
-    {
-        try
-        {
-            return !!getModuleSetting('tokenStatBar');
-        }
-        catch
-        {
-            return false;
-        }
-    })();
+    const settingOn = !!getModuleSetting('tokenStatBar');
     const rows = bars.length
         ? bars.map((record) =>
         {

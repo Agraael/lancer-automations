@@ -13,6 +13,7 @@ import {
     forgetCombat,
 } from './telemetry-store.js';
 import { reconcileCombatant, forgetCombatState } from './state-capture.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 // Tick every tracked combatant into a telemetry object (in place). Returns it.
 function _tickInto(telemetry, combat, round)
@@ -43,7 +44,7 @@ export function registerCombatRecorder()
 {
     Hooks.on('createCombat', async (combat) =>
     {
-        if (!game.user?.isGM)
+        if (!isExecutorGM())
             return;
         if (!battleLogEnabled())
             return;
@@ -52,7 +53,7 @@ export function registerCombatRecorder()
 
     Hooks.on('combatStart', async (combat) =>
     {
-        if (!game.user?.isGM)
+        if (!isExecutorGM())
             return;
         await reclassifyCombat(combat);
         await mutateTelemetry(combat, (telemetry) =>
@@ -67,7 +68,7 @@ export function registerCombatRecorder()
 
     Hooks.on('createCombatant', async (combatant) =>
     {
-        if (!game.user?.isGM)
+        if (!isExecutorGM())
             return;
         const combat = combatant?.combat ?? combatant?.parent;
         if (!combat)
@@ -78,7 +79,7 @@ export function registerCombatRecorder()
     // Tick at every turn and round advance.
     Hooks.on('updateCombat', async (combat, delta) =>
     {
-        if (!game.user?.isGM)
+        if (!isExecutorGM())
             return;
         if (delta.round == null && delta.turn == null)
             return;
@@ -90,7 +91,7 @@ export function registerCombatRecorder()
     // mid-delete), then stash for the delete consumer.
     Hooks.on('preDeleteCombat', (combat) =>
     {
-        if (!game.user?.isGM)
+        if (!isExecutorGM())
             return;
         const round = combat.round ?? 0;
         const telemetry = getTelemetry(combat);

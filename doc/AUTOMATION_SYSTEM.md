@@ -104,7 +104,7 @@ flowchart TD
 
 What the engine does for one trigger:
 
-1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`. The engine wires the reaction helpers (`startRelatedFlow`, `startRelatedFlowToReactor`, `sendMessageToReactor`, `debugActivation`) onto `triggerData`. Signatures in [section 8](#8-clients-and-sockets).
+1. **Trigger fan-out.** A flow step or hook calls `handleTrigger(triggerType, data)`, or your code calls `api.dispatchCustomTrigger(name, data)` ([Custom triggers](#custom-triggers)). The engine wires the reaction helpers (`startRelatedFlow`, `startRelatedFlowToReactor`, `sendMessageToReactor`, `debugActivation`) onto `triggerData`. Signatures in [section 8](#8-clients-and-sockets).
 
 2. **Reactor sweep.** Every token on the scene is a potential reactor. When the *triggering* token is hidden, only the reactors that are the mover itself or one of its targets are considered. Everyone else is skipped.
 
@@ -133,6 +133,10 @@ What the engine does for one trigger:
 10. **Manual activation.** When a recipient clicks **Activate** on a queued entry, *that* client runs `activateReaction()` for that single entry.
 
 Filters and `evaluate` run for every reactor on the scene, every time a matching trigger fires. Keep them cheap.
+
+### Custom triggers
+
+Any name that is not built in. `api.dispatchCustomTrigger(name, data)` enters at step 1. Listen via the editor's **Custom** field or `triggers: ["myTrigger"]`. Always fires, `outOfCombat` does not apply. `data` becomes `triggerData`, so pass `triggeringToken` for the token filters. Built-in names and `onInit*` are refused. Not cancellable, no consumption.
 
 <br>
 
@@ -238,7 +242,7 @@ Filters short-circuit, in this order (rows 6 and 7 apply to item activations onl
 | # | Filter | Behavior |
 |---|---|---|
 | 1 | `onlyOnSourceMatch` | Matches the triggering item LID, deployable LID, or actor UUID against the registered key. Meaning per kind in [section 3](#3-item-vs-general-activations). |
-| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`). |
+| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`) or is a [custom trigger](#custom-triggers). |
 | 3 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. **`triggerOther` defaults to `true`**: it only skips when you set it to exactly `false`. |
 | 4 | `checkReaction` | Skip the reaction when the reactor has no reaction left this round. Runs only when the field is set `true`. Spending is separate: the world setting `consumeReaction`. |
 | 5 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
@@ -585,7 +589,7 @@ Other frequency-related fields:
 
 - `frequency`: display string (`"1/Round"`, `"1/Combat"`) shown on the popup entry. Never enforced.
 
-- `outOfCombat`: opt-in for triggers that wouldn't normally fire outside combat.
+- `outOfCombat`: opt-in for triggers that wouldn't normally fire outside combat. Not needed for custom triggers.
 
 Real limits come from two places. Item tags (`tg_round`, `tg_turn`, limited uses, loading, recharge) are enforced by the `checkUsage` filter. Everything else uses the gate API: `await api.consumeOncePerRound(reactorToken, 'my_key', target)` is true the first time this round per target, and `consumeGate` covers longer windows. See [Flags API](API_FLAGS.md). The Triangulation Ping NPC feature is the worked example.
 

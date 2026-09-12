@@ -17,7 +17,7 @@ import { floatTokenText } from './tools/float-text.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
-import { executeStatRoll, getItemLID } from './tools/misc-tools.js';
+import { executeStatRoll, getItemLID, isExecutorGM } from './tools/misc-tools.js';
 import { openDowntimeSummary, showDowntimeJournalPopup } from './tools/downtime.js';
 import { playTerminalIntro } from './Battelog/intro-terminal.js';
 import { openBattleLogRecap } from './Battelog/recap.js';
@@ -262,7 +262,7 @@ const HANDLERS = {
 
     setActorFlag: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const actor = game.actors.get(payload.actorId);
         if (actor)
@@ -285,7 +285,7 @@ const HANDLERS = {
 
     setItemFlag: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -308,7 +308,7 @@ const HANDLERS = {
 
     setTokenFlag: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const scene = game.scenes.get(payload.sceneId) ?? canvas.scene;
         const tokenDoc = scene?.tokens.get(payload.tokenId);
@@ -332,7 +332,7 @@ const HANDLERS = {
 
     setEffect: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -349,7 +349,7 @@ const HANDLERS = {
 
     setEffectOnDoc: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -367,7 +367,7 @@ const HANDLERS = {
 
     removeEffectFromDoc: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -383,7 +383,7 @@ const HANDLERS = {
 
     removeEffect: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -400,7 +400,7 @@ const HANDLERS = {
 
     removeEffectById: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const target = canvas.tokens.get(payload.targetID);
         if (target?.actor)
@@ -420,7 +420,7 @@ const HANDLERS = {
 
     consumeEffectCharge: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {
@@ -444,7 +444,7 @@ const HANDLERS = {
 
     moveTokens: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const trigToken = payload.triggeringTokenId ? canvas.tokens.get(payload.triggeringTokenId) : null;
         const knockbackItem = payload.itemId
@@ -455,7 +455,7 @@ const HANDLERS = {
 
     createTokens: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const scene = game.scenes.get(payload.sceneId) || canvas.scene;
         const created = await scene.createEmbeddedDocuments('Token', payload.tokenDataArray);
@@ -465,7 +465,7 @@ const HANDLERS = {
 
     pickupWeapon: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const scene = game.scenes.get(payload.sceneId) || canvas.scene;
         if (!scene)
@@ -484,7 +484,7 @@ const HANDLERS = {
 
     recallDeployable: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const scene = game.scenes.get(payload.sceneId) || canvas.scene;
         if (!scene)
@@ -496,7 +496,7 @@ const HANDLERS = {
 
     scanInfoRequest: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const target = canvas.tokens.get(payload.targetId);
         if (!target)
@@ -506,7 +506,7 @@ const HANDLERS = {
 
     scanSystemOptionsRequest: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const target = canvas.tokens.get(payload.targetId);
         if (!target)
@@ -517,7 +517,7 @@ const HANDLERS = {
 
     scanSystemJournalRequest: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const target = canvas.tokens.get(payload.targetId);
         if (!target)
@@ -615,7 +615,7 @@ const HANDLERS = {
 
     updateActorSystem: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         const actor = game.actors.get(payload.actorId);
         if (actor)
@@ -626,7 +626,7 @@ const HANDLERS = {
 
     combatAction: async (payload) =>
     {
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         try
         {

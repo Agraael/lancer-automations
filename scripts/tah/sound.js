@@ -315,7 +315,8 @@ const STAT_SOUNDS = {
 };
 
 const STATUS_SFX_SOUNDS = {
-    bonus: { src: `${STATS_BASE}/bonus.wav`, scale: 0.4 },
+    bonus:  { src: `${STATS_BASE}/bonus.wav`, scale: 0.4 },
+    status: { src: `${STATS_BASE}/bonus.wav`, scale: 0.4 },
 };
 
 /** folder path -> array of full file paths (cached after first browse). */

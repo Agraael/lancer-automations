@@ -16,14 +16,7 @@ const LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-waypoint-label.hbs
 
 function settingOn()
 {
-    try
-    {
-        return !!getModuleSetting(ENABLED);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(ENABLED);
 }
 
 function _isoActive()
@@ -57,26 +50,12 @@ function _isoProjectLabelPos(pos)
 
 function perStepRenderOn()
 {
-    try
-    {
-        return !!getModuleSetting(PER_STEP_RENDER);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(PER_STEP_RENDER);
 }
 
 function climbWaypointsOn()
 {
-    try
-    {
-        return !!getModuleSetting('enableClimbWaypoints');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('enableClimbWaypoints');
 }
 
 function round(num)
@@ -1246,15 +1225,8 @@ import { thtGroundAt as _thtGroundAt } from './movement-utils.js';
 
 function _measureTerrainElevDisabled()
 {
-    try
-    {
-        return !!getModuleSetting('disableAutoElevationOnMeasure')
-            || !!getModuleSetting('disableAutoTerrainElevation');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('disableAutoElevationOnMeasure')
+        || !!getModuleSetting('disableAutoTerrainElevation');
 }
 
 class LancerCanvasRuler extends foundry.canvas.interaction.Ruler

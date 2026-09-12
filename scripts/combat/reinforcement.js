@@ -1,6 +1,7 @@
 /* global Sequence, Sequencer, canvas, game, ui, Hooks, Dialog, ChatMessage, CONST */
 
 import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
+import { isExecutorGM } from "../tools/misc-tools.js";
 
 export async function delayedTokenAppearance()
 {
@@ -142,7 +143,7 @@ export function initDelayedAppearanceHook()
     Hooks.on("updateCombat", async (combat, changed, _options, _userId) =>
     {
         // Only for GM and when round changes
-        if (!game.user.isGM)
+        if (!isExecutorGM())
             return;
         if (!changed.round)
             return;

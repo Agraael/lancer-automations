@@ -11,6 +11,7 @@ import { registerAttackCapture } from './attack-capture.js';
 import { registerStateCapture } from './state-capture.js';
 import { registerActionCapture } from './action-capture.js';
 import { registerMoveCapture } from './move-capture.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 registerCombatRecorder();
 registerDamageCapture();
@@ -41,7 +42,7 @@ export function openBattleLogRecapTest()
 
 Hooks.on('deleteCombat', (combat) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     if (!battleLogEnabled())
         return;

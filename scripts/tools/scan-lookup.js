@@ -37,14 +37,7 @@ export function getScanJournalsForActor(actor, options = {})
 // World override: treat everything as scanned, for tables that don't play with hidden stats.
 function _revealWithoutScan()
 {
-    try
-    {
-        return !!getModuleSetting('revealStatsWithoutScan');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('revealStatsWithoutScan');
 }
 
 // Ally: friendly (token-factions aware) to a token `user` owns on the scene.

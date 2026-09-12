@@ -3,8 +3,7 @@
 import { playTerminalIntro } from './intro-terminal.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { openBattleLogRecap } from './recap.js';
-
-const _escape = s => String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+import { escapeHtml as _escape } from '../tools/string-utils.js';
 
 /** Open the GM card for a battle. */
 export function openBattleLogGMCard(battle)

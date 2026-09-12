@@ -9,9 +9,15 @@ import { getSettingEnabled } from "../setup/settings-register.js";
 const CHANNEL = 'module.lancer-automations';
 const STALE_MS = 2500;
 
-function enabled()
+// Same rule as core cursor sharing: the SHOW_CURSOR permission gates both the sender and the viewer.
+export function canShareTools()
 {
-    return getSettingEnabled('displayToolsToOthers');
+    return getSettingEnabled('displayToolsToOthers') && !!game.user?.hasPermission('SHOW_CURSOR');
+}
+
+export function canSeeToolsFrom(userId)
+{
+    return getSettingEnabled('displayToolsToOthers') && !!game.users?.get(userId)?.hasPermission('SHOW_CURSOR');
 }
 
 function drawCell(g, col, row)
@@ -31,7 +37,7 @@ const _lastAt = new Map();  // kind -> timestamp
 
 export function broadcastToolPresence(kind, data)
 {
-    if (!enabled() || !canvas.scene)
+    if (!canShareTools() || !canvas.scene)
         return;
     // Related token hidden (e.g. a stealthed unit): reveal nothing to other clients, drop any live ghost once.
     if (data.relatedToken?.document?.hidden)
@@ -120,7 +126,7 @@ const ghostKey = (userId, kind) => `${userId}|${kind}`;
 
 export function onRemotePresence(payload)
 {
-    if (!enabled() || !payload || payload.userId === game.user.id)
+    if (!payload || payload.userId === game.user.id || !canSeeToolsFrom(payload.userId))
         return;
     if (payload.sceneId !== canvas.scene?.id)
         return;

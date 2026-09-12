@@ -1,6 +1,7 @@
 import { appendEvent } from './telemetry-store.js';
 import { findActiveCombatForToken, findTelemetryCombatForToken } from './battelog-utils.js';
 import { getIntentionalMoveData } from '../movement/move-tracking.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 let _registered = false;
 const _knockbackSource = new Map();
@@ -55,7 +56,7 @@ function _onInvoluntaryMove(data)
     const event = { type: 'move', round: telemetryCombat.round ?? 0, byId: tokenId, distance, knockback: true };
     if (sourceId)
         event.sourceId = sourceId;
-    if (game.user?.isGM)
+    if (isExecutorGM())
         appendEvent(telemetryCombat, tokenId, event);
     else
         game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: telemetryCombat.id, entryId: tokenId, event } });

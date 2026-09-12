@@ -120,6 +120,8 @@ interface EffectDescriptorInput {
     name?: string;
     icon?: string;
     isCustom?: boolean;
+    /** Stamped on the effect. Saved statuses resolve theirs from CONFIG instead, leave this unset for those. */
+    description?: string;
     [key: string]: any;
 }
 

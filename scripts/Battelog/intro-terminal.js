@@ -1,6 +1,7 @@
 // Shared CRT shell: playTerminal + typeTerminalLines are reused by seasonal/annual.js.
 import { playBattleLogSound, playBattleLogTheme } from '../tah/sound.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { escapeHtml as _escape } from '../tools/string-utils.js';
 
 const INTRO_SPEED = 1.7;
 
@@ -710,11 +711,6 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
         },
     };
 }
-
-const _escape = str => String(str ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
 
 function _dressingHtml(color, {
     channel = 'SECURE CHANNEL',

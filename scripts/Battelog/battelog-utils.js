@@ -1,6 +1,7 @@
 import { appendEvent, BUCKETS } from './telemetry-store.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 export function numOr(value, fallback = 0)
 {
@@ -77,7 +78,7 @@ export function resolveEntryTokenId(actor)
 // GM-side: append a remote battle-log event to the telemetry-flagged combat.
 export async function handleRemoteBattlelogEvent({ combatId, entryId, event })
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const combat = game.combats?.get(combatId);
     if (!combat)

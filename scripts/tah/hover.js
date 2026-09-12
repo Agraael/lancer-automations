@@ -4,7 +4,7 @@
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
-import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus } from '../tools/weapon-bonus-utils.js';
+import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, getWeaponReachRange, weaponIgnoresLineOfSight } from '../tools/weapon-bonus-utils.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 import { resolveDeployRangeCount } from '../interactive/deployables.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
@@ -138,6 +138,13 @@ export function usesLineOfSight(category, item, profile)
 export function getPreviewLosInfo(category, action, actor, item, profile)
 {
     const name = (action?.name ?? '').toLowerCase().trim();
+    // Bands for this one weapon. The actor-wide call would lend it every other weapon's Arcing.
+    if (isWeaponItem(item) && !action?.activation)
+    {
+        const reach = getWeaponReachRange(item, actor);
+        const freeRange = weaponIgnoresLineOfSight(item) ? reach : 0;
+        return { los: reach > freeRange, freeRange };
+    }
     if (name === 'skirmish' || name === 'barrage')
     {
         const { max, freeMax } = getActorReachBands_WithBonus(item ?? actor);

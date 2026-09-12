@@ -844,26 +844,12 @@ export function _groupCellsByDistance(originOffsets, cellKeys)
 // Client-tunable thickness multiplier for the wave line + its black outline (Colors tab).
 function _rangePulseWidthMul()
 {
-    try
-    {
-        return Number(getModuleSetting('rangePulseLineWidth')) || 1;
-    }
-    catch
-    {
-        return 1;
-    }
+    return Number(getModuleSetting('rangePulseLineWidth')) || 1;
 }
 
 function _rangePulseSetting(settingKey, fallback)
 {
-    try
-    {
-        return String(getModuleSetting(settingKey) || fallback);
-    }
-    catch
-    {
-        return fallback;
-    }
+    return String(getModuleSetting(settingKey) || fallback);
 }
 
 function _cellCorners(col, row)
@@ -925,10 +911,11 @@ function _paintCellBrackets(graphic, cells, frac)
     }
 }
 
-// The baked static alpha is near zero, so the slider is the grid line alpha itself.
+// Grid Line Opacity retired 2026-09-12, static grid lines stay off.
+// Restore: return baseAlpha ? _rangePulseOpacity('rangePulseLineOpacity') : 0;
 export function _staticGridAlpha(baseAlpha)
 {
-    return baseAlpha ? _rangePulseOpacity('rangePulseLineOpacity') : 0;
+    return 0;
 }
 
 function _pulseLosEnabled()

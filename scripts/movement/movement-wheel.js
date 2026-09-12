@@ -139,6 +139,6 @@ Hooks.once('init', () =>
             return true;
         },
         repeat: false,
-        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 });

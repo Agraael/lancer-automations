@@ -1202,7 +1202,7 @@ export async function startTahTour()
     return startTour('tah-tour');
 }
 
-class _RootTour extends Tour
+class _RootTour extends foundry.nue.Tour
 {
     constructor(config, root)
     {
@@ -1675,13 +1675,7 @@ function _movementWarningDialog()
 
 async function _maybeShowMovementWarning()
 {
-    let shown = false;
-    try
-    {
-        shown = !!getModuleSetting(SETTING_MOVEMENT_WARNING_SHOWN);
-    }
-    catch
-    { /* not registered yet */ }
+    const shown = !!getModuleSetting(SETTING_MOVEMENT_WARNING_SHOWN);
     if (shown)
         return;
     await _movementWarningDialog();
@@ -1871,13 +1865,7 @@ export function registerTourBootstrap()
 
     Hooks.once('ready', async () =>
     {
-        let done = true;
-        try
-        {
-            done = !!getModuleSetting(SETTING_TOUR_DONE);
-        }
-        catch
-        { /* not ready */ }
+        const done = !!getModuleSetting(SETTING_TOUR_DONE, true);
         if (!done)
             await _runChooser();
         await _maybeShowMovementWarning();

@@ -1,6 +1,7 @@
 import { appendEvent } from './telemetry-store.js';
 import { findActiveCombatForToken, resolveEntryTokenId, numOr } from './battelog-utils.js';
 import { SAVE_KINDS } from './combat-telemetry.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 let _registered = false;
 
@@ -8,7 +9,7 @@ const REAL_ACTIVATIONS = new Set(['Quick', 'Full', 'Free', 'Protocol', 'Reaction
 
 function _emit(combat, byId, event)
 {
-    if (game.user?.isGM)
+    if (isExecutorGM())
         appendEvent(combat, byId, event);
     else
         game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: byId, event } });

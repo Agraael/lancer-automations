@@ -1041,36 +1041,15 @@ function tokenDragActive()
 }
 function ctrlRulerMode()
 {
-    try
-    {
-        return getModuleSetting(CTRL_RULER_KEY);
-    }
-    catch
-    {
-        return 'tool';
-    }
+    return getModuleSetting(CTRL_RULER_KEY, 'tool');
 }
 function targetCursorOn()
 {
-    try
-    {
-        return !!getModuleSetting(TARGET_CURSOR_KEY);
-    }
-    catch
-    {
-        return true;
-    }
+    return !!getModuleSetting(TARGET_CURSOR_KEY, true);
 }
 function rulerCursorOn()
 {
-    try
-    {
-        return !!getModuleSetting(RULER_CURSOR_KEY);
-    }
-    catch
-    {
-        return true;
-    }
+    return !!getModuleSetting(RULER_CURSOR_KEY, true);
 }
 
 function cycleRangeSource()

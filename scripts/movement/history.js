@@ -16,14 +16,7 @@ function asTokenDoc(tokenLike)
 
 function laDebug()
 {
-    try
-    {
-        return !!getModuleSetting('debugMovement');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('debugMovement');
 }
 
 export function getLastMoveDistance(tokenLike)

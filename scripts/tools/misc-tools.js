@@ -31,6 +31,22 @@ export function isItemUsable(item)
         return false;
     return !isActionLocked(item, item.name);
 }
+
+// isGM is true for assistants too, so gating shared work on it runs it on every GM client.
+/** @returns {boolean} */
+export function isExecutorGM()
+{
+    return game.users?.activeGM?.isSelf === true;
+}
+
+/**
+ * Whether any GM client is online to service a relayed socket request.
+ * @returns {boolean}
+ */
+export function hasExecutorGM()
+{
+    return !!game.users?.activeGM;
+}
 import { openAddReserveDialog } from "./pilot-reserves.js";
 import {
     getWeaponProfiles_WithBonus, getItemTags_WithBonus,

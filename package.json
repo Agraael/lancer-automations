@@ -1,6 +1,17 @@
 {
     "name": "lancer-automations",
     "private": true,
+    "type": "module",
+    "scripts": {
+        "lint": "eslint scripts startups",
+        "lint:ci": "eslint -c eslint.ci.config.js scripts startups tools tests",
+        "typecheck": "node --max-old-space-size=12288 ./node_modules/typescript/bin/tsc -p jsconfig.json --noEmit",
+        "typecheck:ratchet": "python tools/typecheck_ratchet.py",
+        "conventions": "python tools/convention_audit.py --list",
+        "conventions:ci": "python tools/convention_audit.py --strict --rule module-id-redeclared --rule module-id-literal --rule settings-read --rule flag-read --rule helper-as-method --rule binding-in-generated-source --rule escape-html --rule log-prefix --rule token-by-id",
+        "i18n:check": "python tools/i18n_audit.py --check --strict",
+        "check": "npm run lint:ci && npm run conventions:ci && npm run typecheck:ratchet"
+    },
     "devDependencies": {
         "@stylistic/eslint-plugin": "^5.10.0",
         "fvtt-types": "^13.346.0-beta.20251209192131",

@@ -2,7 +2,7 @@
 // mirror cards, live on a timer or saved to a small localStorage history.
 
 import { openUplinkPanel, closeUplinkPanel } from './panel.js';
-import { resolveLiveRoll, getCachedRanges, statRollLabel } from './live-rolls.js';
+import { resolveLiveRoll, getCachedRanges, getCachedBonusDamage, statRollLabel } from './live-rolls.js';
 import { usesLineOfSight } from '../tah/hover.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { accDiffTargetToken } from '../combat/grid-helpers.js';
@@ -224,6 +224,16 @@ function attackDamage(state)
     return plain.length ? plain : null;
 }
 
+// The unmodified profile line, so the mirror can grey it out when bonuses changed it.
+function attackDamageBase(state)
+{
+    const item = state.data?.lancerItem ?? state.item;
+    const raw = item?.type === 'mech_weapon' ? item.system?.active_profile?.damage
+        : item?.type === 'pilot_weapon' ? item.system?.damage : null;
+    const plain = plainDamage(Array.isArray(raw) ? raw : []);
+    return plain.length ? plain : null;
+}
+
 /**
  * Build a plain snapshot of the roll HUD state, or null when the flow has none.
  * Safe against a mid-teardown state, used both live and at resolve time.
@@ -271,6 +281,8 @@ export function captureSnapshot(kind, state)
             actorImg: state.actor?.img || '',
             weaponIcon: kind === 'attack' || kind === 'damage' ? (weaponTypeIcon(state.data?.lancerItem ?? state.item) || '') : '',
             attackDamage: kind === 'attack' || kind === 'tech' ? attackDamage(state) : null,
+            attackDamageBase: kind === 'attack' ? attackDamageBase(state) : null,
+            attackBonusDamage: kind === 'attack' || kind === 'tech' ? getCachedBonusDamage(state) : null,
             itemName: state.item?.name || '',
             title: state.data?.title || '',
             raw,

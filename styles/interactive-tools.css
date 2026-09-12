@@ -2,6 +2,25 @@
     filter: invert(1);
 }
 
+/* stack numbers on combat tracker effect icons */
+.la-effect-counter-wrap {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    line-height: 0;
+}
+
+.la-effect-counter {
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1;
+    text-shadow: 0 0 2px #000, 0 0 4px #000;
+}
+
 .la-scan-banner {
     display: flex;
     align-items: stretch;
@@ -3131,8 +3150,33 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 .lancer-sw-stack {
     right: -3px;
     bottom: -3px;
-    border: 1px solid #7d838c;
-    color: #e6e6e6;
+    border: 1px solid #1f6f99;
+    color: #00aaff;
+}
+
+.lancer-sw-stack--uses {
+    border-color: #6a4a9a;
+    color: #c39bff;
+}
+
+.lancer-sw-uses {
+    position: absolute;
+    right: -16px;
+    bottom: -3px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: #14161a;
+    border: 1px solid #6a4a9a;
+    font-family: monospace;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: #c39bff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .lancer-sw-turns {
@@ -3293,6 +3337,10 @@ form[id^="accdiff"] .lancer-header input,
 
 .la-status-tooltip-bonus {
     color: #00aaff;
+}
+
+.la-status-tooltip-uses {
+    color: #c39bff;
 }
 
 .la-status-tooltip-cond {

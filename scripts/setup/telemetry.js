@@ -55,15 +55,7 @@ async function _pingDaily(_userHash, role)
 async function _maybeDailyTouch(userHash, role)
 {
     const today = new Date().toISOString().slice(0, 10);
-    let last = "";
-    try
-    {
-        last = getModuleSetting(LAST_PING_SETTING) || "";
-    }
-    catch
-    {
-        // Setting not registered yet.
-    }
+    const last = getModuleSetting(LAST_PING_SETTING) || "";
     if (last === today)
         return;
     await _pingDaily(userHash, role);
@@ -150,15 +142,7 @@ async function _handleStartup()
     if (!game.user?.id)
         return;
 
-    let consent = CONSENT_PENDING;
-    try
-    {
-        consent = getModuleSetting(CONSENT_SETTING) || CONSENT_PENDING;
-    }
-    catch
-    {
-        // Setting not registered yet; treat as pending.
-    }
+    let consent = getModuleSetting(CONSENT_SETTING) || CONSENT_PENDING;
 
     // Old 'allowed'/'denied' used a different ID scheme; re-prompt for a clean baseline.
     if (consent === "allowed" || consent === "denied")
@@ -169,13 +153,7 @@ async function _handleStartup()
 
     if (consent === ROLE_GM || consent === ROLE_PLAYER)
     {
-        let installId = "";
-        try
-        {
-            installId = getModuleSetting(INSTALL_ID_SETTING) || "";
-        }
-        catch
-        { /* not registered yet */ }
+        let installId = getModuleSetting(INSTALL_ID_SETTING) || "";
         if (!installId)
         {
             installId = foundry.utils.randomID();

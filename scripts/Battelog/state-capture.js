@@ -2,6 +2,7 @@ import { appendEvent, appendEventComputed, getTelemetry, findEntry, pushEvent } 
 import { findActiveCombatForToken, findTelemetryCombatForToken, resolveEntryTokenId, numOr } from './battelog-utils.js';
 import { attributeKill } from './kill-attribution.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 let _registered = false;
 const _gearEmitted = new Set();
@@ -78,7 +79,7 @@ async function _gmEmitDestroyed(combat, tokenId, actor, round)
 
 function _emitLoss(combat, tokenId, event)
 {
-    if (game.user?.isGM)
+    if (isExecutorGM())
         appendEvent(combat, tokenId, event);
     else
         game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: tokenId, event } });
@@ -87,7 +88,7 @@ function _emitLoss(combat, tokenId, event)
 function _die(combat, tokenId, actor)
 {
     const round = combat.round ?? 0;
-    if (game.user?.isGM)
+    if (isExecutorGM())
         _gmEmitDestroyed(combat, tokenId, actor, round);
     else
         game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: tokenId, event: { type: 'destroyed', round, turn: combat.turn ?? null, tokenId } } });
@@ -96,7 +97,7 @@ function _die(combat, tokenId, actor)
 // GM sink for relayed state events; deaths get the final-tick treatment.
 export function handleRemoteStateEvent(payload)
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const combat = game.combats?.get(payload?.combatId);
     if (!getLAFlag(combat,'telemetry'))

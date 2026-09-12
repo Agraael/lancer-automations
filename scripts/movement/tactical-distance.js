@@ -238,14 +238,7 @@ function _ensureMdiFont()
 
 function losEyeEnabled()
 {
-    try
-    {
-        return getModuleSetting('lancerLos') === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('lancerLos') === true;
 }
 
 // A point origin (e.g. the cursor) takes priority over the token reference while set; null reverts.
@@ -351,14 +344,7 @@ function _syncEye(label, seen)
 
 function labelBelow()
 {
-    try
-    {
-        return getModuleSetting('tacticalLabelPosition') === 'below';
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('tacticalLabelPosition') === 'below';
 }
 
 // Below mode clears the stat bars and the nameplate, matching where the bars push the name.
@@ -373,15 +359,7 @@ function belowAnchorY(target)
 
 function zoomCounterScale()
 {
-    let minZoom = 0;
-    try
-    {
-        minZoom = Number(getModuleSetting('tacticalMinZoomScale')) || 0;
-    }
-    catch
-    {
-        minZoom = 0;
-    }
+    const minZoom = Number(getModuleSetting('tacticalMinZoomScale')) || 0;
     if (minZoom <= 0)
         return 1;
     const zoom = canvas.stage?.scale?.x || 1;

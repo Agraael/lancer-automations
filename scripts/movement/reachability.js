@@ -12,14 +12,7 @@ import { isHostile } from "../combat/overwatch.js";
 
 function autoElevDisabled()
 {
-    try
-    {
-        return !!getModuleSetting('disableAutoTerrainElevation');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('disableAutoTerrainElevation');
 }
 
 // A cell counts as off-map (a wall) when its center falls outside the scene rectangle.
@@ -406,14 +399,21 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
     const isHex = isHexGrid();
     const grid = /** @type {any} */ (canvas.grid);
     const goalCube = isHex ? grid.getCube({ i: goalOffset.i, j: goalOffset.j }) : null;
+    // diagonal-and-back detours cost the same as the straight line, so bias equal-cost ties
+    // toward the direct corridor with a deviation term far below any real step cost
+    const lineDirCol = goalOffset.j - startOffset.j;
+    const lineDirRow = goalOffset.i - startOffset.i;
+    const lineLen = Math.hypot(lineDirCol, lineDirRow) || 1;
+    const tieBias = (col, row) =>
+        Math.abs(((col - startOffset.j) * lineDirRow) - ((row - startOffset.i) * lineDirCol)) / lineLen * (sceneDistance / 65536);
     const heuristic = (col, row) =>
     {
         if (isHex)
         {
             const cube = grid.getCube({ i: row, j: col });
-            return Math.max(Math.abs(cube.q - goalCube.q), Math.abs(cube.r - goalCube.r), Math.abs(cube.s - goalCube.s)) * sceneDistance;
+            return Math.max(Math.abs(cube.q - goalCube.q), Math.abs(cube.r - goalCube.r), Math.abs(cube.s - goalCube.s)) * sceneDistance + tieBias(col, row);
         }
-        return Math.max(Math.abs(col - goalOffset.j), Math.abs(row - goalOffset.i)) * sceneDistance;
+        return Math.max(Math.abs(col - goalOffset.j), Math.abs(row - goalOffset.i)) * sceneDistance + tieBias(col, row);
     };
 
     const storedElevGrid = (origin.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;

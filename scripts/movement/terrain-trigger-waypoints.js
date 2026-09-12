@@ -371,14 +371,7 @@ function _injectRoute(token, context)
 
 function _settingOn(key)
 {
-    try
-    {
-        return !!getModuleSetting(key);
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting(key);
 }
 
 function _onModifyPlannedMovement(token, context)

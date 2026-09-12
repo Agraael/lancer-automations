@@ -12,7 +12,7 @@ export default defineConfig([
             globals: {
                 ...globals.browser,
 
-                // Foundry VTT v12 globals
+                // Foundry VTT v13 globals
                 game: "readonly",
                 canvas: "readonly",
                 ui: "readonly",
@@ -37,6 +37,9 @@ export default defineConfig([
                 Folder: "readonly",
                 JournalEntry: "readonly",
                 JournalEntryPage: "readonly",
+                Combat: "readonly",
+                Setting: "readonly",
+                Color: "readonly",
                 fromUuid: "readonly",
                 fromUuidSync: "readonly",
                 mergeObject: "readonly",
@@ -62,7 +65,8 @@ export default defineConfig([
                 Sequencer: "readonly",
                 Sequence: "readonly",
                 MidiQOL: "readonly",
-                $: "readonly"
+                $: "readonly",
+                jQuery: "readonly"
             }
         },
         rules: {

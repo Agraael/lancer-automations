@@ -120,14 +120,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('lancer-alt-structure')?.active)
                     return false;
-                try
-                {
-                    return getModuleSetting('enableAltStruct') === true;
-                }
-                catch
-                {
-                    return false;
-                }
+                return getModuleSetting('enableAltStruct') === true;
             },
             async fix()
             {
@@ -194,14 +187,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('lancer-speed-provider')?.active)
                     return false;
-                try
-                {
-                    return getModuleSetting('enableBuiltinSpeedProvider') === true;
-                }
-                catch
-                {
-                    return false;
-                }
+                return getModuleSetting('enableBuiltinSpeedProvider') === true;
             },
             async fix()
             {
@@ -319,6 +305,15 @@ function getConflictRules()
             check()
             {
                 return !!game.modules.get('jb2a_patreon')?.active && !!game.modules.get('JB2A_DnD5e')?.active;
+            }
+        },
+
+        {
+            id: 'statuscounter-redundant',
+            label: '<b>Stack counters</b> are built into Lancer Automations now, so <i>Status Icon Counters</i> (statuscounter) can be disabled.',
+            check()
+            {
+                return !!game.modules.get('statuscounter')?.active;
             }
         },
     ];

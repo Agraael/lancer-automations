@@ -3,6 +3,7 @@
 import { computeSightlineRays } from './lancerDetectionModes.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 import { drawDashedEdges } from '../interactive/canvas-helpers.js';
+import { canShareTools, canSeeToolsFrom } from '../interactive/presence.js';
 import { thtApi } from '../movement/movement-utils.js';
 import { getTerrainTypeMap } from '../movement/cost-rules.js';
 
@@ -509,7 +510,7 @@ function _drawCutRay(gfx, pointA, pointB, blockPoint)
 // Gameplay height for zone traversal, without the +0.1 wall-peek margin LA bakes into eye heights.
 function _zoneHeight(ref, eyeHeight)
 {
-    if (ref instanceof Token)
+    if (ref instanceof foundry.canvas.placeables.Token)
     {
         const doc = ref.document;
         const size = Number(ref.actor?.system?.size);
@@ -588,10 +589,10 @@ export function drawSightlines(key, viewer, targets)
 // Token ids travel, not geometry: every client already has the walls and terrain to redraw it.
 function _broadcastSightlines(viewer, targets)
 {
-    if (!getSettingEnabled('displayToolsToOthers') || !canvas.scene || viewer?.document?.hidden)
+    if (!canShareTools() || !canvas.scene || viewer?.document?.hidden)
         return;
     const targetIds = targets
-        .filter(target => target instanceof Token && !target.document?.hidden)
+        .filter(target => target instanceof foundry.canvas.placeables.Token && !target.document?.hidden)
         .map(target => target.document.id);
     if (!targetIds.length)
         return;
@@ -628,7 +629,7 @@ export function clearHoverSightlines()
 /** Draws another client's hovered sightlines locally, under their own key. */
 export function onRemoteSightlines(payload)
 {
-    if (!getSettingEnabled('displayToolsToOthers') || !payload || payload.userId === game.user.id)
+    if (!payload || payload.userId === game.user.id || !canSeeToolsFrom(payload.userId))
         return;
     if (payload.sceneId !== canvas.scene?.id)
         return;

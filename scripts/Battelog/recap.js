@@ -5,8 +5,7 @@ import { getStatsForActor, buildTwoZoneStatsHtml, ensureStyleSheet } from '../ta
 import { getLAFlag } from '../tools/flag-utils.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
-
-const _escape = str => String(str ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+import { escapeHtml as _escape } from '../tools/string-utils.js';
 
 function _themeNameHtml()
 {

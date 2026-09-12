@@ -35,15 +35,7 @@ Hooks.once('init', () =>
     {
         if (game.activeTool === 'target')
             return wrapped(event);
-        let enabled = false;
-        try
-        {
-            enabled = !!getModuleSetting('overlapTokenPicker');
-        }
-        catch
-        {
-            enabled = false;
-        }
+        const enabled = !!getModuleSetting('overlapTokenPicker');
         if (!enabled)
             return wrapped(event);
         const stack = overlappingTokens(this);

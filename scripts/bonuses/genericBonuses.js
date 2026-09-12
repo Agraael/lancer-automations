@@ -312,6 +312,43 @@ export function mutateRangeWithBonus(state, bonus)
 
 }
 
+/**
+ * Where a change_type bonus applies: 'base' (weapon damage, the default), 'bonus' (only the
+ * bonus damage rows, global and per-target) or 'all'. Other modes always mean 'base'.
+ * @param {any} bonus
+ * @returns {'base' | 'bonus' | 'all'}
+ */
+export function damageBonusScope(bonus)
+{
+    return (bonus?.damageMode === 'change_type' && bonus.damageScope) ? bonus.damageScope : 'base';
+}
+
+/**
+ * Whether a damage bonus rewrites the weapon's own damage before the HUD opens.
+ * @param {any} bonus
+ * @returns {boolean}
+ */
+export function mutatesBaseDamage(bonus)
+{
+    const mode = bonus?.damageMode || 'add';
+    if (mode !== 'replace' && mode !== 'change_type' && mode !== 'add_base')
+        return false;
+    return damageBonusScope(bonus) !== 'bonus';
+}
+
+/**
+ * Whether a damage bonus rewrites the bonus damage rows after the HUD closes.
+ * @param {any} bonus
+ * @returns {boolean}
+ */
+export function mutatesBonusDamage(bonus)
+{
+    if (bonus?.damageMode !== 'change_type')
+        return false;
+    const scope = damageBonusScope(bonus);
+    return scope === 'bonus' || scope === 'all';
+}
+
 // 'add' goes through DOM injection in showDamageBonusNotification; only replace/add_base/change_type mutate here.
 export function mutateDamageWithBonus(state, bonus)
 {
@@ -1363,7 +1400,9 @@ export function getBonusDetailString(bonus)
                 const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
                 return `${from} → ${dmg.to}`;
             });
-            return `Change Type: ${parts.join(', ')}`;
+            const scope = damageBonusScope(bonus);
+            const scopeLabel = scope === 'base' ? '' : ` (${scope})`;
+            return `Change Type${scopeLabel}: ${parts.join(', ')}`;
         }
         const body = entries.map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
         if (mode === 'replace')
@@ -3035,39 +3074,81 @@ export async function addGlobalBonus(actor, bonusData, options = {})
  *   to remove all matching bonuses in a single flag update.
  * @returns {Promise<boolean>} true if at least one bonus was removed
  */
+const _bonusFlagQueues = new Map();
+const _pendingBonusRemovals = new Map();
+
+function _actorKey(actor)
+{
+    return actor.uuid ?? actor.id;
+}
+
+// read-modify-write of the bonus flag must not interleave: a batch delete fires the hook once per effect
+function _queueBonusFlagWrite(actor, task)
+{
+    const key = _actorKey(actor);
+    const previous = _bonusFlagQueues.get(key) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(task);
+    _bonusFlagQueues.set(key, run);
+    run.finally(() =>
+    {
+        if (_bonusFlagQueues.get(key) === run)
+            _bonusFlagQueues.delete(key);
+    }).catch(() => undefined);
+    return run;
+}
+
+/** True while a removal of that bonus is in flight, so lists can drop it before the flag catches up. */
+export function isBonusRemovalPending(actor, bonusId)
+{
+    return !!actor && !!_pendingBonusRemovals.get(_actorKey(actor))?.has(bonusId);
+}
+
 export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRemoval = false)
 {
     if (!actor)
         return;
-    let bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
-    const initialLength = bonuses.length;
-
     const predicate = typeof bonusIdOrPredicate === 'function'
         ? bonusIdOrPredicate
-        : b => b.id === bonusIdOrPredicate;
+        : bonus => bonus.id === bonusIdOrPredicate;
 
-    const bonusesToRemove = bonuses.filter(predicate);
-    bonuses = bonuses.filter(b => !predicate(b));
-
-
-
-    if (bonuses.length !== initialLength)
+    const key = _actorKey(actor);
+    const pendingIds = (getLAFlag(actor,"global_bonuses") || []).filter(predicate).map(bonus => bonus.id);
+    const pending = _pendingBonusRemovals.get(key) ?? new Set();
+    for (const id of pendingIds)
+        pending.add(id);
+    _pendingBonusRemovals.set(key, pending);
+    try
     {
-        await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
-
-        if (!skipEffectRemoval && bonusesToRemove.length > 0)
+        return await _queueBonusFlagWrite(actor, async () =>
         {
-            const removedIds = new Set(bonusesToRemove.map(b => b.id));
-            const linkedEffects = actor.effects.filter(e =>
-                removedIds.has(getLAFlag(e,'linkedBonusId'))
-            );
-            for (const e of linkedEffects)
-                await e.delete();
-        }
+            let bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
+            const initialLength = bonuses.length;
+            const bonusesToRemove = bonuses.filter(predicate);
+            bonuses = bonuses.filter(bonus => !predicate(bonus));
+            if (bonuses.length === initialLength)
+                return false;
 
-        return true;
+            await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
+
+            if (!skipEffectRemoval && bonusesToRemove.length > 0)
+            {
+                const removedIds = new Set(bonusesToRemove.map(bonus => bonus.id));
+                const linkedEffects = actor.effects.filter(linkedEffect =>
+                    removedIds.has(getLAFlag(linkedEffect,'linkedBonusId'))
+                );
+                for (const linkedEffect of linkedEffects)
+                    await linkedEffect.delete();
+            }
+            return true;
+        });
     }
-    return false;
+    finally
+    {
+        for (const id of pendingIds)
+            pending.delete(id);
+        if (!pending.size && _pendingBonusRemovals.get(key) === pending)
+            _pendingBonusRemovals.delete(key);
+    }
 }
 
 /** @returns {object[]} */

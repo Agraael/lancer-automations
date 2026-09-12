@@ -622,6 +622,9 @@ type TriggerType =
     | "onEnterCombat" | "onExitCombat"
     | "onUpdate";
 
+/** Any non built-in name fired through `dispatchCustomTrigger`. */
+type CustomTriggerType = string & {};
+
 // Shared subtypes
 
 interface ConsumptionConfig {
@@ -688,7 +691,7 @@ interface LancerAutomationsAPI {
         notify?: boolean | object;
     }): Promise<void>;
     ensureLinkedEffect(options?: { items?: any[]; effectNames?: any; note?: string; duration?: object }, extraOptions?: object): Promise<any[]>;  // scripts/bonuses/flagged-effects.js
-    applyMark(sourceToken: Token, targets: Token | Token[], options: { effect: string | { name: string; icon?: string; isCustom?: boolean }; note?: string; duration?: object; flagKey?: string; extraOptions?: object }): Promise<any>;  // scripts/bonuses/flagged-effects.js
+    applyMark(sourceToken: Token, targets: Token | Token[], options: { effect: string | { name: string; icon?: string; isCustom?: boolean; description?: string }; note?: string; duration?: object; flagKey?: string; extraOptions?: object }): Promise<any>;  // scripts/bonuses/flagged-effects.js
     findMarkedTokens(sourceToken: Token, effectName: string, options?: { flagKey?: string }): Token[];  // scripts/bonuses/flagged-effects.js
     findEffectFrom: typeof import("../bonuses/flagged-effects.js").findEffectFrom;
     findEffectsOnToken(token: Token, effectName: string, options?: { extraFlags?: object; hasFlags?: string[]; excludeId?: string }): any[];  // scripts/bonuses/flagged-effects.js
@@ -938,7 +941,8 @@ interface LancerAutomationsAPI {
     executeDowntime(): Promise<void>;  // scripts/tools/downtime.js
 
     // Main helpers
-    handleTrigger(triggerType: TriggerType, data: object): Promise<void>;  // scripts/activations/reactions-engine.js
+    handleTrigger(triggerType: TriggerType | CustomTriggerType, data: object): Promise<void>;  // scripts/activations/reactions-engine.js
+    dispatchCustomTrigger(name: string, data?: object): Promise<void>;  // scripts/activations/reactions-engine.js
     getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };  // scripts/movement/move-tracking.js
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;  // scripts/movement/move-tracking.js
     getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;  // scripts/movement/move-tracking.js
@@ -1111,7 +1115,7 @@ interface LancerAutomationsAPI {
 // ReactionConfig
 
 type ReactionCallback = (
-    triggerType: TriggerType,
+    triggerType: TriggerType | CustomTriggerType,
     triggerData: TriggerData,
     reactorToken: Token,
     item: any,
@@ -1122,7 +1126,7 @@ type ReactionCallback = (
 interface ReactionConfig {
     category?: string;
     itemType?: string;
-    triggers: TriggerType[];
+    triggers: (TriggerType | CustomTriggerType)[];
     triggerSelf?: boolean;
     triggerOther?: boolean;
     /** Fires when the reactor is one of the event's targets, even with triggerOther off. Target-capable triggers only. */

@@ -2,8 +2,8 @@ import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWhee
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
-import { applyEffectsToTokens } from '../bonuses/flagged-effects.js';
-import { removeGlobalBonus, getBonusIcon } from '../bonuses/genericBonuses.js';
+import { applyEffectsToTokens, effectStack } from '../bonuses/flagged-effects.js';
+import { removeGlobalBonus, getBonusIcon, isBonusRemovalPending } from '../bonuses/genericBonuses.js';
 import { getBonusConditionLines } from '../bonuses/bonus-condition.js';
 import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
 import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
@@ -25,9 +25,7 @@ let _refreshTimer = null;
 let _tip = null;
 let _tipTimer = null;
 
-const hasStatusCounter = () => !!game.modules.get('statuscounter')?.active;
-
-const getStack = (effect) => hasStatusCounter() ? (effect.getFlag?.('statuscounter', 'value') ?? 1) : 1;
+const getStack = effectStack;
 
 function statusFavorites()
 {
@@ -50,12 +48,10 @@ function effectsForCustom(actor, name)
         effect.getFlag?.('temporary-custom-statuses', 'originalName') === name || effect.name === name);
 }
 
-// Mirrors the cyan token badge: stacked total with statuscounter, plain effect count without it.
+// Usage, as the purple token badge: stacks summed across the effects.
 function totalStack(effects)
 {
-    if (!effects.length)
-        return 0;
-    return hasStatusCounter() ? effects.reduce((sum, effect) => sum + getStack(effect), 0) : effects.length;
+    return effects.reduce((sum, effect) => sum + getStack(effect), 0);
 }
 
 // Mirrors the gold token badge.
@@ -118,7 +114,7 @@ function collectEntries(actor)
     const ringEffects = entries.flatMap(entry => entry.effects);
     for (const bonus of /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || []))
     {
-        if (ringEffects.some(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id))
+        if (isBonusRemovalPending(actor, bonus.id) || ringEffects.some(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id))
             continue;
         entries.push({
             kind: 'bonus',
@@ -168,6 +164,29 @@ async function clearStatus(tokens, entry)
     }
 }
 
+// Unwinds the newest instance one use at a time, then the instance itself, whatever the count.
+async function unwindStatus(tokens, entry)
+{
+    for (const token of tokens)
+    {
+        const effects = entry.kind === 'custom'
+            ? effectsForCustom(token.actor, entry.name)
+            : effectsForStatus(token.actor, entry.status.id);
+        const last = effects.at(-1);
+        if (!last)
+            continue;
+        const stack = getStack(last);
+        if (stack > 1)
+        {
+            await last.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
+            continue;
+        }
+        if (!await confirmPermanentRemoval(entry.name, [last]))
+            continue;
+        await token.actor.deleteEmbeddedDocuments('ActiveEffect', [last.id]);
+    }
+}
+
 async function stepStack(entry, delta)
 {
     const effect = entry.effects[0];
@@ -184,7 +203,7 @@ async function onLeftClick(tokens, entry)
         await applyStatus(tokens, entry);
         return;
     }
-    if (hasStatusCounter() && entry.effects.length === 1)
+    if (entry.effects.length === 1)
     {
         await stepStack(entry, 1);
         return;
@@ -205,12 +224,7 @@ async function onRightClick(tokens, entry)
         await applyStatus(tokens, entry);
         return;
     }
-    if (hasStatusCounter() && entry.effects.length === 1 && getStack(entry.effects[0]) > 1)
-    {
-        await stepStack(entry, -1);
-        return;
-    }
-    await clearStatus(tokens, entry);
+    await unwindStatus(tokens, entry);
 }
 
 // laHudRenderIcon treats any non-svg path as a font class, and custom statuses can carry a png.
@@ -254,7 +268,8 @@ function tooltipData(entry, actor)
 
 function buildWheelItem(entry, tokens)
 {
-    const stack = totalStack(entry.effects);
+    const instances = entry.effects.length;
+    const uses = totalStack(entry.effects);
     const turns = leastTurns(entry.effects);
     return {
         key: entry.key,
@@ -268,8 +283,15 @@ function buildWheelItem(entry, tokens)
             el.innerHTML = iconHtml(entry.icon);
             if (turns > 0)
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns">${turns}</span>`);
-            if (stack > 1)
-                el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack">${stack}</span>`);
+            // same split as the token badge: blue instances, purple usage beside it or in its place
+            if (instances > 1)
+                el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack">${instances}</span>`);
+            if (uses > instances)
+            {
+                el.insertAdjacentHTML('beforeend', instances > 1
+                    ? `<span class="lancer-sw-uses">${uses}</span>`
+                    : `<span class="lancer-sw-stack lancer-sw-stack--uses">${uses}</span>`);
+            }
             el.onmouseenter = () =>
             {
                 hideTip();
@@ -394,6 +416,6 @@ Hooks.once('init', () =>
             return true;
         },
         repeat: false,
-        precedence: foundry.helpers.interaction.ClientKeybindings?.PRECEDENCE?.PRIORITY ?? 2
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 });

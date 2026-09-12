@@ -88,10 +88,10 @@ export const _pendingVoteCards = new Map(); // cardId → { resolve, cardEl, cho
 // Vote cards (voter side)
 export const _pendingVoterCards = new Map(); // cardId → { cardEl, choices, myVote: number|null, dismissed: boolean, cleanup: fn, updateCounts: fn }
 
-/** Returns the userId of the first active GM, or null if none online. */
+/** Returns the userId of the active GM, or null if none online. */
 export function getActiveGMId()
 {
-    return game.users.find(u => u.isGM && u.active)?.id ?? null;
+    return game.users.activeGM?.id ?? null;
 }
 
 /**
@@ -145,7 +145,7 @@ export function getTokenOwnerUserId(token)
         : [];
     if (playerIds.length > 0)
         return playerIds;
-    const gm = game.users.find(u => u.active && u.isGM);
+    const gm = game.users.activeGM;
     return gm ? [gm.id] : [];
 }
 

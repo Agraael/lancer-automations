@@ -113,6 +113,11 @@ const DAMAGE_BONUS_MODES = [
     { value: 'replace', label: 'Replace' },
     { value: 'change_type', label: 'Change Type' },
 ];
+const DAMAGE_CHANGE_TYPE_SCOPES = [
+    { value: 'base', label: 'Weapon damage' },
+    { value: 'bonus', label: 'Bonus damage' },
+    { value: 'all', label: 'Both' },
+];
 const STAT_BONUS_MODES = [
     { value: 'add', label: 'Add' },
     { value: 'replace', label: 'Replace' },
@@ -874,7 +879,7 @@ async function modifyEffectStack(targetID, effectID, delta)
         const effect = target.actor.effects.get(effectID);
         if (effect)
         {
-            const newStack = effect.getFlag("statuscounter", "value") || effect.getFlag("temporary-custom-statuses", "stack") || 1;
+            const newStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
             if (newStack > 1)
             {
                 await effect.update(/** @type {any} */({
@@ -888,7 +893,7 @@ async function modifyEffectStack(targetID, effectID, delta)
         const effect = target.actor.effects.get(effectID);
         if (effect)
         {
-            const currentStack = effect.getFlag("statuscounter", "value") || effect.getFlag("temporary-custom-statuses", "stack") || 1;
+            const currentStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
             const newStack = currentStack + delta;
             if (newStack <= 0)
                 await effect.delete();
@@ -1270,7 +1275,7 @@ export async function executeEffectManager(options = {})
                 <label>Name:</label>
                 <div style="display:flex; gap:4px; align-items:center; min-width:0; width:100%;">
                     <input type="text" id="cust-name" placeholder="Status Name" style="flex:1; min-width:0;">
-                    <button type="button" class="save-status-btn" title="Save Status (add Name + Icon to the Saved list)" style="flex:0 0 28px; width:28px; height:28px; padding:0; line-height:1;"><i class="fas fa-save"></i></button>
+                    <button type="button" class="save-status-btn" title="Save Status (add Name + Icon + Description to the Saved list)" style="flex:0 0 28px; width:28px; height:28px; padding:0; line-height:1;"><i class="fas fa-save"></i></button>
                 </div>
                 <label style="text-align:right; padding-right:5px;">Stack:</label>
                 <input type="number" id="cust-stack" value="1" min="1">
@@ -1282,6 +1287,10 @@ export async function executeEffectManager(options = {})
                     <input type="text" id="cust-icon" value="systems/lancer/assets/icons/white/d20-framed.svg" style="flex:1; min-width:0;">
                     <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
+            </div>
+            <div class="form-group">
+                <label>Description:</label>
+                <textarea id="cust-description" rows="2" placeholder="Shown when the status is hovered" style="flex:1; min-width:0; resize:vertical;"></textarea>
             </div>
             <div class="te-section">Duration</div>
             <div class="form-group">
@@ -1540,7 +1549,13 @@ export async function executeEffectManager(options = {})
                 <div class="form-group" style="justify-content:flex-start;">
                     <label>Mode:</label>
                     <select id="bonus-damageMode" style="flex:0.6;">
-                        ${DAMAGE_BONUS_MODES.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
+                        ${DAMAGE_BONUS_MODES.map(mode => `<option value="${mode.value}">${mode.label}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group" id="bonus-damageScope-row" style="justify-content:flex-start; display:none;">
+                    <label>Scope:</label>
+                    <select id="bonus-damageScope" style="flex:0.6;">
+                        ${DAMAGE_CHANGE_TYPE_SCOPES.map(scope => `<option value="${scope.value}">${scope.label}</option>`).join('')}
                     </select>
                 </div>
                 <div id="bonus-damageMode-warning" style="display:none; color:#c33; font-size:0.85em; margin: 4px 0 6px; padding: 4px 8px; background: rgba(204,51,51,0.08); border-left: 3px solid #c33;">
@@ -2109,13 +2124,23 @@ export async function executeEffectManager(options = {})
                 $input.val(nextValue).trigger('change');
             });
 
-            html.find('#cust-saved').change(e =>
+            // fresh read, the render snapshot goes stale after a save
+            const findSavedStatus = (/** @type {string} */ name) =>
             {
-                const savedStatusName = $(e.currentTarget).val();
+                if (!hasCustomStatus)
+                    return null;
+                const list = /** @type {any[]} */ (game.settings.get('temporary-custom-statuses', 'savedStatuses') || []);
+                return list.find(saved => saved.name === name) || null;
+            };
+
+            html.find('#cust-saved').change(event =>
+            {
+                const savedStatusName = $(event.currentTarget).val();
                 if (savedStatusName)
                 {
                     html.find('#cust-name').val(savedStatusName);
-                    const icon = $(e.currentTarget).find(':selected').data('icon');
+                    html.find('#cust-description').val(findSavedStatus(String(savedStatusName))?.description ?? '');
+                    const icon = $(event.currentTarget).find(':selected').data('icon');
                     if (icon)
                     {
                         html.find('#cust-icon').val(icon);
@@ -2184,17 +2209,22 @@ export async function executeEffectManager(options = {})
             {
                 const name = String(html.find('#cust-name').val() || '').trim();
                 const icon = String(html.find('#cust-icon').val() || '').trim();
+                const description = String(html.find('#cust-description').val() || '').trim();
                 if (!name)
                     return ui.notifications.warn('Name is required to save a status.');
                 if (!icon)
                     return ui.notifications.warn('Icon is required to save a status.');
                 const list = game.settings.get('temporary-custom-statuses', 'savedStatuses') || [];
-                const existing = list.find(s => s.name === name);
+                const existing = list.find(saved => saved.name === name);
                 if (existing)
+                {
                     existing.icon = icon;
+                    existing.description = description;
+                }
                 else
-                    list.push({ name, icon });
+                    list.push({ name, icon, description });
                 await game.settings.set('temporary-custom-statuses', 'savedStatuses', list);
+                game.modules.get('temporary-custom-statuses')?.api?.syncStatusEffects?.();
                 // Refresh the Saved dropdown so the new entry is selectable immediately.
                 const $sel = html.find('#cust-saved');
                 const prev = String($sel.val() || '');
@@ -2416,10 +2446,13 @@ export async function executeEffectManager(options = {})
                     effectNames = String(html.find('#std-effect').val());
                 else
                 {
+                    const snippetName = String(html.find('#cust-name').val());
+                    const snippetDescription = String(html.find('#cust-description').val() || '').trim();
                     effectNames = pruneSnippet({
-                        name: String(html.find('#cust-name').val()),
+                        name: snippetName,
                         icon: String(html.find('#cust-icon').val()),
-                        isCustom: true
+                        isCustom: true,
+                        description: findSavedStatus(snippetName) ? '' : snippetDescription
                     });
                     const changesSrc = String(html.find('#cust-changes-value').val() || '').trim();
                     if (changesSrc)
@@ -2655,11 +2688,15 @@ export async function executeEffectManager(options = {})
 
                     const resolved = _resolveEmTargets(targetID);
                     const liveTokens = resolved.filter(entry => entry.token && !entry.item).map(entry => entry.token);
+                    // saved statuses resolve from CONFIG, stamp only one-offs
+                    const description = String(html.find('#cust-description').val() || '').trim();
+                    const stampDescription = description && !findSavedStatus(String(name));
                     const effectData = {
                         name: name,
                         icon: icon,
                         stack: stack,
-                        isCustom: true
+                        isCustom: true,
+                        ...(stampDescription ? { description } : {})
                     };
                     if (liveTokens.length)
                     {
@@ -3235,6 +3272,8 @@ export async function executeEffectManager(options = {})
                 {
                     const damageMode = html.find('#bonus-damageMode').val() || 'add';
                     bonusData.damageMode = damageMode;
+                    if (damageMode === 'change_type')
+                        bonusData.damageScope = html.find('#bonus-damageScope').val() || 'base';
                     const damageEntries = [];
                     html.find('#bonus-damage-list .bonus-damage-entry').each(function ()
                     {
@@ -3542,6 +3581,7 @@ export async function executeEffectManager(options = {})
             {
                 const mode = html.find('#bonus-damageMode').val() || 'add';
                 const isChangeType = mode === 'change_type';
+                html.find('#bonus-damageScope-row').toggle(isChangeType);
                 html.find('#bonus-damage-list .bonus-damage-entry').each(function ()
                 {
                     $(this).find('.bonus-damage-from').css('display', isChangeType ? '' : 'none');

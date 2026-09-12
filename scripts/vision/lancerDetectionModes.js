@@ -40,7 +40,7 @@ function _losVetoed(visionSource, target)
 {
     if (!getModuleSetting(SETTING_LOS))
         return false;
-    if (!(target instanceof Token))
+    if (!(target instanceof foundry.canvas.placeables.Token))
         return false;
     const viewerToken = visionSource?.object;
     if (!viewerToken?.document)
@@ -914,9 +914,9 @@ function _resolveToken(ref)
 {
     if (!ref)
         return null;
-    if (ref instanceof Token)
+    if (ref instanceof foundry.canvas.placeables.Token)
         return ref;
-    if (ref.object instanceof Token)
+    if (ref.object instanceof foundry.canvas.placeables.Token)
         return ref.object;
     if (typeof ref === 'string')
         return canvas?.tokens?.get(ref) ?? null;
@@ -971,7 +971,7 @@ export function computeSightlineRays(viewer, target)
 {
     if (!viewer?.document || !target)
         return null;
-    const isToken = target instanceof Token;
+    const isToken = target instanceof foundry.canvas.placeables.Token;
     if (isToken && !target.document)
         return null;
     const edges = _collectSightEdges();
@@ -1255,7 +1255,7 @@ function _applyScaledThickness(filter, input)
     filter.thickness = Math.max(1, maxDim * 0.001);
 }
 
-class SilhouetteOutlineFilter extends OutlineOverlayFilter
+class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOverlayFilter
 {
     apply(filterManager, input, output, clear, currentState)
     {
@@ -1305,7 +1305,7 @@ class SilhouetteOutlineFilter extends OutlineOverlayFilter
     }
 }
 
-class ScanlineOutlineFilter extends OutlineOverlayFilter
+class ScanlineOutlineFilter extends foundry.canvas.rendering.filters.OutlineOverlayFilter
 {
     apply(filterManager, input, output, clear, currentState)
     {
@@ -1360,7 +1360,7 @@ class PlainVisionFilter extends PIXI.Filter
 {
 }
 
-class DetectionModeLancerLineOfSight extends DetectionMode
+class DetectionModeLancerLineOfSight extends foundry.canvas.perception.DetectionMode
 {
     static getDetectionFilter()
     {
@@ -1372,7 +1372,7 @@ class DetectionModeLancerLineOfSight extends DetectionMode
 
     _canDetect(visionSource, target)
     {
-        if (!(target instanceof Token))
+        if (!(target instanceof foundry.canvas.placeables.Token))
             return false;
         if (!getModuleSetting(SETTING_LOS))
             return false;
@@ -1401,7 +1401,7 @@ class ShadowVisionFilter extends PIXI.Filter
 }
 
 // 2D-visible but 3D-occluded: renders a gray fill instead of hiding or fully showing.
-class DetectionModeLancerLosShadow extends DetectionMode
+class DetectionModeLancerLosShadow extends foundry.canvas.perception.DetectionMode
 {
     static getDetectionFilter()
     {
@@ -1413,7 +1413,7 @@ class DetectionModeLancerLosShadow extends DetectionMode
 
     _canDetect(visionSource, target)
     {
-        if (!(target instanceof Token))
+        if (!(target instanceof foundry.canvas.placeables.Token))
             return false;
         if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
@@ -1434,7 +1434,7 @@ class DetectionModeLancerLosShadow extends DetectionMode
     }
 }
 
-class DetectionModeLancerAwareness extends DetectionMode
+class DetectionModeLancerAwareness extends foundry.canvas.perception.DetectionMode
 {
     static getDetectionFilter()
     {
@@ -1448,7 +1448,7 @@ class DetectionModeLancerAwareness extends DetectionMode
 
     _canDetect(visionSource, target)
     {
-        if (!(target instanceof Token))
+        if (!(target instanceof foundry.canvas.placeables.Token))
             return false;
         if (getModuleSetting(SETTING_AWARENESS_COMBAT_ONLY) && !_isCombatActive())
             return false;
@@ -1530,7 +1530,7 @@ function _sensorCanDetect(visionSource, target)
     return false;
 }
 
-class DetectionModeLancerSensor extends DetectionMode
+class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
 {
     static getDetectionFilter()
     {
@@ -1544,7 +1544,7 @@ class DetectionModeLancerSensor extends DetectionMode
 
     _canDetect(visionSource, target)
     {
-        if (!(target instanceof Token))
+        if (!(target instanceof foundry.canvas.placeables.Token))
             return false;
         if (getModuleSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
             return false;
@@ -1599,7 +1599,7 @@ function _sourceWithPreview(token)
     const previews = canvas?.tokens?.preview?.children ?? [];
     for (const preview of previews)
     {
-        if (preview instanceof Token && preview._original === token)
+        if (preview instanceof foundry.canvas.placeables.Token && preview._original === token)
             list.push(preview);
     }
     return list;
@@ -1856,7 +1856,7 @@ export function initLancerDetectionModes()
         CONFIG.Canvas.detectionModes.lancerAwareness = new DetectionModeLancerAwareness({
             id: 'lancerAwareness',
             label: 'Lancer: Battlefield Awareness',
-            type: DetectionMode.DETECTION_TYPES.SIGHT,
+            type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
             tokenConfig: true
@@ -1864,7 +1864,7 @@ export function initLancerDetectionModes()
         CONFIG.Canvas.detectionModes.lancerSensor = new DetectionModeLancerSensor({
             id: 'lancerSensor',
             label: 'Lancer: Sensors',
-            type: DetectionMode.DETECTION_TYPES.SIGHT,
+            type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
             tokenConfig: true
@@ -1872,7 +1872,7 @@ export function initLancerDetectionModes()
         CONFIG.Canvas.detectionModes.lancerLineOfSight = new DetectionModeLancerLineOfSight({
             id: 'lancerLineOfSight',
             label: 'Lancer: Line of Sight',
-            type: DetectionMode.DETECTION_TYPES.SIGHT,
+            type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
             tokenConfig: true
@@ -1880,7 +1880,7 @@ export function initLancerDetectionModes()
         CONFIG.Canvas.detectionModes.lancerLosShadow = new DetectionModeLancerLosShadow({
             id: 'lancerLosShadow',
             label: 'Lancer: Line of Sight (shadow)',
-            type: DetectionMode.DETECTION_TYPES.SIGHT,
+            type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
             tokenConfig: true
@@ -1918,7 +1918,7 @@ function _wrapPlainSightVeto(mode)
         if (!result)
             return result;
         // The Lancer LOS and shadow modes own token detection, so basic vision never clips a token at a wall.
-        if (getModuleSetting(SETTING_LOS) && target instanceof Token && getLAFlag(target.document,'awarenessMode') !== 'ignore')
+        if (getModuleSetting(SETTING_LOS) && target instanceof foundry.canvas.placeables.Token && getLAFlag(target.document,'awarenessMode') !== 'ignore')
             return false;
         return result;
     };
@@ -1927,7 +1927,7 @@ function _wrapPlainSightVeto(mode)
 // Stock SilhouetteOutlineFilter breaks at scale<=1 and conflicts with our overlay; skip it.
 function _patchRenderDetectionFilter()
 {
-    const proto = /** @type {any} */ (Token.prototype);
+    const proto = /** @type {any} */ (foundry.canvas.placeables.Token.prototype);
     const orig = proto._renderDetectionFilter;
     const frameRect = new PIXI.Rectangle();
     const chainFilters = [];

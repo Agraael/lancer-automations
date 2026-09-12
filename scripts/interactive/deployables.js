@@ -914,14 +914,7 @@ function _printFlowConsumedUses(item)
     const tags = item?.system?.all_base_tags ?? item?.system?.tags ?? [];
     if (!Array.isArray(tags) || !tags.some(tag => tag?.lid === 'tg_limited'))
         return false;
-    try
-    {
-        return !!getModuleSetting('treatGenericPrintAsActivation');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('treatGenericPrintAsActivation');
 }
 
 async function _printDeployableCard(parentItem)

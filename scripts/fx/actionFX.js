@@ -2392,6 +2392,37 @@ export async function playBonusAddedFX(token, origin = null)
     playStatusSfxSound('bonus');
 }
 
+/** Status applied on a token. Kept separate from the bonus ping so the two can diverge. */
+export async function playStatusAddedFX(token, origin = null)
+{
+    if (!_canPlay() || !token)
+        return;
+    const arrow = origin
+        ? (_isFriendlyTo(origin, token)
+            ? 'jb2a.zoning.directional.once.bluegreen.line400.03'
+            : 'jb2a.zoning.directional.once.redyellow.line400.03')
+        : null;
+    const preload = ['jb2a.extras.tmfx.inpulse.circle.04'];
+    if (arrow)
+        preload.push(arrow);
+    await Sequencer.Preloader.preloadForClients(preload);
+    const seq = new Sequence();
+    if (arrow && origin && origin.id !== token.id)
+    {
+        seq.effect()
+            .file(arrow)
+            .atLocation(origin)
+            .stretchTo(token)
+            .playbackRate(2.5);
+    }
+    seq.effect()
+        .file('jb2a.extras.tmfx.inpulse.circle.04')
+        .atLocation(token)
+        .preset('la_scaleToBurst', 0);
+    seq.play();
+    playStatusSfxSound('status');
+}
+
 /** Failure ping on a target: red miss + border inpulse + deny sound. */
 export async function playTargetFailFX(token)
 {

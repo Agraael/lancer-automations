@@ -128,17 +128,7 @@ export async function revertMovement(token, destination = null)
 
     const sourceHistory = token.document._source?._movementHistory ?? [];
     const recorded = getRecordedWaypoints(token);
-    const _laDebug = (() =>
-    {
-        try
-        {
-            return !!getModuleSetting('debugMovement');
-        }
-        catch
-        {
-            return false;
-        }
-    })();
+    const _laDebug = !!getModuleSetting('debugMovement');
     if (_laDebug)
     {
         console.log('lancer-automations | revertMovement', {

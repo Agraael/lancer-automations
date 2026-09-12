@@ -3,6 +3,7 @@
 import { MODULE_ID } from './constants.js';
 import { getModuleSetting } from './settings-utils.js';
 import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
+import { escapeHtml as _escapeText } from './string-utils.js';
 
 function log(...args)
 {
@@ -1094,15 +1095,6 @@ function _wrapSection(section, collapsed)
 {
     const cls = section.cls ? ` ${section.cls}` : '';
     return `<div class="la-config-section${cls}${collapsed ? ' collapsed' : ''}">${_sectionHeadHtml(section.title)}${section.html}</div>`;
-}
-
-function _escapeText(value)
-{
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;');
 }
 
 function _linkedScanDocsFor(actorUuid)

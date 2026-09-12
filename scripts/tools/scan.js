@@ -255,15 +255,7 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null)
     }
     if (user?.isGM)
         return { default: OWNER };
-    let mode;
-    try
-    {
-        mode = getModuleSetting('scanPlayerOwnershipMode') || 'all';
-    }
-    catch
-    {
-        mode = 'all';
-    }
+    const mode = getModuleSetting('scanPlayerOwnershipMode') || 'all';
     if (mode === 'all')
         return { default: OWNER };
     if (mode === 'group' && game.modules.get('player-groups')?.active)
@@ -786,14 +778,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
 
 function _useLAJournal()
 {
-    try
-    {
-        return getModuleSetting('scanJournalSource') === 'lancer-automations';
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting('scanJournalSource') === 'lancer-automations';
 }
 
 // The system's initScanData refuses non-NPC actors; mechs, pilots and deployables scan with the generic fields.

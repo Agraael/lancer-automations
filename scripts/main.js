@@ -115,14 +115,15 @@ import {
     wrapUpdateOverchargeActor,
     wrapApplyOverkillHeat,
     wrapExtraActionRecharge,
-    wrapShowDamageHUD
+    wrapShowDamageHUD,
+    bonusDamageMutateStep
 } from "./activations/flow-wraps.js";
 import {
     getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow,
-    handleTrigger, deserializeTriggerData, checkOnInitReactions,
+    handleTrigger, dispatchCustomTrigger, deserializeTriggerData, checkOnInitReactions,
     processEffectConsumption
 } from "./activations/reactions-engine.js";
-export { getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow, handleTrigger, deserializeTriggerData };
+export { getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow, handleTrigger, dispatchCustomTrigger, deserializeTriggerData };
 import {
     throwChoiceStep, syncThrowToAccDiffStep,
     syncAccDiffToThrowStep, throwDeployStep, knockbackInjectStep, knockbackDamageStep,
@@ -144,6 +145,7 @@ import {
     persistRuntimeStackToTemplate,
 } from "./bonuses/flagged-effects.js";
 import { initStatusIconHover } from "./bonuses/status-icon-hover.js";
+import { initStatusCounter } from "./bonuses/status-counter.js";
 import {
     genericBonusStepDamage,
     injectKnockbackCheckbox,
@@ -164,6 +166,8 @@ import {
     getConstantBonuses,
     getGlobalBonuses,
     isBonusApplicable,
+    mutateDamageWithBonus,
+    mutatesBaseDamage,
     genericAccuracyStepAttack,
     genericAccuracyStepTechAttack,
     genericAccuracyStepWeaponAttack,
@@ -191,7 +195,7 @@ import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 
 // Tools
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
-import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, consumeAction } from "./tools/misc-tools.js";
+import { MiscAPI, getItemLID, isItemAvailable, hasReactionAvailable, getWeaponProfiles_WithBonus, executeSimpleActivation, consumeAction, isExecutorGM } from "./tools/misc-tools.js";
 import { DowntimeAPI } from "./tools/downtime.js";
 import { initDowntimeItems } from "./tools/downtime-item.js";
 import { RestAPI } from "./tools/rest.js";
@@ -352,6 +356,7 @@ function insertModuleFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-automations:onPreDamage', onPreDamageStep);
     flowSteps.set('lancer-automations:onDamage', onDamageStep);
+    flowSteps.set('lancer-automations:bonusDamageMutate', bonusDamageMutateStep);
     flowSteps.set('lancer-automations:onPreStructure', onPreStructureStep);
     flowSteps.set('lancer-automations:onStructure', onStructureStep);
     flowSteps.set('lancer-automations:onPreStress', onPreStressStep);
@@ -439,6 +444,10 @@ function insertModuleFlowSteps(flowSteps, flows)
         const anchorIdx = Math.max(critIdx, normIdx);
         if (anchorIdx >= 0)
             damageFlow.steps.splice(anchorIdx + 1, 0, 'lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
+        // rollReliable is the step that copies the HUD's bonus rows into the flow state.
+        const reliableIdx = damageFlow.steps.indexOf('rollReliable');
+        if (reliableIdx >= 0)
+            damageFlow.steps.splice(reliableIdx + 1, 0, 'lancer-automations:bonusDamageMutate');
     }
     flows.get('DamageRollFlow')?.insertStepBefore('setDamageTags', 'lancer-automations:pullInjectedTagsFromAttack');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
@@ -795,6 +804,7 @@ Hooks.once('ready', async () =>
 
     initCollapseHook();
     initStatusIconHover();
+    initStatusCounter();
     if (game.modules.get('status-halo')?.active && getModuleSetting('statusHalo'))
         ui.notifications.warn('Lancer Automations: the Status Icon Halo setting duplicates the Status Halo module. Disable one of them.');
 
@@ -802,6 +812,32 @@ Hooks.once('ready', async () =>
     {
         // intercept currentProfile/rangesFor to apply persistent range bonuses from actor flags
         const _ATTACK_TAGS = new Set(['all', 'attack']);
+
+        function _getBaseDamageBonuses(item)
+        {
+            const actor = item.parent;
+            if (!actor || item._laBaseDamageSwapped)
+                return null;
+            const state = { actor, item, data: {} };
+            const bonuses = [
+                ...flattenBonuses(getGlobalBonuses(actor)),
+                ...getConstantBonuses(actor)
+            ].filter(bonus => bonus?.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, _ATTACK_TAGS, state));
+            return bonuses.length ? bonuses : null;
+        }
+
+        // Clone, mutate, then rebuild as real Damage instances so the HUD's derived fields stay fresh.
+        function _applyDamageBonusesToArray(baseDamage, bonuses, actor, item)
+        {
+            const DamageClass = baseDamage[0]?.constructor;
+            const damage = baseDamage.map(entry => Object.assign(Object.create(Object.getPrototypeOf(entry)), entry));
+            mutateDamageWithBonus({ actor, item, data: { damage } }, bonuses[0]);
+            for (const bonus of bonuses.slice(1))
+                mutateDamageWithBonus({ actor, item, data: { damage } }, bonus);
+            if (!DamageClass || DamageClass === Object)
+                return damage;
+            return damage.map(entry => new DamageClass({ type: entry.type, val: String(entry.val) }));
+        }
 
         function _getRangeBonuses(item)
         {
@@ -860,10 +896,12 @@ Hooks.once('ready', async () =>
             function(wrapped)
             {
                 const result = wrapped.call(this);
-                const bonuses = _getRangeBonuses(this);
-                if (!bonuses)
-                    return result;
-                result.range = _applyRangeBonusesToArray(result.range, bonuses);
+                const rangeBonuses = _getRangeBonuses(this);
+                if (rangeBonuses)
+                    result.range = _applyRangeBonusesToArray(result.range, rangeBonuses);
+                const damageBonuses = Array.isArray(result.damage) && result.damage.length ? _getBaseDamageBonuses(this) : null;
+                if (damageBonuses)
+                    result.damage = _applyDamageBonusesToArray(result.damage, damageBonuses, this.parent, this);
                 return result;
             }, 'WRAPPER');
 
@@ -884,15 +922,7 @@ Hooks.once('ready', async () =>
                 if (this.isPreview)
                 {
                     const value = getModuleSetting('dragVisionMultiplier');
-                    let mode = 'ratio';
-                    try
-                    {
-                        mode = getModuleSetting('dragVisionMode');
-                    }
-                    catch (e)
-                    {
-                        mode = 'ratio';
-                    }
+                    const mode = getModuleSetting('dragVisionMode', 'ratio');
                     if (mode === 'flat' && value > 0)
                     {
                         const px = this.getLightRadius(value);
@@ -1199,6 +1229,7 @@ Hooks.on('ready', async () =>
         actionFX,
         processEffectConsumption,
         handleTrigger,
+        dispatchCustomTrigger,
         checkOnInitReactions,
         registerUserHelper,
         getUserHelper,
@@ -1377,7 +1408,7 @@ async function _cleanupActorTemplateFromTokens(actor, templateId)
 
 Hooks.on('createItem', async (item, _options, _userId) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
@@ -1389,7 +1420,7 @@ Hooks.on('createItem', async (item, _options, _userId) =>
 
 Hooks.on('updateItem', async (item, change, _options, _userId) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const destroyedChanged = foundry.utils.getProperty(change, 'system.destroyed') !== undefined;
     const disabledChanged = foundry.utils.getProperty(change, 'system.disabled') !== undefined;
@@ -1406,7 +1437,7 @@ Hooks.on('updateItem', async (item, change, _options, _userId) =>
 
 Hooks.on('deleteItem', async (item, _options, _userId) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
@@ -1419,7 +1450,7 @@ Hooks.on('deleteItem', async (item, _options, _userId) =>
 
 Hooks.on('updateItem', async (item, change, _options, _userId) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
@@ -1430,7 +1461,7 @@ Hooks.on('updateItem', async (item, change, _options, _userId) =>
 
 Hooks.on('updateActor', async (actor, change, _options, _userId) =>
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     if (foundry.utils.getProperty(change, 'flags.lancer-automations.extraBarTemplates') !== undefined)
         await reinjectAutoBarsForActor(actor);

@@ -12,7 +12,7 @@ const HEAD_META = {
     damage: { cls: 'lancer-weapon', icon: 'cci cci-large-beam' },
     hase: { cls: 'lancer-weapon', icon: 'fas fa-dice-d20' }
 };
-const DMG_ICONS = { kinetic: 'cci-kinetic', energy: 'cci-energy', explosive: 'cci-explosive', heat: 'cci-heat', burn: 'cci-burn', variable: 'cci-variable' };
+const DMG_ICONS = { kinetic: 'cci-kinetic', energy: 'cci-energy', explosive: 'cci-explosive', heat: 'cci-heat', burn: 'cci-burn', variable: 'cci-variable', infection: 'cci-infection' };
 const RANGE_ICONS = { range: 'cci-range', threat: 'cci-threat', thrown: 'cci-thrown', blast: 'cci-blast', burst: 'cci-burst', cone: 'cci-cone', line: 'cci-line' };
 
 function esc(text)
@@ -81,7 +81,16 @@ function targetingRow(snapshot)
         const iconHtml = icon ? `<i class="cci ${icon} i--s" style="border:none"></i>` : '';
         return `<span class="lau-range" data-hover-range="${Number(rangeVal) || 0}">${iconHtml}<span>${esc(icon ? rangeVal : `${type} ${rangeVal}`)}</span></span>`;
     }).join('');
-    return `<div class="lau-radrow"><b class="lau-tglabel">Targeting</b>${chips}${damageLine(damageEntries)}</div>`;
+    const baseEntries = snapshot.kind === 'damage' ? [] : (snapshot.attackDamageBase || []);
+    const baseChanged = baseEntries.length > 0 && JSON.stringify(baseEntries) !== JSON.stringify(snapshot.attackDamage || []);
+    const baseHtml = baseChanged
+        ? `<span style="color:#777;font-size:0.85em;margin-left:4px;">(base: ${esc(baseEntries.map(entry => `${entry.val} ${entry.type}`).join(' + '))})</span>`
+        : '';
+    const bonusEntries = snapshot.kind === 'damage' ? [] : (snapshot.attackBonusDamage || []);
+    const bonusHtml = bonusEntries.length
+        ? `<span style="opacity:0.7;margin:0 2px;">+</span>${damageLine(bonusEntries)}`
+        : '';
+    return `<div class="lau-radrow"><b class="lau-tglabel">Targeting</b>${chips}${damageLine(damageEntries)}${baseHtml}${bonusHtml}</div>`;
 }
 
 function miniHeader(snapshot, uuid)

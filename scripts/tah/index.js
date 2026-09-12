@@ -404,7 +404,7 @@ Hooks.on('init', () =>
             scope: 'client', config: false, type: Boolean, default: true,
         });
     }
-    for (const sfxKey of ['bonus'])
+    for (const sfxKey of ['bonus', 'status'])
     {
         game.settings.register(MODULE_ID, `tah.statusSfx.${sfxKey}`, {
             scope: 'client', config: false, type: Boolean, default: true,

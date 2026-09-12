@@ -19,14 +19,7 @@ function isFocusEnabled(focusKind)
     const settingKey = SETTING_BY_KIND[focusKind];
     if (!settingKey)
         return false;
-    try
-    {
-        return getModuleSetting(settingKey) === true;
-    }
-    catch
-    {
-        return false;
-    }
+    return getModuleSetting(settingKey) === true;
 }
 
 function panDurationMs()

@@ -875,6 +875,25 @@ Fires for any token update, so gate on `change`. For movement that means `x`, `y
 
 ---
 
+#### Custom Triggers
+
+<details id="dispatchCustomTrigger"><summary><b><code>dispatchCustomTrigger</code></b> → <code>Promise&lt;void&gt;</code> - fire your own trigger name</summary>
+
+```js
+api.dispatchCustomTrigger(name, data)
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>name</kbd> | `string` | Not a built-in name, not `onInit*` |
+| <kbd>data</kbd> | `object` | Becomes `triggerData`. Add `triggeringToken` for the self/other, disposition and distance filters |
+
+Listen via the editor's **Custom** field or `triggers: ["myTrigger"]`. Always fires, in or out of combat. Not cancellable, no consumption.
+
+</details>
+
+---
+
 ### Callback Signatures
 
 Shared params: `triggerType: TriggerType`, `triggerData: TriggerData`, `reactorToken: Token`, `item: Item | null` (null for general activations), `activationName: string`, `api: LancerAutomationsAPI`.
@@ -1036,7 +1055,7 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 
 | Field | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>triggers</kbd> | `TriggerType[]` | *required* | Trigger names this entry listens to |
+| <kbd>triggers</kbd> | `(TriggerType \| string)[]` | *required* | Trigger names this entry listens to. Any non built-in name is a [custom trigger](#dispatchCustomTrigger) |
 | <kbd>name</kbd> | `string` | `""` | Display name in the manager, and the key that matches an entry to its saved user settings |
 | <kbd>enabled</kbd> | `boolean` | `true` | Master toggle |
 | <kbd>awaitActivationCompletion</kbd> | `boolean` | `true` | Required to intercept `onPreMove`, `onInitActivation`, `onInitEndActivation`, `onInitAttack`, `onInitTechAttack`, `onInitCheck`. The engine tests `!== false`, so a code-registered entry awaits unless you opt out. The manager's checkbox writes an explicit value and starts unchecked |
@@ -1052,7 +1071,7 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | <kbd>requireCanProvoke</kbd> | `boolean` | `false` | Skip unless the trigger source can provoke the reactor (engagement, provoke immunity). Used by Overwatch |
 | <kbd>checkUsage</kbd> | `boolean` | `false` | Item entries only. Skip when the item is unloaded, uncharged, out of uses, or past its `tg_turn` / `tg_round` limit |
 | <kbd>isReaction</kbd> | `boolean` | `false` | Marks the entry as a reaction in the manager UI |
-| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd` and `onRoundStart`, which always fire |
+| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd`, `onRoundStart` and custom triggers, which always fire |
 | <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
 | <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
 | <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print`. Also gates availability: `ranks[N]` needs the talent at rank N+1, `profiles[N]` needs that weapon profile selected |

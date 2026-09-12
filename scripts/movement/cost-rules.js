@@ -12,14 +12,7 @@ const GAA_ID = 'grid-aware-auras';
 let _debugGfx = null;
 function debugOn()
 {
-    try
-    {
-        return !!getModuleSetting('debugMovement');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('debugMovement');
 }
 function debugReset()
 {
@@ -1213,14 +1206,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
 
 function _autoElevDisabled()
 {
-    try
-    {
-        return !!getModuleSetting('disableAutoTerrainElevation');
-    }
-    catch
-    {
-        return false;
-    }
+    return !!getModuleSetting('disableAutoTerrainElevation');
 }
 
 // Gate: Lancer ruler (cost + per-cell render) on. Auto-elevation is handled

@@ -1162,7 +1162,7 @@ export function getDefaultGeneralReactionRegistry()
                 ...CODE_INSTEAD,
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
-                    const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
+                    const gmUserId = game.users.activeGM?.id;
                     await api.startChoiceCard({
                         title: "FALLING?",
                         description: `<b>${reactorToken.name}</b> is hanging in the air. Does it fall?`,

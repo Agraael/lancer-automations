@@ -1,7 +1,9 @@
+import { isExecutorGM } from '../tools/misc-tools.js';
+
 // get() returns the first document per key, duplicates freeze the value.
 export async function dedupeWorldSettings()
 {
-    if (!game.user?.isGM)
+    if (!isExecutorGM())
         return;
     const byKey = new Map();
     for (const setting of game.settings.storage.get('world'))

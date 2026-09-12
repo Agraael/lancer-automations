@@ -73,7 +73,7 @@ Each activation is a small form. The main fields:
 
 | Group | What you set |
 |-------|--------------|
-| **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). |
+| **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). Custom names go in the **Custom** field, fired with `api.dispatchCustomTrigger(name, data)`. |
 | **Mode** | How your code composes with the activation's **own** flow or card: **instead of** it, or **after** it. Never the flow that triggered you, which runs either way. Also whether it **auto-activates** silently (no popup). |
 | **Filters** | Disposition (Friendly / Hostile / Neutral / Secret, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the activation is limited to. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type (Automation / Reaction / Quick Action / Full Action / ...), and frequency. Note the long forms: it is `"Quick Action"` here, not the `"Quick"` short form the TAH extra actions use. |

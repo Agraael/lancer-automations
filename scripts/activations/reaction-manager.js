@@ -125,6 +125,22 @@ export const SOURCE_MATCH_TRIGGERS = new Set([
     'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
 ]);
 
+// Editor picker groups, also the complete built-in list: any other trigger name is a custom trigger.
+export const TRIGGER_GROUPS = [
+    { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
+    { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
+    { label: "Rolls", triggers: ["onRoll"] },
+    { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
+    { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
+    { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
+    { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
+    { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
+    { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
+    { label: "Token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
+    { label: "Other", triggers: ["onUpdate"] }
+];
+export const BUILT_IN_TRIGGERS = new Set(TRIGGER_GROUPS.flatMap(group => group.triggers));
+
 export const ACTIVATION_TRIGGERS = new Set(['onActivation', 'onInitActivation', 'onEndActivation', 'onInitEndActivation']);
 const ACTIVATION_TRIGGER_SELECTOR = [...ACTIVATION_TRIGGERS].map(trigger => `input[name="trigger.${trigger}"]`).join(', ');
 
@@ -2215,6 +2231,7 @@ export class ReactionEditor extends FormApplication
             sceneId: reaction.sceneId || "",
             sceneOptions: game.scenes.map(scene => ({ id: scene.id, name: scene.name })).sort((left, right) => left.name.localeCompare(right.name)),
             triggers: this._getTriggerOptions(reaction.triggers || []),
+            customTriggers: (reaction.triggers || []).filter(trigger => !BUILT_IN_TRIGGERS.has(trigger)).join(", "),
             evaluate: reaction.evaluate?.toString() || "return true;",
             triggerHelp: this._triggerHelp,
             activationType: reaction.activationType || "flow",
@@ -2847,7 +2864,8 @@ export class ReactionEditor extends FormApplication
                 const countEl = $(this).find('.trigger-group-count');
                 countEl.text(checked > 0 ? `(${checked})` : '');
             });
-            const total = html.find('input[name^="trigger."]:checked').length;
+            const customCount = String(html.find('#custom-triggers').val() ?? '').split(',').filter(entry => entry.trim()).length;
+            const total = html.find('input[name^="trigger."]:checked').length + customCount;
             html.find('.trigger-selected-count').text(`${total} selected`);
         };
         syncGroupCounts = updateGroupCounts;
@@ -2856,6 +2874,7 @@ export class ReactionEditor extends FormApplication
             $(this).closest('.trigger-group').toggleClass('collapsed');
         });
         html.find('.trigger-group-body input').on('change', updateGroupCounts);
+        html.find('#custom-triggers').on('input', updateGroupCounts);
         updateGroupCounts();
 
         html.find('.trigger-group').each(function ()
@@ -3534,23 +3553,10 @@ export class ReactionEditor extends FormApplication
 
     _getTriggerOptions(selected)
     {
-        const groups = [
-            { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
-            { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
-            { label: "Rolls", triggers: ["onRoll"] },
-            { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
-            { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
-            { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
-            { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
-            { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
-            { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
-            { label: "Token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
-            { label: "Other", triggers: ["onUpdate"] }
-        ];
         const help = this._triggerHelp ?? {};
         const hasCancelFn = (triggerKey) => /\w+\s*\(/.test(help[triggerKey] ?? "");
 
-        return groups.map(group => ({
+        return TRIGGER_GROUPS.map(group => ({
             label: group.label,
             items: group.triggers.map(triggerKey => ({
                 key: triggerKey,
@@ -3612,6 +3618,15 @@ export class ReactionEditor extends FormApplication
         {
             if (key.startsWith("trigger.") && value)
                 triggers.push(key.replace("trigger.", ""));
+        }
+        for (const entry of String(formData.customTriggers ?? "").split(","))
+        {
+            const customTrigger = entry.trim();
+            if (!customTrigger || triggers.includes(customTrigger))
+                continue;
+            if (customTrigger.startsWith("onInit"))
+                return ui.notifications.error(`Custom trigger "${customTrigger}": names cannot start with "onInit".`);
+            triggers.push(customTrigger);
         }
 
         const dispositionFilter = [];

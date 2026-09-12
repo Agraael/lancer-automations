@@ -1,4 +1,4 @@
-import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus, mutateDamageWithBonus, getConstantBonuses, getGlobalBonuses } from "../bonuses/genericBonuses.js";
+import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus, mutateDamageWithBonus, mutatesBaseDamage, getConstantBonuses, getGlobalBonuses } from "../bonuses/genericBonuses.js";
 import { getLAFlag } from "./flag-utils.js";
 
 const REACH_RANGE_TYPES = new Set(["Range", "Threat", "Line", "Burst", "Cone"]);
@@ -120,7 +120,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
             {
                 if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
                     mutateRangeWithBonus(bonusState, bonus);
-                else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, bonusState))
+                else if (bonus.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, flowTags, bonusState))
                     mutateDamageWithBonus(bonusState, bonus);
             }
             return { ...profile, range: base, all_range: base, base_range, damage: workingDamage, base_damage };
@@ -159,7 +159,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
     {
         if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
             mutateRangeWithBonus(bonusState, bonus);
-        else if (bonus.type === 'damage' && (bonus.damageMode === 'replace' || bonus.damageMode === 'change_type' || bonus.damageMode === 'add_base') && isBonusApplicable(bonus, flowTags, bonusState))
+        else if (bonus.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, flowTags, bonusState))
             mutateDamageWithBonus(bonusState, bonus);
     }
     return [{ ...weapon.system, damage: workingDamage.length > 0 ? workingDamage : damage, attack_bonus, accuracy, range: base, base_range, base_damage }];

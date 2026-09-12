@@ -3,6 +3,7 @@
 import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './genericBonuses.js';
 import { linkedBonusConditionLines } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
+import { effectStack } from './flagged-effects.js';
 
 /**
  * @typedef {Object} StatusTooltipData
@@ -37,19 +38,13 @@ export function remainingTurns(effect)
     return bestTurnEntry(effect)?.turns ?? 0;
 }
 
-/**
- * Same value the cyan token badge draws: stacked total where statuscounter is in play,
- * otherwise how many effects share the name.
- */
+/** Same value the blue token badge draws: how many live effects share the name. */
 export function instanceCount(actor, effect)
 {
     const name = effect?.name;
     if (!actor || !name)
         return 0;
-    const matches = [...actor.effects].filter(entry => !entry.disabled && entry.name === name);
-    if (game.modules.get('statuscounter')?.active)
-        return matches.reduce((sum, entry) => sum + (entry.getFlag?.('statuscounter', 'value') ?? 1), 0);
-    return matches.length;
+    return [...actor.effects].filter(entry => !entry.disabled && entry.name === name).length;
 }
 
 /** Shortest turn-based entry wins, otherwise the first entry decides the wording. */
@@ -74,28 +69,53 @@ export function durationText(effect)
     return '';
 }
 
-/** Detail line for the global bonus an effect is linked to, empty when it is not linked to one. */
+/**
+ * Detail line for the global bonus an effect is linked to, empty when it is not linked to one.
+ * Uses are summed across the same-name effects that collapse into one icon.
+ */
 export function linkedBonusText(actor, effect)
 {
     const linkedBonusId = getLAFlags(effect)?.linkedBonusId;
     if (!linkedBonusId || !actor)
         return '';
-    const bonus = getGlobalBonuses(actor).find(entry => entry.id === linkedBonusId);
-    return bonus ? bonusText(bonus, actor) : '';
+    const bonuses = getGlobalBonuses(actor);
+    const bonus = bonuses.find(entry => entry.id === linkedBonusId);
+    if (!bonus)
+        return '';
+    return bonusText(bonus, actor, _collapsedUses(actor, effect, bonus, bonuses));
 }
 
-/** Detail line for a bonus object, with its uses when it has a count. */
-export function bonusText(bonus, actor = null)
+function _collapsedUses(actor, effect, bonus, bonuses)
+{
+    const base = getBonusUsesInfo(actor, bonus);
+    if (!base || effect.flags?.statuscounter?.value == null)
+        return base;
+    let remaining = 0;
+    let max = 0;
+    for (const entry of actor.effects)
+    {
+        if (entry.disabled || entry.name !== effect.name)
+            continue;
+        const linked = bonuses.find(candidate => candidate.id === getLAFlags(entry)?.linkedBonusId);
+        if (linked?.uses === undefined)
+            continue;
+        remaining += effectStack(entry);
+        max += Number(linked.uses) || 0;
+    }
+    return { label: `${remaining}/${max}`, onUse: base.onUse };
+}
+
+/** Detail line for a bonus object, with its uses when it has a count. `uses` overrides the bonus's own count. */
+export function bonusText(bonus, actor = null, uses = getBonusUsesInfo(actor, bonus))
 {
     if (!bonus)
         return '';
     const detail = bonus.type === 'multi' && Array.isArray(bonus.bonuses)
         ? bonus.bonuses.map(getBonusDetailString).join(' | ')
         : getBonusDetailString(bonus);
-    const uses = getBonusUsesInfo(actor, bonus);
     if (!uses)
         return detail;
-    return `${detail} [${uses.label}]${uses.onUse ? ' [on-use]' : ''}`;
+    return `${detail} <span class="la-status-tooltip-uses">[${uses.label}]</span>${uses.onUse ? ' [on-use]' : ''}`;
 }
 
 /** Effect description, falling back to the status config it carries. */

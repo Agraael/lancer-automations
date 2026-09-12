@@ -8,6 +8,7 @@
 
 import { getActivationIcon } from '../tools/misc-tools.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { damageBonusScope } from '../bonuses/genericBonuses.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
 
 function activationChipContent(action)
@@ -580,7 +581,9 @@ function laRenderBonusList(bonuses)
                     const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
                     return `${from} → ${dmg.to}`;
                 });
-                return `Change Type: ${parts.join(', ')}`;
+                const scope = damageBonusScope(bonus);
+                const scopeLabel = scope === 'base' ? '' : ` (${scope})`;
+                return `Change Type${scopeLabel}: ${parts.join(', ')}`;
             }
             const body = entries.map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
             if (mode === 'replace')

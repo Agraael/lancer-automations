@@ -1,0 +1,62 @@
+name: Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - startups/**
+      - tests/**
+      - tools/**
+      - eslint.config.js
+      - eslint.ci.config.js
+      - jsconfig.json
+      - package.json
+      - .github/workflows/check.yml
+  pull_request:
+    paths:
+      - scripts/**
+      - startups/**
+      - tests/**
+      - tools/**
+      - eslint.config.js
+      - eslint.ci.config.js
+      - jsconfig.json
+      - package.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: npm ci
+
+      # Bug-detection rules only. Formatting is the author's call, see eslint.ci.config.js.
+      - name: Lint
+        run: npm run lint:ci
+
+      # The eight conventions that are at 100%. Adding a rule here locks it forever.
+      - name: Conventions
+        run: npm run conventions:ci
+
+      # Fails only when the tsc error count RISES above tools/typecheck_baseline.txt.
+      - name: Typecheck ratchet
+        run: npm run typecheck:ratchet

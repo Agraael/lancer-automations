@@ -1501,13 +1501,7 @@ export const ItemDisabledAPI = {
 function getDesiredWallHeight(actor)
 {
     const size = Number(actor.system?.size ?? actor.prototypeToken?.width ?? 1) || 1;
-    let vsEnabled = false;
-    try
-    {
-        vsEnabled = !!getModuleSetting('autoTokenHeightVehicleSquad');
-    }
-    catch
-    { /* ignore */ }
+    const vsEnabled = !!getModuleSetting('autoTokenHeightVehicleSquad');
     if (vsEnabled)
     {
         const items = Array.from(actor.items ?? []);
