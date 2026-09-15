@@ -35,9 +35,9 @@ function _applyIsoCounter(displayObject)
 
 function _isoProjectLabelPos(pos)
 {
-    if (!isIsoFeatureEnabled(ISO_SETTINGS.waypointLabel))
+    if (!pos)
         return pos;
-    if (!_isoActive())
+    if (!isIsoFeatureEnabled(ISO_SETTINGS.waypointLabel) || !_isoActive())
         return pos;
     const proj = canvas.stage.toGlobal({ x: pos.x, y: pos.y });
     const hud = document.getElementById('hud');
@@ -1275,10 +1275,10 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
     _getWaypointLabelContext(waypoint, state)
     {
         const ctx = super._getWaypointLabelContext(waypoint, state);
-        if (!settingOn())
-            return ctx;
         if (ctx?.position)
             ctx.position = _isoProjectLabelPos(ctx.position);
+        if (!settingOn())
+            return ctx;
         if (!ctx?.elevation || !waypoint.previous)
             return ctx;
         const groundHere = _measureTerrainElevDisabled() ? 0 : _thtGroundAt(waypoint);
