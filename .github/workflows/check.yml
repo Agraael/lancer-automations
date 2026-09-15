@@ -43,20 +43,9 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - run: npm ci
 
       # Bug-detection rules only. Formatting is the author's call, see eslint.ci.config.js.
+      # The convention audit and tsc ratchet stay local: tools/ is gitignored.
       - name: Lint
         run: npm run lint:ci
-
-      # The eight conventions that are at 100%. Adding a rule here locks it forever.
-      - name: Conventions
-        run: npm run conventions:ci
-
-      # Fails only when the tsc error count RISES above tools/typecheck_baseline.txt.
-      - name: Typecheck ratchet
-        run: npm run typecheck:ratchet
