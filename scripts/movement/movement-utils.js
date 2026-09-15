@@ -12,6 +12,41 @@ export function thtApi()
     return globalThis.terrainHeightTools ?? null;
 }
 
+// THT shapes live in scene flags, so a scene write or load is the only change. Each query is a quadtree walk.
+let _thtCellCache = new Map();
+let _thtPointCache = new Map();
+function invalidateThtShapes()
+{
+    _thtCellCache = new Map();
+    _thtPointCache = new Map();
+}
+Hooks.on('canvasReady', invalidateThtShapes);
+Hooks.on('updateScene', invalidateThtShapes);
+
+export function thtCellShapes(tht, col, row)
+{
+    const key = `${col},${row}`;
+    let shapes = _thtCellCache.get(key);
+    if (!shapes)
+    {
+        shapes = tht.getCell?.(col, row) ?? [];
+        _thtCellCache.set(key, shapes);
+    }
+    return shapes;
+}
+
+export function thtShapesAtPoint(tht, x, y)
+{
+    const key = `${Math.round(x)},${Math.round(y)}`;
+    let shapes = _thtPointCache.get(key);
+    if (!shapes)
+    {
+        shapes = tht.getShapesAtPoint?.(x, y) ?? [];
+        _thtPointCache.set(key, shapes);
+    }
+    return shapes;
+}
+
 const OBSTRUCTION_TEMPLATE_SETTINGS = {
     vehicle: 'obstructionBlocksVehicle',
     squad: 'obstructionBlocksSquad',

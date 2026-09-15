@@ -6,7 +6,7 @@ import { initHexDragStabilizer } from './hex-drag-stabilizer.js';
 import { initTerrainTriggerSplits, injectTriggerSilentsAtDrop } from './terrain-trigger-waypoints.js';
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag } from "../tools/flag-utils.js";
-import { thtApi, canPassObstructions } from './movement-utils.js';
+import { thtApi, canPassObstructions, thtCellShapes, thtShapesAtPoint } from './movement-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
@@ -126,7 +126,7 @@ function terrainTopUnder(tokenDoc, position)
         {
             try
             {
-                consider(tht.getShapesAtPoint?.(px, py) ?? []);
+                consider(thtShapesAtPoint(tht, px, py));
             }
             catch
             { /* ignore */ }
@@ -142,7 +142,7 @@ function terrainTopUnder(tokenDoc, position)
         catch
         { /* invalid */ }
         for (const gridOffset of offsets)
-            consider(tht.getCell?.(gridOffset.j, gridOffset.i) ?? []);
+            consider(thtCellShapes(tht, gridOffset.j, gridOffset.i));
     }
     if (!cellTops.length)
         return null;
@@ -284,9 +284,9 @@ function _cellTopAt(typeById, tht, cellOffset)
     try
     {
         const cellCenter = canvas.grid.getCenterPoint(cellOffset);
-        shapes = tht.getShapesAtPoint?.(cellCenter.x, cellCenter.y) ?? [];
+        shapes = thtShapesAtPoint(tht, cellCenter.x, cellCenter.y);
         if (!shapes.length)
-            shapes = tht.getCell?.(cellOffset.j, cellOffset.i) ?? [];
+            shapes = thtCellShapes(tht, cellOffset.j, cellOffset.i);
     }
     catch
     {
@@ -367,7 +367,7 @@ function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {})
         {
             try
             {
-                consider(tht.getShapesAtPoint?.(px, py));
+                consider(thtShapesAtPoint(tht, px, py));
             }
             catch
             { /* ignore */ }
@@ -383,7 +383,7 @@ function _terrainTopMost(tokenDoc, position, { terrainFilter, gapSearch } = {})
         catch
         { /* ignore */ }
         for (const gridOffset of offsets)
-            consider(tht.getCell?.(gridOffset.j, gridOffset.i));
+            consider(thtCellShapes(tht, gridOffset.j, gridOffset.i));
     }
 
     if (!gapSearch)

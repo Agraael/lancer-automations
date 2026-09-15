@@ -78,6 +78,7 @@ function _isBlockedByTokenEdge(visionSource, target)
 
 // Wall-based Lancer line of sight: height-aware edge-to-edge rays. A line along a wall edge is not broken.
 let _losEdgeCache = null;
+let _losEdgeCount = 0;
 let _losVertexMap = null;
 let _losPolyMap = null;
 let _losClosedPolys = null;
@@ -121,8 +122,11 @@ function _losPosKey(doc)
 // Sight-blocking edges (walls + the bulwark token blockers + wall-height terrain), cached per refresh.
 function _collectSightEdges()
 {
-    if (_losEdgeCache)
+    // Size guard catches edges added or removed without a wall document.
+    if (_losEdgeCache && canvas?.edges?.size === _losEdgeCount)
         return _losEdgeCache;
+    _losInvalidate();
+    _losEdgeCount = canvas?.edges?.size ?? 0;
     const records = [];
     // Flag-only mode: full token blockers carry laSight twins, so laSight edges alone cover everything.
     const flagOnly = laLosFlagOnly();
@@ -1912,15 +1916,14 @@ export function initLancerDetectionModes()
     });
     Hooks.on('sightRefresh', () =>
     {
-        _losInvalidate();
         _markOverlayDirty();
         _drawLosDebug();
     });
-    Hooks.on('canvasTearDown', _losInvalidateAll);
+    // A drag fires sightRefresh per cell but moves no wall, so only wall, scene and setting changes drop the edges.
+    for (const hook of ['canvasReady', 'canvasTearDown', 'createWall', 'updateWall', 'deleteWall', 'clientSettingChanged', 'updateSetting'])
+        Hooks.on(hook, _losInvalidateAll);
     // Token size and eye-height flags feed the rays but not the pair key.
     Hooks.on('updateToken', _losPairsClear);
-    Hooks.on('clientSettingChanged', _losPairsClear);
-    Hooks.on('updateSetting', _losPairsClear);
     Hooks.on('createToken', _onCreateToken);
     Hooks.on('canvasReady', _installSilhouetteOverlayTicker);
     Hooks.on('canvasReady', _installLosDebug);

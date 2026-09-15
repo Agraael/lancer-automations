@@ -16,6 +16,18 @@ const EYE_OFF = '\u{F06D1}';
 const EYE_SEEN = '#4dd35f';
 const EYE_BLOCKED = '#ff5b52';
 
+// Label metrics are world px, calibrated on a 100px grid.
+function gridScale()
+{
+    return (canvas.grid?.size || 100) / 100;
+}
+
+// Smaller font = smaller bitmap, so raise the density to keep it sharp.
+function labelResolution(scale)
+{
+    return Math.min(8, Math.max(2, 2 / scale));
+}
+
 function _getIsoState(token)
 {
     if (!isIsoFeatureEnabled(ISO_SETTINGS.tacticalDistance))
@@ -54,16 +66,18 @@ function shouldShow()
 
 function makeLabel()
 {
+    const scale = gridScale();
     const style = foundry.canvas.containers.PreciseText.getTextStyle({
         fontFamily: ['Material Design Icons', 'Signika'],
-        fontSize: 14,
+        fontSize: 14 * scale,
         fill: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 3,
+        strokeThickness: Math.max(1, 3 * scale),
         align: 'center',
         fontWeight: '600'
     });
     const text = new foundry.canvas.containers.PreciseText('', style);
+    text.resolution = labelResolution(scale);
     text.anchor.set(0.5, 0);
     return text;
 }
@@ -321,14 +335,16 @@ function _syncEye(label, seen)
     }
     if (!label._laEye || label._laEye.destroyed)
     {
+        const scale = gridScale();
         const style = foundry.canvas.containers.PreciseText.getTextStyle({
             fontFamily: ['Material Design Icons', 'Signika'],
-            fontSize: 14,
+            fontSize: 14 * scale,
             stroke: '#000000',
-            strokeThickness: 3,
+            strokeThickness: Math.max(1, 3 * scale),
             fontWeight: '600'
         });
         const eye = new foundry.canvas.containers.PreciseText('', style);
+        eye.resolution = labelResolution(scale);
         eye.anchor.set(1, 0.5);
         label.addChild(eye);
         label._laEye = eye;
@@ -372,6 +388,7 @@ function positionLabel(target, label)
     const below = labelBelow();
     const iso = _getIsoState(target);
     const zoomK = zoomCounterScale();
+    const gap = 4 * gridScale();
     if (iso && target.mesh)
     {
         label.anchor.set(0.5, below ? 0 : 1);
@@ -379,12 +396,12 @@ function positionLabel(target, label)
         label.rotation = iso.reverseRotation;
         label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
         label.scale.set(iso.counterScale * zoomK, (1 / iso.counterScale) * zoomK);
-        label.pivot.set(0, (below ? -(belowAnchorY(target) - target.h / 2) : target.h / 2 + 4) / zoomK);
+        label.pivot.set(0, (below ? -(belowAnchorY(target) - target.h / 2) : target.h / 2 + gap) / zoomK);
     }
     else
     {
         label.anchor.set(0.5, below ? 0 : 1);
-        label.position.set(target.x + target.w / 2, below ? target.y + belowAnchorY(target) : target.y - 4);
+        label.position.set(target.x + target.w / 2, below ? target.y + belowAnchorY(target) : target.y - gap);
         label.rotation = 0;
         label.skew.set(0, 0);
         label.scale.set(zoomK, zoomK);
@@ -395,10 +412,10 @@ function positionLabel(target, label)
     {
         const textW = label.texture?.orig?.width ?? 0;
         const textH = label.texture?.orig?.height ?? 0;
-        eye.x = -textW / 2 - 4;
+        eye.x = -textW / 2 - gap;
         eye.y = textH * (0.5 - label.anchor.y);
         // The eye hangs off the left, so centre the pair instead of the text alone.
-        label.pivot.x = -((eye.width ?? 0) + 4) / 2;
+        label.pivot.x = -((eye.width ?? 0) + gap) / 2;
     }
 }
 

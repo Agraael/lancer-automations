@@ -1,6 +1,7 @@
 /* global Hooks, game, canvas, CONST, foundry, PIXI, $ */
 
 import { laLosFlagOnly } from './laWallLos.js';
+import { invalidateLosCaches } from './lancerDetectionModes.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
@@ -170,6 +171,7 @@ function _refreshToken(token)
         return;
     _removeEdges(token);
     _installEdges(token);
+    invalidateLosCaches();
     canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
 }
 
@@ -182,6 +184,7 @@ function _refreshAll()
         _removeEdges(token);
         _installEdges(token);
     }
+    invalidateLosCaches();
     canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
 }
 
@@ -243,6 +246,7 @@ export function initTokenBlocksVision()
     Hooks.on('deleteToken', (tokenDoc) =>
     {
         _removeEdges({ id: tokenDoc.id });
+        invalidateLosCaches();
         canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
     });
 

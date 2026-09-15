@@ -22,7 +22,7 @@ const BALLOON_MAX_SPEED = 900;
 const BALLOON_BOING_GAP_MS = 140;
 
 const START_DAY = 13;
-const END_DAY = 16;
+const END_DAY = 14;
 
 const ACCENT = '#2e9fd4';
 const LOOKUP_TIMEOUT_MS = 1500;
