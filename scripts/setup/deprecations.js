@@ -2,6 +2,7 @@
 // instead of finding out mid-session.
 import { ReactionManager } from "../activations/reaction-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localizeFormat } from "../tools/string-utils.js";
 
 /**
  * @typedef {Object} DeprecationCheck
@@ -96,6 +97,6 @@ export function runDeprecationScans()
     }
 
     if (total)
-        ui.notifications.warn(`${total} saved activation(s) use a deprecated pattern. See the console for details.`);
+        ui.notifications.warn(localizeFormat('LA.notify.deprecatedActivations', { count: total }));
     return results;
 }

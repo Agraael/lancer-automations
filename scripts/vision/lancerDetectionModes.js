@@ -1,22 +1,25 @@
 /* global Hooks, CONFIG, DetectionMode, OutlineOverlayFilter, Token, game, canvas, ui */
 
 import { getTokenDistance } from "../combat/overwatch.js";
-import { getTokenVisionLOS } from "./visionFromEdge.js";
+import { getTokenVisionLOS, isAnyTokenMoving } from "./visionFromEdge.js";
 import { blindedVisionEnabled } from "./blindedVision.js";
 import { laLosFlagOnly } from "./laWallLos.js";
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
 const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
 const SETTING_LOS = 'lancerLos';
 const SETTING_LOS_HEIGHT_RULE = 'lancerLosHeightRule';
 const SETTING_LOS_DEBUG = 'lancerLosDebug';
 const SETTING_SILH_FILTER_TEST = 'lancerSilhFilterTest';
+const SETTING_DIM_DEFER_MOVING = 'occlusionDimDeferMoving';
 const SETTING_SENSOR_COMBAT_ONLY = 'lancerSensorCombatOnly';
 const SETTING_AWARENESS_COMBAT_ONLY = 'lancerAwarenessCombatOnly';
 const SETTING_SENSOR_USE_MODE_RANGE = 'lancerSensorUseModeRange';
 const SETTING_AWARENESS_USE_MODE_RANGE = 'lancerAwarenessUseModeRange';
+const SETTING_AWARENESS_STYLE = 'lancerAwarenessStyle';
 const SETTING_BASIC_SIGHT_999 = 'basicSightTo999';
 const SETTING_DRAG_VISION_MODE = 'dragVisionMode';
 
@@ -84,6 +87,7 @@ let _losPolyMap = null;
 let _losClosedPolys = null;
 const _losPairCache = new Map();
 let _losEdgeSignature = null;
+let _lastOverlaySignature = null;
 // Banded wall polygons per eye height, each with its bbox. Same lifetime as the edge cache.
 let _eyeSolidCache = null;
 
@@ -101,11 +105,13 @@ function _losInvalidate()
     _losPolyMap = null;
     _losClosedPolys = null;
     _eyeSolidCache = null;
+    _lastOverlaySignature = null;
 }
 
 function _losPairsClear()
 {
     _losPairCache.clear();
+    _lastOverlaySignature = null;
 }
 
 function _losInvalidateAll()
@@ -333,28 +339,36 @@ function _skimsVertex(origin, dest, edge, vx, vy, record)
 }
 
 // A ray collinear with a wall face must be judged like a crossing, not slip along the lattice line.
-function _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, tol, rayLen = Math.sqrt(rayLenSq))
+function _runsAlongWall(originX, originY, eax, eay, ebx, eby, rayDirX, rayDirY, rayLenSq, tol, rayLen)
 {
     const tolLen = tol * rayLen;
-    const crossA = Math.abs(((edge.a.x - origin.x) * rayDirY) - ((edge.a.y - origin.y) * rayDirX));
+    const crossA = Math.abs(((eax - originX) * rayDirY) - ((eay - originY) * rayDirX));
     if (crossA > tolLen)
         return false;
-    const crossB = Math.abs(((edge.b.x - origin.x) * rayDirY) - ((edge.b.y - origin.y) * rayDirX));
+    const crossB = Math.abs(((ebx - originX) * rayDirY) - ((eby - originY) * rayDirX));
     if (crossB > tolLen)
         return false;
-    const alongA = (((edge.a.x - origin.x) * rayDirX) + ((edge.a.y - origin.y) * rayDirY)) / rayLenSq;
-    const alongB = (((edge.b.x - origin.x) * rayDirX) + ((edge.b.y - origin.y) * rayDirY)) / rayLenSq;
+    const alongA = (((eax - originX) * rayDirX) + ((eay - originY) * rayDirY)) / rayLenSq;
+    const alongB = (((ebx - originX) * rayDirX) + ((eby - originY) * rayDirY)) / rayLenSq;
     return Math.min(alongA, alongB) < 1 && Math.max(alongA, alongB) > 0;
 }
 
-function _pointToSegmentDist(px, py, ax, ay, bx, by)
+// Squared form for tolerance tests: d <= t is d*d <= t*t for non-negative values, and skips Math.hypot.
+function _pointToSegmentDistSq(px, py, ax, ay, bx, by)
 {
     const dx = bx - ax;
     const dy = by - ay;
     const lenSq = dx * dx + dy * dy;
     let proj = lenSq > 0 ? ((px - ax) * dx + (py - ay) * dy) / lenSq : 0;
     proj = Math.max(0, Math.min(1, proj));
-    return Math.hypot(px - (ax + proj * dx), py - (ay + proj * dy));
+    const offX = px - (ax + proj * dx);
+    const offY = py - (ay + proj * dy);
+    return (offX * offX) + (offY * offY);
+}
+
+function _pointToSegmentDist(px, py, ax, ay, bx, by)
+{
+    return Math.sqrt(_pointToSegmentDistSq(px, py, ax, ay, bx, by));
 }
 
 // Renderer path only: collect every blocking hit so the nearest one along the ray wins.
@@ -367,9 +381,33 @@ function _noteBlock(state, origin, rayDirX, rayDirY, rayLenSq, px, py, reason, t
         state.far = { along, x: px, y: py, reason };
 }
 
+// Opt-in ray counters (lancerLosProfile()); null costs one branch per edge and nothing else.
+let _losProfile = null;
+globalThis.lancerLosProfile = (on = true) =>
+{
+    _losProfile = on ? { calls: 0, edgeVisits: 0, passedCull: 0, denseCalls: 0 } : null;
+    console.log(`lancer-automations | LOS profiling ${on ? 'on' : 'off'}`);
+    return _losProfile;
+};
+globalThis.lancerLosProfileDump = () =>
+{
+    if (!_losProfile)
+    {
+        console.warn('lancer-automations | run lancerLosProfile() first');
+        return null;
+    }
+    const { calls, edgeVisits, passedCull, denseCalls } = _losProfile;
+    console.log(`lancer-automations | LOS profile | dense passes ${denseCalls} | _segmentBlocked calls ${calls}`
+        + ` | edge visits ${edgeVisits} (${calls ? (edgeVisits / calls).toFixed(1) : 0} per call)`
+        + ` | survived cull ${passedCull} (${edgeVisits ? (100 * passedCull / edgeVisits).toFixed(1) : 0}%)`);
+    return _losProfile;
+};
+
 // Wall LOS height rule: both eyes over the top => clear; neither => blocked; one over => the shorter is hidden only if adjacent.
 function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
 {
+    if (_losProfile)
+        _losProfile.calls++;
     const { skipPrefixA, skipPrefixB, centerA, centerB, radiusA, radiusB } = ctx;
     const adjacentSlack = canvas.grid.size * 0.75;
     ctx.lastReason = 'open';
@@ -378,9 +416,15 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
     ctx.skimPos = false;
     ctx.skimNeg = false;
     const nearest = ctx.nearestBlock ? { near: null, far: null } : null;
-    const trigHeightRule = getModuleSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
-    const rayDirX = dest.x - origin.x;
-    const rayDirY = dest.y - origin.y;
+    // One read per LOS context instead of one per ray; ctx lives for a single pair test.
+    ctx.trigHeightRule ??= getModuleSetting(SETTING_LOS_HEIGHT_RULE) === 'trig';
+    const trigHeightRule = ctx.trigHeightRule;
+    const originX = origin.x;
+    const originY = origin.y;
+    const destX = dest.x;
+    const destY = dest.y;
+    const rayDirX = destX - originX;
+    const rayDirY = destY - originY;
     const rayLenSq = ((rayDirX * rayDirX) + (rayDirY * rayDirY)) || 1;
     const rayLen = Math.sqrt(rayLenSq);
     const takeBlock = (reason, px, py, tAlong) =>
@@ -395,37 +439,57 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
         return false;
     };
     const endpointTol = canvas.grid.size * 0.02;
-    const segMinX = Math.min(origin.x, dest.x);
-    const segMaxX = Math.max(origin.x, dest.x);
-    const segMinY = Math.min(origin.y, dest.y);
-    const segMaxY = Math.max(origin.y, dest.y);
+    const endpointTolSq = endpointTol * endpointTol;
+    const segMinX = Math.min(originX, destX);
+    const segMaxX = Math.max(originX, destX);
+    const segMinY = Math.min(originY, destY);
+    const segMaxY = Math.max(originY, destY);
     let divedPolys = null;
     for (const record of edges)
     {
+        if (_losProfile)
+            _losProfile.edgeVisits++;
         if (record.maxX < segMinX || record.minX > segMaxX || record.maxY < segMinY || record.minY > segMaxY)
             continue;
         if (record.id && (record.id.startsWith(skipPrefixA) || record.id.startsWith(skipPrefixB)))
             continue;
+        if (_losProfile)
+            _losProfile.passedCull++;
         const edge = record.edge;
-        const crosses = foundry.utils.lineSegmentIntersects(origin, dest, edge.a, edge.b);
+        const edgeA = edge.a;
+        const edgeB = edge.b;
+        const eax = edgeA.x;
+        const eay = edgeA.y;
+        const ebx = edgeB.x;
+        const eby = edgeB.y;
+        // Inlined lineSegmentIntersects: its four orient2dFast calls each resolve through a frozen namespace.
+        const orientA = ((originY - eay) * (destX - eax)) - ((originX - eax) * (destY - eay));
+        const orientB = ((originY - eby) * (destX - ebx)) - ((originX - ebx) * (destY - eby));
+        let crosses = false;
+        if (orientA || orientB)
+        {
+            const orientOrigin = ((eay - originY) * (ebx - originX)) - ((eax - originX) * (eby - originY));
+            const orientDest = ((eay - destY) * (ebx - destX)) - ((eax - destX) * (eby - destY));
+            crosses = ((orientA * orientB) <= 0) && ((orientOrigin * orientDest) <= 0);
+        }
         // A ray endpoint sitting exactly on a wall vertex is a real touch that lineSegmentIntersects misses.
-        const originOn = origin.x >= record.minX - endpointTol && origin.x <= record.maxX + endpointTol
-            && origin.y >= record.minY - endpointTol && origin.y <= record.maxY + endpointTol
-            && _pointToSegmentDist(origin.x, origin.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
-        const destOn = dest.x >= record.minX - endpointTol && dest.x <= record.maxX + endpointTol
-            && dest.y >= record.minY - endpointTol && dest.y <= record.maxY + endpointTol
-            && _pointToSegmentDist(dest.x, dest.y, edge.a.x, edge.a.y, edge.b.x, edge.b.y) <= endpointTol;
+        const originOn = originX >= record.minX - endpointTol && originX <= record.maxX + endpointTol
+            && originY >= record.minY - endpointTol && originY <= record.maxY + endpointTol
+            && _pointToSegmentDistSq(originX, originY, eax, eay, ebx, eby) <= endpointTolSq;
+        const destOn = destX >= record.minX - endpointTol && destX <= record.maxX + endpointTol
+            && destY >= record.minY - endpointTol && destY <= record.maxY + endpointTol
+            && _pointToSegmentDistSq(destX, destY, eax, eay, ebx, eby) <= endpointTolSq;
         const touchesEnd = originOn || destOn;
         let alongWall = false;
         if (!crosses && !touchesEnd)
         {
-            alongWall = _runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen);
+            alongWall = _runsAlongWall(originX, originY, eax, eay, ebx, eby, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen);
             if (!alongWall)
                 continue;
         }
         const side = edge.orientPoint?.(origin) ?? 1;
         if (!side && !touchesEnd && !alongWall
-            && !_runsAlongWall(origin, edge, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen))
+            && !_runsAlongWall(originX, originY, eax, eay, ebx, eby, rayDirX, rayDirY, rayLenSq, endpointTol, rayLen))
             continue;
         if (edge.direction && side === edge.direction)
             continue;
@@ -620,7 +684,8 @@ function _segmentBlocked(origin, originHeight, dest, destHeight, edges, ctx)
 // Centre + the outermost left/right silhouette vertices relative to the a->b ray (as THT's calculateRaysBetweenTokensOrPoints).
 function _tokenLosPoints(token, aCenter, bCenter)
 {
-    const center = token.center;
+    // Plain literal: a PIXI.Point here gives the ray loops two hidden classes and megamorphic reads.
+    const center = { x: token.center.x, y: token.center.y };
     const dx = bCenter.x - aCenter.x;
     const dy = bCenter.y - aCenter.y;
     // Gridless equal-size tokens are circles: offset perpendicular to the ray by the radius.
@@ -636,9 +701,12 @@ function _tokenLosPoints(token, aCenter, bCenter)
     if (canvas.grid.isHexagonal)
     {
         const pts = token.getShape().points;
+        // Document, not the placeable, to match the square branch below and stay put during animation.
+        const hexOriginX = token.document?.x ?? token.x;
+        const hexOriginY = token.document?.y ?? token.y;
         verts = [];
         for (let idx = 0; idx < pts.length; idx += 2)
-            verts.push({ x: Math.round(pts[idx] + token.x), y: Math.round(pts[idx + 1] + token.y) });
+            verts.push({ x: Math.round(pts[idx] + hexOriginX), y: Math.round(pts[idx + 1] + hexOriginY) });
     }
     else
     {
@@ -709,7 +777,8 @@ function _pointLosPoints(point, aCenter, cellCenters = null)
 // Centre plus every silhouette vertex, for the dense LOS fallback.
 function _tokenSamplePoints(token)
 {
-    const center = token.center;
+    // Plain literal: a PIXI.Point here gives the ray loops two hidden classes and megamorphic reads.
+    const center = { x: token.center.x, y: token.center.y };
     const points = [center];
     if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS && token.document.width === token.document.height)
     {
@@ -724,8 +793,11 @@ function _tokenSamplePoints(token)
     if (canvas.grid.isHexagonal)
     {
         const pts = token.getShape().points;
+        // Document, not the placeable, to match the square branch below and stay put during animation.
+        const hexOriginX = token.document?.x ?? token.x;
+        const hexOriginY = token.document?.y ?? token.y;
         for (let idx = 0; idx < pts.length; idx += 2)
-            points.push({ x: Math.round(pts[idx] + token.x), y: Math.round(pts[idx + 1] + token.y) });
+            points.push({ x: Math.round(pts[idx] + hexOriginX), y: Math.round(pts[idx + 1] + hexOriginY) });
         return points;
     }
     const shape = token.getShape();
@@ -812,6 +884,7 @@ export function lancerHasLineOfSight(tokenA, tokenB)
             centerB: centerA,
             radiusA: ctx.radiusB,
             radiusB: ctx.radiusA,
+            trigHeightRule: ctx.trigHeightRule,
         };
         result = _denseLosClear(tokenB, tokenA, heightB, heightA, edges, ctxReverse);
     }
@@ -852,6 +925,52 @@ export function makeSkimRayCaster(originToken)
     };
     test.ctx = ctx;
     return test;
+}
+
+/**
+ * Ray casters between a token's eye and a virtual token standing on a cell, with the token LOS rules intact.
+ * Both directions exist because the per-segment rules read the origin end, as hasLineOfSight does.
+ * @param {any} originToken
+ * @param {number} targetRadius half size of the virtual target, pixels
+ * @returns {{eye: number,
+ *   forward: (from: {x: number, y: number}, to: {x: number, y: number}, cellCenter: {x: number, y: number}, toHeight: number, edgeSubset?: any[]) => boolean,
+ *   reverse: (from: {x: number, y: number}, cellCenter: {x: number, y: number}, fromHeight: number, to: {x: number, y: number}, edgeSubset?: any[]) => boolean}|null}
+ *   each returns true when the ray is clear, edgeSubset narrows the edge records scanned
+ */
+export function makeCellRayCaster(originToken, targetRadius)
+{
+    const doc = originToken?.document;
+    if (!doc || _isDestroyed(originToken))
+        return null;
+    const eye = getTokenVisionLOS(originToken);
+    const center = originToken.center;
+    const edges = _collectSightEdges();
+    const skipPrefix = `la-block-los-${doc.id}-`;
+    const radius = Math.max(originToken.w ?? 0, originToken.h ?? 0) / 2;
+    const forwardCtx = { skipPrefixA: skipPrefix, skipPrefixB: skipPrefix, centerA: center, centerB: center, radiusA: radius, radiusB: targetRadius };
+    const reverseCtx = { skipPrefixA: skipPrefix, skipPrefixB: skipPrefix, centerA: center, centerB: center, radiusA: targetRadius, radiusB: radius };
+    return {
+        eye,
+        forward: (from, to, cellCenter, toHeight, edgeSubset = edges) =>
+        {
+            forwardCtx.centerB = cellCenter;
+            return !_segmentBlocked(from, eye, to, toHeight, edgeSubset, forwardCtx);
+        },
+        reverse: (from, cellCenter, fromHeight, to, edgeSubset = edges) =>
+        {
+            reverseCtx.centerA = cellCenter;
+            return !_segmentBlocked(from, fromHeight, to, eye, edgeSubset, reverseCtx);
+        }
+    };
+}
+
+/**
+ * The cached sight edge records, with their height band and bounding box.
+ * @returns {any[]}
+ */
+export function lancerSightEdgeRecords()
+{
+    return _collectSightEdges();
 }
 
 /**
@@ -921,6 +1040,8 @@ function _pointSamplePoints(point, cellCenters = null)
 
 function _densePointsClear(pointsA, pointsB, heightA, heightB, edges, ctx)
 {
+    if (_losProfile)
+        _losProfile.denseCalls++;
     ctx.denseWitness = null;
     for (const pointA of pointsA)
     {
@@ -1114,6 +1235,76 @@ function _dumpLos()
 }
 globalThis.lancerLosDump = _dumpLos;
 
+// Regression signature (lancerLosSignature()): every ordered token pair's verdict, uncached, for before/after diffs.
+function _losSignature()
+{
+    const tokens = canvas?.tokens?.placeables ?? [];
+    _losInvalidateAll();
+    const lines = [];
+    for (const viewer of tokens)
+    {
+        for (const target of tokens)
+        {
+            if (viewer === target)
+                continue;
+            lines.push(`${viewer.document.id}>${target.document.id}:${lancerHasLineOfSight(viewer, target) ? 1 : 0}`);
+        }
+    }
+    lines.sort((left, right) => (left < right ? -1 : (left > right ? 1 : 0)));
+    const text = lines.join(';');
+    let hash = 0;
+    for (let idx = 0; idx < text.length; idx++)
+        hash = ((hash * 31) + text.charCodeAt(idx)) | 0;
+    console.log(`lancer-automations | LOS signature | ${lines.length} pairs | hash ${hash}`);
+    console.log(text);
+    return { pairs: lines.length, hash, text };
+}
+globalThis.lancerLosSignature = _losSignature;
+
+// Stale check (lancerLosStaleCheck()): compares what the caches currently answer against a fresh recompute.
+function _losStaleCheck()
+{
+    const tokens = canvas?.tokens?.placeables ?? [];
+    const cachedVerdicts = new Map();
+    for (const viewer of tokens)
+    {
+        for (const target of tokens)
+        {
+            if (viewer === target)
+                continue;
+            const keyA = _losPosKey(viewer.document);
+            const keyB = _losPosKey(target.document);
+            const pairKey = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+            if (_losPairCache.has(pairKey))
+                cachedVerdicts.set(`${viewer.document.id}>${target.document.id}`, _losPairCache.get(pairKey));
+        }
+    }
+    const cachedEdgeCount = _losEdgeCount;
+    const liveEdgeCount = canvas?.edges?.size ?? 0;
+    _losInvalidateAll();
+    const mismatches = [];
+    for (const viewer of tokens)
+    {
+        for (const target of tokens)
+        {
+            if (viewer === target)
+                continue;
+            const id = `${viewer.document.id}>${target.document.id}`;
+            if (!cachedVerdicts.has(id))
+                continue;
+            const fresh = lancerHasLineOfSight(viewer, target);
+            if (fresh !== cachedVerdicts.get(id))
+                mismatches.push(`${id}: cached ${cachedVerdicts.get(id) ? 1 : 0}, fresh ${fresh ? 1 : 0}`);
+        }
+    }
+    console.log(`lancer-automations | stale check | edges cached ${cachedEdgeCount} live ${liveEdgeCount}`
+        + ` | cached pairs ${cachedVerdicts.size} | mismatches ${mismatches.length}`);
+    if (mismatches.length)
+        console.log(mismatches.join('\n'));
+    return { cachedEdgeCount, liveEdgeCount, checked: cachedVerdicts.size, mismatches };
+}
+globalThis.lancerLosStaleCheck = _losStaleCheck;
+
 // Debug overlay: rays from controlled tokens; green = clear, red = blocked.
 let _losDebugLayer = null;
 
@@ -1281,6 +1472,16 @@ function _applyScaledThickness(filter, input)
     filter.thickness = Math.max(1, maxDim * 0.001);
 }
 
+const AWARENESS_STYLES = { silhouette: 0, outline: 1, veil: 2 };
+
+// How much of the veil silhouette stays opaque.
+const VEIL_ALPHA = 0.35;
+
+function _awarenessStyleMode()
+{
+    return AWARENESS_STYLES[getModuleSetting(SETTING_AWARENESS_STYLE)] ?? AWARENESS_STYLES.veil;
+}
+
 class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOverlayFilter
 {
     apply(filterManager, input, output, clear, currentState)
@@ -1300,6 +1501,7 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
         uniform vec4 filterClamp;
         uniform float alphaThreshold;
         uniform float time;
+        uniform float styleMode;
 
         ${this.CONSTANTS}
 
@@ -1323,9 +1525,16 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
             float lineWidth = 0.015;
             float scan = pow(smoothstep(lineWidth, 0.0, lineDist), 4.0);
 
-            vec3 fill = outlineColor.rgb * scan * texAlpha;
+            if ( styleMode > 0.5 ) {
+                float bodyAlpha = styleMode < 1.5 ? 0.0 : texAlpha * ${VEIL_ALPHA};
+                float rimAlpha = (1.0 - texAlpha) * maxAlpha;
+                vec3 rim = outlineColor.rgb * rimAlpha * (0.4 + 0.8 * scan);
+                gl_FragColor = vec4(rim, bodyAlpha + rimAlpha);
+                return;
+            }
+
             vec3 outline = outlineColor.rgb * (1.0 - texAlpha) * (0.4 + 0.8 * scan);
-            gl_FragColor = vec4((fill + outline) * resultAlpha, resultAlpha);
+            gl_FragColor = vec4(outline * resultAlpha, resultAlpha);
         }
         `;
     }
@@ -1466,7 +1675,7 @@ class DetectionModeLancerAwareness extends foundry.canvas.perception.DetectionMo
     {
         if (this._detectionFilter)
             return this._detectionFilter;
-        const filter = SilhouetteOutlineFilter.create({ outlineColor: [1, 0.85, 0.15, 1] });
+        const filter = SilhouetteOutlineFilter.create({ outlineColor: [1, 0.85, 0.15, 1], styleMode: _awarenessStyleMode() });
         filter.thickness = 1.25;
         this._detectionFilter = filter;
         return this._detectionFilter;
@@ -1482,8 +1691,8 @@ class DetectionModeLancerAwareness extends foundry.canvas.perception.DetectionMo
             return false;
         if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
-        // Sensor wins: if the same observer's sensor mode would detect this target, suppress awareness.
-        if (_sensorCanDetect(visionSource, target))
+        // Sensor wins: any of the user's sources on sensors suppresses awareness, whichever source testVisibility reaches first.
+        if (_anySensorCanDetect(target))
             return false;
         if (_losCanDetect(target))
             return false;
@@ -1520,6 +1729,18 @@ function _losCanDetect(target)
     return false;
 }
 
+function _anySensorCanDetect(target)
+{
+    for (const source of canvas?.effects?.visionSources?.values?.() ?? [])
+    {
+        if (!source.active)
+            continue;
+        if (_sensorCanDetect(source, target))
+            return true;
+    }
+    return false;
+}
+
 function _sensorCanDetect(visionSource, target)
 {
     const sourceToken = visionSource?.object;
@@ -1536,7 +1757,7 @@ function _sensorCanDetect(visionSource, target)
     const sensorRange = sourceToken.actor?.system?.sensor_range;
     if ((sensorRange ?? 0) <= 0)
         return false;
-    const candidates = _sourceWithPreview(sourceToken);
+    const candidates = _sourcePositions(sourceToken);
     const targets = _sourceWithPreview(target);
     for (const src of candidates)
     {
@@ -1594,7 +1815,7 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
             return false;
         if (!sourceToken?.document || !target?.document)
             return super._testRange(visionSource, mode, target, test);
-        const candidates = _sourceWithPreview(sourceToken);
+        const candidates = _sourcePositions(sourceToken);
         const targets = _sourceWithPreview(target);
         for (const src of candidates)
         {
@@ -1613,6 +1834,13 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
         }
         return false;
     }
+}
+
+function _sourcePositions(token)
+{
+    if (token?.isPreview)
+        return [token];
+    return _sourceWithPreview(token);
 }
 
 function _sourceWithPreview(token)
@@ -1639,7 +1867,7 @@ function _registerVisionSettings()
             canvas.perception.update({ refreshVision: true });
     };
     game.settings.register(MODULE_ID, SETTING_SILH_FILTER_TEST, {
-        name: 'TEST: filter-based awareness silhouette (filterArea bypass)',
+        name: 'LA.settings.lancerSilhFilterTest.name',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1650,17 +1878,30 @@ function _registerVisionSettings()
             refreshPerception();
         }
     });
+    game.settings.register(MODULE_ID, SETTING_DIM_DEFER_MOVING, {
+        name: 'LA.settings.occlusionDimDeferMoving.name',
+        hint: 'LA.settings.occlusionDimDeferMoving.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () =>
+        {
+            _markOverlayDirty();
+            refreshPerception();
+        }
+    });
     game.settings.register(MODULE_ID, SETTING_AUTO_ADD, {
-        name: 'Auto-add Lancer detection modes on token creation',
-        hint: 'Add Lancer Sensors and Battlefield Awareness to newly placed tokens.',
+        name: 'LA.settings.lancerVisionAutoAdd.name',
+        hint: 'LA.settings.lancerVisionAutoAdd.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true
     });
     game.settings.register(MODULE_ID, SETTING_SENSOR_COMBAT_ONLY, {
-        name: 'Lancer Sensors: combat only',
-        hint: 'Only render sensor highlights during active combat.',
+        name: 'LA.settings.lancerSensorCombatOnly.name',
+        hint: 'LA.settings.lancerSensorCombatOnly.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1668,8 +1909,8 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_AWARENESS_COMBAT_ONLY, {
-        name: 'Battlefield Awareness: combat only',
-        hint: 'Only render awareness highlights during active combat.',
+        name: 'LA.settings.lancerAwarenessCombatOnly.name',
+        hint: 'LA.settings.lancerAwarenessCombatOnly.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1677,8 +1918,8 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_SENSOR_USE_MODE_RANGE, {
-        name: 'Lancer Sensors: use detection-mode range',
-        hint: 'Use the per-token detection-mode range instead of the actor sensor range.',
+        name: 'LA.settings.lancerSensorUseModeRange.name',
+        hint: 'LA.settings.lancerSensorUseModeRange.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1686,17 +1927,40 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_AWARENESS_USE_MODE_RANGE, {
-        name: 'Battlefield Awareness: use detection-mode range',
-        hint: 'Use the per-token detection-mode range instead of infinite.',
+        name: 'LA.settings.lancerAwarenessUseModeRange.name',
+        hint: 'LA.settings.lancerAwarenessUseModeRange.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
         onChange: refreshPerception
     });
+    game.settings.register(MODULE_ID, SETTING_AWARENESS_STYLE, {
+        name: 'LA.settings.lancerAwarenessStyle.name',
+        hint: 'LA.settings.lancerAwarenessStyle.hint',
+        scope: 'world',
+        config: false,
+        type: String,
+        choices: {
+            silhouette: 'LA.settings.lancerAwarenessStyle.choices.silhouette',
+            veil: 'LA.settings.lancerAwarenessStyle.choices.veil',
+            outline: 'LA.settings.lancerAwarenessStyle.choices.outline'
+        },
+        default: 'veil',
+        onChange: () =>
+        {
+            const filter = /** @type {any} */ (DetectionModeLancerAwareness)._detectionFilter;
+            if (filter)
+                filter.uniforms.styleMode = _awarenessStyleMode();
+            // The overlay signature does not carry the style, so force the next pass to recompute.
+            _lastOverlaySignature = null;
+            _markOverlayDirty();
+            refreshPerception();
+        }
+    });
     game.settings.register(MODULE_ID, SETTING_LOS, {
-        name: 'Lancer Line of Sight',
-        hint: 'Reciprocal line of sight blocked by walls: reveals tokens that can see you, dims those you have no clear line to.',
+        name: 'LA.settings.lancerLos.name',
+        hint: 'LA.settings.lancerLos.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -1704,21 +1968,21 @@ function _registerVisionSettings()
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_LOS_HEIGHT_RULE, {
-        name: 'Height rule',
-        hint: 'Discrete follows the size rules. Trigonometric follows the real sightline, so peeks over walls fade with distance.',
+        name: 'LA.settings.lancerLosHeightRule.name',
+        hint: 'LA.settings.lancerLosHeightRule.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            discrete: 'Discrete (size rules)',
-            trig: 'Trigonometric (true sightline)'
+            discrete: 'LA.settings.lancerLosHeightRule.choices.discrete',
+            trig: 'LA.settings.lancerLosHeightRule.choices.trig'
         },
         default: 'discrete',
         onChange: refreshPerception
     });
     game.settings.register(MODULE_ID, SETTING_LOS_DEBUG, {
-        name: 'Debug overlay',
-        hint: 'Draw the tested sightlines from controlled tokens; green clear, red blocked.',
+        name: 'LA.settings.lancerLosDebug.name',
+        hint: 'LA.settings.lancerLosDebug.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1726,22 +1990,22 @@ function _registerVisionSettings()
         onChange: () => _drawLosDebug()
     });
     game.settings.register(MODULE_ID, SETTING_BASIC_SIGHT_999, {
-        name: 'Unlimited basic vision range',
-        hint: 'Set sight range to unlimited on auto-created tokens.',
+        name: 'LA.settings.basicSightTo999.name',
+        hint: 'LA.settings.basicSightTo999.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false
     });
     game.settings.register(MODULE_ID, SETTING_DRAG_VISION_MODE, {
-        name: 'Drag-vision mode',
-        hint: 'How the Drag Vision Multiplier applies during a drag.',
+        name: 'LA.settings.dragVisionMode.name',
+        hint: 'LA.settings.dragVisionMode.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            ratio: 'Ratio (multiply current radius)',
-            flat: 'Flat (range in scene units)'
+            ratio: 'LA.settings.dragVisionMode.choices.ratio',
+            flat: 'LA.settings.dragVisionMode.choices.flat'
         },
         default: 'ratio'
     });
@@ -1819,7 +2083,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
         return;
     const overrideSightRange = getModuleSetting(SETTING_BASIC_SIGHT_999);
 
-    ui.notifications.info("Updating prototype token vision...");
+    ui.notifications.info(localize('LA.notify.updatingPrototypeTokenVision'));
     await Promise.all(game.actors.map(actor =>
     {
         const proto = actor.prototypeToken;
@@ -1834,7 +2098,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
         return actor.update(update);
     }));
 
-    ui.notifications.info("Updating placed token vision...");
+    ui.notifications.info(localize('LA.notify.updatingPlacedTokenVision'));
     for (const scene of game.scenes)
     {
         if (activeSceneOnly && scene !== game.canvas.scene)
@@ -1871,7 +2135,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
             console.warn(`lancer-automations | vision update failed in scene ${scene.name}`, err);
         }
     }
-    ui.notifications.info("Token vision updated.");
+    ui.notifications.info(localize('LA.notify.tokenVisionUpdated'));
 };
 
 export function initLancerDetectionModes()
@@ -1881,7 +2145,7 @@ export function initLancerDetectionModes()
         _registerVisionSettings();
         CONFIG.Canvas.detectionModes.lancerAwareness = new DetectionModeLancerAwareness({
             id: 'lancerAwareness',
-            label: 'Lancer: Battlefield Awareness',
+            label: 'LA.detectionMode.battlefieldAwareness',
             type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
@@ -1889,7 +2153,7 @@ export function initLancerDetectionModes()
         });
         CONFIG.Canvas.detectionModes.lancerSensor = new DetectionModeLancerSensor({
             id: 'lancerSensor',
-            label: 'Lancer: Sensors',
+            label: 'LA.detectionMode.sensors',
             type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
@@ -1897,7 +2161,7 @@ export function initLancerDetectionModes()
         });
         CONFIG.Canvas.detectionModes.lancerLineOfSight = new DetectionModeLancerLineOfSight({
             id: 'lancerLineOfSight',
-            label: 'Lancer: Line of Sight',
+            label: 'LA.detectionMode.lineOfSight',
             type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
@@ -1905,7 +2169,7 @@ export function initLancerDetectionModes()
         });
         CONFIG.Canvas.detectionModes.lancerLosShadow = new DetectionModeLancerLosShadow({
             id: 'lancerLosShadow',
-            label: 'Lancer: Line of Sight (shadow)',
+            label: 'LA.detectionMode.lineOfSightShadow',
             type: foundry.canvas.perception.DetectionMode.DETECTION_TYPES.SIGHT,
             walls: false,
             angle: false,
@@ -1919,13 +2183,19 @@ export function initLancerDetectionModes()
         _markOverlayDirty();
         _drawLosDebug();
     });
-    // A drag fires sightRefresh per cell but moves no wall, so only wall, scene and setting changes drop the edges.
+    Hooks.on('controlToken', _losPairsClear);
+    // Every edge writer invalidates on its own, so only wall, scene and setting changes drop the edges here.
     for (const hook of ['canvasReady', 'canvasTearDown', 'createWall', 'updateWall', 'deleteWall', 'clientSettingChanged', 'updateSetting'])
         Hooks.on(hook, _losInvalidateAll);
-    // Token size and eye-height flags feed the rays but not the pair key.
-    Hooks.on('updateToken', _losPairsClear);
+    // Position and elevation live in the pair key. Size, shape and eye-height flags feed the rays but do not.
+    Hooks.on('updateToken', (tokenDoc, change) =>
+    {
+        if (['width', 'height', 'shape', 'flags'].some(key => key in change))
+            _losPairsClear();
+    });
     Hooks.on('createToken', _onCreateToken);
     Hooks.on('canvasReady', _installSilhouetteOverlayTicker);
+    Hooks.on('canvasTearDown', _clearFootprints);
     Hooks.on('canvasReady', _installLosDebug);
     Hooks.on('controlToken', _drawLosDebug);
     Hooks.on('refreshToken', _drawLosDebug);
@@ -1953,11 +2223,23 @@ function _wrapPlainSightVeto(mode)
     };
 }
 
+const _MESH_FILTER_NAMES = new Set(['SilhouetteOutlineFilter', 'ScanlineOutlineFilter']);
+const _REVEAL_FILTER_NAMES = new Set(['PlainVisionFilter', 'ShadowVisionFilter']);
+const _LOS_REVEAL_VIA_MASK = true;
+
 // Stock SilhouetteOutlineFilter breaks at scale<=1 and conflicts with our overlay; skip it.
 function _patchRenderDetectionFilter()
 {
     const proto = /** @type {any} */ (foundry.canvas.placeables.Token.prototype);
     const orig = proto._renderDetectionFilter;
+    // Hover raises zIndex, and at the re-sorted position the pass loses its body fill.
+    const origRefreshState = proto._refreshState;
+    proto._refreshState = function()
+    {
+        origRefreshState.call(this);
+        if (!this.controlled && _MESH_FILTER_NAMES.has(this.detectionFilter?.constructor?.name))
+            this.zIndex = 0;
+    };
     const frameRect = new PIXI.Rectangle();
     const chainFilters = [];
     // fresh bounds (not the cached getBounds(true)), mesh filters kept so displacement FX carry over
@@ -2010,9 +2292,10 @@ function _patchRenderDetectionFilter()
             renderWithMeshFilters(this, renderer);
             return;
         }
-        if (filterName === 'PlainVisionFilter' || filterName === 'ShadowVisionFilter')
+        if (_REVEAL_FILTER_NAMES.has(filterName))
         {
-            this.mesh?.render(renderer);
+            if (!_LOS_REVEAL_VIA_MASK)
+                this.mesh?.render(renderer);
             return;
         }
         return orig.call(this, renderer);
@@ -2045,6 +2328,7 @@ uniform float time;
 uniform vec2 thickness;
 uniform float alphaThreshold;
 uniform float simpleMode;
+uniform float styleMode;
 #define TWOPI 6.28318530718
 
 void main(void) {
@@ -2068,13 +2352,20 @@ void main(void) {
         float rot = max(pow(smoothstep(1.2, 0.0, dA), 2.0), pow(smoothstep(1.2, 0.0, dB), 2.0));
         vec3 outline = outlineColor.rgb * (1.0 - texAlpha) * (0.35 + 0.85 * rot);
         gl_FragColor = vec4(outline * resultAlpha, (1.0 - texAlpha) * resultAlpha);
+    } else if (styleMode > 0.5) {
+        float scanY = mod(time * 0.0008, 1.0);
+        float lineDist = abs(vTextureCoord.y - scanY);
+        float scan = pow(smoothstep(0.005, 0.0, lineDist), 4.0);
+        float bodyAlpha = styleMode < 1.5 ? 0.0 : texAlpha * ${VEIL_ALPHA};
+        float rimAlpha = (1.0 - texAlpha) * maxAlpha;
+        vec3 rim = outlineColor.rgb * rimAlpha * (0.4 + 0.8 * scan);
+        gl_FragColor = vec4(rim, bodyAlpha + rimAlpha);
     } else {
         float scanY = mod(time * 0.0008, 1.0);
         float lineDist = abs(vTextureCoord.y - scanY);
         float scan = pow(smoothstep(0.005, 0.0, lineDist), 4.0);
-        vec3 fill = outlineColor.rgb * scan * texAlpha;
         vec3 outline = outlineColor.rgb * (1.0 - texAlpha) * (0.4 + 0.8 * scan);
-        gl_FragColor = vec4((fill + outline) * resultAlpha, resultAlpha);
+        gl_FragColor = vec4(outline * resultAlpha, resultAlpha);
     }
 }
 `;
@@ -2095,7 +2386,8 @@ function _makeSilhouetteMesh(token, color)
         time: 0,
         thickness: [0.04, 0.04],
         alphaThreshold: 0.6,
-        simpleMode: 0
+        simpleMode: 0,
+        styleMode: 0
     });
     const mesh = new PIXI.Mesh(geometry, shader);
     mesh.name = _OVERLAY_NAME;
@@ -2148,7 +2440,7 @@ function _getOverlayConfig(token)
     if (mode === 'ignore' || mode === 'visible')
         return null;
     const simple = mode === 'simple';
-    return { color: simple ? _OVERLAY_COLOR_SIMPLE : _OVERLAY_COLOR, simple };
+    return { color: simple ? _OVERLAY_COLOR_SIMPLE : _OVERLAY_COLOR, simple, styleMode: simple ? 0 : _awarenessStyleMode() };
 }
 
 // Multiply tint that dims a token to a Foundry-shadow look while keeping its colours.
@@ -2200,15 +2492,43 @@ function _markOverlayDirty()
     _overlayDirty = true;
 }
 
+// Everything the dim + overlay pass reads, except walls and settings, which reset the signature directly.
+function _overlaySignature()
+{
+    const parts = [];
+    // Collection iterates values, so take entries for the id.
+    for (const [sourceId, source] of canvas?.effects?.visionSources?.entries() ?? [])
+    {
+        const data = source?.data;
+        parts.push(`${sourceId}:${Math.round(data?.x ?? 0)},${Math.round(data?.y ?? 0)},${data?.elevation ?? 0},${source?.active ? 1 : 0}`);
+    }
+    parts.push('|');
+    for (const token of canvas?.tokens?.placeables ?? [])
+    {
+        const doc = token.document;
+        parts.push(`${doc.id}:${Math.round(doc.x)},${Math.round(doc.y)},${doc.elevation ?? 0},${token.visible ? 1 : 0},${token.detectionFilter?.constructor?.name ?? 0}`);
+    }
+    return parts.join(';');
+}
+
 function _refreshOverlayState()
 {
     _overlayDirty = false;
+    // A throttled drag cell fires sightRefresh without moving a source; the answers cannot have changed.
+    const signature = _overlaySignature();
+    if (signature === _lastOverlaySignature)
+        return;
+    // Occlusion costs a LOS raycast per token per source and goes stale a frame later while something
+    // moves, so hold the dim until the move lands. Null signature forces that landing pass to recompute.
+    const holdDim = getModuleSetting(SETTING_DIM_DEFER_MOVING) === true && isAnyTokenMoving();
+    _lastOverlaySignature = holdDim ? null : signature;
     _overlayTokens.clear();
     if (!canvas?.tokens?.placeables)
         return;
     for (const token of canvas.tokens.placeables)
     {
-        _applyOcclusionDim(token);
+        if (!holdDim)
+            _applyOcclusionDim(token);
         const overlayConfig = _getOverlayConfig(token);
         const existing = token.children.find(child => child.name === _OVERLAY_NAME);
         if (!overlayConfig)
@@ -2232,10 +2552,131 @@ function _refreshOverlayState()
         }
         mesh.shader.uniforms.outlineColor = overlayConfig.color;
         mesh.shader.uniforms.simpleMode = overlayConfig.simple ? 1 : 0;
+        mesh.shader.uniforms.styleMode = overlayConfig.styleMode;
         if (mesh.shader.uniforms.uSampler !== token.mesh?.texture && token.mesh?.texture)
             mesh.shader.uniforms.uSampler = token.mesh.texture;
         _overlayTokens.set(token, overlayConfig.simple);
     }
+}
+
+const _FOOT_FRAG = `
+precision mediump float;
+varying vec2 vTextureCoord;
+uniform sampler2D uSampler;
+void main(void) {
+    gl_FragColor = vec4(min(1.0, texture2D(uSampler, vTextureCoord).a * 1000.0));
+}
+`;
+
+let _footProgram = null;
+let _footRoot = null;
+const _footprints = new Map();
+
+function _ensureFootRoot()
+{
+    const mask = canvas?.masks?.vision;
+    if (!mask)
+        return null;
+    if (_footRoot?.destroyed)
+        _footRoot = null;
+    if (!_footRoot)
+        _footRoot = new PIXI.Container();
+    if (_footRoot.parent !== mask)
+        mask.addChild(_footRoot);
+    return _footRoot;
+}
+
+function _makeFootprintMesh(tex)
+{
+    const uvs = /** @type {any} */ (tex)._uvs?.uvsFloat32;
+    const geometry = new PIXI.Geometry()
+        .addAttribute('aVertexPosition', [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5], 2)
+        .addAttribute('aTextureCoord', uvs ? Array.from(uvs) : [0, 0, 1, 0, 1, 1, 0, 1], 2)
+        .addIndex([0, 1, 2, 0, 2, 3]);
+    _footProgram ??= PIXI.Program.from(_SILH_VERT, _FOOT_FRAG);
+    const mesh = new PIXI.Mesh(geometry, new PIXI.Shader(_footProgram, { uSampler: tex }));
+    mesh.state.blendMode = PIXI.BLEND_MODES.MAX_COLOR;
+    return mesh;
+}
+
+function _syncFootprint(entry, tokenMesh)
+{
+    const meshWidth = tokenMesh.width;
+    const meshHeight = tokenMesh.height;
+    const mirrorX = Math.sign(tokenMesh.scale.x) || 1;
+    const mirrorY = Math.sign(tokenMesh.scale.y) || 1;
+    const offsetX = mirrorX * meshWidth * (0.5 - tokenMesh.anchor.x);
+    const offsetY = mirrorY * meshHeight * (0.5 - tokenMesh.anchor.y);
+    const rot = tokenMesh.rotation;
+    const cosRot = Math.cos(rot);
+    const sinRot = Math.sin(rot);
+    const posX = tokenMesh.position.x + cosRot * offsetX - sinRot * offsetY;
+    const posY = tokenMesh.position.y + sinRot * offsetX + cosRot * offsetY;
+    const scaleX = mirrorX * meshWidth;
+    const scaleY = mirrorY * meshHeight;
+    if (entry.posX === posX && entry.posY === posY && entry.rot === rot && entry.scaleX === scaleX && entry.scaleY === scaleY)
+        return false;
+    entry.posX = posX;
+    entry.posY = posY;
+    entry.rot = rot;
+    entry.scaleX = scaleX;
+    entry.scaleY = scaleY;
+    entry.mesh.position.set(posX, posY);
+    entry.mesh.scale.set(scaleX, scaleY);
+    entry.mesh.rotation = rot;
+    return true;
+}
+
+function _clearFootprints()
+{
+    for (const entry of _footprints.values())
+        entry.mesh.destroy();
+    _footprints.clear();
+    if (_footRoot && !_footRoot.destroyed)
+        _footRoot.destroy({ children: true });
+    _footRoot = null;
+}
+
+function _tickFootprints()
+{
+    if (!_LOS_REVEAL_VIA_MASK)
+        return;
+    const root = _ensureFootRoot();
+    if (!root)
+        return;
+    let changed = false;
+    const live = new Set();
+    for (const token of canvas.tokens?.placeables ?? [])
+    {
+        const tokenMesh = token.mesh;
+        if (!tokenMesh?.texture || !token.visible || !tokenMesh.visible || !_REVEAL_FILTER_NAMES.has(token.detectionFilter?.constructor?.name))
+            continue;
+        live.add(token.id);
+        let entry = _footprints.get(token.id);
+        if (entry && entry.tex !== tokenMesh.texture)
+        {
+            entry.mesh.destroy();
+            entry = null;
+        }
+        if (!entry)
+        {
+            entry = { tex: tokenMesh.texture, mesh: root.addChild(_makeFootprintMesh(tokenMesh.texture)), posX: NaN, posY: NaN, rot: NaN, scaleX: NaN, scaleY: NaN };
+            _footprints.set(token.id, entry);
+            changed = true;
+        }
+        if (_syncFootprint(entry, tokenMesh))
+            changed = true;
+    }
+    for (const [id, entry] of _footprints)
+    {
+        if (live.has(id))
+            continue;
+        entry.mesh.destroy();
+        _footprints.delete(id);
+        changed = true;
+    }
+    if (changed)
+        canvas.masks.vision.renderDirty = true;
 }
 
 function _tickSilhouetteOverlays()
@@ -2246,6 +2687,7 @@ function _tickSilhouetteOverlays()
         _refreshOverlayState();
         _lastOverlayRefresh = now;
     }
+    _tickFootprints();
     if (!_overlayTokens.size)
         return;
     for (const [token, simple] of _overlayTokens)

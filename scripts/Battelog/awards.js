@@ -16,9 +16,9 @@ export const AWARDS = [
     {
         key: 'EXECUTIONER',
         weight: 2,
-        label: 'EXECUTIONER',
+        label: 'LA.award.EXECUTIONER.label',
         icon: 'fa-skull',
-        description: 'Confirmed three or more enemy chassis destroyed',
+        description: 'LA.award.EXECUTIONER.description',
         stat: p => p.kills ?? 0,
         minValue: 3,
         format: v => `${v} KILLS`,
@@ -26,9 +26,9 @@ export const AWARDS = [
     {
         key: 'HEAVY',
         weight: 3,
-        label: 'HEAVY HITTER',
+        label: 'LA.award.HEAVY.label',
         icon: 'fa-explosion',
-        description: 'Dealt the most physical damage across the engagement',
+        description: 'LA.award.HEAVY.description',
         stat: p => p.physicalDmgDealt ?? 0,
         minValue: 40,
         format: v => `${v} DMG`,
@@ -36,9 +36,9 @@ export const AWARDS = [
     {
         key: 'OVERCLOCK',
         weight: 2,
-        label: 'OVERCLOCK',
+        label: 'LA.award.OVERCLOCK.label',
         icon: 'fa-temperature-arrow-up',
-        description: 'Overheated enemy reactors more than anyone else',
+        description: 'LA.award.OVERCLOCK.description',
         stat: p => p.heatDmgDealt ?? 0,
         minValue: 6,
         format: v => `${v} HEAT`,
@@ -46,9 +46,9 @@ export const AWARDS = [
     {
         key: 'ANCHOR',
         weight: 2,
-        label: 'ANCHOR',
+        label: 'LA.award.ANCHOR.label',
         icon: 'fa-shield-halved',
-        description: 'Absorbed the most physical damage without breaking',
+        description: 'LA.award.ANCHOR.description',
         stat: p => p.destroyed ? 0 : (p.physicalDmgTaken ?? 0),
         minValue: 10,
         format: v => `${v} DMG TAKEN`,
@@ -56,9 +56,9 @@ export const AWARDS = [
     {
         key: 'HEAT_SINK',
         weight: 1,
-        label: 'HEAT SINK',
+        label: 'LA.award.HEAT_SINK.label',
         icon: 'fa-temperature-arrow-down',
-        description: 'Weathered the most incoming reactor heat',
+        description: 'LA.award.HEAT_SINK.description',
         stat: p => p.destroyed ? 0 : (p.heatDmgTaken ?? 0),
         minValue: 1,
         format: v => `${v} HEAT TAKEN`,
@@ -66,9 +66,9 @@ export const AWARDS = [
     {
         key: 'SUPPORT',
         weight: 3,
-        label: 'SUPPORT',
+        label: 'LA.award.SUPPORT.label',
         icon: 'fa-hand-holding-medical',
-        description: 'Enabled the squad’s kills through positioning and tech',
+        description: 'LA.award.SUPPORT.description',
         stat: p => p.assists ?? 0,
         minValue: 2,
         format: v => `${v} ASSISTS`,
@@ -76,9 +76,9 @@ export const AWARDS = [
     {
         key: 'TURBO',
         weight: 1,
-        label: 'TURBO',
+        label: 'LA.award.TURBO.label',
         icon: 'fa-person-running',
-        description: 'Covered the most ground in a single round',
+        description: 'LA.award.TURBO.description',
         stat: p => p.bd?.movement?.maxTurn ?? 0,
         minValue: 5,
         format: v => `${v} SPACES`,
@@ -86,9 +86,9 @@ export const AWARDS = [
     {
         key: 'SHARPSHOOTER',
         weight: 2,
-        label: 'SHARPSHOOTER',
+        label: 'LA.award.SHARPSHOOTER.label',
         icon: 'fa-bullseye',
-        description: 'Highest hit rate on weapon attacks',
+        description: 'LA.award.SHARPSHOOTER.description',
         stat: p =>
         {
             const rangedShots = p.bd?.acc?.rangedShots ?? 0;
@@ -103,9 +103,9 @@ export const AWARDS = [
     {
         key: 'HACKER',
         weight: 2,
-        label: 'HACKER',
+        label: 'LA.award.HACKER.label',
         icon: 'fa-microchip',
-        description: 'Highest hit rate on tech attacks',
+        description: 'LA.award.HACKER.description',
         stat: p =>
         {
             const techShots = p.bd?.acc?.techShots ?? 0;
@@ -119,9 +119,9 @@ export const AWARDS = [
     {
         key: 'GHOST',
         weight: 2,
-        label: 'GHOST',
+        label: 'LA.award.GHOST.label',
         icon: 'fa-ghost',
-        description: 'Evaded the most incoming attacks',
+        description: 'LA.award.GHOST.description',
         stat: p => p.bd?.dmgIn?.evaded ?? 0,
         minValue: 3,
         format: v => `${v} EVADED`,
@@ -129,9 +129,9 @@ export const AWARDS = [
     {
         key: 'FIREWALL',
         weight: 1,
-        label: 'FIREWALL',
+        label: 'LA.award.FIREWALL.label',
         icon: 'fa-shield-virus',
-        description: 'Blocked the most incoming tech through e-defense',
+        description: 'LA.award.FIREWALL.description',
         stat: p => p.bd?.dmgIn?.edef ?? 0,
         minValue: 3,
         format: v => `${v} BLOCKED`,
@@ -139,9 +139,9 @@ export const AWARDS = [
     {
         key: 'STEADFAST',
         weight: 2,
-        label: 'STEADFAST',
+        label: 'LA.award.STEADFAST.label',
         icon: 'fa-hand-fist',
-        description: 'Highest H.A.S.E success rate',
+        description: 'LA.award.STEADFAST.description',
         stat: p =>
         {
             const attempts = p.bd?.hase?.total?.attempts ?? 0;
@@ -155,9 +155,9 @@ export const AWARDS = [
     {
         key: 'BULLSEYE',
         weight: 2,
-        label: 'BULLSEYE',
+        label: 'LA.award.BULLSEYE.label',
         icon: 'fa-eye',
-        description: 'Landed the most critical hits',
+        description: 'LA.award.BULLSEYE.description',
         stat: p => p.bd?.acc?.crits ?? 0,
         minValue: 2,
         format: v => `${v} CRITS`,
@@ -165,9 +165,9 @@ export const AWARDS = [
     {
         key: 'BRAWLER',
         weight: 1,
-        label: 'BRAWLER',
+        label: 'LA.award.BRAWLER.label',
         icon: 'fa-hand-back-fist',
-        description: 'Knocked enemies around more than anyone else',
+        description: 'LA.award.BRAWLER.description',
         stat: player => player.bd?.movement?.knockbackDealt ?? 0,
         minValue: 2,
         format: value => `${value} SPACES KB`,
@@ -175,9 +175,9 @@ export const AWARDS = [
     {
         key: 'BLITZ',
         weight: 1,
-        label: 'BLITZ',
+        label: 'LA.award.BLITZ.label',
         icon: 'fa-bolt-lightning',
-        description: 'Most actions taken in a single turn',
+        description: 'LA.award.BLITZ.description',
         stat: player => player.maxActionsInTurn ?? 0,
         minValue: 5,
         format: value => `${value} ACTIONS`,
@@ -185,9 +185,9 @@ export const AWARDS = [
     {
         key: 'FIRST_BLOOD',
         weight: 2,
-        label: 'FIRST BLOOD',
+        label: 'LA.award.FIRST_BLOOD.label',
         icon: 'fa-droplet',
-        description: 'Drew first blood of the engagement',
+        description: 'LA.award.FIRST_BLOOD.description',
         stat: player => player.firstBlood ?? 0,
         minValue: 1,
         format: () => 'FIRST KILL',
@@ -195,9 +195,9 @@ export const AWARDS = [
     {
         key: 'AVENGER',
         weight: 2,
-        label: 'AVENGER',
+        label: 'LA.award.AVENGER.label',
         icon: 'fa-scale-balanced',
-        description: 'Destroyed the enemies that took squadmates down',
+        description: 'LA.award.AVENGER.description',
         stat: player => player.avengerKills ?? 0,
         minValue: 1,
         format: value => `${value} AVENGED`,
@@ -205,9 +205,9 @@ export const AWARDS = [
     {
         key: 'OVERKILL',
         weight: 2,
-        label: 'OVERKILL',
+        label: 'LA.award.OVERKILL.label',
         icon: 'fa-burst',
-        description: 'Landed the single biggest hit of the battle',
+        description: 'LA.award.OVERKILL.description',
         stat: player => player.maxHit ?? 0,
         minValue: 12,
         format: value => `${value} ONE HIT`,
@@ -215,9 +215,9 @@ export const AWARDS = [
     {
         key: 'SURVIVOR',
         weight: 2,
-        label: 'SURVIVOR',
+        label: 'LA.award.SURVIVOR.label',
         icon: 'fa-heart-crack',
-        description: 'Walked away closest to death',
+        description: 'LA.award.SURVIVOR.description',
         stat: player => player.survivorScore ?? 0,
         minValue: 1,
         format: (_value, player) => player.survivorLabel ?? 'BARELY ALIVE',
@@ -225,9 +225,9 @@ export const AWARDS = [
     {
         key: 'UNTOUCHABLE',
         weight: 2,
-        label: 'UNTOUCHABLE',
+        label: 'LA.award.UNTOUCHABLE.label',
         icon: 'fa-wind',
-        description: 'Under fire all mission without taking a scratch',
+        description: 'LA.award.UNTOUCHABLE.description',
         stat: player =>
         {
             const drawn = (player.bd?.dmgIn?.attacksTaken ?? 0) + (player.bd?.dmgIn?.techTaken ?? 0);
@@ -239,9 +239,9 @@ export const AWARDS = [
     {
         key: 'REDLINE',
         weight: 1,
-        label: 'REDLINE',
+        label: 'LA.award.REDLINE.label',
         icon: 'fa-gauge-high',
-        description: 'Rode the danger zone without stressing out',
+        description: 'LA.award.REDLINE.description',
         stat: player => player.redlineRounds ?? 0,
         minValue: 2,
         format: value => `${value} ROUNDS HOT`,
@@ -249,9 +249,9 @@ export const AWARDS = [
     {
         key: 'DUELIST',
         weight: 1,
-        label: 'DUELIST',
+        label: 'LA.award.DUELIST.label',
         icon: 'fa-swords',
-        description: 'Landed the most melee hits',
+        description: 'LA.award.DUELIST.description',
         stat: player => player.bd?.acc?.meleeHits ?? 0,
         minValue: 3,
         format: value => `${value} MELEE HITS`,
@@ -259,9 +259,9 @@ export const AWARDS = [
     {
         key: 'CROWD_CONTROL',
         weight: 2,
-        label: 'CROWD CONTROL',
+        label: 'LA.award.CROWD_CONTROL.label',
         icon: 'fa-users',
-        description: 'Hit the most separate targets in one round',
+        description: 'LA.award.CROWD_CONTROL.description',
         stat: player => player.maxTargetsOneRound ?? 0,
         minValue: 3,
         format: value => `${value} IN ONE ROUND`,
@@ -269,9 +269,9 @@ export const AWARDS = [
     {
         key: 'LIGHTNING_ROD',
         weight: 1,
-        label: 'LIGHTNING ROD',
+        label: 'LA.award.LIGHTNING_ROD.label',
         icon: 'fa-magnet',
-        description: 'Drew more enemy fire than anyone else',
+        description: 'LA.award.LIGHTNING_ROD.description',
         stat: player => (player.bd?.dmgIn?.attacksTaken ?? 0) + (player.bd?.dmgIn?.techTaken ?? 0),
         minValue: 5,
         format: value => `${value} ATTACKS DRAWN`,
@@ -279,9 +279,9 @@ export const AWARDS = [
     {
         key: 'REFLEX',
         weight: 1,
-        label: 'REFLEX',
+        label: 'LA.award.REFLEX.label',
         icon: 'fa-stopwatch',
-        description: 'Used the most reactions',
+        description: 'LA.award.REFLEX.description',
         stat: player => player.reactionsUsed ?? 0,
         minValue: 2,
         format: value => `${value} REACTIONS`,
@@ -289,9 +289,9 @@ export const AWARDS = [
     {
         key: 'RECON',
         weight: 1,
-        label: 'RECON',
+        label: 'LA.award.RECON.label',
         icon: 'fa-satellite-dish',
-        description: 'Scanned the most enemy signatures',
+        description: 'LA.award.RECON.description',
         stat: player => player.scans ?? 0,
         minValue: 2,
         format: value => `${value} SCANS`,
@@ -299,9 +299,9 @@ export const AWARDS = [
     {
         key: 'ARSONIST',
         weight: 1,
-        label: 'ARSONIST',
+        label: 'LA.award.ARSONIST.label',
         icon: 'fa-fire',
-        description: 'Spread the most burn and infection',
+        description: 'LA.award.ARSONIST.description',
         stat: player => (player.bd?.dmgOut?.types ?? [])
             .filter(type => type.k === 'BURN' || type.k === 'INFECTION')
             .reduce((sum, type) => sum + type.v, 0),
@@ -319,9 +319,9 @@ export const AWARDS = [
     {
         key: 'COOL_HEAD',
         weight: 1,
-        label: 'COOL HEAD',
+        label: 'LA.award.COOL_HEAD.label',
         icon: 'fa-fan',
-        description: 'Vented the most reactor heat',
+        description: 'LA.award.COOL_HEAD.description',
         stat: player => player.heatCooled ?? 0,
         minValue: 6,
         format: value => `${value} HEAT VENTED`,
@@ -329,9 +329,9 @@ export const AWARDS = [
     {
         key: 'GREASE_MONKEY',
         weight: 1,
-        label: 'GREASE MONKEY',
+        label: 'LA.award.GREASE_MONKEY.label',
         icon: 'fa-wrench',
-        description: 'Recovered the most hit points in the field',
+        description: 'LA.award.GREASE_MONKEY.description',
         stat: player => player.hpRestored ?? 0,
         minValue: 5,
         format: value => `${value} HP RECOVERED`,

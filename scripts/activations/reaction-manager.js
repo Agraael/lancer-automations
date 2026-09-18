@@ -3,6 +3,7 @@
 import { getDefaultItemReactionRegistry, getDefaultGeneralReactionRegistry } from "./reactions-registry.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
@@ -127,17 +128,17 @@ export const SOURCE_MATCH_TRIGGERS = new Set([
 
 // Editor picker groups, also the complete built-in list: any other trigger name is a custom trigger.
 export const TRIGGER_GROUPS = [
-    { label: "Combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
-    { label: "Movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
-    { label: "Rolls", triggers: ["onRoll"] },
-    { label: "Attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
-    { label: "Tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
-    { label: "Activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
-    { label: "Status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
-    { label: "HP / Heat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
-    { label: "Structure / Stress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
-    { label: "Token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
-    { label: "Other", triggers: ["onUpdate"] }
+    { label: "LA.triggerGroup.combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
+    { label: "LA.triggerGroup.movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
+    { label: "LA.triggerGroup.rolls", triggers: ["onRoll"] },
+    { label: "LA.triggerGroup.attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
+    { label: "LA.triggerGroup.tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
+    { label: "LA.triggerGroup.activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
+    { label: "LA.triggerGroup.status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
+    { label: "LA.triggerGroup.hpHeat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
+    { label: "LA.triggerGroup.structureStress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
+    { label: "LA.triggerGroup.token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
+    { label: "LA.triggerGroup.other", triggers: ["onUpdate"] }
 ];
 export const BUILT_IN_TRIGGERS = new Set(TRIGGER_GROUPS.flatMap(group => group.triggers));
 
@@ -178,8 +179,8 @@ export class ReactionManager
     static initialize()
     {
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {
-            name: "Custom Activations",
-            hint: "Define custom activations for items.",
+            name: "LA.settings.customReactions.name",
+            hint: "LA.settings.customReactions.hint",
             scope: "world",
             config: false,
             type: Object,
@@ -187,8 +188,8 @@ export class ReactionManager
         });
 
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, {
-            name: "General Activations",
-            hint: "Define activations that apply to all tokens.",
+            name: "LA.settings.generalReactions.name",
+            hint: "LA.settings.generalReactions.hint",
             scope: "world",
             config: false,
             type: Object,
@@ -196,17 +197,17 @@ export class ReactionManager
         });
 
         game.settings.registerMenu(ReactionManager.ID, "reactionConfig", {
-            name: "Automation Manager",
-            label: "Open Automation Manager",
-            hint: "Configure custom activations and triggers.",
+            name: "LA.settings.reactionConfig.name",
+            label: "LA.settings.reactionConfig.label",
+            hint: "LA.settings.reactionConfig.hint",
             icon: "fas fa-bolt",
             type: ReactionConfig,
             restricted: true
         });
 
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_FOLDERS, {
-            name: "Activation Folders",
-            hint: "Folder assignments for custom activations.",
+            name: "LA.settings.activationFolders.name",
+            hint: "LA.settings.activationFolders.hint",
             scope: "world",
             config: false,
             type: Array,
@@ -214,8 +215,8 @@ export class ReactionManager
         });
 
         game.settings.register(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, {
-            name: "Startup Scripts",
-            hint: "JS scripts that run on module ready.",
+            name: "LA.settings.startupScripts.name",
+            hint: "LA.settings.startupScripts.hint",
             scope: "world",
             config: false,
             type: Array,
@@ -223,8 +224,8 @@ export class ReactionManager
         });
 
         game.settings.register(ReactionManager.ID, "enableLaSossisItems", {
-            name: "LaSossis's Items",
-            hint: "Those are the item activations i made for myself, it wil create a startup script that registers them as default item activations.",
+            name: "LA.settings.enableLaSossisItems.name",
+            hint: "LA.settings.enableLaSossisItems.hint",
             scope: "world",
             config: false,
             type: Boolean,
@@ -233,8 +234,8 @@ export class ReactionManager
         });
 
         game.settings.register(ReactionManager.ID, "enablePersonalStuff", {
-            name: "LaSossis's Personal Stuff",
-            hint: "My personal bag of tweaks, might not be useful to anyone else.",
+            name: "LA.settings.enablePersonalStuff.name",
+            hint: "LA.settings.enablePersonalStuff.hint",
             scope: "world",
             config: false,
             type: Boolean,
@@ -506,7 +507,7 @@ export class ReactionManager
         const jsonStr = JSON.stringify(exportData, null, 2);
         globalThis.saveDataToFile(jsonStr, "application/json", `lancer-automations-${new Date().toISOString().slice(0, 10)}.json`);
 
-        ui.notifications.info("Configuration exported successfully.");
+        ui.notifications.info(localize('LA.notify.configurationExportedSuccessfully'));
     }
 
     static async applyImportSelection(data, selection)
@@ -635,12 +636,12 @@ export class ReactionManager
             }
 
             clearScriptCache();
-            ui.notifications.info("Import applied.");
+            ui.notifications.info(localize('LA.notify.importApplied'));
             return true;
         }
         catch (error)
         {
-            ui.notifications.error(`Failed to apply import: ${error.message}`);
+            ui.notifications.error(localizeFormat('LA.notify.importApplyFailed', { error: error.message }));
             return false;
         }
     }
@@ -667,7 +668,7 @@ export class ReactionConfig extends FormApplication
     static get defaultOptions()
     {
         return mergeObject(super.defaultOptions, {
-            title: "Activation Manager",
+            title: localize('LA.dialogTitle.activationManager'),
             id: "reaction-manager-config",
             classes: [...super.defaultOptions.classes, 'lancer-dialog-base', 'lancer-no-title'],
             template: `modules/lancer-automations/templates/reaction-config.html`,
@@ -1183,7 +1184,7 @@ export class ReactionConfig extends FormApplication
                 try
                 {
                     await navigator.clipboard.writeText(result.lid);
-                    ui.notifications.info(`Copied LID: ${result.lid}`);
+                    ui.notifications.info(localizeFormat('LA.notify.copiedLid', { lid: result.lid }));
                 }
                 catch
                 {
@@ -1398,21 +1399,21 @@ export class ReactionConfig extends FormApplication
             const name = await new Promise(resolve =>
             {
                 new Dialog({
-                    title: "Create Folder",
+                    title: localize('LA.dialogTitle.createFolder'),
                     content: `
                         <div class="form-group">
                             <label>Folder Name</label>
-                            <input type="text" name="folderName" placeholder="Enter folder name..." autofocus>
+                            <input type="text" name="folderName" placeholder="${localize('LA.activationManager.folderNamePlaceholder')}" autofocus>
                         </div>
                     `,
                     buttons: {
                         ok: {
-                            label: "Create",
+                            label: localize("LA.common.create"),
                             icon: '<i class="fas fa-folder-plus"></i>',
                             callback: (dlg) => resolve(String(dlg.find('[name=folderName]').val() ?? '').trim())
                         },
                         cancel: {
-                            label: "Cancel",
+                            label: localize("LA.common.cancel"),
                             icon: '<i class="fas fa-times"></i>',
                             callback: () => resolve(null)
                         }
@@ -1459,21 +1460,21 @@ export class ReactionConfig extends FormApplication
             const newName = await new Promise(resolve =>
             {
                 new Dialog({
-                    title: "Rename Folder",
+                    title: localize('LA.dialogTitle.renameFolder'),
                     content: `
                         <div class="form-group">
-                            <label>New Name</label>
+                            <label>${localize('LA.activationManager.newName')}</label>
                             <input type="text" name="folderName" value="${oldName}" autofocus>
                         </div>
                     `,
                     buttons: {
                         ok: {
-                            label: "Rename",
+                            label: localize("LA.common.rename"),
                             icon: '<i class="fas fa-pen"></i>',
                             callback: (dlg) => resolve(String(dlg.find('[name=folderName]').val() ?? '').trim())
                         },
                         cancel: {
-                            label: "Cancel",
+                            label: localize("LA.common.cancel"),
                             icon: '<i class="fas fa-times"></i>',
                             callback: () => resolve(null)
                         }
@@ -1495,26 +1496,26 @@ export class ReactionConfig extends FormApplication
             const result = await new Promise(resolve =>
             {
                 new Dialog({
-                    title: "Delete Folder",
+                    title: localize('LA.dialogTitle.deleteFolder'),
                     content: `
                         <div class="form-group">
-                            <p style="margin-bottom: 10px;">Are you sure you want to delete folder "<strong>${folderName}</strong>"?</p>
-                            <p class="notes">Choose whether to keep the activations inside the folder (unfiled) or delete them entirely.</p>
+                            <p style="margin-bottom: 10px;">${localizeFormat('LA.activationManager.confirmDeleteFolder', { name: folderName })}</p>
+                            <p class="notes">${localize('LA.activationManager.keepOrDeleteHint')}</p>
                         </div>
                     `,
                     buttons: {
                         keep: {
-                            label: "Keep Items",
+                            label: localize("LA.activationManager.keepItems"),
                             icon: '<i class="fas fa-inbox"></i>',
                             callback: () => resolve("keep")
                         },
                         all: {
-                            label: "Delete All",
+                            label: localize("LA.activationManager.deleteAll"),
                             icon: '<i class="fas fa-trash"></i>',
                             callback: () => resolve("all")
                         },
                         cancel: {
-                            label: "Cancel",
+                            label: localize("LA.common.cancel"),
                             icon: '<i class="fas fa-times"></i>',
                             callback: () => resolve(null)
                         }
@@ -1626,11 +1627,11 @@ export class ReactionConfig extends FormApplication
         `;
 
         new Dialog({
-            title: "Activation Manager Help",
+            title: localize('LA.dialogTitle.activationManagerHelp'),
             content: content,
             buttons: {
                 ok: {
-                    label: "Close",
+                    label: localize("LA.common.close"),
                     icon: '<i class="fas fa-check"></i>'
                 }
             },
@@ -1861,8 +1862,8 @@ export class ReactionConfig extends FormApplication
         if (idx === -1)
             return;
         const confirmed = await Dialog.confirm({
-            title: 'Delete Startup Script',
-            content: `<p>Delete script "<strong>${scripts[idx].name}</strong>"?</p>`
+            title: localize('LA.dialogTitle.deleteStartupScript'),
+            content: `<p>${localizeFormat('LA.activationManager.confirmDeleteScript', { name: scripts[idx].name })}</p>`
         });
         if (!confirmed)
             return;
@@ -1899,8 +1900,8 @@ export class ReactionConfig extends FormApplication
         if (this._needsReload)
         {
             const reload = await Dialog.confirm({
-                title: "Reload Required",
-                content: "<p>Changes made to activations or startup scripts require a reload to apply. Reload now?</p>",
+                title: localize('LA.dialogTitle.reloadRequired'),
+                content: localize('LA.activationManager.content.changesMadeToActivationsOrStartup'),
                 yes: () => true,
                 no: () => false,
                 defaultYes: false
@@ -1923,7 +1924,7 @@ export class StartupScriptEditor extends FormApplication
     static get defaultOptions()
     {
         return mergeObject(super.defaultOptions, {
-            title: "Startup Script",
+            title: localize('LA.dialogTitle.startupScript'),
             id: "startup-script-editor",
             template: `modules/lancer-automations/templates/startup-script-editor.html`,
             width: 700,
@@ -2027,7 +2028,7 @@ export class StartupScriptEditor extends FormApplication
         const name = (formData.name ?? "").trim();
         if (!name)
         {
-            ui.notifications.warn('Script name is required.');
+            ui.notifications.warn(localize('LA.notify.scriptNameIsRequired'));
             throw new Error('Script name is required.');
         }
 
@@ -2069,7 +2070,7 @@ export class ReactionEditor extends FormApplication
     static get defaultOptions()
     {
         return foundry.utils.mergeObject(super.defaultOptions, {
-            title: "Edit Activation",
+            title: localize('LA.dialogTitle.editActivation'),
             id: "reaction-editor",
             template: `modules/lancer-automations/templates/reaction-editor.html`,
             width: 860,
@@ -2349,11 +2350,11 @@ export class ReactionEditor extends FormApplication
                 const lid = isGeneral ? name : String(html.find('input[name="lid"]').val() || "");
                 const payload = { isGeneral, lid, name, reaction };
                 await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-                ui.notifications.info("Activation copied to clipboard.");
+                ui.notifications.info(localize('LA.notify.activationCopiedToClipboard'));
             }
             catch (error)
             {
-                ui.notifications.error("Failed to copy to clipboard.");
+                ui.notifications.error(localize('LA.notify.failedToCopyToClipboard'));
             }
         });
 
@@ -2391,7 +2392,7 @@ export class ReactionEditor extends FormApplication
                 }
             }
             if (compiled)
-                ui.notifications.info(`Compiled ${compiled} function(s) under dynamic/${base}/ - see devtools Sources.`);
+                ui.notifications.info(localizeFormat('LA.notify.compiledFunctions', { count: compiled, base }));
         });
 
         html.find('.clipboard-paste').on('click', async () =>
@@ -2402,7 +2403,7 @@ export class ReactionEditor extends FormApplication
                 const payload = JSON.parse(text);
                 if (!payload?.reaction)
                 {
-                    ui.notifications.error("Clipboard does not contain a valid activation.");
+                    ui.notifications.error(localize('LA.notify.clipboardDoesNotContainAValidActivation'));
                     return;
                 }
                 this.object = { ...this.object, ...payload, name: payload.name ?? (payload.isGeneral ? payload.lid : (this.object.name ?? "")) };
@@ -2410,7 +2411,7 @@ export class ReactionEditor extends FormApplication
             }
             catch (error)
             {
-                ui.notifications.error("Failed to load from clipboard: invalid JSON.");
+                ui.notifications.error(localize('LA.notify.failedToLoadFromClipboardInvalidJson'));
             }
         });
 
@@ -3120,12 +3121,12 @@ export class ReactionEditor extends FormApplication
         {
             let picked = 'cancel';
             new Dialog({
-                title: "Unsaved changes",
-                content: "<p style='padding:4px 2px;'>This activation has unsaved changes.</p>",
+                title: localize('LA.dialogTitle.unsavedChanges'),
+                content: localize('LA.activationManager.content.thisActivationHasUnsavedChanges'),
                 buttons: {
                     save: {
                         icon: '<i class="far fa-save"></i>',
-                        label: "Save & Close",
+                        label: localize("LA.common.saveAndClose"),
                         callback: () =>
                         {
                             picked = 'save';
@@ -3133,7 +3134,7 @@ export class ReactionEditor extends FormApplication
                     },
                     discard: {
                         icon: '<i class="fas fa-trash"></i>',
-                        label: "Discard",
+                        label: localize("LA.common.discard"),
                         callback: () =>
                         {
                             picked = 'discard';
@@ -3141,7 +3142,7 @@ export class ReactionEditor extends FormApplication
                     },
                     cancel: {
                         icon: '<i class="fas fa-arrow-left"></i>',
-                        label: "Keep Editing",
+                        label: localize("LA.common.keepEditing"),
                         callback: () =>
                         {
                             picked = 'cancel';
@@ -3249,11 +3250,11 @@ export class ReactionEditor extends FormApplication
         let resizeObserver;
 
         new Dialog({
-            title: `Edit ${title}`,
+            title: localizeFormat('LA.effectManager.editTitle', { title }),
             content: dialogContent,
             buttons: {
                 save: {
-                    label: "Save & Close",
+                    label: localize("LA.common.saveAndClose"),
                     icon: '<i class="fas fa-save" style="margin-right: 8px;"></i>',
                     callback: () =>
                     {
@@ -3321,7 +3322,7 @@ export class ReactionEditor extends FormApplication
     {
         if (!lid)
         {
-            ui.notifications.warn("Please select an item or deployable first.");
+            ui.notifications.warn(localize('LA.notify.pleaseSelectAnItemOrDeployableFirst'));
             return;
         }
 
@@ -3358,7 +3359,7 @@ export class ReactionEditor extends FormApplication
 
         if (!item)
         {
-            ui.notifications.error(`Item or deployable with LID "${lid}" not found in any compendium.`);
+            ui.notifications.error(localizeFormat('LA.notify.lidNotFound', { lid }));
             return;
         }
 
@@ -3514,7 +3515,7 @@ export class ReactionEditor extends FormApplication
         return await new Promise((resolve) =>
         {
             const dialog = new Dialog({
-                title: `Select Action`,
+                title: localize('LA.dialogTitle.selectAction'),
                 content: `
                     <div class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
                         <h1 class="lancer-dialog-title">Select Action</h1>
@@ -3526,11 +3527,11 @@ export class ReactionEditor extends FormApplication
                 `,
                 buttons: {
                     noAction: {
-                        label: '<i class="fas fa-minus"></i> No specific action',
+                        label: `<i class="fas fa-minus"></i> ${localize("LA.activationManager.noSpecificAction")}`,
                         callback: () => resolve("")
                     },
                     cancel: {
-                        label: '<i class="fas fa-times"></i> Cancel',
+                        label: `<i class="fas fa-times"></i> ${localize("LA.common.cancel")}`,
                         callback: () => resolve(null)
                     }
                 },
@@ -3557,7 +3558,7 @@ export class ReactionEditor extends FormApplication
         const hasCancelFn = (triggerKey) => /\w+\s*\(/.test(help[triggerKey] ?? "");
 
         return TRIGGER_GROUPS.map(group => ({
-            label: group.label,
+            label: localize(group.label),
             items: group.triggers.map(triggerKey => ({
                 key: triggerKey,
                 checked: selected.includes(triggerKey),
@@ -3625,7 +3626,7 @@ export class ReactionEditor extends FormApplication
             if (!customTrigger || triggers.includes(customTrigger))
                 continue;
             if (customTrigger.startsWith("onInit"))
-                return ui.notifications.error(`Custom trigger "${customTrigger}": names cannot start with "onInit".`);
+                return ui.notifications.error(localizeFormat('LA.notify.customTriggerOnInit', { name: customTrigger }));
             triggers.push(customTrigger);
         }
 
@@ -3645,7 +3646,7 @@ export class ReactionEditor extends FormApplication
         {
             const name = formData.name;
             if (!name)
-                return ui.notifications.error("Activation Name is required for general activations");
+                return ui.notifications.error(localize('LA.notify.activationNameIsRequiredForGeneralActivations'));
 
             const newReaction = {
                 triggers: triggers,
@@ -3716,7 +3717,7 @@ export class ReactionEditor extends FormApplication
         {
             const lid = formData.lid;
             if (!lid)
-                return ui.notifications.error("Item LID is required");
+                return ui.notifications.error(localize('LA.notify.itemLidIsRequired'));
 
             const newReaction = {
                 reactionPath: formData.reactionPath || "",
@@ -3820,7 +3821,7 @@ export class ReactionEditor extends FormApplication
     async _openDocumentBrowser(lidInput, pathInput, updatePreview)
     {
         await openDocumentPicker({
-            title: 'Find Actor',
+            title: localize('LA.dialogTitle.findActor'),
             documentTypes: ['Actor'],
             onPick: async (entry) =>
             {

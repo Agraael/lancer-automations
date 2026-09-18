@@ -1,10 +1,10 @@
 <div class="battelog-gm-card">
     <div class="battelog-gm-head">
         <span class="battelog-gm-title">
-            <i class="fas fa-flag-checkered"></i> Combat Concluded
+            <i class="fas fa-flag-checkered"></i> {{localize "LA.battleLog.gmCard.combatConcluded"}}
         </span>
         <span class="battelog-gm-tag">
-            <i class="fas fa-user-shield"></i> GM ONLY
+            <i class="fas fa-user-shield"></i> {{localize "LA.battleLog.gmCard.gmOnly"}}
         </span>
     </div>
     <div class="battelog-gm-body">
@@ -13,28 +13,28 @@
                 <i class="fas fa-clipboard-check"></i>
             </div>
             <div>
-                <div class="battelog-gm-label-strong">COMBAT ENCOUNTER</div>
+                <div class="battelog-gm-label-strong">{{localize "LA.battleLog.gmCard.combatEncounter"}}</div>
                 <div class="battelog-gm-sub">{{mission.squadStatus}} · {{mission.rounds}} rounds</div>
             </div>
         </div>
 
         <div>
-            <div class="battelog-gm-label">Record Outcome</div>
+            <div class="battelog-gm-label">{{localize "LA.battleLog.gmCard.recordOutcome"}}</div>
             <div class="battelog-outcome-toggle" role="group">
                 <button type="button" data-action="setOutcome" data-value="VICTORY"
                         class="battelog-outcome-btn win{{#if isVictory}} on{{/if}}">
-                    <i class="fas fa-trophy"></i> VICTORY
+                    <i class="fas fa-trophy"></i> {{localize "LA.battleLog.gmCard.victory"}}
                 </button>
                 <button type="button" data-action="setOutcome" data-value="DEFEAT"
                         class="battelog-outcome-btn lose{{#unless isVictory}} on{{/unless}}">
-                    <i class="fas fa-skull"></i> DEFEAT
+                    <i class="fas fa-skull"></i> {{localize "LA.battleLog.gmCard.defeat"}}
                 </button>
             </div>
         </div>
 
         <div>
             <div class="battelog-gm-label">
-                <i class="fas fa-star" style="color: var(--la-amber, #eab308);"></i> Award MVP
+                <i class="fas fa-star" style="color: var(--la-amber, #eab308);"></i> {{localize "LA.battleLog.gmCard.awardMvp"}}
             </div>
             <div class="battelog-mvp-grid">
                 {{#each players}}
@@ -50,15 +50,15 @@
 
         <div class="battelog-gm-actions">
             <button type="button" data-action="dismiss" class="battelog-btn-secondary">
-                Dismiss
+                {{localize "LA.battleLog.gmCard.dismiss"}}
             </button>
             <button type="button" data-action="broadcast" class="battelog-btn-primary">
-                <i class="fas fa-satellite-dish"></i> Broadcast Recap
+                <i class="fas fa-satellite-dish"></i> {{localize "LA.battleLog.gmCard.broadcastRecap"}}
             </button>
         </div>
 
         <p class="battelog-gm-footer-note">
-            Visible to all connected pilots.
+            {{localize "LA.battleLog.gmCard.visibleToAllConnectedPilots"}}
         </p>
     </div>
 </div>

@@ -18,6 +18,7 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
 let _pendingInfection = null;
@@ -213,7 +214,7 @@ async function initInfectionCheckData(state)
     const tokens = state.actor.getActiveTokens();
     if (!tokens?.length)
     {
-        ui.notifications?.error("Infection flow requires the actor to have a token in the scene");
+        ui.notifications?.error(localize('LA.notify.infectionFlowRequiresTheActorToHave'));
         return false;
     }
 
@@ -261,7 +262,7 @@ async function rollInfectionCheck(state)
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
     if (!StatRollFlow || typeof StatRollFlow !== 'function')
     {
-        ui.notifications?.error('Could not find StatRollFlow for infection check.');
+        ui.notifications?.error(localize('LA.notify.couldNotFindStatrollflowForInfectionCheck'));
         return false;
     }
 
@@ -349,7 +350,7 @@ function _triggerInfectionFlow(actor)
 
     new GenericFlow(actor.uuid, {
         type: "damage",
-        title: "Infection Heat",
+        title: localize('LA.dialogTitle.infectionHeat'),
         icon: "cci cci-infection",
         damage: [{ type: "Heat", val: "1" }],  // overwritten by initInfectionCheckData
         configurable: false,
@@ -387,7 +388,7 @@ async function clearInfectionOnStabilize(state)
     if (infection > 0)
     {
         await state.actor.update({ 'system.infection': 0 });
-        ui.notifications.info(`${state.actor.name}: Infection cleared by stabilize.`);
+        ui.notifications.info(localizeFormat('LA.notify.infectionCleared', { name: state.actor.name }));
     }
     return true;
 }
@@ -668,7 +669,7 @@ export function initInfectionHooks()
             }
 
             const tokenName = actor.token?.name ?? actor.name;
-            ui.notifications.info(`${tokenName} took ${heat} Heat from Infection.`);
+            ui.notifications.info(localizeFormat('LA.notify.infectionHeatTaken', { name: tokenName, heat }));
         });
 
         console.log(`${MODULE_ID} | Infection damage-apply handlers registered`);
@@ -695,11 +696,11 @@ export async function applyInfection(actor, amount)
         content: `
             <div class="card clipped-bot" style="margin:0">
                 <div class="lancer-header lancer-primary" style="padding:4px 8px;">
-                    <i class="cci cci-infection i--m"></i> INFECTION
+                    <i class="cci cci-infection i--m"></i> ${localize('LA.infection.cardTitle')}
                 </div>
                 <div class="effect-text" style="padding:4px 8px;">
-                    ${actor.name} takes <b>${amount} Heat</b> from Infection and marks <b>${amount} Infection</b>.
-                    (Total: ${currentInfection + amount})
+                    ${localizeFormat('LA.infection.cardBody', { name: actor.name, amount })}
+                    ${localizeFormat('LA.infection.cardTotal', { total: currentInfection + amount })}
                 </div>
             </div>`
     });
@@ -750,7 +751,7 @@ function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection)
         <span class="major">INFECTION</span>
       </div>
       <div class="stat-flow-container">
-        <a class="lancer-flow-button lancer-button la-infection-flow-button" data-uuid="${actorUuid}" data-flow-type="InfectionFlow" data-tooltip="Roll an infection check and generate heat damage">
+        <a class="lancer-flow-button lancer-button la-infection-flow-button" data-uuid="${actorUuid}" data-flow-type="InfectionFlow" data-tooltip="${localize('LA.infection.rollTip')}">
           <i class="fas cci cci-infection i--dark i--s"></i>
         </a>
         <input class="lancer-stat" type="number" name="system.infection" value="${infection}" data-dtype="Number" />
@@ -764,7 +765,7 @@ function _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection)
         if (infection > 0)
             _triggerInfectionFlow(actor);
         else
-            ui.notifications.warn('No infection to check.');
+            ui.notifications.warn(localize('LA.notify.noInfectionToCheck'));
     });
 
     $burnCard.after($card);

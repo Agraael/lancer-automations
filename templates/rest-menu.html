@@ -10,7 +10,7 @@
         <div class="la-rest-repairs-box">
             <img src="{{repairIcon}}" alt="">
             <div class="la-rest-repairs-stack">
-                <div class="la-rest-repairs-label">REPAIRS</div>
+                <div class="la-rest-repairs-label">{{localize "LA.restUi.menu.repairs"}}</div>
                 <div class="la-rest-repairs-value"><span>{{mech.repairs.value}}</span><span class="la-rest-repairs-sep">/</span><span>{{mech.repairs.max}}</span></div>
             </div>
         </div>
@@ -18,44 +18,44 @@
     </div>
 
     <div class="la-rest-section">
-        <div class="la-rest-section-title">CONDITIONS &amp; HEAT</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.menu.conditionsAmpHeat"}}</div>
         <div class="la-rest-section-body">
             {{#if heatNotZero}}
             <div class="lancer-toggle-card la-rest-toggle" data-action="resetHeat">
                 <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
                 <div class="lancer-toggle-card-text">
-                    Reset Heat
+                    {{localize "LA.restUi.menu.resetHeat"}}
                     <div class="la-rest-card-sub">Heat: {{mech.heat.value}} / {{mech.heat.max}}</div>
                 </div>
-                <div class="la-rest-cost-chip la-rest-cost-free">FREE</div>
+                <div class="la-rest-cost-chip la-rest-cost-free">{{localize "LA.restUi.menu.free"}}</div>
             </div>
             {{/if}}
             {{#if hasEffects}}
             <div class="lancer-toggle-card la-rest-toggle" data-action="clearEffects">
                 <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
                 <div class="lancer-toggle-card-text">
-                    Clear Status Effects
+                    {{localize "LA.restUi.menu.clearStatusEffects"}}
                     <div class="la-rest-effect-row">
                         {{#each effects}}<img src="{{img}}" title="{{name}}" alt="{{name}}" class="la-rest-effect-icon">{{/each}}
                     </div>
                 </div>
-                <div class="la-rest-cost-chip la-rest-cost-free">FREE</div>
+                <div class="la-rest-cost-chip la-rest-cost-free">{{localize "LA.restUi.menu.free"}}</div>
             </div>
             {{/if}}
             {{#unless heatNotZero}}{{#unless hasEffects}}
-            <div class="la-rest-empty">No conditions to clear.</div>
+            <div class="la-rest-empty">{{localize "LA.restUi.menu.noConditionsToClear"}}</div>
             {{/unless}}{{/unless}}
         </div>
     </div>
 
     <div class="la-rest-section">
-        <div class="la-rest-section-title">CHASSIS HEALTH</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.menu.chassisHealth"}}</div>
         <div class="la-rest-section-body">
             {{#if hpDamaged}}
             <div class="lancer-toggle-card la-rest-toggle" data-action="restoreHp">
                 <div class="lancer-toggle-card-icon"><i class="far fa-square"></i></div>
                 <div class="lancer-toggle-card-text">
-                    Restore HP to Full
+                    {{localize "LA.restUi.menu.restoreHpToFull"}}
                     <div class="la-rest-card-sub">HP: {{mech.hp.value}} / {{mech.hp.max}}</div>
                 </div>
                 <div class="la-rest-cost-chip">1</div>
@@ -63,7 +63,7 @@
             {{/if}}
 
             <div class="la-rest-stepper">
-                <div class="la-rest-stepper-label">Structure</div>
+                <div class="la-rest-stepper-label">{{localize "LA.restUi.menu.structure"}}</div>
                 <div class="la-rest-stepper-icons" id="la-rest-structure-icons"></div>
                 <div class="la-rest-stepper-controls">
                     <button type="button" class="la-rest-step-down" data-target="structure">−</button>
@@ -73,7 +73,7 @@
             </div>
 
             <div class="la-rest-stepper">
-                <div class="la-rest-stepper-label">Stress</div>
+                <div class="la-rest-stepper-label">{{localize "LA.restUi.menu.stress"}}</div>
                 <div class="la-rest-stepper-icons" id="la-rest-stress-icons"></div>
                 <div class="la-rest-stepper-controls">
                     <button type="button" class="la-rest-step-down" data-target="stress">−</button>
@@ -86,7 +86,7 @@
 
     {{#if hasDestroyed}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">DESTROYED EQUIPMENT</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.menu.destroyedEquipment"}}</div>
         <div class="la-rest-section-body">
             {{#if destroyedWeapons.length}}
             <div class="la-rest-equipment-row">
@@ -110,7 +110,7 @@
 
     {{#if hasAllies}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">ALLY REPAIR POOL</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.menu.allyRepairPool"}}</div>
         <div class="la-rest-section-body">
             <div class="la-rest-allies-row">
                 {{#each allies}}
@@ -132,19 +132,19 @@
 
     {{#if isGM}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">GM FREE REPAIR</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.menu.gmFreeRepair"}}</div>
         <div class="la-rest-section-body">
             <div class="la-rest-grant-row">
-                <label for="la-rest-grant">Free Repairs</label>
+                <label for="la-rest-grant">{{localize "LA.restUi.menu.freeRepairs"}}</label>
                 <input id="la-rest-grant" class="la-rest-grant-input" type="number" min="0" value="0">
-                <span class="la-rest-grant-suffix">added to pool, no source</span>
+                <span class="la-rest-grant-suffix">{{localize "LA.restUi.menu.addedToPoolNoSource"}}</span>
             </div>
         </div>
     </div>
     {{/if}}
 
     <div class="la-rest-cost-tally">
-        <div class="la-rest-cost-tally-label">REPAIR COST</div>
+        <div class="la-rest-cost-tally-label">{{localize "LA.restUi.menu.repairCost"}}</div>
         <div class="la-rest-cost-tally-value">
             <span id="la-rest-cost-current">0</span>
             <span class="la-rest-cost-tally-sep">/</span>

@@ -1,6 +1,7 @@
 import { openCursorMenu } from './cursor-menu.js';
 
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2'];
 
 export const WHEEL_COUNT = WHEEL_FLAGS.length;
@@ -77,12 +78,14 @@ export function openFavoritePopup(x, y, currentWheel, { onEnter = null, onLeave 
     for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
     {
         if (wheel !== currentWheel)
-            rows.push({ value: wheel, label: `Wheel ${wheel}`, glyph: `★<span class="la-hud-fav-digit">${wheel}</span>` });
+            rows.push({ value: wheel, label: localizeFormat('LA.tokenHud.wheel', { n: wheel }), glyph: `★<span class="la-hud-fav-digit">${wheel}</span>` });
     }
     if (currentWheel)
-        rows.push({ value: 0, label: 'Remove', glyph: '✕', cls: 'la-menu-popup-danger' });
+        rows.push({ value: 0, label: localize('LA.common.remove'), glyph: '✕', cls: 'la-menu-popup-danger' });
     return openCursorMenu({
-        head: currentWheel ? `On wheel ${currentWheel}` : 'Not favorited',
+        head: currentWheel
+            ? localizeFormat('LA.tokenHud.onWheel', { n: currentWheel })
+            : localize('LA.tokenHud.notFavorited'),
         rows,
         x,
         y,

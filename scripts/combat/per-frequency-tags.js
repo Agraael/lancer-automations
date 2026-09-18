@@ -1,6 +1,7 @@
 /* global game, CONFIG, Hooks, foundry, ui */
 
 import { getAutoConsumeDisabled, getSubAutoConsumeDisabled, getConsumeOn } from '../interactive/extra-config.js';
+import { localize } from '../tools/string-utils.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -612,9 +613,9 @@ function buildSubBadges(item, subs, alt)
     for (const sub of subs)
     {
         const specs = [
-            { max: getPerRoundLimitFromSub(sub.data), field: 'uses_per_round', label: 'PER ROUND', ready: 'mdi-restart', off: 'mdi-restart-off' },
-            { max: getPerTurnLimitFromSub(sub.data), field: 'uses_per_turn', label: 'PER TURN', ready: 'mdi-circle-slice-8', off: 'mdi-circle-outline' },
-            { max: getPerSceneLimitFromSub(sub.data), field: 'uses_per_scene', label: 'PER SCENE', ready: 'mdi-cog', off: 'mdi-cog-off' },
+            { max: getPerRoundLimitFromSub(sub.data), field: 'uses_per_round', label: localize('LA.perFrequency.perRound'), ready: 'mdi-restart', off: 'mdi-restart-off' },
+            { max: getPerTurnLimitFromSub(sub.data), field: 'uses_per_turn', label: localize('LA.perFrequency.perTurn'), ready: 'mdi-circle-slice-8', off: 'mdi-circle-outline' },
+            { max: getPerSceneLimitFromSub(sub.data), field: 'uses_per_scene', label: localize('LA.perFrequency.perScene'), ready: 'mdi-cog', off: 'mdi-cog-off' },
         ];
         for (const spec of specs)
         {

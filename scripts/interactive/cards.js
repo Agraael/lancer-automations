@@ -5,6 +5,7 @@ import { isWhiteIcon } from "../tah/item-helpers.js";
 import { createTokenMark } from "./target-shapes.js";
 import { focusTokens } from "../tools/auto-focus.js";
 
+import { localize } from '../tools/string-utils.js';
 // Info Card Helpers (internal)
 
 export function isWhiteSvgIcon(iconPath)
@@ -27,17 +28,17 @@ function _elevationKeyLabels()
 }
 
 export const _cardDefaults = {
-    chooseToken: { title: "SELECT TARGETS", icon: "fas fa-crosshairs" },
-    knockBack:   { title: "KNOCKBACK",       icon: "fas fa-arrow-right" },
-    placeToken:  { title: "PLACE TOKEN",     icon: "fas fa-user-plus" },
-    placeZone:   { title: "PLACE ZONE",      icon: "fas fa-bullseye" },
-    choiceCard:  { title: "CHOICE",          icon: "fas fa-list" },
-    deploymentCard: { title: "DEPLOY",      icon: "cci cci-deployable" },
-    voteCard:    { title: "VOTE",            icon: "fas fa-poll" },
-    haseContest: { title: "HASE CONTEST",    icon: "fas fa-dice-d20" },
-    forceCheck:  { title: "FORCE CHECK",     icon: "mdi mdi-alert-circle-check-outline" },
-    rollCard:    { title: "ROLL",            icon: "fas fa-dice-d20" },
-    teleport:    { title: "MOVE",            icon: "fas fa-arrows-alt" }
+    chooseToken: { title: 'LA.card.selectTargets', icon: "fas fa-crosshairs" },
+    knockBack:   { title: 'LA.card.knockback',       icon: "fas fa-arrow-right" },
+    placeToken:  { title: 'LA.card.placeToken',     icon: "fas fa-user-plus" },
+    placeZone:   { title: 'LA.card.placeZone',      icon: "fas fa-bullseye" },
+    choiceCard:  { title: 'LA.card.choice',          icon: "fas fa-list" },
+    deploymentCard: { title: 'LA.card.deploy',      icon: "cci cci-deployable" },
+    voteCard:    { title: 'LA.card.vote',            icon: "fas fa-poll" },
+    haseContest: { title: 'LA.card.haseContest',    icon: "fas fa-dice-d20" },
+    forceCheck:  { title: 'LA.card.forceCheck',     icon: "mdi mdi-alert-circle-check-outline" },
+    rollCard:    { title: 'LA.card.roll',            icon: "fas fa-dice-d20" },
+    teleport:    { title: 'LA.card.move',            icon: "fas fa-arrows-alt" }
 };
 
 // Card queue: serialise all interactive cards so they never overwrite each other
@@ -181,9 +182,9 @@ export function _queueCard(fn, title = '', { urgent = false } = {})
 
 export function _createInfoCard(type, opts)
 {
-    const defaults = _cardDefaults[type] || { title: "INFO", icon: "fas fa-info" };
+    const defaults = _cardDefaults[type] || { title: 'LA.card.info', icon: 'fas fa-info' };
     const {
-        title = defaults.title,
+        title = localize(defaults.title),
         icon = defaults.icon,
         headerClass = "",
         description = "",

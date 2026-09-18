@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { localize, localizeFormat } from './string-utils.js';
 export const DOWNTIME_TYPE = 'lancer-automations.downtime';
 export const DOWNTIME_PACK = 'la-downtime-activities';
 const DOWNTIME_ICON = 'systems/lancer/assets/icons/white/downtime.svg';
@@ -86,7 +87,7 @@ export function initDowntimeItems()
     ItemsCollection.registerSheet(MODULE_ID, DowntimeItemSheet, {
         types: [DOWNTIME_TYPE],
         makeDefault: true,
-        label: 'Downtime Activity',
+        label: 'LA.downtime.sheetLabel',
     });
 }
 
@@ -117,14 +118,14 @@ export async function importDowntimeActionsJson(text)
     }
     catch
     {
-        ui.notifications.error('Downtime import: invalid JSON.');
+        ui.notifications.error(localize('LA.notify.downtimeImportInvalidJson'));
         return 0;
     }
     const list = Array.isArray(data) ? data : (Array.isArray(data?.actions) ? data.actions : []);
     const entries = list.filter(entry => entry?.activation === 'Downtime');
     if (!entries.length)
     {
-        ui.notifications.warn('Downtime import: no downtime actions in this file.');
+        ui.notifications.warn(localize('LA.notify.downtimeImportNoDowntimeActionsInThis'));
         return 0;
     }
 
@@ -163,7 +164,7 @@ export async function importDowntimeActionsJson(text)
             await Item.create(itemData, { pack: pack.collection });
     }
     await pack.configure({ locked: true });
-    ui.notifications.info(`Downtime import: ${entries.length} activities in "${pack.title ?? 'Downtime Activities'}".`);
+    ui.notifications.info(localizeFormat('LA.notify.downtimeImported', { count: entries.length, pack: pack.title ?? localize('LA.downtime.activitiesPack') }));
     return entries.length;
 }
 
@@ -219,17 +220,17 @@ export function openDowntimeImportDialog()
     if (!game.user.isGM)
         return;
     new Dialog({
-        title: 'Import Downtime Actions',
-        content: '<p>Select an <code>.lcp</code> file. Actions with activation "Downtime" become items in the "Downtime Activities" compendium.</p><input type="file" accept=".lcp,.json,application/json,application/zip" style="margin-bottom:6px;">',
+        title: localize('LA.downtime.importTitle'),
+        content: `<p>${localize('LA.downtime.importBody')}</p><input type="file" accept=".lcp,.json,application/json,application/zip" style="margin-bottom:6px;">`,
         buttons: {
             import: {
-                label: 'Import',
+                label: localize('LA.common.import'),
                 icon: '<i class="fas fa-file-import"></i>',
                 callback: async (html) =>
                 {
                     const file = html.find('input[type=file]')[0]?.files?.[0];
                     if (!file)
-                        return ui.notifications.warn('Downtime import: no file selected.');
+                        return ui.notifications.warn(localize('LA.notify.downtimeImportNoFileSelected'));
                     let text;
                     if (file.name.toLowerCase().endsWith('.json'))
                         text = await file.text();
@@ -237,12 +238,12 @@ export function openDowntimeImportDialog()
                     {
                         text = await readZipEntry(await file.arrayBuffer(), 'actions.json');
                         if (text == null)
-                            return ui.notifications.warn('Downtime import: no actions.json in this LCP.');
+                            return ui.notifications.warn(localize('LA.notify.downtimeImportNoActionsJsonInThis'));
                     }
                     await importDowntimeActionsJson(text);
                 },
             },
-            cancel: { label: 'Cancel' },
+            cancel: { label: localize('LA.common.cancel') },
         },
         default: 'import',
     }, { classes: ['lancer-dialog-base'], width: 460 }).render(true);

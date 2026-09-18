@@ -2,6 +2,7 @@
 
 import { ReactionReset } from '../activations/reaction-reset.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 import { setLAFlag } from '../tools/flag-utils.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
 import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
@@ -15,54 +16,95 @@ import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 import { importTemplateMacroPresets } from './tmac-presets.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { STATUS_FX_KEYS } from '../fx/statusFX.js';
 const TEMPLATE_PATH = `modules/${MODULE_ID}/templates/lancer-automations-config.html`;
 
-// Per-action FX functions. Same list as the settings registered in tah/index.js.
+// Per-action FX functions, as [action id, label key].
+// Same list as the settings registered in tah/index.js.
 const ACTION_FX_KEYS = [
-    'skirmish', 'eject', 'selfDestruct', 'teleport', 'bootUp',
-    'dismount', 'mount', 'disengage', 'deployable', 'freeAction', 'corePower',
-    'protocol', 'activation', 'reaction', 'fullAction', 'quickAction', 'standingUp',
-    'prepare', 'interact', 'handle', 'fullTech', 'quickTech', 'invade',
-    'grapple', 'ram', 'jockey', 'barrage', 'boost', 'overchargeNpc', 'hide',
-    'shutDown', 'fall', 'fallImpact', 'search', 'scan', 'targetSuccess',
-    'defaultThrow', 'targetFail', 'reload', 'fight', 'mineDetonation',
-    'profile', 'mod', 'attack', 'damage', 'hase', 'skill',
+    ['skirmish', 'LA.settingsMenus.tah.actionFxSound.skirmish.label'],
+    ['eject', 'LA.settingsMenus.tah.actionFxSound.eject.label'],
+    ['selfDestruct', 'LA.settingsMenus.tah.actionFxSound.selfDestruct.label'],
+    ['teleport', 'LA.settingsMenus.tah.actionFxSound.teleport.label'],
+    ['bootUp', 'LA.settingsMenus.tah.actionFxSound.bootUp.label'],
+    ['dismount', 'LA.settingsMenus.tah.actionFxSound.dismount.label'],
+    ['mount', 'LA.settingsMenus.tah.actionFxSound.mount.label'],
+    ['disengage', 'LA.settingsMenus.tah.actionFxSound.disengage.label'],
+    ['deployable', 'LA.settingsMenus.tah.actionFxSound.deployable.label'],
+    ['freeAction', 'LA.settingsMenus.tah.actionFxSound.freeAction.label'],
+    ['corePower', 'LA.settingsMenus.tah.actionFxSound.corePower.label'],
+    ['protocol', 'LA.settingsMenus.tah.actionFxSound.protocol.label'],
+    ['activation', 'LA.settingsMenus.tah.actionFxSound.activation.label'],
+    ['reaction', 'LA.settingsMenus.tah.actionFxSound.reaction.label'],
+    ['fullAction', 'LA.settingsMenus.tah.actionFxSound.fullAction.label'],
+    ['quickAction', 'LA.settingsMenus.tah.actionFxSound.quickAction.label'],
+    ['standingUp', 'LA.settingsMenus.tah.actionFxSound.standingUp.label'],
+    ['prepare', 'LA.settingsMenus.tah.actionFxSound.prepare.label'],
+    ['interact', 'LA.settingsMenus.tah.actionFxSound.interact.label'],
+    ['handle', 'LA.settingsMenus.tah.actionFxSound.handle.label'],
+    ['fullTech', 'LA.settingsMenus.tah.actionFxSound.fullTech.label'],
+    ['quickTech', 'LA.settingsMenus.tah.actionFxSound.quickTech.label'],
+    ['invade', 'LA.settingsMenus.tah.actionFxSound.invade.label'],
+    ['grapple', 'LA.settingsMenus.tah.actionFxSound.grapple.label'],
+    ['ram', 'LA.settingsMenus.tah.actionFxSound.ram.label'],
+    ['jockey', 'LA.settingsMenus.tah.actionFxSound.jockey.label'],
+    ['barrage', 'LA.settingsMenus.tah.actionFxSound.barrage.label'],
+    ['boost', 'LA.settingsMenus.tah.actionFxSound.boost.label'],
+    ['overchargeNpc', 'LA.settingsMenus.tah.actionFxSound.overchargeNpc.label'],
+    ['hide', 'LA.settingsMenus.tah.actionFxSound.hide.label'],
+    ['shutDown', 'LA.settingsMenus.tah.actionFxSound.shutDown.label'],
+    ['fall', 'LA.settingsMenus.tah.actionFxSound.fall.label'],
+    ['fallImpact', 'LA.settingsMenus.tah.actionFxSound.fallImpact.label'],
+    ['search', 'LA.settingsMenus.tah.actionFxSound.search.label'],
+    ['scan', 'LA.settingsMenus.tah.actionFxSound.scan.label'],
+    ['targetSuccess', 'LA.settingsMenus.tah.actionFxSound.targetSuccess.label'],
+    ['defaultThrow', 'LA.settingsMenus.tah.actionFxSound.defaultThrow.label'],
+    ['targetFail', 'LA.settingsMenus.tah.actionFxSound.targetFail.label'],
+    ['reload', 'LA.settingsMenus.tah.actionFxSound.reload.label'],
+    ['fight', 'LA.settingsMenus.tah.actionFxSound.fight.label'],
+    ['mineDetonation', 'LA.settingsMenus.tah.actionFxSound.mineDetonation.label'],
+    ['profile', 'LA.settingsMenus.tah.actionFxSound.profile.label'],
+    ['mod', 'LA.settingsMenus.tah.actionFxSound.mod.label'],
+    ['attack', 'LA.settingsMenus.tah.actionFxSound.attack.label'],
+    ['damage', 'LA.settingsMenus.tah.actionFxSound.damage.label'],
+    ['hase', 'LA.settingsMenus.tah.actionFxSound.hase.label'],
+    ['skill', 'LA.settingsMenus.tah.actionFxSound.skill.label'],
 ];
 
 const FOCUS_ACTION_CATEGORIES = [
-    { key: 'activation', label: 'Item Activation' },
-    { key: 'attack', label: 'Attack' },
-    { key: 'damage', label: 'Damage' },
-    { key: 'hase', label: 'HASE' },
-    { key: 'skill', label: 'Skill' },
-    { key: 'profile', label: 'Weapon Profile' },
-    { key: 'mod', label: 'Mod' },
-    { key: 'tech', label: 'Tech Attack' },
+    { key: 'activation', label: 'LA.settingsMenus.focusCategory.activation' },
+    { key: 'attack', label: 'LA.settingsMenus.focusCategory.attack' },
+    { key: 'damage', label: 'LA.settingsMenus.focusCategory.damage' },
+    { key: 'hase', label: 'LA.settingsMenus.focusCategory.hase' },
+    { key: 'skill', label: 'LA.settingsMenus.focusCategory.skill' },
+    { key: 'profile', label: 'LA.settingsMenus.focusCategory.profile' },
+    { key: 'mod', label: 'LA.settingsMenus.focusCategory.mod' },
+    { key: 'tech', label: 'LA.settingsMenus.focusCategory.tech' },
 ];
 
 const ACTIVATIONS_FIELDS = [
-    { type: 'section', label: 'Activation Manager' },
-    { key: 'reactionNotificationMode', type: 'select', label: 'Activation Notification Mode' },
+    { type: 'section', label: 'LA.settingsMenus.section.activationManager.label' },
+    { key: 'reactionNotificationMode', type: 'select', label: 'LA.settingsMenus.reactionNotificationMode.label' },
     { key: 'consumeReaction', type: 'boolean' },
     { key: 'consumeAction', type: 'boolean' },
     { key: 'treatGenericPrintAsActivation', type: 'boolean' },
 
-    { type: 'section', label: 'Scan' },
-    { key: 'scanJournalSource', type: 'select', label: 'Scan journal source', hint: 'System = native Lancer v3 scan journal, LA legacy = the older LA journal template.' },
-    { key: 'scanPlayerOwnershipMode', type: 'select', label: 'Player Ownership', hint: 'Who gets ownership when a player runs a scan; GM scans always grant to all players.' },
-    { type: 'section', label: 'Count As Scanned Without A Scan', hint: 'Who reads as scanned for the stat hint, scanned stat bars, and consume feedback.', collapsible: false, subsection: true },
+    { type: 'section', label: 'LA.settingsMenus.section.scan.label' },
+    { key: 'scanJournalSource', type: 'select', label: 'LA.settingsMenus.scanJournalSource.label', hint: 'LA.settingsMenus.scanJournalSource.hint' },
+    { key: 'scanPlayerOwnershipMode', type: 'select', label: 'LA.settingsMenus.scanPlayerOwnershipMode.label', hint: 'LA.settingsMenus.scanPlayerOwnershipMode.hint' },
+    { type: 'section', label: 'LA.settingsMenus.section.countAsScanned.label', hint: 'LA.settingsMenus.section.countAsScanned.hint', collapsible: false, subsection: true },
     { type: 'compactBooleans',
         items: [
-            { key: 'revealStatsWithoutScan', label: 'Everyone', hint: 'Every actor reads as scanned.' },
-            { key: 'scanRevealAllies', label: 'Allies', hint: 'Tokens friendly to one you own. Uses Token Factions when active.' },
-            { key: 'scanRevealPlayers', label: 'Player tokens', hint: 'Tokens owned by a player.' },
+            { key: 'revealStatsWithoutScan', label: 'LA.settingsMenus.revealStatsWithoutScan.label', hint: 'LA.settingsMenus.revealStatsWithoutScan.hint' },
+            { key: 'scanRevealAllies', label: 'LA.settingsMenus.scanRevealAllies.label', hint: 'LA.settingsMenus.scanRevealAllies.hint' },
+            { key: 'scanRevealPlayers', label: 'LA.settingsMenus.scanRevealPlayers.label', hint: 'LA.settingsMenus.scanRevealPlayers.hint' },
         ]
     },
     { type: 'button',
         key: 'regenerateScans',
-        label: 'Regenerate All Scan Journals',
+        label: 'LA.settingsMenus.regenerateScans.label',
         icon: 'fas fa-book',
-        hint: 'Walk every entry in the SCAN Database folder and re-render its page using the current template (LA legacy mode).',
+        hint: 'LA.settingsMenus.regenerateScans.hint',
         onClick: async () =>
         {
             const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
@@ -72,91 +114,92 @@ const ACTIVATIONS_FIELDS = [
 ];
 
 const COMBAT_MOVEMENT_FIELDS = [
-    { type: 'section', label: 'Targeting', collapsible: true },
+    { type: 'section', label: 'LA.settingsMenus.section.targeting.label', collapsible: true },
     { key: 'enableAttackTargeting', type: 'boolean' },
     { key: 'autoStartTargetPicking', type: 'boolean' , requires: 'enableAttackTargeting' },
     { key: 'enableDamageTargeting', type: 'boolean' },
     { key: 'statRollTargeting', type: 'boolean' },
-    { key: 'haseChanceLabels', type: 'boolean', label: 'HASE Chance Labels', hint: 'Live success % over the roller during stat rolls, saves, and contests.' },
+    { key: 'haseChanceLabels', type: 'boolean', label: 'LA.settingsMenus.haseChanceLabels.label', hint: 'LA.settingsMenus.haseChanceLabels.hint' },
     { key: 'clearTargetsAfterRoll', type: 'boolean', requires: ['enableAttackTargeting', 'enableDamageTargeting'] },
     { key: 'targetInfoDisplay', type: 'select', requires: ['enableAttackTargeting', 'enableDamageTargeting'] },
-    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'Range Preview on Attack/Damage HUD' },
-    { key: 'displayToolsToOthers', type: 'boolean', label: 'Share Interactive Tools' },
+    { key: 'tah.rangePreviewOnAttackCard', type: 'boolean', label: 'LA.settingsMenus.tah.rangePreviewOnAttackCard.label' },
+    { key: 'displayToolsToOthers', type: 'boolean', label: 'LA.settingsMenus.displayToolsToOthers.label' },
 
-    { type: 'section', label: 'Attacks', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.attacks.label', collapsible: true, collapsed: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },
     { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'autoDamageRoll', type: 'boolean' },
     { key: 'autoDamageApply', type: 'boolean' },
     { key: 'autoStructFollowup', type: 'boolean' },
 
-    { type: 'section', label: 'Roll Uplink', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.rollUplink.label', collapsible: true, collapsed: true },
     { key: 'uplinkEnabled', type: 'boolean' },
     { key: 'uplinkAutoOpen', type: 'boolean', requires: 'uplinkEnabled' },
 
-    { type: 'section', label: 'Movement & Boost', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.movementBoost.label', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
     { key: 'enableBoostOffer', type: 'select' },
     { key: 'count3DDistance', type: 'boolean' },
 
-    { type: 'section', label: 'Structure & Damage', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.structureDamage.label', collapsible: true, collapsed: true },
     { key: 'enableAltStruct', type: 'boolean' },
     { key: 'enableOneStructNpc', type: 'boolean' },
     { key: 'enableInfectionDamageIntegration', type: 'boolean' },
     { key: 'convertHeatToEnergyOnHeatless', type: 'boolean' },
     { key: 'resistSelfHeat', type: 'boolean' },
 
-    { type: 'section', label: 'Turns & Actions', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.turnsActions.label', collapsible: true, collapsed: true },
     { key: 'enablePerRoundTurnTags', type: 'boolean' },
 
-    { type: 'section', label: 'Lancer Automations Ruler', collapsible: true, collapsed: true },
-    { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'Enable Lancer Automations Ruler', hint: 'Custom token/canvas ruler with Lancer speed tiers, free/debug movement modes, and THT elevation readout. Reload after toggling.' },
-    { key: 'rulerPerStepRender', type: 'boolean', label: 'Per-step Ruler Path', hint: 'Polyline through each grid step instead of a straight line.' , requires: 'enableBuiltinSpeedProvider' },
-    { key: 'enableClimbWaypoints', type: 'boolean', label: 'Auto-insert Climb Waypoints', hint: 'Tag movement path steps with the "climb" action wherever terrain elevation changes under the token.' , requires: 'enableBuiltinSpeedProvider' },
-    { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'Split Movement at Trigger Boundaries', hint: 'Fire THT/TemplateMacro/GAA triggers at each boundary crossing instead of once at the end of a drag.' },
-    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'Split Movement at Speed Tiers', hint: 'Split a drag into sub-movements where the ruler speed tier changes. The boost offer then judges each tier on its own.' },
-    { key: 'pathfindDragMovement', type: 'boolean', label: 'Pathfind Drag Movement', hint: 'Route drags around hostile bodies and high terrain; straight line if blocked.', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
-    { type: 'section', label: 'No Step-over', hint: 'NPC templates that cannot step over terrain walls lower than their size.', collapsible: false, subsection: true },
+    { type: 'section', label: 'LA.settingsMenus.section.lancerAutomationsRuler.label', collapsible: true, collapsed: true },
+    { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'LA.settingsMenus.enableBuiltinSpeedProvider.label', hint: 'LA.settingsMenus.enableBuiltinSpeedProvider.hint' },
+    { key: 'rulerPerStepRender', type: 'boolean', label: 'LA.settingsMenus.rulerPerStepRender.label', hint: 'LA.settingsMenus.rulerPerStepRender.hint' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'enableClimbWaypoints', type: 'boolean', label: 'LA.settingsMenus.enableClimbWaypoints.label', hint: 'LA.settingsMenus.enableClimbWaypoints.hint' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'splitMovementAtTriggerBoundaries', type: 'boolean', label: 'LA.settingsMenus.splitMovementAtTriggerBoundaries.label', hint: 'LA.settingsMenus.splitMovementAtTriggerBoundaries.hint' },
+    { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'LA.settingsMenus.splitMovementAtSpeedTiers.label', hint: 'LA.settingsMenus.splitMovementAtSpeedTiers.hint' },
+    { key: 'pathfindDragMovement', type: 'boolean', label: 'LA.settingsMenus.pathfindDragMovement.label', hint: 'LA.settingsMenus.pathfindDragMovement.hint', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
+    { key: 'enableObstructionStepOver', type: 'boolean', label: 'LA.settingsMenus.enableObstructionStepOver.label', hint: 'LA.settingsMenus.enableObstructionStepOver.hint', requires: 'enableBuiltinSpeedProvider' },
+    { type: 'section', label: 'LA.settingsMenus.section.noStepOver.label', hint: 'LA.settingsMenus.section.noStepOver.hint', collapsible: false, subsection: true },
     { type: 'compactBooleans',
         items: [
-            { key: 'obstructionBlocksVehicle', label: 'Vehicles' },
-            { key: 'obstructionBlocksSquad', label: 'Squads' },
-            { key: 'obstructionBlocksHuman', label: 'Humans' },
-            { key: 'obstructionBlocksSpecialist', label: 'Specialists' }
+            { key: 'obstructionBlocksVehicle', label: 'LA.settingsMenus.obstructionBlocksVehicle.label' },
+            { key: 'obstructionBlocksSquad', label: 'LA.settingsMenus.obstructionBlocksSquad.label' },
+            { key: 'obstructionBlocksHuman', label: 'LA.settingsMenus.obstructionBlocksHuman.label' },
+            { key: 'obstructionBlocksSpecialist', label: 'LA.settingsMenus.obstructionBlocksSpecialist.label' }
         ]
     },
-    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'Disable Auto-elevation from Terrain', hint: 'Stop tracking THT terrain elevation during ruler moves; Q/E offsets still work.' },
-    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'Disable Auto-elevation on Measure', hint: 'Ignore THT terrain elevation in the measure ruler labels; token drags are unaffected.' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'LA.settingsMenus.disableAutoTerrainElevation.label', hint: 'LA.settingsMenus.disableAutoTerrainElevation.hint' },
+    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'LA.settingsMenus.disableAutoElevationOnMeasure.label', hint: 'LA.settingsMenus.disableAutoElevationOnMeasure.hint' , requires: 'enableBuiltinSpeedProvider' },
 
-    { type: 'section', label: 'Tactical Distance Labels', collapsible: true, collapsed: true },
-    { key: 'enableTacticalDistance', type: 'select', label: 'Tactical Distance Labels', hint: 'While dragging a token, show its 2D distance and elevation delta on every other visible token.' },
-    { key: 'tacticalLabelPosition', type: 'select', label: 'Tactical Label Position' },
-    { key: 'tacticalMinZoomScale', type: 'slider', label: 'Minimum Label Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the label keeps a constant screen size. 0 = disabled.' },
-    { key: 'tacticalElevationStep', type: 'number', label: 'Elevation Step (label)', hint: 'Round the label elevation delta to the nearest multiple of this. Ignored on gridless scenes.' },
+    { type: 'section', label: 'LA.settingsMenus.section.tacticalDistanceLabels.label', collapsible: true, collapsed: true },
+    { key: 'enableTacticalDistance', type: 'select', label: 'LA.settingsMenus.enableTacticalDistance.label', hint: 'LA.settingsMenus.enableTacticalDistance.hint' },
+    { key: 'tacticalLabelPosition', type: 'select', label: 'LA.settingsMenus.tacticalLabelPosition.label' },
+    { key: 'tacticalMinZoomScale', type: 'slider', label: 'LA.settingsMenus.tacticalMinZoomScale.label', min: 0, max: 4, step: 0.1, hint: 'LA.settingsMenus.tacticalMinZoomScale.hint' },
+    { key: 'tacticalElevationStep', type: 'number', label: 'LA.settingsMenus.tacticalElevationStep.label', hint: 'LA.settingsMenus.tacticalElevationStep.hint' },
 
-    { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
-    { key: 'ctrlRulerMode', type: 'select', label: 'Ctrl Ruler', hint: 'Hold Ctrl to switch to the Measure Distance ruler.' },
-    { key: 'advMeasureScale', type: 'slider', label: 'Measure Toolbar Scale', min: 0.6, max: 1.6, step: 0.05 },
-    { key: 'rulerToolCursor', type: 'boolean', label: 'Measure cursor', hint: 'While the Measure Distance tool is active, replace the cursor with the ruler icon and play a sound on toggle.' },
-    { key: 'targetToolCursor', type: 'boolean', label: 'Select Target cursor', hint: 'While the Select Target tool is active, replace the cursor with the target icon and play a sound on toggle.' },
+    { type: 'section', label: 'LA.settingsMenus.section.advancedMeasure.label', collapsible: true, collapsed: true },
+    { key: 'ctrlRulerMode', type: 'select', label: 'LA.settingsMenus.ctrlRulerMode.label', hint: 'LA.settingsMenus.ctrlRulerMode.hint' },
+    { key: 'advMeasureScale', type: 'slider', label: 'LA.settingsMenus.advMeasureScale.label', min: 0.6, max: 1.6, step: 0.05 },
+    { key: 'rulerToolCursor', type: 'boolean', label: 'LA.settingsMenus.rulerToolCursor.label', hint: 'LA.settingsMenus.rulerToolCursor.hint' },
+    { key: 'targetToolCursor', type: 'boolean', label: 'LA.settingsMenus.targetToolCursor.label', hint: 'LA.settingsMenus.targetToolCursor.hint' },
 ];
 
 const WRECKS_FIELDS = [
-    { type: 'section', label: 'Wreck Generation' },
+    { type: 'section', label: 'LA.settingsMenus.section.wreckGeneration.label' },
     { key: 'enableWrecks', type: 'boolean' },
     { key: 'enableRemoveFromCombat', type: 'boolean' , requires: 'enableWrecks' },
     { key: 'squadLostOnDeath', type: 'boolean' , requires: 'enableWrecks' },
     { key: 'wreckAuraColor', type: 'color', requires: 'enableWrecks' },
     { key: 'wreckAuraOpacity', type: 'slider', min: 0, max: 1, step: 0.05, requires: 'enableWrecks' },
 
-    { type: 'section', label: 'Per-Category Wrecks', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.perCategoryWrecks.label', collapsible: true, collapsed: true },
     { key: 'wreckTerrainType',
         type: 'select',
-        label: 'Wreck Terrain Type',
+        label: 'LA.settingsMenus.wreckTerrainType.label',
         getChoices: () =>
         {
             const current = getModuleSetting('wreckTerrainType') || '';
-            const choices = [{ value: '', label: 'None', selected: current === '' }];
+            const choices = [{ value: '', label: 'LA.settingsMenus.choice.blank.label', selected: current === '' }];
             try
             {
                 const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
@@ -169,7 +212,7 @@ const WRECKS_FIELDS = [
         },
         requires: 'enableWrecks' },
     { type: 'table',
-        label: 'Per-Category Settings',
+        label: 'LA.settingsMenus.table.perCategorySettings.label',
         tableKeys: ['wreckMode_mech', 'wreckTerrain_mech', 'wreckMode_vehicle', 'wreckTerrain_vehicle', 'wreckMode_human', 'wreckTerrain_human',
             'wreckMode_monstrosity', 'wreckTerrain_monstrosity', 'wreckMode_biological', 'wreckTerrain_biological'],
         getTable: () =>
@@ -178,9 +221,9 @@ const WRECKS_FIELDS = [
             {
                 const cur = getModuleSetting(key);
                 return [
-                    { value: 'token', label: 'Token', selected: cur === 'token' },
-                    { value: 'tile', label: 'Tile', selected: cur === 'tile' },
-                    { value: 'none', label: 'Skip', selected: cur === 'none' },
+                    { value: 'token', label: 'LA.settingsMenus.choice.token.label', selected: cur === 'token' },
+                    { value: 'tile', label: 'LA.settingsMenus.choice.tile.label', selected: cur === 'tile' },
+                    { value: 'none', label: 'LA.settingsMenus.choice.none.label', selected: cur === 'none' },
                 ];
             };
             const terrainChoices = (key) =>
@@ -193,35 +236,35 @@ const WRECKS_FIELDS = [
                 else if (cur !== 'terrain' && cur !== 'aura' && cur !== 'none')
                     cur = 'none';
                 return [
-                    { value: 'none', label: 'Nothing', selected: cur === 'none' },
-                    { value: 'terrain', label: 'THT Terrain', selected: cur === 'terrain' },
-                    { value: 'aura', label: 'Aura (movement +1)', selected: cur === 'aura' },
+                    { value: 'none', label: 'LA.settingsMenus.choice.none2.label', selected: cur === 'none' },
+                    { value: 'terrain', label: 'LA.settingsMenus.choice.terrain.label', selected: cur === 'terrain' },
+                    { value: 'aura', label: 'LA.settingsMenus.choice.aura.label', selected: cur === 'aura' },
                 ];
             };
             return {
-                columns: ['Category', 'Mode', 'On Wreck'],
+                columns: ['LA.settingsMenus.tableColumn.category', 'LA.settingsMenus.tableColumn.mode', 'LA.settingsMenus.tableColumn.onWreck'],
                 rows: [
-                    { label: 'Mech',
+                    { label: 'LA.settingsMenus.tableRow.mech.label',
                         cells: [
                             { isSelect: true, name: 'wreckMode_mech', choices: modeChoices('wreckMode_mech') },
                             { isSelect: true, name: 'wreckTerrain_mech', choices: terrainChoices('wreckTerrain_mech') },
                         ]},
-                    { label: 'Vehicle',
+                    { label: 'LA.settingsMenus.tableRow.vehicle.label',
                         cells: [
                             { isSelect: true, name: 'wreckMode_vehicle', choices: modeChoices('wreckMode_vehicle') },
                             { isSelect: true, name: 'wreckTerrain_vehicle', choices: terrainChoices('wreckTerrain_vehicle') },
                         ]},
-                    { label: 'Human / Pilot / Squad',
+                    { label: 'LA.settingsMenus.tableRow.humanPilotSquad.label',
                         cells: [
                             { isSelect: true, name: 'wreckMode_human', choices: modeChoices('wreckMode_human') },
                             { isSelect: true, name: 'wreckTerrain_human', choices: terrainChoices('wreckTerrain_human') },
                         ]},
-                    { label: 'Monstrosity',
+                    { label: 'LA.settingsMenus.tableRow.monstrosity.label',
                         cells: [
                             { isSelect: true, name: 'wreckMode_monstrosity', choices: modeChoices('wreckMode_monstrosity') },
                             { isSelect: true, name: 'wreckTerrain_monstrosity', choices: terrainChoices('wreckTerrain_monstrosity') },
                         ]},
-                    { label: 'Biological',
+                    { label: 'LA.settingsMenus.tableRow.biological.label',
                         cells: [
                             { isSelect: true, name: 'wreckMode_biological', choices: modeChoices('wreckMode_biological') },
                             { isSelect: true, name: 'wreckTerrain_biological', choices: terrainChoices('wreckTerrain_biological') },
@@ -232,13 +275,13 @@ const WRECKS_FIELDS = [
     },
     { key: 'wreckFactionOnDeath',
         type: 'select',
-        label: 'Wreck Faction On Death',
+        label: 'LA.settingsMenus.wreckFactionOnDeath.label',
         getChoices: () =>
         {
             const cur = getModuleSetting('wreckFactionOnDeath') || 'same';
             const choices = [
-                { value: 'same', label: 'Same Team / Disposition', selected: cur === 'same' },
-                { value: 'neutral', label: 'Neutral (No Team)', selected: cur === 'neutral' },
+                { value: 'same', label: 'LA.settingsMenus.choice.same.label', selected: cur === 'same' },
+                { value: 'neutral', label: 'LA.settingsMenus.choice.neutral.label', selected: cur === 'neutral' },
             ];
             const teams = game.settings.settings.has('token-factions.team-setup')
                 ? (game.settings.get('token-factions', 'team-setup') || [])
@@ -249,8 +292,8 @@ const WRECKS_FIELDS = [
         },
         requires: 'enableWrecks' },
 
-    { type: 'section', label: 'Assets & Audio', collapsible: true, collapsed: true },
-    { key: 'wreckAssetsPath', type: 'folder', label: 'Wreck Assets Folder' , requires: 'enableWrecks' },
+    { type: 'section', label: 'LA.settingsMenus.section.assetsAudio.label', collapsible: true, collapsed: true },
+    { key: 'wreckAssetsPath', type: 'folder', label: 'LA.settingsMenus.wreckAssetsPath.label' , requires: 'enableWrecks' },
     { key: 'enableWreckAnimation', type: 'boolean' , requires: 'enableWrecks' },
     { key: 'enableWreckAudio', type: 'boolean' , requires: 'enableWrecks' },
     { key: 'disableHumanDeathSound', type: 'boolean' , requires: 'enableWrecks' },
@@ -261,23 +304,27 @@ function _statBarVisChoices(key)
 {
     const cur = getModuleSetting(key, 'all');
     return [
-        { value: 'all',     label: 'All',              selected: cur === 'all' },
-        { value: 'owner',   label: 'Owners only',      selected: cur === 'owner' },
-        { value: 'scanned', label: 'Owners + scanned', selected: cur === 'scanned' },
-        { value: 'none',    label: 'None',             selected: cur === 'none' },
+        { value: 'all',     label: 'LA.settingsMenus.choice.all.label',     selected: cur === 'all' },
+        { value: 'owner',   label: 'LA.settingsMenus.choice.owner.label',   selected: cur === 'owner' },
+        { value: 'scanned', label: 'LA.settingsMenus.choice.scanned.label', selected: cur === 'scanned' },
+        { value: 'none',    label: 'LA.settingsMenus.choice.none3.label',   selected: cur === 'none' },
     ];
 }
 
 const TOKENS_DISPLAY_FIELDS = [
-    { type: 'section', label: 'Token Display' },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenDisplay.label' },
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'showDeployableLines', type: 'boolean' },
+    { type: 'section', label: 'LA.settingsMenus.section.groundShadow.label', hint: 'LA.settingsMenus.section.groundShadow.hint', subsection: true },
+    { key: 'tokenGroundShadow', type: 'boolean' },
+    { key: 'tokenGroundShadowThrow', type: 'slider', requires: 'tokenGroundShadow' },
+    { key: 'tokenGroundShadowOpacity', type: 'slider', requires: 'tokenGroundShadow' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
     { type: 'button',
         key: 'toggleLancerFloatingNumbers',
-        label: 'Lancer Floating Numbers',
-        hint: 'Damage and heal numbers floating over tokens, a Lancer system setting.',
+        label: 'LA.settingsMenus.toggleLancerFloatingNumbers.label',
+        hint: 'LA.settingsMenus.toggleLancerFloatingNumbers.hint',
         icon: 'fas fa-arrows-alt-v',
         clientAllowed: true,
         state: () => (game.settings.get('lancer', 'floatingNumbers') ? 'On' : 'Off'),
@@ -285,69 +332,69 @@ const TOKENS_DISPLAY_FIELDS = [
         {
             const before = !!game.settings.get('lancer', 'floatingNumbers');
             await game.settings.set('lancer', 'floatingNumbers', !before);
-            ui.notifications?.info(`Floating Numbers: ${!before ? 'ON' : 'OFF'}`);
+            ui.notifications?.info(localizeFormat('LA.notify.floatingNumbers', { state: localize(!before ? 'LA.common.on' : 'LA.common.off') }));
         },
     },
 
-    { type: 'section', label: 'Auto Focus', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.autoFocus.label', collapsible: true, collapsed: true },
     { key: 'autoFocusDuration', type: 'slider', min: 200, max: 3000, step: 100 },
     { key: 'autoFocusCards', type: 'boolean' },
     { key: 'autoFocusAttack', type: 'boolean' },
     { key: 'autoFocusDamage', type: 'boolean' },
     { key: 'autoFocusCheck', type: 'boolean' },
     { key: 'autoFocusActivation', type: 'boolean' },
-    { type: 'section', label: 'Focused Actions', collapsible: true, collapsed: true, subsection: true },
+    { type: 'section', label: 'LA.settingsMenus.section.focusedActions.label', collapsible: true, collapsed: true, subsection: true },
     { type: 'compactBooleans', items: FOCUS_ACTION_CATEGORIES.map((category) => ({ key: `autoFocusAction.${category.key}`, label: category.label })) },
 
-    { type: 'section', label: 'Token HUD Buttons', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenHudButtons.label', collapsible: true, collapsed: true },
     { key: 'showBonusHudButton', type: 'boolean' },
     { key: 'showStatusEffectsHudButton', type: 'boolean' },
     { key: 'showCombatStateHudButton', type: 'boolean' },
     { key: 'showTargetStateHudButton', type: 'boolean' },
     { key: 'showRevertMovementHudButton', type: 'boolean' },
-    { type: 'moduleBoolean', module: 'temporary-custom-statuses', key: 'enableHud', label: 'Custom Status HUD Button' },
+    { type: 'moduleBoolean', module: 'temporary-custom-statuses', key: 'enableHud', label: 'LA.settingsMenus.enableHud.label' },
 
-    { type: 'section', label: 'Status Icons', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.statusIcons.label', collapsible: true, collapsed: true },
     { key: 'statusHalo', type: 'boolean' },
     { key: 'statusHaloRadius', type: 'slider', min: 0.5, max: 2, step: 0.05 },
     { key: 'statusHaloStartAngle', type: 'slider', min: 0, max: 360, step: 5 },
-    { key: 'statBarEffectIconScale', type: 'slider', label: 'Effect Icon Scale', min: 0.3, max: 2, step: 0.05 },
-    { key: 'statusIconMinZoomScale', type: 'slider', label: 'Minimum Icon Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.' },
+    { key: 'statBarEffectIconScale', type: 'slider', label: 'LA.settingsMenus.statBarEffectIconScale.label', min: 0.3, max: 2, step: 0.05 },
+    { key: 'statusIconMinZoomScale', type: 'slider', label: 'LA.settingsMenus.statusIconMinZoomScale.label', min: 0, max: 4, step: 0.1, hint: 'LA.settingsMenus.statusIconMinZoomScale.hint' },
     { key: 'statusIconHover', type: 'boolean' },
     { key: 'statusCounterColor', type: 'color' },
     { key: 'statusUsageColor', type: 'color' },
     { key: 'statusDurationColor', type: 'color' },
     { key: 'statusBadgeFontScale', type: 'slider', min: 0.5, max: 2, step: 0.05 },
 
-    { type: 'section', label: 'Custom Token Stat Bars', collapsible: true, collapsed: true },
-    { key: 'tokenStatBar', type: 'boolean', label: 'Enable Custom Token Stat Bars', hint: 'Requires reload when toggled. Disabled when Bar Brawl is active.' },
+    { type: 'section', label: 'LA.settingsMenus.section.customTokenStatBars.label', collapsible: true, collapsed: true },
+    { key: 'tokenStatBar', type: 'boolean', label: 'LA.settingsMenus.tokenStatBar.label', hint: 'LA.settingsMenus.tokenStatBar.hint' },
 
-    { type: 'section', label: 'Display', subsection: true },
-    { key: 'statBarShowValues', type: 'boolean', label: 'Show Numeric Values on Bars', hint: 'Draw HP/Heat/Stress numbers on top of the bars.' , requires: 'tokenStatBar' },
-    { key: 'statBarMinZoomScale', type: 'slider', label: 'Minimum Bar Zoom Scale', min: 0, max: 4, step: 0.1, hint: 'Below this zoom level the bar keeps a constant screen size. 0 = disabled.' , requires: 'tokenStatBar' },
+    { type: 'section', label: 'LA.settingsMenus.section.display.label', subsection: true },
+    { key: 'statBarShowValues', type: 'boolean', label: 'LA.settingsMenus.statBarShowValues.label', hint: 'LA.settingsMenus.statBarShowValues.hint' , requires: 'tokenStatBar' },
+    { key: 'statBarMinZoomScale', type: 'slider', label: 'LA.settingsMenus.statBarMinZoomScale.label', min: 0, max: 4, step: 0.1, hint: 'LA.settingsMenus.statBarMinZoomScale.hint' , requires: 'tokenStatBar' },
 
-    { type: 'section', label: 'Per-Token Defaults', subsection: true },
-    { key: 'statBarDefaultHidden', type: 'boolean', label: 'Hide Stat Bar by Default' , requires: 'tokenStatBar' },
-    { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'Show Only In Combat by Default' , requires: 'tokenStatBar' },
-    { key: 'statBarDefaultRowHeight', type: 'number', label: 'Default Row Height (px)', hint: 'Leave 0 for auto (scales with grid).' , requires: 'tokenStatBar' },
-    { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'Display Pilot Stress Bar', hint: 'Bond stress on pilot tokens and sheets. When Annoying\'s sheet already shows one, it is recolored instead.' },
+    { type: 'section', label: 'LA.settingsMenus.section.perTokenDefaults.label', subsection: true },
+    { key: 'statBarDefaultHidden', type: 'boolean', label: 'LA.settingsMenus.statBarDefaultHidden.label' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultCombatOnly', type: 'boolean', label: 'LA.settingsMenus.statBarDefaultCombatOnly.label' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultRowHeight', type: 'number', label: 'LA.settingsMenus.statBarDefaultRowHeight.label', hint: 'LA.settingsMenus.statBarDefaultRowHeight.hint' , requires: 'tokenStatBar' },
+    { key: 'statBarDefaultPilotStress', type: 'boolean', label: 'LA.settingsMenus.statBarDefaultPilotStress.label', hint: 'LA.settingsMenus.statBarDefaultPilotStress.hint' },
 
-    { type: 'section', label: 'Visibility', subsection: true },
-    { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'Visibility: Out of Combat', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') , requires: 'tokenStatBar' },
-    { key: 'statBarVisibilityInCombat',   type: 'select', label: 'Visibility: In Combat',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') , requires: 'tokenStatBar' },
+    { type: 'section', label: 'LA.settingsMenus.section.visibility.label', subsection: true },
+    { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'LA.settingsMenus.statBarVisibilityOutOfCombat.label', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') , requires: 'tokenStatBar' },
+    { key: 'statBarVisibilityInCombat',   type: 'select', label: 'LA.settingsMenus.statBarVisibilityInCombat.label',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') , requires: 'tokenStatBar' },
 
-    { type: 'section', label: 'Auto-Injected Bars', subsection: true },
-    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'Auto-add Talent & Frame Counter Bars', hint: 'Add a bar for every talent counter and frame core counter; deleted bars are not re-added.' , requires: 'tokenStatBar' },
-    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'Auto-Injected Bar Color', hint: 'Default color for auto-injected bars that do not set their own.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
-    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'Auto-Injected Bar Width (%)', min: 1, max: 100, step: 1, hint: 'Default width % for auto-injected bars, each on its own line.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
-    { key: 'statBarAutoInjectTalentFeedback', type: 'boolean', label: 'Auto-Injected Bar Audio/Text Feedback', hint: 'Default audio + floating text on value changes for auto-injected bars.' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
-    { key: 'statBarAutoInjectCustomFlags', type: 'boolean', label: 'Auto-add Custom Flag Bars (Alt Sheets)', hint: 'With Annoying\'s Alternative Sheets: fraction flags render as token bars, value flags as TAH counters.' , requires: 'tokenStatBar' },
-    { key: 'statBarAutoInjectBondXp', type: 'boolean', label: 'Auto-add Bond XP Bar', hint: 'Cyan XP bar on bonded pilot tokens. Not listed in the hover popup resources.' , requires: 'tokenStatBar' },
+    { type: 'section', label: 'LA.settingsMenus.section.autoInjectedBars.label', subsection: true },
+    { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'LA.settingsMenus.statBarAutoInjectTalents.label', hint: 'LA.settingsMenus.statBarAutoInjectTalents.hint' , requires: 'tokenStatBar' },
+    { key: 'statBarAutoInjectTalentColor', type: 'color', label: 'LA.settingsMenus.statBarAutoInjectTalentColor.label', hint: 'LA.settingsMenus.statBarAutoInjectTalentColor.hint' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectTalentWidthPct', type: 'number', label: 'LA.settingsMenus.statBarAutoInjectTalentWidthPct.label', min: 1, max: 100, step: 1, hint: 'LA.settingsMenus.statBarAutoInjectTalentWidthPct.hint' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectTalentFeedback', type: 'boolean', label: 'LA.settingsMenus.statBarAutoInjectTalentFeedback.label', hint: 'LA.settingsMenus.statBarAutoInjectTalentFeedback.hint' , requires: ['tokenStatBar', 'statBarAutoInjectTalents'], requiresAll: true },
+    { key: 'statBarAutoInjectCustomFlags', type: 'boolean', label: 'LA.settingsMenus.statBarAutoInjectCustomFlags.label', hint: 'LA.settingsMenus.statBarAutoInjectCustomFlags.hint' , requires: 'tokenStatBar' },
+    { key: 'statBarAutoInjectBondXp', type: 'boolean', label: 'LA.settingsMenus.statBarAutoInjectBondXp.label', hint: 'LA.settingsMenus.statBarAutoInjectBondXp.hint' , requires: 'tokenStatBar' },
     { type: 'button',
         key: 'statBarReinjectAllAutoBars',
-        label: 'Reinject Auto-Bars on All Tokens',
+        label: 'LA.settingsMenus.statBarReinjectAllAutoBars.label',
         icon: 'fas fa-sync',
-        hint: 'Rebuild auto-injected bars on every Lancer token and actor prototype, including deleted ones.',
+        hint: 'LA.settingsMenus.statBarReinjectAllAutoBars.hint',
         onClick: async () =>
         {
             const mod = await import('../tah/tokenStatBar.js');
@@ -355,16 +402,16 @@ const TOKENS_DISPLAY_FIELDS = [
             if (typeof fn === 'function')
                 await fn();
             else
-                ui.notifications.warn('reinjectAutoBarsOnAllTokens is not exported.');
+                ui.notifications.warn(localize('LA.notify.reinjectautobarsonalltokensIsNotExported'));
         },
     },
 
-    { type: 'section', label: 'Scene Actions', subsection: true },
+    { type: 'section', label: 'LA.settingsMenus.section.sceneActions.label', subsection: true },
     { type: 'button',
         key: 'statBarApplyDefaults',
-        label: 'Apply Defaults to Current Scene',
+        label: 'LA.settingsMenus.statBarApplyDefaults.label',
         icon: 'fas fa-clone',
-        hint: 'Overwrites per-token settings on every Lancer token in the active scene.',
+        hint: 'LA.settingsMenus.statBarApplyDefaults.hint',
         onClick: async () =>
         {
             const mod = await import('../tah/tokenStatBar.js');
@@ -372,210 +419,238 @@ const TOKENS_DISPLAY_FIELDS = [
             if (typeof fn === 'function')
                 await fn();
             else
-                ui.notifications.warn('applyDefaultsToCurrentScene is not exported.');
+                ui.notifications.warn(localize('LA.notify.applydefaultstocurrentsceneIsNotExported'));
         },
     },
 
-    { type: 'section', label: 'Token Stat Hint', collapsible: true, collapsed: true },
-    { key: 'tokenStatHintEnabled', type: 'boolean', label: 'Enable Token Stat Hint', hint: 'Popup showing stats for the hovered token.' },
-    { key: 'tokenStatHintDelayMs', type: 'slider', label: 'Hover Delay (ms)', min: 0, max: 2000, step: 50, hint: 'Delay before the popup appears.' , requires: 'tokenStatHintEnabled' },
-    { key: 'tokenStatHintScale', type: 'slider', label: 'Popup Scale', min: 0.5, max: 2, step: 0.05, hint: 'Size of the popup, independent of token size and zoom.' , requires: 'tokenStatHintEnabled' },
-    { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'Show for Controlled Token', hint: 'Show the popup for the token you control.' , requires: 'tokenStatHintEnabled' },
-    { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'Show Only In Combat', hint: 'Popup only appears for tokens in an active combat.' , requires: 'tokenStatHintEnabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenStatHint.label', collapsible: true, collapsed: true },
+    { key: 'tokenStatHintEnabled', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintEnabled.label', hint: 'LA.settingsMenus.tokenStatHintEnabled.hint' },
+    { key: 'tokenStatHintDelayMs', type: 'slider', label: 'LA.settingsMenus.tokenStatHintDelayMs.label', min: 0, max: 2000, step: 50, hint: 'LA.settingsMenus.tokenStatHintDelayMs.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintScale', type: 'slider', label: 'LA.settingsMenus.tokenStatHintScale.label', min: 0.5, max: 2, step: 0.05, hint: 'LA.settingsMenus.tokenStatHintScale.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintShowForControlled.label', hint: 'LA.settingsMenus.tokenStatHintShowForControlled.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintCombatOnly.label', hint: 'LA.settingsMenus.tokenStatHintCombatOnly.hint' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintLabelMode',
         type: 'select',
-        label: 'Header Label (NPC)',
+        label: 'LA.settingsMenus.tokenStatHintLabelMode.label',
         choices: [
-            { value: 'actor', label: 'Always show name' },
-            { value: 'scan', label: 'Tied to scan (UNKNOWN until scanned)' },
+            { value: 'actor', label: 'LA.settingsMenus.choice.actor.label' },
+            { value: 'scan', label: 'LA.settingsMenus.choice.scan.label' },
         ],
-        hint: 'How to display the NPC token name in the popup header.',
+        hint: 'LA.settingsMenus.tokenStatHintLabelMode.hint',
         requires: 'tokenStatHintEnabled' },
-    { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'Unknown Label', hint: 'Text shown for unscanned NPCs in Tied-to-scan mode.' },
-    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'Hide class/templates/tier when not scanned', hint: 'Also hide the class/frame subtitle and tier badge until scanned.' , requires: 'tokenStatHintEnabled' },
-    { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'Hide current values without owner/observer access', hint: 'Current HP, heat, reaction, and resources show as "?", and unscanned tokens hide their damage track.' , requires: 'tokenStatHintEnabled' },
-    { type: 'section', label: 'Also Hide Current Values From', hint: 'Who sees "?" as well. Unchecked groups see live values.', collapsible: false, subsection: true },
+    { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'LA.settingsMenus.tokenStatHintUnknownLabel.label', hint: 'LA.settingsMenus.tokenStatHintUnknownLabel.hint' },
+    { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintHideClassWhenUnknown.label', hint: 'LA.settingsMenus.tokenStatHintHideClassWhenUnknown.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintHideCurrentOnScan.label', hint: 'LA.settingsMenus.tokenStatHintHideCurrentOnScan.hint' , requires: 'tokenStatHintEnabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.alsoHideCurrentValuesFrom.label', hint: 'LA.settingsMenus.section.alsoHideCurrentValuesFrom.hint', collapsible: false, subsection: true },
     { type: 'compactBooleans',
         items: [
-            { key: 'tokenStatHintHideCurrentFromAllies', label: 'Allies', hint: 'Tokens friendly to one you own. Uses Token Factions when active.', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
-            { key: 'tokenStatHintHideCurrentFromPlayers', label: 'Player tokens', hint: 'Tokens owned by a player.', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
+            { key: 'tokenStatHintHideCurrentFromAllies', label: 'LA.settingsMenus.tokenStatHintHideCurrentFromAllies.label', hint: 'LA.settingsMenus.tokenStatHintHideCurrentFromAllies.hint', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
+            { key: 'tokenStatHintHideCurrentFromPlayers', label: 'LA.settingsMenus.tokenStatHintHideCurrentFromPlayers.label', hint: 'LA.settingsMenus.tokenStatHintHideCurrentFromPlayers.hint', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
         ]
     },
-    { key: 'tokenStatHintShowHase', type: 'boolean', label: 'Show HASE', hint: 'Adds a hull/agility/systems/engineering line.', requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintShowHase', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintShowHase.label', hint: 'LA.settingsMenus.tokenStatHintShowHase.hint', requires: 'tokenStatHintEnabled' },
 ];
 
 const TAH_FIELDS = [
-    { type: 'section', label: 'General', collapsible: true },
-    { key: 'tahEnabled', type: 'boolean', label: 'Enable Token Action HUD' },
-    { key: 'tah.narrativeMode', type: 'boolean', label: 'Narrative TAH', hint: 'When no token is selected, show a narrative HUD linkable to a pilot.' , requires: 'tahEnabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.general.label', collapsible: true },
+    { key: 'tahEnabled', type: 'boolean', label: 'LA.settingsMenus.tahEnabled.label' },
+    { key: 'tah.narrativeMode', type: 'boolean', label: 'LA.settingsMenus.tah.narrativeMode.label', hint: 'LA.settingsMenus.tah.narrativeMode.hint' , requires: 'tahEnabled' },
     { key: 'tah.aboveActorSheets', type: 'boolean' , requires: 'tahEnabled' },
-    { key: 'tah.showDisposition', type: 'boolean', label: 'Show Team / Disposition Indicator', hint: 'Colored stripe on the title bar: team if Token Factions advanced teams is active, otherwise disposition.' , requires: 'tahEnabled' },
+    { key: 'tah.showDisposition', type: 'boolean', label: 'LA.settingsMenus.tah.showDisposition.label', hint: 'LA.settingsMenus.tah.showDisposition.hint' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Opening & Layout', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.tahPortrait.label', collapsible: true, collapsed: true },
+    { key: 'tah.portrait.mode', type: 'select', label: 'LA.settingsMenus.tah.portrait.mode.label', hint: 'LA.settingsMenus.tah.portrait.mode.hint', requires: 'tahEnabled' },
+    { key: 'tah.portrait.scope', type: 'select', label: 'LA.settingsMenus.tah.portrait.scope.label', hint: 'LA.settingsMenus.tah.portrait.scope.hint', requires: 'tahEnabled' },
+    { key: 'tah.portrait.mechUsePilot', type: 'boolean', label: 'LA.settingsMenus.tah.portrait.mechUsePilot.label', hint: 'LA.settingsMenus.tah.portrait.mechUsePilot.hint', requires: 'tahEnabled' },
+    { key: 'tah.portrait.scale', type: 'slider', label: 'LA.settingsMenus.tah.portrait.scale.label', hint: 'LA.settingsMenus.tah.portrait.scale.hint', min: 0.5, max: 2.5, step: 0.05, requires: 'tahEnabled' },
+    { key: 'tah.portrait.trim', type: 'boolean', label: 'LA.settingsMenus.tah.portrait.trim.label', hint: 'LA.settingsMenus.tah.portrait.trim.hint', requires: 'tahEnabled' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.openingLayout.label', collapsible: true, collapsed: true },
     { key: 'tah.clickToOpen', type: 'boolean' , requires: 'tahEnabled' },
     { key: 'tah.hoverCloseDelay', type: 'number' , requires: 'tahEnabled' },
     { key: 'tah.maxColumnItems', type: 'number' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Radial Wheels', collapsible: true, collapsed: true },
-    { key: 'tah.wheelRadiusOffset', type: 'slider', label: 'Wheel Radius Offset', min: -40, max: 120, step: 5, requires: 'tahEnabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.radialWheels.label', collapsible: true, collapsed: true },
+    { key: 'tah.wheelRadiusOffset', type: 'slider', label: 'LA.settingsMenus.tah.wheelRadiusOffset.label', min: -40, max: 120, step: 5, requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Keyboard', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.keyboard.label', collapsible: true, collapsed: true },
     { key: 'tah.keyboardNav', type: 'boolean' , requires: 'tahEnabled' },
     { key: 'tah.keyboardNavResetDelay', type: 'number' , requires: ['tahEnabled', 'tah.keyboardNav'], requiresAll: true },
     { key: 'tah.preventWasdMovement', type: 'boolean' },
 
-    { type: 'section', label: 'Ranges & Display', collapsible: true, collapsed: true },
-    { key: 'tah.uiScale', type: 'slider', label: 'HUD Scale', min: 0.6, max: 1.6, step: 0.05 , requires: 'tahEnabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.rangesDisplay.label', collapsible: true, collapsed: true },
+    { key: 'tah.uiScale', type: 'slider', label: 'LA.settingsMenus.tah.uiScale.label', min: 0.6, max: 1.6, step: 0.05 , requires: 'tahEnabled' },
     { key: 'tah.rangePreview', type: 'boolean' , requires: 'tahEnabled' },
-    { key: 'tah.areaElevationAware', type: 'boolean', label: 'Area Elevation Aware', hint: 'Default for area pickers (blast etc.): areas become 3D volumes that clip to terrain.' },
+    { key: 'tah.areaElevationAware', type: 'boolean', label: 'LA.settingsMenus.tah.areaElevationAware.label', hint: 'LA.settingsMenus.tah.areaElevationAware.hint' },
     { key: 'tah.showAidHandleInteractSqueeze', type: 'boolean' , requires: 'tahEnabled' },
 
-    { type: 'section', label: 'Maintenance', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.maintenance.label', collapsible: true, collapsed: true },
     { key: 'tah.resetPosition',
         type: 'button',
-        label: 'Reset TAH Position',
+        label: 'LA.settingsMenus.tah.resetPosition.label',
         icon: 'fas fa-undo',
-        hint: 'Reset the HUD to its default screen position.',
+        hint: 'LA.settingsMenus.tah.resetPosition.hint',
         clientAllowed: true,
         onClick: async () =>
         {
             await game.settings.set(MODULE_ID, 'tah.position', null);
-            ui.notifications.info('TAH position reset to default. Re-select a token to see the change.');
+            ui.notifications.info(localize('LA.notify.tahPositionResetToDefaultReSelect'));
         } },
     { key: 'tah.clearMacros',
         type: 'button',
-        label: 'Clear TAH Macros',
+        label: 'LA.settingsMenus.tah.clearMacros.label',
         icon: 'fas fa-trash',
-        hint: 'Remove every macro from the TAH Macros category for this client.',
+        hint: 'LA.settingsMenus.tah.clearMacros.hint',
         clientAllowed: true,
         onClick: async () =>
         {
             const confirmed = await Dialog.confirm({
-                title: 'Clear TAH Macros',
-                content: '<p>Remove every macro from the TAH Macros category? This cannot be undone.</p>',
+                title: localize('LA.dialogTitle.clearTahMacros'),
+                content: localize('LA.settingsMenus.content.removeEveryMacroFromTheTah'),
             });
             if (!confirmed)
                 return;
             await game.settings.set(MODULE_ID, 'tah.macroList', []);
             Hooks.callAll('forceUpdateTokenActionHud');
-            ui.notifications.info('TAH Macros cleared.');
+            ui.notifications.info(localize('LA.notify.tahMacrosCleared'));
         } },
     { key: 'tah.clearFavorites',
         type: 'button',
-        label: 'Clear TAH Favorites',
+        label: 'LA.settingsMenus.tah.clearFavorites.label',
         icon: 'fas fa-star',
-        hint: 'Remove every favorite (★) you marked through the TAH.',
+        hint: 'LA.settingsMenus.tah.clearFavorites.hint',
         clientAllowed: true,
         onClick: async () =>
         {
             const confirmed = await Dialog.confirm({
-                title: 'Clear TAH Favorites',
-                content: '<p>Remove every favorite marker? This cannot be undone.</p>',
+                title: localize('LA.dialogTitle.clearTahFavorites'),
+                content: localize('LA.settingsMenus.content.removeEveryFavoriteMarkerThisCannot'),
             });
             if (!confirmed)
                 return;
             await setLAFlag(game.user,'tahFavorites', []);
             await setLAFlag(game.user,'tahFavorites2', []);
             Hooks.callAll('forceUpdateTokenActionHud');
-            ui.notifications.info('TAH Favorites cleared.');
+            ui.notifications.info(localize('LA.notify.tahFavoritesCleared'));
         } },
 ];
 
-const UI_VARIANTS = ['hover', 'open', 'details', 'toggle', 'statusHover', 'battleLogHover', 'battleLogClick'];
-const TOKEN_VARIANTS = ['tokenHover', 'tokenSelect', 'tokenDeselect',
-    'tokenTarget', 'tokenUntarget', 'tokenDrag', 'tokenMove', 'elevationKey', 'targeting', 'targetingConfirm'];
-const DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable',
-    'heat', 'burn', 'infection', 'armor', 'hit_overshield', 'overshield'];
-const STAT_EVENTS = ['hp_loss', 'hp_heal', 'heat_clean', 'stress_hit', 'stress_heal', 'xp_gain', 'xp_loss', 'miss', 'hit', 'crit', 'success', 'fail', 'generic_stat'];
-const STATUS_SFX_EVENTS = ['bonus', 'status'];
-
-function _toLabel(str)
-{
-    return str.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1')
-        .replace(/^./, (char) => char.toUpperCase()).trim();
-}
+// [sound id, label key] pairs.
+const UI_VARIANTS = [
+    ['hover', 'LA.settingsMenus.tah.uiSound.hover.label'],
+    ['open', 'LA.settingsMenus.tah.uiSound.open.label'],
+    ['details', 'LA.settingsMenus.tah.uiSound.details.label'],
+    ['toggle', 'LA.settingsMenus.tah.uiSound.toggle.label'],
+    ['statusHover', 'LA.settingsMenus.tah.uiSound.statusHover.label'],
+    ['battleLogHover', 'LA.settingsMenus.tah.uiSound.battleLogHover.label'],
+    ['battleLogClick', 'LA.settingsMenus.tah.uiSound.battleLogClick.label'],
+];
+const TOKEN_VARIANTS = [
+    ['tokenHover', 'LA.settingsMenus.tah.tokenSound.tokenHover.label'],
+    ['tokenSelect', 'LA.settingsMenus.tah.tokenSound.tokenSelect.label'],
+    ['tokenDeselect', 'LA.settingsMenus.tah.tokenSound.tokenDeselect.label'],
+    ['tokenTarget', 'LA.settingsMenus.tah.tokenSound.tokenTarget.label'],
+    ['tokenUntarget', 'LA.settingsMenus.tah.tokenSound.tokenUntarget.label'],
+    ['tokenDrag', 'LA.settingsMenus.tah.tokenSound.tokenDrag.label'],
+    ['tokenMove', 'LA.settingsMenus.tah.tokenSound.tokenMove.label'],
+    ['elevationKey', 'LA.settingsMenus.tah.tokenSound.elevationKey.label'],
+    ['targeting', 'LA.settingsMenus.tah.tokenSound.targeting.label'],
+    ['targetingConfirm', 'LA.settingsMenus.tah.tokenSound.targetingConfirm.label'],
+];
+const DAMAGE_TYPES = [
+    ['kinetic', 'LA.settingsMenus.tah.damageSound.kinetic.label'],
+    ['energy', 'LA.settingsMenus.tah.damageSound.energy.label'],
+    ['explosive', 'LA.settingsMenus.tah.damageSound.explosive.label'],
+    ['variable', 'LA.settingsMenus.tah.damageSound.variable.label'],
+    ['heat', 'LA.settingsMenus.tah.damageSound.heat.label'],
+    ['burn', 'LA.settingsMenus.tah.damageSound.burn.label'],
+    ['infection', 'LA.settingsMenus.tah.damageSound.infection.label'],
+    ['armor', 'LA.settingsMenus.tah.damageSound.armor.label'],
+    ['hit_overshield', 'LA.settingsMenus.tah.damageSound.hit_overshield.label'],
+    ['overshield', 'LA.settingsMenus.tah.damageSound.overshield.label'],
+];
+const STAT_EVENTS = [
+    ['hp_loss', 'LA.settingsMenus.tah.statSound.hp_loss.label'],
+    ['hp_heal', 'LA.settingsMenus.tah.statSound.hp_heal.label'],
+    ['heat_clean', 'LA.settingsMenus.tah.statSound.heat_clean.label'],
+    ['stress_hit', 'LA.settingsMenus.tah.statSound.stress_hit.label'],
+    ['stress_heal', 'LA.settingsMenus.tah.statSound.stress_heal.label'],
+    ['xp_gain', 'LA.settingsMenus.tah.statSound.xp_gain.label'],
+    ['xp_loss', 'LA.settingsMenus.tah.statSound.xp_loss.label'],
+    ['miss', 'LA.settingsMenus.tah.statSound.miss.label'],
+    ['hit', 'LA.settingsMenus.tah.statSound.hit.label'],
+    ['crit', 'LA.settingsMenus.tah.statSound.crit.label'],
+    ['success', 'LA.settingsMenus.tah.statSound.success.label'],
+    ['fail', 'LA.settingsMenus.tah.statSound.fail.label'],
+    ['generic_stat', 'LA.settingsMenus.tah.statSound.generic_stat.label'],
+];
+const STATUS_SFX_EVENTS = [
+    ['bonus', 'LA.settingsMenus.tah.statusSfx.bonus.label'],
+    ['status', 'LA.settingsMenus.tah.statusSfx.status.label'],
+];
 
 const SOUNDS_FIELDS = [
-    { type: 'section', label: 'Master volumes' },
-    { key: 'tah.uiSoundVolume', type: 'slider', label: 'UI Sounds', min: 0, max: 1.5, step: 0.05 },
-    { key: 'tah.tokenFeedbackVolume', type: 'slider', label: 'Token Feedback', min: 0, max: 1.5, step: 0.05 },
-    { key: 'tah.damageSoundVolume', type: 'slider', label: 'Damage / Stat Feedback', min: 0, max: 1.5, step: 0.05 },
-    { key: 'tah.actionFxVolume', type: 'slider', label: 'Action FX', min: 0, max: 1.5, step: 0.05 },
-    { key: 'wreckMasterVolume', type: 'slider', label: 'Wreck Explosions', min: 0, max: 1.5, step: 0.1 , requires: ['enableWrecks', 'enableWreckAudio'], requiresAll: true },
-    { key: 'tah.battleLogVolume', type: 'slider', label: 'Battle Log', min: 0, max: 1.5, step: 0.05 },
+    { type: 'section', label: 'LA.settingsMenus.section.masterVolumes.label' },
+    { key: 'tah.uiSoundVolume', type: 'slider', label: 'LA.settingsMenus.tah.uiSoundVolume.label', min: 0, max: 1.5, step: 0.05 },
+    { key: 'tah.tokenFeedbackVolume', type: 'slider', label: 'LA.settingsMenus.tah.tokenFeedbackVolume.label', min: 0, max: 1.5, step: 0.05 },
+    { key: 'tah.damageSoundVolume', type: 'slider', label: 'LA.settingsMenus.tah.damageSoundVolume.label', min: 0, max: 1.5, step: 0.05 },
+    { key: 'tah.actionFxVolume', type: 'slider', label: 'LA.settingsMenus.tah.actionFxVolume.label', min: 0, max: 1.5, step: 0.05 },
+    { key: 'wreckMasterVolume', type: 'slider', label: 'LA.settingsMenus.wreckMasterVolume.label', min: 0, max: 1.5, step: 0.1 , requires: ['enableWrecks', 'enableWreckAudio'], requiresAll: true },
+    { key: 'tah.battleLogVolume', type: 'slider', label: 'LA.settingsMenus.tah.battleLogVolume.label', min: 0, max: 1.5, step: 0.05 },
 
-    { type: 'section', label: 'UI sounds', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: UI_VARIANTS.map((variant) => ({ key: `tah.uiSound.${variant}`, label: _toLabel(variant), preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.uiSounds.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: UI_VARIANTS.map(([variant, label]) => ({ key: `tah.uiSound.${variant}`, label, preview: true })) },
 
-    { type: 'section', label: 'Token feedback', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: TOKEN_VARIANTS.map((v) => ({ key: `tah.tokenSound.${v}`, label: _toLabel(v.replace(/^token/, '')), preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenFeedback.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: TOKEN_VARIANTS.map(([v, label]) => ({ key: `tah.tokenSound.${v}`, label, preview: true })) },
 
-    { type: 'section', label: 'Damage type sounds', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: DAMAGE_TYPES.map((damageType) => ({ key: `tah.damageSound.${damageType}`, label: _toLabel(damageType), preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.damageTypeSounds.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: DAMAGE_TYPES.map(([damageType, label]) => ({ key: `tah.damageSound.${damageType}`, label, preview: true })) },
 
-    { type: 'section', label: 'Stat feedback', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: STAT_EVENTS.map((statEvent) => ({ key: `tah.statSound.${statEvent}`, label: _toLabel(statEvent), preview: true })) },
-    { type: 'section', label: 'Status SFX', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map((e) => ({ key: `tah.statusSfx.${e}`, label: _toLabel(e), preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.statFeedback.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: STAT_EVENTS.map(([statEvent, label]) => ({ key: `tah.statSound.${statEvent}`, label, preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.statusSfx.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: STATUS_SFX_EVENTS.map(([e, label]) => ({ key: `tah.statusSfx.${e}`, label, preview: true })) },
 
-    { type: 'section', label: 'Action FX audio', collapsible: true, collapsed: true },
-    { type: 'compactBooleans', items: ACTION_FX_KEYS.map((actionKey) => ({ key: `tah.actionFxSound.${actionKey}`, label: _toLabel(actionKey), preview: true })) },
+    { type: 'section', label: 'LA.settingsMenus.section.actionFxAudio.label', collapsible: true, collapsed: true },
+    { type: 'compactBooleans', items: ACTION_FX_KEYS.map(([actionKey, label]) => ({ key: `tah.actionFxSound.${actionKey}`, label, preview: true })) },
 ];
 
-// StatusFX subkeys live in the `statusFXConfig` Object setting.
-const STATUS_FX_VISUAL = [
-    { sub: 'fx_dangerZone',  label: 'Danger Zone Glow' },
-    { sub: 'fx_burn',        label: 'Burn Glow' },
-    { sub: 'fx_overshield',  label: 'Overshield Glow' },
-    { sub: 'fx_cascading',   label: 'Cascading Effect' },
-    { sub: 'fx_invisible',   label: 'Invisible Effect' },
-    { sub: 'fx_hidden',      label: 'Hidden Effect' },
-    { sub: 'fx_brace',       label: 'Brace Shield Effect' },
-    { sub: 'fx_jammed',      label: 'Jammed Effect' },
-    { sub: 'fx_intangible',  label: 'Intangible Effect' },
-    { sub: 'fx_infection',   label: 'Infection Glow' },
-    { sub: 'fx_exposed',     label: 'Exposed Effect' },
-    { sub: 'fx_falling',     label: 'Falling Effect' },
-    { sub: 'fx_dazed',       label: 'Dazed Effect' },
-    { sub: 'fx_stunned',     label: 'Stunned Effect' },
-    { sub: 'fx_shredded',    label: 'Shredded / Stripped Effect' },
-    { sub: 'fx_slowed',      label: 'Slowed Effect' },
-    { sub: 'fx_throttled',   label: 'Throttled Effect' },
-    { sub: 'fx_immobilized', label: 'Immobilized / Staggered Effect' },
-    { sub: 'fx_blinded',     label: 'Blinded Effect' },
-    { sub: 'fx_flying',      label: 'Flying Hover Bob' },
-    { sub: 'fx_corePower',   label: 'Core Power Active Bloom' },
-];
+// StatusFX subkeys live in the `statusFXConfig` Object setting. Derived from the one list statusFX.js owns.
+const STATUS_FX_VISUAL = STATUS_FX_KEYS.map(key => ({
+    sub: `fx_${key}`,
+    label: `LA.settingsMenus.statusFx.fx_${key}.label`,
+}));
 const STATUS_FX_AUTO = [
-    { sub: 'auto_dangerZone', label: 'Auto Danger Zone (heat ≥ 50%)' },
-    { sub: 'auto_burn',       label: 'Auto Burn icon (burn > 0)' },
-    { sub: 'auto_overshield', label: 'Auto Overshield icon (OS > 0)' },
-    { sub: 'auto_infection',  label: 'Auto Infection icon (infection > 0)' },
-    { sub: 'auto_cascading',  label: 'Auto Cascading icon (NHP cascading)' },
+    { sub: 'auto_dangerZone', label: 'LA.settingsMenus.statusFx.auto_dangerZone.label' },
+    { sub: 'auto_burn',       label: 'LA.settingsMenus.statusFx.auto_burn.label' },
+    { sub: 'auto_overshield', label: 'LA.settingsMenus.statusFx.auto_overshield.label' },
+    { sub: 'auto_infection',  label: 'LA.settingsMenus.statusFx.auto_infection.label' },
+    { sub: 'auto_cascading',  label: 'LA.settingsMenus.statusFx.auto_cascading.label' },
 ];
 
 const STATUSES_FIELDS = [
-    { type: 'section', label: 'Statuses & Effects' },
+    { type: 'section', label: 'LA.settingsMenus.section.statusesEffects.label' },
     { key: 'additionalStatuses', type: 'boolean' },
-    { key: 'effectNotificationMode', type: 'select', label: 'Effect Notification Mode' },
-    { type: 'statusFx', sub: 'master', label: 'Master toggle (Status FX)', hint: 'Master switch for all visual and auto-status effects.' },
-    { type: 'statusFx', sub: 'actionFX', label: 'Enable Action FX', hint: 'Boost, Hide, Shut Down, Fall, Overcharge, etc. Some use JB2A Patreon assets.' },
-    { type: 'statusFx', sub: 'rollResultFX', label: 'Roll Result FX', hint: 'Miss and crit overlays on attacks, success and fail pulses on H.A.S.E.' },
-    { type: 'statusFx', sub: 'damageImpactFX', label: 'Damage Impact FX', hint: 'Impact burst on the target, one per 3 damage, coloured by damage type.' },
-    { key: 'actionBadgeItemName', type: 'boolean', label: 'Item Name on Action Badges', hint: 'The action badge banner shows the item name instead of the action type.' },
-    { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'Remove Statuses on Death' },
+    { key: 'effectNotificationMode', type: 'select', label: 'LA.settingsMenus.effectNotificationMode.label' },
+    { type: 'statusFx', sub: 'master', label: 'LA.settingsMenus.statusFx.master.label', hint: 'LA.settingsMenus.statusFx.master.hint' },
+    { type: 'statusFx', sub: 'actionFX', label: 'LA.settingsMenus.statusFx.actionFX.label', hint: 'LA.settingsMenus.statusFx.actionFX.hint' },
+    { type: 'statusFx', sub: 'rollResultFX', label: 'LA.settingsMenus.statusFx.rollResultFX.label', hint: 'LA.settingsMenus.statusFx.rollResultFX.hint' },
+    { type: 'statusFx', sub: 'damageImpactFX', label: 'LA.settingsMenus.statusFx.damageImpactFX.label', hint: 'LA.settingsMenus.statusFx.damageImpactFX.hint' },
+    { key: 'actionBadgeItemName', type: 'boolean', label: 'LA.settingsMenus.actionBadgeItemName.label', hint: 'LA.settingsMenus.actionBadgeItemName.hint' },
+    { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'LA.settingsMenus.statusFx.removeStatusesOnDeath.label' },
 
-    { type: 'section', label: 'Visual effects', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.visualEffects.label', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_VISUAL },
     { key: 'weaponFxAboveTokens', type: 'boolean' },
-    { key: 'guardianBulwarkAuraMode', type: 'select', label: 'Guardian / Bulwark Aura', hint: '"Only in Combat" requires the GAA Fork.' },
+    { key: 'guardianBulwarkAuraMode', type: 'select', label: 'LA.settingsMenus.guardianBulwarkAuraMode.label', hint: 'LA.settingsMenus.guardianBulwarkAuraMode.hint' },
 
-    { type: 'section', label: 'Auto-status icons', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.autoStatusIcons.label', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_AUTO },
 ];
 
 const DEBUG_FIELDS = [
-    { type: 'section', label: 'Debug Toggles' },
+    { type: 'section', label: 'LA.settingsMenus.section.debugToggles.label' },
     { key: 'debugPathHexCalculation', type: 'boolean' },
     { key: 'debugOutOfCombat', type: 'boolean' },
     { key: 'debugForceJb2aFree', type: 'boolean' },
@@ -586,162 +661,174 @@ const DEBUG_FIELDS = [
 const VISION_FIELDS = [
     { type: 'button',
         key: 'visionDocs',
-        label: 'How to set up line of sight / vision',
+        label: 'LA.settingsMenus.visionDocs.label',
         icon: 'fas fa-book',
-        hint: 'Opens the Vision documentation.',
+        hint: 'LA.settingsMenus.visionDocs.hint',
         clientAllowed: true,
         onClick: () => window.open('https://agraael.github.io/lancer-automations/feature/VISION.html', '_blank'),
     },
 
-    { type: 'section', label: 'Basic Vision' },
+    { type: 'section', label: 'LA.settingsMenus.section.basicVision.label' },
     { key: 'basicSightTo999', type: 'boolean' },
 
-    { type: 'section', label: 'Lancer Vision Modes', hint: '<b>Line of Sight</b> = reciprocal 3D sight, blocked by walls. <b>Sensors</b> (blue) = precise <code>sensor_range</code>. <b>Awareness</b> (yellow) = infinite, fuzzy. Sensor wins ties. Best with <b>fog of war</b> and token vision on.' },
+    { type: 'section', label: 'LA.settingsMenus.section.lancerVisionModes.label', hint: 'LA.settingsMenus.section.lancerVisionModes.hint' },
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { key: 'lancerLos', type: 'boolean' },
     { key: 'lancerLosFlagOnly', type: 'boolean' },
     { key: 'lancerLosAttackHover', type: 'boolean', requires: 'lancerLos' },
     { key: 'lancerLosHeightRule', type: 'select' },
+    { key: 'lancerLosPeekRange', type: 'number', requires: 'lancerLos' },
     { key: 'lancerLosDebug', type: 'boolean' },
+    { key: 'lancerAwarenessStyle', type: 'select' },
     { type: 'compactBooleans',
         items: [
-            { key: 'lancerSensorCombatOnly', label: 'Sensor: Combat Only' },
-            { key: 'lancerAwarenessCombatOnly', label: 'Awareness: Combat Only' },
-            { key: 'lancerSensorUseModeRange', label: 'Sensor: Use Mode Range' },
-            { key: 'lancerAwarenessUseModeRange', label: 'Awareness: Use Mode Range' }
+            { key: 'lancerSensorCombatOnly', label: 'LA.settingsMenus.lancerSensorCombatOnly.label' },
+            { key: 'lancerAwarenessCombatOnly', label: 'LA.settingsMenus.lancerAwarenessCombatOnly.label' },
+            { key: 'lancerSensorUseModeRange', label: 'LA.settingsMenus.lancerSensorUseModeRange.label' },
+            { key: 'lancerAwarenessUseModeRange', label: 'LA.settingsMenus.lancerAwarenessUseModeRange.label' }
         ]
     },
     { type: 'button',
         key: 'refreshLancerVisionTokens',
-        label: 'Refresh Tokens (All Scenes + Actors)',
+        label: 'LA.settingsMenus.refreshLancerVisionTokens.label',
         icon: 'fas fa-sync',
-        hint: 'Rebuild and reorder detection modes on every token. Run after enabling Auto-add.',
+        hint: 'LA.settingsMenus.refreshLancerVisionTokens.hint',
         onClick: () => globalThis.lancerAutoVisionSetup?.(false),
     },
 
-    { type: 'section', label: 'Token Blocks Line of Sight', hint: 'Bulwarked tokens block line of sight around their footprint.' },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenBlocksLineOfSight.label', hint: 'LA.settingsMenus.section.tokenBlocksLineOfSight.hint' },
     { key: 'bulwarkBlocksLineOfSight', type: 'boolean' },
 
-    { type: 'section', label: 'Blinded' },
+    { type: 'section', label: 'LA.settingsMenus.section.blinded.label' },
     { key: 'blindedSetsVision', type: 'boolean' },
 
-    { type: 'section', label: 'Token Height (Wall Height)', hint: 'Vertical tokenHeight for 3D line-of-sight over walls of the token\'s own size.' },
-    { key: 'autoTokenHeight', type: 'boolean', label: 'Auto Token Height (Wall Height)', hint: 'Auto-set tokenHeight to actor size + 0.1 so tokens peek above walls of their size.' },
-    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'Vehicle & Squad Height Adjustments', hint: 'Vehicles get reduced height (size 1 = 0.5, otherwise size-1, capped at 4). Squads get 0.5.' },
+    { type: 'section', label: 'LA.settingsMenus.section.tokenHeightWallHeight.label', hint: 'LA.settingsMenus.section.tokenHeightWallHeight.hint' },
+    { key: 'autoTokenHeight', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeight.label', hint: 'LA.settingsMenus.autoTokenHeight.hint' },
+    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeightVehicleSquad.label', hint: 'LA.settingsMenus.autoTokenHeightVehicleSquad.hint' },
     { type: 'button',
         key: 'syncAllTokenHeights',
-        label: 'Apply Token Heights to All Actors',
+        label: 'LA.settingsMenus.syncAllTokenHeights.label',
         icon: 'fas fa-ruler-vertical',
-        hint: 'Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.',
+        hint: 'LA.settingsMenus.syncAllTokenHeights.hint',
         onClick: () => syncAllTokenHeights(),
     },
 
-    { type: 'section', label: 'Vision From Edge (experimental)', collapsible: true, collapsed: true, hint: 'Sample vision from the token edge instead of its center.' },
+    { type: 'section', label: 'LA.settingsMenus.section.visionFromEdgeExperimental.label', collapsible: true, collapsed: true, hint: 'LA.settingsMenus.section.visionFromEdgeExperimental.hint' },
     { key: 'visionFromEdgeEnabled', type: 'boolean' },
     { key: 'visionFromEdgeSampleMode', type: 'select' },
     { key: 'visionFromEdgeSampleOffset', type: 'number' },
     { key: 'visionFromEdgeDebug', type: 'boolean' },
 
-    { type: 'section', label: 'Range Pulse Line of Sight (experimental)', collapsible: true, collapsed: true, hint: 'Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.' },
-    { key: 'rangePulseLos', type: 'boolean', label: 'Enabled' },
+    { type: 'section', label: 'LA.settingsMenus.section.rangePulseLineOfSightExperimental.label', collapsible: true, collapsed: true, hint: 'LA.settingsMenus.section.rangePulseLineOfSightExperimental.hint' },
+    { key: 'rangePulseLos', type: 'boolean', label: 'LA.settingsMenus.rangePulseLos.label' },
 
-    { type: 'section', label: 'Drag Vision', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.dragVision.label', collapsible: true, collapsed: true },
     { key: 'dragVisionMode', type: 'select' },
     { key: 'dragVisionMultiplier', type: 'number' },
+    { key: 'dragSuppressOriginSources', type: 'boolean' },
 
 ];
 
 const PERFORMANCE_FIELDS = [
-    { type: 'section', label: 'Vision', hint: 'Vision and light are the module\'s heaviest per-frame work. Both knobs trade fidelity for frame rate.' },
+    { type: 'section', label: 'LA.settingsMenus.section.vision.label', hint: 'LA.settingsMenus.section.vision.hint' },
     { key: 'visionAnimationThrottleFps', type: 'number' },
+    { key: 'visionFromEdgeDeferDrag', type: 'boolean' },
+    { key: 'occlusionDimDeferMoving', type: 'boolean' },
     { key: 'disableVisionAboveControlled', type: 'number' },
 
-    { type: 'section', label: 'Settings cache' },
+    { type: 'section', label: 'LA.settingsMenus.section.coreShortcuts.label', hint: 'LA.settingsMenus.section.coreShortcuts.hint' },
+    { type: 'moduleSelect', module: 'core', key: 'performanceMode' },
+    { type: 'moduleSlider', module: 'core', key: 'maxFPS', min: 10, max: 60, step: 10 },
+    { type: 'moduleBoolean', module: 'core', key: 'visionAnimation' },
+    { type: 'moduleBoolean', module: 'core', key: 'lightAnimation' },
+    { type: 'moduleBoolean', module: 'core', key: 'tokenDragPreview' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.settingsCache.label' },
     { key: 'settingsCacheAllModules', type: 'boolean' },
 
-    { type: 'section', label: 'Status FX' },
-    { type: 'statusFx', sub: 'lowQuality', default: false, label: 'Low-quality mode', hint: 'Outline-only swaps for Danger Zone, Core Power, Jammed.' },
+    { type: 'section', label: 'LA.settingsMenus.section.statusFx.label' },
+    { type: 'statusFx', sub: 'lowQuality', default: false, label: 'LA.settingsMenus.statusFx.lowQuality.label', hint: 'LA.settingsMenus.statusFx.lowQuality.hint' },
 ];
 
 const TOOLS_FIELDS = [
-    { type: 'section', label: 'Optional content packs', hint: 'Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager.' },
+    { type: 'section', label: 'LA.settingsMenus.section.optionalContentPacks.label', hint: 'LA.settingsMenus.section.optionalContentPacks.hint' },
     { key: 'enableLaSossisItems', type: 'boolean', requires: 'additionalStatuses' },
     { key: 'enablePersonalStuff', type: 'boolean' },
     { type: 'button',
         key: 'getDeployablesLcp',
-        label: 'Get the Deployables LCP',
+        label: 'LA.settingsMenus.getDeployablesLcp.label',
         icon: 'fas fa-download',
-        hint: 'Downloads LaSossis_Npc_Deployables.lcp.',
+        hint: 'LA.settingsMenus.getDeployablesLcp.hint',
         clientAllowed: true,
         onClick: () => window.open(foundry.utils.getRoute('modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp'), '_blank'),
     },
 
-    { type: 'section', label: 'Downtime', hint: 'Custom downtime activities are Downtime Activity items, in the LA compendium or the world directory.' },
+    { type: 'section', label: 'LA.settingsMenus.section.downtime.label', hint: 'LA.settingsMenus.section.downtime.hint' },
     { type: 'button',
         key: 'importDowntimeLcp',
-        label: 'Import Downtime Actions (LCP)',
+        label: 'LA.settingsMenus.importDowntimeLcp.label',
         icon: 'fas fa-file-import',
-        hint: 'Create the items from an LCP\'s downtime actions.',
+        hint: 'LA.settingsMenus.importDowntimeLcp.hint',
         onClick: () => game.modules.get(MODULE_ID)?.api?.openDowntimeImportDialog?.(),
     },
 
-    { type: 'section', label: 'Template Macro' },
+    { type: 'section', label: 'LA.settingsMenus.section.templateMacro.label' },
     { type: 'button',
         key: 'importTmacPresets',
         requiresModule: 'templatemacro',
-        label: 'Import LaSossis Template Presets',
+        label: 'LA.settingsMenus.importTmacPresets.label',
         icon: 'fas fa-shapes',
-        hint: 'Add the LaSossis zone presets to the Template Macro library.',
+        hint: 'LA.settingsMenus.importTmacPresets.hint',
         onClick: () => importTemplateMacroPresets(),
     },
 
-    { type: 'section', label: 'Actor / Prototype Token sync' },
-    { key: 'syncActorImgToToken', type: 'boolean', label: 'Sync actor portrait to token image', hint: 'When the prototype token image changes, also update the actor portrait.' },
-    { key: 'syncActorNameToToken', type: 'boolean', label: 'Sync actor name to token name', hint: 'When the prototype token name changes, also update the actor name.' },
+    { type: 'section', label: 'LA.settingsMenus.section.actorPrototypeTokenSync.label' },
+    { key: 'syncActorImgToToken', type: 'boolean', label: 'LA.settingsMenus.syncActorImgToToken.label', hint: 'LA.settingsMenus.syncActorImgToToken.hint' },
+    { key: 'syncActorNameToToken', type: 'boolean', label: 'LA.settingsMenus.syncActorNameToToken.label', hint: 'LA.settingsMenus.syncActorNameToToken.hint' },
     { type: 'button',
         key: 'syncAllActorImgs',
-        label: 'Sync All Actors Now',
+        label: 'LA.settingsMenus.syncAllActorImgs.label',
         icon: 'fas fa-images',
-        hint: 'Walk every world actor and copy the prototype token image and name onto the actor.',
+        hint: 'LA.settingsMenus.syncAllActorImgs.hint',
         onClick: () => syncAllActorImgs(),
     },
 
-    { type: 'section', label: 'Maintenance', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.maintenance.label', collapsible: true, collapsed: true },
     { type: 'button',
         key: 'openLcpRepair',
-        label: 'Apply Fixes (LCP Data)',
+        label: 'LA.settingsMenus.openLcpRepair.label',
         icon: 'fas fa-wrench',
-        hint: 'Rebuild compendium and actor item data with LA patches: ammo metadata, weapon profile text merging, and missing action names.',
+        hint: 'LA.settingsMenus.openLcpRepair.hint',
         onClick: () => repairLCPData(),
     },
     { type: 'button',
         key: 'openReset',
-        label: 'Reset to Defaults',
+        label: 'LA.settingsMenus.openReset.label',
         icon: 'fas fa-undo',
-        hint: 'Reset all module settings and activations to their default values.',
+        hint: 'LA.settingsMenus.openReset.hint',
         onClick: () => new ReactionReset().render(true),
     },
     { type: 'button',
         key: 'openExport',
-        label: 'Export to JSON',
+        label: 'LA.settingsMenus.openExport.label',
         icon: 'fas fa-file-export',
-        hint: 'Export activations, startup scripts, module settings, and the shortcuts shown here to a JSON file.',
+        hint: 'LA.settingsMenus.openExport.hint',
         onClick: () => new ReactionExport().render(true),
     },
     { type: 'button',
         key: 'openImport',
-        label: 'Import from JSON',
+        label: 'LA.settingsMenus.openImport.label',
         icon: 'fas fa-file-import',
-        hint: 'Import from a JSON file, with a review dialog to pick which activations and settings to apply.',
+        hint: 'LA.settingsMenus.openImport.hint',
         onClick: () => new ReactionImport().render(true),
     },
 
-    { type: 'section', label: 'News' },
+    { type: 'section', label: 'LA.settingsMenus.section.news.label' },
     { type: 'button',
         key: 'openNewsHistory',
-        label: 'News & Releases',
+        label: 'LA.settingsMenus.openNewsHistory.label',
         icon: 'fas fa-newspaper',
-        hint: 'Browse past news entries and module release notes.',
+        hint: 'LA.settingsMenus.openNewsHistory.hint',
         onClick: () => openNewsHistory(),
     },
 ];
@@ -750,9 +837,9 @@ const laKb = (key) => ({ type: 'keybinding', module: MODULE_ID, key });
 const laTour = (key) => ({ type: 'tour', module: MODULE_ID, key });
 
 const TUTORIALS_FIELDS = [
-    { type: 'section', label: 'Setup', hint: 'First-run setup and guided walkthroughs.' },
-    { type: 'button', key: 'openOnboarding', label: 'Re-run Setup Wizard', icon: 'fas fa-wand-magic-sparkles', hint: 'Answer the main settings as yes/no questions. Nothing is written until you press Apply.', onClick: () => runSettingsOnboarding() },
-    { type: 'section', label: 'Tutorials', hint: 'Guided walkthroughs of the module.' },
+    { type: 'section', label: 'LA.settingsMenus.section.setup.label', hint: 'LA.settingsMenus.section.setup.hint' },
+    { type: 'button', key: 'openOnboarding', label: 'LA.settingsMenus.openOnboarding.label', icon: 'fas fa-wand-magic-sparkles', hint: 'LA.settingsMenus.openOnboarding.hint', onClick: () => runSettingsOnboarding() },
+    { type: 'section', label: 'LA.settingsMenus.section.tutorials.label', hint: 'LA.settingsMenus.section.tutorials.hint' },
     laTour('config-tour'),
     laTour('activation-manager-tour'),
     laTour('effect-manager-tour'),
@@ -763,28 +850,28 @@ const TUTORIALS_FIELDS = [
     laTour('add-extra-tour'),
 ];
 
-// [control, where, action]. Verified against the handlers, not the docs.
+// [control, where, action] keys. Verified against the handlers, not the docs.
 const FIXED_CONTROLS = [
-    ['Right-click',        'HUD row, wheel item',  'Open its details popup'],
-    ['Ctrl+Right-click',   'HUD row',              'Assign it to a favorite wheel'],
-    ['Ctrl+Right-click',   'Status row',           'Star the status'],
-    ['Hover',              'HUD row',              'Preview its range on the canvas'],
-    ['Tab',                'Action, status wheel', 'Next favorite page'],
-    ['Escape',             'Any wheel',            'Close the wheel'],
-    ['Shift+Wheel',        'Shape placement',      'Resize the shape'],
-    ['Ctrl+Wheel',         'Shape placement',      'Rotate an aimed shape, cone or line'],
-    ['T',                  'Advanced Measure',     'Cycle the range source'],
-    ['G',                  'Advanced Measure',     'Clear every placement'],
-    ['Shift+Left-click',   'Advanced Measure',     'Paint marks, drag to continue. Not in area mode'],
-    ['Ctrl+F',             'This window',          'Search every setting'],
+    ['LA.settingsMenus.fixedControl.rightClickHudRowWheelItem.control', 'LA.settingsMenus.fixedControl.rightClickHudRowWheelItem.where', 'LA.settingsMenus.fixedControl.rightClickHudRowWheelItem.action'],
+    ['LA.settingsMenus.fixedControl.ctrlRightClickHudRow.control', 'LA.settingsMenus.fixedControl.ctrlRightClickHudRow.where', 'LA.settingsMenus.fixedControl.ctrlRightClickHudRow.action'],
+    ['LA.settingsMenus.fixedControl.ctrlRightClickStatusRow.control', 'LA.settingsMenus.fixedControl.ctrlRightClickStatusRow.where', 'LA.settingsMenus.fixedControl.ctrlRightClickStatusRow.action'],
+    ['LA.settingsMenus.fixedControl.hoverHudRow.control', 'LA.settingsMenus.fixedControl.hoverHudRow.where', 'LA.settingsMenus.fixedControl.hoverHudRow.action'],
+    ['LA.settingsMenus.fixedControl.tabActionStatusWheel.control', 'LA.settingsMenus.fixedControl.tabActionStatusWheel.where', 'LA.settingsMenus.fixedControl.tabActionStatusWheel.action'],
+    ['LA.settingsMenus.fixedControl.escapeAnyWheel.control', 'LA.settingsMenus.fixedControl.escapeAnyWheel.where', 'LA.settingsMenus.fixedControl.escapeAnyWheel.action'],
+    ['LA.settingsMenus.fixedControl.shiftWheelShapePlacement.control', 'LA.settingsMenus.fixedControl.shiftWheelShapePlacement.where', 'LA.settingsMenus.fixedControl.shiftWheelShapePlacement.action'],
+    ['LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.control', 'LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.where', 'LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.action'],
+    ['LA.settingsMenus.fixedControl.tAdvancedMeasure.control', 'LA.settingsMenus.fixedControl.tAdvancedMeasure.where', 'LA.settingsMenus.fixedControl.tAdvancedMeasure.action'],
+    ['LA.settingsMenus.fixedControl.gAdvancedMeasure.control', 'LA.settingsMenus.fixedControl.gAdvancedMeasure.where', 'LA.settingsMenus.fixedControl.gAdvancedMeasure.action'],
+    ['LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.control', 'LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.where', 'LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.action'],
+    ['LA.settingsMenus.fixedControl.ctrlFThisWindow.control', 'LA.settingsMenus.fixedControl.ctrlFThisWindow.where', 'LA.settingsMenus.fixedControl.ctrlFThisWindow.action'],
 ];
 
 const CONTROL_FIELDS = [
-    { type: 'section', label: 'Lancer Automations' },
+    { type: 'section', label: 'LA.settingsMenus.section.lancerAutomations.label' },
     laKb('resetMovement'),
     laKb('cardTargeting'),
 
-    { type: 'section', label: 'TAH Navigation', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.tahNavigation.label', collapsible: true, collapsed: true },
     laKb('tah.toggleSearch'),
     laKb('tah.toggleFavorites'),
     laKb('tah.toggleStatuses'),
@@ -795,14 +882,16 @@ const CONTROL_FIELDS = [
     laKb('tahNavActivate'),
     laKb('tahNavContext'),
 
-    { type: 'section', label: 'Movement' },
+    { type: 'section', label: 'LA.settingsMenus.section.movement.label' },
     laKb('freeMovement'),
     laKb('debugMovement'),
+    laKb('togglePathfinding'),
+    laKb('swapElevationMode'),
     laKb('movementWheel'),
     laKb('actionWheel'),
     laKb('statusWheel'),
 
-    { type: 'section', label: 'Advanced Measure', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.advancedMeasure.label', collapsible: true, collapsed: true },
     laKb('advancedMeasure'),
     laKb('elevationUp'),
     laKb('elevationDown'),
@@ -810,11 +899,11 @@ const CONTROL_FIELDS = [
     laKb('lineTiltDown'),
     laKb('resetShape'),
 
-    { type: 'section', label: 'Fixed Controls', hint: 'Built-in gestures. These cannot be rebound.', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.fixedControls.label', hint: 'LA.settingsMenus.section.fixedControls.hint', collapsible: true, collapsed: true },
     { type: 'table',
-        label: 'Mouse and Keyboard',
+        label: 'LA.settingsMenus.table.mouseAndKeyboard.label',
         getTable: () => ({
-            columns: ['Control', 'Where', 'Action'],
+            columns: ['LA.settingsMenus.tableColumn.control', 'LA.settingsMenus.tableColumn.where', 'LA.settingsMenus.tableColumn.action'],
             rows: FIXED_CONTROLS.map(([control, where, action]) => ({
                 label: control,
                 cells: [{ isText: true, text: where }, { isText: true, text: action }],
@@ -823,7 +912,7 @@ const CONTROL_FIELDS = [
 ];
 
 const ISO_FIELDS = [
-    { type: 'section', label: 'Isometric Integrations' },
+    { type: 'section', label: 'LA.settingsMenus.section.isometricIntegrations.label' },
     { key: 'iso.statBar', type: 'boolean' , requires: 'tokenStatBar' },
     { key: 'iso.tacticalDistance', type: 'boolean' },
     { key: 'iso.waypointLabel', type: 'boolean' },
@@ -838,129 +927,129 @@ const ISO_FIELDS = [
 ];
 
 const BATTLE_LOG_FIELDS = [
-    { type: 'section', label: 'Battle Log' },
+    { type: 'section', label: 'LA.settingsMenus.section.battleLog.label' },
     {
         key: 'battleLogEnabled',
         type: 'boolean',
-        label: 'Enable Battle Log',
-        hint: 'Record combat telemetry and open the recap when a combat ends.',
+        label: 'LA.settingsMenus.battleLogEnabled.label',
+        hint: 'LA.settingsMenus.battleLogEnabled.hint',
     },
     {
         key: 'tah.telemetryFriendlyMechAsSquad',
         type: 'boolean',
-        label: 'Friendly mechs count as squad',
-        hint: 'Squad membership normally means owned by a player. This also counts FRIENDLY mechs that no player owns, so GM-run pilots and solo testing still show up in the log.',
+        label: 'LA.settingsMenus.tah.telemetryFriendlyMechAsSquad.label',
+        hint: 'LA.settingsMenus.tah.telemetryFriendlyMechAsSquad.hint',
         requires: 'battleLogEnabled' },
     {
         key: 'tah.disableAwards',
         type: 'boolean',
-        label: 'Disable awards',
-        hint: 'No awards or MVP auto-pick; the GM can still pick MVP manually.',
+        label: 'LA.settingsMenus.tah.disableAwards.label',
+        hint: 'LA.settingsMenus.tah.disableAwards.hint',
         requires: 'battleLogEnabled' },
     {
         key: 'tah.telemetryDebug',
         type: 'boolean',
-        label: 'Debug: log every telemetry event',
-        hint: 'Console-log every event written to the combat telemetry flag.',
+        label: 'LA.settingsMenus.tah.telemetryDebug.label',
+        hint: 'LA.settingsMenus.tah.telemetryDebug.hint',
         requires: 'battleLogEnabled' },
 
     { type: 'button',
         key: 'openBattleLogTest',
-        label: 'Open GM card (test)',
+        label: 'LA.settingsMenus.openBattleLogTest.label',
         icon: 'fas fa-flag-checkered',
         onClick: () => openBattleLogGMCardTest(),
     },
     { type: 'button',
         key: 'openBattleLogRecapTest',
-        label: 'Open Battle Log Recap',
+        label: 'LA.settingsMenus.openBattleLogRecapTest.label',
         icon: 'fas fa-clipboard-list',
         onClick: () => openBattleLogRecapTest(),
     },
     { type: 'button',
         key: 'openTelemetryDebug',
-        label: 'Telemetry debug',
+        label: 'LA.settingsMenus.openTelemetryDebug.label',
         icon: 'fas fa-bug',
         onClick: () => openTelemetryDebugWindow(),
     },
 
-    { type: 'section', label: 'Theme music', collapsible: true, collapsed: true },
+    { type: 'section', label: 'LA.settingsMenus.section.themeMusic.label', collapsible: true, collapsed: true },
     { key: 'tah.battleLog.themeStart',
         type: 'select',
-        label: 'Theme starts',
-        hint: 'Whether the theme comes in with the intro or when the outcome lands.' },
+        label: 'LA.settingsMenus.tah.battleLog.themeStart.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themeStart.hint' },
     { key: 'tah.battleLog.themeVolume',
         type: 'slider',
-        label: 'Theme volume',
+        label: 'LA.settingsMenus.tah.battleLog.themeVolume.label',
         min: 0.5, max: 2, step: 0.05,
-        hint: 'Scales the theme on top of the Battle Log volume.' },
+        hint: 'LA.settingsMenus.tah.battleLog.themeVolume.hint' },
     { key: 'tah.battleLog.themeLoop',
         type: 'boolean',
-        label: 'Loop theme',
-        hint: 'Off plays the track once and lets it end.' },
+        label: 'LA.settingsMenus.tah.battleLog.themeLoop.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themeLoop.hint' },
     { key: 'tah.battleLog.themeDefault',
         type: 'audio',
-        label: 'Default theme',
-        hint: 'Played for all outcomes unless a specific one is set below.' },
+        label: 'LA.settingsMenus.tah.battleLog.themeDefault.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themeDefault.hint' },
     { key: 'tah.battleLog.themeVictory',
         type: 'audio',
-        label: 'Success theme',
-        hint: 'Overrides the default when the mission outcome is SUCCESS.' },
+        label: 'LA.settingsMenus.tah.battleLog.themeVictory.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themeVictory.hint' },
     { key: 'tah.battleLog.themeDefeat',
         type: 'audio',
-        label: 'Failure theme',
-        hint: 'Overrides the default when the mission outcome is FAILURE.' },
+        label: 'LA.settingsMenus.tah.battleLog.themeDefeat.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themeDefeat.hint' },
     { key: 'tah.battleLog.themePartial',
         type: 'audio',
-        label: 'Partial theme',
-        hint: 'Overrides the default when the mission outcome is PARTIAL.' },
+        label: 'LA.settingsMenus.tah.battleLog.themePartial.label',
+        hint: 'LA.settingsMenus.tah.battleLog.themePartial.hint' },
 ];
 
 const COLORS_FIELDS = [
-    { type: 'section', label: 'Theme' },
+    { type: 'section', label: 'LA.settingsMenus.section.theme.label' },
     { type: 'moduleSelect', module: 'lancer-style-library', key: 'theme' },
-    { type: 'section', label: 'Targeting Colors' },
-    { key: 'color.inRange', type: 'color', label: 'In Range' },
-    { key: 'color.target', type: 'color', label: 'Target' },
-    { key: 'color.reference', type: 'color', label: 'Reference Token' },
-    { key: 'color.outOfRange', type: 'color', label: 'Out of Range' },
-    { key: 'color.placed', type: 'color', label: 'Placed Shape' },
-    { key: 'color.noHost', type: 'color', label: 'No Host' },
-    { key: 'color.selected', type: 'color', label: 'Selected' },
-    { key: 'color.crit', type: 'color', label: 'Critical' },
-    { key: 'color.rangeFill', type: 'color', label: 'Range Fill' },
-    { type: 'section', label: 'Tool Colors' },
-    { key: 'color.traceStart', type: 'color', label: 'Trace Start' },
-    { key: 'color.traceEnd', type: 'color', label: 'Trace End' },
-    { key: 'color.traceLine', type: 'color', label: 'Trace Line' },
-    { type: 'section', label: 'Range Glow Colors' },
-    { key: 'color.glowManual', type: 'color', label: 'Default' },
-    { key: 'color.glowThreat', type: 'color', label: 'Threat' },
-    { key: 'color.glowSensor', type: 'color', label: 'Sensor' },
-    { key: 'color.glowWeapon', type: 'color', label: 'Weapon' },
-    { key: 'color.glowReach', type: 'color', label: 'Max Reach' },
-    { key: 'color.glowMark', type: 'color', label: 'Mark' },
-    { key: 'color.glowDeploy', type: 'color', label: 'Deploy' },
-    { type: 'section', label: 'Range Pulse' },
-    { key: 'rangePulseStyle', type: 'select', label: 'Pulse Style', hint: 'Applies the next time a pulse is drawn.' },
-    { key: 'rangePulseMotion', type: 'select', label: 'Pulse Motion' },
-    { key: 'color.pulseLine', type: 'color', label: 'Grid Line Color' },
+    { type: 'section', label: 'LA.settingsMenus.section.targetingColors.label' },
+    { key: 'color.inRange', type: 'color', label: 'LA.settingsMenus.color.inRange.label' },
+    { key: 'color.target', type: 'color', label: 'LA.settingsMenus.color.target.label' },
+    { key: 'color.reference', type: 'color', label: 'LA.settingsMenus.color.reference.label' },
+    { key: 'color.outOfRange', type: 'color', label: 'LA.settingsMenus.color.outOfRange.label' },
+    { key: 'color.placed', type: 'color', label: 'LA.settingsMenus.color.placed.label' },
+    { key: 'color.noHost', type: 'color', label: 'LA.settingsMenus.color.noHost.label' },
+    { key: 'color.selected', type: 'color', label: 'LA.settingsMenus.color.selected.label' },
+    { key: 'color.crit', type: 'color', label: 'LA.settingsMenus.color.crit.label' },
+    { key: 'color.rangeFill', type: 'color', label: 'LA.settingsMenus.color.rangeFill.label' },
+    { type: 'section', label: 'LA.settingsMenus.section.toolColors.label' },
+    { key: 'color.traceStart', type: 'color', label: 'LA.settingsMenus.color.traceStart.label' },
+    { key: 'color.traceEnd', type: 'color', label: 'LA.settingsMenus.color.traceEnd.label' },
+    { key: 'color.traceLine', type: 'color', label: 'LA.settingsMenus.color.traceLine.label' },
+    { type: 'section', label: 'LA.settingsMenus.section.rangeGlowColors.label' },
+    { key: 'color.glowManual', type: 'color', label: 'LA.settingsMenus.color.glowManual.label' },
+    { key: 'color.glowThreat', type: 'color', label: 'LA.settingsMenus.color.glowThreat.label' },
+    { key: 'color.glowSensor', type: 'color', label: 'LA.settingsMenus.color.glowSensor.label' },
+    { key: 'color.glowWeapon', type: 'color', label: 'LA.settingsMenus.color.glowWeapon.label' },
+    { key: 'color.glowReach', type: 'color', label: 'LA.settingsMenus.color.glowReach.label' },
+    { key: 'color.glowMark', type: 'color', label: 'LA.settingsMenus.color.glowMark.label' },
+    { key: 'color.glowDeploy', type: 'color', label: 'LA.settingsMenus.color.glowDeploy.label' },
+    { type: 'section', label: 'LA.settingsMenus.section.rangePulse.label' },
+    { key: 'rangePulseStyle', type: 'select', label: 'LA.settingsMenus.rangePulseStyle.label', hint: 'LA.settingsMenus.rangePulseStyle.hint' },
+    { key: 'rangePulseMotion', type: 'select', label: 'LA.settingsMenus.rangePulseMotion.label' },
+    { key: 'color.pulseLine', type: 'color', label: 'LA.settingsMenus.color.pulseLine.label' },
     // Retired 2026-09-12, forced to 0 in _staticGridAlpha. Uncomment both to bring it back.
-    // { key: 'rangePulseLineOpacity', type: 'slider', label: 'Grid Line Opacity', min: 0, max: 1, step: 0.05 },
-    { key: 'rangePulseWaveOpacity', type: 'slider', label: 'Wave Opacity', min: 0.1, max: 1, step: 0.05 },
-    { key: 'rangePulseLineWidth', type: 'slider', label: 'Wave Width', min: 1, max: 4, step: 0.25 },
-    { key: 'rangePulseSpeed', type: 'slider', label: 'Pulse Speed', min: 0.25, max: 3, step: 0.05 },
-    { type: 'section', label: 'Ruler Colors' },
-    { key: 'speedProvider.colorStandard', type: 'color', label: 'Standard' },
-    { key: 'speedProvider.colorBoost', type: 'color', label: 'Boost' },
-    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'Over-boost' },
-    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'Free Movement' , requires: 'enableBuiltinSpeedProvider' },
-    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'Force Movement' },
+    // { key: 'rangePulseLineOpacity', type: 'slider', label: 'LA.settingsMenus.rangePulseLineOpacity.label', min: 0, max: 1, step: 0.05 },
+    { key: 'rangePulseWaveOpacity', type: 'slider', label: 'LA.settingsMenus.rangePulseWaveOpacity.label', min: 0.1, max: 1, step: 0.05 },
+    { key: 'rangePulseLineWidth', type: 'slider', label: 'LA.settingsMenus.rangePulseLineWidth.label', min: 1, max: 4, step: 0.25 },
+    { key: 'rangePulseSpeed', type: 'slider', label: 'LA.settingsMenus.rangePulseSpeed.label', min: 0.25, max: 3, step: 0.05 },
+    { type: 'section', label: 'LA.settingsMenus.section.rulerColors.label' },
+    { key: 'speedProvider.colorStandard', type: 'color', label: 'LA.settingsMenus.speedProvider.colorStandard.label' },
+    { key: 'speedProvider.colorBoost', type: 'color', label: 'LA.settingsMenus.speedProvider.colorBoost.label' },
+    { key: 'speedProvider.colorOverBoost', type: 'color', label: 'LA.settingsMenus.speedProvider.colorOverBoost.label' },
+    { key: 'speedProvider.colorFreeMovement', type: 'color', label: 'LA.settingsMenus.speedProvider.colorFreeMovement.label' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'speedProvider.colorForceMovement', type: 'color', label: 'LA.settingsMenus.speedProvider.colorForceMovement.label' },
     {
         key: 'color.resetDefaults',
         type: 'button',
-        label: 'Reset Tab to Defaults',
+        label: 'LA.settingsMenus.color.resetDefaults.label',
         icon: 'fas fa-undo',
-        hint: 'Restore every color, opacity and width on this tab to its default.',
+        hint: 'LA.settingsMenus.color.resetDefaults.hint',
         clientAllowed: true,
         onClick: () => resetPaletteColorSettings(
             COLORS_FIELDS.filter(field => field.key && !field.module && field.type !== 'button').map(field => field.key)
@@ -968,21 +1057,121 @@ const COLORS_FIELDS = [
     },
 ];
 
+const THT_ID = 'terrain-height-tools';
+const TMAC_ID = 'templatemacro';
+
+// Keep the owning module's own wording, minus a prefix that the section header already says
+// Core is not a module, but its settings ride the same external-shortcut plumbing.
+function _extNamespaceActive(namespace)
+{
+    return namespace === 'core' || !!game.modules.get(namespace)?.active;
+}
+
+// A select hands back a string, and core's numeric settings are DataFields that reject one.
+function _coerceExtValue(setting, raw)
+{
+    if (setting?.type === Boolean)
+        return !!raw;
+    const isNumeric = setting?.type === Number
+        || setting?.type instanceof foundry.data.fields.NumberField;
+    if (!isNumeric)
+        return raw;
+    if (raw === '' || raw === null || raw === undefined)
+        return setting?.type?.nullable ? null : raw;
+    return Number(raw);
+}
+
+function externalLabel(field, setting)
+{
+    if (field.label)
+        return localize(field.label);
+    const name = localize(setting?.name ?? field.key);
+    if (typeof name !== 'string')
+        return name;
+    const trimmed = name.replace(/^experimental:\s*/i, '');
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+// Shortcuts only. Anything that has its own automation on the LA side (line of sight, rulers, auto elevation) is
+// deliberately absent, and fields whose setting is not registered drop out on their own.
+const THT_FIELDS = [
+    { type: 'section', label: 'LA.settingsMenus.section.thtShortcuts.label', hint: 'LA.settingsMenus.section.thtShortcuts.hint', collapsible: true },
+
+    // The section header carries the feature name, so the rows only name the property
+    { type: 'section', label: 'LA.settingsMenus.section.thtDropShading.label', hint: 'LA.settingsMenus.section.thtDropShading.hint', subsection: true, collapsed: true },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainDropBand' },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainDropBandReach' },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainDropBandOpacity' },
+    { type: 'moduleColor', module: THT_ID, key: 'terrainDropBandColor' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtTanaka.label', hint: 'LA.settingsMenus.section.thtTanaka.hint', subsection: true, collapsed: true },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainTanaka' },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainTanakaWidth' },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainTanakaOpacity' },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainTanakaTint' },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainTanakaTexture' },
+    { type: 'moduleColor', module: THT_ID, key: 'terrainTanakaLight' },
+    { type: 'moduleColor', module: THT_ID, key: 'terrainTanakaDark' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtLight.label', hint: 'LA.settingsMenus.section.thtLight.hint', subsection: true, collapsed: true },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainExtrusionSunAngle' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtStacking.label', hint: 'LA.settingsMenus.section.thtStacking.hint', subsection: true, collapsed: true },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainAboveLowerTokens' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtLabels.label', subsection: true, collapsed: true },
+    { type: 'moduleBoolean', module: THT_ID, key: 'useFractionsForLabels' },
+    { type: 'moduleBoolean', module: THT_ID, key: 'smartLabelPlacement' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtPerformance.label', hint: 'LA.settingsMenus.section.thtPerformance.hint', subsection: true, collapsed: true },
+    { type: 'moduleBoolean', module: THT_ID, key: 'scaleVisualsToGrid' },
+    { type: 'moduleBoolean', module: THT_ID, key: 'terrainCacheEnabled' },
+    { type: 'moduleSlider', module: THT_ID, key: 'terrainCacheResolution' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.thtTypes.label', subsection: true, collapsed: true },
+    {
+        type: 'button',
+        key: 'openThtTerrainTypes',
+        label: 'LA.settingsMenus.openThtTerrainTypes.label',
+        hint: 'LA.settingsMenus.openThtTerrainTypes.hint',
+        icon: 'fas fa-mountain',
+        onClick: () =>
+        {
+            const menu = /** @type {any} */ (game.settings.menus.get(`${THT_ID}.terrainTypes`));
+            if (!menu?.type)
+            {
+                ui.notifications?.warn(localize('LA.settingsMenus.openThtTerrainTypes.missing'));
+                return;
+            }
+            new menu.type().render(true);
+        },
+    },
+];
+
+const TMAC_FIELDS = [
+    { type: 'section', label: 'LA.settingsMenus.section.tmacShortcuts.label', hint: 'LA.settingsMenus.section.tmacShortcuts.hint', collapsible: true },
+    { type: 'moduleBoolean', module: TMAC_ID, key: 'scaleVisualsToGrid' },
+    { type: 'moduleSlider', module: TMAC_ID, key: 'centerLabelSize', min: 6, max: 48, step: 1 },
+    { type: 'moduleBoolean', module: TMAC_ID, key: 'thtAutoElevation' },
+];
+
+const MAP_MODULE_IDS = [THT_ID, TMAC_ID];
+
 const TAB_DEFS = [
     // Gameplay & rules
-    { id: 'activations', label: 'Activations', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
-    { id: 'combat', label: 'Combat & Movement', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
-    { id: 'statuses', label: 'Statuses & FX', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
-    { id: 'experimental', label: 'Vision', icon: 'fas fa-eye', fields: VISION_FIELDS },
-    { id: 'wrecks', label: 'Wrecks', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
+    { id: 'activations', label: 'LA.settingsMenus.tab.activations.label', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
+    { id: 'combat', label: 'LA.settingsMenus.tab.combat.label', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
+    { id: 'statuses', label: 'LA.settingsMenus.tab.statuses.label', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
+    { id: 'experimental', label: 'LA.settingsMenus.tab.experimental.label', icon: 'fas fa-eye', fields: VISION_FIELDS },
+    { id: 'wrecks', label: 'LA.settingsMenus.tab.wrecks.label', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
     // Look & feel
-    { id: 'tokens', label: 'Tokens & Display', icon: 'fas fa-cubes', fields: TOKENS_DISPLAY_FIELDS },
-    { id: 'tah', label: 'Token Action HUD', icon: 'fas fa-th-list', fields: TAH_FIELDS },
-    { id: 'colors', label: 'Colors', icon: 'fas fa-palette', fields: COLORS_FIELDS },
-    { id: 'sounds', label: 'Sounds', icon: 'fas fa-volume-high', fields: SOUNDS_FIELDS },
+    { id: 'tokens', label: 'LA.settingsMenus.tab.tokens.label', icon: 'fas fa-cubes', fields: TOKENS_DISPLAY_FIELDS },
+    { id: 'tah', label: 'LA.settingsMenus.tab.tah.label', icon: 'fas fa-th-list', fields: TAH_FIELDS },
+    { id: 'colors', label: 'LA.settingsMenus.tab.colors.label', icon: 'fas fa-palette', fields: COLORS_FIELDS },
+    { id: 'sounds', label: 'LA.settingsMenus.tab.sounds.label', icon: 'fas fa-volume-high', fields: SOUNDS_FIELDS },
     {
         id: 'iso',
-        label: 'Isometric',
+        label: 'LA.settingsMenus.tab.iso.label',
         icon: 'fas fa-cube',
         fields: ISO_FIELDS,
         disabledReason: () =>
@@ -991,25 +1180,34 @@ const TAB_DEFS = [
             const hasGrapeJuiceIsometrics = !!game.modules.get('grape_juice-isometrics')?.active;
             if (hasIsometricPerspective || hasGrapeJuiceIsometrics)
                 return null;
-            return 'Install and enable "Isometric Perspective" or "Grape Juice Isometrics" to use these settings.';
+            return 'LA.settingsMenus.tab.iso.disabledReason';
         },
     },
+    {
+        id: 'mapModules',
+        label: 'LA.settingsMenus.tab.mapModules.label',
+        icon: 'fas fa-layer-group',
+        fields: [...THT_FIELDS, ...TMAC_FIELDS],
+        disabledReason: () => MAP_MODULE_IDS.some(id => game.modules.get(id)?.active)
+            ? null
+            : 'LA.settingsMenus.tab.mapModules.disabledReason',
+    },
     // Interface & tools
-    { id: 'battelog', label: 'Battle Log', icon: 'fas fa-flag-checkered', fields: BATTLE_LOG_FIELDS },
-    { id: 'tools', label: 'Tools & Extras', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
-    { id: 'control', label: 'Control', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
+    { id: 'battelog', label: 'LA.settingsMenus.tab.battelog.label', icon: 'fas fa-flag-checkered', fields: BATTLE_LOG_FIELDS },
+    { id: 'tools', label: 'LA.settingsMenus.tab.tools.label', icon: 'fas fa-toolbox', fields: TOOLS_FIELDS },
+    { id: 'control', label: 'LA.settingsMenus.tab.control.label', icon: 'fas fa-keyboard', fields: CONTROL_FIELDS },
     // Help & maintenance
-    { id: 'tutorials', label: 'Tutorial & Help', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
-    { id: 'performance', label: 'Performance', icon: 'fas fa-gauge-high', fields: PERFORMANCE_FIELDS },
-    { id: 'debug', label: 'Debug', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
+    { id: 'tutorials', label: 'LA.settingsMenus.tab.tutorials.label', icon: 'fas fa-graduation-cap', fields: TUTORIALS_FIELDS },
+    { id: 'performance', label: 'LA.settingsMenus.tab.performance.label', icon: 'fas fa-gauge-high', fields: PERFORMANCE_FIELDS },
+    { id: 'debug', label: 'LA.settingsMenus.tab.debug.label', icon: 'fas fa-bug', fields: DEBUG_FIELDS },
 ];
 
 const NAV_GROUPS = [
-    { label: 'Core', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'statuses'] },
-    { label: 'Canvas', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso', 'performance'] },
-    { label: 'Interface', icon: 'fas fa-window-maximize', tabs: ['tah', 'control', 'colors', 'sounds'] },
-    { label: 'Extras', icon: 'fas fa-star', tabs: ['battelog', 'tools'] },
-    { label: 'Help', icon: 'fas fa-circle-question', tabs: ['tutorials', 'debug'] },
+    { label: 'LA.settingsMenus.navGroup.core.label', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'statuses'] },
+    { label: 'LA.settingsMenus.navGroup.canvas.label', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso', 'mapModules', 'performance'] },
+    { label: 'LA.settingsMenus.navGroup.interface.label', icon: 'fas fa-window-maximize', tabs: ['tah', 'control', 'colors', 'sounds'] },
+    { label: 'LA.settingsMenus.navGroup.extras.label', icon: 'fas fa-star', tabs: ['battelog', 'tools'] },
+    { label: 'LA.settingsMenus.navGroup.help.label', icon: 'fas fa-circle-question', tabs: ['tutorials', 'debug'] },
 ];
 
 // Field opt-in: `requires: 'key'` or `['a','b']`, plus `requiresAll` for AND.
@@ -1034,7 +1232,7 @@ function _fieldByKey(key)
 
 function _requirementLabel(key)
 {
-    return _fieldByKey(key)?.label ?? game.settings.settings.get(`${MODULE_ID}.${key}`)?.name ?? key;
+    return localize(_fieldByKey(key)?.label ?? game.settings.settings.get(`${MODULE_ID}.${key}`)?.name ?? key);
 }
 
 // A dependency that is itself gated counts as unmet, so chains resolve.
@@ -1196,7 +1394,7 @@ function _buildItem(field)
             if (!mod?.active || mod.title !== field.requireForkTitle.title)
                 return null;
         }
-        return { type: 'section', label: field.label, hint: field.hint ?? '', isSection: true, collapsible: field.collapsible !== false, collapsed: !!field.collapsed, isSubsection: !!field.subsection };
+        return { type: 'section', label: localize(field.label), hint: localize(field.hint ?? ''), isSection: true, collapsible: field.collapsible !== false, collapsed: !!field.collapsed, isSubsection: !!field.subsection };
     }
     if (field.type === 'button')
     {
@@ -1209,16 +1407,21 @@ function _buildItem(field)
         }
         catch
         { /* setting not registered */ }
-        return { type: 'button', isButton: true, key: field.key, label: field.label, hint: field.hint ?? '', icon: field.icon ?? '', state, isLocked: !game.user.isGM && !field.clientAllowed };
+        return { type: 'button', isButton: true, key: field.key, label: localize(field.label), hint: localize(field.hint ?? ''), icon: field.icon ?? '', state, isLocked: !game.user.isGM && !field.clientAllowed };
     }
     if (field.type === 'table')
     {
         const table = field.getTable();
         const rows = table.rows.map(row => ({
             ...row,
-            cells: row.cells.map(cell => ({ ...cell, isLocked: cell.name ? _isLockedForUser(cell.name) : false }))
+            label: localize(row.label),
+            cells: row.cells.map(cell => ({
+                ...cell,
+                text: localize(cell.text),
+                isLocked: cell.name ? _isLockedForUser(cell.name) : false
+            }))
         }));
-        return { type: 'table', label: field.label, isTable: true, columns: table.columns, rows };
+        return { type: 'table', label: localize(field.label), isTable: true, columns: table.columns.map(localize), rows };
     }
     if (field.type === 'keybinding')
     {
@@ -1264,8 +1467,11 @@ function _buildItem(field)
     }
     if (field.type === 'moduleBoolean')
     {
-        const mod = game.modules.get(field.module);
-        if (!mod?.active)
+        if (!_extNamespaceActive(field.module))
+            return null;
+        // Absent means that build of the module does not have it, so there is nothing to shortcut to
+        const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
+        if (!setting)
             return null;
         let value = false;
         try
@@ -1273,21 +1479,81 @@ function _buildItem(field)
             value = !!game.settings.get(field.module, field.key);
         }
         catch
-        { /* setting not registered */ }
-        const setting = game.settings.settings.get(`${field.module}.${field.key}`) ?? {};
+        {
+            value = !!setting.default;
+        }
         return {
             key: `__ext.${field.module}.${field.key}`,
             type: 'boolean',
-            label: field.label ?? setting.name ?? field.key,
-            hint: field.hint ?? setting.hint ?? '',
+            label: externalLabel(field, setting),
+            hint: localize(field.hint ?? setting.hint ?? ''),
             value,
             isBoolean: true,
-            isLocked: !game.user.isGM
+            isLocked: setting.scope === 'world' && !game.user.isGM
+        };
+    }
+    if (field.type === 'moduleSlider')
+    {
+        if (!_extNamespaceActive(field.module))
+            return null;
+        const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
+        if (!setting)
+            return null;
+        let value = setting.default;
+        try
+        {
+            value = game.settings.get(field.module, field.key);
+        }
+        catch
+        { /* fall back to the default */ }
+        const range = setting.range ?? {};
+        return {
+            key: `__ext.${field.module}.${field.key}`,
+            type: 'slider',
+            label: externalLabel(field, setting),
+            hint: localize(field.hint ?? setting.hint ?? ''),
+            value,
+            isSlider: true,
+            sliderMin: field.min ?? range.min ?? 0,
+            sliderMax: field.max ?? range.max ?? 1,
+            sliderStep: field.step ?? range.step ?? 1,
+            isLocked: setting.scope === 'world' && !game.user.isGM
+        };
+    }
+    if (field.type === 'moduleColor')
+    {
+        if (!game.modules.get(field.module)?.active)
+            return null;
+        const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
+        if (!setting)
+            return null;
+        let value = setting.default;
+        try
+        {
+            value = game.settings.get(field.module, field.key);
+        }
+        catch
+        { /* fall back to the default */ }
+        // A ColorField hands back a Color object, and the picker needs a plain hex string
+        const hexRe = /^#[0-9a-fA-F]{6}$/;
+        if (typeof value !== 'string' || !hexRe.test(value))
+        {
+            const asText = (typeof value?.toString === 'function') ? value.toString() : null;
+            value = (asText && hexRe.test(asText)) ? asText : (setting.default ?? '#000000');
+        }
+        return {
+            key: `__ext.${field.module}.${field.key}`,
+            type: 'color',
+            label: externalLabel(field, setting),
+            hint: localize(field.hint ?? setting.hint ?? ''),
+            value,
+            isColor: true,
+            isLocked: setting.scope === 'world' && !game.user.isGM
         };
     }
     if (field.type === 'moduleSelect')
     {
-        if (!game.modules.get(field.module)?.active)
+        if (!_extNamespaceActive(field.module))
             return null;
         const setting = game.settings.settings.get(`${field.module}.${field.key}`);
         if (!setting)
@@ -1304,14 +1570,15 @@ function _buildItem(field)
         return {
             key: `__ext.${field.module}.${field.key}`,
             type: 'select',
-            label: field.label ?? setting.name ?? field.key,
-            hint: field.hint ?? setting.hint ?? '',
+            label: externalLabel(field, setting),
+            hint: localize(field.hint ?? setting.hint ?? ''),
             value,
             isSelect: true,
-            choices: Object.entries(setting.choices ?? {}).map(([choiceValue, choiceLabel]) => ({
+            // Core puts its choices on the DataField rather than on the setting config.
+            choices: Object.entries(setting.choices ?? setting.type?.choices ?? {}).map(([choiceValue, choiceLabel]) => ({
                 value: choiceValue,
                 label: game.i18n.localize(String(choiceLabel)),
-                selected: choiceValue === value,
+                selected: choiceValue === String(value),
             })),
             isLocked: setting.scope === 'world' && !game.user.isGM
         };
@@ -1342,7 +1609,7 @@ function _buildItem(field)
                         hint = '';
                     }
                 }
-                return { key: it.key, label: it.label, hint, value, preview: !!it.preview, isLocked: _isLockedForUser(it.key) };
+                return { key: it.key, label: localize(it.label), hint: localize(hint), value, preview: !!it.preview, isLocked: _isLockedForUser(it.key) };
             }),
         };
     }
@@ -1353,7 +1620,7 @@ function _buildItem(field)
             isCompactBooleans: true,
             items: (field.items ?? []).map((/** @type {any} */ it) => ({
                 key: `_sfx.${it.sub}`,
-                label: it.label,
+                label: localize(it.label),
                 value: _readStatusFx(it.sub) !== false,
                 preview: false,
                 isLocked: !game.user.isGM
@@ -1367,8 +1634,8 @@ function _buildItem(field)
         return {
             key: `_sfx.${field.sub}`,
             type: 'boolean',
-            label: field.label,
-            hint: field.hint ?? '',
+            label: localize(field.label),
+            hint: localize(field.hint ?? ''),
             value: _readStatusFx(field.sub, fallback) !== false,
             isBoolean: true,
             choices: [],
@@ -1384,7 +1651,7 @@ function _buildItem(field)
     {
         value = field.default;
     }
-    const setting = game.settings.settings.get(`${MODULE_ID}.${field.key}`) || {};
+    const setting = /** @type {any} */ (game.settings.settings.get(`${MODULE_ID}.${field.key}`) || {});
     if (field.type === 'color')
     {
         const hexRe = /^#[0-9a-fA-F]{6}$/;
@@ -1397,8 +1664,8 @@ function _buildItem(field)
     return {
         key: field.key,
         type: field.type,
-        label: field.label ?? setting.name ?? field.key,
-        hint: field.hint ?? setting.hint ?? '',
+        label: externalLabel(field, setting),
+        hint: localize(field.hint ?? setting.hint ?? ''),
         value,
         isBoolean: field.type === 'boolean',
         isNumber: field.type === 'number',
@@ -1416,11 +1683,11 @@ function _buildItem(field)
         {
             const raw = (typeof field.getChoices === 'function' ? field.getChoices() : field.choices);
             if (raw)
-                return raw.map(choice => ({ ...choice, selected: choice.selected ?? (choice.value === value) }));
+                return raw.map(choice => ({ ...choice, label: localize(choice.label), selected: choice.selected ?? (choice.value === value) }));
             if (setting.choices)
             {
                 return Object.entries(setting.choices).map(([choiceValue, choiceLabel]) => ({
-                    value: choiceValue, label: choiceLabel, selected: choiceValue === value,
+                    value: choiceValue, label: localize(choiceLabel), selected: choiceValue === value,
                 }));
             }
             return [];
@@ -1656,7 +1923,7 @@ function _groupSections(tabId, items)
     {
         if (!current)
         {
-            current = { id: `la-sec-${tabId}-general`, label: 'General', headerless: true, collapsible: false, collapsed: false, hint: '', items: [], subs: [], count: 0 };
+            current = { id: `la-sec-${tabId}-general`, label: localize('LA.settingsMenus.section.general.label'), headerless: true, collapsible: false, collapsed: false, hint: '', items: [], subs: [], count: 0 };
             sections.push(current);
         }
         return current;
@@ -1729,7 +1996,7 @@ export class LancerAutomationsConfig extends FormApplication
         const saved = _laConfigState;
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'lancer-automations-config',
-            title: 'Lancer Automations Configuration',
+            title: localize('LA.config.windowTitle'),
             template: TEMPLATE_PATH,
             width: saved?.width ?? 860,
             height: saved?.height ?? 820,
@@ -1755,11 +2022,11 @@ export class LancerAutomationsConfig extends FormApplication
             const sections = tab.sections;
             return {
                 id: tab.id,
-                label: tab.label,
+                label: localize(tab.label),
                 icon: tab.icon,
                 active: idx === Math.max(firstEnabledIdx, 0),
                 disabled: tab._disabled,
-                disabledReason: tab._disabledReason,
+                disabledReason: localize(tab._disabledReason),
                 sections,
                 settingCount: sections.reduce((sum, section) => sum + section.count, 0),
                 sectionCount: sections.filter(section => !section.headerless).length,
@@ -1770,13 +2037,13 @@ export class LancerAutomationsConfig extends FormApplication
             tabController.active = tabs.find(tab => tab.active)?.id ?? tabs[0]?.id;
         const grouped = new Set();
         const groups = NAV_GROUPS.map(group => ({
-            label: group.label,
+            label: localize(group.label),
             icon: group.icon,
             tabs: group.tabs.map(id => tabs.find(tab => tab.id === id)).filter(Boolean).map(tab => (grouped.add(tab.id), tab)),
         })).filter(group => group.tabs.length > 0);
         const leftover = tabs.filter(tab => !grouped.has(tab.id));
         if (leftover.length > 0)
-            groups.push({ label: 'Other', icon: 'fas fa-ellipsis', tabs: leftover });
+            groups.push({ label: localize('LA.settingsMenus.navGroup.other.label'), icon: 'fas fa-ellipsis', tabs: leftover });
         return { tabs, groups };
     }
 
@@ -1784,6 +2051,32 @@ export class LancerAutomationsConfig extends FormApplication
     {
         super.activateListeners(html);
         const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
+
+        // Measured on hover rather than on render, so it stays right through resizes and tab switches
+        const root = $html[0];
+        if (root)
+        {
+            root.addEventListener('pointerover', event =>
+            {
+                const label = event.target?.closest?.('.la-opt-label');
+                const text = label?.querySelector('.la-opt-label-text');
+                if (!text)
+                    return;
+                const overflow = Math.round(text.scrollWidth - label.clientWidth);
+                if (overflow <= 1)
+                    return;
+                label.style.setProperty('--la-pan', `-${overflow}px`);
+                label.classList.add('la-pans');
+            });
+
+            root.addEventListener('pointerout', event =>
+            {
+                const label = event.target?.closest?.('.la-opt-label');
+                if (label && !label.contains(event.relatedTarget))
+                    label.classList.remove('la-pans');
+            });
+        }
+
         const scroller = $html.find('.la-config-content')[0];
         if (_laConfigState?.scroll != null && scroller)
         {
@@ -1867,7 +2160,7 @@ export class LancerAutomationsConfig extends FormApplication
                     return;
                 if (protectedKeys.has(ev.code))
                 {
-                    ui.notifications.warn(`"${ev.code}" is reserved by Foundry and cannot be bound.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.keyReservedByFoundry', { key: ev.code }));
                     document.removeEventListener('keydown', handler, true);
                     onDone(null);
                     return;
@@ -1912,7 +2205,7 @@ export class LancerAutomationsConfig extends FormApplication
             const original = btn.outerHTML;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            placeholder.textContent = localize('LA.settingsMenus.pressKey');
             btn.replaceWith(placeholder);
             captureKey(async (binding) =>
             {
@@ -1961,7 +2254,7 @@ export class LancerAutomationsConfig extends FormApplication
                 return;
             const placeholder = document.createElement('span');
             placeholder.style.cssText = placeholderStyle;
-            placeholder.textContent = 'Press a key… (Esc to cancel)';
+            placeholder.textContent = localize('LA.settingsMenus.pressKey');
             const resetBtn = binds.querySelector('.la-kb-reset');
             binds.insertBefore(placeholder, resetBtn);
             btn.style.display = 'none';
@@ -2029,7 +2322,7 @@ export class LancerAutomationsConfig extends FormApplication
                     catch (error)
                     {
                         console.error(`lancer-automations | config button "${key}" failed:`, error);
-                        ui.notifications?.error(`"${matchedField.label}" failed, see the console.`);
+                        ui.notifications?.error(localizeFormat('LA.notify.configButtonFailed', { label: matchedField.label }));
                     }
                     finally
                     {
@@ -2369,7 +2662,7 @@ export class LancerAutomationsConfig extends FormApplication
                 continue;
             const moduleId = rest.slice(0, dot);
             const settingKey = rest.slice(dot + 1);
-            if (!game.modules.get(moduleId)?.active)
+            if (!_extNamespaceActive(moduleId))
                 continue;
             if (!_canWrite(moduleId, settingKey))
                 continue;
@@ -2377,7 +2670,7 @@ export class LancerAutomationsConfig extends FormApplication
             {
                 const targetSetting = game.settings.settings.get(`${moduleId}.${settingKey}`);
                 const raw = formData[formKey];
-                await game.settings.set(moduleId, settingKey, targetSetting?.type === Boolean ? !!raw : raw);
+                await game.settings.set(moduleId, settingKey, _coerceExtValue(targetSetting, raw));
             }
             catch (e)
             {
@@ -2391,7 +2684,7 @@ export class LancerAutomationsConfig extends FormApplication
                 const f = /** @type {any} */ (fRaw);
                 if (f.type !== 'moduleBoolean')
                     continue;
-                if (!game.modules.get(f.module)?.active)
+                if (!_extNamespaceActive(f.module))
                     continue;
                 const formKey = `__ext.${f.module}.${f.key}`;
                 if (formKey in formData)
@@ -2534,8 +2827,8 @@ export class LancerAutomationsConfig extends FormApplication
             return;
         this._needsReload = false;
         const reload = await Dialog.confirm({
-            title: 'Reload Required',
-            content: '<p>One or more changes require a reload to take effect. Reload now?</p>',
+            title: localize('LA.dialogTitle.reloadRequired'),
+            content: localize('LA.settingsMenus.content.oneOrMoreChangesRequireA'),
             yes: () => true,
             no: () => false,
             defaultYes: true,
@@ -2575,9 +2868,9 @@ export class LancerAutomationsConfig extends FormApplication
 export function registerSettingsMenus()
 {
     game.settings.registerMenu(MODULE_ID, 'lancerAutomationsConfigMenu', {
-        name: 'Lancer Automations Configuration',
-        label: 'Open Configuration',
-        hint: 'Configuration window for all module settings.',
+        name: 'LA.settings.lancerAutomationsConfigMenu.name',
+        label: 'LA.settings.lancerAutomationsConfigMenu.label',
+        hint: 'LA.settings.lancerAutomationsConfigMenu.hint',
         icon: 'fas fa-sliders-h',
         type: LancerAutomationsConfig,
         restricted: false,

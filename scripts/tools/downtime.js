@@ -1,4 +1,5 @@
 import { DOWNTIME_TYPE, DOWNTIME_PACK, importDowntimeActionsJson, openDowntimeImportDialog } from './downtime-item.js';
+import { localize, localizeFormat } from './string-utils.js';
 
 let unionDate = () =>
 {
@@ -413,7 +414,7 @@ export async function executeDowntime()
 
     if (!pilots.length)
     {
-        ui.notifications.warn("Downtime: no pilot available.");
+        ui.notifications.warn(localize('LA.notify.downtimeNoPilotAvailable'));
         return;
     }
 
@@ -435,11 +436,11 @@ export async function executeDowntime()
     </div>`;
 
     new Dialog({
-        title: "Downtime: Pilot Selection",
+        title: localize('LA.dialogTitle.downtimePilotSelection'),
         content: dialogContent,
         buttons: {
             submit: {
-                label: "Proceed",
+                label: localize("LA.downtime.proceed"),
                 // @ts-ignore
                 callback: (html) =>
                 {
@@ -477,9 +478,9 @@ export async function executeDowntime()
                         <div style="margin-bottom:1rem; border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
                             <p style="text-align: right; font-style:italic;">#UAD.OP-DATA</p>
                             <label><b>Mission/Campaign Name</b></label>
-                            <input style="display:inline; width:100%" placeholder="Awaiting operation name..." type="text" id="campaign"></input>
+                            <input style="display:inline; width:100%" placeholder="${localize('LA.downtime.ph.campaign')}" type="text" id="campaign"></input>
                             <label><b>Downtime Location</b></label>
-                            <input type="text" style="display:inline; width:100%" id="location" placeholder="Quadrant, Line, Sector, Planet..."></location>
+                            <input type="text" style="display:inline; width:100%" id="location" placeholder="${localize('LA.downtime.ph.location')}"></location>
                             </div>
                         <h2 class="lancer-border-primary" style="color:var(--la-ink);"><img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/downtime.svg">Downtime Activity</h2>
                         <div style="margin-bottom:1rem; border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem; margin-bottom:1rem;">
@@ -489,7 +490,7 @@ export async function executeDowntime()
                                 <div id="activityDescription" style="padding: 0.75rem; margin-bottom: 1rem; background-color: rgba(95, 158, 160, 0.2); border-left: 3px solid var(--primary-color, fuschia); font-style: italic; white-space: pre-line;"></div>
                                 <h3 class="lancer-border-primary" style="text-align: right; margin-bottom:1rem; border-bottom: none;">Downtime Objective<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/deployable.svg"></h3>
                                 <p style="text-align: right; font-style:italic;">Describe what ${pilotData.name} is trying to achieve</p>
-                                <textarea placeholder="Brief description of aim or goal of downtime activity" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="objective"></textarea>
+                                <textarea placeholder="${localize('LA.downtime.ph.aim')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="objective"></textarea>
                                 <h3 class="lancer-border-primary" style="text-align: right; margin-bottom:1rem; border-bottom: none;">Apply your skills<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/skill.svg"></h3>
                                 <p style="text-align: right; font-style:italic;">Choose a relevant trigger for downtime activity</p>
                                 <select id='triggers' style="width:100%">${pilotSkillsHtml}</select>
@@ -510,16 +511,16 @@ export async function executeDowntime()
                                     <h3 style="text-align: right; border-bottom:none;">Probability Overrides<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/tech_quick.svg"></h3>
                                     <p><sub style="text-align: right;">For Administrative use only: leave blank unless otherwise instructed</sub></p>
                                     <div style="text-align: right;">
-                                        <label for="flat_mod">Flat Modifier Value: </label><input id="flatMod" style="width:60px;" placeholder="Any Int" name="flat_mod" type="number" min="-20" max="20">
-                                        <textarea placeholder="Precision circumstantial modification coefficients. Add notes for ingestion by Evaluatory COMP/CON." style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="flatOverrideNote"></textarea>
+                                        <label for="flat_mod">Flat Modifier Value: </label><input id="flatMod" style="width:60px;" placeholder="${localize('LA.downtime.ph.anyInt')}" name="flat_mod" type="number" min="-20" max="20">
+                                        <textarea placeholder="${localize('LA.downtime.ph.coefficients')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="flatOverrideNote"></textarea>
                                         <p>Accuracy/Difficulty Modifier</p>
                                         <button style="width:45px; height: 45px;" id="plusAcc"><img style="height:35px; border: none; top:.25rem; position:relative" src="systems/lancer/assets/icons/accuracy.svg"></button>
                                         <button style="width:45px; height: 45px;" id="plusDiff"><img style="height:35px; border: none; top:.25rem; position:relative" src="systems/lancer/assets/icons/difficulty.svg"></button>
                                         <input type="number" name="modifier" id="modifierAcc" value=0 style="height:45px;margin-left:1rem;width:60px; position:relative; top:-10px;"></input><br/>
-                                        <textarea placeholder="Precision circumstantial modification coefficients, adjusted for causal free radicals. Add notes for ingestion by Evaluatory COMP/CON." style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="modifierNote"></textarea>
+                                        <textarea placeholder="${localize('LA.downtime.ph.coefficientsAdjusted')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="modifierNote"></textarea>
                                         <p style="text-align:center; padding-top:.5rem;"> --- OR --- </p>
                                         <label for="default_override">Static Override Value: </label><input id="staticOverride" style="width:60px;" name="default_override" placeholder="1-100" type="number" min="1" max="100">
-                                        <textarea placeholder="Full override, bypasses Probability matrices. Precognitive bandwidth may exceed administrative NHP allotment. Use sparingly. Add notes for ingestion by Evaluatory COMP/CON." style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
+                                        <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -572,11 +573,11 @@ export async function executeDowntime()
                       </script>`;
 
                     new Dialog({
-                        title: "Downtime: Objective and Activity",
+                        title: localize('LA.dialogTitle.downtimeObjectiveAndActivity'),
                         content: dialogContent,
                         buttons: {
                             Submit: {
-                                label: "Submit Downtime Request",
+                                label: localize("LA.downtime.submitRequest"),
                                 callback: async (activityHtml) =>
                                 {
                                     let selectedTrigger = /** @type {HTMLInputElement} */ (activityHtml.find("#triggers")[0]).value;
@@ -595,7 +596,7 @@ export async function executeDowntime()
 
                                     if (manualRollEnabled && !manualRollValue)
                                     {
-                                        ui.notifications.warn("Manual Roll Mode is enabled but no value was entered. Please enter a dice result or disable Manual Roll Mode.");
+                                        ui.notifications.warn(localize('LA.notify.manualRollModeIsEnabledButNo'));
                                         return;
                                     }
 
@@ -724,11 +725,11 @@ export async function executeDowntime()
                                             <h3 class="lancer-border-primary" style="color:#1a1a1a;">Downtime Activity Complete.</h3>
                                             <div style="margin-bottom:1rem">
                                                 <p><i>Record any resultant outcomes or consequences, if applicable.</i></p>
-                                                <textarea placeholder="A brief summary of results, general analysis of success or failure, and potential next steps to continue on trajectory towards any goals or project completions" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" id="pilotEvaluate"></textarea>
+                                                <textarea placeholder="${localize('LA.downtime.ph.summary')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" id="pilotEvaluate"></textarea>
                                             </div>
                                             <p style="text-align:center; padding-top:.5rem;"> --- OR --- </p>
                                             <label for="default_override">Static Override Value: </label><input id="staticOverride" style="width:60px;" name="default_override" placeholder="1-100" type="number" min="1" max="100">
-                                            <textarea placeholder="Full override, bypasses Probability matrices. Precognitive bandwidth may exceed administrative NHP allotment. Use sparingly. Add notes for ingestion by Evaluatory COMP/CON." style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
+                                            <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
                                         </div>
                                     </div>
                                 `;
@@ -787,9 +788,9 @@ export async function executeDowntime()
                                             payload: { pilotName: pilotData.name, summaryContent: dialogContent, journalTemplate, requestingUserId: game.user.id }
                                         });
                                         new Dialog({
-                                            title: "Downtime Submitted",
-                                            content: `<div class="lancer-dialog-header"><div class="lancer-dialog-title">DOWNTIME SUBMITTED</div><div class="lancer-dialog-subtitle">${pilotData.name}</div></div><p style="padding:0.5rem 0.25rem;">Your downtime request has been sent to the GM for review. You'll receive a link to the log once it's filed.</p>`,
-                                            buttons: { ok: { label: "OK" } },
+                                            title: localize('LA.dialogTitle.downtimeSubmitted'),
+                                            content: `<div class="lancer-dialog-header"><div class="lancer-dialog-title">${localize('LA.downtime.submittedTitle')}</div><div class="lancer-dialog-subtitle">${pilotData.name}</div></div><p style="padding:0.5rem 0.25rem;">${localize('LA.downtime.submittedBody')}</p>`,
+                                            buttons: { ok: { label: localize("LA.common.ok") } },
                                             default: "ok"
                                         }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
                                     }
@@ -807,11 +808,11 @@ export async function executeDowntime()
 export function openDowntimeSummary(pilotName, summaryContent, journalTemplate, requestingUserId = null)
 {
     new Dialog({
-        title: "Downtime: Summary",
+        title: localize('LA.dialogTitle.downtimeSummary'),
         content: summaryContent,
         buttons: {
             submit: {
-                label: "Submit and Close",
+                label: localize("LA.downtime.submitAndClose"),
                 callback: async (summaryHtml) =>
                 {
                     const pilotEvaluate = /** @type {HTMLInputElement} */ (summaryHtml.find("#pilotEvaluate")[0])?.value ?? '';
@@ -836,7 +837,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
         }
         catch (error)
         {
-            ui.notifications.error(`Could not create "${journalFolderName}" folder. ${error}`);
+            ui.notifications.error(localizeFormat('LA.notify.couldNotCreateFolder', { folder: journalFolderName, error }));
             return;
         }
     }
@@ -851,7 +852,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
         }
         catch (error)
         {
-            ui.notifications.error(`Error creating Downtime Journal: ${error}`);
+            ui.notifications.error(localizeFormat('LA.notify.downtimeJournalFailed', { error }));
             return;
         }
     }
@@ -865,7 +866,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
         recipients.add(requestingUserId);
     await ChatMessage.create({
         speaker: { alias: pilotName },
-        content: `<p><b>Downtime Report Filed</b></p><p>@UUID[${page.uuid}]{${pageName}}</p>`,
+        content: `<p><b>${localize('LA.downtime.reportFiled')}</b></p><p>@UUID[${page.uuid}]{${pageName}}</p>`,
         whisper: [...recipients]
     });
 
@@ -883,9 +884,9 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
 export function showDowntimeJournalPopup(pageUuid, pageName)
 {
     const dialog = new Dialog({
-        title: "Downtime Filed",
+        title: localize('LA.dialogTitle.downtimeFiled'),
         content: `<div class="lancer-dialog-header"><div class="lancer-dialog-title">DOWNTIME FILED</div></div><p style="padding:0.5rem 0.25rem;">Your downtime report has been logged.</p><p style="padding:0.25rem;"><a class="la-dt-journal-link" style="cursor:pointer;font-weight:bold;">${pageName}</a></p>`,
-        buttons: { close: { label: "Close" } },
+        buttons: { close: { label: localize("LA.common.close") } },
         default: "close",
         render: (html) =>
         {

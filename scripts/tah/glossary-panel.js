@@ -3,6 +3,7 @@
 import { playUiSound } from './sound.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 import { HudPanel } from './hud-panel.js';
+import { localize } from '../tools/string-utils.js';
 
 /** Pull every visible scan journal entry. */
 function _collectVisibleScans()
@@ -43,7 +44,7 @@ export class GlossaryPanel extends HudPanel
         const panel = $(`<div class="la-hud-panel la-hud-glossary-panel"></div>`);
         panel.append(`<div class="la-hud-col-label">Glossary &middot; Scanned Units</div>`);
 
-        const searchWrap = $(`<div class="la-hud-panel-search"><input type="text" placeholder="Search by name…"></div>`);
+        const searchWrap = $(`<div class="la-hud-panel-search"><input type="text" placeholder="${localize('LA.common.searchByName')}"></div>`);
         const search = searchWrap.find('input');
         panel.append(searchWrap);
 

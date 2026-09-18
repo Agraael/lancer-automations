@@ -2,6 +2,7 @@
 
 import { startChoiceCard, startVoteCard } from "./network.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { isWhiteSvgIcon } from "./cards.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
@@ -21,7 +22,7 @@ export async function openThrowMenu(actor)
 
     if (!activeActor)
     {
-        ui.notifications.warn("No actor found. Select a token or provide an actor.");
+        ui.notifications.warn(localize('LA.notify.noActorFoundSelectATokenOr'));
         return;
     }
 
@@ -49,7 +50,7 @@ export async function openThrowMenu(actor)
 
     if (throwWeapons.length === 0)
     {
-        ui.notifications.warn(`No throwable weapons found for ${activeActor.name}.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noThrowableWeapons', { name: activeActor.name }));
         return;
     }
 
@@ -65,13 +66,13 @@ export async function openThrowMenu(actor)
 
     if (available.length === 0)
     {
-        ui.notifications.warn(`All throwable weapons for ${activeActor.name} are unavailable.`);
+        ui.notifications.warn(localizeFormat('LA.notify.throwableUnavailable', { name: activeActor.name }));
         return;
     }
 
     const weapon = await pickItem(available, {
-        title: "THROW WEAPON",
-        description: "Select a throwable weapon to attack with.",
+        title: localize('LA.dialogTitle.throwWeapon'),
+        description: localize('LA.choiceCard.selectAThrowableWeaponToAttack'),
         icon: "cci cci-weapon-range",
         relatedToken: token,
         formatText: (weapon) =>
@@ -122,7 +123,7 @@ export async function revertMovement(token, destination = null)
 
     if (!token.document.isOwner)
     {
-        ui.notifications.warn(`You do not own ${token.name} and cannot revert their movement.`);
+        ui.notifications.warn(localizeFormat('LA.notify.cannotRevertNotOwner', { name: token.name }));
         return false;
     }
 
@@ -158,7 +159,7 @@ export async function revertMovement(token, destination = null)
         return true;
     }
 
-    ui.notifications.info(`${token.name} has no movement history to revert.`);
+    ui.notifications.info(localizeFormat('LA.notify.noMovementHistory', { name: token.name }));
     return true;
 }
 
@@ -193,7 +194,7 @@ export async function clearMovementHistory(tokens, revert = false)
         lancerAutomations?.api?.clearMoveData?.(token.document.id);
     }
     const tokenNames = tokenList.map(token => token.name).join(", ");
-    ui.notifications.info(`Movement history cleared for: ${tokenNames}.`);
+    ui.notifications.info(localizeFormat('LA.notify.movementHistoryCleared', { names: tokenNames }));
 }
 
 export async function resetMovementCap(token)
@@ -212,7 +213,7 @@ export async function openChoiceMenu()
     const activeUsers = game.users.filter(user => user.active);
     if (activeUsers.length === 0)
     {
-        ui.notifications.warn("No active users found.");
+        ui.notifications.warn(localize('LA.notify.noActiveUsersFound'));
         return;
     }
 
@@ -259,7 +260,7 @@ export async function openChoiceMenu()
         const choicesHtml = choicesInfo.map((choice, idx) => `
             <div class="form-group la-choice-row" data-idx="${idx}" style="display: flex; gap: 5px; margin-bottom: 2px; align-items: center;">
                 <span style="font-size: 0.9em; font-weight: bold; width: 15px; text-align: right;">${idx + 1}.</span>
-                <input type="text" class="la-choice-text" value="${choice.text || ''}" placeholder="Option Text" style="flex: 1; height: 24px; font-size: 0.9em;" />
+                <input type="text" class="la-choice-text" value="${choice.text || ''}" placeholder="${localize('LA.choiceCard.optionText')}" style="flex: 1; height: 24px; font-size: 0.9em;" />
                 <button type="button" class="la-choice-remove" style="flex: 0 0 24px; height: 24px; padding: 0; background: none; border: none; color: #c33; cursor: pointer;"><i class="fas fa-times"></i></button>
             </div>
         `).join('');
@@ -342,12 +343,12 @@ export async function openChoiceMenu()
     `;
 
     const dialogObj = new Dialog({
-        title: "Choice Configuration",
+        title: localize('LA.dialogTitle.choiceConfiguration'),
         content: htmlContent,
         buttons: {
             send: {
                 icon: '<i class="fas fa-paper-plane"></i>',
-                label: "Send",
+                label: localize("LA.common.send"),
                 callback: async (html) =>
                 {
                     const finalTitle = String(html.find('.la-choice-title').val() || "Choice");
@@ -355,12 +356,12 @@ export async function openChoiceMenu()
 
                     if (selectedUserIds.length === 0)
                     {
-                        ui.notifications.warn("No recipients selected.");
+                        ui.notifications.warn(localize('LA.notify.noRecipientsSelected'));
                         return;
                     }
                     if (choicesInfo.length === 0)
                     {
-                        ui.notifications.warn("No options provided.");
+                        ui.notifications.warn(localize('LA.notify.noOptionsProvided'));
                         return;
                     }
 
@@ -428,10 +429,10 @@ export async function openChoiceMenu()
                         }));
                     }
 
-                    ui.notifications.info(`Sent card to ${selectedUserIds.length} users.`);
+                    ui.notifications.info(localizeFormat('LA.notify.sentCardToUsers', { count: selectedUserIds.length }));
                 }
             },
-            cancel: { label: "Cancel" }
+            cancel: { label: localize("LA.common.cancel") }
         },
         default: "send",
         render: (html) =>
@@ -495,12 +496,12 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
         buttons: {
             confirm: {
                 icon: '<i class="fas fa-check"></i>',
-                label: "Confirm",
+                label: localize("LA.common.confirm"),
                 callback: () => resolve(Array.from(selectedIndices).map(idx => choices[idx].item))
             },
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
-                label: "Cancel",
+                label: localize("LA.common.cancel"),
                 callback: () => resolve(null)
             }
         },
@@ -733,7 +734,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
 
     if (allItems.length === 0)
     {
-        ui.notifications.warn(`No ${isMech ? 'mounts' : 'weapons'} found.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noMountsOrWeapons', { kind: isMech ? 'mounts' : 'weapons' }));
         return [];
     }
 
@@ -853,7 +854,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
         _buildChoiceDialog(choices, {
             title: title || `Choose ${isMech ? 'Mount' : 'Weapon'}`,
             titleHtml: title || `CHOOSE ${isMech ? 'MOUNT' : 'WEAPON'}`,
-            subtitle: `Select up to ${numberToChoose} ${isMech ? 'mount(s)' : 'weapon(s)'}.`,
+            subtitle: localizeFormat('LA.choiceCard.selectUpToKind', { count: numberToChoose, kind: isMech ? 'mount(s)' : 'weapon(s)' }),
             hint: 'Right-click a row for weapon details',
             numberToChoose,
             selectionValidator,
@@ -987,7 +988,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
 
     if (allItems.length === 0)
     {
-        ui.notifications.warn(`No systems found.`);
+        ui.notifications.warn(localize('LA.notify.noSystemsFound'));
         return [];
     }
 
@@ -1041,7 +1042,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
         _buildChoiceDialog(choices, {
             title: title || 'Choose System',
             titleHtml: title || 'CHOOSE SYSTEM',
-            subtitle: `Select up to ${numberToChoose} system(s).`,
+            subtitle: localizeFormat('LA.choiceCard.selectUpToSystems', { count: numberToChoose }),
             hint: 'Right-click a row for system details',
             numberToChoose,
             selectionValidator,
@@ -1114,7 +1115,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
 
     if (allItems.length === 0)
     {
-        ui.notifications.warn("No traits found.");
+        ui.notifications.warn(localize('LA.notify.noTraitsFound'));
         return [];
     }
 
@@ -1156,7 +1157,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
         _buildChoiceDialog(choices, {
             title: title || 'Choose Trait',
             titleHtml: title || 'CHOOSE TRAIT',
-            subtitle: `Select up to ${numberToChoose} trait(s).`,
+            subtitle: localizeFormat('LA.choiceCard.selectUpToTraits', { count: numberToChoose }),
             hint: 'Right-click a row for trait details',
             numberToChoose,
             selectionValidator,
@@ -1262,12 +1263,12 @@ export async function chooseInvade(actorOrToken)
         let selectedIdx = -1;
 
         const dialog = new Dialog({
-            title: "Choose Invade",
+            title: localize('LA.dialogTitle.chooseInvade'),
             content,
             buttons: {
                 confirm: {
                     icon: '<i class="fas fa-check"></i>',
-                    label: "Confirm",
+                    label: localize("LA.common.confirm"),
                     callback: () =>
                     {
                         if (selectedIdx >= 0)
@@ -1278,7 +1279,7 @@ export async function chooseInvade(actorOrToken)
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel",
+                    label: localize("LA.common.cancel"),
                     callback: () => resolve(null)
                 }
             },
@@ -1344,7 +1345,7 @@ export async function executeInvade(actorOrToken, bypassChoice = null)
     const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
     if (!TechAttackFlow)
     {
-        ui.notifications.error("TechAttackFlow not found in game.lancer.flows.");
+        ui.notifications.error(localize('LA.notify.techattackflowNotFoundInGameLancerFlows'));
         return;
     }
 

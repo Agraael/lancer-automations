@@ -107,8 +107,8 @@ function writer()
 export function initBlindedVision()
 {
     game.settings.register(MODULE_ID, SETTING_BLINDED_VISION, {
-        name: 'Blinded reduces vision',
-        hint: 'While Blinded, a token sees only one space.',
+        name: 'LA.settings.blindedSetsVision.name',
+        hint: 'LA.settings.blindedSetsVision.hint',
         scope: 'world',
         config: false,
         type: Boolean,

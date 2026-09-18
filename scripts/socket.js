@@ -12,8 +12,10 @@ import {
 import { onRemotePresence, onRemotePresenceClear } from './interactive/presence.js';
 import { onRemoteSightlines, onRemoteSightlinesClear } from './vision/sightlines.js';
 import { onUplinkRollOpen, onUplinkRollSnapshot, onUplinkRollClose } from './uplink/live-rolls.js';
+import { localize, localizeFormat } from './tools/string-utils.js';
 import { handleRemoteFocus } from './tools/auto-focus.js';
 import { floatTokenText } from './tools/float-text.js';
+import { receiveDeferredResistanceConsumption } from './bonuses/genericBonuses.js';
 import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } from './bonuses/flagged-effects.js';
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
@@ -216,6 +218,8 @@ const HANDLERS = {
         if (token)
             floatTokenText(token, text, fill);
     },
+
+    deferResistanceConsumption: receiveDeferredResistanceConsumption,
 
     showReactionPopup: async ({ targetUserId, triggerType, reactions }) =>
     {
@@ -511,7 +515,7 @@ const HANDLERS = {
         const target = canvas.tokens.get(payload.targetId);
         if (!target)
             return;
-        ui.notifications.info(`${payload.requestingUserName} requested a system scan of ${payload.targetName}.`);
+        ui.notifications.info(localizeFormat('LA.notify.scanRequestedBy', { user: payload.requestingUserName, target: payload.targetName }));
         await showSystemScanDialog([target]);
     },
 
@@ -523,7 +527,7 @@ const HANDLERS = {
         if (!target)
             return;
         new Dialog({
-            title: 'Journal Entry Request',
+            title: localize('LA.dialogTitle.journalEntryRequest'),
             content: `
                 <div class="lancer-dialog-header">
                     <h2 class="lancer-dialog-title">Journal Entry Request</h2>
@@ -536,25 +540,25 @@ const HANDLERS = {
                     </div>
                     <div class="form-group">
                         <label style="font-weight: bold; margin-bottom: 8px; display: block;">Custom Journal Name (optional):</label>
-                        <input type="text" id="custom-journal-name" name="custom-journal-name" value="${payload.customName || ''}" placeholder="Leave empty for auto-generated name" style="width: 100%; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px;" />
+                        <input type="text" id="custom-journal-name" name="custom-journal-name" value="${payload.customName || ''}" placeholder="${localize('LA.socket.journalNamePlaceholder')}" style="width: 100%; padding: 8px; font-size: 14px; border: 2px solid #999; border-radius: 4px;" />
                     </div>
                 </form>
             `,
             buttons: {
                 yes: {
                     icon: '<i class="fas fa-check"></i>',
-                    label: 'Create Journal Entry',
+                    label: localize('LA.socket.createJournalEntry'),
                     callback: async (html) =>
                     {
                         const customName = String(/** @type {any} */ (html).find('[name="custom-journal-name"]').val()).trim();
                         await performSystemScan(target, true, customName, payload.ownership ?? null);
-                        ui.notifications.info(`Journal entry created for ${payload.targetName}`);
+                        ui.notifications.info(localizeFormat('LA.notify.journalCreatedFor', { target: payload.targetName }));
                     },
                 },
                 no: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: 'Decline',
-                    callback: () => ui.notifications.info('Journal entry request declined'),
+                    label: localize('LA.common.decline'),
+                    callback: () => ui.notifications.info(localize('LA.notify.journalEntryRequestDeclined')),
                 },
             },
             default: 'yes',

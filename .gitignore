@@ -21,6 +21,7 @@ tools/*
 
 .vtt_ignore
 release-diff.sh
+settings_dump.json
 
 
 extra/package_lcp.ps1

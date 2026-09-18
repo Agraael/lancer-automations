@@ -1,5 +1,6 @@
 import { isForceDebugMovement } from "./keybindings.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize } from "../tools/string-utils.js";
 import { getLAFlag } from "../tools/flag-utils.js";
 import { getOriginalMovePath, trimPathToPosition } from "./path-replay.js";
 import {
@@ -227,7 +228,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             {
                 await startChoiceCard({
                     mode: "or",
-                    title: "MOVEMENT REROUTED",
+                    title: localize('LA.dialogTitle.movementRerouted'),
                     description: reasonText,
                     item,
                     originToken,

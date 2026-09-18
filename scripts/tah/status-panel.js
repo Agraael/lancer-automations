@@ -11,6 +11,7 @@ import { playUiSound } from './sound.js';
 import { tahScale, laHudRenderIcon } from './item-helpers.js';
 import { HudPanel } from './hud-panel.js';
 import { openCursorMenu } from './cursor-menu.js';
+import { localize } from '../tools/string-utils.js';
 
 function getBonusDetailStr(/** @type {any} */ bonus)
 {
@@ -43,8 +44,8 @@ export async function confirmPermanentRemoval(label, effects)
     return await openCursorMenu({
         head: `${label} is permanent`,
         rows: [
-            { value: true, label: 'Remove', glyph: '✕', cls: 'la-menu-popup-danger' },
-            { value: false, label: 'Keep' },
+            { value: true, label: localize('LA.common.remove'), glyph: '✕', cls: 'la-menu-popup-danger' },
+            { value: false, label: localize('LA.common.keep') },
         ],
     }) === true;
 }
@@ -298,7 +299,7 @@ export class StatusPanel extends HudPanel
             return tooltipEl;
         };
 
-        const searchBar =$(`<input type="text" class="la-status-search" placeholder="Search statuses…">`);
+        const searchBar =$(`<input type="text" class="la-status-search" placeholder="${localize('LA.tokenHud.searchStatuses')}">`);
         const searchWrap = $(`<div class="la-status-search-wrap"><i class="fas fa-search la-status-search-icon"></i></div>`);
         searchWrap.append(searchBar);
 
@@ -311,7 +312,7 @@ export class StatusPanel extends HudPanel
             _lastDurationLabel = String($(this).val());
         });
         const searchRow = $(`<div class="la-status-search-row"></div>`);
-        const helpTip = $(`<i class="fas fa-circle-question la-status-help" data-tooltip="Click: apply or add a stack<br>Right-click: remove or reduce<br>Ctrl+click: favorite<br>Hover: description"></i>`);
+        const helpTip = $(`<i class="fas fa-circle-question la-status-help" data-tooltip="${localize('LA.tokenHud.statusHelp')}"></i>`);
         searchRow.append(searchWrap, durTool, helpTip);
         const refreshDurMarks = () =>
         {

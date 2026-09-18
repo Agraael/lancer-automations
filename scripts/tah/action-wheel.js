@@ -8,6 +8,7 @@ import { lastCursor } from './cursor-menu.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 
+import { localize } from '../tools/string-utils.js';
 let _openToken = null;
 let _refreshTimer = null;
 let _page = 1;
@@ -112,7 +113,7 @@ export async function toggleActionWheel()
     }
     if (!getModuleSetting('tahEnabled'))
     {
-        ui.notifications.info('Enable the Token Action HUD to use the action wheel.');
+        ui.notifications.info(localize('LA.notify.enableTheTokenActionHudToUse'));
         return;
     }
     const token = canvas.tokens?.controlled?.[0] ?? null;
@@ -130,7 +131,7 @@ export async function toggleActionWheel()
     const secondPage = hud.getFavorites(2) ?? [];
     if (!firstPage.length && !secondPage.length)
     {
-        ui.notifications.info('No favorite actions yet. Mark actions with Ctrl+Right-click in the Token Action HUD.');
+        ui.notifications.info(localize('LA.notify.noFavoriteActionsYetMarkActionsWith'));
         return;
     }
     _pageCount = secondPage.length ? 2 : 1;
@@ -185,8 +186,8 @@ Hooks.on('deleteToken', (tokenDoc) =>
 Hooks.once('init', () =>
 {
     game.keybindings.register(MODULE_ID, 'actionWheel', {
-        name: 'Action Wheel',
-        hint: 'Open a radial wheel of your favorite TAH actions on the selected token.',
+        name: 'LA.keybindings.actionWheel.name',
+        hint: 'LA.keybindings.actionWheel.hint',
         editable: [{ key: 'KeyF' }],
         onDown: () =>
         {

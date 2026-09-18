@@ -97,6 +97,30 @@ await api.addActorFlags(mineActor, {
 
 </details>
 
+<details id="getLAFlag">
+<summary><b><code>getLAFlag</code></b> → <code>any</code><br><b><code>setLAFlag</code></b> → <code>Promise</code><br><b><code>unsetLAFlag</code></b> → <code>Promise</code><br><b><code>getLAFlags</code></b> → <code>Object</code></summary>
+
+<br>
+
+```js
+api.getLAFlag(doc, key, fallback?)
+await api.setLAFlag(doc, key, value)
+await api.unsetLAFlag(doc, key)
+api.getLAFlags(source)
+```
+
+**Params:** <kbd>doc</kbd> `Document` · <kbd>key</kbd> `string` flag key, without the namespace · <kbd>fallback</kbd> `any` returned when the flag is unset · <kbd>value</kbd> `any` · <kbd>source</kbd> `Object` anything carrying a `flags` bag
+
+Raw access to the `lancer-automations` flag namespace, the same helpers the module uses internally. All four are safe on a missing document and return `undefined` instead of throwing. `getLAFlags` reads the whole bag off plain data, for hook payloads and source objects that have no `getFlag`.
+
+**Example:**
+```js
+const history = api.getLAFlag(token.document, 'moveHistory', []);
+await api.setLAFlag(token.document, 'isDead', true);
+```
+
+</details>
+
 ---
 
 ## Gates

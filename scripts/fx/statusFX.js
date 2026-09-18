@@ -8,6 +8,7 @@ import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localize } from '../tools/string-utils.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
@@ -33,8 +34,20 @@ const FX_DEFAULTS = {
     fx_falling:     true,
     fx_dazed:       true,
     fx_stunned:     true,
+    fx_impaired:    true,
+    fx_vulnerable:  true,
+    fx_lockOn:      true,
+    fx_aided:       true,
+    fx_resistAll:   true,
+    fx_phasing:     true,
+    fx_overheated:  true,
+    fx_reactorMeltdown: true,
     fx_shredded:    true,
+    fx_prone:       true,
     fx_slowed:      true,
+    fx_bolstered:   true,
+    fx_shutDown:    true,
+    fx_disengage:   true,
     fx_throttled:   true,
     fx_immobilized:   true,
     fx_blinded:     true,
@@ -53,6 +66,15 @@ const FX_DEFAULTS = {
     // Damage-type impacts on the target
     damageImpactFX:   true,
 };
+
+// One ordered list feeds both the config window and the settings menu, so a new key cannot be missed on one.
+export const STATUS_FX_KEYS = [
+    'dangerZone', 'burn', 'overshield', 'cascading', 'invisible', 'hidden', 'brace', 'jammed',
+    'intangible', 'infection', 'exposed', 'falling', 'dazed', 'stunned', 'impaired', 'vulnerable',
+    'lockOn', 'aided', 'resistAll', 'phasing', 'overheated', 'reactorMeltdown', 'shredded', 'prone',
+    'slowed', 'bolstered', 'shutDown', 'disengage', 'throttled', 'immobilized', 'blinded', 'flying',
+    'corePower',
+];
 
 function getConfig()
 {
@@ -130,7 +152,7 @@ export class StatusFXConfig extends FormApplication
     {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: 'la-statusfx-config',
-            title: 'Lancer Automations — Status FX Configuration',
+            title: localize('LA.statusFx.windowTitle'),
             template: `modules/${MODULE_ID}/templates/statusfx-config.html`,
             width: 500,
             closeOnSubmit: true,
@@ -148,35 +170,17 @@ export class StatusFXConfig extends FormApplication
             additionalStatuses,
             actionFX: config.actionFX !== false,
             hasWeaponFX,
-            fxEffects: [
-                { key: 'dangerZone',  label: 'Danger Zone Glow',   enabled: config.fx_dangerZone },
-                { key: 'burn',        label: 'Burn Glow',           enabled: config.fx_burn },
-                { key: 'overshield',  label: 'Overshield Glow',     enabled: config.fx_overshield },
-                { key: 'cascading',   label: 'Cascading Effect',    enabled: config.fx_cascading },
-                { key: 'invisible',   label: 'Invisible Effect',    enabled: config.fx_invisible },
-                { key: 'hidden',      label: 'Hidden Effect',       enabled: config.fx_hidden },
-                { key: 'brace',       label: 'Brace Shield Effect', enabled: config.fx_brace },
-                { key: 'jammed',      label: 'Jammed Effect',       enabled: config.fx_jammed },
-                { key: 'intangible',  label: 'Intangible Effect',   enabled: config.fx_intangible },
-                { key: 'infection',   label: 'Infection Glow',      enabled: config.fx_infection },
-                { key: 'exposed',    label: 'Exposed Effect',      enabled: config.fx_exposed },
-                { key: 'falling',    label: 'Falling Effect',      enabled: config.fx_falling },
-                { key: 'dazed',      label: 'Dazed Effect',        enabled: config.fx_dazed },
-                { key: 'stunned',    label: 'Stunned Effect',      enabled: config.fx_stunned },
-                { key: 'shredded',   label: 'Shredded / Stripped Effect', enabled: config.fx_shredded },
-                { key: 'slowed',     label: 'Slowed Effect',       enabled: config.fx_slowed },
-                { key: 'throttled',  label: 'Throttled Effect',    enabled: config.fx_throttled },
-                { key: 'immobilized', label: 'Immobilized / Staggered Effect', enabled: config.fx_immobilized },
-                { key: 'blinded',    label: 'Blinded Effect',     enabled: config.fx_blinded },
-                { key: 'flying',     label: 'Flying Hover Bob',   enabled: config.fx_flying },
-                { key: 'corePower',  label: 'Core Power Active Bloom', enabled: config.fx_corePower },
-            ],
+            fxEffects: STATUS_FX_KEYS.map(key => ({
+                key,
+                label: localize(`LA.settingsMenus.statusFx.fx_${key}.label`),
+                enabled: config[`fx_${key}`],
+            })),
             autoStatuses: [
-                { key: 'dangerZone',  label: 'Auto Danger Zone (heat ≥ 50%)', enabled: config.auto_dangerZone },
-                { key: 'burn',        label: 'Auto Burn icon (burn > 0)',      enabled: config.auto_burn },
-                { key: 'overshield',  label: 'Auto Overshield icon (OS > 0)',  enabled: config.auto_overshield },
-                { key: 'infection',   label: 'Auto Infection icon (infection > 0)', enabled: config.auto_infection },
-                { key: 'cascading',   label: 'Auto Cascading icon (NHP cascading)', enabled: config.auto_cascading },
+                { key: 'dangerZone',  label: localize('LA.settingsMenus.statusFx.auto_dangerZone.label'), enabled: config.auto_dangerZone },
+                { key: 'burn',        label: localize('LA.settingsMenus.statusFx.auto_burn.label'), enabled: config.auto_burn },
+                { key: 'overshield',  label: localize('LA.settingsMenus.statusFx.auto_overshield.label'), enabled: config.auto_overshield },
+                { key: 'infection',   label: localize('LA.settingsMenus.statusFx.auto_infection.label'), enabled: config.auto_infection },
+                { key: 'cascading',   label: localize('LA.settingsMenus.statusFx.auto_cascading.label'), enabled: config.auto_cascading },
             ],
             removeStatusesOnDeath: config.removeStatusesOnDeath ?? false
         };
@@ -207,10 +211,10 @@ export class StatusFXConfig extends FormApplication
             }
         }
 
-        ui.notifications.info('StatusFX configuration saved.');
+        ui.notifications.info(localize('LA.notify.statusfxConfigurationSaved'));
 
         if (config.actionFX !== false && !game.modules.get('jb2a_patreon')?.active)
-            ui.notifications.warn('Some Action FX use JB2A Patreon assets. Without it, those effects are skipped.');
+            ui.notifications.warn(localize('LA.notify.someActionFxUseJb2aPatreonAssets'));
 
         try
         {
@@ -257,8 +261,44 @@ export function registerStatusFXSettings()
 
 const dangerZoneEffect = [
     {
+        filterType: "ventColumn",
+        filterId: "DangerZoneVent",
+        hotColor: 0xff8442,
+        plumeColor: 0xfeb76c,
+        warpFreq: 16,
+        warpAmp: 0.012,
+        riseSpeed: 1.4,
+        reach: 0.07,
+        plumeFreq: 17,
+        plumeStrength: 1.2,
+        bodyGlow: 0.55,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
+    }
+];
+
+const overheatedChurn = {
+    filterType: "convectionChurn",
+    filterId: "OverheatedChurn",
+    hotColor: 0xff8a1e,
+    coolColor: 0x4a2a1c,
+    rimColor: 0xffc06a,
+    churnScale: 4,
+    rise: 0.35,
+    warpAmp: 0.035,
+    mixAmt: 0.38,
+    rimWidth: 0.008,
+    rimGlow: 0,
+    opacity: 1.0,
+    timeSpeed: 1.0
+};
+
+const overheatedEffect = [
+    overheatedChurn,
+    {
         filterType: "glow",
-        filterId: "DangerZoneGlow",
+        filterId: "OverheatedGlow",
         outerStrength: 3,
         innerStrength: 1.5,
         color: 0xff9633,
@@ -271,7 +311,7 @@ const dangerZoneEffect = [
     },
     {
         filterType: "xbloom",
-        filterId: "DangerZoneBloom",
+        filterId: "OverheatedBloom",
         threshold: 0.35,
         bloomScale: 0,
         brightness: 1,
@@ -283,10 +323,11 @@ const dangerZoneEffect = [
     }
 ];
 
-const enkiduDangerZoneEffect = [
+const enkiduOverheatedEffect = [
+    overheatedChurn,
     {
         filterType: "glow",
-        filterId: "DangerZoneGlow",
+        filterId: "OverheatedGlow",
         outerStrength: 3,
         innerStrength: 1.5,
         color: 0x9c24f2,
@@ -297,18 +338,8 @@ const enkiduDangerZoneEffect = [
             outerStrength: { active: true, loopDuration: 6000, animType: "cosOscillation", val1: 1.5, val2: 2.5 }
         }
     },
-    {
-        filterType: "xbloom",
-        filterId: "DangerZoneBloom",
-        threshold: 0.35,
-        bloomScale: 0,
-        brightness: 1,
-        blur: 0.1,
-        padding: 10,
-        quality: 4,
-        blendMode: 0,
-        animated: { bloomScale: { active: true, loopDuration: 6000, animType: "sinOscillation", val1: 0.4, val2: 1.0 } }
-    }
+    // Matched by filterId, never by position, so reordering the chain above cannot swap it out.
+    overheatedEffect.find(filter => filter.filterId === "OverheatedBloom")
 ];
 
 const burnEffect = [
@@ -333,14 +364,23 @@ const burnEffect = [
 
 const overshieldEffect = [
     {
-        filterType: "outline",
-        filterId: "OverShieldGlow",
-        padding: 10,
-        color: 0x48dee0,
-        thickness: 1,
-        quality: 5,
-        zOrder: 9,
-        animated: { thickness: { active: true, loopDuration: 800, animType: "syncCosOscillation", val1: 1, val2: 6 } }
+        filterType: "doubleShell",
+        filterId: "OverShieldShell",
+        innerColor: 0xcdf2ff,
+        outerColor: 0x49c9f0,
+        bloomColor: 0x2f8fd8,
+        pulsePeriod: 2.0,
+        gapMin: 0.018,
+        gapMax: 0.01,
+        innerWidth: 0.004,
+        outerWidth: 0.004,
+        innerStrength: 0.0,
+        outerStrength: 0.6,
+        bloomWidth: 0.01,
+        bloom: 0.7,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
     }
 ];
 
@@ -484,40 +524,47 @@ const intangibleEffect = [
 
 const exposedEffect = [
     {
-        filterType: "distortion",
-        filterId: "ExposedDistortion",
-        maskPath: "modules/tokenmagic/fx/assets/distortion-1.png",
-        maskSpriteScaleX: 7,
-        maskSpriteScaleY: 7,
+        filterType: "shatterSeams",
+        filterId: "ExposedShatter",
+        blocks: 10,
+        jitter: 0.85,
+        gapMin: 0.0,
+        gapMax: 0.1,
+        breathRate: 1.5,
+        misalignChance: 1,
+        seamColor: 0xff2d3c,
+        seamCore: 0xffb0a0,
+        seamGain: 1.0,
+        lipColor: 0xffeddb,
+        lipGain: 0.4,
+        lipW: 0.08,
+        lightAngle: 30,
+        opacity: 0.96,
+        timeSpeed: 1
+    },
+    {
+        filterType: "glow",
+        filterId: "ExposedGlow",
+        outerStrength: 1,
+        innerStrength: 0,
+        color: 0xff2d3c,
+        quality: 0.5,
         padding: 10,
         animated: {
-            maskSpriteX: { active: true, speed: 0.02, animType: "move" },
-            maskSpriteY: { active: true, speed: 0.03, animType: "move" }
+            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
         }
     },
     {
         filterType: "adjustment",
         filterId: "ExposedAdjust",
-        saturation: 1.2,
+        saturation: 1.1,
         brightness: 1,
         contrast: 1,
-        red: 1.2,
-        green: 0.9,
-        blue: 0.8,
+        red: 1.25,
+        green: 0.85,
+        blue: 0.85,
         animated: {
             brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
-        }
-    },
-    {
-        filterType: "outline",
-        filterId: "ExposedOutline",
-        padding: 10,
-        color: 0xff6600,
-        thickness: 1,
-        quality: 5,
-        zOrder: 10,
-        animated: {
-            thickness: { active: true, loopDuration: 3000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
         }
     }
 ];
@@ -622,20 +669,209 @@ const stunnedEffect = [
     }
 ];
 
+const impairedEffect = [
+    {
+        filterType: "chromaRot",
+        filterId: "ImpairedRot",
+        color: 0xb8bcc2,
+        blocks: 35,
+        drift: 0.115,
+        levels: 4,
+        strength: 0.62,
+        dropThreshold: 0.46,
+        rotThreshold: 0.9,
+        stepRate: 6,
+        lockPeriod: 2.7,
+        lockWidth: 0,
+        rollPeriod: 4,
+        opacity: 0.85,
+        timeSpeed: 1.0
+    }
+];
+
+const lockOnEffect = [
+    {
+        filterType: "trackingGhost",
+        filterId: "LockOnGhost",
+        colorHot: 0xff4422,
+        colorCold: 0x22d8ff,
+        lockAngle: 0,
+        spinRate: 1.5,
+        ghostDist: 0.065,
+        lockPeriod: 1.4,
+        steps: 10,
+        ghostOpacity: 0.35,
+        ringWidth: 0.002,
+        chirpStrength: 0.0,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
+    }
+];
+
+const vulnerableEffect = [
+    {
+        filterType: "distortion",
+        filterId: "VulnerableDistortion",
+        maskPath: "modules/tokenmagic/fx/assets/distortion-1.png",
+        maskSpriteScaleX: 7,
+        maskSpriteScaleY: 7,
+        padding: 10,
+        animated: {
+            maskSpriteX: { active: true, speed: 0.02, animType: "move" },
+            maskSpriteY: { active: true, speed: 0.03, animType: "move" }
+        }
+    },
+    {
+        filterType: "thermalSplit",
+        filterId: "VulnerableCracks",
+        hotColor: 0xff1900,
+        charColor: 0x2a1410,
+        coreColor: 0xfef6de,
+        crackScale: 13.5,
+        breathPeriod: 2.6,
+        widthMin: 0.0,
+        widthMax: 0.04,
+        driftSpeed: 0.75,
+        writheAmp: 1.25,
+        writheRate: 0.18,
+        bloom: 0.95,
+        heat: 1.65,
+        coreAmt: 0.9,
+        charAmt: 0.75,
+        flowRate: 0.66,
+        flowDepth: 0.6,
+        opacity: 0.97,
+        timeSpeed: 1.0
+    },
+    {
+        filterType: "outline",
+        filterId: "VulnerableOutline",
+        padding: 10,
+        color: 0xff6600,
+        thickness: 1,
+        quality: 5,
+        zOrder: 10,
+        animated: {
+            thickness: { active: true, loopDuration: 3000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
+        }
+    },
+];
+
+const aidedEffect = [
+    {
+        filterType: "guidingLight",
+        filterId: "AidedGleam",
+        aidColor: 0xa9f0c6,
+        bearing: 150,
+        rimWidth: 0.02,
+        sweepPeriod: 2.6,
+        gleamWidth: 0.22,
+        keyLight: 0.85,
+        gleamGain: 1.55,
+        rimStrength: 0.45,
+        opacity: 1.0,
+        padding: 10,
+        timeSpeed: 1.0
+    }
+];
+
+const proneEffect = [
+    {
+        filterType: "noDrift",
+        filterId: "ProneNoDrift",
+        ghostColor: 0x94a6b8,
+        snapColor: 0xe8f2ff,
+        bearing: 180,
+        tryPeriod: 3.4,
+        slip: 0.03,
+        ghostStrength: 0.3,
+        holdStrength: 0.15,
+        snapStrength: 0.75,
+        opacity: 1.0,
+        padding: 16,
+        timeSpeed: 1.0
+    }
+];
+
+const phasingEffect = [
+    {
+        filterType: "slicePlane",
+        filterId: "PhasingSlice",
+        edgeColor: 0xa06cff,
+        cutAngle: 25,
+        slide: 0.01,
+        rate: 0.35,
+        bounce: 0,
+        travel: 0.9,
+        opacity: 1.0,
+        padding: 16,
+        timeSpeed: 1.0
+    }
+];
+
+const resistAllEffect = [
+    {
+        filterType: "ablativeCrust",
+        filterId: "ResistAllCrust",
+        crustColor: 0xc9a882,
+        coreColor: 0xffd8a0,
+        crustWidth: 0.012,
+        segments: 10,
+        shedPeriod: 3.2,
+        shedDrift: 0.09,
+        reverse: 1,
+        grainScale: 200,
+        lipStrength: 0.0,
+        opacity: 0.52,
+        padding: 32,
+        timeSpeed: 1.0
+    }
+];
+
+const reactorMeltdownEffect = [
+    {
+        filterType: "seamBeat",
+        filterId: "MeltdownSeams",
+        seamColor: 0xff2d3c,
+        seamCore: 0xffb0a0,
+        rimColor: 0xff3a2a,
+        blocks: 9,
+        setPeriod: 4.9,
+        beats: 2,
+        gapMin: 0.0,
+        gapMax: 0.3,
+        seamStrength: 1.0,
+        coreStrength: 0.8,
+        rimWidth: 0.016,
+        rimBase: 0.15,
+        rimKick: 1.1,
+        glow: 0.9,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
+    }
+];
+
 const shreddedEffect = [
     {
-        filterType: "fracture",
-        filterId: "ShreddedCracks",
-        color: 0x786559,
-        intensity: 3.0,
-        scale: 20,
-        crackWidth: 0.04,
-        opacity: 0.8,
-        warpStrength: 1.0,
-        noiseScale: 0.0,
-        maskAmount: 0.3,
-        blend: 2,
-        timeSpeed: 0.3
+        filterType: "shatterSeams",
+        filterId: "ShreddedShatter",
+        blocks: 20,
+        jitter: 0.85,
+        gapMin: 0.0,
+        gapMax: 0.105,
+        breathRate: 3.5,
+        misalignChance: 1,
+        seamColor: 0x786559,
+        seamCore: 0xc4a98e,
+        seamGain: 1.0,
+        lipColor: 0xffeddb,
+        lipGain: 0.4,
+        lipW: 0.08,
+        lightAngle: 30,
+        opacity: 0.96,
+        timeSpeed: 1.0
     },
     {
         filterType: "glow",
@@ -666,18 +902,23 @@ const shreddedEffect = [
 
 const strippedEffect = [
     {
-        filterType: "fracture",
-        filterId: "StrippedCracks",
-        color: 0x786559,
-        intensity: 3.0,
-        scale: 20,
-        crackWidth: 0.04,
-        opacity: 0.8,
-        warpStrength: 1.0,
-        noiseScale: 0.0,
-        maskAmount: 0.3,
-        blend: 2,
-        timeSpeed: 0.3
+        filterType: "shatterSeams",
+        filterId: "StrippedShatter",
+        blocks: 20,
+        jitter: 0.85,
+        gapMin: 0.0,
+        gapMax: 0.105,
+        breathRate: 3.5,
+        misalignChance: 1,
+        seamColor: 0x786559,
+        seamCore: 0xc4a98e,
+        seamGain: 1.0,
+        lipColor: 0xffeddb,
+        lipGain: 0.4,
+        lipW: 0.08,
+        lightAngle: 30,
+        opacity: 0.96,
+        timeSpeed: 1.0
     },
     {
         filterType: "glow",
@@ -708,30 +949,67 @@ const strippedEffect = [
 
 const slowedEffect = [
     {
-        filterType: "wave",
-        filterId: "SlowedWave",
-        time: 0,
-        color: 0xC4B3A9,
-        strength: 0.01,
-        frequency: 10,
-        minIntensity: 0.7,
-        maxIntensity: 1.5,
-        inward: true,
-        animated: {
-            time: { active: true, speed: 0.001, animType: "move" }
-        }
-    },
+        filterType: "overflowWrap",
+        filterId: "SlowedBands",
+        lineColor: 0x9e9e9e,
+        period: 1.1,
+        lines: 8,
+        thickness: 0.33,
+        opacity: 1.0,
+        timeSpeed: 1.0
+    }
+];
+
+const disengageEffect = [
     {
-        filterType: "glow",
-        filterId: "SlowedGlow",
-        outerStrength: 1.5,
-        innerStrength: 0,
-        color: 0xC4B3A9,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 4000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
-        }
+        filterType: "ricochetLip",
+        filterId: "DisengageRounds",
+        roundColor: 0xffd9a0,
+        sparkColor: 0xfff0c0,
+        lipColor: 0x9aa3ae,
+        bearing: 215,
+        lanes: 24,
+        laneTight: 6,
+        flightPeriod: 2.9,
+        trailLen: 0.23,
+        hardness: 0,
+        throughFloor: 0.66,
+        lipWidth: 0.004,
+        onSprite: 1,
+        bodyFade: 0.44,
+        confine: 1,
+        roundStrength: 1,
+        sparkStrength: 1.1,
+        lipStrength: 0.3,
+        opacity: 1.0,
+        padding: 16,
+        timeSpeed: 1.0
+    }
+];
+
+const shutDownEffect = [
+    {
+        filterType: "coldSoak",
+        filterId: "ShutDownSoak",
+        coldColor: 0x38414d,
+        frostColor: 0x9fc4d8,
+        frontPeriod: 6,
+        depth: 0.86,
+        opacity: 1.0,
+        timeSpeed: 1.0
+    }
+];
+
+const bolsteredEffect = [
+    {
+        filterType: "errorCorrection",
+        filterId: "BolsteredBand",
+        bandColor: 0x7fe8ff,
+        bandWidth: 0.09,
+        period: 2.7,
+        boost: 0,
+        opacity: 1.0,
+        timeSpeed: 1.0
     }
 ];
 
@@ -739,7 +1017,7 @@ const throttledEffect = [
     {
         filterType: "fracture",
         filterId: "ThrottledCracks",
-        color: 0xcc4422,
+        color: 0xe08c26,
         intensity: 3.0,
         scale: 6,
         crackWidth: 0.04,
@@ -755,7 +1033,7 @@ const throttledEffect = [
         filterId: "ThrottledGlow",
         outerStrength: 1,
         innerStrength: 0,
-        color: 0xcc4422,
+        color: 0xe08c26,
         quality: 0.5,
         padding: 10,
         animated: {
@@ -769,8 +1047,8 @@ const throttledEffect = [
         brightness: 1,
         contrast: 1,
         red: 1.2,
-        green: 0.85,
-        blue: 0.75,
+        green: 1.0,
+        blue: 0.65,
         animated: {
             brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
         }
@@ -924,10 +1202,10 @@ const corePowerEffect = [
 // Low-quality variants
 // outline-only swaps for bloom/glow presets; filter IDs kept identical for EFFECT_MAP matching
 
-const dangerZoneEffectLite = [
+const overheatedEffectLite = [
     {
         filterType: "outline",
-        filterId: "DangerZoneGlow",
+        filterId: "OverheatedGlow",
         color: 0xff9633,
         thickness: 2,
         quality: 3,
@@ -939,10 +1217,10 @@ const dangerZoneEffectLite = [
     }
 ];
 
-const enkiduDangerZoneEffectLite = [
+const enkiduOverheatedEffectLite = [
     {
         filterType: "outline",
-        filterId: "DangerZoneGlow",
+        filterId: "OverheatedGlow",
         color: 0x9c24f2,
         thickness: 2,
         quality: 3,
@@ -979,17 +1257,20 @@ const jammedEffectLite = [
 ];
 
 const LOW_QUALITY_PRESETS = {
-    dangerZone: dangerZoneEffectLite,
+    overheated: overheatedEffectLite,
     corePower: corePowerEffectLite,
     jammed: jammedEffectLite,
 };
 
 // Effect Map
 
+// staleFilterIds are cleaned up but never added, so a dropped filter is not orphaned on old tokens.
+const allFilterIds = entry => entry.staleFilterIds ? [...entry.filterIds, ...entry.staleFilterIds] : entry.filterIds;
+
 const EFFECT_MAP = [
-    { name: 'Danger Zone', key: 'dangerZone', preset: dangerZoneEffect, filterIds: ['DangerZoneGlow', 'DangerZoneBloom'] },
+    { name: 'Danger Zone', key: 'dangerZone', preset: dangerZoneEffect, filterIds: ['DangerZoneVent'], staleFilterIds: ['DangerZoneGlow', 'DangerZoneBloom'] },
     { name: 'Burn',        key: 'burn',       preset: burnEffect,       filterIds: ['BurnGlow'] },
-    { name: 'Overshield',  key: 'overshield', preset: overshieldEffect, filterIds: ['OverShieldGlow'] },
+    { name: 'Overshield',  key: 'overshield', preset: overshieldEffect, filterIds: ['OverShieldShell'], staleFilterIds: ['OverShieldGlow'] },
     { name: 'Cascading',   key: 'cascading',  preset: cascadingEffect,  filterIds: ['cascading1', 'cascading2'] },
     { name: 'Invisible',   key: 'invisible',  preset: invisibleEffect,  filterIds: ['invisible'] },
     { name: 'Hidden',      key: 'hidden',     preset: hiddenEffect,     filterIds: ['hidden'] },
@@ -997,14 +1278,25 @@ const EFFECT_MAP = [
     { name: 'Jammed',      key: 'jammed',     preset: jammedEffect,     filterIds: ['jammedShadow', 'jammedElectric'] },
     { name: 'Intangible',  key: 'intangible', preset: intangibleEffect, filterIds: ['intangible1', 'intangible2', 'intangible3'] },
     { name: 'Infection',   key: 'infection',  preset: infectionEffect,  filterIds: ['InfectionGlow'] },
-    { name: 'Exposed',    key: 'exposed',   preset: exposedEffect,   filterIds: ['ExposedDistortion', 'ExposedAdjust', 'ExposedOutline'] },
+    { name: 'Exposed',    key: 'exposed',   preset: exposedEffect,   filterIds: ['ExposedShatter', 'ExposedGlow', 'ExposedAdjust'], staleFilterIds: ['ExposedDistortion', 'ExposedCracks', 'ExposedOutline', 'ExposedSeams'] },
     { name: 'Falling',    key: 'falling',   preset: fallingEffect,   filterIds: ['FallingSmoke'] },
     { name: 'Dazed',      key: 'dazed',     preset: dazedEffect,     filterIds: ['DazedFilm', 'DazedOutline'] },
     { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
-    { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedCracks', 'ShreddedGlow', 'ShreddedAdjust'] },
-    { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedCracks', 'StrippedGlow', 'StrippedAdjust'] },
-    { name: 'Prone',      key: 'prone',     preset: slowedEffect.map(filter => ({ ...filter, filterId: filter.filterId.replace('Slowed', 'Prone') })), filterIds: ['ProneWave', 'ProneGlow'] },
-    { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedWave', 'SlowedGlow'] },
+    { name: 'Impaired',   key: 'impaired',  preset: impairedEffect,  filterIds: ['ImpairedRot'] },
+    { name: 'Vulnerable', key: 'vulnerable', preset: vulnerableEffect, filterIds: ['VulnerableDistortion', 'VulnerableCracks', 'VulnerableOutline'], staleFilterIds: ['VulnerableShatter', 'VulnerableGlow', 'VulnerableAdjust', 'VulnerableSeams'] },
+    { name: 'Lock On',    key: 'lockOn',     preset: lockOnEffect,     filterIds: ['LockOnGhost'] },
+    { name: 'Aided',      key: 'aided',      preset: aidedEffect,      filterIds: ['AidedGleam'] },
+    { name: 'Resist All', key: 'resistAll',  preset: resistAllEffect,  filterIds: ['ResistAllCrust'] },
+    { name: 'Phasing',    key: 'phasing',    preset: phasingEffect,    filterIds: ['PhasingSlice'] },
+    { name: 'Overheated', key: 'overheated', preset: overheatedEffect, filterIds: ['OverheatedChurn', 'OverheatedGlow', 'OverheatedBloom'], staleFilterIds: ['OverheatedWave', 'OverheatedCracks'] },
+    { name: 'Reactor Meltdown', key: 'reactorMeltdown', preset: reactorMeltdownEffect, filterIds: ['MeltdownSeams'] },
+    { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedShatter', 'ShreddedGlow', 'ShreddedAdjust'], staleFilterIds: ['ShreddedCracks'] },
+    { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedShatter', 'StrippedGlow', 'StrippedAdjust'], staleFilterIds: ['StrippedCracks'] },
+    { name: 'Prone',      key: 'prone',     preset: proneEffect,     filterIds: ['ProneNoDrift'], staleFilterIds: ['ProneWave', 'ProneGlow'] },
+    { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedBands'], staleFilterIds: ['SlowedWave', 'SlowedGlow'] },
+    { name: 'Bolster',    key: 'bolstered', preset: bolsteredEffect, filterIds: ['BolsteredBand'] },
+    { name: 'Shut Down',  key: 'shutDown',  preset: shutDownEffect,  filterIds: ['ShutDownSoak'] },
+    { name: 'Disengage',  key: 'disengage', preset: disengageEffect, filterIds: ['DisengageRounds'] },
     { name: 'Throttled',  key: 'throttled', preset: throttledEffect, filterIds: ['ThrottledCracks', 'ThrottledGlow', 'ThrottledAdjust'] },
     { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
     { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
@@ -1157,19 +1449,18 @@ function blockQoLEffects()
     if (qolAutoEnabled || qolFXEnabled)
     {
         ui.notifications.warn(
-            'Lancer Automations StatusFX is active — csm-lancer-qol\'s ' +
-            (qolAutoEnabled && qolFXEnabled ? 'auto-status and condition effects are' :
-                qolAutoEnabled ? 'auto-status is' : 'condition effects are') +
-            ' being overridden. Disable them in csm-lancer-qol settings to remove this warning.',
+            localize('LA.notify.statusFxOverrideHead') + ' ' +
+            localize(qolAutoEnabled && qolFXEnabled ? 'LA.notify.statusFxOverrideBoth' :
+                qolAutoEnabled ? 'LA.notify.statusFxOverrideAuto' : 'LA.notify.statusFxOverrideFx') + ' ' +
+            localize('LA.notify.statusFxOverrideTail'),
             { permanent: true }
         );
     }
 }
 
-// Workaround for our chains/fracture filters: they don't register a TMFX Anime puppet,
-// so TMFX dupes them on every flag update. Stash a minimal fake puppet in the anime map
-// so the dedupe path finds it. Removed automatically by TMFX when the filter is deleted.
-const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture']);
+// Our filters have no TMFX Anime puppet, so TMFX would push a fresh instance on every flag write.
+// A fake puppet in the anime map satisfies the dedupe (TMFX drops it with the filter). Every LA filter type must be listed here.
+const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture', 'chromaRot', 'openSeams', 'trackingGhost', 'seamBeat', 'doubleShell', 'ventColumn', 'guidingLight', 'ablativeCrust', 'noDrift', 'shatterSeams', 'thermalSplit', 'slicePlane', 'overflowWrap', 'errorCorrection', 'coldSoak', 'ricochetLip', 'convectionChurn']);
 function _ensureFakePuppetsForCustomFilters(token)
 {
     const tokenMagic = /** @type {any} */ (globalThis).TokenMagic;
@@ -1234,17 +1525,20 @@ async function _doReconcileStatusFX(actor)
     const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
     for (const token of tokens)
     {
-        // Inject fake puppets before any add/delete so TMFX's hook sees them.
-        _ensureFakePuppetsForCustomFilters(token);
         for (const entry of EFFECT_MAP)
         {
             const wantFilter = aeNames.has(entry.name) && isFXEnabled(entry.key);
             const hasFilter = entry.filterIds.some(filterId => TokenMagic.hasFilterId(token, filterId));
             if (wantFilter && !hasFilter)
             {
+                for (const filterId of entry.staleFilterIds ?? [])
+                {
+                    if (TokenMagic.hasFilterId(token, filterId))
+                        await _writeFilters(token, () => token.TMFXdeleteFilters(filterId));
+                }
                 let preset = entry.preset;
-                if (entry.key === 'dangerZone' && isEnkiduFrame(actor))
-                    preset = enkiduDangerZoneEffect;
+                if (entry.key === 'overheated' && isEnkiduFrame(actor))
+                    preset = enkiduOverheatedEffect;
                 if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene))
                 {
                     const base = entry.name === 'Hover'
@@ -1254,38 +1548,50 @@ async function _doReconcileStatusFX(actor)
                 }
                 if (getConfig().lowQuality && LOW_QUALITY_PRESETS[entry.key])
                 {
-                    preset = (entry.key === 'dangerZone' && isEnkiduFrame(actor))
-                        ? enkiduDangerZoneEffectLite
+                    preset = (entry.key === 'overheated' && isEnkiduFrame(actor))
+                        ? enkiduOverheatedEffectLite
                         : LOW_QUALITY_PRESETS[entry.key];
                 }
-                await token.TMFXaddUpdateFilters(preset);
-                // TMFX dupes filters on this path; keep only the first of each filterId
-                const mesh = token.mesh;
-                if (mesh?.filters?.length)
-                {
-                    const seenIds = new Set();
-                    mesh.filters = mesh.filters.filter(filter =>
-                    {
-                        const id = filter.filterId;
-                        if (!id)
-                            return true;
-                        if (seenIds.has(id))
-                            return false;
-                        seenIds.add(id);
-                        return true;
-                    });
-                }
+                // TMFX stamps filterInternalId/rank/placeableId into what it is handed, so never the const.
+                await _writeFilters(token, () => token.TMFXaddUpdateFilters(foundry.utils.duplicate(preset)));
             }
             else if (!wantFilter && hasFilter)
             {
-                for (const filterId of entry.filterIds)
+                for (const filterId of allFilterIds(entry))
                 {
                     if (TokenMagic.hasFilterId(token, filterId))
-                        await token.TMFXdeleteFilters(filterId);
+                        await _writeFilters(token, () => token.TMFXdeleteFilters(filterId));
                 }
             }
         }
     }
+}
+
+// A filter rebuilt without a puppet lands on the mesh as a second instance; keep the first of each id.
+function _dedupeMeshFilters(token)
+{
+    const mesh = token.mesh;
+    if (!mesh?.filters?.length)
+        return;
+    const seenIds = new Set();
+    mesh.filters = mesh.filters.filter(filter =>
+    {
+        const id = filter.filterId;
+        if (!id)
+            return true;
+        if (seenIds.has(id))
+            return false;
+        seenIds.add(id);
+        return true;
+    });
+}
+
+// Every flag write re-enters TMFX's rebuild, so puppets go in before it and the mesh is swept after.
+async function _writeFilters(token, write)
+{
+    _ensureFakePuppetsForCustomFilters(token);
+    await write();
+    _dedupeMeshFilters(token);
 }
 
 const _reconcileTimers = new Map();
@@ -1324,11 +1630,11 @@ async function _reapplyCustomFiltersAfterLoad()
         {
             if (aeNames.has(entry.name) && isFXEnabled(entry.key))
                 relevant = true;
-            for (const filterId of entry.filterIds)
+            for (const filterId of allFilterIds(entry))
             {
                 if (TokenMagic.hasFilterId(token, filterId))
                 {
-                    await token.TMFXdeleteFilters(filterId);
+                    await _writeFilters(token, () => token.TMFXdeleteFilters(filterId));
                     relevant = true;
                 }
             }

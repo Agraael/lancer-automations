@@ -10,6 +10,7 @@ import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js"
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { hasLineOfSight } from "../vision/lancerDetectionModes.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 export { getMinGridDistance };
 
@@ -268,10 +269,10 @@ export function displayOverwatch(reactors, target)
     if (mode === 'p')
     {
         new Dialog({
-            title: "Overwatch Alert",
+            title: localize('LA.dialogTitle.overwatchAlert'),
             content: html,
             buttons: {
-                ok: { label: "ACKNOWLEDGE" }
+                ok: { label: localize("LA.common.acknowledge") }
             },
             default: "ok",
             render: (html) =>
@@ -310,11 +311,11 @@ export async function drawThreatDebug(token)
 
     const maxThreat = await getActorMaxThreat(token.actor);
 
-    ui.notifications.info(`Debug: Token Size ${token.document.width}x${token.document.height}, Max Threat: ${maxThreat}`);
+    ui.notifications.info(localizeFormat('LA.notify.threatDebugSize', { width: token.document.width, height: token.document.height, threat: maxThreat }));
 
     if (!isHexGrid())
     {
-        ui.notifications.warn("Threat debug visualization currently only supports hex grids");
+        ui.notifications.warn(localize('LA.notify.threatDebugVisualizationCurrentlyOnlySupportsHex'));
         return;
     }
 
@@ -385,7 +386,7 @@ export async function drawDistanceDebug()
 
     if (controlled.length !== 2)
     {
-        ui.notifications.warn("Select exactly 2 tokens to measure distance.");
+        ui.notifications.warn(localize('LA.notify.selectExactly2TokensToMeasureDistance'));
         return;
     }
 
@@ -479,7 +480,7 @@ export async function drawDistanceDebug()
         canvas.controls.debug.endFill();
     }
 
-    ui.notifications.info(`Distance: ${distance} spaces (${token1.name} ↔ ${token2.name})`);
+    ui.notifications.info(localizeFormat('LA.notify.distanceBetween', { distance, from: token1.name, to: token2.name }));
 
     return distance;
 }
@@ -500,8 +501,8 @@ export function canProvokeReaction(triggering, reactor, reasonOut = null)
             return true;
         return !!token.actor?.effects?.some(effect => effect.statuses?.has(statusId) && !effect.disabled);
     };
-    const hasProvokeImmunity = (token) =>
-        !!api?.getImmunityBonuses && api.getImmunityBonuses(token.actor, "provoke").length > 0;
+    const hasProvokeImmunity = (token, other) =>
+        !!api?.getGateImmunityBonuses && api.getGateImmunityBonuses(token.actor, "provoke", { ownerToken: token, otherToken: other }).length > 0;
     if (hasStatus(triggering, "hidden"))
     {
         reasonOut?.push('hidden');
@@ -512,7 +513,7 @@ export function canProvokeReaction(triggering, reactor, reasonOut = null)
         reasonOut?.push('disengage');
         return false;
     }
-    if (hasProvokeImmunity(triggering))
+    if (hasProvokeImmunity(triggering, reactor))
     {
         reasonOut?.push('provoke_immunity');
         return false;
@@ -564,9 +565,9 @@ export function canEngage(token1, token2)
         return token.actor.effects.some(effect => effect.statuses?.has(statusName) && !effect.disabled);
     };
 
-    const hasProvokeImmunity = (token) =>
-        !!api?.getImmunityBonuses && api.getImmunityBonuses(token.actor, "provoke").length > 0;
-    if (hasProvokeImmunity(token1) || hasProvokeImmunity(token2))
+    const hasProvokeImmunity = (token, other) =>
+        !!api?.getGateImmunityBonuses && api.getGateImmunityBonuses(token.actor, "provoke", { ownerToken: token, otherToken: other }).length > 0;
+    if (hasProvokeImmunity(token1, token2) || hasProvokeImmunity(token2, token1))
         return false;
 
     const invalidStatuses = ["hidden", "disengage", "intangible"];

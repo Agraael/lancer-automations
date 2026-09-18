@@ -20,115 +20,111 @@
     <div class="la-headstrip">
         <label class="checkbox la-scope-toggle">
             <input type="checkbox" name="isGeneral" id="isGeneral" {{#if isGeneral}}checked{{/if}}>
-            <span>General Activation</span>
-            <span class="la-scope-hint">(applies to all tokens, no item required)</span>
+            <span>{{localize "LA.reactionEditor.generalActivation"}}</span>
+            <span class="la-scope-hint">{{localize "LA.reactionEditor.appliesToAllTokensNoItem"}}</span>
         </label>
         <div class="la-headstrip-links">
             <a class="debug-preload" title="Compile the editor functions now so they show in devtools Sources for breakpoints"><i
-                    class="fas fa-bug"></i> Load for Debug</a>
-            <a class="clipboard-copy" title="Copy activation to clipboard"><i class="fas fa-copy"></i> Copy</a>
-            <a class="clipboard-paste" title="Load activation from clipboard"><i class="fas fa-paste"></i> Paste</a>
+                    class="fas fa-bug"></i> {{localize "LA.reactionEditor.loadForDebug"}}</a>
+            <a class="clipboard-copy" title="Copy activation to clipboard"><i class="fas fa-copy"></i> {{localize "LA.reactionEditor.copy"}}</a>
+            <a class="clipboard-paste" title="Load activation from clipboard"><i class="fas fa-paste"></i> {{localize "LA.reactionEditor.paste"}}</a>
         </div>
     </div>
 
     <div class="form-group general-only" style="{{#unless isGeneral}}display:none{{/unless}}">
         <div class="la-row-scope">
             <div>
-                <label>Activation Name</label>
+                <label>{{localize "LA.reactionEditor.activationName"}}</label>
                 <input type="text" name="name" value="{{name}}" placeholder="e.g. Custom Overwatch">
-                <p class="notes">A unique name for this activation.</p>
+                <p class="notes">{{localize "LA.reactionEditor.aUniqueNameForThisActivation"}}</p>
             </div>
             <div>
-                <label>Comments <span class="optional">(optional)</span></label>
+                <label>{{localize "LA.reactionEditor.comments"}} <span class="optional">(optional)</span></label>
                 <input type="text" name="commentsGeneral" value="{{comments}}" placeholder="Brief notes for the list...">
-                <p class="notes">Shown in the manager list.</p>
+                <p class="notes">{{localize "LA.reactionEditor.shownInTheManagerList"}}</p>
             </div>
         </div>
         <div class="la-scene-row">
-            <label>Scene Reactor / Scene</label>
+            <label>{{localize "LA.reactionEditor.sceneReactorScene"}}</label>
             <div class="la-row-even">
                 <select name="sceneReactor" id="sceneReactor">
                     <option value="off" {{#if (eq sceneReactor "off" )}}selected{{/if}}>Off</option>
-                    <option value="add" {{#if (eq sceneReactor "add" )}}selected{{/if}}>Add (scene and tokens)</option>
-                    <option value="only" {{#if (eq sceneReactor "only" )}}selected{{/if}}>Only (scene, no tokens)</option>
+                    <option value="add" {{#if (eq sceneReactor "add" )}}selected{{/if}}>{{localize "LA.reactionEditor.addSceneAndTokens"}}</option>
+                    <option value="only" {{#if (eq sceneReactor "only" )}}selected{{/if}}>{{localize "LA.reactionEditor.onlySceneNoTokens"}}</option>
                 </select>
                 <select name="sceneId" id="sceneId">
-                    <option value="" {{#unless sceneId}}selected{{/unless}}>Any scene</option>
+                    <option value="" {{#unless sceneId}}selected{{/unless}}>{{localize "LA.reactionEditor.anyScene"}}</option>
                     {{#each sceneOptions}}
                     <option value="{{this.id}}" {{#if (eq ../sceneId this.id)}}selected{{/if}}>{{this.name}}</option>
                     {{/each}}
                 </select>
             </div>
-            <p class="notes">Scene Reactor evaluates once as the viewed scene, on the GM client. Add keeps the per-token
-                passes, Only replaces them. Scene limits the whole activation to one scene.</p>
+            <p class="notes">{{localize "LA.reactionEditor.sceneReactorEvaluatesOnceAsThe"}}</p>
         </div>
     </div>
 
     <div class="form-group item-only" style="{{#if isGeneral}}display:none{{/if}}">
         <div class="la-row-scope">
             <div>
-                <label>Item LID / Deployable LID / Actor UUID</label>
+                <label>{{localize "LA.reactionEditor.itemLidDeployableLidActorUuid"}}</label>
                 <div class="la-lid-row">
                     <input type="text" name="lid" value="{{lid}}" placeholder="e.g. system_lid_id">
                     <div class="la-finders">
-                        <a class="find-item-btn" title="Find Item"><i class="fas fa-search"></i> Item</a>
-                        <a class="find-deployable-btn" title="Find Deployable LID"><i class="fas fa-rocket"></i> Deploy</a>
-                        <a class="find-document-btn" title="Find Actor UUID"><i class="fas fa-user"></i> Actor</a>
+                        <a class="find-item-btn" title="Find Item"><i class="fas fa-search"></i> {{localize "LA.reactionEditor.item"}}</a>
+                        <a class="find-deployable-btn" title="Find Deployable LID"><i class="fas fa-rocket"></i> {{localize "LA.reactionEditor.deploy"}}</a>
+                        <a class="find-document-btn" title="Find Actor UUID"><i class="fas fa-user"></i> {{localize "LA.reactionEditor.actor"}}</a>
                     </div>
                 </div>
-                <p class="notes">Item <code>system.lid</code>, deployable LID, or actor UUID.</p>
+                <p class="notes">{{{localize "LA.reactionEditor.sourceNote"}}}</p>
             </div>
             <div>
-                <label>Comments <span class="optional">(optional)</span></label>
+                <label>{{localize "LA.reactionEditor.comments"}} <span class="optional">(optional)</span></label>
                 <input type="text" name="commentsItem" value="{{comments}}" placeholder="Brief notes for the list...">
-                <p class="notes">Shown in the manager list.</p>
+                <p class="notes">{{localize "LA.reactionEditor.shownInTheManagerList"}}</p>
             </div>
         </div>
 
         <div class="item-preview-container">
             <span id="preview-item-name">{{#if foundItemName}}<strong>{{foundItemKind}}:</strong>
-                {{foundItemName}}{{else}}<em>No item found</em>{{/if}}</span>
+                {{foundItemName}}{{else}}<em>{{localize "LA.reactionEditor.noItemFound"}}</em>{{/if}}</span>
             {{#if foundActionName}}<span id="preview-action-name"><strong>Action:</strong> {{foundActionName}}</span>{{/if}}
             <a class="show-item-btn" data-uuid="{{foundItemUuid}}" title="Show Item Sheet"
                 style="{{#unless foundItemUuid}}display:none;{{/unless}}"><i class="fas fa-eye"></i></a>
         </div>
 
         <div class="la-path-row">
-            <label>Action Path</label>
+            <label>{{localize "LA.reactionEditor.actionPath"}}</label>
             <div class="la-lid-row">
                 <input type="text" name="reactionPath" value="{{reactionPath}}" placeholder="empty = the item itself">
-                <a class="find-action-btn la-finder-btn" title="Find Action"><i class="fas fa-bolt"></i> Find Action</a>
+                <a class="find-action-btn la-finder-btn" title="Find Action"><i class="fas fa-bolt"></i> {{localize "LA.reactionEditor.findAction"}}</a>
             </div>
-            <p class="notes">Path within <code>system</code> to the action data. Leave empty to use the item itself.
-                (system)</p>
+            <p class="notes">{{{localize "LA.reactionEditor.pathNote"}}}</p>
         </div>
     </div>
 
     <div class="form-group la-sourcematch">
         <label class="checkbox ps-tooltip" id="sourceMatchLabel">
             <input type="checkbox" name="onlyOnSourceMatch" {{#if onlyOnSourceMatch}}checked{{/if}}>
-            <span>Only On Source Match</span>
+            <span>{{localize "LA.reactionEditor.onlyOnSourceMatch"}}</span>
         </label>
-        <p class="notes general-only" style="{{#unless isGeneral}}display:none{{/unless}}">Matches the action name from
-            the trigger against the Activation Name above.</p>
-        <p class="notes item-only" style="{{#if isGeneral}}display:none{{/if}}">Matches the triggering item LID,
-            deployable LID, or actor UUID.</p>
+        <p class="notes general-only" style="{{#unless isGeneral}}display:none{{/unless}}">{{localize "LA.reactionEditor.matchesTheActionNameFromThe"}}</p>
+        <p class="notes item-only" style="{{#if isGeneral}}display:none{{/if}}">{{localize "LA.reactionEditor.matchesTheTriggeringItemLidDeployable"}}</p>
     </div>
 
     <details class="code-section">
-        <summary class="code-section-header">Descriptions</summary>
+        <summary class="code-section-header">{{localize "LA.reactionEditor.descriptions"}}</summary>
         <div class="la-row-even la-descriptions">
             <div class="form-group">
-                <label>Trigger Description</label>
+                <label>{{localize "LA.reactionEditor.triggerDescription"}}</label>
                 <textarea name="triggerDescription" rows="2"
                     placeholder="When this reaction triggers...">{{triggerDescription}}</textarea>
-                <p class="notes">Overrides trigger text from Action Path. Required for general reactions.</p>
+                <p class="notes">{{localize "LA.reactionEditor.overridesTriggerTextFromActionPath"}}</p>
             </div>
             <div class="form-group">
-                <label>Effect Description</label>
+                <label>{{localize "LA.reactionEditor.effectDescription"}}</label>
                 <textarea name="effectDescription" rows="2"
                     placeholder="What this reaction does...">{{effectDescription}}</textarea>
-                <p class="notes">Overrides effect text from Action Path. Required for general reactions.</p>
+                <p class="notes">{{localize "LA.reactionEditor.overridesEffectTextFromActionPath"}}</p>
             </div>
         </div>
     </details>
@@ -162,106 +158,105 @@
                 {{/each}}
             </div>
             <div class="la-custom-triggers">
-                <label for="custom-triggers">Custom</label>
+                <label for="custom-triggers">{{localize "LA.reactionEditor.custom"}}</label>
                 <input type="text" id="custom-triggers" name="customTriggers" value="{{customTriggers}}"
                     placeholder="myTrigger, otherTrigger" autocomplete="off"
                     title="Comma-separated names fired from code with api.dispatchCustomTrigger(name, data). They fire in and out of combat.">
             </div>
             <div class="la-mark-legend">
-                <span><b class="tmk tmk-cx"></b> cancel / change fns</span>
-                <span><b class="tmk tmk-tg"></b> carries targets</span>
-                <span><b class="tmk tmk-sm"></b> allows source match</span>
+                <span><b class="tmk tmk-cx"></b> {{localize "LA.reactionEditor.cancelChangeFns"}}</span>
+                <span><b class="tmk tmk-tg"></b> {{localize "LA.reactionEditor.carriesTargets"}}</span>
+                <span><b class="tmk tmk-sm"></b> {{localize "LA.reactionEditor.allowsSourceMatch"}}</span>
             </div>
         </div>
 
         <div class="la-eligibility">
             <div class="panel-section">
-                <h4 class="la-subhead">Who reacts</h4>
+                <h4 class="la-subhead">{{localize "LA.reactionEditor.whoReacts"}}</h4>
                 <div class="options-grid">
                     <label class="checkbox" title="Allow token to react to its own trigger">
                         <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
-                        <span>React to Self</span>
+                        <span>{{localize "LA.reactionEditor.reactToSelf"}}</span>
                     </label>
                     <label class="checkbox" title="Allow other tokens to react to this trigger">
                         <input type="checkbox" name="triggerOther" {{#if triggerOther}}checked{{/if}}>
-                        <span>React to Others</span>
+                        <span>{{localize "LA.reactionEditor.reactToOthers"}}</span>
                     </label>
                     <label class="checkbox"
                         title="Fires when this token is one of the event's targets, even with React to Others off. Only works on triggers that carry targets (attacks, tech, damage, checks, forced movement).">
                         <input type="checkbox" name="triggerTarget" {{#if triggerTarget}}checked{{/if}}>
-                        <span>React as Target</span>
+                        <span>{{localize "LA.reactionEditor.reactAsTarget"}}</span>
                     </label>
                     <label class="checkbox" title="Allow tokens not in combat to react">
                         <input type="checkbox" name="outOfCombat" {{#if outOfCombat}}checked{{/if}}>
-                        <span>Out of Combat</span>
+                        <span>{{localize "LA.reactionEditor.outOfCombat"}}</span>
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">Disposition <span class="la-subhead-note">none picked means no
-                        filter</span></h4>
+                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.disposition"}} <span class="la-subhead-note">{{localize "LA.reactionEditor.nonePickedMeansNoFilter"}}</span></h4>
                 <div class="disposition-grid">
                     <label class="la-chip la-chip-friendly">
                         <input type="checkbox" name="dispositionFilter.friendly" {{#if
                             dispositionFilter.friendly}}checked{{/if}}>
-                        <span>Friendly</span>
+                        <span>{{localize "LA.reactionEditor.friendly"}}</span>
                     </label>
                     <label class="la-chip la-chip-neutral">
                         <input type="checkbox" name="dispositionFilter.neutral" {{#if
                             dispositionFilter.neutral}}checked{{/if}}>
-                        <span>Neutral</span>
+                        <span>{{localize "LA.reactionEditor.neutral"}}</span>
                     </label>
                     <label class="la-chip la-chip-hostile">
                         <input type="checkbox" name="dispositionFilter.hostile" {{#if
                             dispositionFilter.hostile}}checked{{/if}}>
-                        <span>Hostile</span>
+                        <span>{{localize "LA.reactionEditor.hostile"}}</span>
                     </label>
                     <label class="la-chip la-chip-secret">
                         <input type="checkbox" name="dispositionFilter.secret" {{#if
                             dispositionFilter.secret}}checked{{/if}}>
-                        <span>Secret</span>
+                        <span>{{localize "LA.reactionEditor.secret"}}</span>
                     </label>
                 </div>
             </div>
 
             <div class="panel-section">
-                <h4 class="la-subhead">Preconditions</h4>
+                <h4 class="la-subhead">{{localize "LA.reactionEditor.preconditions"}}</h4>
                 <div class="options-grid">
                     <label class="checkbox" id="checkReactionContainer"
                         title="Block activation if the token has no reaction available. Independent of the declared Action Type.">
                         <input type="checkbox" name="checkReaction" id="checkReaction" {{#if checkReaction}}checked{{/if}}>
-                        <span>Check Reaction</span>
+                        <span>{{localize "LA.reactionEditor.checkReaction"}}</span>
                     </label>
                     <label class="checkbox item-only" title="Block activation if the item is unloaded, out of uses, or uncharged."
                         style="{{#if isGeneral}}display:none{{/if}}">
                         <input type="checkbox" name="checkUsage" id="checkUsage" {{#if checkUsage}}checked{{/if}}>
-                        <span>Check Usage</span>
+                        <span>{{localize "LA.reactionEditor.checkUsage"}}</span>
                     </label>
                     <label class="checkbox"
                         title="Skip activation if the triggering token cannot provoke a reaction from this reactor. Blocks reactions when the triggering token is HIDDEN or has DISENGAGE, or is INTANGIBLE while the reactor is not also intangible (different planes). Self-reactions always pass.">
                         <input type="checkbox" name="requireCanProvoke" {{#if requireCanProvoke}}checked{{/if}}>
-                        <span>Require Provokable</span>
+                        <span>{{localize "LA.reactionEditor.requireProvokable"}}</span>
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">Execution</h4>
+                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.execution"}}</h4>
                 <div class="options-grid">
                     <label class="checkbox" title="Auto-activate without showing popup">
                         <input type="checkbox" name="autoActivate" {{#if autoActivate}}checked{{/if}}>
-                        <span>Auto Activate</span>
+                        <span>{{localize "LA.reactionEditor.autoActivate"}}</span>
                     </label>
                     <label class="checkbox force-sync-option"
                         title="Run activation code synchronously. Required for cancel functions (cancelAction, cancelAttack, cancelTechAttack, cancelCheck, cancelStructure, cancelStress, cancelStructureOutcome, cancelStressOutcome, cancelHpChange, cancelHeatChange) and cancelTriggeredMove in onPreMove. Also ensures bonuses like Accuracy are applied before rolls begin."
                         {{#unless autoActivate}}style="display:none" {{/unless}}>
                         <input type="checkbox" name="awaitActivationCompletion" {{#if
                             awaitActivationCompletion}}checked{{/if}}>
-                        <span>Await Activation</span>
+                        <span>{{localize "LA.reactionEditor.awaitActivation"}}</span>
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">Declared type</h4>
+                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.declaredType"}}</h4>
                 <div class="la-row-even">
                     <div>
-                        <label>Action Type <a
+                        <label>{{localize "LA.reactionEditor.actionType"}} <a
                                 title="Display only. On general activations, 'Reaction' can spend the token's reaction (module setting 'Consume Reaction on Activation')."
                                 class="la-help"><i class="fas fa-question-circle"></i></a></label>
                         <select name="actionType" id="actionType">
@@ -271,7 +266,7 @@
                         </select>
                     </div>
                     <div class="frequency-option" {{#if autoActivate}}style="display:none" {{/if}}>
-                        <label>Frequency <a title="Shown on the activation prompt only, never enforced. Gate uses from code with consumeOncePerRound."
+                        <label>{{localize "LA.reactionEditor.frequency"}} <a title="Shown on the activation prompt only, never enforced. Gate uses from code with consumeOncePerRound."
                                 class="la-help"><i class="fas fa-question-circle"></i></a></label>
                         <select name="frequency" id="frequency">
                             {{#each frequencyOptions}}
@@ -280,118 +275,101 @@
                         </select>
                     </div>
                 </div>
-                <p class="notes">Display only. See the help icons for the exceptions.</p>
+                <p class="notes">{{localize "LA.reactionEditor.displayOnlySeeTheHelpIcons"}}</p>
             </div>
         </div>
     </div>
 
     <div class="la-reference-bar">
-        <a id="open-api-ref"><i class="fas fa-code"></i> Function Reference</a>
-        <a id="open-trigger-ref"><i class="fas fa-book"></i> Trigger Data Reference</a>
+        <a id="open-api-ref"><i class="fas fa-code"></i> {{localize "LA.reactionEditor.functionReference"}}</a>
+        <a id="open-trigger-ref"><i class="fas fa-book"></i> {{localize "LA.reactionEditor.triggerDataReference"}}</a>
     </div>
 
     <details class="code-section" open>
-        <summary class="code-section-header">Evaluate Function <a class="expand-editor" data-target="evaluate"
+        <summary class="code-section-header">{{localize "LA.reactionEditor.evaluateFunction"}} <a class="expand-editor" data-target="evaluate"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked">
             <div class="form-fields">
                 <textarea name="evaluate" rows="8">{{evaluate}}</textarea>
             </div>
             <p class="notes">
-                Must return <code>true</code> or <code>false</code>. An async evaluate is rejected and treated as false.
-                Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
-                <code>item</code>, <code>activationName</code>, <code>api</code>.
+                {{{localize "LA.reactionEditor.evaluateNote"}}}
             </p>
         </div>
     </details>
 
     <div class="form-group">
-        <label>Activation Type</label>
+        <label>{{localize "LA.reactionEditor.activationType"}}</label>
         <div class="la-row-even">
             <select name="activationType" id="activationType">
-                <option value="none" {{#if (eq activationType "none" )}}selected{{/if}}>None</option>
-                <option value="flow" {{#if (eq activationType "flow" )}}selected{{/if}}>Flow (default)</option>
-                <option value="macro" {{#if (eq activationType "macro" )}}selected{{/if}}>Macro</option>
-                <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>JavaScript</option>
+                <option value="none" {{#if (eq activationType "none" )}}selected{{/if}}>{{localize "LA.reactionEditor.none"}}</option>
+                <option value="flow" {{#if (eq activationType "flow" )}}selected{{/if}}>{{localize "LA.reactionEditor.flowDefault"}}</option>
+                <option value="macro" {{#if (eq activationType "macro" )}}selected{{/if}}>{{localize "LA.reactionEditor.macro"}}</option>
+                <option value="code" {{#if (eq activationType "code" )}}selected{{/if}}>{{localize "LA.reactionEditor.javascript"}}</option>
             </select>
             <select name="activationMode" id="activationMode">
-                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>Instead of flow (code only)
+                <option value="instead" {{#if (eq activationMode "instead" )}}selected{{/if}}>{{localize "LA.reactionEditor.insteadOfFlowCodeOnly"}}
                 </option>
-                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>Alongside flow (also posts
-                    card)</option>
+                <option value="after" {{#if (eq activationMode "after" )}}selected{{/if}}>{{localize "LA.reactionEditor.alongsideFlowAlsoPostsCard"}}</option>
             </select>
         </div>
-        <p class="notes">None (no activation), Flow (shows chat card), Macro/JS (run custom code). Mode: run Macro/JS
-            alone, or alongside this reaction's own flow/card.</p>
+        <p class="notes">{{localize "LA.reactionEditor.noneNoActivationFlowShowsChat"}}</p>
         <p id="activation-after-warning" class="notes la-warn" style="display:none;">
-            <i class="fas fa-info-circle"></i> <b>Alongside flow</b> also fires this reaction's own flow / chat card.
-            It does not delay your code until after the triggering action, both run together. The action you are
-            reacting to always runs either way.
+            <i class="fas fa-info-circle"></i> <b>{{localize "LA.reactionEditor.alongsideFlow"}}</b> {{localize "LA.reactionEditor.alsoFiresThisReactionSOwn"}}
         </p>
         <p id="activation-recursion-warning" class="notes la-warn la-warn-hot" style="display:none;">
-            <i class="fas fa-exclamation-triangle"></i> With an activation trigger (<code>onActivation</code>,
-            <code>onInitActivation</code>, <code>onEndActivation</code>, <code>onInitEndActivation</code>) and this
-            setting, re-activating the same item would loop. Lancer Automations will skip the item re-activation
-            (console warning). Prefer <b>Instead of flow</b> for clearer behavior.
+            <i class="fas fa-exclamation-triangle"></i> {{{localize "LA.reactionEditor.recursionWarning"}}}
+            <b>{{localize "LA.reactionEditor.insteadOfFlow"}}</b> {{localize "LA.reactionEditor.forClearerBehavior"}}
         </p>
     </div>
 
     <div class="form-group activation-macro" style="display:none;">
-        <label>Macro Name</label>
+        <label>{{localize "LA.reactionEditor.macroName"}}</label>
         <div class="form-fields">
             <input type="text" name="activationMacro" value="{{activationMacro}}" placeholder="e.g. MyMacroName">
         </div>
-        <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
-            <code>item</code>, <code>activationName</code>, <code>api</code>
-        </p>
+        <p class="notes">{{{localize "LA.reactionEditor.variablesNote"}}}</p>
     </div>
 
     <details class="code-section activation-code" style="display:none;" {{#if activationCode}}open{{/if}}>
-        <summary class="code-section-header">Activation Code <a class="expand-editor" data-target="activationCode"
+        <summary class="code-section-header">{{localize "LA.reactionEditor.activationCode"}} <a class="expand-editor" data-target="activationCode"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked">
             <div class="form-fields">
                 <textarea name="activationCode" rows="6">{{activationCode}}</textarea>
             </div>
-            <p class="notes">Variables: <code>triggerType</code>, <code>triggerData</code>, <code>reactorToken</code>,
-                <code>item</code>, <code>activationName</code>, <code>api</code>
-            </p>
+            <p class="notes">{{{localize "LA.reactionEditor.variablesNote"}}}</p>
         </div>
     </details>
 
     <details class="code-section">
-        <summary class="code-section-header">onInit Code <a class="expand-editor" data-target="onInit"
+        <summary class="code-section-header">{{localize "LA.reactionEditor.oninitCode"}} <a class="expand-editor" data-target="onInit"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked">
             <div class="form-fields">
                 <textarea name="onInit" rows="6">{{onInit}}</textarea>
             </div>
-            <p class="notes">Runs when a token enters the scene, or when the scene loads for a scene reactor. Variables:
-                <code>token</code>, <code>item</code>, <code>api</code>
-            </p>
+            <p class="notes">{{{localize "LA.reactionEditor.onInitNote"}}}</p>
         </div>
     </details>
 
     <details class="code-section">
-        <summary class="code-section-header">onMessage Code <a class="expand-editor" data-target="onMessage"
+        <summary class="code-section-header">{{localize "LA.reactionEditor.onmessageCode"}} <a class="expand-editor" data-target="onMessage"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked">
             <div class="form-fields">
                 <textarea name="onMessage" rows="6">{{onMessage}}</textarea>
             </div>
-            <p class="notes">Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables:
-                <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>,
-                <code>activationName</code>, <code>api</code>
-            </p>
+            <p class="notes">{{{localize "LA.reactionEditor.onMessageNote"}}}</p>
         </div>
     </details>
 
     <footer class="sheet-footer flexrow">
         <button type="submit" class="la-save-btn">
-            <i class="far fa-save la-save-icon"></i> Save Activation<span class="la-dirty-star"></span>
+            <i class="far fa-save la-save-icon"></i> {{localize "LA.reactionEditor.saveActivation"}}<span class="la-dirty-star"></span>
         </button>
         <button type="button" class="la-close-btn">
-            <i class="fas fa-xmark"></i> Close
+            <i class="fas fa-xmark"></i> {{localize "LA.reactionEditor.close"}}
         </button>
     </footer>
 </form>

@@ -1,5 +1,7 @@
 // LaSossis template presets for the Template Macro library, imported from the settings menu.
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
+
 const TMAC = 'templatemacro';
 
 function _jb2aModule()
@@ -83,7 +85,7 @@ export async function importTemplateMacroPresets()
 {
     if (!game.modules.get(TMAC)?.active)
     {
-        ui.notifications.warn('Template Macro is not active.');
+        ui.notifications.warn(localize('LA.notify.templateMacroIsNotActive'));
         return;
     }
     const library = /** @type {any[]} */ (foundry.utils.deepClone(game.settings.get(TMAC, 'templateLibrary') ?? []));
@@ -104,5 +106,5 @@ export async function importTemplateMacroPresets()
         }
     }
     await game.settings.set(TMAC, 'templateLibrary', library);
-    ui.notifications.info(`LaSossis template presets: ${added} added, ${updated} updated.`);
+    ui.notifications.info(localizeFormat('LA.notify.tmacPresetsImported', { added, updated }));
 }

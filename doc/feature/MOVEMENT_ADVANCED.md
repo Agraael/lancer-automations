@@ -47,7 +47,7 @@ If neither is enough, the move is rejected with a reminder to hold the free-move
 
 **Pathfind Drag Movement** (`pathfindDragMovement`) routes a dragged token around hostile bodies and tall terrain instead of straight through them. A live overlay shows how far it can still reach as you drag.
 
-It is off by default, and the settings row only unlocks with both **Enable Lancer Automations Ruler** (`enableBuiltinSpeedProvider`) and **Per-step Ruler Path** (`rulerPerStepRender`) on. Press **X** to flip it for the current session, over whatever the setting says.
+It is off by default, and the settings row only unlocks with both **Enable Lancer Automations Ruler** (`enableBuiltinSpeedProvider`) and **Per-step Ruler Path** (`rulerPerStepRender`) on. Press **X** to flip it for the current session while it is on.
 
 ---
 

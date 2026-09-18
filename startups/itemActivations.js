@@ -5,6 +5,13 @@ function whiteIcon(img)
     return String(img ?? '').replace('lancer/assets/icons/', 'lancer/assets/icons/white/');
 }
 
+const INVISIBLE_AURA = {
+    lineType:           0,
+    fillType:           0,
+    ownerVisibility:    { default: false, hovered: false, controlled: false, dragging: false, targeted: false, turn: false },
+    nonOwnerVisibility: { default: false, hovered: false, controlled: false, dragging: false, targeted: false, turn: false }
+};
+
 const OWNER_ONLY_AURA_VISIBILITY = {
     onlyEnabledInCombat: true,
     ownerVisibility:    { default: true,  hovered: true,  controlled: true,  dragging: true,  targeted: true,  turn: true  },
@@ -540,6 +547,14 @@ const baserunnerDefenseAutomation = {
     }]
 };
 
+function restockDroneHealInfo(droneToken)
+{
+    const lid = String(droneToken?.actor?.system?.lid ?? '');
+    const isRebake = lid.includes('rebake');
+    const tier = Number(lid.match(/_t([123])_/)?.[1] ?? 1);
+    return { isRebake, healAmount: (isRebake ? [5, 8, 10] : [5, 10, 15])[tier - 1] };
+}
+
 /** @type {ReactionGroup} */
 const restockDroneSupportAutomation = {
     category: "NPC (LaSossis)",
@@ -563,10 +578,6 @@ const restockDroneSupportAutomation = {
             if (!deployedToken)
                 return;
 
-            const isRebake = item.system.lid?.includes('rebake') || item.name.toLowerCase().includes("rebake");
-
-            const healAmount = api.tierValue(reactorToken, isRebake ? [5, 8, 10] : [5, 10, 15]);
-
             await api.createAura(deployedToken, {
                 name: "Restock Drone Zone",
                 radius: 1,
@@ -586,6 +597,8 @@ const restockDroneSupportAutomation = {
                             return;
                         if (!lancerApi.isFriendly(token, parent))
                             return;
+
+                        const { healAmount, isRebake } = lancerApi.helpers.restockDrone.healInfo(parent);
 
                         // Find any loading weapons the entered token has that are unloaded
                         const weapons = lancerApi.getWeapons(token);
@@ -814,9 +827,9 @@ function buildRingOfFireTurnStartCallback()
         const la = api;
         if (!la || !token?.actor || !parent?.actor)
             return;
-        if (!hasRingOfFire(parent, la) || !la.isHostile(token, parent))
+        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(token, parent))
             return;
-        await applyRingOfFire(token, parent, la);
+        await la.helpers.ringOfFire.apply(token, parent, la);
     };
 }
 
@@ -863,11 +876,11 @@ function buildDefenseNetAuraCallback()
         else
             await la.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === parent.id);
 
-        if (!hasRingOfFire(parent, la) || !la.isHostile(token, parent))
+        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(token, parent))
             return;
 
         if (options.hasEntered)
-            await applyRingOfFire(token, parent, la);
+            await la.helpers.ringOfFire.apply(token, parent, la);
         else
         {
             await la.removeEffectsByNameFromTokens({
@@ -1675,11 +1688,16 @@ const ablativeShieldingAutomation = {
         activationType: "none",
         onInit: async function (token, item, api)
         {
-            await api.ensureLinkedEffect({
+            await api.ensureLinkedBonus({
                 items: [item],
-                effectNames: ['resistance_energy'],
-                note: item.name,
-                duration: { label: 'permanent' }
+                bonusData: {
+                    id: `ablative_shielding_${item.id}`,
+                    name: "Ablative Shielding",
+                    type: "immunity",
+                    subtype: "resistance",
+                    damageTypes: ["Energy"]
+                },
+                addOptions: { duration: 'constant' }
             });
         }
     }]
@@ -3122,7 +3140,169 @@ const witchPainTransferenceAutomation = {
     }]
 };
 
+const ROTARY_LAUNCHER_LID = "npc-rebake_npcf_rotary_grenade_launcher_bastion";
+const ASSISTED_RELOAD_ACTION = "Assisted Reload";
+
+function assistedReloadCondition(allyActor, action)
+{
+    const la = game.modules.get('lancer-automations')?.api;
+    const grant = la?.resolveGrant(action);
+    const weapon = grant?.item;
+    if (!weapon || weapon.system?.destroyed)
+        return 'hidden';
+    const allyToken = allyActor?.getActiveTokens?.()?.[0];
+    if (!allyToken || la.getTokenDistance(allyToken, grant.token) > 1)
+        return 'hidden';
+    return weapon.system?.loaded === false ? 'visible' : 'disabled';
+}
+
+function buildAssistedReloadAuraCallback()
+{
+    return async (token, parent, aura, options) =>
+    {
+        if (options.isPreview)
+            return;
+        const la = api;
+        if (!la || !token?.actor || !parent?.actor || token.id === parent.id)
+            return;
+        if (!la.isFriendly(token, parent))
+            return;
+        const weapon = la.findItemByLid(parent.actor, la.helpers.rotary.launcherLid);
+        if (!weapon)
+            return;
+
+        if (options.hasEntered)
+        {
+            await la.addExtraActions(token.actor, {
+                name: la.helpers.rotary.actionName,
+                activation: "Quick",
+                icon: "modules/lancer-automations/icons/reload.svg",
+                detail: `Reload <b>${parent.name}</b>'s ${weapon.name}.`,
+                condition: la.helpers.rotary.assistedReloadCondition
+            }, {
+                grant: {
+                    tokenId: parent.id,
+                    actorUuid: parent.actor.uuid,
+                    itemId: weapon.id,
+                    label: weapon.name
+                }
+            });
+        }
+        else
+        {
+            await la.removeExtraActions(token.actor,
+                entry => entry.name === la.helpers.rotary.actionName && entry._grant?.tokenId === parent.id);
+        }
+    };
+}
+
 /** @type {ReactionGroup} */
+const rotaryGrenadeLauncherAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.ensureAura(token, {
+                name: ASSISTED_RELOAD_ACTION,
+                radius: 1,
+                elevationAware: true,
+                ...INVISIBLE_AURA,
+                macros: [{ function: buildAssistedReloadAuraCallback() }]
+            });
+        }
+    }]
+};
+
+/** @type {ReactionGroup} */
+const assistedReloadGeneralAutomation = {
+    category: "NPC (LaSossis)",
+    reactions: [{
+        name: ASSISTED_RELOAD_ACTION,
+        triggers: ["onActivation"],
+        onlyOnSourceMatch: true,
+        actionType: "Quick Action",
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const granted = api.findGrantedAction(reactorToken, ASSISTED_RELOAD_ACTION);
+            return granted?.item?.system?.loaded === false;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const granted = api.findGrantedAction(reactorToken, ASSISTED_RELOAD_ACTION);
+            const weapon = granted?.item;
+            if (!weapon)
+                return;
+
+            if (weapon.isOwner)
+                await api.rechargeItemResource(weapon, 'loading');
+            else
+            {
+                await triggerData.sendMessageToReactor(
+                    { tokenId: granted.token.id, itemId: weapon.id },
+                    api.getActiveGMId(),
+                    { wait: true }
+                );
+            }
+
+            ui.notifications.info(`${reactorToken.name} reloaded ${granted.token.name}'s ${weapon.name}.`);
+        },
+        onMessage: async function (triggerType, data, reactorToken, item, activationName, api)
+        {
+            const weapon = api.resolveGrant(data)?.item;
+            if (weapon)
+                await api.rechargeItemResource(weapon, 'loading');
+        }
+    }]
+};
+
+/** @type {ReactionGroup} */
+const heavyAssaultShieldAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onHit"],
+        onlyOnSourceMatch: true,
+        triggerSelf: true,
+        triggerOther: false,
+        outOfCombat: true,
+        autoActivate: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            return (triggerData.hitTokens ?? []).length > 0;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            api.afterFx(async () =>
+            {
+                await api.executeSaveVsEffect(triggerData.hitTokens, {
+                    stat: "HULL",
+                    title: "Heavy Assault Shield",
+                    origin: reactorToken,
+                    cardTitle: "HEAVY ASSAULT SHIELD - HULL SAVE",
+                    cardDescription: (target) => `<b>${target.name}</b> must pass a Hull save or be knocked <b>Prone</b>.`,
+                    effects: ['prone'],
+                    note: "Heavy Assault Shield"
+                });
+            });
+        }
+    }]
+};
+
 const witchPetrifyAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
@@ -3218,7 +3398,16 @@ const witchPetrifyAutomation = {
     ]
 };
 
+api.registerUserHelper('ringOfFire.has', hasRingOfFire);
+api.registerUserHelper('ringOfFire.apply', applyRingOfFire);
+api.registerUserHelper('rotary.launcherLid', ROTARY_LAUNCHER_LID);
+api.registerUserHelper('rotary.actionName', ASSISTED_RELOAD_ACTION);
+api.registerUserHelper('rotary.assistedReloadCondition', assistedReloadCondition);
+api.registerUserHelper('restockDrone.healInfo', restockDroneHealInfo);
+
 api.registerDefaultItemReactions({
+    "npc-rebake_npcf_rotary_grenade_launcher_bastion": rotaryGrenadeLauncherAutomation,
+    "npc-rebake_npcf_heavy_assault_shield_bastion": heavyAssaultShieldAutomation,
     "npc-rebake_npcf_tear_down_witch": witchTearDownAutomation,
     "npc-rebake_npcf_blind_witch": witchBlindAutomation,
     "npc-rebake_npcf_predatory_logic_witch": witchPredatoryLogicAutomation,
@@ -5924,6 +6113,7 @@ api.registerDefaultItemReactions({
 });
 
 api.registerDefaultGeneralReactions({
+    "Assisted Reload": assistedReloadGeneralAutomation,
     "Fall Prone (Sniper's Mark)": {
         category: "NPC (LaSossis)",
         triggers: ["onActivation"],

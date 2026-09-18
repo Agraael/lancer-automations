@@ -2,6 +2,7 @@
 
 import * as actionFX from '../fx/actionFX.js';
 import { getModuleSetting } from './settings-utils.js';
+import { localize, localizeFormat } from './string-utils.js';
 import { getLAFlags } from './flag-utils.js';
 import { MODULE_ID } from './constants.js';
 import { getStatIcon, getTierIcon } from './scan-icons.js';
@@ -510,10 +511,10 @@ function _buildScanData(target, customName = '', scanIndex = '')
         eng:  actor.system.eng  || 0,
     };
     scanData.haseList = [
-        { label: 'Hull', value: scanData.hase.hull, icon: getStatIcon('Hull') },
-        { label: 'Agi',  value: scanData.hase.agi,  icon: getStatIcon('Agi')  },
-        { label: 'Sys',  value: scanData.hase.sys,  icon: getStatIcon('Sys')  },
-        { label: 'Eng',  value: scanData.hase.eng,  icon: getStatIcon('Eng')  },
+        { label: localize('LA.hase.hull'), value: scanData.hase.hull, icon: getStatIcon('Hull') },
+        { label: localize('LA.hase.agi'),  value: scanData.hase.agi,  icon: getStatIcon('Agi')  },
+        { label: localize('LA.hase.sys'),  value: scanData.hase.sys,  icon: getStatIcon('Sys')  },
+        { label: localize('LA.hase.eng'),  value: scanData.hase.eng,  icon: getStatIcon('Eng')  },
     ];
 
     /** @param {string} label @param {any} value @param {{max?: number, isHeat?: boolean}} [opts] */
@@ -584,7 +585,7 @@ export async function createScanJournalEntry(target, customName = '', ownership 
 {
     if (!JournalEntry.canUserCreate(game.user))
     {
-        ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
+        ui.notifications.error(localizeFormat('LA.notify.scanJournalNoPermission', { name: game.user.name }));
         return null;
     }
     const actor = target.actor;
@@ -701,7 +702,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
 {
     if (!JournalEntry.canUserCreate(game.user))
     {
-        ui.notifications.error(`${game.user.name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.`);
+        ui.notifications.error(localizeFormat('LA.notify.scanJournalNoPermission', { name: game.user.name }));
         return null;
     }
     let folder = game.folders.getName(FOLDER_NAME);
@@ -713,7 +714,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
         }
         catch
         {
-            ui.notifications.error(`${FOLDER_NAME} does not exist and must be created manually.`);
+            ui.notifications.error(localizeFormat('LA.notify.folderMissing', { folder: FOLDER_NAME }));
             return null;
         }
     }
@@ -905,7 +906,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
         buttons: {
             submit: {
                 icon: '<i class="fas fa-check"></i>',
-                label: 'Send to Chat',
+                label: localize('LA.scan.sendToChat'),
                 callback: async (html) =>
                 {
                     const gmNotes = String(html.find('[name="scan-info"]').val()).trim();
@@ -924,7 +925,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                     });
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'submit',
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520 }).render(true);
@@ -948,7 +949,7 @@ export async function showSystemScanDialog(targets)
                 },
             });
         }
-        ui.notifications.info(`Scan request sent to GM for ${targetArray.length} target${targetArray.length > 1 ? 's' : ''}.`);
+        ui.notifications.info(localizeFormat('LA.notify.scanRequestSent', { count: targetArray.length, plural: targetArray.length > 1 ? 's' : '' }));
         return;
     }
 
@@ -965,12 +966,12 @@ export async function showSystemScanDialog(targets)
     });
 
     const dlg = new Dialog({
-        title: 'System Scan Options',
+        title: localize('LA.dialogTitle.systemScanOptions'),
         content,
         buttons: {
             scan: {
                 icon: '<i class="fas fa-radar"></i>',
-                label: 'Execute Scan',
+                label: localize('LA.scan.executeScan'),
                 callback: async (html) =>
                 {
                     const $card = html.find('.lancer-toggle-card');
@@ -995,14 +996,14 @@ export async function showSystemScanDialog(targets)
                                 },
                             });
                         }
-                        ui.notifications.info(`Journal creation request sent to GM for ${targetArray.length} target${targetArray.length > 1 ? 's' : ''}`);
+                        ui.notifications.info(localizeFormat('LA.notify.journalRequestSent', { count: targetArray.length, plural: targetArray.length > 1 ? 's' : '' }));
                     }
 
                     for (const target of targetArray)
                         await performSystemScan(target, createJournal && game.user.isGM, customName, ownership);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'scan',
         render: (html) =>
@@ -1103,8 +1104,8 @@ export async function executeScanOnActivation(reactorToken)
             range: sensorRange,
             glow: 'sensor',
             count: 1,
-            title: 'SCAN — Select Target',
-            description: `Choose a target within Sensors (${sensorRange})`,
+            title: localize('LA.dialogTitle.scanSelectTarget'),
+            description: localizeFormat('LA.scanUi.chooseWithinSensors', { range: sensorRange }),
             filter: (token) => token.actor?.type !== 'deployable',
         });
         if (chosen?.length)
@@ -1113,7 +1114,7 @@ export async function executeScanOnActivation(reactorToken)
 
     if (!targets.length)
     {
-        ui.notifications.warn('No targets selected for Scan!');
+        ui.notifications.warn(localize('LA.notify.noTargetsSelectedForScan'));
         return;
     }
 
@@ -1132,12 +1133,12 @@ export async function executeScanOnActivation(reactorToken)
     });
 
     new Dialog({
-        title: 'SCAN Action',
+        title: localize('LA.dialogTitle.scanAction'),
         content,
         buttons: {
             scan: {
                 icon: '<i class="fas fa-radar"></i>',
-                label: 'Scan',
+                label: localize('LA.scan.scan'),
                 callback: async (html) =>
                 {
                     const $sel = html.find('.lancer-scaling-card.selected');
@@ -1165,11 +1166,11 @@ export async function executeScanOnActivation(reactorToken)
                                 },
                             });
                         }
-                        ui.notifications.info(`Scan request sent to GM for ${targets.length} target${targets.length > 1 ? 's' : ''}`);
+                        ui.notifications.info(localizeFormat('LA.notify.scanRequestSentNoDot', { count: targets.length, plural: targets.length > 1 ? 's' : '' }));
                     }
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'scan',
         render: (html) =>
@@ -1184,7 +1185,7 @@ export async function executeScanOnActivation(reactorToken)
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 540 }).render(true);
 }
 
-/** Helper: wire group→members propagation + members→group reflection on the ownership grid. */
+/** Wire group→members propagation + members→group reflection on the ownership grid. */
 function _bindOwnerGroupSync(html)
 {
     const root = html[0] ?? html;
@@ -1253,7 +1254,7 @@ export async function executeGenerateScan(targetsArg)
     const targetArray = Array.isArray(targetsArg) ? targetsArg : [targetsArg];
     if (!targetArray.length)
     {
-        ui.notifications.warn('No targets selected for Generate Scan.');
+        ui.notifications.warn(localize('LA.notify.noTargetsSelectedForGenerateScan'));
         return;
     }
     const targetNames = targetArray.map((target) => target.name).join(', ');
@@ -1266,12 +1267,12 @@ export async function executeGenerateScan(targetsArg)
     });
 
     const dlg = new Dialog({
-        title: 'Generate Scan',
+        title: localize('LA.dialogTitle.generateScan'),
         content,
         buttons: {
             ok: {
                 icon: '<i class="fas fa-check"></i>',
-                label: 'Generate',
+                label: localize('LA.scan.generate'),
                 callback: async (html) =>
                 {
                     const $sel = html.find('.lancer-scaling-card.selected');
@@ -1290,7 +1291,7 @@ export async function executeGenerateScan(targetsArg)
                     }
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'ok',
         render: (html) =>
@@ -1424,7 +1425,7 @@ export async function regenerateScans(opts = {})
         }
     }
 
-    ui.notifications.info(`Regenerated ${results.updated.length}, missing ${results.missing.length}, skipped ${results.skipped.length}.`);
+    ui.notifications.info(localizeFormat('LA.notify.scanRegenerated', { updated: results.updated.length, missing: results.missing.length, skipped: results.skipped.length }));
     console.log('lancer-automations | regenerateScans summary', results);
     return results;
 }

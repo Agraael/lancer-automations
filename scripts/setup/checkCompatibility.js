@@ -2,6 +2,8 @@
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localize } from '../tools/string-utils.js';
+import { ISO_SETTINGS, isIsoPerspectiveActive, isGrapeIsoActive } from './iso-settings.js';
 
 /**
  * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
@@ -38,7 +40,7 @@ function getConflictRules()
         // StatusFX vs csm-lancer-qol Auto-Status
         {
             id: 'statusfx-vs-qol-auto',
-            label: '<b>StatusFX</b> auto-status conflicts with csm-lancer-qol <i>"Enable Status & Condition Automation"</i>',
+            label: 'LA.compat.statusfx-vs-qol-auto.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -64,7 +66,7 @@ function getConflictRules()
         // StatusFX TokenMagic vs csm-lancer-qol Condition Effects
         {
             id: 'statusfx-vs-qol-fx',
-            label: '<b>StatusFX</b> TokenMagic effects conflict with csm-lancer-qol <i>"Enable Status & Condition Token Effects"</i>',
+            label: 'LA.compat.statusfx-vs-qol-fx.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -90,7 +92,7 @@ function getConflictRules()
         // Alt Structure vs csm-lancer-qol One Structure NPC Automation
         {
             id: 'altstruct-vs-qol-onestruct',
-            label: '<b>Alt Structure</b> rules conflict with csm-lancer-qol <i>"One Structure NPC Automation"</i>',
+            label: 'LA.compat.altstruct-vs-qol-onestruct.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -115,7 +117,7 @@ function getConflictRules()
         // Alt Structure vs lancer-alt-structure standalone module
         {
             id: 'altstruct-vs-standalone',
-            label: '<b>Alt Structure</b> (built-in) conflicts with standalone <i>lancer-alt-structure</i> module',
+            label: 'LA.compat.altstruct-vs-standalone.label',
             check()
             {
                 if (!game.modules.get('lancer-alt-structure')?.active)
@@ -132,7 +134,7 @@ function getConflictRules()
         // Engagement: lancer-automations reaction vs csm-lancer-qol
         {
             id: 'engagement-vs-qol',
-            label: '<b>Engagement</b> reaction conflicts with csm-lancer-qol <i>"Enable Engaged Automation"</i>',
+            label: 'LA.compat.engagement-vs-qol.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -157,7 +159,7 @@ function getConflictRules()
         // Remove Statuses on Death: lancer-automations vs csm-lancer-qol
         {
             id: 'wipondeath-vs-qol',
-            label: '<b>Remove Statuses on Death</b> conflicts with csm-lancer-qol <i>"Remove Statuses on Death"</i>',
+            label: 'LA.compat.wipondeath-vs-qol.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -182,7 +184,7 @@ function getConflictRules()
         // Built-in Speed Provider vs standalone lancer-speed-provider
         {
             id: 'speedprovider-vs-standalone',
-            label: '<b>Built-in Speed Provider</b> conflicts with standalone <i>lancer-speed-provider</i> module. Auto-fix will disable the built-in provider.',
+            label: 'LA.compat.speedprovider-vs-standalone.label',
             check()
             {
                 if (!game.modules.get('lancer-speed-provider')?.active)
@@ -198,7 +200,7 @@ function getConflictRules()
         // Wreck system vs csm-lancer-qol wrecks
         {
             id: 'wreck-vs-qol',
-            label: '<b>Wreck Automation</b> conflicts with csm-lancer-qol <i>"Wreck Automation"</i>. Auto-fix will disable csm-lancer-qol wrecks.',
+            label: 'LA.compat.wreck-vs-qol.label',
             check()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
@@ -299,9 +301,67 @@ function getConflictRules()
             }
         },
 
+        // Only our own ruler reads iso.waypointLabel, and only Isometric Perspective needs it.
+        {
+            id: 'waypointlabel-vs-isoperspective',
+            label: 'LA.compat.waypointlabel-vs-isoperspective.label',
+            check()
+            {
+                if (!isIsoPerspectiveActive())
+                    return false;
+                return getModuleSetting(ISO_SETTINGS.waypointLabel) !== true;
+            },
+            async fix()
+            {
+                await game.settings.set(MODULE_ID, ISO_SETTINGS.waypointLabel, true);
+            }
+        },
+
+        {
+            id: 'waypointlabel-vs-grapejuice',
+            label: 'LA.compat.waypointlabel-vs-grapejuice.label',
+            check()
+            {
+                if (isIsoPerspectiveActive() || !isGrapeIsoActive())
+                    return false;
+                return getModuleSetting(ISO_SETTINGS.waypointLabel) === true;
+            },
+            async fix()
+            {
+                await game.settings.set(MODULE_ID, ISO_SETTINGS.waypointLabel, false);
+            }
+        },
+
+        // THT draws its own line of sight measurement during token drags, on top of ours
+        {
+            id: 'tht-los-vs-la-ruler',
+            label: 'LA.compat.tht-los-vs-la-ruler.label',
+            check()
+            {
+                if (!game.modules.get('terrain-height-tools')?.active)
+                    return false;
+                if (!getModuleSetting('enableBuiltinSpeedProvider'))
+                    return false;
+                try
+                {
+                    return game.settings.get('terrain-height-tools', 'displayLosMeasurementGm') === true
+                        || game.settings.get('terrain-height-tools', 'displayLosMeasurementPlayer') === true;
+                }
+                catch
+                {
+                    return false;
+                }
+            },
+            async fix()
+            {
+                await game.settings.set('terrain-height-tools', 'displayLosMeasurementGm', false);
+                await game.settings.set('terrain-height-tools', 'displayLosMeasurementPlayer', false);
+            }
+        },
+
         {
             id: 'jb2a-both-active',
-            label: 'Both <b>JB2A</b> packs are active. The Patreon library already contains everything in the free one, so <i>JB2A_DnD5e</i> can be disabled.',
+            label: 'LA.compat.jb2a-both-active.label',
             check()
             {
                 return !!game.modules.get('jb2a_patreon')?.active && !!game.modules.get('JB2A_DnD5e')?.active;
@@ -310,7 +370,7 @@ function getConflictRules()
 
         {
             id: 'statuscounter-redundant',
-            label: '<b>Stack counters</b> are built into Lancer Automations now, so <i>Status Icon Counters</i> (statuscounter) can be disabled.',
+            label: 'LA.compat.statuscounter-redundant.label',
             check()
             {
                 return !!game.modules.get('statuscounter')?.active;
@@ -328,7 +388,7 @@ function showQolAdvisoryOnce()
         return;
     game.settings.set(MODULE_ID, 'qolAdvisoryShown', true);
     new Dialog({
-        title: 'Lancer Automations: about Lancer QoL',
+        title: localize('LA.dialogTitle.lancerAutomationsAboutLancerQol'),
         content: `
             <p><b>Lancer QoL</b> is enabled. Lancer Automations covers all of its features, and keeping the two modules compatible gets more tedious with every release.</p>
             <p>You can keep using it, but some issues can occur when both run together. Known ones are already patched by Lancer Automations.</p>
@@ -337,7 +397,7 @@ function showQolAdvisoryOnce()
         buttons: {
             ok: {
                 icon: '<i class="fas fa-check"></i>',
-                label: 'Understood',
+                label: localize('LA.compat.button.understood'),
                 callback: () =>
                 {}
             }
@@ -368,7 +428,7 @@ export function checkCompatibility()
         game.settings.set(MODULE_ID, 'compatWarningsShown', [...seen, ...warnings.map(rule => rule.id)]);
 
     const listHtml = (entries, color) => entries.map(entry =>
-        `<li style="margin-bottom:6px;"><i class="fas fa-exclamation-triangle" style="color:${color};"></i> ${entry.label}</li>`
+        `<li style="margin-bottom:6px;"><i class="fas fa-exclamation-triangle" style="color:${color};"></i> ${localize(entry.label)}</li>`
     ).join('');
 
     const conflictHtml = conflicts.length
@@ -387,7 +447,7 @@ export function checkCompatibility()
     const fixButtons = {
         fix: {
             icon: '<i class="fas fa-wrench"></i>',
-            label: 'Auto-fix & Reload',
+            label: localize('LA.compat.button.autoFix'),
             callback: async () =>
             {
                 for (const conflict of conflicts)
@@ -402,13 +462,13 @@ export function checkCompatibility()
                         console.error(`${MODULE_ID} | Compatibility: failed to fix ${conflict.id}:`, e);
                     }
                 }
-                ui.notifications.info('Migration complete. Reloading in 1 second...');
+                ui.notifications.info(localize('LA.notify.migrationCompleteReloadingIn1Second'));
                 setTimeout(() => foundry.utils.debouncedReload(), 1000);
             }
         },
         ignore: {
             icon: '<i class="fas fa-times"></i>',
-            label: 'Ignore for now',
+            label: localize('LA.compat.button.ignore'),
             callback: () =>
             {}
         }
@@ -417,7 +477,7 @@ export function checkCompatibility()
     const okButton = {
         ok: {
             icon: '<i class="fas fa-check"></i>',
-            label: 'Understood',
+            label: localize('LA.compat.button.understood'),
             callback: () =>
             {}
         }

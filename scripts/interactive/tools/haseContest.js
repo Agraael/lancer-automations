@@ -2,6 +2,7 @@
 
 import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
 import { MODULE_ID } from "../../tools/constants.js";
+import { localize } from "../../tools/string-utils.js";
 import { isSingleTargetPickerActive, cancelSingleTargetPicker, createChanceLabel } from "../canvas.js";
 import { getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { TG, paintDashedFootprint, createTokenTether } from "../canvas-helpers.js";
@@ -173,7 +174,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
         const unbindEscape = bindCardEscape(cancel, isSingleTargetPickerActive);
 
         cardEl = _createInfoCard("haseContest", {
-            title: "HASE CONTEST",
+            title: localize('LA.dialogTitle.haseContest'),
             onCancel: cancel,
         });
 

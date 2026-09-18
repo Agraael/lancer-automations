@@ -1,6 +1,7 @@
 /* global console, ChatMessage, Dialog, fromUuid, game, ui, renderTemplate, $ */
 
 import { socketRequestWithAck } from '../socket.js';
+import { localize } from './string-utils.js';
 
 const TPL = {
     menu:      'modules/lancer-automations/templates/rest-menu.html',
@@ -306,18 +307,18 @@ async function _showEmergencyRest(mech, pilot)
 
     const content = await renderTemplate(TPL.emergency, data);
     const dlg = new Dialog({
-        title: 'Emergency Recovery',
+        title: localize('LA.dialogTitle.emergencyRecovery'),
         content,
         buttons: {
             confirm: {
                 icon: '<i class="fas fa-bolt"></i>',
-                label: 'Reinitialize',
+                label: localize('LA.rest.reinitialize'),
                 callback: async () =>
                 {
                     const totalsData = totals();
                     if (!totalsData.canConfirm)
                     {
-                        ui.notifications.warn('Not enough repairs available.');
+                        ui.notifications.warn(localize('LA.notify.notEnoughRepairsAvailable'));
                         return;
                     }
                     const allyLines = await _applyAllyPulls(data, pulledByAlly);
@@ -343,7 +344,7 @@ async function _showEmergencyRest(mech, pilot)
                     setTimeout(() => _showRegularRest(mech, pilot), 80);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'confirm',
         render: (html) =>
@@ -400,18 +401,18 @@ async function _showRegularRest(mech, pilot)
     const pool = () => data.mech.repairs.value + _sumPulled(pulledByAlly) + gmGrantRef.value;
 
     const dlg = new Dialog({
-        title: 'Rest',
+        title: localize('LA.dialogTitle.rest'),
         content,
         buttons: {
             confirm: {
                 icon: '<i class="fas fa-check"></i>',
-                label: 'Confirm',
+                label: localize('LA.common.confirm'),
                 callback: async () =>
                 {
                     const costTotal = cost();
                     if (costTotal > pool())
                     {
-                        ui.notifications.warn('Total cost exceeds available repairs.');
+                        ui.notifications.warn(localize('LA.notify.totalCostExceedsAvailableRepairs'));
                         return;
                     }
                     const allyLines = await _applyAllyPulls(data, pulledByAlly);
@@ -475,7 +476,7 @@ async function _showRegularRest(mech, pilot)
                     await _postRestReport(mech, pilot, lines);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
         },
         default: 'confirm',
         render: (html) =>
@@ -597,7 +598,7 @@ export async function executeRest(token)
     const { mech, pilot } = await _resolveMechAndPilot(token);
     if (!mech)
     {
-        ui.notifications.warn("No mech for this token. Pick a mech token, or a pilot with an active mech.");
+        ui.notifications.warn(localize('LA.notify.noMechForThisTokenPickA'));
         return;
     }
     const isDestroyed = (mech.system.structure?.value ?? 0) === 0 || (mech.system.stress?.value ?? 0) === 0;

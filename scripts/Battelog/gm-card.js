@@ -3,7 +3,7 @@
 import { playTerminalIntro } from './intro-terminal.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { openBattleLogRecap } from './recap.js';
-import { escapeHtml as _escape } from '../tools/string-utils.js';
+import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 
 /** Open the GM card for a battle. */
 export function openBattleLogGMCard(battle)
@@ -71,7 +71,7 @@ export function openBattleLogGMCard(battle)
     `;
 
     const dlg = new Dialog({
-        title: 'Battle Log · GM',
+        title: localize('LA.dialogTitle.battleLogGm'),
         content,
         buttons: {
             // Hidden via CSS; real buttons live in the card body. Dialog requires at least one entry.

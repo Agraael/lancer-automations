@@ -1,5 +1,6 @@
 // filled in even when the toggle is off, so callers can tell "opted out" from "typo"
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localize } from '../tools/string-utils.js';
 
 let additionalStatusKeys = null;
 
@@ -49,7 +50,7 @@ Hooks.on('lancer.statusesReady', () =>
             id: "infection",
             name: "Infection",
             img: "modules/lancer-automations/icons/infection.svg",
-            description: "Like Burn, but applies Heat instead of damage. Characters immediately take Heat equal to the Infection received, and the value stacks if Infection is already present. At the end of their turn, they roll a Systems check: on success they clear all Infection, otherwise they take Heat equal to the current Infection. Anything that clears Burn (e.g. Stabilize) also clears Infection."
+            description: localize('LA.status.infection.description')
         });
     }
 
@@ -61,7 +62,7 @@ Hooks.on('lancer.statusesReady', () =>
                 id: "guardian",
                 name: "Guardian",
                 img: "modules/lancer-automations/icons/guarded-tower.svg",
-                description: "Allied characters adjacent to this character can use them as hard cover."
+                description: localize('LA.status.guardian.description')
             });
         }
 
@@ -71,7 +72,7 @@ Hooks.on('lancer.statusesReady', () =>
                 id: "bulwark",
                 name: "Bulwark",
                 img: "modules/lancer-automations/icons/brick-wall.svg",
-                description: "This character is treated as hard cover and blocks line of sight."
+                description: localize('LA.status.bulwark.description')
             });
         }
 
@@ -81,7 +82,7 @@ Hooks.on('lancer.statusesReady', () =>
                 id: "phasing",
                 name: "Phasing",
                 img: "modules/lancer-automations/icons/back-forth.svg",
-                description: "This character can move through other characters, but still cannot end its movement on them."
+                description: localize('LA.status.phasing.description')
             });
         }
     }
@@ -95,7 +96,7 @@ Hooks.on('lancer.statusesReady', () =>
             { id: "overshield", name: "Overshield", img: "modules/lancer-automations/icons/overshield.svg" },
             { id: "engaged", name: "Engaged", img: "systems/lancer/assets/icons/white/status_engaged.svg" },
             { id: "cascading", name: "Cascading", img: "icons/svg/paralysis.svg" },
-            { id: "bolster", name: "Bolstered", img: "systems/lancer/assets/icons/white/accuracy.svg" },
+            { id: "bolster", name: "Bolster", img: "systems/lancer/assets/icons/white/accuracy.svg" },
             { id: "mia", name: "M.I.A.", img: "modules/lancer-automations/icons/mia_lg.svg" }
         ];
         for (const eff of qolStatusEffects)
@@ -137,7 +138,7 @@ Hooks.on('lancer.statusesReady', () =>
         id: "resistance_all",
         name: "Resist All",
         img: "modules/lancer-automations/icons/resist_all.svg",
-        description: "You count as having RESISTANCE to all damage, burn, and heat: take half, rounded up.",
+        description: localize('LA.status.resistance_all.description'),
         changes: /** @type {any[]} */ ([
             { key: "system.resistances.burn", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.energy", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
@@ -150,22 +151,22 @@ Hooks.on('lancer.statusesReady', () =>
         id: "immovable",
         name: "Immovable",
         img: "modules/lancer-automations/icons/immovable.svg",
-        description: "Cannot be moved"
+        description: localize('LA.status.immovable.description')
     }, {
         id: "disengage",
         name: "Disengage",
         img: "modules/lancer-automations/icons/disengage.svg",
-        description: "You ignore engagement and your movement does not provoke reactions"
+        description: localize('LA.status.disengage.description')
     }, {
         id: "destroyed",
         name: "Destroyed",
         img: "modules/lancer-automations/icons/destroyed.svg",
-        description: "You are destroyed"
+        description: localize('LA.status.destroyed.description')
     }, {
         id: "grappling",
         name: "Grappling",
         img: "modules/lancer-automations/icons/grappling.svg",
-        description: "You are grappling in a grapple contest",
+        description: localize('LA.status.grappling.description'),
         changes: /** @type {any[]} */ ([
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
@@ -174,7 +175,7 @@ Hooks.on('lancer.statusesReady', () =>
         id: "grappled",
         name: "Grappled",
         img: "modules/lancer-automations/icons/grappled.svg",
-        description: "You are grappled in a grapple contest",
+        description: localize('LA.status.grappled.description'),
         changes: /** @type {any[]} */ ([
             { key: "system.statuses.engaged", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.action_tracker.reaction", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "false" },
@@ -183,60 +184,60 @@ Hooks.on('lancer.statusesReady', () =>
         id: "falling",
         name: "Falling",
         img: "modules/lancer-automations/icons/falling.svg",
-        description: "Characters take damage when they fall 3 or more spaces and cannot recover before hitting the ground. Characters fall 10 spaces per round in normal gravity, but can't fall in zero-G or very low-G environments. They take 3 Kinetic AP (armour piercing) damage for every three spaces fallen, to a maximum of 9 Kinetic AP. Falling is a type of involuntary movement."
+        description: localize('LA.status.falling.description')
     }, {
         id: "throttled",
         name: "Throttled",
         img: "modules/lancer-automations/icons/throttled.svg",
-        description: "Deals Half damage, heat, and burn on attacks"
+        description: localize('LA.status.throttled.description')
     }, {
         id: "blinded",
         name: "Blinded",
         img: "modules/lancer-automations/icons/blinded.svg",
-        description: "Light of sight reduced to 1"
+        description: localize('LA.status.blinded.description')
     }, {
         id: "climber",
         name: "Climber",
         img: "modules/lancer-automations/icons/mountain-climbing.svg",
-        description: "You ignore effect of climbing terrain"
+        description: localize('LA.status.climber.description')
     }, {
         id: "hover",
         name: "Hover",
         img: "modules/lancer-automations/icons/hover.svg",
-        description: "You hover above the ground: same movement rules as Flying."
+        description: localize('LA.status.hover.description')
     }, {
         id: "terrain_immunity",
         name: "Terrain Immunity",
         img: "modules/lancer-automations/icons/metal-boot.svg",
-        description: "You ignore difficult and dangerous terrain"
+        description: localize('LA.status.terrain_immunity.description')
     }, {
         id: "surefoot",
         name: "Surefoot",
         img: "modules/lancer-automations/icons/running-shoe.svg",
-        description: "You ignore difficult terrain. Dangerous terrain still applies."
+        description: localize('LA.status.surefoot.description')
     }, {
         id: "reactor_meltdown",
         name: "Reactor Meltdown",
         img: "modules/lancer-automations/icons/mushroom-cloud.svg",
-        description: "You are in a reactor meltdown"
+        description: localize('LA.status.reactor_meltdown.description')
     },
     {
         id: "aided",
         name: "Aided",
         img: "modules/lancer-automations/icons/health-capsule.svg",
-        description: "You can Stabilize as a quick action"
+        description: localize('LA.status.aided.description')
     },
     {
         id: "brace",
         name: "Brace",
         img: "modules/lancer-automations/icons/brace.svg",
-        description: "You resist the triggering attack, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
+        description: localize('LA.status.brace.description')
     },
     {
         id: "core_power_active",
         name: "Core Power Active",
         img: "systems/lancer/assets/icons/white/corepower.svg",
-        description: "Your core is active",
+        description: localize('LA.status.core_power_active.description'),
         changes: /** @type {any[]} */ ([
             { key: "system.statuses.core_power_active", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
@@ -246,13 +247,13 @@ Hooks.on('lancer.statusesReady', () =>
         id: "dazed",
         name: "Dazed",
         img: "modules/lancer-automations/icons/dazed.svg",
-        description: "DAZED mechs can only take one quick action – they cannot OVERCHARGE, move normally, nor take full actions, reactions, or free actions."
+        description: localize('LA.status.dazed.description')
     },
     {
         id: "overheated",
         name: "Overheated",
         img: "modules/lancer-automations/icons/overheated.svg",
-        description: "An OVERHEATED mech cannot take any actions or activate abilities that would inflict Heat upon themselves, including OVERCHARGE and systems with the HEAT X (SELF) tag. Weapons with OVERKILL lose the tag while OVERHEATED. Cleared by STABILIZE."
+        description: localize('LA.status.overheated.description')
     }];
 
     additionalStatusKeys = new Set([

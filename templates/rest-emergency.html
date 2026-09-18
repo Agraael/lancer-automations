@@ -9,37 +9,37 @@
     <div class="la-rest-emergency-warning">
         <i class="fas fa-exclamation-triangle"></i>
         <div>
-            <div class="la-rest-emergency-title">CATASTROPHIC DAMAGE DETECTED</div>
-            <div class="la-rest-emergency-sub">Chassis recovery requires <b>4</b> repairs total.</div>
+            <div class="la-rest-emergency-title">{{localize "LA.restUi.emergency.catastrophicDamageDetected"}}</div>
+            <div class="la-rest-emergency-sub">{{localize "LA.restUi.emergency.chassisRecoveryRequires"}} <b>4</b> {{localize "LA.restUi.emergency.repairsTotal"}}</div>
         </div>
     </div>
 
     <div class="la-rest-recovery-grid">
         <div class="la-rest-recovery-cell">
-            <div class="la-rest-recovery-label">From Pilot</div>
+            <div class="la-rest-recovery-label">{{localize "LA.restUi.emergency.fromPilot"}}</div>
             <div class="la-rest-recovery-value">{{mech.repairs.value}}</div>
         </div>
         <div class="la-rest-recovery-cell">
-            <div class="la-rest-recovery-label">Allies</div>
+            <div class="la-rest-recovery-label">{{localize "LA.restUi.emergency.allies"}}</div>
             <div class="la-rest-recovery-value" id="la-rest-pool-pulled">0</div>
         </div>
         <div class="la-rest-recovery-cell">
-            <div class="la-rest-recovery-label">GM Grant</div>
+            <div class="la-rest-recovery-label">{{localize "LA.restUi.emergency.gmGrant"}}</div>
             <div class="la-rest-recovery-value" id="la-rest-pool-grant">0</div>
         </div>
         <div class="la-rest-recovery-cell">
-            <div class="la-rest-recovery-label">Pool</div>
+            <div class="la-rest-recovery-label">{{localize "LA.restUi.emergency.pool"}}</div>
             <div class="la-rest-recovery-value" id="la-rest-pool-total">{{mech.repairs.value}}</div>
         </div>
         <div class="la-rest-recovery-cell la-rest-recovery-required">
-            <div class="la-rest-recovery-label">Still Required</div>
+            <div class="la-rest-recovery-label">{{localize "LA.restUi.emergency.stillRequired"}}</div>
             <div class="la-rest-recovery-value" id="la-rest-required-count">4</div>
         </div>
     </div>
 
     {{#if hasAllies}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">ALLY REPAIR POOL</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.emergency.allyRepairPool"}}</div>
         <div class="la-rest-section-body">
             <div class="la-rest-allies-row">
                 {{#each allies}}
@@ -61,12 +61,12 @@
 
     {{#if isGM}}
     <div class="la-rest-section">
-        <div class="la-rest-section-title">GM FREE REPAIR</div>
+        <div class="la-rest-section-title">{{localize "LA.restUi.emergency.gmFreeRepair"}}</div>
         <div class="la-rest-section-body">
             <div class="la-rest-grant-row">
-                <label for="la-rest-grant">Free Repairs</label>
+                <label for="la-rest-grant">{{localize "LA.restUi.emergency.freeRepairs"}}</label>
                 <input id="la-rest-grant" class="la-rest-grant-input" type="number" min="0" value="0">
-                <span class="la-rest-grant-suffix">added to pool, no source</span>
+                <span class="la-rest-grant-suffix">{{localize "LA.restUi.emergency.addedToPoolNoSource"}}</span>
             </div>
         </div>
     </div>

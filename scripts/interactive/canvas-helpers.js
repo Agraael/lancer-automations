@@ -7,9 +7,10 @@ import {
     getInRangeOffsets, isPositionInRange, neighborKeys
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { localizeFormat } from "../tools/string-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { MODULE_ID } from "../tools/constants.js";
-import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester } from "../vision/lancerDetectionModes.js";
+import { MODULE_ID, LOS_TARGET_ABOVE } from "../tools/constants.js";
+import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester, lancerSightEdgeRecords, makeCellRayCaster } from "../vision/lancerDetectionModes.js";
 import { laSightEdgeOptions } from "../vision/laWallLos.js";
 import { getShapeSamplePoints, getTokenVisionLOS } from "../vision/visionFromEdge.js";
 import { getSettingEnabled } from "../setup/settings-register.js";
@@ -949,6 +950,87 @@ function _hexTestPoints(col, row)
 }
 
 /** Foundry sweeps from the token's shape corner samples plus its center, one sweep per origin. */
+// Clipper rounds to 0.01 px, so the angular noise of a vertex is a few hundredths of a pixel over its distance.
+const STAR_POSITION_SLACK = 0.05;
+
+// A sweep is star-shaped around its origin, so "inside" is one edge lookup by angle instead of a walk of every
+// vertex. Null when the vertices are not in angular order, and the caller falls back to the plain test.
+function _starIndex(polygon, origin)
+{
+    const points = polygon?.points;
+    if (!points || points.length < 6)
+        return null;
+    const count = points.length / 2;
+    const angles = new Float64Array(count);
+    const distances = new Float64Array(count);
+    let start = 0;
+    for (let index = 0; index < count; index++)
+    {
+        const dx = points[index * 2] - origin.x;
+        const dy = points[(index * 2) + 1] - origin.y;
+        angles[index] = Math.atan2(dy, dx);
+        distances[index] = Math.max(1, Math.hypot(dx, dy));
+        if (angles[index] < angles[start])
+            start = index;
+    }
+    for (const direction of [1, -1])
+    {
+        const ordered = new Float64Array(count);
+        const xs = new Float64Array(count);
+        const ys = new Float64Array(count);
+        let monotone = true;
+        let previous = -1;
+        for (let step = 0; step < count; step++)
+        {
+            const index = (((start + (step * direction)) % count) + count) % count;
+            ordered[step] = angles[index];
+            xs[step] = points[index * 2];
+            ys[step] = points[(index * 2) + 1];
+            // vertices on one ray come back from Clipper's rounding a hair out of order, they are equal
+            if (step > 0 && ordered[step] < ordered[step - 1])
+            {
+                const slack = STAR_POSITION_SLACK / Math.min(distances[index], distances[previous]);
+                if (ordered[step] < ordered[step - 1] - slack)
+                {
+                    monotone = false;
+                    break;
+                }
+                ordered[step] = ordered[step - 1];
+            }
+            previous = index;
+        }
+        if (monotone)
+            return { angles: ordered, xs, ys, count, ox: origin.x, oy: origin.y };
+    }
+    return null;
+}
+
+function _starContains(star, x, y)
+{
+    const theta = Math.atan2(y - star.oy, x - star.ox);
+    let low = 0;
+    let high = star.count - 1;
+    if (theta < star.angles[0])
+        low = high;
+    else
+    {
+        while (low < high)
+        {
+            const mid = (low + high + 1) >> 1;
+            if (star.angles[mid] <= theta)
+                low = mid;
+            else
+                high = mid - 1;
+        }
+    }
+    const next = (low + 1) % star.count;
+    const edgeX = star.xs[next] - star.xs[low];
+    const edgeY = star.ys[next] - star.ys[low];
+    const sidePoint = (edgeX * (y - star.ys[low])) - (edgeY * (x - star.xs[low]));
+    const sideOrigin = (edgeX * (star.oy - star.ys[low])) - (edgeY * (star.ox - star.xs[low]));
+    return sidePoint * sideOrigin >= 0;
+}
+
 function _visibilityTester(originToken)
 {
     try
@@ -964,15 +1046,15 @@ function _visibilityTester(originToken)
         }
         origins = [...(origins ?? []), originToken.center];
         const eyeElevation = originToken.losHeight ?? getTokenVisionLOS(originToken);
-        // without a vision source (uncontrolled token), wall-height's edge filter needs an object carrying b/t
-        const sourceOpt = originToken.vision
-            ? { source: originToken.vision }
-            : { source: { object: { b: eyeElevation, t: eyeElevation } }, b: eyeElevation, t: eyeElevation };
-        const built = origins.map(point => ({
-            origin: point,
-            sweep: CONFIG.Canvas.polygonBackends.sight.create({ x: point.x, y: point.y, elevation: eyeElevation }, { type: 'sight', edgeOptions: laSightEdgeOptions(), ...sourceOpt }),
-        }));
-        const tester = (x, y) => built.some(entry => entry.sweep.contains(x, y));
+        // Always the bare carrier, never the live vision source: the peek hook only fires on Token-sourced
+        // sweeps, so a selected pulse and a hovered one would build different sweeps. The band veto is the height rule here.
+        const sourceOpt = { source: { object: { b: eyeElevation, t: eyeElevation } }, b: eyeElevation, t: eyeElevation };
+        const built = origins.map(point =>
+        {
+            const sweep = CONFIG.Canvas.polygonBackends.sight.create({ x: point.x, y: point.y, elevation: eyeElevation }, { type: 'sight', edgeOptions: laSightEdgeOptions(), ...sourceOpt });
+            return { origin: point, sweep, star: _starIndex(sweep, point) };
+        });
+        const tester = (x, y) => built.some(entry => (entry.star ? _starContains(entry.star, x, y) : entry.sweep.contains(x, y)));
         tester.built = built;
         return tester;
     }
@@ -981,6 +1063,178 @@ function _visibilityTester(originToken)
         console.warn('lancer-automations | LOS tester failed:', err);
         return null;
     }
+}
+
+let _trigVeto = true;
+// Off: the seven test points already catch every straight-edged band above 3.5%, the area pass only adds
+// light that bends around a wall end inside the hex, rare, for 20-30 ms a pulse.
+let _areaPass = false;
+let _pulseBuilds = [];
+globalThis.laPulseArea = (on = true) =>
+{
+    _areaPass = !!on;
+    return _areaPass;
+};
+globalThis.laPulseTrig = (on) =>
+{
+    if (on === undefined)
+    {
+        console.log(`${MODULE_ID} | pulse trig veto ${_trigVeto ? 'on' : 'off'} | last builds, newest last\n`
+            + _pulseBuilds.map(build => JSON.stringify(build)).join('\n'));
+        return _pulseBuilds;
+    }
+    _trigVeto = !!on;
+    _pulseBuilds = [];
+    return _trigVeto;
+};
+
+function _crossingParam(from, to, edgeA, edgeB)
+{
+    const rayX = to.x - from.x;
+    const rayY = to.y - from.y;
+    const wallX = edgeB.x - edgeA.x;
+    const wallY = edgeB.y - edgeA.y;
+    const denom = (rayX * wallY) - (rayY * wallX);
+    if (Math.abs(denom) <= 1e-9)
+        return null;
+    const toWallX = edgeA.x - from.x;
+    const toWallY = edgeA.y - from.y;
+    const alongRay = ((toWallX * wallY) - (toWallY * wallX)) / denom;
+    const alongWall = ((toWallX * rayY) - (toWallY * rayX)) / denom;
+    if (alongRay <= 0 || alongRay >= 1 || alongWall < 0 || alongWall > 1)
+        return null;
+    return alongRay;
+}
+
+function _edgeMinDistance(record, point)
+{
+    const closest = foundry.utils.closestPointToSegment(point, record.edge.a, record.edge.b);
+    return Math.hypot(closest.x - point.x, closest.y - point.y);
+}
+
+const PAIR_CLEAR = 0;
+const PAIR_BLOCKED = 1;
+const PAIR_GRAZED = 2;
+
+// Sweeps and skim walks both run at eye height, so a low wall's shadow band is re-checked per hex at terrain top
+// plus a target height. Plain crossings decide, a crossing at a wall corner goes back to the rule engine's skim rules.
+function _makeBandVeto(origin, visible, build)
+{
+    // the band is the trig rule's, discrete has none
+    if (!_trigVeto || !visible?.built?.length || getModuleSetting('lancerLosHeightRule') !== 'trig')
+        return null;
+    const eye = origin.losHeight ?? getTokenVisionLOS(origin);
+    const center = origin.center;
+    const distanceTo = point => Math.hypot(point.x - center.x, point.y - center.y);
+    // nearest first, so a hex only scans the walls that can sit between it and the viewer
+    const walls = lancerSightEdgeRecords()
+        .map(record => ({ record, reach: _edgeMinDistance(record, center) }))
+        .sort((left, right) => left.reach - right.reach);
+    if (!walls.some(entry => entry.record.top < eye))
+        return null;
+    // centre first: on open ground the first pair clears and the hex costs one test
+    const origins = visible.built.map(entry => entry.origin).sort((left, right) => distanceTo(left) - distanceTo(right));
+    const originBox = _pointsBox(origins);
+    const cellCaster = makeCellRayCaster(origin, canvas.grid.size / 2);
+    const vertexTol = canvas.grid.size * 0.05;
+    const hexReach = canvas.grid.size;
+
+    const pairState = (from, to, hex) =>
+    {
+        let state = PAIR_CLEAR;
+        for (const record of hex.lowWalls)
+        {
+            const alongRay = _crossingParam(from, to, record.edge.a, record.edge.b);
+            if (alongRay === null)
+                continue;
+            const edge = record.edge;
+            if (edge.direction && (edge.orientPoint?.(from) ?? 1) === edge.direction)
+                continue;
+            // the terrain lookup waits for the first ray that actually crosses a wall
+            hex.targetHeight ??= getHexGroundElevation(hex.col, hex.row) + LOS_TARGET_ABOVE;
+            const height = eye + ((hex.targetHeight - eye) * alongRay);
+            if (height > record.top || height < record.bottom)
+                continue;
+            const hitX = from.x + ((to.x - from.x) * alongRay);
+            const hitY = from.y + ((to.y - from.y) * alongRay);
+            const grazed = Math.hypot(hitX - edge.a.x, hitY - edge.a.y) <= vertexTol
+                || Math.hypot(hitX - edge.b.x, hitY - edge.b.y) <= vertexTol;
+            if (!grazed)
+                return PAIR_BLOCKED;
+            state = PAIR_GRAZED;
+        }
+        return state;
+    };
+
+    const vetoHex = (col, row) =>
+    {
+        const targets = _hexTestPoints(col, row);
+        const box = _pointsBox(targets, originBox);
+        const hex = { col, row, center: getHexCenter(col, row), targetHeight: null, walls: [], lowWalls: [] };
+        const limit = distanceTo(hex.center) + hexReach;
+        for (const entry of walls)
+        {
+            if (entry.reach > limit)
+                break;
+            const record = entry.record;
+            if (record.maxX < box.minX || record.minX > box.maxX || record.maxY < box.minY || record.minY > box.maxY)
+                continue;
+            hex.walls.push(record);
+            if (record.top < eye)
+                hex.lowWalls.push(record);
+        }
+        if (!hex.lowWalls.length)
+            return false;
+        build.tested++;
+        const grazedPairs = [];
+        for (const from of origins)
+        {
+            for (const to of targets)
+            {
+                const state = pairState(from, to, hex);
+                if (state === PAIR_CLEAR)
+                    return false;
+                if (state === PAIR_GRAZED)
+                    grazedPairs.push([from, to]);
+            }
+        }
+        if (!cellCaster)
+            return true;
+        for (const [from, to] of grazedPairs)
+        {
+            build.casterRays += 2;
+            if (cellCaster.forward(from, to, hex.center, hex.targetHeight, hex.walls)
+                || cellCaster.reverse(to, hex.center, hex.targetHeight, from, hex.walls))
+                return false;
+        }
+        return true;
+    };
+
+    return (col, row) =>
+    {
+        const started = performance.now();
+        const vetoed = vetoHex(col, row);
+        build.hexes++;
+        build.vetoMs = Math.round((build.vetoMs + performance.now() - started) * 10) / 10;
+        if (vetoed)
+            build.vetoed++;
+        return vetoed;
+    };
+}
+
+function _pointsBox(points, seed = null)
+{
+    const box = seed
+        ? { minX: seed.minX, minY: seed.minY, maxX: seed.maxX, maxY: seed.maxY }
+        : { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+    for (const point of points)
+    {
+        box.minX = Math.min(box.minX, point.x);
+        box.minY = Math.min(box.minY, point.y);
+        box.maxX = Math.max(box.maxX, point.x);
+        box.maxY = Math.max(box.maxY, point.y);
+    }
+    return box;
 }
 
 function _isBlinded(token)
@@ -1025,14 +1279,44 @@ function _skimLineCells(origin)
     const caster = makeSkimRayCaster(origin);
     if (!caster)
         return null;
-    const eyeEdges = getEyeWallSegments(origin);
-    const inEyeSolid = makeEyeSolidTester(origin) ?? (() => false);
-    const centerReachable = (fromPoint, centerPoint) =>
-        !inEyeSolid(centerPoint)
-        && !eyeEdges.some(seg => foundry.utils.lineSegmentIntersects(fromPoint, centerPoint, seg.a, seg.b));
-    const cells = new Set();
     const step = canvas.grid.size / 2;
     const maxDist = canvas.grid.size * 25;
+    // Only walls the walks can reach are scanned per side point, the rest of the map cannot cross them.
+    const center = origin.center;
+    const reach = maxDist + (Math.max(origin.w ?? 0, origin.h ?? 0) / 2) + canvas.grid.size;
+    const eyeEdges = getEyeWallSegments(origin)
+        .map(seg => ({
+            a: seg.a,
+            b: seg.b,
+            minX: Math.min(seg.a.x, seg.b.x),
+            maxX: Math.max(seg.a.x, seg.b.x),
+            minY: Math.min(seg.a.y, seg.b.y),
+            maxY: Math.max(seg.a.y, seg.b.y)
+        }))
+        .filter(seg =>
+        {
+            const closest = foundry.utils.closestPointToSegment(center, seg.a, seg.b);
+            return Math.hypot(closest.x - center.x, closest.y - center.y) <= reach;
+        });
+    const inEyeSolid = makeEyeSolidTester(origin) ?? (() => false);
+    const centerReachable = (fromPoint, centerPoint) =>
+    {
+        if (inEyeSolid(centerPoint))
+            return false;
+        const minX = Math.min(fromPoint.x, centerPoint.x);
+        const maxX = Math.max(fromPoint.x, centerPoint.x);
+        const minY = Math.min(fromPoint.y, centerPoint.y);
+        const maxY = Math.max(fromPoint.y, centerPoint.y);
+        for (const seg of eyeEdges)
+        {
+            if (seg.maxX < minX || seg.minX > maxX || seg.maxY < minY || seg.minY > maxY)
+                continue;
+            if (foundry.utils.lineSegmentIntersects(fromPoint, centerPoint, seg.a, seg.b))
+                return false;
+        }
+        return true;
+    };
+    const cells = new Set();
     const sceneRect = canvas.dimensions?.sceneRect ?? null;
     for (const walk of _skimWalks(origin))
     {
@@ -1291,7 +1575,7 @@ function _tokenCellKeys(originToken)
 const AREA_GRANT_FRACTION = 0.10;
 
 // Per eye, never the union: one eye seeing a band is the claim, several eyes grazing a sliver is not.
-function _hexLitFraction(col, row, clipPaths, scale)
+function _hexLitFraction(col, row, clipPaths, scale, stopAt = Infinity)
 {
     const hexPoints = _cellCorners(col, row).flatMap(corner => [corner.x, corner.y]);
     const hexPolygon = new PIXI.Polygon(hexPoints);
@@ -1305,6 +1589,9 @@ function _hexLitFraction(col, row, clipPaths, scale)
         const litArea = Math.abs(ClipperLib.JS.AreaOfPolygons(solution, scale));
         if (litArea > bestLit)
             bestLit = litArea;
+        // one eye past the bar is the whole claim, the other eyes cannot lower it
+        if (bestLit / hexArea >= stopAt)
+            break;
     }
     return bestLit / hexArea;
 }
@@ -1374,9 +1661,21 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
     const blindedCells = useLos && _isBlinded(origin)
         ? new Set(getInRangeOffsets(origin, 1, { includeSelf: true }))
         : null;
+    // Test only: one record per build, so a pulse that builds several filters lists each of them.
+    const build = { los, freeRange, useLos, sweepsMs: 0, tokenMs: 0, skimMs: 0, hexes: 0, tested: 0, vetoed: 0, vetoMs: 0, casterRays: 0, calls: 0, filterMs: 0 };
+    _pulseBuilds.push(build);
+    if (_pulseBuilds.length > 8)
+        _pulseBuilds.shift();
+    let stageStart = performance.now();
     const visible = useLos && !blindedCells ? _visibilityTester(origin) : null;
+    build.sweepsMs = Math.round((performance.now() - stageStart) * 10) / 10;
+    stageStart = performance.now();
     const tokenCells = useLos && visible ? _tokenCellKeys(origin) : null;
+    build.tokenMs = Math.round((performance.now() - stageStart) * 10) / 10;
+    stageStart = performance.now();
     const skimCells = useLos && visible ? _skimLineCells(origin) : null;
+    build.skimMs = Math.round((performance.now() - stageStart) * 10) / 10;
+    const bandVeto = useLos && visible ? _makeBandVeto(origin, visible, build) : null;
     const clipPaths = visible?.built
         ? visible.built.map(entry => entry.sweep.toClipperPoints({ scalingFactor: CONST.CLIPPER_SCALING_FACTOR }))
         : null;
@@ -1399,7 +1698,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
         let fraction = areaCache.get(key);
         if (fraction === undefined)
         {
-            fraction = _hexLitFraction(col, row, clipPaths, CONST.CLIPPER_SCALING_FACTOR);
+            fraction = _hexLitFraction(col, row, clipPaths, CONST.CLIPPER_SCALING_FACTOR, AREA_GRANT_FRACTION);
             areaCache.set(key, fraction);
         }
         return fraction >= AREA_GRANT_FRACTION;
@@ -1410,6 +1709,7 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
     const litKeys = new Set();
     const cellFilter = (cells) =>
     {
+        const filterStart = performance.now();
         const kept = [];
         const deferred = [];
         for (const cell of cells)
@@ -1460,21 +1760,20 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
                 verdicts.set(key, 0);
                 continue;
             }
-            if (_hexTestPoints(col, row).some(point => visible(point.x, point.y)))
+            if (_hexTestPoints(col, row).some(point => visible(point.x, point.y)) || skimCells?.has(key))
             {
+                // the skim walks run at eye height, so the target height is applied here, and never in the area pass
+                if (bandVeto?.(col, row))
+                {
+                    verdicts.set(key, 0);
+                    continue;
+                }
                 verdicts.set(key, 1);
                 kept.push(cell);
                 litKeys.add(key);
                 continue;
             }
-            if (skimCells?.has(key))
-            {
-                verdicts.set(key, 1);
-                kept.push(cell);
-                litKeys.add(key);
-                continue;
-            }
-            if (clipPaths)
+            if (clipPaths && _areaPass)
             {
                 verdicts.set(key, 2);
                 deferred.push({ cell, col, row, key });
@@ -1492,6 +1791,12 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
                 const pending = deferred[index];
                 if (!areaGrants(pending.col, pending.row, pending.key, litKeys))
                     continue;
+                if (bandVeto?.(pending.col, pending.row))
+                {
+                    verdicts.set(pending.key, 0);
+                    deferred.splice(index, 1);
+                    continue;
+                }
                 verdicts.set(pending.key, 1);
                 kept.push(pending.cell);
                 litKeys.add(pending.key);
@@ -1499,6 +1804,8 @@ export function makePulseCellFilter(originToken, { los = false, freeRange = 0 } 
                 grew = true;
             }
         }
+        build.calls++;
+        build.filterMs = Math.round((build.filterMs + performance.now() - filterStart) * 10) / 10;
         return kept;
     };
     freeMap?.set(freeRange, cellFilter);
@@ -2599,7 +2906,7 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         }
 
         if (token.actor?.statuses?.has?.('immovable'))
-            ui.notifications.warn(`${token.name} is IMMOVABLE and is being moved anyway.`);
+            ui.notifications.warn(localizeFormat('LA.notify.immovableMovedAnyway', { name: token.name }));
 
         const dest = { x: updateData.x, y: updateData.y };
         if (!asVoluntary)

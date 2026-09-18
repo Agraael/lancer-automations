@@ -5,6 +5,7 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { playUiSound } from './sound.js';
 import { tahScale, laHudStripeStyle } from './item-helpers.js';
 import { favoriteWheel, favMarkHtml } from './favorites.js';
+import { localize } from '../tools/string-utils.js';
 
 /**
  * Collect search results across all categories.
@@ -27,7 +28,7 @@ export function collectSearchResults(query, categories)
                 continue;
             if (item.onClick)
             {
-                const plainLabel = item.label.replace(/<[^>]+>/g, '').toLowerCase();
+                const plainLabel = String(item.text ?? item.label).replace(/<[^>]+>/g, '').toLowerCase();
                 if (plainLabel.includes(query))
                 {
                     if (seen.has(plainLabel))
@@ -65,27 +66,36 @@ export function collectSearchResults(query, categories)
  * @param {any[]} results  From `collectSearchResults`.
  * @param {{ el: any, makeRow: Function, token: any, brighten: Function }} ctx
  */
-const CAT_ABBREV = {
-    'Actions': 'ACT',
-    'Attributes': 'ATTR',
-    'Deployables': 'DEPL',
-    'Resources': 'RES',
-    'Statuses': 'STATUS',
-    'Systems': 'SYS',
-    'Talents': 'TAL',
-    'Utility': 'UTIL',
-    'Weapons': 'WPN',
-};
+// [category label key, chip key]. Looked up by rendered label, so the map is built per
+// call: the category labels are localized and follow the active language.
+const CAT_ABBREV_KEYS = [
+    ['LA.tokenHud.label.actions', 'LA.tokenHud.abbrev.actions'],
+    ['LA.tokenHud.label.attributes', 'LA.tokenHud.abbrev.attributes'],
+    ['LA.tokenHud.label.deployables', 'LA.tokenHud.abbrev.deployables'],
+    ['LA.tokenHud.label.resources', 'LA.tokenHud.abbrev.resources'],
+    ['LA.tokenHud.label.systems', 'LA.tokenHud.abbrev.systems'],
+    ['LA.tokenHud.label.talents', 'LA.tokenHud.abbrev.talents'],
+    ['LA.tokenHud.label.utility', 'LA.tokenHud.abbrev.utility'],
+    ['LA.tokenHud.label.weapons', 'LA.tokenHud.abbrev.weapons'],
+    ['LA.tokenHud.label.macros', 'LA.tokenHud.abbrev.macros'],
+    ['LA.tokenHud.label.tech', 'LA.tokenHud.abbrev.tech'],
+    ['LA.tokenHud.label.frame', 'LA.tokenHud.abbrev.frame'],
+    ['LA.tokenHud.label.class', 'LA.tokenHud.abbrev.class'],
+    ['LA.tokenHud.label.pilot', 'LA.tokenHud.abbrev.pilot'],
+    ['LA.tokenHud.label.gear', 'LA.tokenHud.abbrev.gear'],
+];
 
+// An item found in two categories carries "A · B", so abbreviate each part.
 function catLabel(label)
 {
-    return CAT_ABBREV[label] ?? label;
+    const abbrev = new Map(CAT_ABBREV_KEYS.map(([labelKey, chipKey]) => [localize(labelKey), localize(chipKey)]));
+    return String(label).split(' · ').map(part => abbrev.get(part) ?? part).join(' · ');
 }
 
 export function openSearchResults(col, results, { el, makeRow, token, brighten, onCtrlRightClick = null })
 {
     col.children(':not(.la-hud-col-label)').remove();
-    col.find('.la-hud-col-label').text('Results');
+    col.find('.la-hud-col-label').attr('data-col', 'results').text(localize('LA.tokenHud.col.results'));
 
     // Align top with first category row
     const firstRow = el.children().first().find('.la-hud-row').first();

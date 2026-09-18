@@ -181,6 +181,33 @@ await api.setReaction(reactorToken, false);
 
 </details>
 
+<details id="consumeAction">
+<summary><b><code>consumeAction</code></b> <sup>async</sup> → <code>void</code><br><b><code>gainAction</code></b> <sup>async</sup> → <code>void</code><br><b><code>modifyAction</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.consumeAction(actorOrToken, kind)
+await api.gainAction(actorOrToken, kind)
+await api.modifyAction(actorOrToken, kind, spend = true)
+```
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>actorOrToken</kbd> | `Token\|Actor` | *required* | Whose tracker to change |
+| <kbd>kind</kbd> | `'quick'\|'full'\|'free'\|'protocol'\|'reaction'\|'move'` | *required* | Which action |
+| <kbd>spend</kbd> | `boolean` | `true` | `modifyAction` only. `false` refunds |
+
+Writes `system.action_tracker`, following the same cascade as the sheet: spending `quick` takes `full` first when it is still up, spending `full` takes both, and any spend clears `protocol`. `move` goes to 0 on spend and back to the actor's speed on refund.
+
+`setReaction` is the direct setter for the reaction flag alone, with no cascade.
+
+```js
+await api.consumeAction(reactorToken, 'quick');
+```
+
+</details>
+
 <details id="hasReactionAvailable">
 <summary><b><code>hasReactionAvailable</code></b> → <code>boolean</code></summary>
 
@@ -270,18 +297,22 @@ Auto-detects the resource type.
 
 Detection order:
 1. **Talent** → `system.counters[counterIndex].value` (clamped to counter `min`/`max`)
-2. **Uses** (`uses.max > 0`) → `system.uses.value` (clamped `0..max`)
-3. **Loaded** → `system.loaded` (`Boolean(value)`)
-4. **Charged** → `system.charged` (`Boolean(value)`)
+2. **Frame** → `system.core_system.counters[counterIndex].value` (clamped to counter `min`/`max`)
+3. **Uses** (`uses.max > 0`) → `system.uses.value` (clamped `0..max`)
+4. **Loaded** → `system.loaded` (`Boolean(value)`)
+5. **Charged** → `system.charged` (`Boolean(value)`)
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>item</kbd> | `Item` | *required* | The item document to update |
 | <kbd>value</kbd> | `number\|boolean` | *required* | Target value. For `loaded`/`charged`: truthy/falsy. For `uses`/counters: number (clamped to valid range). |
-| <kbd>counterIndex</kbd> | `number` | `0` | For talent items: which counter to update. |
+| <kbd>counterIndex</kbd> | `number` | `0` | For talents and frames: which counter to update. |
 
 ```js
 await api.setItemResource(talentItem, 2, 0);
+
+const frame = actor.system.loadout.frame.value;
+await api.setItemResource(frame, frame.system.core_system.counters[0].value + 1, 0);
 ```
 
 </details>

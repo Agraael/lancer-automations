@@ -1,10 +1,11 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { MODULE_ID } from "./constants.js";
+import { localize, localizeFormat } from "./string-utils.js";
 import { getLAFlag } from "./flag-utils.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
 import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "../bonuses/genericBonuses.js";
-import { getItemActions, findItemByLid, linkTierGate, isPrimaryActionHidden } from "../interactive/deployables.js";
+import { getItemActions, findItemByLid, linkTierGate, isPrimaryActionHidden, gateActions } from "../interactive/deployables.js";
 import { playSkirmishFX, playBarrageFX, playFightFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX, playMineDetonationFX, queueActionFx } from "../fx/actionFX.js";
 import { awaitPendingAck } from "../socket.js";
 import { afterFx } from "../activations/after-fx.js";
@@ -105,12 +106,12 @@ export function getTokenDispositionInfo(token)
         return null;
     const disposition = token.document.disposition;
     const dispositionMap = {
-        [CONST.TOKEN_DISPOSITIONS.HOSTILE]:  { color: '#e53935', label: 'Hostile' },
-        [CONST.TOKEN_DISPOSITIONS.NEUTRAL]:  { color: '#f9a825', label: 'Neutral' },
-        [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: 'Friendly' },
-        [CONST.TOKEN_DISPOSITIONS.SECRET]:   { color: '#7e57c2', label: 'Secret' },
+        [CONST.TOKEN_DISPOSITIONS.HOSTILE]:  { color: '#e53935', label: localize('LA.disposition.hostile') },
+        [CONST.TOKEN_DISPOSITIONS.NEUTRAL]:  { color: '#f9a825', label: localize('LA.disposition.neutral') },
+        [CONST.TOKEN_DISPOSITIONS.FRIENDLY]: { color: '#43a047', label: localize('LA.disposition.friendly') },
+        [CONST.TOKEN_DISPOSITIONS.SECRET]:   { color: '#7e57c2', label: localize('LA.disposition.secret') },
     };
-    const fallback = dispositionMap[disposition] ?? { color: '#888', label: 'Unknown' };
+    const fallback = dispositionMap[disposition] ?? { color: '#888', label: localize('LA.disposition.unknown') };
     let color = fallback.color;
     let label = fallback.label;
     try
@@ -317,11 +318,14 @@ export function getActorActionItems(actor, activationType)
     }
 
     // Actor-level extra actions (stored on actor flag via addExtraActions(actor, ...))
-    const actorExtraActions = getLAFlag(actor,'extraActions') || [];
+    const actorExtraActions = gateActions(
+        (getLAFlag(actor,'extraActions') || []).filter((/** @type {any} */ action) => linkTierGate(action, actor)),
+        actor
+    );
     for (const action of actorExtraActions)
     {
-        if (action.activation === activationType && linkTierGate(action, actor))
-            results.push({ action, sourceItem: null });
+        if (action.activation === activationType)
+            results.push({ action: { ...action, _isExtra: true }, sourceItem: null });
     }
 
     return results;
@@ -478,17 +482,18 @@ export async function gainAction(actorOrToken, kind)
 }
 
 /**
- * Sets a resource value on an item: uses, loaded, charged, or talent counter.
+ * Sets a resource value on an item: uses, loaded, charged, talent counter, or frame core system counter.
  *
  * Detection order:
  *   1. Talent items               → system.counters[counterIndex].value (clamped to counter min/max)
- *   2. Items with uses.max > 0    → system.uses.value (clamped 0..max)
- *   3. Items with a loaded field  → system.loaded (Boolean(value))
- *   4. Items with a charged field → system.charged (Boolean(value))
+ *   2. Frame items                → system.core_system.counters[counterIndex].value (clamped to counter min/max)
+ *   3. Items with uses.max > 0    → system.uses.value (clamped 0..max)
+ *   4. Items with a loaded field  → system.loaded (Boolean(value))
+ *   5. Items with a charged field → system.charged (Boolean(value))
  *
  * @param {Item} item
  * @param {number|boolean} value  Target value. For loaded/charged: truthy/falsy. For uses/counters: number.
- * @param {number} [counterIndex=0]  For talent items: index into system.counters.
+ * @param {number} [counterIndex=0]  For talents: index into system.counters. For frames: index into system.core_system.counters.
  * @returns {Promise<void>}
  */
 export async function setItemResource(item, value, counterIndex = 0)
@@ -504,6 +509,17 @@ export async function setItemResource(item, value, counterIndex = 0)
             return;
         const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(value))));
         await item.update({ [`system.counters.${counterIndex}.value`]: clamped });
+        return;
+    }
+
+    if (item.type === 'frame')
+    {
+        const counters = item.system?.core_system?.counters ?? [];
+        const counter = counters[counterIndex];
+        if (!counter)
+            return;
+        const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(value))));
+        await item.update({ [`system.core_system.counters.${counterIndex}.value`]: clamped });
         return;
     }
 
@@ -612,6 +628,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
             {
                 const requestId = foundry.utils.randomID();
                 const targetActor = (typeof target === 'object' && target) ? target.actor : null;
+                const targetTokenId = targetActor ? (target.id ?? null) : null;
                 let targetVal = (typeof target === 'number') ? target : 10;
                 if (targetActor)
                     targetVal = deriveSaveDc(targetActor, targetStat);
@@ -627,7 +644,11 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
                         cardTitle: cardTitle || null,
                         cardDescription: cardDescription || null,
                         targetUserId: firstOwner,
-                        extraData: { ...(restExtraData ?? {}), ...(target === "token" ? { forceTargeting: true } : {}) }
+                        extraData: {
+                            ...(restExtraData ?? {}),
+                            ...(targetTokenId ? { targetTokenId, forceTargeting: true } : {}),
+                            ...(target === "token" ? { forceTargeting: true } : {})
+                        }
                     }
                 });
 
@@ -635,7 +656,7 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
                 const waitCard = startWaitCard({
                     title: cardTitle || title || 'STAT ROLL',
                     description: cardDescription || `<b>${actor.name ?? 'Actor'}</b> :: ${stat.toUpperCase()}`,
-                    waitMessage: `Waiting for ${ownerName} to roll…`,
+                    waitMessage: localizeFormat('LA.misc.waitingForRoll', { name: ownerName }),
                     relatedToken: ownerToken
                 });
 
@@ -696,6 +717,10 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
 
     if (restExtraData && typeof restExtraData === 'object')
         flow.state.la_extraData = foundry.utils.mergeObject(flow.state.la_extraData || {}, restExtraData);
+
+    const focusTokenId = flow.state.la_extraData.targetTokenId;
+    if (focusTokenId)
+        setFlowTargets(canvas.tokens?.get(focusTokenId));
 
     const completed = await flow.begin();
     if (!completed)
@@ -930,7 +955,7 @@ export async function executeForceCheck(skill, targets = null, options = {})
     const rollers = (Array.isArray(targets) && targets.length) ? targets : [...(game.user.targets ?? [])];
     if (!rollers.length)
     {
-        ui.notifications.warn('Force Check: no targets selected.');
+        ui.notifications.warn(localize('LA.notify.forceCheckNoTargetsSelected'));
         return { completed: false, results: [] };
     }
 
@@ -1631,7 +1656,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null)
         selectedTurns = await new Promise((resolve) =>
         {
             const dialog = new Dialog({
-                title: "Reactor Meltdown",
+                title: localize('LA.dialogTitle.reactorMeltdown'),
                 content: `
                     <div class="lancer-dialog-base">
                         <div class="lancer-dialog-header">
@@ -1671,7 +1696,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null)
                 buttons: {
                     cancel: {
                         icon: '<i class="fas fa-times"></i>',
-                        label: "Cancel",
+                        label: localize("LA.common.cancel"),
                         callback: () => resolve(null)
                     }
                 },
@@ -1701,7 +1726,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null)
 
     if (selectedTurns === null)
     {
-        ui.notifications.info('Reactor Meltdown cancelled.');
+        ui.notifications.info(localize('LA.notify.reactorMeltdownCancelled'));
         return;
     }
 
@@ -1716,7 +1741,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null)
     await executeSimpleActivation(actor, {
         title: "Reactor Meltdown",
         action: { name: "Reactor Meltdown", activation: "Quick" },
-        detail: `Reactor meltdown initiated. Explosion will occur at the end of turn ${selectedTurns}. Your mech will be annihilated, dealing 4d6 Explosive Damage in a Burst 2 radius.`
+        detail: localizeFormat('LA.misc.meltdownDetail', { turn: selectedTurns })
     }, { selectedTurns });
 }
 
@@ -1743,8 +1768,8 @@ export async function executeReactorExplosion(token)
         areaRange: 2,
         includeSelf: true,
         allowEmptyConfirm: true,
-        title: "REACTOR EXPLOSION",
-        description: "Confirm the tokens caught in the Burst 2. Close the card to cancel.",
+        title: localize('LA.dialogTitle.reactorExplosionCaps'),
+        description: localize('LA.misc.confirmTheTokensCaughtInThe'),
         icon: "fas fa-radiation",
     });
     if (!caught)
@@ -1904,10 +1929,16 @@ export async function activateGeneralAction(actorOrToken, name)
     });
 }
 
+/** `ranks[0].actions.1` / `system.ranks.0.actions.1` -> `ranks.0.actions.1`, so reactionPath and dotpath forms both work. */
+function _subPath(path)
+{
+    return String(path ?? '').replace(/^system\./, '').replace(/\[(\d+)\]/g, '.$1').replace(/^\./, '');
+}
+
 /**
  * Run an item activation flow, matching the dispatch rules of triggerData.startRelatedFlow.
  * @param {any} item      - LancerItem to activate.
- * @param {Object} [options] - { path?: string, flowName?: string }: `path` sets action_path; `flowName` forces a specific flow class.
+ * @param {Object} [options] - { path?: string, flowName?: string }: `path` sets action_path, and also takes `ranks.N` or `ranks.N.actions.M` on a talent and `powers.N` on a bond. `flowName` forces a specific flow class.
  * @param {Object} [extraData] - Merged onto flow.state.la_extraData before begin().
  * @returns {Promise<{completed: boolean, flow?: any}>}
  */
@@ -1936,6 +1967,32 @@ export async function executeItemActivation(item, options = {}, extraData = {})
     }
     else if (item.is_frame?.() && path === "system.core_system")
         flow = new (flows.get("CoreActiveFlow"))(item.uuid ?? item, { action_path: path });
+    else if (item.is_talent?.())
+    {
+        // Talent actions live under ranks.N.actions, never system.actions, so the generic branches never match.
+        const match = _subPath(path).match(/^ranks\.(\d+)(?:\.actions\.(\d+))?$/);
+        const rankIdx = match ? Number(match[1]) : 0;
+        const rank = item.system?.ranks?.[rankIdx];
+        if (!rank)
+        {
+            ui.notifications.error(`lancer-automations | executeItemActivation: "${item.name}" has no rank ${rankIdx + 1}.`);
+            return { completed: false };
+        }
+        if (match?.[2] !== undefined)
+            flow = new (flows.get("ActivationFlow"))(item.uuid ?? item, { action_path: `system.ranks.${rankIdx}.actions.${match[2]}` });
+        else
+            flow = new (flows.get("TalentFlow"))(item.uuid ?? item, { title: item.name, rank, lvl: rankIdx });
+    }
+    else if (item.is_bond?.())
+    {
+        const powerIdx = Number(_subPath(path).match(/^powers\.(\d+)$/)?.[1] ?? 0);
+        if (!item.system?.powers?.[powerIdx])
+        {
+            ui.notifications.error(`lancer-automations | executeItemActivation: "${item.name}" has no power ${powerIdx}.`);
+            return { completed: false };
+        }
+        flow = new (flows.get("BondPowerFlow"))(item.uuid ?? item, { powerIndex: powerIdx });
+    }
     else if (path || item.system?.actions?.length > 0)
         flow = new (flows.get("ActivationFlow"))(item.uuid ?? item, { action_path: path ?? "system.actions.0" });
     else if (item.is_mech_system?.() || item.is_weapon_mod?.() || (item.is_npc_feature?.() && !item.is_weapon?.()))
@@ -2100,7 +2157,7 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
         }));
 
         await InteractiveAPI.startChoiceCard({
-            title: "SKIRMISH WEAPON ORDER",
+            title: localize('LA.dialogTitle.skirmishWeaponOrder'),
             description: hasNonAux
                 ? "Aux weapons don't deal bonus damage."
                 : "First weapon fired deals bonus damage; others don't.",
@@ -2272,7 +2329,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
                 callback: async () => fireWeapon(weapon)
             }));
             await InteractiveAPI.startChoiceCard({
-                title: "WEAPON ORDER",
+                title: localize('LA.dialogTitle.weaponOrder'),
                 description: hasNonAux
                     ? `Firing weapons from ${mount.type || "Mount"}. Aux weapons don't deal bonus damage.`
                     : `Firing weapons from ${mount.type || "Mount"}. First weapon fired deals bonus damage; others don't.`,
@@ -2309,8 +2366,8 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         });
 
         await InteractiveAPI.startChoiceCard({
-            title: "BARRAGE MOUNT ORDER",
-            description: "Select which mount to trigger. Aux weapons don't deal bonus damage.",
+            title: localize('LA.dialogTitle.barrageMountOrder'),
+            description: localize('LA.misc.selectWhichMountToTriggerAux'),
             mode: "and",
             choices: mountChoices
         });
@@ -2349,14 +2406,14 @@ export function samePosition(a, b)
  */
 export function getWeaponType(item)
 {
-    if (!item)
+    const sys = item?.system;
+    if (!sys)
         return "";
-    if (item.type === "mech_weapon")
-    {
-        const profileIdx = item.system?.selected_profile_index ?? 0;
-        return item.system?.profiles?.[profileIdx]?.weapon_type ?? item.system?.weapon_type ?? "";
-    }
-    return item.system?.weapon_type ?? "";
+    // Weapon profiles carry it as `type`; only npc_feature has a `weapon_type` field.
+    return sys.active_profile?.type
+        || sys.profiles?.[sys.selected_profile_index ?? 0]?.type
+        || sys.weapon_type
+        || "";
 }
 
 /**
@@ -2531,6 +2588,9 @@ export const MiscAPI = {
     executeReactorMeltdown,
     executeReactorExplosion,
     setReaction,
+    consumeAction,
+    gainAction,
+    modifyAction,
     setItemResource,
     addItemTag,
     removeItemTag,

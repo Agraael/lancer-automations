@@ -5,6 +5,7 @@ import { getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { applyStandingUp } from '../tools/movement-tools.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 
 const CODE_INSTEAD = { activationType: "code", activationMode: "instead" };
 
@@ -46,7 +47,7 @@ export function getDefaultItemReactionRegistry()
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
                     const result = await api.startChoiceCard({
-                        title: "CUSTOM PAINT JOB",
+                        title: localize('LA.dialogTitle.customPaintJob'),
                         item,
                         originToken: reactorToken,
                         choices: [
@@ -73,7 +74,7 @@ export function getDefaultItemReactionRegistry()
                         await reactorToken.actor.update({ "system.hp.value": 1 });
                         ChatMessage.create({
                             speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
-                            content: `<b>Custom Paint Job - Success!</b> The hit simply scratched the paint. Back to 1 HP.`
+                            content: localize('LA.reaction.content.customPaintJobSuccessTheHit')
                         });
                         triggerData.cancelStructure(
                             "Custom Paint Job - scratched the paint.",
@@ -86,7 +87,7 @@ export function getDefaultItemReactionRegistry()
                     {
                         ChatMessage.create({
                             speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
-                            content: `<b>Custom Paint Job - Failed!</b> Rolled ${roll.total}, needed 6.`
+                            content: localizeFormat('LA.reaction.paintJobFailed', { roll: roll.total })
                         });
                     }
                 }
@@ -220,8 +221,8 @@ export function getDefaultItemReactionRegistry()
                     async () =>
                     {
                         const ask = await api.askCard({
-                            title: "LIMITED HANDLING",
-                            description: `<b>${reactorToken.name}</b> can only clear Prone while adjacent to an allied character. Is an ally adjacent?`,
+                            title: localize('LA.dialogTitle.limitedHandling'),
+                            description: localizeFormat('LA.reaction.limitedHandlingPrompt', { name: reactorToken.name }),
                             item,
                             originToken: reactorToken,
                             owner: reactorToken,
@@ -272,7 +273,7 @@ export function getDefaultItemReactionRegistry()
             }
         }));
         await api.startChoiceCard({
-            title: "VETERANCY",
+            title: localize('LA.dialogTitle.veterancy'),
             description: current
                 ? `Currently <b>${current}</b>. Choose a new skill for ${reactorToken.name}:`
                 : `Choose a skill for ${reactorToken.name}:`,
@@ -365,7 +366,7 @@ export function getDefaultGeneralReactionRegistry()
                             name: "Overwatch",
                             activation: "Reaction",
                         },
-                        detail: "Trigger: A hostile character starts any movement (including BOOST and other actions) inside one of your weapons' THREAT.<br>Effect: Trigger OVERWATCH, immediately using that weapon to SKIRMISH against that character as a reaction, before they move."
+                        detail: localize('LA.reaction.overwatchDetail')
                     });
                 }
             }, {
@@ -406,9 +407,9 @@ export function getDefaultGeneralReactionRegistry()
                     const preConfirm = async () =>
                     {
                         const result = await api.startChoiceCard({
-                            title: "OVERWATCH",
+                            title: localize('LA.dialogTitle.overwatchCaps'),
                             icon: api.getActivationIcon("reaction"),
-                            description: `<b>${mover.name}</b> is moving through <b>${reactorToken.name}</b>'s threat range. Fire?`,
+                            description: localizeFormat('LA.reaction.overwatchPrompt', { mover: mover.name, reactor: reactorToken.name }),
                             originToken: reactorToken,
                             relatedToken: mover,
                             userIdControl: api.getTokenOwnerUserId(reactorToken),
@@ -428,8 +429,8 @@ export function getDefaultGeneralReactionRegistry()
                         {
                             await triggerData.startRelatedFlowToReactor(preConfirmResponderIds[0], { moverTokenId: mover.id });
                             await api.startChoiceCard({
-                                title: `WAITING - ${reactorToken.name.toUpperCase()} OVERWATCH`,
-                                description: `Waiting for <b>${reactorToken.name}</b> to resolve Overwatch against <b>${mover.name}</b>.`,
+                                title: localizeFormat('LA.dialogTitle.waitingOverwatch', { name: reactorToken.name.toUpperCase() }),
+                                description: localizeFormat('LA.reaction.overwatchWaiting', { reactor: reactorToken.name, mover: mover.name }),
                                 originToken: reactorToken,
                                 icon: api.getActivationIcon("reaction"),
                                 relatedToken: mover,
@@ -553,7 +554,7 @@ export function getDefaultGeneralReactionRegistry()
                             name: "Brace",
                             activation: "Reaction",
                         },
-                        detail: "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
+                        detail: localize('LA.reaction.youCountAsHavingResistanceTo')
                     });
                 }
             }, {
@@ -653,14 +654,13 @@ export function getDefaultGeneralReactionRegistry()
                             rollTypes: ["damage"],
                             applyToTargetter: true
                         });
-                        // Fallback for bracing after the roll: damageCalc reads it at apply time, the condition keeps it out of roll HUDs.
+                        // Fallback for bracing after the roll: damageCalc reads it at apply time.
                         await api.addConstantBonus(reactorToken.actor, {
                             id: BRACE_RESIST_ID,
                             name: "Brace",
                             type: "immunity",
                             subtype: "resistance",
-                            damageTypes: ["all"],
-                            condition: () => false
+                            damageTypes: ["all"]
                         });
                     }
                     else if (triggerType === 'onStatusRemoved')
@@ -725,12 +725,12 @@ export function getDefaultGeneralReactionRegistry()
                     {
                         const statusName = triggerData.statusId.charAt(0).toUpperCase() + triggerData.statusId.slice(1);
                         await api.startChoiceCard({
-                            title: `FLYING - ${statusName}`,
-                            description: `<b>${reactorToken.name}</b> is Flying and received <b>${statusName}</b>. Remove Flying?`,
+                            title: localizeFormat('LA.dialogTitle.flyingStatus', { status: statusName }),
+                            description: localizeFormat('LA.reaction.flyingReceivedStatus', { name: reactorToken.name, status: statusName }),
                             originToken: reactorToken,
                             choices: [
                                 {
-                                    text: "Remove Flying",
+                                    text: localize('LA.reaction.removeFlying'),
                                     icon: "fas fa-arrow-down",
                                     callback: async () =>
                                     {
@@ -747,12 +747,12 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     const label = triggerType === 'onStructure' ? 'Structure damage' : 'Stress';
                     await api.startChoiceCard({
-                        title: `FLYING - ${label}`,
-                        description: `<b>${reactorToken.name}</b> took ${label} while Flying. Roll AGILITY save or lose Flying.`,
+                        title: localizeFormat('LA.dialogTitle.flyingStatus', { status: label }),
+                        description: localizeFormat('LA.reaction.flyingTookDamage', { name: reactorToken.name, damage: label }),
                         originToken: reactorToken,
                         choices: [
                             {
-                                text: "Roll AGI Save",
+                                text: localize('LA.reaction.rollAgiSave'),
                                 icon: "fas fa-dice-d20",
                                 callback: async () =>
                                 {
@@ -786,7 +786,7 @@ export function getDefaultGeneralReactionRegistry()
                     range: sensorRange,
                     glow: 'sensor',
                     count: 1,
-                    title: 'LOCK ON - Select Target',
+                    title: localize('LA.dialogTitle.lockOnSelectTarget'),
                     description: sensorRange !== sensors ? `Choose a target within Range ${sensorRange}` : `Choose a target within Sensors (${sensorRange})`,
                     filter: t => t.actor?.type !== 'deployable',
                 });
@@ -1032,7 +1032,7 @@ export function getDefaultGeneralReactionRegistry()
                     tokens: [reactorToken],
                     effectNames: ["Aided"]
                 });
-                ui.notifications.info(`${reactorToken.name} stabilizes as a Quick Action (Aided).`);
+                ui.notifications.info(localizeFormat('LA.notify.stabilizesAided', { name: reactorToken.name }));
             }
         },
         "Fragment Signal": {
@@ -1093,7 +1093,7 @@ export function getDefaultGeneralReactionRegistry()
                         title: "Ram",
                         attack_type: "Melee",
                         action: { name: "Ram", activation: "Quick" },
-                        effect: "Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.",
+                        effect: localize('LA.reaction.makeAMeleeAttackAgainstAn'),
                         tags: [{ lid: 'tg_knockback', val: 1 }]
                     });
                 }
@@ -1165,13 +1165,13 @@ export function getDefaultGeneralReactionRegistry()
                     const gmUserId = game.users.activeGM?.id;
                     await api.startChoiceCard({
                         title: "FALLING?",
-                        description: `<b>${reactorToken.name}</b> is hanging in the air. Does it fall?`,
+                        description: localizeFormat('LA.reaction.hangingInAir', { name: reactorToken.name }),
                         item,
                         originToken: reactorToken,
                         userIdControl: gmUserId,
                         choices: [
                             {
-                                text: "Yes, it falls",
+                                text: localize('LA.reaction.yesItFalls'),
                                 icon: "fas fa-arrow-down",
                                 callback: async () =>
                                 {
@@ -1428,7 +1428,7 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     if (!triggerData.actionData?.flowState?.la_extraData?.selectedTurns)
                     {
-                        ui.notifications.warn('Reactor Meltdown: no turn count provided.');
+                        ui.notifications.warn(localize('LA.notify.reactorMeltdownNoTurnCountProvided'));
                         return false;
                     }
                     return true;
@@ -1442,7 +1442,7 @@ export function getDefaultGeneralReactionRegistry()
                         duration: { label: 'end', turns: selectedTurns, rounds: 0 }
                     });
                     if (validTokens.length > 0)
-                        ui.notifications.warn(`⚠️ Reactor Meltdown initiated! Explosion in ${selectedTurns} turn${selectedTurns > 1 ? 's' : ''}!`);
+                        ui.notifications.warn(localizeFormat('LA.notify.meltdownInitiated', { turns: selectedTurns, plural: selectedTurns > 1 ? 's' : '' }));
                 }
             }, {
                 triggers: ["onStatusRemoved"],
@@ -1460,11 +1460,11 @@ export function getDefaultGeneralReactionRegistry()
                 {
                     await api.startChoiceCard({
                         mode: "or",
-                        title: "Reactor Explosion",
+                        title: localize('LA.dialogTitle.reactorExplosion'),
                         icon: "cci cci-boom",
-                        description: "Trigger the explosion?",
+                        description: localize('LA.reaction.triggerTheExplosion'),
                         choices: [{
-                            text: "Trigger Reactor Explosion",
+                            text: localize('LA.reaction.triggerReactorExplosion'),
                             icon: "cci cci-boom",
                             callback: async () =>
                             {
@@ -1492,7 +1492,7 @@ export function getDefaultGeneralReactionRegistry()
                 const mechActor = reactorToken.actor;
                 if (mechActor?.type !== 'mech')
                 {
-                    ui.notifications.warn('Eject: this action must be used by a mech token.');
+                    ui.notifications.warn(localize('LA.notify.ejectThisActionMustBeUsedBy'));
                     return false;
                 }
 
@@ -1504,7 +1504,7 @@ export function getDefaultGeneralReactionRegistry()
 
                 if (!pilotActor)
                 {
-                    ui.notifications.warn(`Eject: no linked pilot found on ${mechActor.name}.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.ejectNoPilot', { name: mechActor.name }));
                     return false;
                 }
 
@@ -1524,8 +1524,8 @@ export function getDefaultGeneralReactionRegistry()
                     range: 6,
                     origin: reactorToken,
                     count: 1,
-                    title: "Eject - Place Pilot",
-                    description: `Place ${pilotActor.name} within 6 spaces of ${mechActor.name}.`
+                    title: localize('LA.dialogTitle.ejectPlacePilot'),
+                    description: localizeFormat('LA.reaction.ejectPlace', { pilot: pilotActor.name, mech: mechActor.name })
                 });
 
                 if (!placed || placed.length === 0)
@@ -1539,7 +1539,7 @@ export function getDefaultGeneralReactionRegistry()
                     note: 'Eject'
                 });
 
-                ui.notifications.info(`${pilotActor.name} has ejected from ${mechActor.name}!`);
+                ui.notifications.info(localizeFormat('LA.notify.ejected', { pilot: pilotActor.name, mech: mechActor.name }));
             }
         },
         "Shut Down": {
@@ -1757,15 +1757,15 @@ export function getDefaultGeneralReactionRegistry()
                                     };
 
                                     api.startChoiceCard({
-                                        title: "MINE TRIGGER ZONE",
-                                        description: "<b>" + mover.name + "</b> entered <b>" + mine.name + "</b>'s trigger zone. Detonate?",
+                                        title: localize('LA.dialogTitle.mineTriggerZone'),
+                                        description: localizeFormat('LA.reaction.mineEntered', { mover: mover.name, mine: mine.name }),
                                         originToken: mine,
                                         relatedToken: mover,
                                         userIdControl: game.user.id,
                                         choices: [
                                             { text: "Detonate", icon: "fas fa-bomb", callback: detonate },
                                             {
-                                                text: "Try disarm (SYS)",
+                                                text: localize('LA.reaction.tryDisarmSys'),
                                                 icon: "fas fa-screwdriver",
                                                 callback: async () =>
                                                 {
@@ -1874,7 +1874,7 @@ export function getDefaultGeneralReactionRegistry()
                 const mechActor = reactorToken.actor;
                 if (mechActor?.type !== 'mech')
                 {
-                    ui.notifications.warn('Dismount: this action must be used by a mech token.');
+                    ui.notifications.warn(localize('LA.notify.dismountThisActionMustBeUsedBy'));
                     return false;
                 }
                 const pilotRef = mechActor.system.pilot;
@@ -1884,7 +1884,7 @@ export function getDefaultGeneralReactionRegistry()
                     : null;
                 if (!pilotActor)
                 {
-                    ui.notifications.warn(`Dismount: no linked pilot found on ${mechActor.name}.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.dismountNoPilot', { name: mechActor.name }));
                     return false;
                 }
                 return true;
@@ -1901,8 +1901,8 @@ export function getDefaultGeneralReactionRegistry()
                     range: 1,
                     origin: reactorToken,
                     count: 1,
-                    title: "Dismount - Place Pilot",
-                    description: `Place ${pilotActor.name} adjacent to ${mechActor.name}.`
+                    title: localize('LA.dialogTitle.dismountPlacePilot'),
+                    description: localizeFormat('LA.reaction.dismountPlace', { pilot: pilotActor.name, mech: mechActor.name })
                 });
                 if (placed && placed.length > 0)
                     await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken), reactorToken, 'dismount');
@@ -1938,7 +1938,7 @@ export function getDefaultGeneralReactionRegistry()
                 const isPilot = reactorToken.actor?.type === 'pilot';
                 const range = isPilot ? 5 : (reactorToken.actor?.system?.sensor_range ?? null);
                 const targets = await api.chooseToken(reactorToken, {
-                    title: "SEARCH",
+                    title: localize('LA.dialogTitle.searchCaps'),
                     count: 1,
                     range,
                     includeHidden: true
@@ -1962,7 +1962,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (result.winner === reactorToken.actor)
                 {
                     await api.removeEffectsByNameFromTokens({ tokens: [targetToken], effectNames: ["hidden"] });
-                    ui.notifications.info(`${reactorToken.name} found ${targetToken.name}!`);
+                    ui.notifications.info(localizeFormat('LA.notify.searchFound', { searcher: reactorToken.name, target: targetToken.name }));
                     await actionFX.queueActionFx(() => actionFX.playSearchFoundFX(targetToken), targetToken, 'search');
                 }
                 else
@@ -2010,8 +2010,8 @@ export function getDefaultGeneralReactionRegistry()
                     range: 1,
                     includeSelf: false,
                     filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
-                    title: "MOUNT",
-                    description: `${pilotName} is mounting. Choose the mech to board.`,
+                    title: localize('LA.dialogTitle.mountCaps'),
+                    description: localizeFormat('LA.reaction.mountPrompt', { pilot: pilotName }),
                     icon: "cci cci-pilot"
                 });
                 const mechToken = targets?.[0];
@@ -2051,8 +2051,8 @@ export function getDefaultGeneralReactionRegistry()
                     origin: reactorToken,
                     range: 1,
                     count: 1,
-                    title: "DISMOUNT",
-                    description: `${pilotActor.name} dismounts from ${reactorToken.name}.`,
+                    title: localize('LA.dialogTitle.dismountCaps'),
+                    description: localizeFormat('LA.reaction.dismountPrompt', { pilot: pilotActor.name, mech: reactorToken.name }),
                     icon: "cci cci-pilot"
                 });
             }
@@ -2075,8 +2075,8 @@ export function getDefaultGeneralReactionRegistry()
                 range: 1,
                 includeSelf: false,
                 filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
-                title: "JOCKEY",
-                description: `Choose the adjacent mech to JOCKEY.`,
+                title: localize('LA.dialogTitle.jockeyCaps'),
+                description: localize('LA.reaction.chooseTheAdjacentMechTo'),
                 icon: "modules/lancer-automations/icons/rope-dart.svg"
             });
             const mechToken = targets?.[0];
@@ -2089,7 +2089,7 @@ export function getDefaultGeneralReactionRegistry()
                 skillA: "GRIT",
                 tokenB: mechToken,
                 skillB: "HULL",
-                title: "JOCKEY - GRIT vs HULL",
+                title: localize('LA.dialogTitle.jockeyGritVsHull'),
                 sendToOwner: true,
                 sourceAction: "Jockey",
             });
@@ -2097,13 +2097,13 @@ export function getDefaultGeneralReactionRegistry()
                 return;
             if (result.winner !== reactorToken.actor)
             {
-                ui.notifications.info(`${reactorToken.name} failed to Jockey ${mechToken.name}.`);
+                ui.notifications.info(localizeFormat('LA.notify.jockeyFailed', { name: reactorToken.name, mech: mechToken.name }));
                 return;
             }
 
             const choice = await api.startChoiceCard({
-                title: "JOCKEY",
-                description: `${reactorToken.name} climbs onto ${mechToken.name}. Choose one:`,
+                title: localize('LA.dialogTitle.jockeyCaps'),
+                description: localizeFormat('LA.reaction.jockeyClimbs', { name: reactorToken.name, mech: mechToken.name }),
                 originToken: reactorToken,
                 relatedToken: mechToken,
                 choices: [

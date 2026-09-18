@@ -1,5 +1,7 @@
 /* global Hooks, ui, Image, document */
 
+import { localize, localizeFormat } from "../tools/string-utils.js";
+
 const BTN_CLASS = "la-match-image-size";
 
 function _findInput(root, names)
@@ -38,7 +40,7 @@ async function _applyImageSize(app, root)
     const src = _getBackgroundSrc(app, root);
     if (!src)
     {
-        ui.notifications?.warn("No background image set on this scene.");
+        ui.notifications?.warn(localize('LA.notify.noBackgroundImageSetOnThisScene'));
         return;
     }
     const img = new Image();
@@ -49,7 +51,7 @@ async function _applyImageSize(app, root)
         img.src = src;
     }).catch(() =>
     {
-        ui.notifications?.warn(`Couldn't load image: ${src}`);
+        ui.notifications?.warn(localizeFormat('LA.notify.couldNotLoadImage', { src }));
     });
     if (!img.naturalWidth || !img.naturalHeight)
         return;
@@ -61,7 +63,7 @@ async function _applyImageSize(app, root)
     _setInput(_findInput(root, ["height"]), img.naturalHeight);
     if (wasLinked)
         linkBtn.click();
-    ui.notifications?.info(`Scene dimensions set to ${img.naturalWidth} × ${img.naturalHeight}.`);
+    ui.notifications?.info(localizeFormat('LA.notify.sceneDimensionsSet', { width: img.naturalWidth, height: img.naturalHeight }));
 }
 
 function _findLinkBtn(root)
@@ -80,7 +82,7 @@ function _applyScale(root, wPct, hPct)
     const curH = Number(heightInput.value) || 0;
     if (!curW || !curH)
     {
-        ui.notifications?.warn("Current scene dimensions are empty. Set Width and Height first.");
+        ui.notifications?.warn(localize('LA.notify.currentSceneDimensionsAreEmptySetWidth'));
         return;
     }
     const newW = Math.max(1, Math.round(curW * (wPct / 100)));
@@ -97,7 +99,7 @@ function _applyScale(root, wPct, hPct)
     if (wasLinked)
         linkBtn.click();
 
-    ui.notifications?.info(`Scene dimensions scaled to ${newW} × ${newH}.`);
+    ui.notifications?.info(localizeFormat('LA.notify.sceneDimensionsScaled', { width: newW, height: newH }));
 }
 
 function _buildScaleRow(root)
@@ -168,7 +170,7 @@ function _buildScaleRow(root)
 
     const label = document.createElement("span");
     label.style.cssText = "opacity:0.7;";
-    label.textContent = "Scale W/H %";
+    label.textContent = localize("LA.sceneDim.scaleWH");
 
     row.append(label, widthInput, link, heightInput, apply);
     return row;

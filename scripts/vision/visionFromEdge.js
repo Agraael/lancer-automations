@@ -1,5 +1,4 @@
-                                                                                                                                                                                        /* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI, CONFIG */
-
+/* global canvas, game, Hooks, foundry, jQuery, $, libWrapper, PIXI, CONFIG */
 /*
    Lancer-style vision: see from the token's perimeter, not its center.
    Foundry's default polygon originates at the center, so a 4x4 mech can't
@@ -21,13 +20,19 @@ import { laSightEdgeOptions } from './laWallLos.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { laTokenHeight } from '../tools/token-height.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
 const FLAG_KEY = 'visionFromEdge';
 const SETTING_ENABLED = 'visionFromEdgeEnabled';
 const SETTING_SAMPLE_MODE = 'visionFromEdgeSampleMode';
 const SETTING_SAMPLE_OFFSET = 'visionFromEdgeSampleOffset';
+const SETTING_DEFER_DRAG = 'visionFromEdgeDeferDrag';
+const SETTING_THROTTLE_FPS = 'visionAnimationThrottleFps';
 const SOURCE_ID_PART = 'la-edge';
 const WALL_STEP_INSIDE = 4;
+const REST_DELAY_MIN_MS = 50;
+const ARRIVAL_DELAY_MS = 50;
 
 function _getVisionSourceClass()
 {
@@ -65,6 +70,139 @@ export function getEdgeSamplePoints(token)
     return _getSamplePoints(token);
 }
 
+// Upper bound on what a position-keyed sweep cache could skip. Counts only, caches nothing.
+let _sweepProbe = null;
+
+function _countSweep(source)
+{
+    const data = source?.data;
+    if (!data)
+        return;
+    const key = `${Math.round(data.x)},${Math.round(data.y)},${Math.round(data.radius ?? 0)}`
+        + `,${Math.round(data.externalRadius ?? 0)},${data.angle ?? 360},${data.rotation ?? 0}`
+        + `,${Math.round((data.elevation ?? 0) * 100)},${source.constructor?.name ?? '?'}`;
+    _sweepProbe.requests++;
+    const seen = _sweepProbe.keys.get(key);
+    if (seen === undefined)
+        _sweepProbe.keys.set(key, { count: 1, sourceId: source.sourceId ?? '?', walls: canvas?.edges?.size ?? 0 });
+    else
+    {
+        _sweepProbe.hits++;
+        seen.count++;
+        if (seen.walls !== (canvas?.edges?.size ?? 0))
+            seen.wallsChanged = true;
+        if (!seen.via)
+        {
+            seen.via = (new Error().stack ?? '').split('\n').slice(2, 10)
+                .map(line => line.trim().replace(/^at\s+/, '').replace(/\s*\(.*$/, ''))
+                .filter(name => name && !name.startsWith('http'))
+                .join(' < ');
+        }
+    }
+};
+
+globalThis.lancerSweepProbe = (on = true) =>
+{
+    _sweepProbe = on ? { requests: 0, hits: 0, keys: new Map() } : null;
+    console.log(`${MODULE_ID} | sweep probe ${on ? 'armed, now drag and drop' : 'off'}`);
+    return null;
+};
+
+globalThis.lancerSweepProbeDump = () =>
+{
+    if (!_sweepProbe)
+    {
+        console.warn(`${MODULE_ID} | run lancerSweepProbe() first`);
+        return null;
+    }
+    const { requests, hits, keys } = _sweepProbe;
+    const entries = [...keys.entries()].filter(([, info]) => info.count > 1)
+        .sort((left, right) => right[1].count - left[1].count);
+    console.log(`${MODULE_ID} | sweep probe | requests ${requests} | distinct geometries ${keys.size}`
+        + ` | repeatable ${hits} (${requests ? (100 * hits / requests).toFixed(1) : 0}%)`
+        + ` | geometries seen more than once ${entries.length}`);
+    console.log(entries.slice(0, 8).map(([, info]) =>
+        `${info.count}x  ${info.sourceId}${info.wallsChanged ? '  WALLS CHANGED' : ''}\n      via ${info.via ?? '?'}`).join('\n'));
+    return { requests, distinct: keys.size, hits, top: entries.slice(0, 12).map(([, info]) => info) };
+};
+
+// Diagnostics: everything the edge sources are built from, so a preview and the real token can be diffed.
+let _watchPreview = false;
+let _lastPreviewSnapshot = null;
+
+function _visionSnapshot(token)
+{
+    const doc = token.document;
+    let samples = null;
+    try
+    {
+        samples = _getSamplePoints(token).map(point => `${Math.round(point.x)},${Math.round(point.y)}`).join(' | ');
+    }
+    catch (err)
+    {
+        samples = `failed: ${err.message}`;
+    }
+    return {
+        isPreview: !!token.isPreview,
+        sourceId: token.sourceId,
+        doc: `${Math.round(doc.x)},${Math.round(doc.y)} elev ${doc.elevation ?? 0} size ${doc.width}x${doc.height}`,
+        placeable: `${Math.round(token.x)},${Math.round(token.y)}`,
+        center: `${Math.round(token.center.x)},${Math.round(token.center.y)}`,
+        eyeHeight: getTokenVisionLOS(token),
+        edgeVisionEnabled: _isEdgeVisionEnabled(doc),
+        sightEnabled: !!doc.sight?.enabled,
+        visionDisabled: token.vision?.disabled ?? null,
+        sampleMode: getModuleSetting(SETTING_SAMPLE_MODE),
+        samples,
+        edgeSourceCount: [...(canvas?.effects?.visionSources?.keys() ?? [])].filter(id => id.includes(SOURCE_ID_PART)).length,
+        visionSourceIds: [...(canvas?.effects?.visionSources?.keys() ?? [])].join(' | ')
+    };
+}
+
+globalThis.lancerVisionSnapshot = () =>
+{
+    const token = (canvas?.tokens?.preview?.children ?? [])[0] ?? canvas?.tokens?.controlled?.[0];
+    if (!token)
+    {
+        console.warn(`${MODULE_ID} | drag or select a token first`);
+        return null;
+    }
+    const snapshot = _visionSnapshot(token);
+    console.log(`${MODULE_ID} | vision snapshot\n` + JSON.stringify(snapshot, null, 1));
+    return snapshot;
+};
+
+globalThis.lancerVisionWatch = (on = true) =>
+{
+    _watchPreview = on;
+    _lastPreviewSnapshot = null;
+    console.log(`${MODULE_ID} | preview vision capture ${on ? 'armed, now drag and drop' : 'off'}`);
+};
+
+globalThis.lancerVisionCompare = () =>
+{
+    const token = canvas?.tokens?.controlled?.[0];
+    if (!_lastPreviewSnapshot)
+    {
+        console.warn(`${MODULE_ID} | no preview captured; run lancerVisionWatch() then drag`);
+        return null;
+    }
+    if (!token)
+    {
+        console.warn(`${MODULE_ID} | select the dropped token first`);
+        return null;
+    }
+    const after = _visionSnapshot(token);
+    const diff = {};
+    for (const key of Object.keys(after))
+    {
+        if (String(_lastPreviewSnapshot[key]) !== String(after[key]))
+            diff[key] = { preview: _lastPreviewSnapshot[key], real: after[key] };
+    }
+    console.log(`${MODULE_ID} | preview vs real | ${Object.keys(diff).length} field(s) differ\n` + JSON.stringify(diff, null, 1));
+    return { preview: _lastPreviewSnapshot, real: after, diff };
+};
+
 // Convex token-shape corner samples, fixed 1px inside the outline, independent of the vision sample settings.
 export function getShapeSamplePoints(token)
 {
@@ -94,10 +232,14 @@ function _convexShapeVertices(token, center, outset)
     if (!shapePoints?.length)
         return null;
     const outline = [];
+    // Document, not the placeable: a preview or animating token has not moved its PIXI position yet,
+    // which would put the hull a cell behind the centre these samples are measured from.
+    const shapeOriginX = token.document?.x ?? token.x;
+    const shapeOriginY = token.document?.y ?? token.y;
     for (let idx = 0; idx < shapePoints.length; idx += 2)
     {
-        const vertX = shapePoints[idx] + token.x;
-        const vertY = shapePoints[idx + 1] + token.y;
+        const vertX = shapePoints[idx] + shapeOriginX;
+        const vertY = shapePoints[idx + 1] + shapeOriginY;
         const lastPt = outline.at(-1);
         if (lastPt && Math.abs(lastPt.x - vertX) < 0.01 && Math.abs(lastPt.y - vertY) < 0.01)
             continue;
@@ -205,11 +347,7 @@ function _getSamplePoints(token)
 export function getTokenVisionLOS(token)
 {
     const tokenDoc = token.document;
-    const elevation = tokenDoc.elevation ?? 0;
-    const tokenHeight = tokenDoc.flags?.['wall-height']?.tokenHeight
-        ?? tokenDoc.flags?.elevatedvision?.tokenHeight
-        ?? 1;
-    return elevation + tokenHeight;
+    return (tokenDoc.elevation ?? 0) + laTokenHeight(tokenDoc);
 }
 
 // Collide up to the offset: cast center -> sample, land at the sample or just short of the first wall.
@@ -268,7 +406,7 @@ export function getTokenVisionSources(token)
     if (!canvas?.effects?.visionSources || !token?.sourceId)
         return sources;
     const prefix = `${token.sourceId}.${SOURCE_ID_PART}.`;
-    for (const [id, source] of canvas.effects.visionSources)
+    for (const [id, source] of canvas.effects.visionSources.entries())
     {
         if (id.startsWith(prefix) && source && !source.disabled)
             sources.push(source);
@@ -302,10 +440,88 @@ function _destroyEdgeSources(token)
     return removed;
 }
 
+let _restBuildRunning = false;
+const _restTimersBySource = new Map();
+
+function _restDelay(token)
+{
+    if (!token.isPreview)
+        return ARRIVAL_DELAY_MS;
+    const fps = Number(getModuleSetting(SETTING_THROTTLE_FPS)) || 0;
+    return fps > 0 ? Math.max(REST_DELAY_MIN_MS, (1000 / fps) * 1.5) : REST_DELAY_MIN_MS;
+}
+
+function _isMovementAnimating(token)
+{
+    return token.animationContexts?.has(token.movementAnimationName) === true;
+}
+
+/**
+ * Whether any token is mid drag or mid movement animation.
+ * @returns {boolean} true while a drag preview exists or a token animates its movement
+ */
+export function isAnyTokenMoving()
+{
+    if (canvas?.tokens?.preview?.children?.length)
+        return true;
+    for (const token of canvas?.tokens?.placeables ?? [])
+    {
+        if (_isMovementAnimating(token))
+            return true;
+    }
+    return false;
+}
+
+function _armRestBuild(token)
+{
+    const sourceId = token.sourceId;
+    const pendingTimer = _restTimersBySource.get(sourceId);
+    if (pendingTimer !== undefined)
+        globalThis.clearTimeout(pendingTimer);
+    _restTimersBySource.set(sourceId, globalThis.setTimeout(() =>
+    {
+        _restTimersBySource.delete(sourceId);
+        if (token.destroyed)
+            return;
+        // The last animation frame still holds its context, so wait the move out instead of building into it.
+        if (_isMovementAnimating(token))
+        {
+            _armRestBuild(token);
+            return;
+        }
+        _restBuildRunning = true;
+        try
+        {
+            if (_buildEdgeSources(token))
+                canvas?.perception?.update({ refreshVision: true, refreshLighting: true });
+        }
+        finally
+        {
+            _restBuildRunning = false;
+        }
+    }, _restDelay(token)));
+}
+
+// A preview reruns one sweep per sample on every cell and the move animation does the same per frame,
+// so hold them until the token stops.
+function _deferWhileMoving(token)
+{
+    if (_restBuildRunning)
+        return false;
+    if (!token.isPreview && !_isMovementAnimating(token))
+        return false;
+    if (getModuleSetting(SETTING_DEFER_DRAG) !== true)
+        return false;
+    _armRestBuild(token);
+    return true;
+}
+
 function _buildEdgeSources(token)
 {
     if (!canvas?.effects?.visionSources || !token?.document)
         return false;
+    if (_deferWhileMoving(token))
+        return _destroyEdgeSources(token);
 
     const SourceClass = _getVisionSourceClass();
     let primaryData = null;
@@ -403,6 +619,8 @@ function _buildEdgeSources(token)
         }
         sources.delete(id);
     }
+    if (_watchPreview && token.isPreview)
+        _lastPreviewSnapshot = _visionSnapshot(token);
     return added;
 }
 
@@ -545,7 +763,7 @@ function _onRenderTokenConfig(app, html)
     const block = `
         <hr/>
         <div class="form-group">
-            <label data-tooltip="Vision computed from the token's perimeter (Lancer LOS-style) so larger tokens can peek around corners. 'Default' follows the world setting.">Vision From Edge</label>
+            <label data-tooltip="${localize('LA.vision.fromEdgeTip')}">${localize('LA.vision.fromEdge')}</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.${FLAG_KEY}">
                     <option value="default" ${selected === 'default' ? 'selected' : ''}>Default (world setting)</option>
@@ -618,8 +836,8 @@ window.lancerVisionDebug = {
 export function initVisionFromEdge()
 {
     game.settings.register(MODULE_ID, SETTING_ENABLED, {
-        name: 'Vision From Edge',
-        hint: 'Compute vision from the token perimeter instead of its center.',
+        name: 'LA.settings.visionFromEdgeEnabled.name',
+        hint: 'LA.settings.visionFromEdgeEnabled.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -628,8 +846,8 @@ export function initVisionFromEdge()
     });
 
     game.settings.register(MODULE_ID, 'visionFromEdgeDebug', {
-        name: 'Vision From Edge: Debug Overlay',
-        hint: 'Draw the perimeter sample points on the canvas.',
+        name: 'LA.settings.visionFromEdgeDebug.name',
+        hint: 'LA.settings.visionFromEdgeDebug.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -644,9 +862,19 @@ export function initVisionFromEdge()
         }
     });
 
+    game.settings.register(MODULE_ID, SETTING_DEFER_DRAG, {
+        name: 'LA.settings.visionFromEdgeDeferDrag.name',
+        hint: 'LA.settings.visionFromEdgeDeferDrag.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () => _rebuildAll()
+    });
+
     game.settings.register(MODULE_ID, SETTING_SAMPLE_OFFSET, {
-        name: 'Vision From Edge: Sample Offset (px)',
-        hint: 'Distance of the sample points from the token edge. Positive outsets, negative insets.',
+        name: 'LA.settings.visionFromEdgeSampleOffset.name',
+        hint: 'LA.settings.visionFromEdgeSampleOffset.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -656,18 +884,18 @@ export function initVisionFromEdge()
     });
 
     game.settings.register(MODULE_ID, SETTING_SAMPLE_MODE, {
-        name: 'Vision From Edge: Sample Density',
-        hint: 'Vision sample points per token, one vision sweep each. Token shape follows the real outline; Adaptive uses 8 for size 3+, else 4.',
+        name: 'LA.settings.visionFromEdgeSampleMode.name',
+        hint: 'LA.settings.visionFromEdgeSampleMode.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            corners4: '4 (corners only)',
-            perimeter8: '8 (corners + edge midpoints)',
-            perimeter16: '16 (dense perimeter)',
-            silhouette: 'Token shape corners (recommended)',
-            silhouette2: 'Token shape corners x2',
-            adaptive: 'Adaptive'
+            corners4: 'LA.settings.visionFromEdgeSampleMode.choices.corners4',
+            perimeter8: 'LA.settings.visionFromEdgeSampleMode.choices.perimeter8',
+            perimeter16: 'LA.settings.visionFromEdgeSampleMode.choices.perimeter16',
+            silhouette: 'LA.settings.visionFromEdgeSampleMode.choices.silhouette',
+            silhouette2: 'LA.settings.visionFromEdgeSampleMode.choices.silhouette2',
+            adaptive: 'LA.settings.visionFromEdgeSampleMode.choices.adaptive'
         },
         default: 'silhouette',
         onChange: () => _rebuildAll()
@@ -710,6 +938,8 @@ export function initVisionFromEdge()
         {
             libWrapper.register(MODULE_ID, 'foundry.canvas.sources.PointVisionSource.prototype._createShapes', function (wrapped, ...args)
             {
+                if (_sweepProbe)
+                    _countSweep(this);
                 wrapped(...args);
                 const clip = this._laEdgeClipCircle;
                 if (!clip || !this.los?.applyConstraint)

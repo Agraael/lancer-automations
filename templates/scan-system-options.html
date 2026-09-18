@@ -1,43 +1,43 @@
 <div class="lancer-dialog-base">
     <div class="lancer-dialog-header">
-        <div class="lancer-dialog-title">SYSTEM SCAN OPTIONS</div>
+        <div class="lancer-dialog-title">{{localize "LA.scanUi.systemOptions.systemScanOptions"}}</div>
         <div class="lancer-dialog-subtitle">{{#if isMulti}}Targets{{else}}Target{{/if}}: {{targetNames}}</div>
     </div>
 
     <div class="lancer-info-box">
         <i class="fas fa-info-circle"></i>
-        <span>The chat card always posts. Toggle below to also create / update a journal entry in the SCAN Database folder.</span>
+        <span>{{localize "LA.scanUi.systemOptions.theChatCardAlwaysPostsToggle"}}</span>
     </div>
 
     <div class="lancer-toggle-card active" data-create-journal="true" style="margin-top:12px;">
         <div class="lancer-toggle-card-icon"><i class="fas fa-check-square"></i></div>
         <div class="lancer-toggle-card-text">
-            Create journal entry
-            <div style="font-size:0.8em;font-weight:normal;opacity:0.7;margin-top:2px;">Updates the existing entry if one already exists for this target.</div>
+            {{localize "LA.scanUi.systemOptions.createJournalEntry"}}
+            <div style="font-size:0.8em;font-weight:normal;opacity:0.7;margin-top:2px;">{{localize "LA.scanUi.systemOptions.updatesTheExistingEntryIfOne"}}</div>
         </div>
     </div>
 
     <div class="la-scan-custom-name" style="margin-top:8px;">
-        <label for="la-scan-custom-name" style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Custom journal name (optional)</label>
+        <label for="la-scan-custom-name" style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">{{localize "LA.scanUi.systemOptions.customJournalNameOptional"}}</label>
         <input id="la-scan-custom-name" type="text" name="custom-journal-name" placeholder="Leave blank to use target name" style="width:100%;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#fff;">
 
         <div class="la-scan-owner-section" style="margin-top:10px;">
             <div class="la-scan-owner-summary" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#f7f7f7;">
                 <span class="la-scan-owner-summary-text" style="font-size:0.9em;">{{defaultOwnershipSummary}}</span>
-                <button type="button" class="la-scan-owner-toggle" style="padding:3px 10px;font-size:0.85em;">Custom Ownership</button>
+                <button type="button" class="la-scan-owner-toggle" style="padding:3px 10px;font-size:0.85em;">{{localize "LA.scanUi.systemOptions.customOwnership"}}</button>
             </div>
             <div class="la-scan-owner-grid-wrap" style="display:none;margin-top:8px;">
-                <div class="la-scan-owner-header">Ownership</div>
+                <div class="la-scan-owner-header">{{localize "LA.scanUi.systemOptions.ownership"}}</div>
                 <div class="la-scan-owner-grid">
                     {{#each ownerRows}}
                     <div class="la-scan-owner-row{{#if isAll}} la-scan-owner-all{{/if}}{{#if isGroup}} la-scan-owner-group{{/if}}">
                         <label for="la-scan-own-{{key}}" class="la-scan-owner-name">{{name}}</label>
                         <select id="la-scan-own-{{key}}" class="la-scan-owner-select" data-kind="{{kind}}" data-id="{{id}}">
-                            <option value="" selected>No Change</option>
-                            <option value="0">None</option>
-                            <option value="1">Limited</option>
-                            <option value="2">Observer</option>
-                            <option value="3">Owner</option>
+                            <option value="" selected>{{localize "LA.scanUi.systemOptions.noChange"}}</option>
+                            <option value="0">{{localize "LA.scanUi.systemOptions.none"}}</option>
+                            <option value="1">{{localize "LA.scanUi.systemOptions.limited"}}</option>
+                            <option value="2">{{localize "LA.scanUi.systemOptions.observer"}}</option>
+                            <option value="3">{{localize "LA.scanUi.systemOptions.owner"}}</option>
                         </select>
                     </div>
                     {{/each}}

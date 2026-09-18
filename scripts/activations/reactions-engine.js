@@ -11,6 +11,7 @@ import { getTokenDistance } from "../combat/overwatch.js";
 import { getItemLID, isItemAvailable, hasReactionAvailable, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
 let reactionDebounceTimer = null;
 let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
@@ -400,7 +401,7 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
     {
         dbgAuto('skip:', token.name, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
         if ((token?.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
-            ui.notifications.warn(`${reactionName} (${token?.name ?? '?'}): not triggered, out of combat.`);
+            ui.notifications.warn(localizeFormat('LA.notify.notTriggeredOutOfCombat', { reaction: reactionName, name: token?.name ?? '?' }));
         return null;
     }
     if (isSelf && !reaction.triggerSelf)
@@ -547,7 +548,7 @@ function evaluateSceneReaction(reactionName, reaction, triggerType, data, sceneR
     {
         dbgAuto('skip:', sceneName, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
         if (getModuleSetting('debugOutOfCombat'))
-            ui.notifications.warn(`${reactionName} (${sceneName}): not triggered, out of combat.`);
+            ui.notifications.warn(localizeFormat('LA.notify.notTriggeredOutOfCombat', { reaction: reactionName, name: sceneName }));
         return null;
     }
 
@@ -616,7 +617,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
                 ? startWaitCard({
                     title: waitTitle ?? 'WAITING',
                     description: waitDescription ?? '',
-                    waitMessage: `Waiting for ${game.users.get(targetUserId)?.name ?? 'remote user'}…`,
+                    waitMessage: localizeFormat('LA.reaction.waitingForUser', { name: game.users.get(targetUserId)?.name ?? localize('LA.reaction.remoteUser') }),
                     item: waitItem,
                     originToken: waitOriginToken ?? token,
                     relatedToken: waitRelatedToken
@@ -711,7 +712,7 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName)
                 ? startWaitCard({
                     title: waitTitle ?? 'WAITING',
                     description: waitDescription ?? '',
-                    waitMessage: `Waiting for ${game.users.get(targetUserId)?.name ?? 'remote user'}…`,
+                    waitMessage: localizeFormat('LA.reaction.waitingForUser', { name: game.users.get(targetUserId)?.name ?? localize('LA.reaction.remoteUser') }),
                     item: waitItem ?? item,
                     originToken: waitOriginToken ?? token,
                     relatedToken: waitRelatedToken
@@ -949,7 +950,7 @@ async function checkReactions(triggerType, data)
                 if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
                 {
                     if ((token.isOwner || game.user.isGM) && getModuleSetting('debugOutOfCombat'))
-                        ui.notifications.warn(`${item.name} (${token.name}): not triggered, out of combat.`);
+                        ui.notifications.warn(localizeFormat('LA.notify.notTriggeredOutOfCombat', { reaction: item.name, name: token.name }));
                     if (triggerType === 'onActivation' && (token.isOwner || game.user.isGM))
                         _warnReactionConfigOnce(`ooc|${lid}|${reaction.reactionPath || ''}`, `"${item.name}" only triggers in combat. Enable "Out of Combat" to allow it outside.`);
                     dbgAuto('skip:', token.name, item.name, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });

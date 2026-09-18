@@ -399,14 +399,14 @@ await api.executeItemActivation(item, options, extraData)
 
 Runs an item's activation flow. The item's own automation fires. `activateGeneralAction` is the equivalent for registry actions that belong to no item.
 
-The flow class is picked in this order: `flowName` if given, then `CoreActiveFlow` for a frame with `path: "system.core_system"`, then `ActivationFlow` if there is a `path` or the item has any actions (`system.actions.0` when no path is given), then `SystemFlow` for a mech system, weapon mod, or non-weapon NPC feature, then `WeaponAttackFlow` for a weapon. If none match it errors and returns `{ completed: false }`. This is close to `triggerData.startRelatedFlow` but not the same: that one tries weapons before actions, prefers a Reaction action over `actions.0`, has no `CoreActiveFlow` branch, and falls back to a simple activation card instead of erroring.
+The flow class is picked in this order: `flowName` if given, then `CoreActiveFlow` for a frame with `path: "system.core_system"`, then `TalentFlow` or `ActivationFlow` for a talent, then `BondPowerFlow` for a bond, then `ActivationFlow` if there is a `path` or the item has any actions (`system.actions.0` when no path is given), then `SystemFlow` for a mech system, weapon mod, or non-weapon NPC feature, then `WeaponAttackFlow` for a weapon. If none match it errors and returns `{ completed: false }`. This is close to `triggerData.startRelatedFlow` but not the same: that one tries weapons before actions, prefers a Reaction action over `actions.0`, has no `CoreActiveFlow` branch, and falls back to a simple activation card instead of erroring.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>item</kbd> | `Item` | *required* | The item to activate |
 | <kbd>extraData</kbd> | `Object` | `{}` | Merged onto `flow.state.la_extraData` before the flow begins |
 | **inside `options`** | | | |
-| <kbd>path</kbd> | `string` | `null` | Sets `action_path`, to pick one action on a multi-action item |
+| <kbd>path</kbd> | `string` | `null` | Sets `action_path`, to pick one action on a multi-action item. On a talent, `ranks[N]` for the rank card or `ranks[N].actions[M]` for its action. On a bond, `powers[N]` |
 | <kbd>flowName</kbd> | `string` | `null` | Forces a specific flow class instead of the dispatched one |
 
 ```js

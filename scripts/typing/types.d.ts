@@ -105,8 +105,8 @@ interface TriggerDataBase {
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
-    /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). */
-    sendMessageToReactor(data: any, userId?: string | null): Promise<void>;
+    /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). `wait: true` awaits the remote handler and resolves with whatever it returned. */
+    sendMessageToReactor(data: any, userId?: string | null, options?: { wait?: boolean; waitTitle?: string | null; waitDescription?: string | null; waitItem?: Item | null; waitOriginToken?: Token | null; waitRelatedToken?: Token | null }): Promise<any>;
     /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console and returns a summary. */
     debugActivation(label?: string): any;
     [key: string]: any;

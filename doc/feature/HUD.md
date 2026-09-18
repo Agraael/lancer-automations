@@ -29,7 +29,8 @@ The bar at the top of the HUD shows:
 
 - the **token name** - click it to open the actor sheet (shows "N TOKENS" when several are selected),
 - a **combat toggle** (the swords icon) to add or remove the token from combat,
-- an optional **team / disposition stripe** down the edge (`tah.showDisposition`, uses Token Factions teams if installed, otherwise the disposition).
+- an optional **team / disposition stripe** down the edge (`tah.showDisposition`, uses Token Factions teams if installed, otherwise the disposition),
+- an optional **portrait** above the bar: token art or actor portrait (`tah.portrait.mode`), overridable per token in the L.A tab of the token config.
 
 ---
 
@@ -228,5 +229,9 @@ With **`tah.narrativeMode`** on, the HUD still shows when no token is selected, 
 | **Hover Close Delay (seconds)** | How long the HUD stays open after the mouse leaves. |
 | **Max items per column** | Rows per column before it scrolls (0 = no cap, top menu never capped). |
 | **HUD Scale** | Size of the Token Action HUD and its popups. |
+| **HUD Portrait** | Artwork above the name bar: none, token art, or actor portrait. Tokens can override it in the L.A tab. |
+| **Portrait Applies To** | Mechs and pilots only, or all actors. |
+| **Mechs Use Pilot Art** | Draw the linked pilot's image instead of the mech's. |
+| **Portrait Scale** | Size of the portrait. |
 | **Weapon Range Preview** | Show weapon range on the map when hovering items in the HUD. Works standalone, no extra module needed. |
 | **Aid / Handle / Interact / Squeeze Actions** | Show these actions in the Actions category. They come from PPG (Prototype Pattern Group). |

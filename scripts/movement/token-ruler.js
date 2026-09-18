@@ -3,16 +3,43 @@
 import { getSpeedRanges } from '../combat/speed-provider.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { elevationForPreview } from './elevation.js';
-import { isForceFreeMovement, isForceDebugMovement, pathfindDragEnabled } from './keybindings.js';
+import { isForceFreeMovement, isForceDebugMovement, pathfindDragEnabled, currentElevationMode } from './keybindings.js';
 import { parseAction } from './movement-actions.js';
+import { isHexUnderTerrain } from '../combat/terrain-utils.js';
 import { snapElevationForDisplay } from './tactical-distance.js';
-import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
+import { ISO_SETTINGS, isIsoPerspectiveFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from '../tah/sound.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const PER_STEP_RENDER = 'rulerPerStepRender';
 const LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-waypoint-label.hbs`;
+// Path hexes running under an overhang fade, so the terrain above still reads
+const UNDER_TERRAIN_ALPHA = 0.35;
+const HATCH_SRC = `modules/${MODULE_ID}/assets/hatching.png`;
+const HATCH_TILES = 4;
+
+let _hatchTexture = null;
+let _hatchRequested = false;
+
+function hatchTexture()
+{
+    if (_hatchTexture)
+        return _hatchTexture;
+    const cached = /** @type {PIXI.Texture} */ (foundry.canvas.getTexture(HATCH_SRC));
+    if (cached?.baseTexture)
+    {
+        cached.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT;
+        _hatchTexture = cached;
+        return cached;
+    }
+    if (!_hatchRequested)
+    {
+        _hatchRequested = true;
+        foundry.canvas.loadTexture(HATCH_SRC);
+    }
+    return null;
+}
 
 function settingOn()
 {
@@ -35,7 +62,8 @@ function _applyIsoCounter(displayObject)
 
 function _isoProjectLabelPos(pos)
 {
-    if (!isIsoFeatureEnabled(ISO_SETTINGS.waypointLabel))
+    // Grape Juice wraps _getWaypointLabelContext and projects the label itself; projecting again doubles it.
+    if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.waypointLabel))
         return pos;
     if (!_isoActive())
         return pos;
@@ -1039,6 +1067,25 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
 
     _getGridHighlightStyle(waypoint, offset)
     {
+        let style = this._laGridHighlightStyle(waypoint, offset);
+        if (!(style?.alpha > 0))
+            return style;
+        if (waypoint._laBrushed || parseAction(waypoint.action).base === 'ignore')
+        {
+            const texture = hatchTexture();
+            if (texture)
+            {
+                const scale = canvas.grid.size / (texture.width * HATCH_TILES);
+                style = { ...style, texture, matrix: new PIXI.Matrix().scale(scale, scale) };
+            }
+        }
+        if (isHexUnderTerrain(offset.j, offset.i, waypoint.elevation ?? 0))
+            style = { ...style, alpha: style.alpha * UNDER_TERRAIN_ALPHA };
+        return style;
+    }
+
+    _laGridHighlightStyle(waypoint, offset)
+    {
         // Silent region-boundary waypoint (animation slowdown only).
         if (waypoint._laSilent)
             return { alpha: 0 };
@@ -1126,7 +1173,12 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
     _getWaypointLabelContext(waypoint, _state)
     {
         if (!settingOn())
-            return super._getWaypointLabelContext(waypoint, _state);
+        {
+            const base = super._getWaypointLabelContext(waypoint, _state);
+            if (base?.position)
+                base.position = _isoProjectLabelPos(base.position);
+            return base;
+        }
         if (!waypoint.previous)
             return null;
         if (!waypoint.explicit && waypoint.next
@@ -1214,8 +1266,11 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             penaltyZone,
             showSecondLine,
             ringColor,
-            showPathfind: isLast,
+            showPathfind: isLast && !!getModuleSetting('pathfindDragMovement'),
             pathfindOn: pathfindDragEnabled(),
+            showElevMode: isLast && !!currentElevationMode(),
+            elevMode: currentElevationMode(),
+            elevIcon: currentElevationMode() === 'hold' ? 'fa-arrow-up-to-line' : 'fa-arrow-down-to-line',
             units
         };
     }
@@ -1275,10 +1330,10 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
     _getWaypointLabelContext(waypoint, state)
     {
         const ctx = super._getWaypointLabelContext(waypoint, state);
-        if (!settingOn())
-            return ctx;
         if (ctx?.position)
             ctx.position = _isoProjectLabelPos(ctx.position);
+        if (!settingOn())
+            return ctx;
         if (!ctx?.elevation || !waypoint.previous)
             return ctx;
         const groundHere = _measureTerrainElevDisabled() ? 0 : _thtGroundAt(waypoint);

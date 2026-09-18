@@ -210,16 +210,16 @@ Hooks.on('recordToken', (tokenDoc) =>
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, SETTING_CLEAR_ON_TURN, {
-        name: 'Clear movement history on turn change',
-        hint: 'When a combatant\'s turn ends, wipe their recorded movement trail.',
+        name: 'LA.settings.historyClearOnTurn.name',
+        hint: 'LA.settings.historyClearOnTurn.hint',
         scope: 'world',
         type: Boolean,
         default: false,
         config: false
     });
     game.settings.register(MODULE_ID, SETTING_CLEAR_ON_ROUND, {
-        name: 'Clear movement history on round change',
-        hint: 'At the start of each new round, wipe every combatant\'s recorded movement trail.',
+        name: 'LA.settings.historyClearOnRound.name',
+        hint: 'LA.settings.historyClearOnRound.hint',
         scope: 'world',
         type: Boolean,
         default: false,

@@ -40,8 +40,8 @@ function _scheduleTrailing(token, delayMs, perception)
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, SETTING_FPS, {
-        name: 'Vision Animation Throttle (FPS)',
-        hint: 'Cap vision/light refresh rate during token movement (0 = vanilla).',
+        name: 'LA.settings.visionAnimationThrottleFps.name',
+        hint: 'LA.settings.visionAnimationThrottleFps.hint',
         scope: 'world',
         type: Number,
         default: 0,

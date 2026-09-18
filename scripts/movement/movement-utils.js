@@ -47,6 +47,90 @@ export function thtShapesAtPoint(tht, x, y)
     return shapes;
 }
 
+/**
+ * Solid height bands among THT shapes, grid units.
+ * @param {object[]} shapes
+ * @param {Map} typeById terrain type by id
+ * @returns {{bottom: number, top: number}[]}
+ */
+export function solidBands(shapes, typeById)
+{
+    const bands = [];
+    for (const shape of shapes ?? [])
+    {
+        const terrainType = typeById?.get(shape.terrainTypeId);
+        if (!terrainType?.usesHeight || !terrainType?.isSolid)
+            continue;
+        bands.push({
+            bottom: shape.bottom ?? shape.elevation ?? 0,
+            top: shape.top ?? ((shape.elevation ?? 0) + (shape.height ?? 0))
+        });
+    }
+    return bands;
+}
+
+/**
+ * Surface a token rests on in one cell, grid units.
+ * ground: the highest surface with room above it at or below height, else the lowest one above.
+ * hold: height is a floor. Rise out of any band filling the body, never below the floor.
+ * @param {{bottom: number, top: number}[]} bands
+ * @param {number} zHeight token height, grid units
+ * @param {number} height current elevation, grid units
+ * @param {'ground'|'hold'} mode
+ * @returns {number}
+ */
+export function restingSurface(bands, zHeight, height, mode)
+{
+    if (mode === 'hold')
+    {
+        let surface = height;
+        for (let pass = 0; pass <= bands.length; pass++)
+        {
+            let pushed = surface;
+            for (const band of bands)
+            {
+                if (band.top > pushed + 1e-6 && band.bottom < surface + zHeight - 1e-6)
+                    pushed = band.top;
+            }
+            if (pushed === surface)
+                break;
+            surface = pushed;
+        }
+        return surface;
+    }
+    const fits = surface => !bands.some(band => band.top > surface + 1e-6 && band.bottom < surface + zHeight - 1e-6);
+    let below = -Infinity;
+    let above = Infinity;
+    for (const surface of [0, ...bands.map(band => band.top)])
+    {
+        if (!fits(surface))
+            continue;
+        if (surface <= height + 1e-6)
+            below = Math.max(below, surface);
+        else
+            above = Math.min(above, surface);
+    }
+    return below > -Infinity ? below : above;
+}
+
+/**
+ * Standing rule across a footprint: rest on the lowest cell unless one rises SIZE or more above it.
+ * @param {number[]} cellSurfaces
+ * @param {number} moverSize
+ * @param {boolean} standing whether the mover may step over sub-SIZE obstructions
+ * @returns {{surface: number, brushed: boolean, landingSurface: number}} brushed when a taller cell was ignored, landingSurface where the mover rests if it stops here
+ */
+export function footprintSurface(cellSurfaces, moverSize, standing)
+{
+    const maxTop = Math.max(...cellSurfaces);
+    if (!standing || cellSurfaces.length < 2 || !(moverSize > 1))
+        return { surface: maxTop, brushed: false, landingSurface: maxTop };
+    const minTop = Math.min(...cellSurfaces);
+    if (maxTop - minTop < moverSize - 1e-6)
+        return { surface: minTop, brushed: maxTop - minTop > 1e-6, landingSurface: maxTop };
+    return { surface: maxTop, brushed: false, landingSurface: maxTop };
+}
+
 const OBSTRUCTION_TEMPLATE_SETTINGS = {
     vehicle: 'obstructionBlocksVehicle',
     squad: 'obstructionBlocksSquad',
@@ -57,6 +141,8 @@ const OBSTRUCTION_TEMPLATE_SETTINGS = {
 // Mechs step over sub-SIZE walls; the settings pick which NPC templates do not.
 export function canPassObstructions(tokenDoc)
 {
+    if (!getSettingEnabled('enableObstructionStepOver'))
+        return false;
     if (getLAFlag(tokenDoc,'noObstructionPass') || getLAFlag(tokenDoc.actor,'noObstructionPass'))
         return false;
     const actor = tokenDoc?.actor;

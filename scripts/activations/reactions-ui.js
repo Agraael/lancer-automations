@@ -3,6 +3,7 @@ import { ReactionManager, stringToAsyncFunction, ACTIVATION_TRIGGERS } from "./r
 import { MODULE_ID } from "../tools/constants.js";
 import { hasReactionAvailable } from "../tools/misc-tools.js";
 import { runInFlowBody } from "./flow-queue.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 let activeReactionDialog = null;
 let activeDetailPanel = null;
@@ -19,7 +20,7 @@ function runCustomActivation({ activationType, source, triggerType, triggerData,
             if (macro)
                 return macro.execute({ triggerType, triggerData, reactorToken: token, item, activationName });
             else
-                ui.notifications.warn(`Macro "${macroName}" not found`);
+                ui.notifications.warn(localizeFormat('LA.notify.macroNotFound', { name: macroName }));
         }
     }
     else if (activationType === "code")
@@ -189,7 +190,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                         name: activationName,
                         activation: actionType
                     },
-                    detail: `<strong>Trigger:</strong> ${triggerText}<br><strong>Effect:</strong> ${effectText}`
+                    detail: localizeFormat('LA.reaction.triggerEffectDetail', { trigger: triggerText, effect: effectText })
                 };
             }
 
@@ -634,10 +635,10 @@ function renderReactionDialog(popupData)
         activeReactionDialog.close();
 
     activeReactionDialog = new Dialog({
-        title: `Activation Opportunity: ${triggerDisplay}`,
+        title: localizeFormat('LA.dialogTitle.activationOpportunity', { trigger: triggerDisplay }),
         content: html,
         buttons: {
-            ok: { label: "ACKNOWLEDGE" }
+            ok: { label: localize("LA.common.acknowledge") }
         },
         default: "ok",
         render: (htmlEl) =>

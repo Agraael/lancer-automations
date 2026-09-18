@@ -1,6 +1,7 @@
 /* global Tour, game, ui, Dialog, Hooks, FormApplication, $, fetch */
 
 import { maybeRunSettingsOnboarding } from './settings-onboarding.js';
+import { localize } from '../tools/string-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getWeapons } from '../interactive/deployables.js';
 
@@ -31,89 +32,89 @@ function _emTabClick(tab)
 const EFFECT_MANAGER_STEPS = [
     {
         id: 'em-intro',
-        title: 'Effect Manager',
-        content: "Coding and automation can feel rough, and mid-game you need stuff fast. Here's a UI on top of the Lancer Automations systems, no code.",
+        title: localize('LA.tour.step.effectManager'),
+        content: localize('LA.tour.content.codingAndAutomationCanFeelRough'),
         selector: `${EM_ROOT} .lancer-dialog-header`,
     },
     {
         id: 'em-std',
-        title: 'Standard',
-        content: "The standard effect page. Pick a status, a duration, optionally an auto-consume trigger.",
+        title: localize('LA.tour.step.standard'),
+        content: localize('LA.tour.content.theStandardEffectPagePickA'),
         selector: `${EM_ROOT} #tab-standard`,
         action: _emTabClick('standard'),
     },
     {
         id: 'em-std-pick',
-        title: 'Standard - Effect',
-        content: "Pick a status and a stack count. Target is up top.",
+        title: localize('LA.tour.step.standardEffect'),
+        content: localize('LA.tour.content.pickAStatusAndAStack'),
         selector: `${EM_ROOT} #std-effect-grid`,
     },
     {
         id: 'em-std-duration',
-        title: 'Standard - Duration',
-        content: "How long it sticks: end/start of turn, indefinite, etc.",
+        title: localize('LA.tour.step.standardDuration'),
+        content: localize('LA.tour.content.howLongItSticksEndStart'),
         selector: `${EM_ROOT} #std-duration`,
     },
     {
         id: 'em-std-trigger',
-        title: 'Standard - Consume on',
-        content: "Optional auto-consume trigger (on hit, on damage, on turn end...). Picking some triggers reveals extra filters: item LID, action name, status, check type.",
+        title: localize('LA.tour.step.standardConsumeOn'),
+        content: localize('LA.tour.content.optionalAutoConsumeTriggerOnHit'),
         selector: `${EM_ROOT} #std-trigger`,
     },
     {
         id: 'em-presets',
-        title: 'Presets',
-        content: "Save a filled-in effect as a preset and reload it later - handy for ones you apply often.",
+        title: localize('LA.tour.step.presets'),
+        content: localize('LA.tour.content.saveAFilledInEffectAs'),
         selector: `${EM_ROOT} .preset-bar`,
     },
     {
         id: 'em-custom',
-        title: 'Custom',
-        content: "Registering every possible status from NPC stuff is tedious and noisy on the status list. This tab lets you create temporary statuses on the fly. With my <b>temporary-custom-statuses</b> module some can be saved and reused.",
+        title: localize('LA.tour.step.custom'),
+        content: localize('LA.tour.content.registeringEveryPossibleStatusFromNpc'),
         selector: `${EM_ROOT} #tab-custom`,
         action: _emTabClick('custom'),
     },
     {
         id: 'em-custom-build',
-        title: 'Custom - Build',
-        content: "Name, icon, duration, note. Same shape as Standard but for ad-hoc statuses.",
+        title: localize('LA.tour.step.customBuild'),
+        content: localize('LA.tour.content.nameIconDurationNoteSameShape'),
         selector: `${EM_ROOT} #cust-name`,
     },
     {
         id: 'em-custom-saved',
-        title: 'Custom - Saved',
-        content: "Statuses saved through temporary-custom-statuses show up here for reuse, and on a separate Statuses tab in TAH.",
+        title: localize('LA.tour.step.customSaved'),
+        content: localize('LA.tour.content.statusesSavedThroughTemporaryCustomStatuses'),
         selector: `${EM_ROOT} #cust-saved`,
     },
     {
         id: 'em-bonus',
-        title: 'Bonus',
-        content: "The advanced stuff, and one of the core features of the Lancer Automations engine. Many many things go through here: accuracy, damage on next attack, immunities, rerolls, target modifiers. They inject into the regular Lancer system cards seamlessly. Read <code>doc/API_EFFECTS.md</code> for the full menu.",
+        title: localize('LA.tour.step.bonus'),
+        content: localize('LA.tour.content.theAdvancedStuffAndOneOf'),
         selector: `${EM_ROOT} #tab-bonus`,
         action: _emTabClick('bonus'),
     },
     {
         id: 'em-bonus-type',
-        title: 'Bonus - Type',
-        content: "The bonus type. Each one reveals its own fields below.",
+        title: localize('LA.tour.step.bonusType'),
+        content: localize('LA.tour.content.theBonusTypeEachOneReveals'),
         selector: `${EM_ROOT} #bonus-type`,
     },
     {
         id: 'em-bonus-trigger',
-        title: 'Bonus - Consume',
-        content: "Same trigger picker as Standard. Combined with Uses, this is how you build things like <i>3 stacks of +1d6 damage on next attack, consumed on damage roll</i>.",
+        title: localize('LA.tour.step.bonusConsume'),
+        content: localize('LA.tour.content.sameTriggerPickerAsStandardCombined'),
         selector: `${EM_ROOT} #bonus-trigger`,
     },
     {
         id: 'em-bonus-add',
-        title: 'Bonus - Add',
-        content: "Adds the bonus to the target.",
+        title: localize('LA.tour.step.bonusAdd'),
+        content: localize('LA.tour.content.addsTheBonusToTheTarget'),
         selector: `${EM_ROOT} #bonus-add`,
     },
     {
         id: 'em-manage',
-        title: 'Manage',
-        content: "Everything currently on a token, including passive bonuses you can't see otherwise (Veterancy adding a passive on a HASE check, etc.).",
+        title: localize('LA.tour.step.manage'),
+        content: localize('LA.tour.content.everythingCurrentlyOnATokenIncluding'),
         selector: `${EM_ROOT} #tab-manage`,
         action: _emTabClick('manage'),
     },
@@ -122,8 +123,8 @@ const EFFECT_MANAGER_STEPS = [
 const AD_EXTRA_STEPS = [
     {
         id: 'sheet-btn',
-        title: 'On a Sheet',
-        content: "Add extras and effects to any actor or item right from its sheet. The <b>L.A</b> button in its header is the entry point; the number shows how much is already attached.",
+        title: localize('LA.tour.step.onASheet'),
+        content: localize('LA.tour.content.addExtrasAndEffectsToAny'),
         selector: '.la-sheet-menu',
         action: async () =>
         {
@@ -140,8 +141,8 @@ const AD_EXTRA_STEPS = [
     },
     {
         id: 'menu',
-        title: 'L.A Menu',
-        content: "The L.A button opens this menu. <b>Add Effect</b> opens the Effect Manager for this sheet, <b>Add Extra</b> attaches actions/deployables/bars, and <b>Extra Config</b> (items only) tunes auto-consume and deployable range/count.",
+        title: localize('LA.tour.step.lAMenu'),
+        content: localize('LA.tour.content.theLAButtonOpensThis'),
         selector: 'button[data-button="extras"]',
         action: async () =>
         {
@@ -161,8 +162,8 @@ const AD_EXTRA_STEPS = [
     },
     {
         id: 'extra-open',
-        title: 'Add Extra',
-        content: "Add Extra opens this: tie extra actions, deployables, and resource bars onto the actor or item.",
+        title: localize('LA.tour.step.addExtra'),
+        content: localize('LA.tour.content.addExtraOpensThisTieExtra'),
         selector: '.la-extras-body',
         action: async () =>
         {
@@ -187,26 +188,26 @@ const AD_EXTRA_STEPS = [
     },
     {
         id: 'extra-actions',
-        title: 'Extra Actions',
-        content: "Custom actions bolted onto the actor or item - name, activation, icon, optional resource limits. They show up in the TAH.",
+        title: localize('LA.tour.step.extraActions'),
+        content: localize('LA.tour.content.customActionsBoltedOntoTheActor'),
         selector: '.la-extras-act-new',
     },
     {
         id: 'extra-deploy',
-        title: 'Extra Deployables',
-        content: "Attach deployables by actor or LID, or drag one in - this is how an NPC feature gets its deployable in the TAH. The T1/T2/T3 pills gate an entry to that NPC tier; none lit = every tier.",
+        title: localize('LA.tour.step.extraDeployables'),
+        content: localize('LA.tour.content.attachDeployablesByActorOrLid'),
         selector: '.la-extras-dep-new',
     },
     {
         id: 'extra-bars',
-        title: 'Extra Bars',
-        content: "Quick-add a manual token stat bar to track anything you like.",
+        title: localize('LA.tour.step.extraBars'),
+        content: localize('LA.tour.content.quickAddAManualTokenStat'),
         selector: '.la-extras-bar-new',
     },
     {
         id: 'extra-drawer',
-        title: 'Editor',
-        content: "Actions can also be an attack or damage roll.",
+        title: localize('LA.tour.step.editor'),
+        content: localize('LA.tour.content.actionsCanAlsoBeAnAttack'),
         selector: '.la-extras-drawer',
         action: async () =>
         {
@@ -234,8 +235,8 @@ const AD_EXTRA_STEPS = [
 const CONFIG_STEPS = [
     {
         id: 'shortcut',
-        title: 'Where to find this',
-        content: "Re-open this any time from the <b>Lancer Automations</b> button in the Game Settings sidebar, under the LANCER section.",
+        title: localize('LA.tour.step.whereToFindThis'),
+        content: localize('LA.tour.content.reOpenThisAnyTimeFrom'),
         selector: '#lancer-automations-overview',
         action: () =>
         {
@@ -244,105 +245,105 @@ const CONFIG_STEPS = [
     },
     {
         id: 'welcome',
-        title: 'Configuration',
-        content: "Pretty simple, here's the configuration menu where all the Lancer Automations options live. Note: some settings are <b>client-side</b> (per user) and not shared world-wide (Token Action HUD, custom stat bars, vision debug overlays, etc.). Each player must enable them on their own client.",
+        title: localize('LA.tour.step.configuration'),
+        content: localize('LA.tour.content.prettySimpleHereSTheConfiguration'),
         selector: `${ROOT} .lancer-dialog-header`,
     },
     {
         id: 'tabs',
-        title: 'Pages',
-        content: "Every page groups related stuff, sorted by family on the left. The search box up top looks through all of them at once.",
+        title: localize('LA.tour.step.pages'),
+        content: localize('LA.tour.content.everyPageGroupsRelatedStuffSorted'),
         selector: `${ROOT} .la-config-rail`,
     },
     {
         id: 'activations',
         tab: 'activations',
-        title: 'Activations',
-        content: "How activation popups feel during play: who sees them, whether the reaction is auto-spent, and a couple of niche toggles.",
+        title: localize('LA.tour.step.activations'),
+        content: localize('LA.tour.content.howActivationPopupsFeelDuringPlay'),
         selector: `${ROOT} .tab[data-tab="activations"]`,
     },
     {
         id: 'combat',
         tab: 'combat',
-        title: 'Combat & Movement',
-        content: "All the combat-flavor toggles: knockback, throw, movement-cap, boost detection, alt structure/stress rules, infection damage. The big stuff.",
+        title: localize('LA.tour.step.combatMovement'),
+        content: localize('LA.tour.content.allTheCombatFlavorTogglesKnockback'),
         selector: `${ROOT} .tab[data-tab="combat"]`,
     },
     {
         id: 'wrecks',
         tab: 'wrecks',
-        title: 'Wrecks',
-        content: "What happens when something dies. Spawn a wreck token, play the explosion, optionally drop terrain. Per-category if you want monstrosity wrecks to look different from mech wrecks.",
+        title: localize('LA.tour.step.wrecks'),
+        content: localize('LA.tour.content.whatHappensWhenSomethingDiesSpawn'),
         selector: `${ROOT} .tab[data-tab="wrecks"]`,
     },
     {
         id: 'tokens',
         tab: 'tokens',
-        title: 'Tokens & Display',
-        content: "Half-size tokens, auto wall-height for tokens, my own token stat bars (a Bar Brawl alternative). Mostly QoL display tweaks.",
+        title: localize('LA.tour.step.tokensDisplay'),
+        content: localize('LA.tour.content.halfSizeTokensAutoWallHeight'),
         selector: `${ROOT} .tab[data-tab="tokens"]`,
     },
     {
         id: 'iso',
         tab: 'iso',
-        title: 'Isometric',
-        content: "Fixes for isometric modules (Isometric Perspective, Grape Juice). Only shows when one is active.",
+        title: localize('LA.tour.step.isometric'),
+        content: localize('LA.tour.content.fixesForIsometricModulesIsometricPerspective'),
         selector: `${ROOT} .tab[data-tab="iso"]`,
         condition: () => !!game.modules.get('isometric-perspective')?.active || !!game.modules.get('grape_juice-isometrics')?.active,
     },
     {
         id: 'tah',
         tab: 'tah',
-        title: 'Token Action HUD',
-        content: "Here you can enable the TAH, my own Token Action HUD. It offers a bunch of tools, with UI and sound, and a few options to tune it. Still work in progress but fairly usable.",
+        title: localize('LA.tour.step.tokenActionHud'),
+        content: localize('LA.tour.content.hereYouCanEnableTheTah'),
         selector: `${ROOT} .tab[data-tab="tah"]`,
     },
     {
         id: 'sounds',
         tab: 'sounds',
-        title: 'Sounds',
-        content: "All the sound feedback options, including the UI sounds for the TAH.",
+        title: localize('LA.tour.step.sounds'),
+        content: localize('LA.tour.content.allTheSoundFeedbackOptionsIncluding'),
         selector: `${ROOT} .tab[data-tab="sounds"]`,
     },
     {
         id: 'statuses',
         tab: 'statuses',
-        title: 'Statuses & FX',
-        content: "The FX section: status visual effects (glows, shaders) plus the extra statuses I added. A bit like Lancer QoL, so pick one or the other if both are on.",
+        title: localize('LA.tour.step.statusesFx'),
+        content: localize('LA.tour.content.theFxSectionStatusVisualEffects'),
         selector: `${ROOT} .tab[data-tab="statuses"]`,
     },
     {
         id: 'debug',
         tab: 'debug',
-        title: 'Debug',
-        content: "Flip these on if something feels off and you want to see what the module is doing under the hood.",
+        title: localize('LA.tour.step.debug'),
+        content: localize('LA.tour.content.flipTheseOnIfSomethingFeels'),
         selector: `${ROOT} .tab[data-tab="debug"]`,
     },
     {
         id: 'tools',
         tab: 'tools',
-        title: 'Tools & Extras',
-        content: "My optional content packs (personal stuff), the News & Releases history, and one-shot maintenance buttons: LCP repair, reset, export, import.",
+        title: localize('LA.tour.step.toolsExtras'),
+        content: localize('LA.tour.content.myOptionalContentPacksPersonalStuff'),
         selector: `${ROOT} .tab[data-tab="tools"]`,
     },
     {
         id: 'vision',
         tab: 'experimental',
-        title: 'Vision',
-        content: "Vision-from-edge for big tokens, the Lancer Sensors and Battlefield Awareness detection modes (auto-add, combat-only, range source), basic-sight overrides, and drag-vision behavior all live here.",
+        title: localize('LA.tour.step.vision'),
+        content: localize('LA.tour.content.visionFromEdgeForBigTokens'),
         selector: `${ROOT} .tab[data-tab="experimental"]`,
     },
     {
         id: 'tutorials',
         tab: 'tutorials',
-        title: 'Tutorials & Help',
-        content: "Re-run the <b>Setup Wizard</b>, or launch any tour: Token Action HUD, ruler &amp; movement, advanced measure, effect manager, automation. They can run long - start one now or come back whenever.",
+        title: localize('LA.tour.step.tutorialsHelp'),
+        content: localize('LA.tour.content.reRunTheSetupWizardOr'),
         selector: `${ROOT} .tab[data-tab="tutorials"]`,
     },
     {
         id: 'save',
-        title: 'Save',
-        content: "One Save commits every tab at once. Some changes need a reload, you'll be prompted on close.",
+        title: localize('LA.common.save'),
+        content: localize('LA.tour.content.oneSaveCommitsEveryTabAt'),
         selector: `${ROOT} footer`,
     },
 ];
@@ -350,8 +351,8 @@ const CONFIG_STEPS = [
 const ACTIVATION_MANAGER_STEPS = [
     {
         id: 'shortcut',
-        title: 'Where to find this',
-        content: "Re-open this any time from the <b>Activation Manager</b> button in the Game Settings sidebar, under the LANCER section.",
+        title: localize('LA.tour.step.whereToFindThis'),
+        content: localize('LA.tour.content.reOpenActivationManager'),
         selector: '#lancer-automations-manager',
         action: () =>
         {
@@ -360,76 +361,76 @@ const ACTIVATION_MANAGER_STEPS = [
     },
     {
         id: 'welcome',
-        title: 'Activation Manager',
-        content: "Where you build automations. Item-bound (per LID) or general, code-driven, fired on triggers like onMove, onHit, onActivation, and so on.",
+        title: localize('LA.tour.step.activationManager'),
+        content: localize('LA.tour.content.whereYouBuildAutomationsItemBound'),
         selector: `${RM_ROOT} .lancer-dialog-header`,
     },
     {
         id: 'tabs',
-        title: 'Tabs',
-        content: "Custom is your own stuff. Defaults are the activations bundled with the module. Startup is JS that runs once on Foundry ready.",
+        title: localize('LA.tour.step.tabs'),
+        content: localize('LA.tour.content.customIsYourOwnStuffDefaults'),
         selector: `${RM_ROOT} .sheet-tabs`,
     },
     {
         id: 'custom',
         tab: 'custom',
-        title: 'Custom',
-        content: "Your activations, grouped into folders. Each row binds to one or more triggers and runs your code.",
+        title: localize('LA.tour.step.custom'),
+        content: localize('LA.tour.content.yourActivationsGroupedIntoFoldersEach'),
         selector: `${RM_ROOT} .tab[data-tab="custom"]`,
     },
     {
         id: 'add',
         tab: 'custom',
         title: 'Add',
-        content: "Create a new one. You'll pick item-bound (LID) or general, the triggers, and the code blocks that run on evaluate / activate / init.",
+        content: localize('LA.tour.content.createANewOneYouLl'),
         selector: `${RM_ROOT} .tab[data-tab="custom"] .add-reaction`,
     },
     {
         id: 'editor',
-        title: 'Editor',
-        content: "Add opens this editor. Triggers, filters, and code all live here; Save commits, closing discards.",
+        title: localize('LA.tour.step.editor'),
+        content: localize('LA.tour.content.addOpensThisEditorTriggersFilters'),
         selector: '#reaction-editor',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-binding',
-        title: 'Item-bound or General',
-        content: "Bind it to an item (by LID) or make it <b>general</b> - checked on every token.",
+        title: localize('LA.tour.step.itemBoundOrGeneral'),
+        content: localize('LA.tour.content.bindItToAnItemBy'),
         selector: '#reaction-editor input[name="isGeneral"]',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-lid',
-        title: 'Item LID',
-        content: "For item-bound activations, the item's Lancer ID. The finder button beside it searches your items and compendiums, so you don't type it by hand.",
+        title: localize('LA.tour.step.itemLid'),
+        content: localize('LA.tour.content.forItemBoundActivationsTheItem'),
         selector: '#reaction-editor input[name="lid"]',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-triggers',
-        title: 'Triggers',
-        content: "Tick the triggers that fire it: onMove, onHit, onActivation, onStructure, and many more.",
+        title: localize('LA.tour.step.triggers'),
+        content: localize('LA.tour.content.tickTheTriggersThatFireIt'),
         selector: '#reaction-editor .trigger-groups-container',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-options',
-        title: 'Filters',
-        content: "Narrow when it fires: react to self or others, disposition, in or out of combat, auto-activate.",
+        title: localize('LA.tour.step.filters'),
+        content: localize('LA.tour.content.narrowWhenItFiresReactTo'),
         selector: '#reaction-editor .options-grid',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-code',
-        title: 'Code Blocks',
-        content: "Your logic: <b>evaluate</b> (should it fire?), <b>activation</b> (what happens), plus onInit and onMessage.",
+        title: localize('LA.tour.step.codeBlocks'),
+        content: localize('LA.tour.content.yourLogicEvaluateShouldItFire'),
         selector: '#reaction-editor .CodeMirror',
         action: _ensureReactionEditorOpen,
     },
     {
         id: 'editor-autocomplete',
-        title: 'Autocomplete',
-        content: "The editor suggests API names as you type. Press <b>Alt-Enter</b> to open the list, then arrow through to see what each does.",
+        title: localize('LA.tour.step.autocomplete'),
+        content: localize('LA.tour.content.theEditorSuggestsApiNamesAs'),
         selector: '#reaction-editor .CodeMirror',
         action: _ensureReactionEditorOpen,
         cleanup: _closeReactionEditor,
@@ -437,29 +438,29 @@ const ACTIVATION_MANAGER_STEPS = [
     {
         id: 'folder',
         tab: 'custom',
-        title: 'Folders',
-        content: "Make folders to keep things tidy. Drag rows in to file them.",
+        title: localize('LA.tour.step.folders'),
+        content: localize('LA.tour.content.makeFoldersToKeepThingsTidy'),
         selector: `${RM_ROOT} .tab[data-tab="custom"] .create-folder-btn`,
     },
     {
         id: 'search',
         tab: 'custom',
-        title: 'Search & Filter',
-        content: "Filter by name, LID, or trigger type. Handy when the list gets long.",
+        title: localize('LA.tour.step.searchFilter'),
+        content: localize('LA.tour.content.filterByNameLidOrTrigger'),
         selector: `${RM_ROOT} .tab[data-tab="custom"] .filter-bar`,
     },
     {
         id: 'defaults',
         tab: 'defaults',
-        title: 'Defaults',
-        content: "The activations bundled with the module: Overwatch, Brace, Flight, Fall, plus a bunch of NPC-feature automations. Toggle them on or off.",
+        title: localize('LA.tour.step.defaults'),
+        content: localize('LA.tour.content.theActivationsBundledWithTheModule'),
         selector: `${RM_ROOT} .tab[data-tab="defaults"]`,
     },
     {
         id: 'startup',
         tab: 'startup',
-        title: 'Startup',
-        content: "JS that runs once on Foundry ready. Good for helper functions you want your activations to reuse.",
+        title: localize('LA.tour.step.startup'),
+        content: localize('LA.tour.content.jsThatRunsOnceOnFoundry'),
         selector: `${RM_ROOT} .tab[data-tab="startup"]`,
     },
 ];
@@ -567,74 +568,74 @@ function _tahCategoryStep(label, content, alternatives = [])
 const TAH_STEPS = [
     {
         id: 'intro',
-        title: 'Token Action HUD',
-        content: "The Lancer Automations Token Action HUD - your token's action menu.",
+        title: localize('LA.tour.step.tokenActionHud'),
+        content: localize('LA.tour.content.theLancerAutomationsTokenActionHud'),
         selector: TAH_ROOT,
     },
     {
         id: 'token-name',
-        title: 'Token Name',
-        content: 'Click the name to open the actor sheet.',
+        title: localize('LA.tour.step.tokenName'),
+        content: localize('LA.tour.content.clickTheNameToOpenThe'),
         selector: `${TAH_ROOT} .la-hud-token-name`,
     },
     {
         id: 'move-hud',
-        title: 'Move the HUD',
-        content: 'Unlock with the lock icon, then drag the HUD anywhere. The reset icon restores its position.',
+        title: localize('LA.tour.step.moveTheHud'),
+        content: localize('LA.tour.content.unlockWithTheLockIconThen'),
         selector: `${TAH_ROOT} .la-hud-lock`,
     },
     {
         id: 'combat-toggle',
-        title: 'Combat Toggle',
-        content: 'Click the swords icon to add or remove the token from the combat tracker without leaving the HUD.',
+        title: localize('LA.tour.step.combatToggle'),
+        content: localize('LA.tour.content.clickTheSwordsIconToAdd'),
         selector: `${TAH_ROOT} .la-combat-toggle`,
     },
     {
         id: 'stats',
-        title: 'Stats Bar',
-        content: 'Live vitals: HP, heat, structure and stress pips, overshield, burn.',
+        title: localize('LA.tour.step.statsBar'),
+        content: localize('LA.tour.content.liveVitalsHpHeatStructureAnd'),
         selector: '#la-hud-stats',
     },
     {
         id: 'stats-detail',
-        title: 'More Stats',
-        content: 'Click to expand armor, evasion, e-defense, tech attack, save, sensors, and core.',
+        title: localize('LA.tour.step.moreStats'),
+        content: localize('LA.tour.content.clickToExpandArmorEvasionE'),
         selector: `#la-hud-stats .la-stats-toggle`,
     },
     {
         id: 'movement',
-        title: 'Movement Cap',
-        content: 'The right number is the max move this turn (speed); the left is what the token has used so far. Boost (or anything granting extra move) extends the cap.',
+        title: localize('LA.tour.step.movementCap'),
+        content: localize('LA.tour.content.theRightNumberIsTheMax'),
         selector: '#la-combat-bar',
     },
     {
         id: 'action-economy',
-        title: 'Action Tracker',
-        content: 'Quick / Full / Reaction / Protocol / Move pips. Click to spend, right-click to restore; on your turn the spent slot becomes End Turn. It mirrors Lancer\'s own action tracker, so you can disable that one in the Lancer system settings.',
+        title: localize('LA.tour.step.actionTracker'),
+        content: localize('LA.tour.content.quickFullReactionProtocolMovePips'),
         selector: '#la-combat-bar',
     },
     {
         id: 'move-history',
-        title: 'Movement History',
-        content: 'Revert the last move, or clear this token\'s recorded history.',
+        title: localize('LA.tour.step.movementHistory'),
+        content: localize('LA.tour.content.revertTheLastMoveOrClear'),
         selector: '#la-combat-bar span[title="Revert Last Move"]',
     },
     {
         id: 'keyboard-nav',
-        title: 'Keyboard Navigation',
-        content: 'Drive the HUD by keyboard: <b>Shift+WASD</b> moves, <b>Shift+E</b> left-clicks, <b>Shift+Q</b> right-clicks, <b>Shift+F</b> searches.',
+        title: localize('LA.tour.step.keyboardNavigation'),
+        content: localize('LA.tour.content.driveTheHudByKeyboardShift'),
         selector: `${TAH_ROOT} .la-hud-col-label`,
     },
     {
         id: 'categories',
-        title: 'Categories',
-        content: 'The Menu column lists categories (Actions, Weapons, Systems, Frame, Talents, Utility, Statuses). Hovering or clicking a row cascades extra columns out to the right.',
+        title: localize('LA.tour.step.categories'),
+        content: localize('LA.tour.content.theMenuColumnListsCategoriesActions'),
         selector: `${TAH_ROOT} .la-hud-col-label`,
     },
     {
         id: 'item-row',
-        title: 'Item Rows',
-        content: "Any row that is not a sub-category is an item. Left-click usually activates it; right-click (or Shift+Q) opens a detail popup with its full text.",
+        title: localize('LA.tour.step.itemRows'),
+        content: localize('LA.tour.content.anyRowThatIsNotA'),
         selector: `${TAH_ROOT} .la-hud-tour-item`,
         action: async () =>
         {
@@ -672,8 +673,8 @@ const TAH_STEPS = [
     },
     {
         id: 'auto-tick',
-        title: 'Automation Hint',
-        content: "A coloured triangle on a row's left edge marks it <b>automated</b> - using it runs its built-in effects.",
+        title: localize('LA.tour.step.automationHint'),
+        content: localize('LA.tour.content.aColouredTriangleOnARow'),
         selector: `${TAH_ROOT} .la-hud-auto-tick`,
         action: async () =>
         {
@@ -713,8 +714,8 @@ const TAH_STEPS = [
     },
     {
         id: 'detailing',
-        title: 'Right-click Details',
-        content: "Right-click any item (or <b>Shift+Q</b>) to open a detail popup: full text, tags, and any Disable / Destroy toggles.",
+        title: localize('LA.tour.step.rightClickDetails'),
+        content: localize('LA.tour.content.rightClickAnyItemOrShift'),
         selector: '.la-hud-popup',
         action: async () =>
         {
@@ -759,20 +760,20 @@ const TAH_STEPS = [
     },
     {
         id: 'search',
-        title: 'Search',
-        content: 'Click the magnifier or press <b>Shift+F</b> to live-filter every action.',
+        title: localize('LA.tour.step.search'),
+        content: localize('LA.tour.content.clickTheMagnifierOrPressShift'),
         selector: `${TAH_ROOT} .la-hud-search-toggle`,
     },
     {
         id: 'favorites',
-        title: 'Favorites',
-        content: 'Ctrl+Right-click any action to pick which wheel it goes on. The mark on a row says where it lives. Hover the star tab to open the list.',
+        title: localize('LA.tour.step.favorites'),
+        content: localize('LA.tour.content.ctrlRightClickAnyActionTo'),
         selector: `${TAH_ROOT} .la-hud-fav-icon`,
     },
     {
         id: 'action-wheel',
-        title: 'Action Wheel',
-        content: 'Press <b>F</b> on a selected token: your favorites form a wheel around it. Click an icon to use it, right-click for its details, hover for the range preview. <b>Tab</b> switches to the second wheel once you have one.',
+        title: localize('LA.tour.step.actionWheel'),
+        content: localize('LA.tour.content.pressFOnASelectedToken'),
         selector: 'body',
         allowCanvas: true,
         action: async () =>
@@ -794,8 +795,8 @@ const TAH_STEPS = [
     },
     {
         id: 'status-wheel',
-        title: 'Status Wheel',
-        content: 'Press <b>G</b> for the statuses on the token plus the ones starred in the status panel. Click to apply or add a stack, right-click to remove one. Removing a permanent effect asks first.',
+        title: localize('LA.tour.step.statusWheel'),
+        content: localize('LA.tour.content.pressGForTheStatusesOn'),
         selector: 'body',
         allowCanvas: true,
         action: async () =>
@@ -830,8 +831,8 @@ const TAH_STEPS = [
     _tahCategoryStep('Attributes', "HULL / AGI / SYS / ENG checks and saves, plus your pilot skill triggers.", ['Skills']),
     {
         id: 'utility',
-        title: 'Utility',
-        content: "Sub-categories of tools: Gameplay actions, Movement helpers, Measures (the Advanced Measure tool), Log, Glossary, and a Misc grab-bag.",
+        title: localize('LA.tour.step.utility'),
+        content: localize('LA.tour.content.subCategoriesOfToolsGameplayActions'),
         selector: `${TAH_ROOT} .la-hud-tour-utility`,
         action: () =>
         {
@@ -853,8 +854,8 @@ const TAH_STEPS = [
     _tahCategoryStep('Macros', "Pinned macros for quick access. Per-user."),
     {
         id: 'outro',
-        title: 'And more',
-        content: 'There is a lot more under the hood, but the tour would get long. Drop by Discord if you have questions.',
+        title: localize('LA.tour.step.andMore'),
+        content: localize('LA.tour.content.thereIsALotMoreUnder'),
         selector: TAH_ROOT,
     },
 ];
@@ -862,8 +863,8 @@ const TAH_STEPS = [
 const ADV_TAH_STEPS = [
     {
         id: 'adv-intro',
-        title: 'Advanced TAH Tools',
-        content: "A pass through the tools tucked into the HUD, past just firing weapons.",
+        title: localize('LA.tour.step.advancedTahTools'),
+        content: localize('LA.tour.content.aPassThroughTheToolsTucked'),
         selector: TAH_ROOT,
     },
     _tahDrillStep('adv-attacks', 'Skirmish & Barrage', "You can attack straight from a weapon, but Skirmish and Barrage live here as real actions so the gameplay action is captured: an automation watching for a skirmish reacts to it, and the secondary weapon gets its no-bonus-damage rule.", ['actions', 'attacks'], 'skirmish'),
@@ -880,8 +881,8 @@ const ADV_TAH_STEPS = [
     _tahDrillStep('adv-vote', 'Vote', "Sends a quick poll to the table and tallies the answers.", ['utility', 'misc'], 'vote'),
     {
         id: 'adv-outro',
-        title: 'And more',
-        content: "That's the toolbox. Dig through Utility for the rest.",
+        title: localize('LA.tour.step.andMore'),
+        content: localize('LA.tour.content.thatSTheToolboxDigThrough'),
         selector: TAH_ROOT,
     },
 ];
@@ -889,15 +890,15 @@ const ADV_TAH_STEPS = [
 const RULER_STEPS = [
     {
         id: 'intro',
-        title: 'Lancer Ruler',
-        content: "Drag a token to measure. The ruler follows Lancer rules: speed cap, terrain cost, climb, flight ceiling.",
+        title: localize('LA.tour.step.lancerRuler'),
+        content: localize('LA.tour.content.dragATokenToMeasureThe'),
         selector: 'body',
         allowCanvas: true,
     },
     {
         id: 'wheel',
-        title: 'Movement Wheel',
-        content: "Press <b>M</b> on a selected token to open this wheel and set its <b>base</b> movement type - walk, fly, drift, each with its own cost rules.",
+        title: localize('LA.tour.step.movementWheel'),
+        content: localize('LA.tour.content.pressMOnASelectedToken'),
         selector: '.lancer-movement-wheel',
         action: async () =>
         {
@@ -924,22 +925,22 @@ const RULER_STEPS = [
     },
     {
         id: 'm-drag',
-        title: 'Cycle While Dragging',
-        content: "During a drag, press <b>M</b> to cycle the type for that drag only - the token's base type stays put.",
+        title: localize('LA.tour.step.cycleWhileDragging'),
+        content: localize('LA.tour.content.duringADragPressMTo'),
         selector: 'body',
         allowCanvas: true,
     },
     {
         id: 'free-debug',
-        title: 'Free & Debug',
-        content: "Hold <b>V</b> for free movement (no cost, ignores terrain). Hold <b>B</b> for debug movement (skips automation hooks). <b>Ctrl+drag</b> from empty space gives the vanilla ruler.",
+        title: localize('LA.tour.step.freeDebug'),
+        content: localize('LA.tour.content.holdVForFreeMovementNo'),
         selector: 'body',
         allowCanvas: true,
     },
     {
         id: 'force',
-        title: 'Force Movement',
-        content: "<b>Force</b> is unintentional movement (knockback, drag): it doesn't trigger move automations like Overwatch.",
+        title: localize('LA.tour.step.forceMovement'),
+        content: localize('LA.tour.content.forceIsUnintentionalMovementKnockbackDrag'),
         selector: 'body',
         allowCanvas: true,
     },
@@ -950,38 +951,38 @@ const AM_ROOT = '#la-measure-toolbar';
 const ADV_MEASURE_STEPS = [
     {
         id: 'intro',
-        title: 'Advanced Measure',
-        content: "A measuring toolset reusing LA's targeting visuals - toggle it with <b>Shift+R</b>. Everything lives on this floating toolbar.",
+        title: localize('LA.tour.step.advancedMeasure'),
+        content: localize('LA.tour.content.aMeasuringToolsetReusingLaS'),
         selector: AM_ROOT,
     },
     {
         id: 'help',
-        title: 'Shortcuts',
-        content: "Hover here for the full cheat-sheet. Quick ones: <b>Ctrl+wheel</b> rotate, <b>Shift+wheel</b> size, <b>Q/E</b> elevation, <b>W/S</b> tilt a line, <b>Z</b> reset.",
+        title: localize('LA.tour.step.shortcuts'),
+        content: localize('LA.tour.content.hoverHereForTheFullCheat'),
         selector: `${AM_ROOT} .la-mt-help`,
     },
     {
         id: 'shapes',
-        title: 'Shapes',
-        content: "Pick a shape - Blast, Burst, Cone, Line - or a single Target mark. Options make it 3D (elevation), auto-follow terrain, and propagate cell to cell.",
+        title: localize('LA.tour.step.shapes'),
+        content: localize('LA.tour.content.pickAShapeBlastBurstCone'),
         selector: `${AM_ROOT} .la-mt-icon-btn`,
     },
     {
         id: 'range',
-        title: 'Range Pulse',
-        content: "Pulse a range around the shape: a manual radius, threat, sensor, max reach, or a weapon's range. <b>T</b> cycles sources, re-clicking the active one turns it off. A movement-reach toggle is here too.",
+        title: localize('LA.tour.step.rangePulse'),
+        content: localize('LA.tour.content.pulseARangeAroundTheShape'),
         selector: `${AM_ROOT} .la-mt-dd`,
     },
     {
         id: 'pins',
-        title: 'Pinned Rings',
-        content: "<b>Right-click</b> a range source (or a weapon in its list) to pin it: a steady ring that stays while the tool is open, on as many tokens as you want. Pinned entries show a ★; the TAH range toggles pin the same way.",
+        title: localize('LA.tour.step.pinnedRings'),
+        content: localize('LA.tour.content.rightClickARangeSourceOr'),
         selector: `${AM_ROOT} .la-mt-dd`,
     },
     {
         id: 'marker',
-        title: 'Markers & Ruler',
-        content: "<b>Shift+click</b> in free mode marks a token (shows its range and reach) or the ground (manual-range only). Hold <b>Ctrl</b> for the vanilla Measure Distance ruler.",
+        title: localize('LA.tour.step.markersRuler'),
+        content: localize('LA.tour.content.shiftClickInFreeModeMarks'),
         selector: AM_ROOT,
     },
 ];
@@ -997,23 +998,23 @@ function _waitForTokenDialog()
     return new Promise((resolve) =>
     {
         new Dialog({
-            title: 'Lancer Automations',
+            title: localize('LA.tour.step.lancerAutomations'),
             content: `
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">PLACE A TOKEN</div>
-                    <div class="lancer-dialog-subtitle">The TAH tour needs a mech token.</div>
+                    <div class="lancer-dialog-title">${localize('LA.tour.placeTokenTitle')}</div>
+                    <div class="lancer-dialog-subtitle">${localize('LA.tour.placeTokenSubtitle')}</div>
                 </div>
-                <p style="padding: 4px 6px;">Drop a player mech onto the scene and select it, then click Continue. Talents, Frame and mounts are mech-only, so an NPC won't do, and an unequipped mech leaves the weapon steps with nothing to point at.</p>
+                <p style="padding: 4px 6px;">${localize('LA.tour.placeTokenBody')}</p>
             `,
             buttons: {
                 continue: {
                     icon: '<i class="fas fa-check"></i>',
-                    label: 'Continue',
+                    label: localize('LA.common.continue'),
                     callback: () => resolve(true),
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: 'Cancel Tour',
+                    label: localize('LA.tour.cancelTour'),
                     callback: () => resolve(false),
                 },
             },
@@ -1104,11 +1105,11 @@ async function _ensureTAHOpen({ withCombat = true } = {})
         const enable = await new Promise((resolve) =>
         {
             new Dialog({
-                title: 'Token Action HUD',
-                content: '<p style="padding:6px 8px;">Token Action HUD is off. Enable it for the tour?</p>',
+                title: localize('LA.tour.step.tokenActionHud'),
+                content: localize('LA.tour.content.tokenActionHudIsOffEnable'),
                 buttons: {
-                    yes: { icon: '<i class="fas fa-check"></i>', label: 'Enable', callback: () => resolve(true) },
-                    no:  { icon: '<i class="fas fa-times"></i>', label: 'Skip',   callback: () => resolve(false) },
+                    yes: { icon: '<i class="fas fa-check"></i>', label: localize('LA.common.enable'), callback: () => resolve(true) },
+                    no:  { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.skip'),   callback: () => resolve(false) },
                 },
                 default: 'yes',
                 close: () => resolve(false),
@@ -1393,7 +1394,7 @@ async function _ensureAddExtraStart()
         ?? canvas.tokens.placeables.find((token) => token.actor?.type === 'mech' && !token.document.hidden)?.actor;
     if (!mech)
     {
-        ui.notifications.warn('The Add Extra tour needs a mech on the scene.');
+        ui.notifications.warn(localize('LA.notify.theAddExtraTourNeedsAMech'));
         return false;
     }
     _emDemoActor = mech;
@@ -1450,8 +1451,8 @@ async function _closeReactionEditor()
 const TOURS = [
     {
         id: 'config-tour',
-        title: 'Lancer Automations: Configuration',
-        description: 'Guided walkthrough of every tab in the Lancer Automations configuration window.',
+        title: localize('LA.tour.step.lancerAutomationsConfiguration'),
+        description: localize('LA.tour.guidedWalkthroughOfEveryTabIn'),
         root: ROOT,
         steps: () => CONFIG_STEPS.filter(step => !(/** @type {any} */ (step).condition) || /** @type {any} */ (step).condition()),
         ensure: _ensureConfigOpen,
@@ -1461,8 +1462,8 @@ const TOURS = [
     },
     {
         id: 'activation-manager-tour',
-        title: 'Lancer Automations: Activation Manager',
-        description: 'Walks through the Activation Manager dialog (custom activations, defaults, startup scripts).',
+        title: localize('LA.tour.step.lancerAutomationsActivationManager'),
+        description: localize('LA.tour.walksThroughTheActivationManagerDialog'),
         root: RM_ROOT,
         steps: () => ACTIVATION_MANAGER_STEPS,
         ensure: _ensureActivationManagerOpen,
@@ -1472,8 +1473,8 @@ const TOURS = [
     },
     {
         id: 'tah-tour',
-        title: 'Lancer Automations: Token Action HUD',
-        description: 'Walks through the Token Action HUD on a controlled token.',
+        title: localize('LA.tour.step.lancerAutomationsTokenActionHud'),
+        description: localize('LA.tour.walksThroughTheTokenActionHud'),
         root: TAH_ROOT,
         steps: () => TAH_STEPS,
         ensure: _ensureTAHOpen,
@@ -1484,8 +1485,8 @@ const TOURS = [
     },
     {
         id: 'tah-advanced-tour',
-        title: 'Lancer Automations: TAH Advanced Tools',
-        description: 'The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, downtime, reserve, vote.',
+        title: localize('LA.tour.step.lancerAutomationsTahAdvancedTools'),
+        description: localize('LA.tour.theGameplayToolsInsideTheToken'),
         root: TAH_ROOT,
         steps: () => ADV_TAH_STEPS,
         ensure: () => _ensureTAHOpen({ withCombat: false }),
@@ -1496,8 +1497,8 @@ const TOURS = [
     },
     {
         id: 'effect-manager-tour',
-        title: 'Lancer Automations: Effect Manager',
-        description: 'Walks through the Effect Manager dialog (standard, custom, bonus, manage).',
+        title: localize('LA.tour.step.lancerAutomationsEffectManager'),
+        description: localize('LA.tour.walksThroughTheEffectManagerDialog'),
         root: EM_ROOT,
         steps: () => EFFECT_MANAGER_STEPS,
         ensure: _ensureEffectManagerOpen,
@@ -1508,8 +1509,8 @@ const TOURS = [
     },
     {
         id: 'ruler-tour',
-        title: 'Lancer Automations: Lancer Ruler',
-        description: 'The movement wheel, movement types, and the free/debug keys.',
+        title: localize('LA.tour.step.lancerAutomationsLancerRuler'),
+        description: localize('LA.tour.theMovementWheelMovementTypesAnd'),
         root: 'body',
         steps: () => RULER_STEPS,
         assign: (tour) => { _rulerTour = tour; },
@@ -1517,8 +1518,8 @@ const TOURS = [
     },
     {
         id: 'advanced-measure-tour',
-        title: 'Lancer Automations: Advanced Measure',
-        description: 'The Advanced Measure tool: shapes, ranges, markers, and shortcuts.',
+        title: localize('LA.tour.step.lancerAutomationsAdvancedMeasure'),
+        description: localize('LA.tour.theAdvancedMeasureToolShapesRanges'),
         root: AM_ROOT,
         steps: () => ADV_MEASURE_STEPS,
         ensure: _ensureAdvMeasureOpen,
@@ -1529,8 +1530,8 @@ const TOURS = [
     },
     {
         id: 'add-extra-tour',
-        title: 'Lancer Automations: Add Extra',
-        description: 'Add Extra, Add Effect and Extra Config from an actor or item sheet.',
+        title: localize('LA.tour.step.lancerAutomationsAddExtra'),
+        description: localize('LA.tour.addExtraAddEffectAndExtra'),
         root: 'body',
         steps: () => AD_EXTRA_STEPS,
         ensure: _ensureAddExtraStart,
@@ -1599,22 +1600,22 @@ function _welcomeDialog()
         {
             buttons.setup = {
                 icon: '<i class="fas fa-wand-magic-sparkles"></i>',
-                label: 'Setup Wizard',
+                label: localize('LA.settings.settingsOnboardingMenu.name'),
                 callback: () => resolve('setup'),
             };
         }
         buttons.start = {
             icon: '<i class="fas fa-play"></i>',
-            label: 'Start Tour',
+            label: localize('LA.settings.tourMenu.label'),
             callback: () => resolve('tour'),
         };
         buttons.skip = {
             icon: '<i class="fas fa-times"></i>',
-            label: 'Skip',
+            label: localize('LA.common.skip'),
             callback: () => resolve('skip'),
         };
         new Dialog({
-            title: 'Lancer Automations',
+            title: localize('LA.tour.step.lancerAutomations'),
             content: `
                 <div class="lancer-dialog-header">
                     <div class="lancer-dialog-title">WELCOME TO LANCER AUTOMATIONS</div>
@@ -1625,7 +1626,7 @@ function _welcomeDialog()
                     <p style="margin: 0 0 8px;">It's a very dense, powerful, big module. Its use is mainly for me, so the design is catered to what I like.</p>
                     <p style="margin: 0 0 8px;">Since it's a big module, here's a set of tours for the important stuff. They can run long, so take them one at a time and come back later.</p>
                     <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
-                    <p style="margin: 0; opacity: 0.85;">Shout to the people tipping me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener">Ko-fi</a>.</p>
+                    <p style="margin: 0; opacity: 0.85;">This module is free and always will be. If you wanna support my late nights, <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener">Ko-fi</a>.</p>
                     ${setupNote}
                     <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);"><b>Last warning:</b> if you installed this without reading <a href="https://agraael.github.io/lancer-automations/" target="_blank" rel="noopener">the documentation</a>, please go read it. This is not a plug and play module, and you have to be serious about that.</p>
                 </div>
@@ -1643,7 +1644,7 @@ function _movementWarningDialog()
     return new Promise((resolve) =>
     {
         new Dialog({
-            title: 'Lancer Automations - Movement',
+            title: localize('LA.tour.step.lancerAutomationsMovement'),
             content: `
                 <div class="lancer-dialog-header">
                     <div class="lancer-dialog-title">A WORD ON MOVEMENT</div>
@@ -1663,7 +1664,7 @@ function _movementWarningDialog()
             buttons: {
                 ok: {
                     icon: '<i class="fas fa-check"></i>',
-                    label: 'Got it',
+                    label: localize('LA.common.gotIt'),
                     callback: () => resolve(true),
                 },
             },
@@ -1795,9 +1796,9 @@ export function registerTourBootstrap()
     });
 
     game.settings.registerMenu(MODULE_ID, 'tourMenu', {
-        name: 'Configuration Tour',
-        label: 'Start Tour',
-        hint: 'Guided walkthrough of the configuration window or the Activation Manager.',
+        name: 'LA.settings.tourMenu.name',
+        label: 'LA.settings.tourMenu.label',
+        hint: 'LA.settings.tourMenu.hint',
         icon: 'fas fa-route',
         type: TourMenu,
         restricted: false,

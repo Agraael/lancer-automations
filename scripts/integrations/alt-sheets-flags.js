@@ -1,6 +1,7 @@
 // Sole coupling to lancer-alternative-sheets custom flags; change here if Annoying's api/paths move.
 
 import { getLAFlag } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
 
 const ID = 'lancer-alternative-sheets';
 
@@ -221,7 +222,7 @@ export function injectBarToggles(app, html)
         row.classList.add('la-bar-link-toggle');
         const label = row.querySelector('.la-effectbox__span');
         if (label)
-            label.textContent = 'Show in Token Bar';
+            label.textContent = localize('LA.extras.showInTokenBar');
         const checkbox = row.querySelector('input[type="checkbox"]');
         if (!checkbox)
             return;

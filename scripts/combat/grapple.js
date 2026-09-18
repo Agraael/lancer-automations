@@ -4,6 +4,7 @@ import { getLAFlag } from '../tools/flag-utils.js';
 // IMMOBILIZED uses flagged-effects; ENGAGED is managed by overwatch.js, not here.
 
 import { MODULE_ID } from '../tools/constants.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 
 // Held > 0 while grapple-internal status mutations run on this client.
 // Lets the deleteActiveEffect hook (Layer 3) tell its own removals from user-manual ones.
@@ -330,7 +331,7 @@ Hooks.on('lancer-automations.ready', (api) =>
 
                         const choices = [
                             {
-                                text: "Grapple (Melee Attack)",
+                                text: localize('LA.grapple.grappleMeleeAttack'),
                                 icon: "cci cci-reticule",
                                 callback: async () =>
                                 {
@@ -342,30 +343,30 @@ Hooks.on('lancer-automations.ready', (api) =>
                                 }
                             },
                             {
-                                text: "End Grapple (Free Action)",
+                                text: localize('LA.grapple.endGrappleFreeAction'),
                                 icon: "fas fa-unlink",
                                 disabled: !isGrappling,
-                                disabledReason: "You aren't grappling anyone.",
+                                disabledReason: localize('LA.grapple.notGrapplingAnyone'),
                                 callback: async () =>
                                 {
                                     await api.executeSimpleActivation(reactorToken.actor, {
                                         title: "End Grapple",
                                         action: { name: "End Grapple", activation: "Free" },
-                                        detail: "End your grapple as a free action."
+                                        detail: localize('LA.grapple.endYourGrappleAsAFree')
                                     });
                                 }
                             },
                             {
-                                text: "Break Free (Quick Action)",
+                                text: localize('LA.grapple.breakFreeQuickAction'),
                                 icon: "cci cci-structure",
                                 disabled: !isGrappled,
-                                disabledReason: "You aren't being grappled.",
+                                disabledReason: localize('LA.grapple.notBeingGrappled'),
                                 callback: async () =>
                                 {
                                     await api.executeSimpleActivation(reactorToken.actor, {
                                         title: "Break Free",
                                         action: { name: "Break Free", activation: "Quick" },
-                                        detail: "Attempt to break free from a grapple with a contested HULL check."
+                                        detail: localize('LA.grapple.attemptToBreakFreeFromA')
                                     });
                                 }
                             }
@@ -373,8 +374,8 @@ Hooks.on('lancer-automations.ready', (api) =>
 
                         await api.startChoiceCard({
                             mode: "or",
-                            title: "GRAPPLE",
-                            description: "Choose a grapple action:",
+                            title: localize('LA.dialogTitle.grappleCaps'),
+                            description: localize('LA.grapple.chooseAGrappleAction'),
                             choices
                         });
                     }
@@ -398,8 +399,8 @@ Hooks.on('lancer-automations.ready', (api) =>
                         const validTargets = [];
                         for (const target of targets)
                         {
-                            if (api.checkEffectImmunities(target.actor, 'grappled').length > 0)
-                                ui.notifications.warn(`${target.name} is immune to grapple — grapple has no effect.`);
+                            if (api.checkEffectImmunities(target.actor, 'grappled', null, null, { ownerTokenId: target.id, otherToken: reactorToken }).length > 0)
+                                ui.notifications.warn(localizeFormat('LA.notify.immuneToGrapple', { name: target.name }));
                             else
                                 validTargets.push(target);
                         }
@@ -458,8 +459,8 @@ Hooks.on('lancer-automations.ready', (api) =>
                             return;
 
                         await api.knockBackToken(tokensToMove, -1, {
-                            title: "GRAPPLE — Follow Movement",
-                            description: `Place ${tokensToMove.map(t => t.name).join(', ')} to follow ${reactorToken.name}.`,
+                            title: localize('LA.dialogTitle.grappleFollowMovement'),
+                            description: localizeFormat('LA.grapple.placeToFollow', { tokens: tokensToMove.map(t => t.name).join(', '), name: reactorToken.name }),
                             triggeringToken: reactorToken,
                             actionName: "Grapple"
                         });
@@ -631,11 +632,11 @@ Hooks.on('lancer-automations.ready', (api) =>
                         {
                             await api.startChoiceCard({
                                 mode: "or",
-                                title: "GRAPPLE CONTEST",
-                                description: `${reactorToken.name}: Make a HULL check to determine who controls the grapple. On success your side counts as larger — the other side becomes IMMOBILIZED.`,
+                                title: localize('LA.dialogTitle.grappleContest'),
+                                description: localizeFormat('LA.grapple.contestPrompt', { name: reactorToken.name }),
                                 choices: [
                                     {
-                                        text: "Contest Grapple (HULL Check)",
+                                        text: localize('LA.grapple.contestGrappleHullCheck'),
                                         icon: "cci cci-structure",
                                         callback: async () =>
                                         {
@@ -651,7 +652,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                                 skillA: "HULL",
                                                 tokenB: otherToken,
                                                 skillB: "HULL",
-                                                title: "GRAPPLE CONTEST - HULL vs HULL",
+                                                title: localize('LA.dialogTitle.grappleContestHull'),
                                                 sendToOwner: true,
                                                 sourceAction: "Grapple",
                                             });
@@ -676,7 +677,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                         }
                                     },
                                     {
-                                        text: "Skip Contest",
+                                        text: localize('LA.grapple.skipContest'),
                                         icon: "fas fa-times",
                                         callback: async () =>
                                         {}
@@ -727,7 +728,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                 const state = getGrappleState(reactorToken);
                 if (!state.grapplerIds?.length)
                 {
-                    ui.notifications.warn(`${reactorToken.name} is not grappled.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.notGrappled', { name: reactorToken.name }));
                     return;
                 }
 
@@ -744,8 +745,8 @@ Hooks.on('lancer-automations.ready', (api) =>
                 {
                     const result = await api.startChoiceCard({
                         mode: "or",
-                        title: "BREAK FREE",
-                        description: `${reactorToken.name}: choose which grappler to contest.`,
+                        title: localize('LA.dialogTitle.breakFreeCaps'),
+                        description: localizeFormat('LA.grapple.chooseGrappler', { name: reactorToken.name }),
                         choices: grapplerTokens.map(g => ({
                             text: g.name,
                             icon: "cci cci-structure",
@@ -763,7 +764,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     skillA: "HULL",
                     tokenB: chosenGrappler,
                     skillB: "HULL",
-                    title: "BREAK FREE - HULL vs HULL",
+                    title: localize('LA.dialogTitle.breakFreeHull'),
                     sendToOwner: true,
                     sourceAction: "Break Free",
                 });
@@ -773,12 +774,12 @@ Hooks.on('lancer-automations.ready', (api) =>
                 if (result.winner === reactorToken.actor)
                 {
                     await releaseGrappler(api, chosenGrappler, reactorToken);
-                    ui.notifications.info(`${reactorToken.name} breaks free from ${chosenGrappler.name}!`);
+                    ui.notifications.info(localizeFormat('LA.notify.breaksFree', { name: reactorToken.name, grappler: chosenGrappler.name }));
                 }
                 else
                 {
                     // Tie goes to grappler (winner === null on tie).
-                    ui.notifications.info(`${reactorToken.name} fails to break free from ${chosenGrappler.name}.`);
+                    ui.notifications.info(localizeFormat('LA.notify.failsToBreakFree', { name: reactorToken.name, grappler: chosenGrappler.name }));
                 }
             }
         }

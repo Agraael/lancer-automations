@@ -15,7 +15,9 @@ import {
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { moveTokenTo, awaitMovementSettled } from "../../movement/move-api.js";
 import { _transformFoundPath } from "../../movement/terrain-trigger-waypoints.js";
+import { makeWallBlocker } from "../../movement/wall-block.js";
 
+import { localize } from '../../tools/string-utils.js';
 // Above this budget the cost-aware Dijkstra sweep gets too big; fall back to plain grid range.
 const REACHABLE_BUDGET_CAP = 15;
 
@@ -226,9 +228,6 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             };
         };
 
-        const wallBlocked = (centerA, centerB) =>
-            CONFIG.Canvas.polygonBackends.move.testCollision(centerA, centerB, { type: 'move', mode: 'any' });
-
         const stepCostBetween = (moveTok, centerA, centerB, elevation) =>
         {
             try
@@ -252,6 +251,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const fromCenter = { x: fromWaypoint.x + moveTok.w / 2, y: fromWaypoint.y + moveTok.h / 2 };
             if (unconstrained || budget > REACHABLE_BUDGET_CAP)
                 return getInRangeOffsets(fromCenter, budget, { includeSelf: true });
+            const wallBlocked = makeWallBlocker(action ?? moveTok.document.movementAction);
             const dist = new Map();
             for (const startCell of getOccupiedOffsets(moveTok, { x: fromWaypoint.x, y: fromWaypoint.y }))
             {
@@ -281,7 +281,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                         continue;
                     if (nextCost >= (dist.get(neighborKey) ?? Infinity))
                         continue;
-                    if (wallBlocked(currentCenter, neighborCenter))
+                    if (wallBlocked?.(currentCenter, neighborCenter, fromWaypoint.elevation ?? 0))
                         continue;
                     dist.set(neighborKey, nextCost);
                     reachable.add(neighborKey);
@@ -423,7 +423,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                     .map(moveTok => ({ token: moveTok, path: stateOf(moveTok).commitPath }));
                 if (!plans.length)
                 {
-                    ui.notifications.warn("Pick a destination first.");
+                    ui.notifications.warn(localize('LA.notify.pickADestinationFirst'));
                     return;
                 }
                 doCleanup();
@@ -458,7 +458,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const snapped = snapTokenCenter(moveTok, { x, y });
             lastSnapped = snapped;
             if (!isDestInRange(moveTok, snapped.x, snapped.y))
-                ui.notifications.warn("Destination is out of range.");
+                ui.notifications.warn(localize('LA.notify.destinationIsOutOfRange'));
             if (isCtrlDown(event))
             {
                 state.selectedPos = null;

@@ -6,6 +6,7 @@
 import { AWARDS } from './awards.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { attributeKill } from './kill-attribution.js';
+import { localize } from '../tools/string-utils.js';
 
 const ACCENT_PALETTE = [
     '#7bd3ff', '#ffaa00', '#a577ff', '#6be08a', '#ff7bb9',
@@ -937,10 +938,10 @@ function _buildAwards(players, mvpId)
         awards.push({
             key: award.key,
             holder: topPlayer.id,
-            label: award.label,
+            label: localize(award.label),
             icon: award.icon,
             stat: award.format(topValue, topPlayer),
-            sub: award.description,
+            sub: localize(award.description),
         });
         const weight = award.weight ?? 1;
         addPoints(topPlayer.id, weight);

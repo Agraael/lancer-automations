@@ -6,6 +6,7 @@ import {
 } from "./cards.js";
 
 import { drawMovementTrace } from "./canvas.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 import { laDetailPopup, laRenderTextSection, laRenderActions, laRenderTags } from "./detail-renderers.js";
 
 // GM-controlled choice cards
@@ -169,7 +170,6 @@ export function getTokenOwnerUserId(token)
  */
 export function startChoiceCard(options = {})
 {
-    // Delegate vote mode to the dedicated vote card function
     if (/** @type {any} */ (options).mode === "vote" || /** @type {any} */ (options).mode === "vote-hidden")
         return startVoteCard({ ...options, hidden: /** @type {any} */ (options).mode === "vote-hidden" });
 
@@ -190,7 +190,6 @@ export function startChoiceCard(options = {})
         urgent = false
     } = /** @type {any} */ (options);
 
-    // Normalize userIdControl to an array.
     const rawTargets = Array.isArray(userIdControl)
         ? userIdControl
         : (userIdControl ? [userIdControl] : []);
@@ -330,8 +329,8 @@ export function startChoiceCard(options = {})
                     if (dismissed)
                         return;
                     const confirm = await Dialog.confirm({
-                        title: "Cancel Choice?",
-                        content: `<p>Are you sure you want to cancel the <b>${title}</b> choice card for all recipients?</p>`,
+                        title: localize('LA.dialogTitle.cancelChoice'),
+                        content: localizeFormat('LA.choiceCard.confirmCancelCard', { title }),
                         yes: () => true,
                         no: () => false,
                         defaultYes: false
@@ -409,8 +408,8 @@ export function startChoiceCard(options = {})
                 const onCancel = async () =>
                 {
                     const confirm = await Dialog.confirm({
-                        title: "Cancel Choice?",
-                        content: `<p>Are you sure you want to cancel the <b>${title}</b> choice card for all recipients?</p>`,
+                        title: localize('LA.dialogTitle.cancelChoice'),
+                        content: localizeFormat('LA.choiceCard.confirmCancelCard', { title }),
                         yes: () => true,
                         no: () => false,
                         defaultYes: false
@@ -762,7 +761,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
             else
             {
                 // Still waiting for others.
-                ui.notifications.info(`${responderName} declined the choice.`);
+                ui.notifications.info(localizeFormat('LA.notify.declinedChoice', { name: responderName }));
             }
         }
         else
@@ -824,9 +823,9 @@ export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation 
     if (cancel)
     {
         if (isCancellation)
-            ui.notifications.info(`${responderName || 'The requester'} cancelled the choice card.`);
+            ui.notifications.info(localizeFormat('LA.notify.cancelledChoiceCard', { name: responderName || localize('LA.choiceCard.theRequester') }));
         else if (responderName)
-            ui.notifications.info(`${responderName} took the choice card.`);
+            ui.notifications.info(localizeFormat('LA.notify.tookChoiceCard', { name: responderName }));
         cancel();
     }
 }
@@ -939,7 +938,7 @@ export function startVoteCard(options = {})
                 return;
             if (votes.size === 0)
             {
-                ui.notifications.warn("No votes cast yet.");
+                ui.notifications.warn(localize('LA.notify.noVotesCastYet'));
                 return;
             }
             const counts = choices.map((_, i) => [...votes.values()].filter(voteIdx => voteIdx === i).length);
@@ -959,11 +958,11 @@ export function startVoteCard(options = {})
                 const tieButtons = /** @type {Record<string,any>} */ ({});
                 for (const i of winners)
                     tieButtons[`choice_${i}`] = { label: choices[i].text, callback: () => i };
-                tieButtons.cancel = { label: "Cancel", callback: () => null };
+                tieButtons.cancel = { label: localize("LA.common.cancel"), callback: () => null };
                 const tiedNames = winners.map(i => `<b>${choices[i].text}</b>`).join(', ');
                 const picked = await Dialog.wait({
-                    title: "Vote Tie",
-                    content: `<p>There is a tie between: ${tiedNames}.</p><p>Pick the winner or cancel.</p>`,
+                    title: localize('LA.dialogTitle.voteTie'),
+                    content: localizeFormat('LA.choiceCard.voteTieBody', { names: tiedNames }),
                     buttons: tieButtons,
                     default: "cancel"
                 });
@@ -1001,8 +1000,8 @@ export function startVoteCard(options = {})
             if (dismissed)
                 return;
             const confirm = await Dialog.confirm({
-                title: "Cancel Vote?",
-                content: `<p>Are you sure you want to cancel the <b>${title}</b> vote?</p>`,
+                title: localize('LA.dialogTitle.cancelVote'),
+                content: localizeFormat('LA.choiceCard.confirmCancelVote', { title }),
                 yes: () => true,
                 no: () => false,
                 defaultYes: false
@@ -1223,7 +1222,7 @@ export function confirmVoteCardOnVoter({ cardId, winnerIdx, winnerText })
         return;
     pending.dismissed = true;
     pending.cleanup();
-    ui.notifications.info(`Vote concluded — winner: ${winnerText}`);
+    ui.notifications.info(localizeFormat('LA.notify.voteConcluded', { winner: winnerText }));
     pending.resolve({ choiceIdx: winnerIdx, responderIds: [] });
 }
 
@@ -1239,7 +1238,7 @@ export function cancelVoteCardOnVoter({ cardId })
         return;
     pending.dismissed = true;
     pending.cleanup();
-    ui.notifications.info("The vote was cancelled.");
+    ui.notifications.info(localize('LA.notify.theVoteWasCancelled'));
     pending.resolve(null);
 }
 

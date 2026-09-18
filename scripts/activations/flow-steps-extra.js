@@ -5,6 +5,7 @@ import { accDiffTargetToken, getMinGridDistance } from "../combat/grid-helpers.j
 import { injectKnockbackCheckbox } from "../bonuses/genericBonuses.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX } from "../fx/actionFX.js";
 import { ActiveFlowState } from "./flows.js";
+import { localize } from "../tools/string-utils.js";
 
 export async function throwChoiceStep(state)
 {
@@ -36,7 +37,7 @@ export async function throwChoiceStep(state)
         mode: "or",
         title: item.name,
         icon: "cci cci-melee",
-        description: "This weapon can be thrown.",
+        description: localize('LA.flow.thisWeaponCanBeThrown'),
         choices: [
             { text: `Attack (${weaponRanges})`,
                 icon: "cci cci-melee",

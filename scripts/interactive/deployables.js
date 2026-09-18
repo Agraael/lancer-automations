@@ -11,6 +11,7 @@ import { MODULE_ID } from "../tools/constants.js";
 import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX, playReloadFX } from "../fx/actionFX.js";
 import { stripDeployOwner } from "./detail-renderers.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
@@ -79,7 +80,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
 
         if (!templateActor)
         {
-            ui.notifications.error("Failed to create Template Throw actor.");
+            ui.notifications.error(localize('LA.notify.failedToCreateTemplateThrowActor'));
             return null;
         }
     }
@@ -193,7 +194,7 @@ export async function spawnHardCover(originToken, options = {})
 
         if (!templateActor)
         {
-            ui.notifications.error("Failed to create Template Hard Cover actor.");
+            ui.notifications.error(localize('LA.notify.failedToCreateTemplateHardCoverActor'));
             return null;
         }
     }
@@ -249,7 +250,7 @@ export async function pickupWeaponToken(ownerToken)
 {
     if (!ownerToken?.actor)
     {
-        ui.notifications.warn("No valid token selected.");
+        ui.notifications.warn(localize('LA.notify.noValidTokenSelected'));
         return null;
     }
 
@@ -262,7 +263,7 @@ export async function pickupWeaponToken(ownerToken)
 
     if (thrownTokens.length === 0)
     {
-        ui.notifications.warn("No thrown weapons found for this character.");
+        ui.notifications.warn(localize('LA.notify.noThrownWeaponsFoundForThisCharacter'));
         return null;
     }
 
@@ -270,8 +271,8 @@ export async function pickupWeaponToken(ownerToken)
         count: 1,
         includeSelf: false,
         selection: thrownTokens,
-        title: "PICK UP WEAPON",
-        description: `${thrownTokens.length} thrown weapon(s) available.`,
+        title: localize('LA.deployables.pickUpWeaponTitle'),
+        description: localizeFormat('LA.deployables.thrownAvailable', { count: thrownTokens.length }),
         icon: "fas fa-hand"
     });
 
@@ -304,7 +305,7 @@ export async function pickupWeaponToken(ownerToken)
         });
     }
 
-    ui.notifications.info(`Picked up ${weaponName}.`);
+    ui.notifications.info(localizeFormat('LA.notify.pickedUp', { name: weaponName }));
     return { weaponName, weaponId };
 }
 
@@ -551,8 +552,8 @@ Hooks.on('lancer-automations.clearCaches', () =>
 });
 
 /**
- * Cache lid -> { name, img }, filled lazily by `getDeployableInfo`.
- * @type {Map<string, { name: string, img: string, activation: string | null } | null>}
+ * Cache lid -> { name, img, activation, type }, filled lazily by `getDeployableInfo`.
+ * @type {Map<string, { name: string, img: string, activation: string | null, type: string | null } | null>}
  */
 const _deployableInfoCache = new Map();
 
@@ -576,7 +577,7 @@ function _findWorldDeployable(lid, ownerActor)
  * Synchronous read from the deployable info cache (populated by `getDeployableInfo`).
  * Returns null if not yet cached, call `getDeployableInfo` first to warm it.
  * @param {string} lid
- * @returns {{ name: string, img: string, activation: string | null } | null}
+ * @returns {{ name: string, img: string, activation: string | null, type: string | null } | null}
  */
 export function getDeployableInfoSync(lid, ownerActor = null)
 {
@@ -602,11 +603,11 @@ export function getDeployableInfoSync(lid, ownerActor = null)
 /**
  * Get the name and img for a deployable LID.
  * Checks world actors first (sync), then the cache, then async-resolves from compendium and caches.
- * Returns a plain `{ name, img }` object, never the full Actor to keep it lightweight.
+ * Returns a plain `{ name, img, activation, type }` object, never the full Actor to keep it lightweight.
  *
  * @param {string} lid
  * @param {any} [ownerActor] - Used by resolveDeployable for folder search
- * @returns {Promise<{ name: string, img: string, activation: string | null } | null>}
+ * @returns {Promise<{ name: string, img: string, activation: string | null, type: string | null } | null>}
  */
 export async function getDeployableInfo(lid, ownerActor = null)
 {
@@ -687,7 +688,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
     if (!ownerActor)
     {
-        ui.notifications.error("No owner actor specified.");
+        ui.notifications.error(localize('LA.notify.noOwnerActorSpecified'));
         return null;
     }
 
@@ -724,7 +725,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
         if (!actualDeployable)
         {
-            ui.notifications.warn(`Deployable not found: ${input}`);
+            ui.notifications.warn(localizeFormat('LA.notify.deployableNotFound', { input }));
             continue;
         }
 
@@ -751,10 +752,10 @@ export async function placeDeployable(options = /** @type {any} */({}))
             actualDeployable = await LancerActor.create(actorData);
             if (!actualDeployable)
             {
-                ui.notifications.error(`Failed to create deployable actor for: ${input}`);
+                ui.notifications.error(localizeFormat('LA.notify.deployableCreateFailed', { input }));
                 continue;
             }
-            ui.notifications.info(`Created ${actorData.name}`);
+            ui.notifications.info(localizeFormat('LA.notify.created', { name: actorData.name }));
         }
 
         if (isDrone(actualDeployable, systemItem))
@@ -785,7 +786,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
     if (actorEntries.length === 0)
     {
-        ui.notifications.error("No valid deployables found.");
+        ui.notifications.error(localize('LA.notify.noValidDeployablesFound'));
         return null;
     }
 
@@ -1331,7 +1332,7 @@ export async function setItemAsActivated(item, token, endAction, endActionDescri
 {
     if (!item)
     {
-        ui.notifications.warn("No item provided to setItemAsActivated.");
+        ui.notifications.warn(localize('LA.notify.noItemProvidedToSetitemasactivated'));
         return null;
     }
     const blockedAction = options.blockAction === false ? null : (options.actionName ?? item.name);
@@ -1413,20 +1414,20 @@ export async function openEndActivationMenu(token)
 {
     if (!token?.actor)
     {
-        ui.notifications.warn("No valid token selected.");
+        ui.notifications.warn(localize('LA.notify.noValidTokenSelected'));
         return null;
     }
 
     const activatedItems = getActivatedItems(token);
     if (activatedItems.length === 0)
     {
-        ui.notifications.warn(`No activated items found for ${token.name}.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noActivatedItems', { name: token.name }));
         return null;
     }
 
     const chosenItem = await pickItem(activatedItems, {
-        title: "END ITEM ACTIVATION",
-        description: `Select an activated item to end for ${token.name}:`,
+        title: localize('LA.deployables.endItemActivationTitle'),
+        description: localizeFormat('LA.deployables.selectActivatedToEnd', { name: token.name }),
         icon: "fas fa-power-off",
         formatText: (activatedItem) =>
         {
@@ -1453,13 +1454,133 @@ export async function openEndActivationMenu(token)
  * @param {{extraOnly?: boolean}} [opts]  extraOnly: return only LA extra actions (skip system/profile)
  * @returns {Array} Array of action objects
  */
+const actionGateCache = new Map();
+
+function compileActionGate(src)
+{
+    let fn = actionGateCache.get(src);
+    if (!fn)
+    {
+        fn = new Function('actor', 'action', 'item', `return(${src})(actor,action,item);`);
+        actionGateCache.set(src, fn);
+    }
+    return fn;
+}
+
+/**
+ * True when an action's grantor token is gone from the scene it was granted on.
+ * @param {any} action
+ * @returns {boolean}
+ */
+export function isGrantStale(action)
+{
+    const grant = action?._grant;
+    if (!grant?.tokenId)
+        return false;
+    if (grant.sceneId && grant.sceneId !== canvas.scene?.id)
+        return false;
+    return !canvas.tokens?.get(grant.tokenId);
+}
+
+/**
+ * Resolve a granted action's grantor back into live documents.
+ * @param {any} actionOrGrant  an action carrying `_grant`, or the grant itself
+ * @returns {{ token: Token|null, actor: Actor|null, item: Item|null }|null} null when there is no grant
+ */
+export function resolveGrant(actionOrGrant)
+{
+    const grant = actionOrGrant?._grant ?? actionOrGrant;
+    if (!grant?.tokenId)
+        return null;
+    const token = canvas.tokens?.get(grant.tokenId) ?? null;
+    const actor = /** @type {any} */ (token)?.actor ?? null;
+    const item = grant.itemId ? (actor?.items?.get(grant.itemId) ?? null) : null;
+    return { token, actor, item };
+}
+
+/**
+ * Find a granted extra action on a holder and resolve its grantor in one step.
+ * @param {Item|Token|Actor} holder
+ * @param {string} name  the action's name
+ * @returns {{ action: any, token: Token|null, actor: Actor|null, item: Item|null }|null}
+ */
+export function findGrantedAction(holder, name)
+{
+    const action = getActorActions(holder).find((/** @type {any} */ entry) => entry.name === name);
+    if (!action)
+        return null;
+    return { action, ...(resolveGrant(action) ?? { token: null, actor: null, item: null }) };
+}
+
+/**
+ * Resolve an extra action's runtime gate.
+ * @param {any} action
+ * @param {Actor|null} actor  the holder
+ * @param {Item|null} [item]  the holding item, null for actor-held entries
+ * @returns {'visible'|'hidden'|'locked'|'disabled'}
+ */
+export function resolveActionGate(action, actor, item = null)
+{
+    if (isGrantStale(action))
+        return 'hidden';
+    const gate = action?.condition;
+    if (!gate)
+        return 'visible';
+    let result;
+    try
+    {
+        if (typeof gate === 'function')
+            result = gate(actor, action, item);
+        else if (typeof gate === 'string')
+        {
+            const src = gate.startsWith('@@fn:') ? gate.slice('@@fn:'.length).trim() : gate.trim();
+            result = compileActionGate(src)(actor, action, item);
+        }
+        else
+            return 'visible';
+    }
+    catch (err)
+    {
+        console.warn(`lancer-automations | resolveActionGate: condition threw on "${action?.name}"`, err);
+        return 'visible';
+    }
+    if (result === false || result === 'hidden')
+        return 'hidden';
+    if (result === 'locked' || result === 'disabled')
+        return result;
+    return 'visible';
+}
+
+/**
+ * Drop hidden entries and stamp `_gate` on locked / disabled ones.
+ * @param {any[]} actions
+ * @param {Actor|null} actor
+ * @param {Item|null} [item]
+ * @returns {any[]}
+ */
+export function gateActions(actions, actor, item = null)
+{
+    const out = [];
+    for (const action of actions ?? [])
+    {
+        const gate = resolveActionGate(action, actor, item);
+        if (gate === 'hidden')
+            continue;
+        out.push(gate === 'visible' ? action : { ...action, _gate: gate });
+    }
+    return out;
+}
+
 export function getItemActions(item, opts = {})
 {
     if (!item)
         return [];
     const owner = item.parent?.documentName === 'Actor' ? item.parent : null;
-    const extraActions = (getLAFlag(item,'extraActions') || [])
-        .filter(action => linkTierGate(action, owner, item));
+    const extraActions = gateActions(
+        (getLAFlag(item,'extraActions') || []).filter(action => linkTierGate(action, owner, item)),
+        owner,
+        item
+    );
     if (opts.extraOnly)
         return extraActions;
     const systemActions = applyActionOverlays(item, item.system?.actions ?? []);
@@ -1477,9 +1598,11 @@ export function getItemActions(item, opts = {})
     });
 }
 
+/** @typedef {{ tokenId?: string, actorUuid?: string, itemId?: string, sceneId?: string|null, label?: string }} ActionGrant */
+
 /**
  * Extra action object: LancerAction shape plus an optional TAH icon field.
- * @typedef {LancerAction & { icon?: string }} ExtraAction
+ * @typedef {LancerAction & { icon?: string, condition?: string|((actor: Actor|null, action: any, item: Item|null) => any), _grant?: ActionGrant }} ExtraAction
  */
 
 /**
@@ -1488,9 +1611,10 @@ export function getItemActions(item, opts = {})
  * - Token / Actor: stores in actor's 'lancer-automations.extraActions' flag
  * @param {Item|Token|Actor} target         Item, Token, or Actor to attach actions to
  * @param {ExtraAction|ExtraAction[]} actions  A single action object or array of action objects
+ * @param {{ grant?: ActionGrant }} [opts]  grant: stamped on every entry that has no `_grant` of its own
  * @returns {Promise<Item|Actor|null>} The updated document, or null on failure
  */
-export async function addExtraActions(target, actions)
+export async function addExtraActions(target, actions, opts = {})
 {
     if (!target)
     {
@@ -1500,6 +1624,18 @@ export async function addExtraActions(target, actions)
     const newActions = Array.isArray(actions) ? actions : [actions];
     if (newActions.length === 0)
         return null;
+
+    // Flags are JSON, so a function-valued gate has to be serialized the way bonus lambdas are.
+    for (const action of newActions)
+    {
+        const actionAny = /** @type {any} */ (action);
+        if (typeof actionAny.condition === 'function')
+            actionAny.condition = '@@fn:' + actionAny.condition.toString();
+        if (!actionAny._grant && opts?.grant)
+            actionAny._grant = { ...opts.grant };
+        if (actionAny._grant?.tokenId && actionAny._grant.sceneId === undefined)
+            actionAny._grant.sceneId = canvas.scene?.id ?? null;
+    }
 
     // Items store on themselves, tokens/actors use their actor doc.
     const anyTarget = /** @type {any} */ (target);
@@ -1534,7 +1670,7 @@ export async function addExtraActions(target, actions)
                     return true;
                 });
                 if (dropped.length)
-                    ui.notifications.warn(`Tag(s) ${dropped.join(', ')} already on ${doc.name}, removed from extra action "${actionAny.name}".`);
+                    ui.notifications.warn(localizeFormat('LA.notify.tagsAlreadyOn', { tags: dropped.join(', '), doc: doc.name, action: actionAny.name }));
             }
         }
         for (const action of newActions)
@@ -1547,7 +1683,10 @@ export async function addExtraActions(target, actions)
 
     const existing = getLAFlag(doc,'extraActions') || [];
     // Same-name entries keep their stored state, so onInit re-runs stay idempotent.
-    const fresh = newActions.filter(action => !existing.some(entry => entry.name === action.name));
+    // Keyed by grantor too, so two sources granting the same action stay independently revocable.
+    const grantKey = (/** @type {any} */ entry) => `${entry.name}|${entry._grant?.tokenId ?? ''}`;
+    const existingKeys = new Set(existing.map(grantKey));
+    const fresh = newActions.filter(action => !existingKeys.has(grantKey(action)));
     if (!fresh.length)
         return doc;
 
@@ -1604,6 +1743,38 @@ export async function removeExtraActions(target, filter = null)
     await setLAFlag(doc,'extraActions', kept);
 }
 
+/**
+ * Drop every granted extra action whose grantor token or item is gone. GM only, the writes are direct.
+ * @param {{ tokenId?: string|null, itemId?: string|null }} [source]
+ * @returns {Promise<void>}
+ */
+export async function sweepStaleGrants({ tokenId = null, itemId = null } = {})
+{
+    if (!tokenId && !itemId)
+        return;
+    const matches = (/** @type {any} */ action) =>
+    {
+        const grant = action?._grant;
+        if (!grant)
+            return false;
+        return (!!tokenId && grant.tokenId === tokenId) || (!!itemId && grant.itemId === itemId);
+    };
+    const sweep = async (/** @type {any} */ doc) =>
+    {
+        if ((getLAFlag(doc,'extraActions') || []).some(matches))
+            await removeExtraActions(doc, matches);
+    };
+    for (const token of (canvas.tokens?.placeables ?? []))
+    {
+        const actor = /** @type {any} */ (token).actor;
+        if (!actor)
+            continue;
+        await sweep(actor);
+        for (const item of (actor.items ?? []))
+            await sweep(item);
+    }
+}
+
 // Spend the consumable state on an actor-level extra action. Returns false when depleted so the caller bails.
 export async function consumeExtraAction(actor, actionName)
 {
@@ -1626,7 +1797,7 @@ export async function consumeExtraAction(actor, actionName)
     {
         if (entry.loaded === false)
         {
-            ui.notifications.warn(`${entry.name} is not loaded.`);
+            ui.notifications.warn(localizeFormat('LA.notify.notLoaded', { name: entry.name }));
             return false;
         }
         entry.loaded = false;
@@ -1636,7 +1807,7 @@ export async function consumeExtraAction(actor, actionName)
     {
         if (entry.charged === false)
         {
-            ui.notifications.warn(`${entry.name} is uncharged.`);
+            ui.notifications.warn(localizeFormat('LA.notify.uncharged', { name: entry.name }));
             return false;
         }
         entry.charged = false;
@@ -1647,7 +1818,7 @@ export async function consumeExtraAction(actor, actionName)
         const cur = entry.uses?.value ?? 0;
         if (cur <= 0)
         {
-            ui.notifications.warn(`${entry.name} has no uses left.`);
+            ui.notifications.warn(localizeFormat('LA.notify.noUsesLeft', { name: entry.name }));
             return false;
         }
         entry.uses = { ...entry.uses, value: cur - 1 };
@@ -1658,7 +1829,7 @@ export async function consumeExtraAction(actor, actionName)
         const cur = entry.usesPerTurn?.value ?? 0;
         if (cur <= 0)
         {
-            ui.notifications.warn(`${entry.name}: per-turn limit reached.`);
+            ui.notifications.warn(localizeFormat('LA.notify.perTurnLimit', { name: entry.name }));
             return false;
         }
         entry.usesPerTurn = { ...entry.usesPerTurn, value: cur - 1 };
@@ -1669,7 +1840,7 @@ export async function consumeExtraAction(actor, actionName)
         const cur = entry.usesPerRound?.value ?? 0;
         if (cur <= 0)
         {
-            ui.notifications.warn(`${entry.name}: per-round limit reached.`);
+            ui.notifications.warn(localizeFormat('LA.notify.perRoundLimit', { name: entry.name }));
             return false;
         }
         entry.usesPerRound = { ...entry.usesPerRound, value: cur - 1 };
@@ -2106,7 +2277,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
             <div class="lancer-search-container" style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
                 <div style="flex:1;position:relative;">
                     <i class="fas fa-search lancer-search-icon"></i>
-                    <input type="text" id="deploy-search" placeholder="Search by name or LID..." style="padding-left:35px;">
+                    <input type="text" id="deploy-search" placeholder="${localize('LA.common.searchByNameOrLid')}" style="padding-left:35px;">
                 </div>
                 <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:0.85em;cursor:pointer;">
                     <input type="checkbox" id="deploy-show-all"> Show all
@@ -2118,7 +2289,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                 </div>
             </div>
         `,
-        buttons: { close: { label: '<i class="fas fa-times"></i> Close' } },
+        buttons: { close: { label: `<i class="fas fa-times"></i> ${localize('LA.common.close')}` } },
         render: (html) =>
         {
             const searchInput = html.find('#deploy-search');
@@ -2163,7 +2334,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                 if (lid)
                 {
                     await navigator.clipboard.writeText(lid);
-                    ui.notifications.info(`Copied LID: ${lid}`);
+                    ui.notifications.info(localizeFormat('LA.notify.copiedLid', { lid }));
                 }
             });
             if (canPick)
@@ -2258,7 +2429,7 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             <div class="lancer-search-container" style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
                 <div style="flex:1;position:relative;">
                     <i class="fas fa-search lancer-search-icon"></i>
-                    <input type="text" id="document-search" placeholder="Search by name or UUID..." style="padding-left:35px;">
+                    <input type="text" id="document-search" placeholder="${localize('LA.deployables.searchByNameOrUuid')}" style="padding-left:35px;">
                 </div>
                 <label style="display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:0.85em;cursor:pointer;">
                     <input type="checkbox" id="document-show-all"> Show all
@@ -2266,7 +2437,7 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             </div>
             <div id="document-list" style="height:400px;overflow-y:auto;padding:4px;border:1px solid #ddd;background:#fafafa;border-radius:4px;">${emptyHint}</div>
         `,
-        buttons: { close: { label: '<i class="fas fa-times"></i> Close' } },
+        buttons: { close: { label: `<i class="fas fa-times"></i> ${localize('LA.common.close')}` } },
         render: (html) =>
         {
             const searchInput = html.find('#document-search');
@@ -2311,7 +2482,7 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
                 if (uuid)
                 {
                     await navigator.clipboard.writeText(uuid);
-                    ui.notifications.info(`Copied UUID: ${uuid}`);
+                    ui.notifications.info(localizeFormat('LA.notify.copiedUuid', { uuid }));
                 }
             });
             if (canPick)
@@ -2406,8 +2577,8 @@ export async function promptLinkOrUnlinkActor(ownerToken)
     const picked = await chooseToken(ownerToken, {
         count: 1,
         includeSelf: false,
-        title: 'LINK / UNLINK ACTOR',
-        description: 'Pick a token to link. Already-linked tokens will be unlinked.',
+        title: localize('LA.deployables.linkUnlinkActorTitle'),
+        description: localize('LA.deployables.pickATokenToLinkAlready'),
         icon: 'cci cci-deployable',
         filter: (/** @type {any} */ token) => !isLinkedToOwner(token),
         filterWarning: 'Already linked, click to UNLINK',
@@ -2419,13 +2590,13 @@ export async function promptLinkOrUnlinkActor(ownerToken)
     {
         await unsetLAFlag(target.document,'ownerActorUuid');
         await unsetLAFlag(target.document,'ownerName');
-        ui.notifications.info(`Unlinked ${target.actor?.name ?? target.name} from ${owner.name}.`);
+        ui.notifications.info(localizeFormat('LA.notify.unlinkedFrom', { target: target.actor?.name ?? target.name, owner: owner.name }));
     }
     else
     {
         await setLAFlag(target.document,'ownerActorUuid', ownerUuid);
         await setLAFlag(target.document,'ownerName', owner.name ?? '');
-        ui.notifications.info(`Linked ${target.actor?.name ?? target.name} to ${owner.name}.`);
+        ui.notifications.info(localizeFormat('LA.notify.linkedTo', { target: target.actor?.name ?? target.name, owner: owner.name }));
     }
 }
 
@@ -2605,7 +2776,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
 
     if (!actor || !item)
     {
-        ui.notifications.warn("Actor and item are required.");
+        ui.notifications.warn(localize('LA.notify.actorAndItemAreRequired'));
         return null;
     }
 
@@ -2613,7 +2784,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
 
     if (deployablesArray.length === 0)
     {
-        ui.notifications.warn(`No deployables found on ${item.name}.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noDeployablesOn', { name: item.name }));
         return null;
     }
 
@@ -2628,7 +2799,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
         hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
         if (hasUses && uses.value <= 0)
         {
-            ui.notifications.warn(`${item.name} has no uses remaining.`);
+            ui.notifications.warn(localizeFormat('LA.notify.noUsesRemaining', { name: item.name }));
             return null;
         }
 
@@ -2636,7 +2807,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
         isUncharged = hasRechargeTag && item.system?.charged === false;
         if (isUncharged)
         {
-            ui.notifications.warn(`${item.name} is uncharged. You must reload or recharge it before deploying.`);
+            ui.notifications.warn(localizeFormat('LA.notify.unchargedDeploy', { name: item.name }));
             return null;
         }
     }
@@ -2682,7 +2853,7 @@ export async function openDeployableMenu(actor)
 {
     if (!actor)
     {
-        ui.notifications.warn("No actor specified.");
+        ui.notifications.warn(localize('LA.notify.noActorSpecified'));
         return;
     }
 
@@ -2693,7 +2864,7 @@ export async function openDeployableMenu(actor)
 
     if (allSystemsWithDeployables.length === 0 && actorLevelDeployables.length === 0)
     {
-        ui.notifications.warn(`No deployables found for ${actor.name}.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noDeployablesFor', { name: actor.name }));
         return;
     }
 
@@ -2826,7 +2997,7 @@ export async function openDeployableMenu(actor)
 
     if (items.length === 0)
     {
-        ui.notifications.warn(`No deployables available for ${actor.name}.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noDeployablesAvailable', { name: actor.name }));
         return;
     }
 
@@ -2977,12 +3148,12 @@ export async function openDeployableMenu(actor)
     `;
 
     const dialog = new Dialog({
-        title: "Deploy Actors",
+        title: localize("LA.deployables.deployTitle"),
         content: content,
         buttons: {
             deploy: {
                 icon: '<i class="cci cci-deployable"></i>',
-                label: "Deploy",
+                label: localize("LA.deployables.deploy"),
                 callback: async () =>
                 {
                     const item = items.find(candidate => candidate.id === selectedId);
@@ -3003,14 +3174,14 @@ export async function openDeployableMenu(actor)
                         range: extraOpts.range ?? null,
                         count: extraOpts.count ?? null,
                         at: null,
-                        title: `DEPLOY ${item.deployableName}`,
+                        title: localizeFormat('LA.deployables.deployTitleFor', { name: item.deployableName }),
                         description: ""
                     });
                 }
             },
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
-                label: "Cancel"
+                label: localize("LA.common.cancel")
             }
         },
         default: "deploy",
@@ -3064,7 +3235,7 @@ export async function openDeployableMenu(actor)
                 const newActor = await LancerActor.create(actorData);
                 if (newActor)
                 {
-                    ui.notifications.info(`Created ${actorData.name}`);
+                    ui.notifications.info(localizeFormat('LA.notify.created', { name: actorData.name }));
                     item.deployableId = newActor.id;
                     item.deployableData = newActor;
                     item.fromCompendium = false;
@@ -3096,7 +3267,7 @@ export async function recallDeployable(ownerToken)
 {
     if (!ownerToken?.actor)
     {
-        ui.notifications.warn("No valid token selected.");
+        ui.notifications.warn(localize('LA.notify.noValidTokenSelected'));
         return null;
     }
 
@@ -3109,7 +3280,7 @@ export async function recallDeployable(ownerToken)
 
     if (deployedTokens.length === 0)
     {
-        ui.notifications.warn("No deployed items found for this character.");
+        ui.notifications.warn(localize('LA.notify.noDeployedItemsFoundForThisCharacter'));
         return null;
     }
 
@@ -3148,8 +3319,8 @@ export async function recallDeployable(ownerToken)
         count: 1,
         includeSelf: false,
         selection: deployedTokens,
-        title: "RECALL DEPLOYABLE",
-        description: `${deployedTokens.length} deployed item(s) available. Red highlights indicate deployables with Recall.`,
+        title: localize('LA.deployables.recallDeployableTitle'),
+        description: localizeFormat('LA.deployables.deployedAvailable', { count: deployedTokens.length }),
         icon: "fas fa-hand"
     });
 
@@ -3179,7 +3350,7 @@ export async function recallDeployable(ownerToken)
         });
     }
 
-    ui.notifications.info(`Recalled ${deployableName}.`);
+    ui.notifications.info(localizeFormat('LA.notify.recalled', { name: deployableName }));
     return { deployableName, deployableId };
 }
 
@@ -3200,7 +3371,7 @@ export function pickItem(items, options = {})
     {
         if (!items || items.length === 0)
         {
-            ui.notifications.warn("No items available to pick.");
+            ui.notifications.warn(localize('LA.notify.noItemsAvailableToPick'));
             return resolve(null);
         }
 
@@ -3288,7 +3459,7 @@ export async function reloadOneWeapon(actorOrToken, targetName)
 
     if (!actor)
     {
-        ui.notifications.warn("No valid actor provided for reloading.");
+        ui.notifications.warn(localize('LA.notify.noValidActorProvidedForReloading'));
         return null;
     }
 
@@ -3301,13 +3472,13 @@ export async function reloadOneWeapon(actorOrToken, targetName)
 
     if (unloadedWeapons.length === 0)
     {
-        ui.notifications.warn(`${name} has no unloaded weapons to reload!`);
+        ui.notifications.warn(localizeFormat('LA.notify.noUnloadedWeapons', { name }));
         return null;
     }
 
     const chosenWeapon = await pickItem(unloadedWeapons, {
-        title: "CHOOSE WEAPON TO RELOAD",
-        description: `Select which of ${name}'s weapons to reload:`,
+        title: localize('LA.deployables.chooseWeaponToReloadTitle'),
+        description: localizeFormat('LA.deployables.selectWeaponToReload', { name }),
         icon: "fas fa-sync",
         formatText: (weapon) => `Reload ${weapon.name}`
     });
@@ -3315,7 +3486,7 @@ export async function reloadOneWeapon(actorOrToken, targetName)
     if (chosenWeapon)
     {
         await chosenWeapon.update(/** @type {any} */({ "system.loaded": true }));
-        ui.notifications.info(`${name}'s ${chosenWeapon.name} reloaded!`);
+        ui.notifications.info(localizeFormat('LA.notify.weaponReloaded', { name, weapon: chosenWeapon.name }));
         const token = (/** @type {any} */ (actorOrToken))?.actor
             ? /** @type {any} */ (actorOrToken)
             : actor.getActiveTokens?.()?.[0];
@@ -3339,7 +3510,7 @@ export async function rechargeSystem(actorOrToken, targetName)
 
     if (!actor)
     {
-        ui.notifications.warn("No valid actor provided for recharging.");
+        ui.notifications.warn(localize('LA.notify.noValidActorProvidedForRecharging'));
         return null;
     }
 
@@ -3366,13 +3537,13 @@ export async function rechargeSystem(actorOrToken, targetName)
 
     if (depletedItems.length === 0)
     {
-        ui.notifications.warn(`${name} has no depleted systems to recharge!`);
+        ui.notifications.warn(localizeFormat('LA.notify.noDepletedSystems', { name }));
         return null;
     }
 
     const chosen = await pickItem(depletedItems, {
-        title: "CHOOSE SYSTEM TO RECHARGE",
-        description: `Select which of ${name}'s systems to recharge:`,
+        title: localize('LA.deployables.chooseSystemToRechargeTitle'),
+        description: localizeFormat('LA.deployables.selectSystemToRecharge', { name }),
         icon: "fas fa-bolt",
         formatText: (item) => `Recharge ${item.name}`
     });
@@ -3397,7 +3568,7 @@ export async function rechargeSystem(actorOrToken, targetName)
         update['system.charged'] = true;
 
     await chosen.update(update);
-    ui.notifications.info(`${name}'s ${chosen.name} recharged!`);
+    ui.notifications.info(localizeFormat('LA.notify.systemRecharged', { name, system: chosen.name }));
     return chosen;
 }
 
@@ -3466,8 +3637,8 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
                 count: 1,
                 includeSelf: false,
                 selection: candidateTokens,
-                title: "LINK DEPLOYABLE",
-                description: `Which token owns the deployed ${deployableActor.name}?`,
+                title: localize('LA.deployables.linkDeployableTitle'),
+                description: localizeFormat('LA.deployables.whichTokenOwns', { name: deployableActor.name }),
                 icon: "cci cci-deployable"
             });
             if (!picked || picked.length === 0)
@@ -3488,8 +3659,8 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
     else if (candidateItems.length > 1)
     {
         systemItem = await pickItem(candidateItems, {
-            title: "LINK DEPLOYABLE",
-            description: `Which item deployed ${deployableActor.name}?`,
+            title: localize('LA.deployables.linkDeployableTitle'),
+            description: localizeFormat('LA.deployables.whichItemDeployed', { name: deployableActor.name }),
             icon: "cci cci-deployable",
             relatedToken: ownerToken
         });

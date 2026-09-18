@@ -1,8 +1,8 @@
-# FX and Sounds
+# FX, Visuals and Sounds
 
 [← Back to Home](../index.md)
 
-The cosmetic and feedback layer: visual effects on statuses, animations when actions fire, and sounds for most table events. All optional.
+The cosmetic and feedback layer: visual effects on statuses, animations when actions fire, cues that make elevation readable, and sounds for most table events. All optional.
 
 ---
 
@@ -56,6 +56,20 @@ Some statuses are applied straight from the actor's numbers: the danger-zone ove
 A soft aura is drawn around tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off. Combat-only needs the GAA fork.
 
 <br clear="right"/>
+
+---
+
+## Ground shadow and terrain relief
+
+<img src="../vid/fs-elevation-cues.gif" width="70%"/>
+
+Two cues make height readable from straight above: one drawn on the tokens, one on the terrain.
+
+**Token ground shadow** (**`tokenGroundShadow`**, off by default) casts each token's own silhouette on the ground, thrown further and blurred softer the higher it stands. A token resting on whatever is beneath it casts nothing, so a shadow always means "this is above the ground it sits on". Solid terrain counts as ground, so a mech standing on a plateau casts none until it leaves it. **`tokenGroundShadowThrow`** (9) is the pixels of offset per grid cell of elevation on a grid of 100, and **`tokenGroundShadowOpacity`** (0.55) its strength.
+
+On the terrain side, [my Terrain Height Tools fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools) adds **Tanaka contours** (**`terrainTanaka`**), which draw every drop as a highlight where it faces the light and a shadow where it faces away, and **drop shading** (**`terrainDropBand`**), which shades the ground beside a drop, reaching further the further it falls. Both are off by default and both are marked experimental there.
+
+The token shadow takes its direction from the fork's sun angle (**`terrainExtrusionSunAngle`**), falling back to 225 degrees when the module is absent, so the tokens and the terrain are lit from the same side.
 
 ---
 

@@ -40,6 +40,7 @@ declare module "fvtt-types/configuration"
             [key: `lancer.postFlow.${string}`]: (...args: any[]) => any;
             "lancer.registerFlows": (...args: any[]) => any;
             "lancer.statusesReady": (...args: any[]) => any;
+            "terrain-height-tools.updateTerrain": (...args: any[]) => any;
             forceUpdateTokenActionHud: (...args: any[]) => any;
             modifyPlannedMovement: (...args: any[]) => any;
             recordToken: (...args: any[]) => any;
@@ -162,6 +163,7 @@ declare module "fvtt-types/configuration"
         [key: `force-client-settings.${string}`]: any;
         [key: `templatemacro.${string}`]: any;
         [key: `isometric-perspective.${string}`]: any;
+        [key: `terrain-height-tools.${string}`]: any;
     }
 
     // Everything in this module runs at or after ready, so the pre-ready game unions
@@ -204,6 +206,8 @@ declare module "fvtt-types/configuration"
         {
             effects: PIXI.Container & { bg?: any;[key: string]: any };
             _movement: { points: number[];[key: string]: any } | null;
+            // Wall Height adds this getter
+            losHeight?: number;
         }
     }
 }

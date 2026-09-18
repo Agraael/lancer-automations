@@ -2,6 +2,7 @@
 
 import { isActionFXEnabled, isRollResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localizeFormat } from '../tools/string-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
 
@@ -149,7 +150,7 @@ export function previewActionFxSound(action)
     const entry = ACTION_FX_PREVIEW[action];
     if (!entry)
     {
-        ui.notifications.info(`No audio preview for "${action}".`);
+        ui.notifications.info(localizeFormat('LA.notify.noAudioPreview', { action }));
         return;
     }
     const src = typeof entry.src === 'function' ? entry.src() : entry.src;

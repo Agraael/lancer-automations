@@ -7,6 +7,7 @@ import { npcOneStructStep, altRollStructure, structCheckMultipleOnes, insertHull
 import { baseApplyStructureEffects, baseInsertHullCheckButton, baseHandleHullCheckResult, baseSelectDestructionTarget, baseApplyStressEffects, baseHandleNoStressRemaining, baseInsertEngCheckButton, baseHandleEngCheckResult } from "./base-rules.js";
 import { executeStatRoll } from "../tools/misc-tools.js";
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
 let _flowSteps = null;
 let _flows = null;
 const _preInstallSnapshot = new Map();
@@ -36,7 +37,7 @@ async function initSecondaryStructureCrushingHit(state)
 {
     state.data = {
         type: "secondary_structure",
-        title: "Equipment Destruction",
+        title: localize('LA.altStruct.equipmentDestruction'),
         desc: "",
         roll_str: "1d6"
     };
@@ -194,7 +195,7 @@ export function initAltStructReady()
     if (hasConflict)
     {
         ui.notifications.warn(
-            "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active - integrated version will not load. Disable one of them."
+            localize('LA.notify.altStructModuleConflict')
         );
         return;
     }
@@ -209,15 +210,15 @@ export function initAltStructReady()
     {
         const parts = [];
         if (preSteps.length)
-            parts.push(`new flow step(s) already claimed: ${preSteps.join(", ")}`);
+            parts.push(localizeFormat('LA.altStruct.conflictNewSteps', { items: preSteps.join(', ') }));
         if (preFlows.length)
-            parts.push(`new flow(s) already claimed: ${preFlows.join(", ")}`);
+            parts.push(localizeFormat('LA.altStruct.conflictNewFlows', { items: preFlows.join(', ') }));
         if (postConflicts.length)
-            parts.push(`override step(s) modified after us: ${postConflicts.join(", ")}`);
+            parts.push(localizeFormat('LA.altStruct.conflictModifiedAfter', { items: postConflicts.join(', ') }));
         if (preHijacks.length)
-            parts.push(`override step(s) already replaced before us: ${preHijacks.map(conflict => `${conflict.key} (by ${conflict.byFunctionName})`).join(", ")}`);
+            parts.push(localizeFormat('LA.altStruct.conflictReplacedBefore', { items: preHijacks.map(conflict => `${conflict.key} (by ${conflict.byFunctionName})`).join(', ') }));
         ui.notifications.warn(
-            `Lancer Automations (Alt Structure): flow conflict detected. The other module's changes will be overwritten. ${parts.join(" | ")}. See console.`,
+            localizeFormat('LA.notify.altStructFlowConflict', { details: parts.join(' | ') }),
             { permanent: true }
         );
         console.warn("lancer-automations | alt-struct |flow conflicts", { preSteps, preFlows, postConflicts, preHijacks });
@@ -248,7 +249,7 @@ async function _runHaseCheck(btn, handler)
     const actor = await fromUuid(btn.dataset.actorId);
     if (!actor)
     {
-        ui.notifications?.error("Invalid actor ID on check button.");
+        ui.notifications?.error(localize('LA.notify.invalidActorIdOnCheckButton'));
         return;
     }
     const result = await executeStatRoll(actor, btn.dataset.checkType ?? "hull", null);
@@ -267,7 +268,7 @@ function _runAltStructFlow(btn)
     const actorId = btn.dataset.actorId;
     if (!flowType || !actorId)
     {
-        ui.notifications?.error("Missing flow type or actor ID on alt-struct button.");
+        ui.notifications?.error(localize('LA.notify.missingFlowTypeOrActorIdOn'));
         return;
     }
     if (CHECK_RESULTS[flowType])
@@ -280,7 +281,7 @@ function _runAltStructFlow(btn)
     const flowDef = /** @type {any} */ (game)?.lancer?.flows?.get(flowType);
     if (!Flow || !flowDef?.steps)
     {
-        ui.notifications?.error(`Alt-struct flow "${flowType}" not registered.`);
+        ui.notifications?.error(localizeFormat('LA.notify.altStructFlowNotRegistered', { flow: flowType }));
         return;
     }
     const flowParams = { ...btn.dataset };

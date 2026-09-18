@@ -290,7 +290,7 @@ It also handles skill checks and contests, and tracks usage per turn, per round,
 
 ---
 
-### FX and Sounds
+### FX, Visuals and Sounds
 
 <img align="right" src="img/feature-fx.png" width="53%"/>
 
@@ -298,7 +298,7 @@ There's more flavor in Lancer Automations than just JB2A and Lancer Weapon FX.
 
 Sounds and graphical effects run throughout the module, and almost all of them can be tweaked or disabled.
 
-→ Full guide: [FX and Sounds](feature/FX_AND_SOUNDS.md)
+→ Full guide: [FX, Visuals and Sounds](feature/FX_AND_SOUNDS.md)
 
 <br clear="right"/>
 

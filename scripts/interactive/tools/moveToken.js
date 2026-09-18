@@ -4,6 +4,7 @@ import {
     getDistanceTokenToPoint,
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
+import { localizeFormat } from "../../tools/string-utils.js";
 import { isPhasing } from "../../movement/cost-rules.js";
 import { movePathLegs } from "../move-waypoints.js";
 import { awaitMovementSettled } from "../../movement/move-api.js";
@@ -91,7 +92,7 @@ export async function moveToken(token, options = {})
                 });
                 if (blocked)
                 {
-                    ui.notifications.warn(`Movement blocked by ${blocked.name}.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.movementBlockedBy', { name: blocked.name }));
                     if (pathIdx === 0)
                         return null;
                     const lastFreeOffset = pathOffsets[pathIdx - 1];

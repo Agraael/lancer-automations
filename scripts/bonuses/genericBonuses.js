@@ -9,6 +9,7 @@ import { playBonusAddedFX } from "../fx/actionFX.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
 import { linkTierGate } from "../interactive/deployables.js";
 import { broadcastFloatTokenText } from "../tools/float-text.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 // Re-inject our row when Svelte re-renders a roll HUD. formWasSeen stops it disconnecting on mutations that land before the HUD exists.
 function observeHudReinject(formSelector, rowSelector, doInject, onStillPresent = null)
@@ -116,6 +117,12 @@ function resolveReactorToken(bonus, state)
  */
 function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
 {
+    return runApplyToCondition(mod, accDiffTargetToken(targetEntry), state, reactorToken, targetEntry);
+}
+
+/** Same gate against an already-resolved token, for callers with no accdiff entry. */
+function runApplyToCondition(mod, targetToken, state, reactorToken, entry = null)
+{
     if (!mod.applyToCondition)
         return true;
     try
@@ -134,7 +141,7 @@ function evaluateApplyToCondition(mod, targetEntry, state, reactorToken)
         }
         else
             return true;
-        const result = fn(accDiffTargetToken(targetEntry), state, reactorToken, targetEntry);
+        const result = fn(targetToken, state, reactorToken, entry);
         if (result instanceof Promise)
         {
             console.error(`lancer-automations | applyToCondition for "${mod.name || mod.id}" is async. Must be synchronous.`);
@@ -252,7 +259,7 @@ export function applyTagBonus(state, bonus)
             lid: tagId,
             val: String(Number.parseInt(bonus.val) || 0),
             name: tagName,
-            description: `Granted by bonus: ${bonus.name}`
+            description: localizeFormat('LA.bonus.grantedBy', { name: bonus.name })
         });
     }
 }
@@ -2612,7 +2619,7 @@ export function injectKnockbackCheckbox(state)
                     <input type="checkbox" class="csm-knockback-checkbox ${containerScope}" ${checked ? 'checked' : ''}>
                     <span style="text-wrap: nowrap;">Knockback</span>
                 </label>
-                <i class="csm-knockback-icon mdi mdi-arrow-expand-all i--2 ${valueScope}" data-tooltip="Knockback" style="${checked ? '' : 'display:none;opacity:0;'}"></i>
+                <i class="csm-knockback-icon mdi mdi-arrow-expand-all i--2 ${valueScope}" data-tooltip="${localize('LA.bonus.knockback')}" style="${checked ? '' : 'display:none;opacity:0;'}"></i>
                 <input class="lancer-input csm-knockback-value reliable-value ${valueScope}"
                        type="text" inputmode="numeric" pattern="[0-9]*" data-dtype="string" value="${val}"
                        style="${checked ? '' : 'display:none;opacity:0;'}">
@@ -2780,7 +2787,7 @@ export function injectThrottledCheckbox(state)
         $configGrid.css('grid-template-areas', areas);
 
         const containerScope = _detectSvelteScope($form, 'label.container');
-        const statusText = CONFIG.statusEffects?.find(effect => effect.id === 'throttled')?.description ?? '';
+        const statusText = localize(CONFIG.statusEffects?.find(effect => effect.id === 'throttled')?.description ?? '');
         const $row = $(`
             <div class="la-throttled-row" style="grid-area: throttled; display: flex; align-items: center; margin-top: 4px;">
                 <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;" data-tooltip="${statusText.replace(/"/g, '&quot;')}">
@@ -2890,7 +2897,8 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 }
             }
 
-            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes)
+            // A filtered resistance is decided per attack, so it must not be baked on permanently.
+            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData))
             {
                 for (const rt of bonusData.damageTypes)
                 {
@@ -3007,7 +3015,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 }
             }
 
-            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes)
+            if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData))
             {
                 if (!extraOptions.changes)
                     extraOptions.changes = [];
@@ -3551,14 +3559,15 @@ export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false }
 
 /**
  * @param {string[]|null} [options.damageTypes] Only consider bonuses covering one of these damage types
+ * @param {object[]|null} [options.bonuses] Prefiltered candidates, skips the flag re-read
  * @returns {Promise<boolean>} True if a charge was spent
  */
-export async function consumeImmunityUse(actor, subtype, state = null, { damageTypes = null } = {})
+export async function consumeImmunityUse(actor, subtype, state = null, { damageTypes = null, bonuses = null } = {})
 {
     if (!actor)
         return false;
     const wanted = damageTypes?.map(type => String(type).toLowerCase());
-    const candidates = getImmunityBonuses(actor, subtype, state)
+    const candidates = (bonuses ?? getImmunityBonuses(actor, subtype, state))
         .filter(bonus => bonus.consumeOnUsage === true)
         .filter(bonus => !wanted || !bonus.damageTypes || bonus.damageTypes.some(type =>
         {
@@ -3583,6 +3592,9 @@ export async function burnBonusUsageForFlow(state)
     for (const candidate of Object.values(usage.candidates))
     {
         if (candidate.consumeOnUsage === false || !supportsConsumeOnUsage(candidate.type, candidate.subtype))
+            continue;
+        // Immunities burn where they are consulted, not on the bearer's own roll.
+        if (candidate.type === 'immunity')
             continue;
         if (typeof candidate.uses !== 'number')
             continue;
@@ -3888,14 +3900,89 @@ export function getImmunityBonuses(actor, subtype = null, state = null)
         .filter(bonus => bonus.type === "immunity" && (!subtype || bonus.subtype === subtype) && linkTierGate(bonus, actor));
 }
 
+// Only source for reactorToken in condition lambdas.
+function withOwnerContext(bonus, ownerTokenId)
+{
+    if (!ownerTokenId || bonus.context?.ownerTokenId)
+        return bonus;
+    return { ...bonus, context: { ...bonus.context, ownerTokenId } };
+}
+
+/**
+ * Immunity bonuses that also pass their rollTypes / itemLids / condition / applyToCondition filters.
+ * Unfiltered when no state is given. `state.actor` is the other party.
+ * @param {any} actor Actor, Token or TokenDocument holding the immunity
+ * @param {string} subtype
+ * @param {any} [state] flow state
+ * @param {object} [options]
+ * @param {string} [options.flowType] tag set to build
+ * @param {string|null} [options.ownerTokenId] bearer token, the `reactorToken` of applyToCondition
+ * @param {any} [options.otherToken] other party, the `target` of applyToCondition
+ * @returns {object[]}
+ */
+export function getApplicableImmunityBonuses(actor, subtype, state = null, { flowType = 'damage', ownerTokenId = null, otherToken = null } = {})
+{
+    const bonuses = getImmunityBonuses(actor, subtype, state);
+    if (!state || bonuses.length === 0)
+        return bonuses;
+    const tags = getFlowTags(flowType, state);
+    const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
+    // No other party means nothing for applyToCondition to judge, so the immunity stands.
+    return bonuses.filter(bonus =>
+        isBonusApplicable(withOwnerContext(bonus, ownerTokenId), tags, state)
+        && (!otherToken || runApplyToCondition(bonus, otherToken, state, ownerToken)));
+}
+
 /** @returns {string[]} array of immunity source names; empty if not immune */
-export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null)
+// These gates are not flows, so the item and roll-type filters are dropped rather than failed.
+function passesGateFilters(bonus, state, ownerTokenId, otherToken)
+{
+    const gateState = state ?? { actor: otherToken?.actor ?? null, data: {} };
+    const gated = withOwnerContext({ ...bonus, rollTypes: null, itemLids: null, itemId: null }, ownerTokenId);
+    if (!isBonusApplicable(gated, new Set(['all']), gateState))
+        return false;
+    const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
+    return !otherToken || runApplyToCondition(bonus, otherToken, gateState, ownerToken);
+}
+
+/**
+ * Immunity bonuses passing their condition / applyToCondition gates outside a flow.
+ * Unfiltered when no context is supplied, so liveness checks keep the fast path.
+ * @param {any} actor bearer
+ * @param {string} subtype
+ * @param {object} [context]
+ * @param {any} [context.ownerToken] bearer token, the `reactorToken` of applyToCondition
+ * @param {any} [context.otherToken] other party, the `target` of applyToCondition
+ * @param {any} [context.state]
+ * @returns {object[]}
+ */
+export function getGateImmunityBonuses(actor, subtype, { ownerToken = null, otherToken = null, state = null } = {})
+{
+    const bonuses = getImmunityBonuses(actor, subtype, state);
+    if (bonuses.length === 0 || !(state || ownerToken || otherToken))
+        return bonuses;
+    return bonuses.filter(bonus => passesGateFilters(bonus, state, ownerToken?.id ?? null, otherToken));
+}
+
+/**
+ * Effect-immunity bonuses matching that status, after their condition / applyToCondition gates.
+ * @param {any} actor bearer
+ * @param {string} effectIdOrName
+ * @param {any} [effect] the ActiveEffect being applied, widens the match
+ * @param {any} [state] flow state, when one exists
+ * @param {object} [tokens]
+ * @param {string|null} [tokens.ownerTokenId] bearer token id
+ * @param {any} [tokens.otherToken] whoever applied the status, when known
+ * @returns {object[]}
+ */
+export function getEffectImmunityBonuses(actor, effectIdOrName, effect = null, state = null, { ownerTokenId = null, otherToken = null } = {})
 {
     if (!actor || !effectIdOrName)
         return [];
 
-    const effectImmunities = getImmunityBonuses(actor, "effect", state);
-    const matchedSources = [];
+    const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
+    const effectImmunities = getGateImmunityBonuses(actor, "effect", { ownerToken, otherToken, state });
+    const matched = [];
 
     const incomingLower = effectIdOrName.toLowerCase();
     const incomingTail = incomingLower.split('.').pop();
@@ -3937,14 +4024,32 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null, stat
         });
 
         if (isImmune)
-            matchedSources.push(b.source || b.name || "Unknown Immunity");
+            matched.push(b);
     }
 
-    return matchedSources;
+    return matched;
 }
 
-/** @returns {any[]} Resistance bonuses matching that damage type */
-export function checkDamageResistances(actor, damageType)
+/** @returns {string[]} array of immunity source names; empty if not immune */
+export function checkEffectImmunities(actor, effectIdOrName, effect = null, state = null, tokens = {})
+{
+    return getEffectImmunityBonuses(actor, effectIdOrName, effect, state, tokens)
+        .map(bonus => bonus.source || bonus.name || "Unknown Immunity");
+}
+
+/** @returns {boolean} true when the bonus is gated on something only a flow can answer */
+export function hasBonusFilters(bonus)
+{
+    return !!(bonus?.rollTypes?.length || bonus?.itemLids?.length || bonus?.itemId || bonus?.condition || bonus?.applyToCondition);
+}
+
+/**
+ * @param {any} actor
+ * @param {string} damageType
+ * @param {string[]|null} [allowedIds] ids that passed their filters in the damage flow; null skips the check
+ * @returns {any[]} Resistance bonus source names matching that damage type
+ */
+export function checkDamageResistances(actor, damageType, allowedIds = null)
 {
     if (!actor || !damageType)
         return [];
@@ -3952,20 +4057,41 @@ export function checkDamageResistances(actor, damageType)
     const incomingLower = damageType.toLowerCase();
 
     return resistanceBonuses
-        .filter(b => b.damageTypes && b.damageTypes.some(t => t.toLowerCase() === incomingLower || t.toLowerCase() === "variable" || t.toLowerCase() === "all"))
-        .map(b => b.source || b.name || "Unknown Resistance");
+        .filter(bonus => !allowedIds || !hasBonusFilters(bonus) || !bonus.id || allowedIds.includes(bonus.id))
+        .filter(bonus => bonus.damageTypes && bonus.damageTypes.some(type => type.toLowerCase() === incomingLower || type.toLowerCase() === "variable" || type.toLowerCase() === "all"))
+        .map(bonus => bonus.source || bonus.name || "Unknown Resistance");
 }
 
 // Resistance effects consumed on damage burn at apply time, after the halving they granted.
 const _deferredResistanceConsumption = new Map();
 
+/** Mirror of the defer, for clients that did not run the damage flow. */
+export function receiveDeferredResistanceConsumption({ actorUuid, effectId, clear })
+{
+    if (!actorUuid)
+        return;
+    if (clear)
+    {
+        _deferredResistanceConsumption.delete(actorUuid);
+        return;
+    }
+    if (!effectId)
+        return;
+    const pending = _deferredResistanceConsumption.get(actorUuid) ?? new Set();
+    pending.add(effectId);
+    _deferredResistanceConsumption.set(actorUuid, pending);
+}
+
+// The flow runs on the attacker's client but damageCalc runs on the defender's owner, so mirror it everywhere.
 export function deferResistanceEffectConsumption(actor, effect)
 {
     if (!actor?.uuid || !effect?.id)
         return;
-    const pending = _deferredResistanceConsumption.get(actor.uuid) ?? new Set();
-    pending.add(effect.id);
-    _deferredResistanceConsumption.set(actor.uuid, pending);
+    receiveDeferredResistanceConsumption({ actorUuid: actor.uuid, effectId: effect.id });
+    game.socket.emit('module.lancer-automations', {
+        action: 'deferResistanceConsumption',
+        payload: { actorUuid: actor.uuid, effectId: effect.id }
+    });
 }
 
 async function _consumeDeferredResistanceEffects(actor, damage, options)
@@ -3974,6 +4100,10 @@ async function _consumeDeferredResistanceEffects(actor, damage, options)
     if (!pending)
         return;
     _deferredResistanceConsumption.delete(actor.uuid);
+    game.socket.emit('module.lancer-automations', {
+        action: 'deferResistanceConsumption',
+        payload: { actorUuid: actor.uuid, clear: true }
+    });
     if (options?.paracausal || actor.system?.statuses?.shredded)
         return;
     for (const effectId of pending)
@@ -3992,6 +4122,7 @@ async function _consumeDeferredResistanceEffects(actor, damage, options)
 
 // Bridges bonus-based resistances into damageCalc, which only reads system.resistances.
 let _pendingApplyHalvedActorUuid = null;
+let _pendingResistanceVerdict = null;
 export function initDamageCalcWrapper()
 {
     if (typeof libWrapper === 'undefined')
@@ -4004,14 +4135,18 @@ export function initDamageCalcWrapper()
         if (!button)
             return;
         _pendingApplyHalvedActorUuid = null;
+        _pendingResistanceVerdict = null;
         const chatMessageElement = button.closest('.chat-message.message');
         const damageData = game.messages?.get(chatMessageElement?.dataset.messageId)?.flags?.lancer?.damageData;
         const targetUuid = button.closest('.lancer-damage-button-group')?.dataset?.target;
         if (!damageData || !targetUuid)
             return;
         const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
+        const actorUuid = /** @type {any} */ (fromUuidSync(targetUuid))?.actor?.uuid ?? null;
         if (targetResult?.half_damage)
-            _pendingApplyHalvedActorUuid = /** @type {any} */ (fromUuidSync(targetUuid))?.actor?.uuid ?? null;
+            _pendingApplyHalvedActorUuid = actorUuid;
+        if (actorUuid && Array.isArray(targetResult?.laResistance))
+            _pendingResistanceVerdict = { actorUuid, ids: targetResult.laResistance };
     }, { capture: true });
 
     libWrapper.register(MODULE_ID,'CONFIG.Actor.documentClass.prototype.damageCalc',
@@ -4020,13 +4155,16 @@ export function initDamageCalcWrapper()
             const alreadyHalved = _pendingApplyHalvedActorUuid !== null && _pendingApplyHalvedActorUuid === this.uuid;
             if (alreadyHalved)
                 _pendingApplyHalvedActorUuid = null;
+            // No verdict means no damage card decided this, so filtered bonuses stay permissive.
+            const allowedIds = _pendingResistanceVerdict?.actorUuid === this.uuid ? _pendingResistanceVerdict.ids : null;
+            _pendingResistanceVerdict = null;
             const resistances = this.system?.resistances;
             const bridged = [];
             if (resistances && !alreadyHalved)
             {
                 for (const type of ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat'])
                 {
-                    if (!resistances[type] && checkDamageResistances(this, type).length > 0)
+                    if (!resistances[type] && checkDamageResistances(this, type, allowedIds).length > 0)
                     {
                         resistances[type] = true;
                         bridged.push(type);
@@ -4070,12 +4208,12 @@ export function initDamageCalcWrapper()
 }
 
 /** @returns {object[]} damages with immune types zeroed */
-export function applyDamageImmunities(actor, damages, state = null)
+export function applyDamageImmunities(actor, damages, state = null, bonuses = null)
 {
     if (!actor || !damages)
         return damages;
 
-    const damageImmunities = getImmunityBonuses(actor, "damage", state);
+    const damageImmunities = bonuses ?? getImmunityBonuses(actor, "damage", state);
     if (damageImmunities.length === 0)
         return damages;
 
@@ -4122,61 +4260,49 @@ export function convertHeatToEnergyIfHeatless(actor, damages)
     return damages.map(d => (d?.type === 'Heat' ? { ...d, type: 'Energy' } : d));
 }
 
-/** @returns {Promise<boolean>} */
-export async function hasCritImmunity(actor, attackerActor = null, state = null)
+/**
+ * Applicable crit / hit / miss immunity bonuses held by the defender.
+ * Unfiltered when the attacker is unknown, matching the old "no attacker means immune" rule.
+ * @param {any} actor defender
+ * @param {string} subtype crit, hit or miss
+ * @param {any} [attackerActor]
+ * @param {any} [state] the attack flow state
+ * @param {object} [tokens]
+ * @param {any} [tokens.defenderToken] bearer, the `reactorToken` of applyToCondition
+ * @param {any} [tokens.attackerToken] the `target` of applyToCondition
+ * @returns {object[]}
+ */
+export function getAttackImmunityBonuses(actor, subtype, attackerActor = null, state = null, { defenderToken = null, attackerToken = null } = {})
 {
     if (!actor)
-        return false;
-    const candidates = getImmunityBonuses(actor, "crit", state);
-    if (candidates.length === 0)
-        return false;
-    if (!attackerActor)
-        return true;
+        return [];
+    const raw = getImmunityBonuses(actor, subtype, state);
+    if (raw.length === 0 || !attackerActor)
+        return raw;
     const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates)
-    {
-        if (await isBonusApplicable(b, new Set(), attackerState))
-            return true;
-    }
-    return false;
+    return getApplicableImmunityBonuses(actor, subtype, attackerState, {
+        flowType: 'attack',
+        ownerTokenId: defenderToken?.id ?? null,
+        otherToken: attackerToken
+    });
 }
 
 /** @returns {Promise<boolean>} */
-export async function hasHitImmunity(actor, attackerActor = null, state = null)
+export async function hasCritImmunity(actor, attackerActor = null, state = null, tokens = {})
 {
-    if (!actor)
-        return false;
-    const candidates = getImmunityBonuses(actor, "hit", state);
-    if (candidates.length === 0)
-        return false;
-    if (!attackerActor)
-        return true;
-    const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates)
-    {
-        if (await isBonusApplicable(b, new Set(), attackerState))
-            return true;
-    }
-    return false;
+    return getAttackImmunityBonuses(actor, "crit", attackerActor, state, tokens).length > 0;
 }
 
 /** @returns {Promise<boolean>} */
-export async function hasMissImmunity(actor, attackerActor = null, state = null)
+export async function hasHitImmunity(actor, attackerActor = null, state = null, tokens = {})
 {
-    if (!actor)
-        return false;
-    const candidates = getImmunityBonuses(actor, "miss", state);
-    if (candidates.length === 0)
-        return false;
-    if (!attackerActor)
-        return true;
-    const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
-    for (const b of candidates)
-    {
-        if (await isBonusApplicable(b, new Set(), attackerState))
-            return true;
-    }
-    return false;
+    return getAttackImmunityBonuses(actor, "hit", attackerActor, state, tokens).length > 0;
+}
+
+/** @returns {Promise<boolean>} */
+export async function hasMissImmunity(actor, attackerActor = null, state = null, tokens = {})
+{
+    return getAttackImmunityBonuses(actor, "miss", attackerActor, state, tokens).length > 0;
 }
 
 
@@ -4216,6 +4342,10 @@ export const BonusesAPI = {
     cleanupActorBonusesFromTokens,
     executeGenericBonusMenu,
     getImmunityBonuses,
+    getApplicableImmunityBonuses,
+    getAttackImmunityBonuses,
+    getGateImmunityBonuses,
+    getEffectImmunityBonuses,
     checkEffectImmunities,
     applyDamageImmunities,
     checkDamageResistances,

@@ -1,43 +1,41 @@
 <form class="{{cssClass}} lancer-dialog-base" autocomplete="off">
     <header class="lancer-dialog-header" style="margin: -8px -8px 10px -8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
-            <h1 class="lancer-dialog-title" style="flex: 1; margin: 0; border: none;">Activation Manager</h1>
+            <h1 class="lancer-dialog-title" style="flex: 1; margin: 0; border: none;">{{localize "LA.reactionConfig.activationManager"}}</h1>
             <a class="item-find-btn" title="Find item / look up LID" style="color: #fff; font-size: 16px;"><i
                     class="fas fa-magnifying-glass"></i></a>
             <a class="help-btn" title="Help" style="color: #fff; font-size: 16px;"><i
                     class="fas fa-question-circle"></i></a>
         </div>
-        <p class="lancer-dialog-subtitle">Manage default and custom activations for checking triggers.</p>
+        <p class="lancer-dialog-subtitle">{{localize "LA.reactionConfig.manageDefaultAndCustomActivationsFor"}}</p>
     </header>
 
     <nav class="sheet-tabs tabs" data-group="primary">
-        <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> Activations</a>
-        <a class="item" data-tab="defaults"><i class="fas fa-book"></i> Defaults</a>
-        <a class="item" data-tab="startup"><i class="fas fa-play"></i> Startup</a>
-        <a class="item" data-tab="workshop"><i class="fas fa-globe"></i> Workshop</a>
+        <a class="item" data-tab="custom"><i class="fas fa-bolt"></i> {{localize "LA.reactionConfig.activations"}}</a>
+        <a class="item" data-tab="defaults"><i class="fas fa-book"></i> {{localize "LA.reactionConfig.defaults"}}</a>
+        <a class="item" data-tab="startup"><i class="fas fa-play"></i> {{localize "LA.reactionConfig.startup"}}</a>
+        <a class="item" data-tab="workshop"><i class="fas fa-globe"></i> {{localize "LA.reactionConfig.workshop"}}</a>
     </nav>
 
     <div class="content">
         <!-- CUSTOM TAB -->
         <div class="tab" data-tab="custom">
             <div class="lancer-action-buttons" style="margin: 0 0 8px 0;">
-                <button type="button" class="lancer-action-btn add-reaction"><i class="fas fa-plus"></i> Add
-                    Activation</button>
+                <button type="button" class="lancer-action-btn add-reaction"><i class="fas fa-plus"></i> {{localize "LA.reactionConfig.addActivation"}}</button>
                 <button type="button" class="lancer-action-btn create-folder-btn"><i class="fas fa-folder-plus"></i>
-                    Create Folder</button>
+                    {{localize "LA.reactionConfig.createFolder"}}</button>
                 <button type="button" class="lancer-action-btn export-pack-btn"><i class="fas fa-file-export"></i>
-                    Export Pack</button>
+                    {{localize "LA.reactionConfig.exportPack"}}</button>
                 <button type="button" class="lancer-action-btn import-pack-btn"><i class="fas fa-file-import"></i>
-                    Import Pack</button>
+                    {{localize "LA.reactionConfig.importPack"}}</button>
             </div>
-            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">Drag items onto folder headers to
-                organize.</p>
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">{{localize "LA.reactionConfig.dragItemsOntoFolderHeadersTo"}}</p>
             <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
                     <input type="text" class="search-input" placeholder="Search by name or LID..."
                         style="flex: 2; height: 28px; padding: 4px 8px;">
                     <select class="trigger-filter" style="flex: 1; height: 28px;">
-                        <option value="">All Triggers</option>
+                        <option value="">{{localize "LA.reactionConfig.allTriggers"}}</option>
                         {{#each allTriggers}}
                         <option value="{{this}}">{{this}}</option>
                         {{/each}}
@@ -49,10 +47,10 @@
                 </div>
                 <div class="reaction-header flexrow">
                     <span class="col-enabled" title="Enabled"></span>
-                    <span class="col-type">Type</span>
-                    <span class="col-name">Name / LID</span>
-                    <span class="col-triggers">Triggers</span>
-                    <span class="col-controls">Controls</span>
+                    <span class="col-type">{{localize "LA.reactionConfig.type"}}</span>
+                    <span class="col-name">{{localize "LA.reactionConfig.nameLid"}}</span>
+                    <span class="col-triggers">{{localize "LA.reactionConfig.triggers"}}</span>
+                    <span class="col-controls">{{localize "LA.reactionConfig.controls"}}</span>
                 </div>
                 <div class="scrollable">
                     {{!-- Custom Folders --}}
@@ -172,7 +170,7 @@
                                 style="opacity: 0.5; color: var(--primary-color);"></i></span>
                         <span class="col-type" style="flex: 0.3;"></span>
                         <span class="col-name" style="flex: 3;"><span
-                                style="opacity: 0.6; font-weight: 600;">Unfiled</span></span>
+                                style="opacity: 0.6; font-weight: 600;">{{localize "LA.reactionConfig.unfiled"}}</span></span>
                         <span class="col-triggers" style="flex: 2;"></span>
                         <span class="col-controls" style="flex: 0.5;"></span>
                     </div>
@@ -259,7 +257,7 @@
                     {{/if}}
                     {{else}}
                     {{#unless customFolders.length}}
-                    <p class="notes" style="text-align: center; color: var(--la-ink-dim);">No custom activations defined.</p>
+                    <p class="notes" style="text-align: center; color: var(--la-ink-dim);">{{localize "LA.reactionConfig.noCustomActivationsDefined"}}</p>
                     {{/unless}}
                     {{/each}}
                 </div>
@@ -268,14 +266,13 @@
 
         <!-- DEFAULTS TAB -->
         <div class="tab" data-tab="defaults">
-            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">Default activations from the
-                registry. Click copy to create an editable override.</p>
+            <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">{{localize "LA.reactionConfig.defaultActivationsFromTheRegistryClick"}}</p>
             <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="filter-bar" style="display: flex; gap: 8px; margin-bottom: 6px; align-items: center;">
                     <input type="text" class="search-input" placeholder="Search by name or LID..."
                         style="flex: 2; height: 28px; padding: 4px 8px;">
                     <select class="trigger-filter" style="flex: 1; height: 28px;">
-                        <option value="">All Triggers</option>
+                        <option value="">{{localize "LA.reactionConfig.allTriggers"}}</option>
                         {{#each allTriggers}}
                         <option value="{{this}}">{{this}}</option>
                         {{/each}}
@@ -287,9 +284,9 @@
                 </div>
                 <div class="reaction-header flexrow">
                     <span class="col-enabled" title="Enabled"></span>
-                    <span class="col-type">Type</span>
-                    <span class="col-name">Name / LID</span>
-                    <span class="col-triggers">Triggers</span>
+                    <span class="col-type">{{localize "LA.reactionConfig.type"}}</span>
+                    <span class="col-name">{{localize "LA.reactionConfig.nameLid"}}</span>
+                    <span class="col-triggers">{{localize "LA.reactionConfig.triggers"}}</span>
                     <span class="col-controls"></span>
                 </div>
                 <div class="scrollable">
@@ -343,7 +340,7 @@
                                                 class="fas fa-cube" title="Item-Based"></i>{{/if}}
                                         </span>
                                         <span class="col-name">
-                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
+                                            <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">{{localize "LA.reactionConfig.edited"}}</span>{{/if}}
                                             {{#if this.comments}}<span
                                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                             {{#if this.reactionPath}}<br><span
@@ -369,11 +366,11 @@
                                 </span>
                                 <span class="col-name">
                                     {{#if this.isGeneral}}
-                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">{{localize "LA.reactionConfig.edited"}}</span>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     {{else}}
-                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">EDITED</span>{{/if}}
+                                    <strong>{{this.name}}</strong>{{#if this.workshopId}}<i class="fas fa-cloud-arrow-down" title="Workshop import: {{this.workshopId}}" style="color: var(--la-accent); font-size: 0.85em; margin-left: 4px;"></i>{{/if}}{{#if this.isOverridden}}<span title="This default has been overridden by your edited version" style="background: var(--la-accent); color: #fff; font-size: 0.68em; font-weight: bold; letter-spacing: 0.5px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle;">{{localize "LA.reactionConfig.edited"}}</span>{{/if}}
                                     {{#if this.comments}}<span
                                         style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.comments}})</span>{{/if}}
                                     <br><span
@@ -398,20 +395,18 @@
         <!-- STARTUP TAB -->
         <div class="tab" data-tab="startup">
             <div class="lancer-action-buttons" style="margin: 0 0 8px 0;">
-                <button type="button" class="lancer-action-btn add-script"><i class="fas fa-plus"></i> Add
-                    Script</button>
+                <button type="button" class="lancer-action-btn add-script"><i class="fas fa-plus"></i> {{localize "LA.reactionConfig.addScript"}}</button>
             </div>
             <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">
-                Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable
-                helpers, then access them in activations via <code>api.getUserHelper(name)</code>.
+                {{{localize "LA.reactionConfig.scriptsNote"}}}
             </p>
             <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="reaction-header flexrow">
                     <span class="col-enabled" title="Enabled"></span>
-                    <span class="col-type">Type</span>
-                    <span class="col-name">Name / Description</span>
-                    <span class="col-triggers">When</span>
-                    <span class="col-controls">Controls</span>
+                    <span class="col-type">{{localize "LA.reactionConfig.type"}}</span>
+                    <span class="col-name">{{localize "LA.reactionConfig.nameDescription"}}</span>
+                    <span class="col-triggers">{{localize "LA.reactionConfig.when"}}</span>
+                    <span class="col-controls">{{localize "LA.reactionConfig.controls"}}</span>
                 </div>
                 <div class="scrollable">
                     {{#each startupScripts}}
@@ -432,7 +427,7 @@
                             {{#if this.description}}<span
                                 style="font-size: 0.8em; color: var(--la-ink-dim); font-style: italic; margin-left: 5px;">({{this.description}})</span>{{/if}}
                         </span>
-                        <span class="col-triggers">On Ready</span>
+                        <span class="col-triggers">{{localize "LA.reactionConfig.onReady"}}</span>
                         <span class="col-controls">
                             <a class="edit-script" title="{{#if this.builtin}}View Code{{else}}Edit{{/if}}"><i
                                     class="fas fa-{{#if this.builtin}}eye{{else}}edit{{/if}}"></i></a>
@@ -441,7 +436,7 @@
                         </span>
                     </div>
                     {{else}}
-                    <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">No startup scripts defined.
+                    <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">{{localize "LA.reactionConfig.noStartupScriptsDefined"}}
                     </p>
                     {{/each}}
                 </div>
@@ -451,7 +446,7 @@
         <!-- WORKSHOP TAB -->
         <div class="tab" data-tab="workshop">
             <div class="la-workshop-root" style="display: flex; flex-direction: column; min-height: 0; flex: 1;">
-                <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">Loading the workshop...</p>
+                <p class="notes" style="text-align: center; color: var(--la-ink-dim); padding: 16px;">{{localize "LA.reactionConfig.loadingTheWorkshop"}}</p>
             </div>
         </div>
     </div>
@@ -729,5 +724,32 @@
 
     .la-ws-file .la-ws-open:hover {
         text-decoration: underline;
+    }
+
+    .la-ws-search {
+        flex: 1;
+        min-width: 0;
+        margin-left: 8px;
+        align-self: center;
+    }
+
+    .la-ws-stats {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: 8px;
+        font-size: 0.8em;
+        color: var(--la-ink-dim);
+        white-space: nowrap;
+    }
+
+    .la-ws-stats .la-ws-like {
+        cursor: pointer;
+        color: var(--la-ink-dim);
+    }
+
+    .la-ws-stats .la-ws-like:hover,
+    .la-ws-stats .la-ws-like.liked {
+        color: #c0392b;
     }
 </style>

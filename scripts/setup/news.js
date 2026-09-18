@@ -1,6 +1,8 @@
 import { getPendingUpdate } from "./version-check.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize } from "../tools/string-utils.js";
 import { getSupabase } from "./supabase-client.js";
+import { getOrCreateInstallId } from "./telemetry.js";
 import { escapeAttr as _escAttr } from "../tools/misc-tools.js";
 
 import { MODULE_ID } from "../tools/constants.js";
@@ -13,7 +15,6 @@ const SEEN_SETTING = "seenNewsIds";
 const NEWS_CONSENT_KEY = "dataConsent";
 const NEWS_PENDING = "pending";
 const POLL_RESPONDED_SETTING = "respondedPollIds";
-const INSTALL_ID_SETTING = "dataInstallId";
 const HISTORY_HINT = `<p style="margin-top: 12px; padding: 8px 10px; background: rgba(120,46,34,0.08); border-left: 3px solid #782e22; border-radius: 2px; font-size: 0.9em;">
     <i class="fas fa-info-circle"></i> Past news and release notes are available under
     <b>Configure Settings → Module Settings → Lancer Automations → Tools & Extras → News & Releases</b>.
@@ -257,24 +258,6 @@ function _collectInstallContext()
     return ctx;
 }
 
-async function _getOrCreateInstallId()
-{
-    try
-    {
-        let id = getModuleSetting(INSTALL_ID_SETTING) || "";
-        if (!id)
-        {
-            id = foundry.utils.randomID();
-            await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, id);
-        }
-        return id;
-    }
-    catch
-    {
-        return foundry.utils.randomID();
-    }
-}
-
 async function _submitPoll(pollEl)
 {
     const pollId = pollEl.dataset.pollId;
@@ -290,7 +273,7 @@ async function _submitPoll(pollEl)
         if (fieldValue !== "")
             data[el.name] = fieldValue;
     }
-    const installId = await _getOrCreateInstallId();
+    const installId = await getOrCreateInstallId();
     const context = _collectInstallContext();
     const payload = { install_id: installId, ...context, ...data };
     status.textContent = "Sending...";
@@ -309,7 +292,7 @@ async function _submitPoll(pollEl)
     catch (err)
     {
         console.warn("lancer-automations | Poll submit failed:", err);
-        status.textContent = "Could not submit. Try again later.";
+        status.textContent = localize("LA.news.submitFailed");
         form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = false);
     }
 }
@@ -462,7 +445,7 @@ function _showCombinedDialog({ news, update, firstRun })
         buttons: {
             ok: {
                 icon: '<i class="fas fa-check"></i>',
-                label: "Got it",
+                label: localize("LA.common.gotIt"),
                 callback: () =>
                 {
                     ackNews(); ackUpdate();
@@ -559,10 +542,10 @@ export async function openNewsHistory()
     `;
 
     new Dialog({
-        title: "Lancer Automations - News & Releases",
+        title: localize('LA.dialogTitle.lancerAutomationsNewsReleases'),
         content,
         buttons: {
-            close: { icon: '<i class="fas fa-times"></i>', label: "Close" }
+            close: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.close") }
         },
         default: "close",
         render: (html) =>

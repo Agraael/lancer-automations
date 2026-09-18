@@ -9,6 +9,7 @@ import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../i
 import { getActivationIcon, executeProfileSwitch, executeSimpleActivation } from '../tools/misc-tools.js';
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits } from '../combat/per-frequency-tags.js';
 import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
@@ -408,7 +409,7 @@ export function laHudItemChildren(item, opts = {})
     // Profiles
     if (profiles.length > 1)
     {
-        items.push({ label: 'PROFILES', isSectionLabel: true });
+        items.push({ label: localize('LA.tokenHud.profiles'), isSectionLabel: true });
         profiles.forEach((profile, idx) =>
         {
             const isActive = idx === activeIdx;
@@ -428,7 +429,7 @@ export function laHudItemChildren(item, opts = {})
                 _profile: profile,
                 favKey: `${item.uuid ?? item.id}|profile-${idx}`,
                 onClick: isActive
-                    ? () => ui.notifications.info(`${profileName} is already the active profile.`)
+                    ? () => ui.notifications.info(localizeFormat('LA.notify.alreadyActiveProfile', { name: profileName }))
                     : () => executeProfileSwitch(item, idx),
                 refreshCol4: () => laHudItemChildren(item, opts),
                 onRightClick: showPopup ? (row) =>
@@ -445,7 +446,7 @@ export function laHudItemChildren(item, opts = {})
     // Mod
     if (modItem)
     {
-        items.push({ label: 'MOD', isSectionLabel: true });
+        items.push({ label: localize('LA.tokenHud.mod'), isSectionLabel: true });
         items.push({
             label: modItem.name,
             icon: ICON_MOD,

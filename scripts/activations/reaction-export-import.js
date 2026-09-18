@@ -2,7 +2,7 @@
 
 import { ReactionManager, clearScriptCache } from "./reaction-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { escapeHtml as esc } from "../tools/string-utils.js";
+import { escapeHtml as esc, localize, localizeFormat } from "../tools/string-utils.js";
 
 export class ReactionExport extends FormApplication
 {
@@ -10,7 +10,7 @@ export class ReactionExport extends FormApplication
     {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-export",
-            title: "Export Configuration",
+            title: localize('LA.dialogTitle.exportConfiguration'),
             width: 400,
             height: "auto"
         });
@@ -32,7 +32,7 @@ export class ReactionImport extends FormApplication
     {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-import",
-            title: "Import Configuration",
+            title: localize('LA.dialogTitle.importConfiguration'),
             width: 400,
             height: "auto"
         });
@@ -44,11 +44,11 @@ export class ReactionImport extends FormApplication
     render(force = false, options = {})
     {
         new Dialog({
-            title: "Import Configuration",
+            title: localize('LA.dialogTitle.importConfiguration'),
             content: `
                 <form>
                     <div class="form-group">
-                        <label>Select JSON File</label>
+                        <label>${localize('LA.reactionImport.selectJsonFile')}</label>
                         <input type="file" name="importFile" accept=".json" style="width: 100%;">
                     </div>
                 </form>
@@ -56,13 +56,13 @@ export class ReactionImport extends FormApplication
             buttons: {
                 next: {
                     icon: '<i class="fas fa-file-import"></i>',
-                    label: "Open",
+                    label: localize("LA.common.open"),
                     callback: async (html) =>
                     {
                         const fileInput = /** @type {HTMLInputElement} */ (html.find('input[name="importFile"]')[0]);
                         if (!fileInput.files.length)
                         {
-                            ui.notifications.warn("Please select a file to import.");
+                            ui.notifications.warn(localize('LA.notify.pleaseSelectAFileToImport'));
                             return;
                         }
                         try
@@ -73,13 +73,13 @@ export class ReactionImport extends FormApplication
                         }
                         catch (e)
                         {
-                            ui.notifications.error(`Failed to parse file: ${e.message}`);
+                            ui.notifications.error(localizeFormat('LA.notify.parseFileFailed', { error: e.message }));
                         }
                     }
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel"
+                    label: localize("LA.common.cancel")
                 }
             },
             default: "next"
@@ -219,12 +219,12 @@ function openImportSummary(data)
     `;
 
     const dlg = new Dialog({
-        title: "Review Import",
+        title: localize('LA.dialogTitle.reviewImport'),
         content: body,
         buttons: {
             import: {
                 icon: '<i class="fas fa-file-import"></i>',
-                label: "Import Selected",
+                label: localize("LA.reactionImport.importSelected"),
                 callback: async (html) =>
                 {
                     const selection = { itemReactions: new Set(), generalReactions: new Set(), startupScripts: new Set(), settings: new Set(), externalSettings: new Set(), keybindings: new Set() };
@@ -238,7 +238,7 @@ function openImportSummary(data)
                     await ReactionManager.applyImportSelection(data, selection);
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
         },
         default: "import",
         render: (html) =>
@@ -466,19 +466,19 @@ export function openPackExport()
         </div>`;
 
     new Dialog({
-        title: "Export Pack",
+        title: localize('LA.dialogTitle.exportPack'),
         content: body,
         buttons: {
             export: {
                 icon: '<i class="fas fa-file-export"></i>',
-                label: "Export",
+                label: localize("LA.reactionExport.export"),
                 callback: (html) =>
                 {
                     const name = String(html.find('.la-pack-name').val() ?? '').trim() || 'Activation Pack';
                     const { items, generals, startups } = _collectPackSelection(html, itemReactions, generalReactions, startupScripts);
                     if (!Object.keys(items).length && !Object.keys(generals).length && !startups.length)
                     {
-                        ui.notifications.warn("Nothing selected to export.");
+                        ui.notifications.warn(localize('LA.notify.nothingSelectedToExport'));
                         return;
                     }
                     const pack = ReactionManager.stripWorkshopIds(_serializeFns({
@@ -492,10 +492,10 @@ export function openPackExport()
                     }));
                     const safeName = name.replace(/[^\w-]+/g, '_').slice(0, 60) || 'pack';
                     saveDataToFile(JSON.stringify(pack, null, 2), "application/json", `la-pack-${safeName}.json`);
-                    ui.notifications.info(`Exported pack "${name}".`);
+                    ui.notifications.info(localizeFormat('LA.notify.exportedPack', { name }));
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
         },
         default: "export",
         render: (html) => wirePackSelectAll(html)
@@ -505,24 +505,24 @@ export function openPackExport()
 export function openPackImport(onDone)
 {
     new Dialog({
-        title: "Import Pack",
+        title: localize('LA.dialogTitle.importPack'),
         content: `
             <form>
                 <div class="form-group">
-                    <label>Select pack JSON file</label>
+                    <label>${localize('LA.reactionImport.selectPackFile')}</label>
                     <input type="file" name="packFile" accept=".json" style="width:100%;">
                 </div>
             </form>`,
         buttons: {
             next: {
                 icon: '<i class="fas fa-file-import"></i>',
-                label: "Open",
+                label: localize("LA.common.open"),
                 callback: async (html) =>
                 {
                     const fileInput = /** @type {HTMLInputElement} */ (html.find('input[name="packFile"]')[0]);
                     if (!fileInput.files.length)
                     {
-                        ui.notifications.warn("Please select a file to import.");
+                        ui.notifications.warn(localize('LA.notify.pleaseSelectAFileToImport'));
                         return;
                     }
                     try
@@ -530,18 +530,18 @@ export function openPackImport(onDone)
                         const data = JSON.parse(await fileInput.files[0].text());
                         if (data?.type !== PACK_TYPE)
                         {
-                            ui.notifications.error("That file isn't a Lancer Automations pack.");
+                            ui.notifications.error(localize('LA.notify.thatFileIsnTALancerAutomations'));
                             return;
                         }
                         openPackImportSummary(data, onDone);
                     }
                     catch (e)
                     {
-                        ui.notifications.error(`Failed to parse file: ${e.message}`);
+                        ui.notifications.error(localizeFormat('LA.notify.parseFileFailed', { error: e.message }));
                     }
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
         },
         default: "next"
     }, { width: 400, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
@@ -580,12 +580,12 @@ function openPackImportSummary(data, onDone)
         </div>`;
 
     new Dialog({
-        title: "Import Pack",
+        title: localize('LA.dialogTitle.importPack'),
         content: body,
         buttons: {
             import: {
                 icon: '<i class="fas fa-file-import"></i>',
-                label: "Import Selected",
+                label: localize("LA.reactionImport.importSelected"),
                 callback: async (html) =>
                 {
                     const { items, generals, startups } = _collectPackSelection(html, itemReactions, generalReactions, startupScripts);
@@ -594,7 +594,7 @@ function openPackImportSummary(data, onDone)
                         onDone();
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel" }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
         },
         default: "import",
         render: (html) => wirePackSelectAll(html)
@@ -620,12 +620,12 @@ async function _resolveFolderName(name)
     return await new Promise(resolve =>
     {
         new Dialog({
-            title: "Folder Already Exists",
-            content: `<p>A folder named <b>${esc(name)}</b> already exists.</p><p>Merge the pack into it, or create a new folder?</p>`,
+            title: localize('LA.dialogTitle.folderAlreadyExists'),
+            content: localizeFormat('LA.reactionImport.folderExists', { name: esc(name) }),
             buttons: {
-                merge: { icon: '<i class="fas fa-folder-open"></i>', label: "Merge into it", callback: () => resolve(name) },
-                fresh: { icon: '<i class="fas fa-folder-plus"></i>', label: "New folder", callback: () => resolve(_uniqueFolderName(name)) },
-                cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
+                merge: { icon: '<i class="fas fa-folder-open"></i>', label: localize("LA.reactionImport.mergeIntoFolder"), callback: () => resolve(name) },
+                fresh: { icon: '<i class="fas fa-folder-plus"></i>', label: localize("LA.reactionImport.newFolder"), callback: () => resolve(_uniqueFolderName(name)) },
+                cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel"), callback: () => resolve(null) }
             },
             default: "merge"
         }, { classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
@@ -691,5 +691,5 @@ async function applyPackImport(packName, itemReactions, generalReactions, startu
     }
 
     clearScriptCache();
-    ui.notifications.info(`Imported pack "${packName}"${addedStartups ? ` (+${addedStartups} startup script${addedStartups === 1 ? '' : 's'})` : ''}.`);
+    ui.notifications.info(localizeFormat('LA.notify.importedPack', { name: packName, extra: addedStartups ? ` (+${addedStartups} startup script${addedStartups === 1 ? '' : 's'})` : '' }));
 }

@@ -2,10 +2,13 @@
 // Weighted movement reach: Dijkstra flood over grid cells using the ruler's own
 // per-cell cost core (evalCellStep), so the frontier matches what a drag would bill. style:ignore
 
-import { evalCellStep, getTerrainTypeMap, footprintShapesAt, standingTopFor, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
+import { evalCellStep, getTerrainTypeMap, footprintShapesAt, isClimbingImmune, isTerrainImmune, isPhasing } from "./cost-rules.js";
+import { elevationModeFor } from "./keybindings.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag } from "../tools/flag-utils.js";
 import { canPassObstructions } from "./movement-utils.js";
+import { laTokenGameplayHeight } from "../tools/token-height.js";
+import { makeWallBlocker } from "./wall-block.js";
 import { neighborKeys, getOccupiedOffsets, isHexGrid } from "../combat/grid-helpers.js";
 import { isHostile } from "../combat/overwatch.js";
 
@@ -94,6 +97,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
 
     const sceneDistance = canvas.scene?.dimensions?.distance ?? 1;
     const flying = action === 'fly';
+    const wallBlocked = makeWallBlocker(action);
     // Jump: flat steps cost double and clear terrain; height changes price as climb segments like walk.
     const jumping = action === 'jump';
     const noTerrainClimb = action === 'ignore' || autoElevDisabled();
@@ -105,6 +109,8 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
         sceneDistance,
         flying,
         noTerrainClimb,
+        elevationMode: noTerrainClimb ? null : elevationModeFor(action),
+        zHeight: laTokenGameplayHeight(tokenDoc),
         climbImmune: isClimbingImmune(tokenDoc),
         freeMode: false,
         terrainImmune: isTerrainImmune(tokenDoc),
@@ -131,9 +137,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
         return reach;
     }
     footprintCache.set(`${startOffset.i},${startOffset.j}`, startShapes);
-    const storedElevGrid = (origin?.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;
-    const groundElevGrid = startShapes.top;
-    const startTokenElev = noTerrainClimb ? storedElevGrid : Math.max(storedElevGrid, groundElevGrid);
+    const startTokenElev = (origin?.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;
 
     const footprintKeysOf = (offset) =>
     {
@@ -196,14 +200,11 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
 
     ctx.moverSize = Number(token.actor?.system?.size) || 0;
     ctx.standingRule = ctx.moverSize > 1 && canPassObstructions(tokenDoc);
-    const startGround = (ctx.standingRule && !flying)
-        ? standingTopFor(typeById, startShapes.footprint, ctx.moverSize, startShapes.top)
-        : groundElevGrid;
 
     const heap = makeHeap();
     const best = new Map();
     best.set(startKey, 0);
-    heap.push({ key: startKey, cost: 0, tokenElev: startTokenElev, terrainTop: startGround });
+    heap.push({ key: startKey, cost: 0, tokenElev: startTokenElev, floor: startTokenElev });
 
     while (heap.size)
     {
@@ -236,7 +237,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
                 if (nextCost >= (best.get(nextKey) ?? Infinity))
                     continue;
                 best.set(nextKey, nextCost);
-                heap.push({ key: nextKey, cost: nextCost, tokenElev: node.tokenElev, terrainTop: node.terrainTop });
+                heap.push({ key: nextKey, cost: nextCost, tokenElev: node.tokenElev, floor: node.floor });
                 continue;
             }
             if (blockCells.size)
@@ -252,11 +253,13 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
                 if (blocked)
                     continue;
             }
+            if (wallBlocked?.(canvas.grid.getCenterPoint({ i: nodeRow, j: nodeCol }), canvas.grid.getCenterPoint(nextOffset), node.tokenElev * sceneDistance))
+                continue;
             let step;
             try
             {
                 step = evalCellStep(tokenDoc, nextOffset,
-                    { prevFootprintKeys, prevTerrainTop: node.terrainTop, tokenElev: node.tokenElev, manualDelta: 0 }, ctx);
+                    { prevFootprintKeys, tokenElev: node.tokenElev, floor: node.floor, manualDelta: 0 }, ctx);
             }
             catch
             {
@@ -272,7 +275,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
             if (nextCost >= (best.get(nextKey) ?? Infinity))
                 continue;
             best.set(nextKey, nextCost);
-            heap.push({ key: nextKey, cost: nextCost, tokenElev: step.nextTokenElev, terrainTop: step.newTerrainTop });
+            heap.push({ key: nextKey, cost: nextCost, tokenElev: step.nextTokenElev, floor: step.nextFloor });
         }
     }
     return reach;
@@ -304,6 +307,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         return [];
 
     const flying = action === 'fly';
+    const wallBlocked = makeWallBlocker(action);
     const jumping = action === 'jump';
     const noTerrainClimb = action === 'ignore' || autoElevDisabled();
     const typeById = getTerrainTypeMap();
@@ -313,6 +317,8 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         sceneDistance,
         flying,
         noTerrainClimb,
+        elevationMode: noTerrainClimb ? null : elevationModeFor(action),
+        zHeight: laTokenGameplayHeight(tokenDoc),
         climbImmune: isClimbingImmune(tokenDoc),
         freeMode: false,
         terrainImmune: isTerrainImmune(tokenDoc),
@@ -416,18 +422,14 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
         return Math.max(Math.abs(col - goalOffset.j), Math.abs(row - goalOffset.i)) * sceneDistance + tieBias(col, row);
     };
 
-    const storedElevGrid = (origin.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;
-    const startTokenElev = noTerrainClimb ? storedElevGrid : Math.max(storedElevGrid, startShapes.top);
+    const startTokenElev = (origin.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;
 
     const heap = makeHeap();
     const gScore = new Map([[startKey, 0]]);
     const cameFrom = new Map();
     ctx.moverSize = Number(token.actor?.system?.size) || 0;
     ctx.standingRule = ctx.moverSize > 1 && canPassObstructions(tokenDoc);
-    const startGround = (ctx.standingRule && !flying)
-        ? standingTopFor(typeById, startShapes.footprint, ctx.moverSize, startShapes.top)
-        : startShapes.top;
-    heap.push({ key: startKey, cost: heuristic(startOffset.j, startOffset.i), g: 0, tokenElev: startTokenElev, terrainTop: startGround });
+    heap.push({ key: startKey, cost: heuristic(startOffset.j, startOffset.i), g: 0, tokenElev: startTokenElev, floor: startTokenElev });
 
     const NODE_CAP = 20000;
     let expansions = 0;
@@ -468,12 +470,14 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
                 if (blocked)
                     continue;
             }
+            if (wallBlocked?.(canvas.grid.getCenterPoint({ i: nodeRow, j: nodeCol }), canvas.grid.getCenterPoint(nextOffset), node.tokenElev * sceneDistance))
+                continue;
 
             let step;
             try
             {
                 step = evalCellStep(tokenDoc, nextOffset,
-                    { prevFootprintKeys, prevTerrainTop: node.terrainTop, tokenElev: node.tokenElev, manualDelta: 0 }, ctx);
+                    { prevFootprintKeys, tokenElev: node.tokenElev, floor: node.floor, manualDelta: 0 }, ctx);
             }
             catch
             {
@@ -489,7 +493,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
                 continue;
             gScore.set(nextKey, tentativeG);
             cameFrom.set(nextKey, node.key);
-            heap.push({ key: nextKey, cost: tentativeG + heuristic(nextCol, nextRow), g: tentativeG, tokenElev: step.nextTokenElev, terrainTop: step.newTerrainTop });
+            heap.push({ key: nextKey, cost: tentativeG + heuristic(nextCol, nextRow), g: tentativeG, tokenElev: step.nextTokenElev, floor: step.nextFloor });
         }
     }
     if (!reached)

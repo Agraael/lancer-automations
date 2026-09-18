@@ -61,19 +61,19 @@ function registerSettings()
         requiresReload: true
     });
     game.settings.register(MODULE_ID, COLOR_STANDARD, {
-        name: 'Speed Color: Standard', scope: 'client', type: String, default: '#1e88e5', config: false
+        name: 'LA.settings.speedProvider.colorStandard.name', scope: 'client', type: String, default: '#1e88e5', config: false
     });
     game.settings.register(MODULE_ID, COLOR_BOOST, {
-        name: 'Speed Color: Boost', scope: 'client', type: String, default: '#ffc107', config: false
+        name: 'LA.settings.speedProvider.colorBoost.name', scope: 'client', type: String, default: '#ffc107', config: false
     });
     game.settings.register(MODULE_ID, COLOR_OVER_BOOST, {
-        name: 'Speed Color: Over-boost', scope: 'client', type: String, default: '#d81b60', config: false
+        name: 'LA.settings.speedProvider.colorOverBoost.name', scope: 'client', type: String, default: '#d81b60', config: false
     });
     game.settings.register(MODULE_ID, 'speedProvider.colorFreeMovement', {
-        name: 'Speed Color: Free Movement', scope: 'client', type: String, default: '#ffffff', config: false
+        name: 'LA.settings.speedProvider.colorFreeMovement.name', scope: 'client', type: String, default: '#ffffff', config: false
     });
     game.settings.register(MODULE_ID, 'speedProvider.colorForceMovement', {
-        name: 'Speed Color: Force Movement', scope: 'client', type: String, default: '#8B5CF6', config: false
+        name: 'LA.settings.speedProvider.colorForceMovement.name', scope: 'client', type: String, default: '#8B5CF6', config: false
     });
 }
 

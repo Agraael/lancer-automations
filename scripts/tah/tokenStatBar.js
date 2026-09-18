@@ -117,6 +117,7 @@ const BAR_DEFS = [
 
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 function isEnabled()
 {
@@ -1163,7 +1164,7 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed)
                 <button type="button" class="la-extra-bar-toggle" title="${collapsed ? 'Expand' : 'Collapse'}">
                     <i class="fas fa-chevron-${collapsed ? 'right' : 'down'}"></i>
                 </button>
-                <input type="text" class="la-extra-bar-label" data-field="label" value="${_escAttr(entry.label ?? '')}" placeholder="Label" maxlength="14">
+                <input type="text" class="la-extra-bar-label" data-field="label" value="${_escAttr(entry.label ?? '')}" placeholder="${localize('LA.common.label')}" maxlength="14">
                 <span class="la-extra-bar-summary" title="${_escAttr(summary)}">${_escAttr(summary)}</span>
                 <input type="number" data-field="widthPct" value="${entry.widthPct}" min="1" max="100" step="1" title="Width %" class="la-extra-bar-width" style="${overflow ? 'border-color:#c33;color:#c33;' : ''}">
                 <span class="la-extra-bar-pct">%</span>
@@ -1220,7 +1221,7 @@ function _renderExtraBarRowHtml(entry, idx, overflow, collapsed)
                 ${entry.autoKey ? '' : `
                 <div class="la-extra-bar-line">
                     <span class="la-extra-bar-tag" title="Right-click in TAH Resources opens this item's sheet.">Linked Item</span>
-                    <input type="text" data-field="linkedItemUuid" value="${_escAttr(entry.linkedItemUuid ?? '')}" placeholder="Actor.X.Item.Y (UUID)" class="la-extra-bar-grow" readonly>
+                    <input type="text" data-field="linkedItemUuid" value="${_escAttr(entry.linkedItemUuid ?? '')}" placeholder="${localize('LA.extras.uuidPlaceholder')}" class="la-extra-bar-grow" readonly>
                     <button type="button" class="la-extra-bar-item-pick" title="Pick an item from the actor"><i class="fas fa-link"></i></button>
                     <button type="button" class="la-extra-bar-item-clear" title="Clear linked item"><i class="fas fa-times"></i></button>
                 </div>`}
@@ -1444,9 +1445,9 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 ).join('');
                 const content = `<form><div class="form-group"><label>Linked Item</label><select name="uuid" style="width:100%;">${optionGroups || '<option value="">(no items found)</option>'}</select></div></form>`;
                 const picked = await Dialog.prompt({
-                    title: 'Link Item to Extra Bar',
+                    title: localize('LA.dialogTitle.linkItemToExtraBar'),
                     content,
-                    label: 'Link',
+                    label: localize('LA.scan.link'),
                     callback: (/** @type {any} */ html) =>
                     {
                         const sel = (html?.find?.('select[name="uuid"]')?.[0]) ?? html?.querySelector?.('select[name="uuid"]');
@@ -1534,7 +1535,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         const ok = await store.onReset();
         if (!ok)
         {
-            ui.notifications.warn('Reset failed, see the console.');
+            ui.notifications.warn(localize('LA.notify.resetFailedSeeTheConsole'));
             return;
         }
         // Pull the fresh array back into the editor and re-render.
@@ -3146,7 +3147,7 @@ function injectLancerHud(hud, html, actor)
             name: 'system.action_tracker.reaction',
             value: reactionVal,
             color: COLORS.reaction,
-            title: 'Reaction (1 = available, 0 = used)',
+            title: localize('LA.tokenStatBar.reactionHint'),
         });
         const reactionBox = `<div class="attribute la-hud-reaction" style="position: absolute; right: 100%; top: 50%; transform: translateY(-50%); width: 50px; display: flex; justify-content: center;">${reactionInput}</div>`;
         $html.find('.col.left').prepend(reactionBox);
@@ -3308,8 +3309,8 @@ export function registerTokenStatBarSettings()
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
     game.settings.register(MODULE_ID, SETTING_EFFECT_ICON_SCALE, {
-        name: 'Effect Icon Scale',
-        hint: 'Multiplier on token effect icon size. 1 = default size, below shrinks, above enlarges.',
+        name: 'LA.settings.statBarEffectIconScale.name',
+        hint: 'LA.settings.statBarEffectIconScale.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -3368,7 +3369,7 @@ export async function reinjectAutoBarsOnAllTokens()
 {
     if (!game.user?.isGM)
     {
-        ui.notifications?.warn('Only the GM can reinject auto bars.');
+        ui.notifications?.warn(localize('LA.notify.onlyTheGmCanReinjectAutoBars'));
         return;
     }
     let sceneTokens = 0, prototypes = 0, failed = 0;
@@ -3396,14 +3397,14 @@ export async function reinjectAutoBarsOnAllTokens()
             prototypes++; else
             failed++;
     }
-    ui.notifications?.info(`Reinjected auto bars on ${sceneTokens} scene token(s) and ${prototypes} prototype(s)${failed ? ` (${failed} failed)` : ''}.`);
+    ui.notifications?.info(localizeFormat('LA.notify.reinjectedAutoBars', { tokens: sceneTokens, prototypes, failed: failed ? ` (${failed} failed)` : '' }));
 }
 
 export async function applyDefaultsToCurrentScene()
 {
     if (!canvas?.scene)
     {
-        ui.notifications?.warn('No active scene.');
+        ui.notifications?.warn(localize('LA.notify.noActiveScene'));
         return;
     }
     const defaultHidden = getWorldSetting(SETTING_DEFAULT_HIDDEN, false);
@@ -3426,18 +3427,18 @@ export async function applyDefaultsToCurrentScene()
     }
     if (updates.length === 0)
     {
-        ui.notifications?.info('No Lancer tokens on this scene.');
+        ui.notifications?.info(localize('LA.notify.noLancerTokensOnThisScene'));
         return;
     }
     try
     {
         await canvas.scene.updateEmbeddedDocuments('Token', updates);
-        ui.notifications?.info(`Applied defaults to ${updates.length} token(s).`);
+        ui.notifications?.info(localizeFormat('LA.notify.appliedDefaults', { count: updates.length }));
     }
     catch (e)
     {
         console.warn(`${MODULE_ID} | apply defaults failed`, e);
-        ui.notifications?.error('Failed to apply defaults, see the console.');
+        ui.notifications?.error(localize('LA.notify.failedToApplyDefaultsSeeTheConsole'));
     }
 }
 

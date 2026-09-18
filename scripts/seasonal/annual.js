@@ -5,6 +5,7 @@ import { playSeasonalSound } from './sound.js';
 import { getSupabase } from '../setup/supabase-client.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { localize } from '../tools/string-utils.js';
 const SENT_SETTING = 'birthdayWishYear';
 const DECLINED_SETTING = 'birthdayDeclinedYear';
 const BALLOON_SETTING = 'birthdayBalloonState';
@@ -200,7 +201,7 @@ function _renderForm(inner, { finish, later, interval })
     form.innerHTML = `
         <div>
             <label for="la-bday-msg">Your nice thing</label>
-            <textarea id="la-bday-msg" maxlength="${MAX_MESSAGE}" placeholder="say something nice, or else ....."></textarea>
+            <textarea id="la-bday-msg" maxlength="${MAX_MESSAGE}" placeholder="${localize('LA.seasonal.birthdayPlaceholder')}"></textarea>
         </div>
         <div class="battelog-intro-form-row">
             <button type="button" class="battelog-intro-decline">Sorry, not right now</button>

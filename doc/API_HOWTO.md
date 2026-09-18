@@ -14,20 +14,24 @@
 <br>
 
 ```js
-api.registerUserHelper(name, fn)   // register a shared utility function
-api.getUserHelper(name)             // retrieve it by name
+api.registerUserHelper(name, value)   // register a shared function or constant
+api.getUserHelper(name)               // retrieve it by name
+api.helpers                            // the same entries as a tree, a dotted name nests
 ```
 
-Shares logic between activation scripts.
+Shares logic and constants between activation scripts. Re-register on every load: the startup file runs at `ready`.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>name</kbd> | `string` | Unique name for the helper |
-| <kbd>fn</kbd> | `(...args: any[]) => any` | The function to register |
+| <kbd>name</kbd> | `string` | Unique name. `a.b` lands at `api.helpers.a.b` |
+| <kbd>value</kbd> | `any` | Function or constant |
 
 ```js
-api.registerUserHelper('isOverheated', (actor) => actor.system.heat.value >= actor.system.heat.max);
-const isOverheated = api.getUserHelper('isOverheated');
+api.registerUserHelper('ringOfFire.has', hasRingOfFire);
+api.registerUserHelper('rotary.launcherLid', 'npc-rebake_npcf_rotary_grenade_launcher_bastion');
+
+api.helpers.ringOfFire.has(parent, api);
+api.helpers.rotary.launcherLid;
 ```
 
 </details>
@@ -237,13 +241,20 @@ Requires the [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Awa
 await api.createAura(owner, auraConfig)
 ```
 
-Wrapper accepts a JS `function` in place of a macro ID. That form needs libWrapper installed and active. Without
-it the callback silently never runs.
+Wrapper accepts a JS `function` in place of a macro ID. LaSossis GAA fork: stored as an inline-code macro. Stock GAA: libWrapper intercept, libWrapper required.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | The document that owns the aura. An Item owner ties the aura to the item's lifetime |
 | <kbd>auraConfig</kbd> | `Object` | Full Grid-Aware Auras configuration object |
+| <kbd>macros[].function</kbd> | `(token, parent, aura, options) => any` | Saved as source text |
+| <kbd>macros[].scope</kbd> | `Record<string, any>` | Outside names the function uses. Functions by source, values as JSON |
+
+Rules for `function`:
+- `api` inside it is this module's api.
+- Nothing else from the defining file exists. Register it with `registerUserHelper` and read `api.helpers.*`, pass it in `scope`, or write it inside.
+- `api.helpers`: live lookup, a fix reaches placed auras. `scope`: a copy frozen into that aura.
+- A placed aura keeps its code until recreated.
 
 Whenever an owning actor and token can be resolved, the wrapper deep-merges a default config underneath yours, so
 a five-line call still comes out looking like the module's own auras. The defaults: one `unified` aura named
@@ -280,6 +291,22 @@ await api.createAura(reactorToken, {
     lineWidth: 3,
     lineColor: '#ffd600',
     lineOpacity: 0.9
+});
+```
+
+```js
+await api.createAura(droneToken, {
+    name: 'Restock Drone Zone',
+    radius: 1,
+    macros: [{
+        mode: 'ENTER',
+        scope: { healAmount, isRebake },
+        function: async (token, parent, aura, options) => {
+            if (!api.isFriendly(token, parent))
+                return;
+            await api.updateTokenSystem(token, { 'system.hp.value': token.actor.system.hp.value + healAmount });
+        }
+    }]
 });
 ```
 

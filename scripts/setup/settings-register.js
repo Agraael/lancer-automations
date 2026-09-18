@@ -27,36 +27,36 @@ export function registerSettings()
 {
     // Core
     game.settings.register(MODULE_ID,'reactionNotificationMode', {
-        name: 'Activation Notification Mode',
-        hint: 'Who sees the activation popup.',
+        name: 'LA.settings.reactionNotificationMode.name',
+        hint: 'LA.settings.reactionNotificationMode.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            "both": "GM and Owner",
-            "gm": "GM Only",
-            "owner": "Owner Only"
+            "both": "LA.settings.reactionNotificationMode.choices.both",
+            "gm": "LA.settings.reactionNotificationMode.choices.gm",
+            "owner": "LA.settings.reactionNotificationMode.choices.owner"
         },
         default: "both"
     });
 
     game.settings.register(MODULE_ID,'effectNotificationMode', {
-        name: 'Effect Notification Mode',
-        hint: 'Chat message when a token gains or loses an effect or bonus.',
+        name: 'LA.settings.effectNotificationMode.name',
+        hint: 'LA.settings.effectNotificationMode.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            "public": "Public",
-            "whisper": "GM and Owner",
-            "off": "Off"
+            "public": "LA.settings.effectNotificationMode.choices.public",
+            "whisper": "LA.settings.effectNotificationMode.choices.whisper",
+            "off": "LA.settings.effectNotificationMode.choices.off"
         },
         default: "public"
     });
 
     game.settings.register(MODULE_ID,'consumeReaction', {
-        name: 'Consume Reaction on Activation',
-        hint: 'Auto-spend the token\'s reaction when a Reaction activation fires.',
+        name: 'LA.settings.consumeReaction.name',
+        hint: 'LA.settings.consumeReaction.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -78,8 +78,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'consumeAction', {
-        name: 'Consume Action on Activation',
-        hint: 'Auto-spend the token\'s Quick / Full action when an activation flow succeeds.',
+        name: 'LA.settings.consumeAction.name',
+        hint: 'LA.settings.consumeAction.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -87,8 +87,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'overlapTokenPicker', {
-        name: 'Overlapping Token Picker',
-        hint: 'When clicking a token at the same spot and size as others, open a picker to choose among them.',
+        name: 'LA.settings.overlapTokenPicker.name',
+        hint: 'LA.settings.overlapTokenPicker.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -96,8 +96,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusDuration', {
-        name: 'Focus Pan Duration',
-        hint: 'How long the camera takes to reach the focused tokens, in milliseconds.',
+        name: 'LA.settings.autoFocusDuration.name',
+        hint: 'LA.settings.autoFocusDuration.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -106,8 +106,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusCards', {
-        name: 'Focus on Interactive Cards',
-        hint: 'Pan the canvas to the card\'s tokens when a choice, confirm or wait card shows.',
+        name: 'LA.settings.autoFocusCards.name',
+        hint: 'LA.settings.autoFocusCards.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -115,8 +115,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusAttack', {
-        name: 'Focus on Attack Rolls',
-        hint: 'Pan the canvas to the attacker and targets when the attack rolls, or when its card reaches you.',
+        name: 'LA.settings.autoFocusAttack.name',
+        hint: 'LA.settings.autoFocusAttack.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -124,8 +124,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusDamage', {
-        name: 'Focus on Damage Rolls',
-        hint: 'Pan the canvas to the attacker and targets when damage rolls, or when its card reaches you.',
+        name: 'LA.settings.autoFocusDamage.name',
+        hint: 'LA.settings.autoFocusDamage.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -133,8 +133,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusCheck', {
-        name: 'Focus on Stat Rolls',
-        hint: 'Pan the canvas to the roller and its target when a stat roll happens, or when its card reaches you.',
+        name: 'LA.settings.autoFocusCheck.name',
+        hint: 'LA.settings.autoFocusCheck.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -142,8 +142,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoFocusActivation', {
-        name: 'Focus on Activations',
-        hint: 'Pan the canvas to the acting token when its action FX plays.',
+        name: 'LA.settings.autoFocusActivation.name',
+        hint: 'LA.settings.autoFocusActivation.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -151,8 +151,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'showBonusHudButton', {
-        name: 'Token HUD Bonus Button',
-        hint: 'Adds a button on the Token HUD to open the Effect Manager.',
+        name: 'LA.settings.showBonusHudButton.name',
+        hint: 'LA.settings.showBonusHudButton.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -160,8 +160,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'showStatusEffectsHudButton', {
-        name: 'Token HUD Status Effects Button',
-        hint: 'Foundry\'s default "Assign Status Effects" button on the Token HUD.',
+        name: 'LA.settings.showStatusEffectsHudButton.name',
+        hint: 'LA.settings.showStatusEffectsHudButton.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -169,8 +169,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'showCombatStateHudButton', {
-        name: 'Token HUD Combat State Button',
-        hint: 'Foundry\'s default "Toggle Combat State" button on the Token HUD.',
+        name: 'LA.settings.showCombatStateHudButton.name',
+        hint: 'LA.settings.showCombatStateHudButton.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -178,8 +178,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'showTargetStateHudButton', {
-        name: 'Token HUD Target State Button',
-        hint: 'Foundry\'s default "Toggle Target State" button on the Token HUD.',
+        name: 'LA.settings.showTargetStateHudButton.name',
+        hint: 'LA.settings.showTargetStateHudButton.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -187,8 +187,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'showRevertMovementHudButton', {
-        name: 'Revert Movement Button',
-        hint: 'The Revert Last Movement / Reset Movement History button on the Token HUD.',
+        name: 'LA.settings.showRevertMovementHudButton.name',
+        hint: 'LA.settings.showRevertMovementHudButton.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -196,8 +196,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusHalo', {
-        name: 'Status Icon Halo',
-        hint: 'Status icons circle around the token instead of stacking in a column.',
+        name: 'LA.settings.statusHalo.name',
+        hint: 'LA.settings.statusHalo.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -206,8 +206,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusHaloRadius', {
-        name: 'Halo Radius',
-        hint: 'Ring radius as a fraction of the token size.',
+        name: 'LA.settings.statusHaloRadius.name',
+        hint: 'LA.settings.statusHaloRadius.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -217,8 +217,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusIconMinZoomScale', {
-        name: 'Minimum Icon Zoom Scale',
-        hint: 'Below this zoom level the icons keep a constant screen size. 0 = disabled.',
+        name: 'LA.settings.statusIconMinZoomScale.name',
+        hint: 'LA.settings.statusIconMinZoomScale.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -228,8 +228,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusHaloStartAngle', {
-        name: 'Halo Start Angle',
-        hint: 'Angle of the first icon, in degrees counterclockwise from the token\'s right.',
+        name: 'LA.settings.statusHaloStartAngle.name',
+        hint: 'LA.settings.statusHaloStartAngle.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -239,8 +239,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusIconHover', {
-        name: 'Status Icon Hover Info',
-        hint: 'Hovering a status icon enlarges it and shows its name, description, duration and bonus.',
+        name: 'LA.settings.statusIconHover.name',
+        hint: 'LA.settings.statusIconHover.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -248,8 +248,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusCounterColor', {
-        name: 'Instance Counter Color',
-        hint: 'Color of the instance count drawn on collapsed status icons.',
+        name: 'LA.settings.statusCounterColor.name',
+        hint: 'LA.settings.statusCounterColor.hint',
         scope: 'world',
         config: false,
         type: String,
@@ -258,8 +258,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusUsageColor', {
-        name: 'Usage Counter Color',
-        hint: 'Color of the usage number drawn on status icons and in the combat tracker.',
+        name: 'LA.settings.statusUsageColor.name',
+        hint: 'LA.settings.statusUsageColor.hint',
         scope: 'world',
         config: false,
         type: String,
@@ -272,8 +272,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusDurationColor', {
-        name: 'Duration Counter Color',
-        hint: 'Color of the remaining-turns number drawn on status icons.',
+        name: 'LA.settings.statusDurationColor.name',
+        hint: 'LA.settings.statusDurationColor.hint',
         scope: 'world',
         config: false,
         type: String,
@@ -282,8 +282,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statusBadgeFontScale', {
-        name: 'Counter Font Scale',
-        hint: 'Size of the numbers drawn on status icons.',
+        name: 'LA.settings.statusBadgeFontScale.name',
+        hint: 'LA.settings.statusBadgeFontScale.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -295,8 +295,8 @@ export function registerSettings()
     // Features
     // Surfaced in the StatusFX config menu instead of the main settings panel
     game.settings.register(MODULE_ID,'additionalStatuses', {
-        name: 'LaSossis Additional statuses and effects',
-        hint: 'Extra statuses (Resist All, Disengage, Grappling, etc.) in the status effects list.',
+        name: 'LA.settings.additionalStatuses.name',
+        hint: 'LA.settings.additionalStatuses.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -305,8 +305,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enablePerRoundTurnTags', {
-        name: 'Per-Round / Per-Turn / Per-Scene Enforcement',
-        hint: 'Enforce per-round and per-turn tags (tg_round, tg_turn) and per-scene frequencies ("N/scene", use="Encounter"). Blocks attacks/activations at the limit and auto-resets on round/turn/combat. Requires reload.',
+        name: 'LA.settings.enablePerRoundTurnTags.name',
+        hint: 'LA.settings.enablePerRoundTurnTags.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -315,8 +315,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableInfectionDamageIntegration', {
-        name: 'Infection Damage Integration',
-        hint: 'Adds Infection as a fully integrated Lancer damage type. Requires reload.',
+        name: 'LA.settings.enableInfectionDamageIntegration.name',
+        hint: 'LA.settings.enableInfectionDamageIntegration.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -325,8 +325,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'convertHeatToEnergyOnHeatless', {
-        name: 'Heat as Energy on heatless targets',
-        hint: 'Convert Heat damage to Energy when the target has no heat capacity (pilots, biological NPCs). Mirrors what Lancer does natively for pilots.',
+        name: 'LA.settings.convertHeatToEnergyOnHeatless.name',
+        hint: 'LA.settings.convertHeatToEnergyOnHeatless.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -334,8 +334,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'resistSelfHeat', {
-        name: 'Resist Self-Inflicted Heat',
-        hint: 'Halve self-inflicted heat from self-heat, overkill, and overcharge when the mech resists Heat.',
+        name: 'LA.settings.resistSelfHeat.name',
+        hint: 'LA.settings.resistSelfHeat.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -343,8 +343,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoDamageRoll', {
-        name: 'Auto Damage Roll',
-        hint: 'Open the Damage HUD automatically after an attack.',
+        name: 'LA.settings.autoDamageRoll.name',
+        hint: 'LA.settings.autoDamageRoll.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -352,8 +352,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoDamageApply', {
-        name: 'Auto Apply Damage',
-        hint: 'Apply rolled damage to targets automatically. Unowned targets are applied by the GM client.',
+        name: 'LA.settings.autoDamageApply.name',
+        hint: 'LA.settings.autoDamageApply.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -361,8 +361,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'autoStructFollowup', {
-        name: 'Auto Structure / Stress Follow-ups',
-        hint: 'Click the follow-up buttons on your own structure and stress cards automatically.',
+        name: 'LA.settings.autoStructFollowup.name',
+        hint: 'LA.settings.autoStructFollowup.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -370,8 +370,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableKnockbackFlow', {
-        name: 'Automate Knockback on Hit',
-        hint: 'Auto-trigger the Knockback tool on hits with Knockback-tagged weapons.',
+        name: 'LA.settings.enableKnockbackFlow.name',
+        hint: 'LA.settings.enableKnockbackFlow.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -379,8 +379,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableThrowFlow', {
-        name: 'Automate Throw Choice for Thrown Weapons',
-        hint: 'Thrown-tagged weapons prompt Attack or Throw at the start of the flow.',
+        name: 'LA.settings.enableThrowFlow.name',
+        hint: 'LA.settings.enableThrowFlow.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -388,8 +388,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'statRollTargeting', {
-        name: 'Stat Roll Targeting',
-        hint: 'Adds an optional single-target picker to the stat-roll HUD to auto-calculate save difficulty.',
+        name: 'LA.settings.statRollTargeting.name',
+        hint: 'LA.settings.statRollTargeting.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -397,8 +397,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'uplinkEnabled', {
-        name: 'Roll Uplink (Beta)',
-        hint: 'Streams players\' open roll dialogs to the GM as live mirror cards.',
+        name: 'LA.settings.uplinkEnabled.name',
+        hint: 'LA.settings.uplinkEnabled.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -406,8 +406,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'uplinkAutoOpen', {
-        name: 'Uplink Auto-Open',
-        hint: 'Open the uplink bar as soon as a roll dialog appears.',
+        name: 'LA.settings.uplinkAutoOpen.name',
+        hint: 'LA.settings.uplinkAutoOpen.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -429,8 +429,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'weaponFxAboveTokens', {
-        name: 'Weapon FX Above Tokens',
-        hint: 'Since Sequencer 4, some Lancer Weapon FX render behind tokens. This lifts them back above token art.',
+        name: 'LA.settings.weaponFxAboveTokens.name',
+        hint: 'LA.settings.weaponFxAboveTokens.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -438,8 +438,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableAttackTargeting', {
-        name: 'LA Attack Targeting',
-        hint: 'Adds an LA target/range picker to the attack HUD; hold Shift to target multiple.',
+        name: 'LA.settings.enableAttackTargeting.name',
+        hint: 'LA.settings.enableAttackTargeting.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -447,8 +447,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableDamageTargeting', {
-        name: 'LA Damage Targeting',
-        hint: 'Adds the LA target/range picker to the damage HUD; hold Shift to target multiple.',
+        name: 'LA.settings.enableDamageTargeting.name',
+        hint: 'LA.settings.enableDamageTargeting.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -456,8 +456,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'clearTargetsAfterRoll', {
-        name: 'Clear Targets After Roll',
-        hint: 'Drop targets once an attack or damage roll resolves.',
+        name: 'LA.settings.clearTargetsAfterRoll.name',
+        hint: 'LA.settings.clearTargetsAfterRoll.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -465,18 +465,22 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'targetInfoDisplay', {
-        name: 'Target Info Labels',
-        hint: 'Who sees the hit-chance and damage-range labels while targeting.',
+        name: 'LA.settings.targetInfoDisplay.name',
+        hint: 'LA.settings.targetInfoDisplay.hint',
         scope: 'world',
         config: false,
         type: String,
-        choices: { off: 'No', gm: 'GM only', all: 'GM and players' },
+        choices: {
+            off: 'LA.settings.targetInfoDisplay.choices.off',
+            gm: 'LA.settings.targetInfoDisplay.choices.gm',
+            all: 'LA.settings.targetInfoDisplay.choices.all',
+        },
         default: 'gm'
     });
 
     game.settings.register(MODULE_ID,'autoStartTargetPicking', {
-        name: 'Auto-Start Target Picking',
-        hint: 'Open the target picker automatically when an attack starts with no target set.',
+        name: 'LA.settings.autoStartTargetPicking.name',
+        hint: 'LA.settings.autoStartTargetPicking.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -484,8 +488,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'displayToolsToOthers', {
-        name: 'Share Interactive Tools',
-        hint: 'Show your in-progress targeting / placement / movement tools to other clients (discreet overlay), and see theirs. Follows the Display Mouse Cursor permission.',
+        name: 'LA.settings.displayToolsToOthers.name',
+        hint: 'LA.settings.displayToolsToOthers.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -493,8 +497,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'treatGenericPrintAsActivation', {
-        name: 'Treat Generic Prints as Activations',
-        hint: 'Items printed via the generic method also trigger onActivation events.',
+        name: 'LA.settings.treatGenericPrintAsActivation.name',
+        hint: 'LA.settings.treatGenericPrintAsActivation.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -502,8 +506,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableMovementCapDetection', {
-        name: 'Movement Cap Detection',
-        hint: 'Cancel drag movement exceeding the token\'s movement cap.',
+        name: 'LA.settings.enableMovementCapDetection.name',
+        hint: 'LA.settings.enableMovementCapDetection.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -511,22 +515,57 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'enableBoostOffer', {
-        name: 'Boost & Move Offer',
-        hint: 'Offer to cover an over-cap move with Boost then Overcharge (Automatic accepts without asking).',
+        name: 'LA.settings.enableBoostOffer.name',
+        hint: 'LA.settings.enableBoostOffer.hint',
         scope: 'world',
         config: false,
         type: String,
         choices: {
-            no: 'No',
-            yes: 'Yes, ask first',
-            auto: 'Automatic, no prompt',
+            no: 'LA.settings.enableBoostOffer.choices.no',
+            yes: 'LA.settings.enableBoostOffer.choices.yes',
+            auto: 'LA.settings.enableBoostOffer.choices.auto',
         },
         default: 'no'
     });
 
+    const refreshShadows = () => import('../fx/token-ground-shadow.js')
+        .then(module => module.refreshAllGroundShadows());
+
+    game.settings.register(MODULE_ID,'tokenGroundShadow', {
+        name: 'LA.settings.tokenGroundShadow.name',
+        hint: 'LA.settings.tokenGroundShadow.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: refreshShadows
+    });
+
+    game.settings.register(MODULE_ID,'tokenGroundShadowThrow', {
+        name: 'LA.settings.tokenGroundShadowThrow.name',
+        hint: 'LA.settings.tokenGroundShadowThrow.hint',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0, max: 40, step: 1 },
+        default: 9,
+        onChange: refreshShadows
+    });
+
+    game.settings.register(MODULE_ID,'tokenGroundShadowOpacity', {
+        name: 'LA.settings.tokenGroundShadowOpacity.name',
+        hint: 'LA.settings.tokenGroundShadowOpacity.hint',
+        scope: 'world',
+        config: false,
+        type: Number,
+        range: { min: 0.05, max: 1, step: 0.05 },
+        default: 0.55,
+        onChange: refreshShadows
+    });
+
     game.settings.register(MODULE_ID,'showDeployableLines', {
-        name: 'Show Deployable Lines',
-        hint: 'Draw lines between owned tokens and their deployables on hover.',
+        name: 'LA.settings.showDeployableLines.name',
+        hint: 'LA.settings.showDeployableLines.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -535,8 +574,8 @@ export function registerSettings()
 
     // Alt Structure
     game.settings.register(MODULE_ID,'enableAltStruct', {
-        name: "Maria's Alternate Structure & Stress Rules",
-        hint: "Integrated implementation of Maria's Alternate Structure & Stress rules. Disable if using the standalone lancer-alt-structure module.",
+        name: 'LA.settings.enableAltStruct.name',
+        hint: 'LA.settings.enableAltStruct.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -546,8 +585,8 @@ export function registerSettings()
 
     // One-Structure NPC Auto-Destroy
     game.settings.register(MODULE_ID,'enableOneStructNpc', {
-        name: 'One-Structure NPC Auto-Destroy',
-        hint: 'NPCs with max structure 1 skip the structure table and are destroyed on the first structure hit.',
+        name: 'LA.settings.enableOneStructNpc.name',
+        hint: 'LA.settings.enableOneStructNpc.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -556,8 +595,8 @@ export function registerSettings()
 
     // Vision
     game.settings.register(MODULE_ID,'dragVisionMultiplier', {
-        name: 'Drag Vision Radius Multiplier',
-        hint: '1 = full vision while dragging, 0.5 = half, 0 = none.',
+        name: 'LA.settings.dragVisionMultiplier.name',
+        hint: 'LA.settings.dragVisionMultiplier.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -566,8 +605,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseLineOpacity', {
-        name: 'Range Pulse Grid Line Opacity',
-        hint: 'Opacity of the still grid lines inside the range.',
+        name: 'LA.settings.rangePulseLineOpacity.name',
+        hint: 'LA.settings.rangePulseLineOpacity.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -576,8 +615,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseWaveOpacity', {
-        name: 'Range Pulse Wave Opacity',
-        hint: 'Opacity of the wave running through the range and of its outline.',
+        name: 'LA.settings.rangePulseWaveOpacity.name',
+        hint: 'LA.settings.rangePulseWaveOpacity.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -586,8 +625,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseLineWidth', {
-        name: 'Range Pulse Wave Width',
-        hint: 'Thickness of the wave and its black outline. 1 = original.',
+        name: 'LA.settings.rangePulseLineWidth.name',
+        hint: 'LA.settings.rangePulseLineWidth.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -596,8 +635,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseLos', {
-        name: 'Range Pulse Line of Sight',
-        hint: 'Experimental. Weapon reach hides hexes you cannot see. Arcing and Seeking ignore it.',
+        name: 'LA.settings.rangePulseLos.name',
+        hint: 'LA.settings.rangePulseLos.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -605,8 +644,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseSpeed', {
-        name: 'Range Pulse Speed',
-        hint: 'Speed of the wave and of the bloom. 1 = original.',
+        name: 'LA.settings.rangePulseSpeed.name',
+        hint: 'LA.settings.rangePulseSpeed.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -615,48 +654,51 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'rangePulseStyle', {
-        name: 'Range Pulse Style',
-        hint: 'Shape drawn for each ring of the pulse.',
+        name: 'LA.settings.rangePulseStyle.name',
+        hint: 'LA.settings.rangePulseStyle.hint',
         scope: 'client',
         config: false,
         type: String,
         choices: {
-            inset: 'Inset tiles',
-            bracket: 'Corner brackets'
+            inset: 'LA.settings.rangePulseStyle.choices.inset',
+            bracket: 'LA.settings.rangePulseStyle.choices.bracket'
         },
         default: 'inset'
     });
 
     game.settings.register(MODULE_ID,'rangePulseMotion', {
-        name: 'Range Pulse Motion',
-        hint: 'A bloom outward that repeats, or a single bloom that then holds still.',
+        name: 'LA.settings.rangePulseMotion.name',
+        hint: 'LA.settings.rangePulseMotion.hint',
         scope: 'client',
         config: false,
         type: String,
         choices: {
-            wave: 'Repeating bloom',
-            bloom: 'One shot bloom'
+            wave: 'LA.settings.rangePulseMotion.choices.wave',
+            bloom: 'LA.settings.rangePulseMotion.choices.bloom'
         },
         default: 'bloom'
     });
 
     // Wreck system
     game.settings.register(MODULE_ID,'enableWrecks', {
-        name: 'Wreck Automation',
-        hint: 'Automate wrecking on structure reaching 0.',
+        name: 'LA.settings.enableWrecks.name',
+        hint: 'LA.settings.enableWrecks.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
     // Per-category wreck mode + terrain.
-    const wreckModeChoices = { token: 'Token', tile: 'Tile', none: 'Skip (do nothing)' };
+    const wreckModeChoices = {
+        token: 'LA.settings.wreckMode.choices.token',
+        tile: 'LA.settings.wreckMode.choices.tile',
+        none: 'LA.settings.wreckMode.choices.none',
+    };
     for (const cat of ['mech', 'vehicle', 'human', 'monstrosity', 'biological'])
     {
-        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
         game.settings.register(MODULE_ID,`wreckMode_${cat}`, {
-            name: `${label}: Wreck Mode`,
-            hint: `How ${label} wrecks are placed.`,
+            name: 'LA.settings.wreckMode.name',
+            hint: 'LA.settings.wreckMode.hint',
             scope: 'world',
             config: false,
             type: String,
@@ -664,30 +706,30 @@ export function registerSettings()
             choices: wreckModeChoices,
         });
         game.settings.register(MODULE_ID,`wreckTerrain_${cat}`, {
-            name: `${label}: Wreck Difficult Terrain`,
-            hint: `What to leave behind for movement cost when a ${label} is wrecked.`,
+            name: 'LA.settings.wreckTerrain.name',
+            hint: 'LA.settings.wreckTerrain.hint',
             scope: 'world',
             config: false,
             type: String,
             default: (cat === 'mech' || cat === 'vehicle' || cat === 'monstrosity') ? 'aura' : 'none',
             choices: {
-                none: 'Nothing',
-                terrain: 'THT Difficult Terrain',
-                aura: 'Aura on wreck (movement +1)',
+                none: 'LA.settings.wreckTerrain.choices.none',
+                terrain: 'LA.settings.wreckTerrain.choices.terrain',
+                aura: 'LA.settings.wreckTerrain.choices.aura',
             },
         });
     }
     game.settings.register(MODULE_ID,'wreckAuraColor', {
-        name: 'Wreck Aura Color',
-        hint: 'Line and fill color of the aura left on a wreck. Applies to new wrecks.',
+        name: 'LA.settings.wreckAuraColor.name',
+        hint: 'LA.settings.wreckAuraColor.hint',
         scope: 'world',
         config: false,
         type: String,
         default: '#8B4513',
     });
     game.settings.register(MODULE_ID,'wreckAuraOpacity', {
-        name: 'Wreck Aura Opacity',
-        hint: 'Fill opacity of the wreck aura. The outline scales with it.',
+        name: 'LA.settings.wreckAuraOpacity.name',
+        hint: 'LA.settings.wreckAuraOpacity.hint',
         scope: 'world',
         config: false,
         type: Number,
@@ -695,8 +737,8 @@ export function registerSettings()
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE_ID,'wreckAssetsPath', {
-        name: 'Wreck Assets Folder',
-        hint: 'Custom folder for wreck images/effects/audio. Leave blank for built-in.',
+        name: 'LA.settings.wreckAssetsPath.name',
+        hint: 'LA.settings.wreckAssetsPath.hint',
         scope: 'world',
         config: false,
         type: String,
@@ -709,40 +751,40 @@ export function registerSettings()
         default: 'same',
     });
     game.settings.register(MODULE_ID,'enableRemoveFromCombat', {
-        name: 'Remove Wrecks from Combat',
-        hint: 'Remove wrecked tokens from the combat tracker.',
+        name: 'LA.settings.enableRemoveFromCombat.name',
+        hint: 'LA.settings.enableRemoveFromCombat.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID,'enableWreckAnimation', {
-        name: 'Wreck Explosion Effects',
-        hint: 'Play explosion effects when tokens are wrecked.',
+        name: 'LA.settings.enableWreckAnimation.name',
+        hint: 'LA.settings.enableWreckAnimation.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID,'enableWreckAudio', {
-        name: 'Wreck Explosion Audio',
-        hint: 'Play explosion sounds when tokens are wrecked.',
+        name: 'LA.settings.enableWreckAudio.name',
+        hint: 'LA.settings.enableWreckAudio.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID,'squadLostOnDeath', {
-        name: 'Squad MIA on Death',
-        hint: 'Apply MIA status to dead squads.',
+        name: 'LA.settings.squadLostOnDeath.name',
+        hint: 'LA.settings.squadLostOnDeath.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID,'wreckTerrainType', {
-        name: 'Wreck Terrain Type',
-        hint: 'Terrain Height Tools terrain type ID for wreck difficult terrain.',
+        name: 'LA.settings.wreckTerrainType.name',
+        hint: 'LA.settings.wreckTerrainType.hint',
         scope: 'world',
         config: false,
         type: String,
@@ -752,7 +794,11 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: String,
-        choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
+        choices: {
+            off: 'LA.settings.guardianBulwarkAuraMode.choices.off',
+            combat: 'LA.settings.guardianBulwarkAuraMode.choices.combat',
+            always: 'LA.settings.guardianBulwarkAuraMode.choices.always',
+        },
         default: 'always',
     });
     game.settings.register(MODULE_ID,'syncActorImgToToken', {
@@ -771,7 +817,10 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: String,
-        choices: { system: 'Lancer System (v3)', 'lancer-automations': 'Lancer Automations (legacy)' },
+        choices: {
+            system: 'LA.settings.scanJournalSource.choices.system',
+            'lancer-automations': 'LA.settings.scanJournalSource.choices.lancer-automations',
+        },
         default: 'system',
     });
     game.settings.register(MODULE_ID,'scanPlayerOwnershipMode', {
@@ -779,9 +828,9 @@ export function registerSettings()
         config: false,
         type: String,
         choices: {
-            self: 'Scanning player only',
-            all: 'All players',
-            group: 'Player\'s groups (Player Groups required)',
+            self: 'LA.settings.scanPlayerOwnershipMode.choices.self',
+            all: 'LA.settings.scanPlayerOwnershipMode.choices.all',
+            group: 'LA.settings.scanPlayerOwnershipMode.choices.group',
         },
         default: 'all',
     });
@@ -804,8 +853,8 @@ export function registerSettings()
         default: true,
     });
     game.settings.register(MODULE_ID,'wreckMasterVolume', {
-        name: 'Wreck Master Volume',
-        hint: 'Volume of wreck explosion sounds (0 = mute, 1 = full).',
+        name: 'LA.settings.wreckMasterVolume.name',
+        hint: 'LA.settings.wreckMasterVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -813,16 +862,16 @@ export function registerSettings()
         range: { min: 0, max: 1.5, step: 0.1 },
     });
     game.settings.register(MODULE_ID,'disableHumanDeathSound', {
-        name: 'Disable Human Death Sound',
-        hint: 'Mute wreck sounds for human/pilot/squad deaths.',
+        name: 'LA.settings.disableHumanDeathSound.name',
+        hint: 'LA.settings.disableHumanDeathSound.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE_ID,'allowHalfSizeTokens', {
-        name: 'Allow Half-Size Tokens',
-        hint: 'Size 0.5 actors get 0.5 grid token dimensions instead of being forced to 1.',
+        name: 'LA.settings.allowHalfSizeTokens.name',
+        hint: 'LA.settings.allowHalfSizeTokens.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -843,8 +892,8 @@ export function registerSettings()
     // Debug
 
     game.settings.register(MODULE_ID,'debugPathHexCalculation', {
-        name: 'Debug: Path Hex Calculation',
-        hint: 'Draw temporary circles on the map highlighting the calculated path hex steps.',
+        name: 'LA.settings.debugPathHexCalculation.name',
+        hint: 'LA.settings.debugPathHexCalculation.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -852,8 +901,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'debugMovement', {
-        name: 'Debug: Movement',
-        hint: 'Console logs from the Lancer cost-rules pipeline, revert flow, and movement recording. Also enables the on-canvas debug overlay (per-cell terrain markers).',
+        name: 'LA.settings.debugMovement.name',
+        hint: 'LA.settings.debugMovement.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -861,8 +910,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'debugOutOfCombat', {
-        name: 'Debug: Out of Combat Warnings',
-        hint: 'Show UI warnings when an activation is skipped because the token is not in combat.',
+        name: 'LA.settings.debugOutOfCombat.name',
+        hint: 'LA.settings.debugOutOfCombat.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -870,8 +919,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'debugAutomation', {
-        name: 'Debug: Automation System',
-        hint: 'Console logs from the reaction / trigger pipeline: which trigger fires, which reactions match, why each one is skipped or evaluated, and which activation fires.',
+        name: 'LA.settings.debugAutomation.name',
+        hint: 'LA.settings.debugAutomation.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -879,8 +928,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'debugForceJb2aFree', {
-        name: 'Debug: Force JB2A Free Fallbacks',
-        hint: 'Pretend the JB2A Patreon module is not installed; route all premium assets through the free-version fallback registry. For testing only.',
+        name: 'LA.settings.debugForceJb2aFree.name',
+        hint: 'LA.settings.debugForceJb2aFree.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -888,7 +937,7 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'lastNotifiedVersion', {
-        name: 'Last Notified Version',
+        name: 'LA.settings.lastNotifiedVersion.name',
         scope: 'world',
         config: false,
         type: String,
@@ -896,8 +945,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'linkManualDeploy', {
-        name: 'Link Manually Placed Deployables',
-        hint: 'Auto-link dragged deployable tokens to their owner and fire onDeploy.',
+        name: 'LA.settings.linkManualDeploy.name',
+        hint: 'LA.settings.linkManualDeploy.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -905,17 +954,26 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'count3DDistance', {
-        name: 'Count Elevation in Combat Distance',
-        hint: 'Distance = max(horizontal, elevation). Off = 2D only. Affects overwatch, engagement, range checks.',
+        name: 'LA.settings.count3DDistance.name',
+        hint: 'LA.settings.count3DDistance.hint',
         scope: 'world',
         config: false,
         type: Boolean,
         default: false
     });
 
+    game.settings.register(MODULE_ID,'enableObstructionStepOver', {
+        name: 'LA.settings.enableObstructionStepOver.name',
+        hint: 'LA.settings.enableObstructionStepOver.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
     game.settings.register(MODULE_ID,'obstructionBlocksVehicle', {
-        name: 'No Step-over: Vehicles',
-        hint: 'Vehicle NPCs cannot step over terrain walls lower than their size.',
+        name: 'LA.settings.obstructionBlocksVehicle.name',
+        hint: 'LA.settings.obstructionBlocksVehicle.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -923,8 +981,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'obstructionBlocksSquad', {
-        name: 'No Step-over: Squads',
-        hint: 'Squad NPCs cannot step over terrain walls lower than their size.',
+        name: 'LA.settings.obstructionBlocksSquad.name',
+        hint: 'LA.settings.obstructionBlocksSquad.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -932,8 +990,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'obstructionBlocksHuman', {
-        name: 'No Step-over: Humans',
-        hint: 'Human NPCs cannot step over terrain walls lower than their size.',
+        name: 'LA.settings.obstructionBlocksHuman.name',
+        hint: 'LA.settings.obstructionBlocksHuman.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -941,8 +999,8 @@ export function registerSettings()
     });
 
     game.settings.register(MODULE_ID,'obstructionBlocksSpecialist', {
-        name: 'No Step-over: Specialists',
-        hint: 'Specialist NPCs cannot step over terrain walls lower than their size.',
+        name: 'LA.settings.obstructionBlocksSpecialist.name',
+        hint: 'LA.settings.obstructionBlocksSpecialist.hint',
         scope: 'world',
         config: false,
         type: Boolean,

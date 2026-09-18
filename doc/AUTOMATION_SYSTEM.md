@@ -668,6 +668,8 @@ Typical uses: Sniper's Mark adds a "Fall Prone" action, Limitless adds "Overchar
 
 - **By action path** - when the extra action is injected onto an item, register an *item* activation with `reactionPath: "extraActions.<Name>"`. The engine resolves the sub-action through the flag lookup the same way it walks `actions[N]`.
 
+**Granting to someone else.** An action added to another actor needs `opts.grant` on `addExtraActions`, which marks it with the token and item it came from. It is deleted when that token or item is deleted. A `condition` on the action gates it the rest of the time, returning `hidden`, `locked` or `disabled`. Both in [HUD API - Granted actions](API_HUD.md#granted-actions). The Rotary Grenade Launcher in `startups/itemActivations.js` is the worked example: an aura hands adjacent allies a Quick action that reloads the owner's weapon.
+
 **Access.** Extra actions are currently only surfaced through the Lancer Automations TAH. Other UIs (the native Lancer sheet, the native action bar, etc.) do not show them. If the TAH is disabled, extra actions are invisible to the user even though they still fire when triggered from code.
 
 ### Activated items lifecycle

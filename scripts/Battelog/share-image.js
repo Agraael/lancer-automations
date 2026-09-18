@@ -1,4 +1,5 @@
 import { MODULE_ID } from '../tools/constants.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 const CSS_PATH = `modules/${MODULE_ID}/styles/battelog.css`;
 
 // The SVG can't see document @font-face, so every font rides along as a data uri.
@@ -252,7 +253,7 @@ async function _copyToClipboard(blob)
     if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined')
         throw new Error('image clipboard unavailable here');
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    ui.notifications.info('Battle Log card copied to clipboard.');
+    ui.notifications.info(localize('LA.notify.battleLogCardCopiedToClipboard'));
 }
 
 /** Native save dialog; the desktop app hands plain blob downloads to the OS instead of saving. */
@@ -285,7 +286,7 @@ async function _saveToFile(blob, filename)
 function _showPreview(dataUri, blob, filename)
 {
     const dlg = new Dialog({
-        title: 'Battle Log · Share Card',
+        title: localize('LA.dialogTitle.battleLogShareCard'),
         content: `
             <div style="text-align:center;">
                 <img src="${dataUri}" alt="" style="max-width:100%;max-height:60vh;border:none;"/>
@@ -293,27 +294,27 @@ function _showPreview(dataUri, blob, filename)
         buttons: {
             copy: {
                 icon: '<i class="fas fa-clipboard"></i>',
-                label: 'Copy',
+                label: localize('LA.common.copy'),
                 callback: () => _copyToClipboard(blob).catch((err) =>
                 {
                     console.warn(`${MODULE_ID} | Clipboard write refused.`, err);
-                    ui.notifications.warn(`Clipboard copy failed: ${err.message}`);
+                    ui.notifications.warn(localizeFormat('LA.notify.clipboardCopyFailed', { error: err.message }));
                 }),
             },
             save: {
                 icon: '<i class="fas fa-floppy-disk"></i>',
-                label: 'Save to File',
+                label: localize('LA.battleLog.saveToFile'),
                 callback: () => _saveToFile(blob, filename)
-                    .then(name => ui.notifications.info(`Saved ${name}.`))
+                    .then(name => ui.notifications.info(localizeFormat('LA.notify.savedFile', { name })))
                     .catch((err) =>
                     {
                         if (err?.name === 'AbortError')
                             return;
                         console.error(`${MODULE_ID} | Battle Log card save failed:`, err);
-                        ui.notifications.error(`Could not save the file: ${err.message}`);
+                        ui.notifications.error(localizeFormat('LA.notify.couldNotSaveFile', { error: err.message }));
                     }),
             },
-            close: { icon: '<i class="fas fa-times"></i>', label: 'Close' },
+            close: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.close') },
         },
         default: 'copy',
     }, { classes: ['lancer-dialog-base'], width: 760 });
@@ -384,7 +385,7 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
         poster.appendChild(row);
         const foot = document.createElement('div');
         foot.className = 'la-share-foot';
-        foot.textContent = 'Lancer Automations · Battle Log';
+        foot.textContent = localize('LA.battleLog.watermark');
         poster.appendChild(foot);
         const droppedImages = await _inlineImages(poster);
         await _inlineStyleUrls(poster);
@@ -416,12 +417,12 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
         await _deliver(blob, filename, toClipboard);
 
         if (droppedImages)
-            ui.notifications.warn('Portrait could not be embedded (remote image); card exported without it.');
+            ui.notifications.warn(localize('LA.notify.portraitCouldNotBeEmbeddedRemoteImage'));
     }
     catch (err)
     {
         console.error(`${MODULE_ID} | Battle Log share failed:`, err);
-        ui.notifications.error(`Battle Log card export failed: ${err.message}`);
+        ui.notifications.error(localizeFormat('LA.notify.battleLogExportFailed', { error: err.message }));
     }
     finally
     {

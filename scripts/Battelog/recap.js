@@ -5,7 +5,7 @@ import { getStatsForActor, buildTwoZoneStatsHtml, ensureStyleSheet } from '../ta
 import { getLAFlag } from '../tools/flag-utils.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
-import { escapeHtml as _escape } from '../tools/string-utils.js';
+import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 
 function _themeNameHtml()
 {
@@ -136,7 +136,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
     `;
 
     const dlg = new Dialog({
-        title: 'Battle Log · Recap',
+        title: localize('LA.dialogTitle.battleLogRecap'),
         content,
         buttons: {
             // Hidden via CSS; real buttons live inline. Dialog requires at least one entry.
@@ -324,9 +324,9 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             });
             // Focused mech view: stat strip on top, panels in three labeled category columns.
             const PANEL_GROUPS = [
-                { label: 'Offense', titles: new Set(['confirmed kills', 'assisted kills', 'attacks & tech', 'accuracy', 'weapons used']) },
-                { label: 'Defense', titles: new Set(['damage dealt', 'damage taken', 'attacks avoided', 'h.a.s.e']) },
-                { label: 'Operations', titles: new Set(['actions used', 'movement', 'repairs', 'awards']) },
+                { label: localize('LA.recap.panelGroup.offense'), titles: new Set(['confirmed kills', 'assisted kills', 'attacks & tech', 'accuracy', 'weapons used']) },
+                { label: localize('LA.recap.panelGroup.defense'), titles: new Set(['damage dealt', 'damage taken', 'attacks avoided', 'h.a.s.e']) },
+                { label: localize('LA.recap.panelGroup.operations'), titles: new Set(['actions used', 'movement', 'repairs', 'awards']) },
             ];
             const buildFocusDetail = (card) =>
             {
@@ -1278,12 +1278,12 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                         <div class="battelog-pcol-kills-label"><span class="confirmed">CONFIRMED</span></div>
                         <div class="battelog-pcol-kills-label">KILLS${_crown(best.kills === player.id)}</div>
                     </div>
-                    ${_tipPanelHtml({ title: 'Confirmed Kills', rows: _killListRows(player.killedList) })}
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.confirmedKills'), rows: _killListRows(player.killedList) })}
                 </div>
                 <div class="battelog-pcol-assists-block has-tip">
                     <span class="battelog-pcol-assists-num">${assists}</span>
                     <span class="battelog-pcol-assists-label">ASSISTS${_crown(best.assists === player.id)}</span>
-                    ${_tipPanelHtml({ title: 'Assisted Kills', align: 'right', rows: _killListRows(player.assistedList) })}
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.assistedKills'), align: 'right', rows: _killListRows(player.assistedList) })}
                 </div>
             </div>
 
@@ -1295,7 +1295,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     </div>
                     <span class="battelog-pcol-activity-label">ACTIONS</span>
                     ${_tipPanelHtml({
-                        title: 'Actions Used',
+                        title: localize('LA.recap.panel.actionsUsed'),
                         rows: (battleData.skills ?? []).map(skill => ({ k: skill.k, v: '×' + skill.n })),
                     })}
                 </div>
@@ -1306,7 +1306,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     </div>
                     <span class="battelog-pcol-activity-label">MOVES</span>
                     ${_tipPanelHtml({
-                        title: 'Movement',
+                        title: localize('LA.recap.panel.movement'),
                         rows: _movementRows(battleData),
                     })}
                 </div>
@@ -1317,7 +1317,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     </div>
                     <span class="battelog-pcol-activity-label">REPAIRS</span>
                     ${_tipPanelHtml({
-                        title: 'Repairs',
+                        title: localize('LA.recap.panel.repairs'),
                         rows: [
                             { k: 'HP RESTORED', v: `+${player.hpRestored ?? 0}`, kIcon: 'modules/lancer-automations/icons/stats/hp.svg' },
                             { k: 'HEAT COOLED', v: `-${player.heatCooled ?? 0}`, tone: 'var(--la-heat)', kIcon: 'modules/lancer-automations/icons/stats/heat.svg', kColor: 'var(--la-heat)' },
@@ -1338,7 +1338,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <div class="battelog-pcol-stat-value"><span class="phys">${player.physicalDmgDealt ?? 0}</span><span class="sep">/</span><span class="heat">${player.heatDmgDealt ?? 0}</span>${_crown(best.dmgDealt === player.id)}</div>
                     <div class="battelog-pcol-stat-label"><i class="fas fa-burst"></i> DMG DEALT</div>
                     ${_tipPanelHtml({
-                        title: 'Damage Dealt',
+                        title: localize('LA.recap.panel.damageDealt'),
                         rows: [
                             ..._damageTypeRows(battleData.dmgOut),
                             ..._mitigatedRows(battleData.dmgOut),
@@ -1350,7 +1350,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <div class="battelog-pcol-stat-value"><span class="phys">${player.physicalDmgTaken ?? 0}</span><span class="sep">/</span><span class="heat">${player.heatDmgTaken ?? 0}</span>${_crown(best.dmgTaken === player.id)}</div>
                     <div class="battelog-pcol-stat-label"><i class="fas fa-heart-crack"></i> DMG TAKEN</div>
                     ${_tipPanelHtml({
-                        title: 'Damage Taken',
+                        title: localize('LA.recap.panel.damageTaken'),
                         align: 'right',
                         rows: [
                             ..._damageTypeRows(battleData.dmgIn),
@@ -1363,7 +1363,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <div class="battelog-pcol-stat-value">${attacks}<span class="sep">/</span><span class="tech">${techAtk}</span>${_crown(best.techAtk === player.id && techAtk > 0)}</div>
                     <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-weapon"></span> ATK <span class="tech"><span class="battelog-icon-mask battelog-icon-tech-quick"></span> TECH</span></div>
                     ${_tipPanelHtml({
-                        title: 'Attacks & Tech',
+                        title: localize('LA.recap.panel.attacksAndTech'),
                         rows: [
                             ...(battleData.weapons  ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })),
                             ...(battleData.techActs ?? []).map(techAct => ({ k: techAct.k, v: '×' + techAct.n, tone: 'var(--la-tech)', dot: 'var(--la-tech)' })),
@@ -1375,7 +1375,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <div class="battelog-pcol-stat-value"><span class="eva">${_evaPct(battleData)}</span><span class="sep">/</span><span class="edef">${_edefPct(battleData)}</span>${_crown(best.dodged === player.id)}</div>
                     <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-evasion"></span> EVA <span class="edef"><span class="battelog-icon-mask battelog-icon-edef"></span> E-DEF</span></div>
                     ${_tipPanelHtml({
-                        title: 'Attacks Avoided',
+                        title: localize('LA.recap.panel.attacksAvoided'),
                         align: 'right',
                         rows: _dodgedEfficiencyRows(battleData),
                     })}
@@ -1384,7 +1384,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <div class="battelog-pcol-stat-value">${accuracy}%${_crown(best.accuracy === player.id)}</div>
                     <div class="battelog-pcol-stat-label"><i class="fas fa-crosshairs"></i> ACCURACY</div>
                     ${_tipPanelHtml({
-                        title: 'Accuracy',
+                        title: localize('LA.recap.panel.accuracy'),
                         rows: [
                             { k: `RANGED ×${battleData.acc?.rangedShots ?? 0}`, v: battleData.acc?.ranged != null ? battleData.acc.ranged + '%' : '-' },
                             { k: `MELEE ×${battleData.acc?.meleeShots ?? 0}`,   v: battleData.acc?.melee  != null ? battleData.acc.melee  + '%' : '-' },
@@ -1440,13 +1440,13 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     <span class="battelog-icon-mask battelog-icon-weapon"></span>
                     <span class="battelog-pcol-fs-label">FAV WPN</span>
                     <span class="battelog-pcol-fs-value">${_escape(favWeapon)}</span>
-                    ${_tipPanelHtml({ title: 'Weapons Used', rows: (battleData.weapons ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })) })}
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.weaponsUsed'), rows: (battleData.weapons ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })) })}
                 </div>
                 <div class="battelog-pcol-topact has-tip">
                     <span class="battelog-icon-mask battelog-icon-activation"></span>
                     <span class="battelog-pcol-fs-label">TOP ACT</span>
                     <span class="battelog-pcol-fs-value">${_escape(topAction)}</span>
-                    ${_tipPanelHtml({ title: 'Actions Used', rows: (battleData.skills ?? []).map(action => ({ k: action.k, v: '×' + action.n })) })}
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.actionsUsed'), rows: (battleData.skills ?? []).map(action => ({ k: action.k, v: '×' + action.n })) })}
                 </div>
             </div>
 
@@ -1600,7 +1600,7 @@ function _hostileKillersTipHtml(instances, players)
     }
     if (mechRows.length && teamRows.length)
         teamRows[0].sep = true;
-    return _tipPanelHtml({ title: 'DESTROYED BY', rows: [...mechRows, ...teamRows], extraClass: 'battelog-hcard-killers-tip' });
+    return _tipPanelHtml({ title: localize('LA.recap.panel.destroyedBy'), rows: [...mechRows, ...teamRows], extraClass: 'battelog-hcard-killers-tip' });
 }
 
 function _hcardBadgeTipHtml(title, body)
@@ -1741,10 +1741,10 @@ function _hostileCardHtml(group, idx, players, badge = null)
 }
 
 const DISPO_MAP = {
-    hostile:  { label: 'HOSTILE',  icon: 'fa-skull-crossbones',   color: 'var(--la-danger, #c8353d)' },
-    friendly: { label: 'FRIENDLY', icon: 'fa-shield-halved',      color: '#3aa955' },
-    neutral:  { label: 'NEUTRAL',  icon: 'fa-circle-half-stroke', color: '#d09024' },
-    secret:   { label: 'SECRET',   icon: 'fa-user-secret',        color: '#6b45a8' },
+    hostile:  { label: 'LA.recap.dispo.hostile',  icon: 'fa-skull-crossbones',   color: 'var(--la-danger, #c8353d)' },
+    friendly: { label: 'LA.recap.dispo.friendly', icon: 'fa-shield-halved',      color: '#3aa955' },
+    neutral:  { label: 'LA.recap.dispo.neutral',  icon: 'fa-circle-half-stroke', color: '#d09024' },
+    secret:   { label: 'LA.recap.dispo.secret',   icon: 'fa-user-secret',        color: '#6b45a8' },
 };
 
 function _encounterTabHtml(encounter, players)
@@ -1770,7 +1770,7 @@ function _encounterFilterHtml(counts, activeDispo)
                 ${disabled ? 'disabled' : ''}
                 style="--dispo:${dispoConfig.color};">
                 <i class="fas ${dispoConfig.icon}"></i>
-                <span class="battelog-encounter-filter-lbl">${dispoConfig.label}</span>
+                <span class="battelog-encounter-filter-lbl">${localize(dispoConfig.label)}</span>
                 <span class="battelog-encounter-filter-count">${count}</span>
             </button>
         `;
@@ -1910,10 +1910,10 @@ function _encounterInnerHtml(encounter, players, dispo)
 const TELEMETRY_CHART = { w: 660, h: 300, pl: 42, pr: 18, pt: 18, pb: 30 };
 
 const TELEMETRY_METRICS = [
-    { key: 'hp',    field: 'line',     turnField: 'lineTurns',     label: 'HP TOTAL PER ROUND',     icon: 'fa-heart-pulse', startField: 'startHp' },
-    { key: 'heat',  field: 'heatLine', turnField: 'heatLineTurns', label: 'HEAT TOTAL PER ROUND',   icon: 'fa-thermometer-half', startField: 'startHeat' },
-    { key: 'dmg',   field: 'dmgLine',  turnField: 'dmgLineTurns',  label: 'DAMAGE TOTAL PER ROUND', icon: 'fa-burst',  cumulative: true },
-    { key: 'kills', field: 'killAssistLine', turnField: 'killAssistLineTurns', label: 'KILL/ASSIST TOTAL PER ROUND', icon: 'fa-skull', cumulative: true },
+    { key: 'hp',    field: 'line',     turnField: 'lineTurns',     label: 'LA.recap.metric.hp',    icon: 'fa-heart-pulse', startField: 'startHp' },
+    { key: 'heat',  field: 'heatLine', turnField: 'heatLineTurns', label: 'LA.recap.metric.heat',  icon: 'fa-thermometer-half', startField: 'startHeat' },
+    { key: 'dmg',   field: 'dmgLine',  turnField: 'dmgLineTurns',  label: 'LA.recap.metric.dmg',   icon: 'fa-burst',  cumulative: true },
+    { key: 'kills', field: 'killAssistLine', turnField: 'killAssistLineTurns', label: 'LA.recap.metric.kills', icon: 'fa-skull', cumulative: true },
 ];
 
 // Turn-resolution mode: each turn is a chart column instead of each round. Dense fights fall back to rounds.
@@ -2007,7 +2007,7 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
     const metricButtons = TELEMETRY_METRICS.map(m => `
         <button type="button" class="battelog-telemetry-metric ${m.key === view ? 'on' : ''}" data-metric="${m.key}">
             ${_metricIconHtml(m)}
-            <span class="battelog-telemetry-metric-label">${_escape(m.label)}</span>
+            <span class="battelog-telemetry-metric-label">${_escape(localize(m.label))}</span>
         </button>
     `).join('');
     const turns = battle.mission?.turns ?? null;
@@ -2018,7 +2018,7 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
         <div class="battelog-telemetry-metrics">${metricButtons}</div>
         <div class="battelog-telemetry-panel">
             <div class="battelog-telemetry-panel-head">
-                <span class="battelog-telemetry-panel-title"><i class="fas fa-chart-line"></i> ${_escape(metric.label)}</span>
+                <span class="battelog-telemetry-panel-title"><i class="fas fa-chart-line"></i> ${_escape(localize(metric.label))}</span>
                 <span class="battelog-telemetry-panel-note">${_escape(noteText)}</span>
             </div>
             <div class="battelog-telemetry-chart">${_telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize)}</div>
@@ -2075,7 +2075,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     const totalSplitB = isKills ? dataCols.map(colIdx => players.reduce((acc, player) => acc + (splitBFor(player)[colIdx] ?? 0), 0)) : null;
     const totalSeries = {
         key: 'total',
-        label: 'TOTAL',
+        label: localize('LA.recap.total'),
         color: 'var(--la-ink, #0a0a0a)',
         data: [totalStart, ...cum(totalRaw)],
         splitA: isKills ? [0, ...cum(totalSplitA)] : null,

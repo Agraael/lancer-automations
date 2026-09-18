@@ -1,5 +1,7 @@
 /*global game, console, fetch, Dialog, foundry, window */
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
+
 export async function getPendingUpdate(moduleId)
 {
     if (!game.user.isGM)
@@ -118,12 +120,12 @@ function showUpdateDialog(module, newVersion, releaseNotes = "")
     `;
 
     new Dialog({
-        title: `${module.title} Update`,
+        title: localizeFormat('LA.dialogTitle.moduleUpdate', { name: module.title }),
         content: dialogContent,
         buttons: {
             dismiss: {
                 icon: '<i class="fas fa-times"></i>',
-                label: "Dismiss",
+                label: localize("LA.common.dismiss"),
                 callback: () =>
                 {
                     game.settings.set(module.id, 'lastNotifiedVersion', newVersion);
@@ -131,7 +133,7 @@ function showUpdateDialog(module, newVersion, releaseNotes = "")
             },
             later: {
                 icon: '<i class="fas fa-clock"></i>',
-                label: "Remind Me Later"
+                label: localize("LA.versionCheck.remindMeLater")
             }
         },
         default: "dismiss"

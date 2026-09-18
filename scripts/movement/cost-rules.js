@@ -2,8 +2,9 @@
 
 import { elevationForPreview, getDragElevationOffset } from './elevation.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localizeFormat } from '../tools/string-utils.js';
 import { getImmunityBonuses } from '../bonuses/genericBonuses.js';
-import { isForceFreeMovement, getCurrentMovementType } from './keybindings.js';
+import { isForceFreeMovement, getCurrentMovementType, elevationModeFor } from './keybindings.js';
 import { freeTwinOf, parseAction } from './movement-actions.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -104,7 +105,8 @@ export function isPhasing(tokenDoc)
     return hasAny(actor, PHASING_STATUSES) || hasImmunityBonus(actor, 'obstacle');
 }
 
-import { thtApi, canPassObstructions } from './movement-utils.js';
+import { thtApi, canPassObstructions, solidBands, restingSurface, footprintSurface } from './movement-utils.js';
+import { laTokenGameplayHeight } from '../tools/token-height.js';
 
 // getShapesAtPoint is a polygon point-test and was the flood's dominant cost (~6x/cell). Memoize
 // per cell, invalidated whenever terrain could change (scene flag write / scene switch).
@@ -180,7 +182,7 @@ function _warnNonIntegerRegionDifficulty(value, regionName)
     try
     {
         ui.notifications?.warn(
-            `Lancer Automations: Region "${regionName ?? "?"}" has a non-integer difficulty (${value}). Use whole numbers (2 = +1 penalty, 3 = +2, ...).`,
+            localizeFormat('LA.notify.regionNonIntegerDifficulty', { region: regionName ?? '?', value }),
             { permanent: false }
         );
     }
@@ -320,7 +322,6 @@ function templatePenaltyAtCells(offsets, tokenElev = 0)
     }
 }
 
-/** Returns map of terrain types for lookup. */
 export function getTerrainTypeMap()
 {
     const tht = thtApi();
@@ -349,55 +350,34 @@ function isLegalJump(tokenDoc, horizontalCells, ascentUnits)
     return horizontalCells <= 1 ? ascentUnits <= jumpSize(tokenDoc) + 1e-9 : ascentUnits <= 1e-9;
 }
 
-/** Max solid terrain top at one cell, grid units. */
-function centerTopAt(typeById, cellOffset)
-{
-    const tht = thtApi();
-    if (!tht || !typeById)
-        return 0;
-    let top = 0;
-    for (const shape of shapesAtCell(tht, cellOffset))
-    {
-        const terrainType = typeById.get(shape.terrainTypeId);
-        if (!terrainType?.usesHeight || !terrainType?.isSolid)
-            continue;
-        const shapeTop = (shape.elevation ?? 0) + (shape.height ?? 0);
-        if (shapeTop > top)
-            top = shapeTop;
-    }
-    return top;
-}
-
 /**
- * Standing rule: the mover stands on the lowest hex under its body when everything else
- * under it rises less than SIZE above that; otherwise it is mounted on the max.
- * @returns {number} effective terrain top, grid units
+ * Surface the token rests on across a sampled footprint, grid units. Null when nothing was sampled (no THT).
+ * @param {{cellShapes: object[][]}} fpResult from footprintShapesAt
+ * @param {Map} typeById
+ * @param {number} zHeight token height, grid units
+ * @param {number} height current elevation, grid units
+ * @param {'ground'|'hold'} mode
+ * @param {boolean} standing walker may step over sub-SIZE obstructions
+ * @param {number} moverSize
+ * @returns {{surface: number, brushed: boolean, landingSurface: number}|null}
  */
-export function standingTopFor(typeById, footprint, moverSize, maxTop)
+export function footprintRestingSurface(fpResult, typeById, zHeight, height, mode, standing, moverSize)
 {
-    if (!(moverSize > 1) || !footprint || footprint.length < 2)
-        return maxTop;
-    let minTop = Infinity;
-    for (const cellOffset of footprint)
-    {
-        const cellTop = centerTopAt(typeById, cellOffset);
-        if (cellTop < minTop)
-            minTop = cellTop;
-    }
-    if (minTop === Infinity)
-        return maxTop;
-    return (maxTop - minTop < moverSize - 1e-6) ? minTop : maxTop;
+    if (!fpResult.cellShapes.length)
+        return null;
+    const cellSurfaces = fpResult.cellShapes.map(shapes => restingSurface(solidBands(shapes, typeById), zHeight, height, mode));
+    return footprintSurface(cellSurfaces, moverSize, standing && mode === 'ground');
 }
 
 /**
  * Sample the token's full footprint when its center sits on the given path cell.
- * Returns the unique set of THT shapes across all occupied hexes and the MAX solid top.
+ * Returns the unique set of THT shapes across all occupied hexes, plus the shapes per cell.
  */
 export function footprintShapesAt(tokenDoc, pathOffset, typeById)
 {
     const tht = thtApi();
     if (!tht || !typeById)
-        return { top: 0, shapes: [], footprint: [] };
+        return { shapes: [], footprint: [], cellShapes: [] };
 
     const center = canvas.grid.getCenterPoint(pathOffset);
     const gridSize = canvas.grid.size;
@@ -420,24 +400,15 @@ export function footprintShapesAt(tokenDoc, pathOffset, typeById)
         footprint = [pathOffset];
 
     const dedup = new Map();
+    const cellShapes = [];
     for (const cellOffset of footprint)
     {
-        for (const shape of shapesAtCell(tht, cellOffset))
+        const shapes = shapesAtCell(tht, cellOffset);
+        cellShapes.push(shapes);
+        for (const shape of shapes)
             dedup.set(`${shape.terrainTypeId}|${shape.elevation}|${shape.height}`, shape);
     }
-    const shapes = [...dedup.values()];
-
-    let top = 0;
-    for (const shape of shapes)
-    {
-        const terrainType = typeById.get(shape.terrainTypeId);
-        if (!terrainType?.usesHeight || !terrainType?.isSolid)
-            continue;
-        const shapeTop = (shape.elevation ?? 0) + (shape.height ?? 0);
-        if (shapeTop > top)
-            top = shapeTop;
-    }
-    return { top, shapes, footprint };
+    return { shapes: [...dedup.values()], footprint, cellShapes };
 }
 
 /** Collect deduplicated THT shapes across a set of grid offsets. */
@@ -701,8 +672,8 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result)
 // Optional ctx.actionKey/footprintCache/penaltyCache only matter for static (non-drag) queries.
 export function evalCellStep(tokenDoc, curr, state, ctx)
 {
-    const { typeById, sceneDistance, flying, noTerrainClimb, climbImmune, freeMode, terrainImmune, actionKey = null, footprintCache = null, penaltyCache = null, standingRule = false, moverSize = 0 } = ctx;
-    const { prevFootprintKeys, prevTerrainTop, tokenElev, manualDelta = 0 } = state;
+    const { typeById, sceneDistance, flying, noTerrainClimb, climbImmune, freeMode, terrainImmune, actionKey = null, footprintCache = null, penaltyCache = null, standingRule = false, moverSize = 0, elevationMode = null, zHeight = 1 } = ctx;
+    const { prevFootprintKeys, tokenElev, floor = tokenElev, manualDelta = 0, landing = false } = state;
     const cellKey = `${curr.i},${curr.j}`;
     let fpResult = footprintCache?.get(cellKey);
     if (!fpResult)
@@ -711,17 +682,22 @@ export function evalCellStep(tokenDoc, curr, state, ctx)
         footprintCache?.set(cellKey, fpResult);
     }
     const footprint = fpResult.footprint;
-    const cellTop = (standingRule && !flying) ? standingTopFor(typeById, footprint, moverSize, fpResult.top) : fpResult.top;
     const newCells = footprint.filter(cellOffset => !prevFootprintKeys.has(`${cellOffset.i},${cellOffset.j}`));
     const newShapes = collectShapes(newCells, typeById);
     const noClimbFlag = newShapes.some(shape => typeById.get(shape.terrainTypeId)?.noClimbingCost);
     const noDescentFlag = newShapes.some(shape => typeById.get(shape.terrainTypeId)?.noDescentCost);
-    const newTerrainTop = flying ? Math.max(prevTerrainTop, cellTop) : cellTop;
-    const terrainDelta = noTerrainClimb ? 0 : (newTerrainTop - prevTerrainTop);
-    const stepDelta = terrainDelta + manualDelta;
+    // Hold measures from the floor so a ridge is crossed and left behind, with Q/E folded into the floor;
+    // Ground chains from the last surface and adds Q/E on top.
+    const reference = elevationMode === 'hold' ? floor + manualDelta : tokenElev;
+    const rest = (noTerrainClimb || !elevationMode) ? null
+        : footprintRestingSurface(fpResult, typeById, zHeight, reference, elevationMode, standingRule, moverSize);
+    const surface = rest == null ? null : (landing ? rest.landingSurface : rest.surface);
+    const nextTokenElev = surface == null ? tokenElev + manualDelta
+        : (elevationMode === 'hold' ? surface : surface + manualDelta);
+    const cellTop = nextTokenElev;
+    const stepDelta = nextTokenElev - tokenElev;
     const rawClimb = Math.abs(stepDelta);
     const climbCellsBilled = Math.ceil(rawClimb - 0.5);
-    const nextTokenElev = tokenElev + stepDelta;
     const cellsForOverlay = newCells.length ? newCells : [curr];
     // Penalty memo is only valid for 1-cell footprints (multi-hex penalty depends on entry direction).
     const penaltyKey = `${cellKey}|${Math.round(nextTokenElev * 1000)}`;
@@ -752,7 +728,7 @@ export function evalCellStep(tokenDoc, curr, state, ctx)
     const stepMalus = (!flying && !climbImmune && !freeMode && !noClimbStep && climbCellsBilled > 0)
         ? Math.max(0, climbCellsBilled - 1) * sceneDistance
         : 0;
-    return { cellTop, footprint, newCells, noClimbStep, newTerrainTop, stepDelta, rawClimb, climbCellsBilled, penalty, stepClimbCost, stepMalus, nextTokenElev };
+    return { cellTop, footprint, newCells, noClimbStep, stepDelta, rawClimb, climbCellsBilled, penalty, stepClimbCost, stepMalus, nextTokenElev, nextFloor: floor + manualDelta };
 }
 
 function applyLancerCost(tokenDoc, inputWaypoints, result)
@@ -773,6 +749,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
     const ignoreTerrainElev = _autoElevDisabled();
     const climbImmune = isClimbingImmune(tokenDoc);
     const moverSize = Number(tokenDoc.actor?.system?.size) || 0;
+    const zHeight = laTokenGameplayHeight(tokenDoc);
     const standingRule = moverSize > 1 && canPassObstructions(tokenDoc);
     const freeMode = isForceFreeMovement();
     const terrainImmune = isTerrainImmune(tokenDoc) || freeMode;
@@ -786,32 +763,11 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
     const typeById = getTerrainTypeMap();
     debugReset();
 
-    // Climb cost is driven by terrain-top changes, not absolute token elev.
-    // Use the PATH'S first waypoint (origin of history), not tokenDoc.x/y (which is the
-    // current position - post-move that's the destination and would skew the climb start).
+    // Elevation starts from the PATH'S first waypoint (origin of history), not tokenDoc, which post-move is the destination.
     const startWp = inputWaypoints[0];
-    const startElev = startWp?.elevation ?? tokenDoc.elevation ?? 0;
-    const startX = startWp?.x ?? tokenDoc.x ?? 0;
-    const startY = startWp?.y ?? tokenDoc.y ?? 0;
-    const startWidth = startWp?.width ?? tokenDoc.width ?? 1;
-    const startHeight = startWp?.height ?? tokenDoc.height ?? 1;
-    const storedElevGrid = startElev / sceneDistance;
-    let groundElevGrid = 0;
-    try
-    {
-        const startGridSize = canvas.grid.size;
-        const tokenCenter = {
-            x: startX + startWidth * startGridSize / 2,
-            y: startY + startHeight * startGridSize / 2
-        };
-        const startOffset = canvas.grid.getOffset(tokenCenter);
-        groundElevGrid = footprintShapesAt(tokenDoc, startOffset, typeById).top;
-    }
-    catch
-    { /* ignore */ }
-    let prevTerrainTop = groundElevGrid;
-    let prevCellTop = groundElevGrid;
-    let tokenElev = (defaultIgnoreElev || ignoreTerrainElev) ? storedElevGrid : Math.max(storedElevGrid, groundElevGrid);
+    let tokenElev = (startWp?.elevation ?? tokenDoc.elevation ?? 0) / sceneDistance;
+    // Hold measures every cell from this floor; Q/E moves it.
+    let floor = tokenElev;
     const dragOffsetGrid = getDragElevationOffset?.() ?? 0;
     let userOffsetApplied = false;
 
@@ -843,6 +799,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
         const flying = segAction === 'fly' || (segAction == null && defaultFlying);
         const jumping = segAction === 'jump' || (segAction == null && defaultJump);
         const noTerrainClimb = ignoreTerrainElev || segAction === 'ignore' || (segAction == null && defaultIgnoreElev);
+        const elevationMode = noTerrainClimb ? null : elevationModeFor(segAction ?? dragType);
 
         const isLastSegment = (keepIdxPos === keepIdx.length - 2);
         const segStartElev = tokenElev;
@@ -917,10 +874,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 return cached;
             };
             let prev = path?.[0];
-            const startFpResult = footAt(prev);
-            if (standingRule && !flying)
-                prevTerrainTop = Math.min(prevTerrainTop, standingTopFor(typeById, startFpResult.footprint, moverSize, startFpResult.top));
-            const startFootprint = startFpResult.footprint;
+            const startFootprint = footAt(prev).footprint;
             let prevFootprintKeys = new Set(startFootprint.map(cellOffset => `${cellOffset.i},${cellOffset.j}`));
             // Average of footprint cell centers; matches the geometric center of the cells Foundry highlights.
             const footprintCentroid = (cells) =>
@@ -958,13 +912,14 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 }
 
                 const step = evalCellStep(tokenDoc, curr,
-                    { prevFootprintKeys, prevTerrainTop, tokenElev, manualDelta },
-                    { typeById, sceneDistance, flying, noTerrainClimb, climbImmune, freeMode, terrainImmune, footprintCache: groupFootprintCache, standingRule, moverSize });
-                const { cellTop, footprint, newCells, stepDelta, climbCellsBilled, penalty, stepClimbCost, stepMalus, newTerrainTop } = step;
+                    { prevFootprintKeys, tokenElev, floor, manualDelta, landing: isLastSegment && j === lastRealJ },
+                    { typeById, sceneDistance, flying, noTerrainClimb, climbImmune, freeMode, terrainImmune, footprintCache: groupFootprintCache, standingRule, moverSize, elevationMode, zHeight });
+                const { cellTop, footprint, newCells, stepDelta, climbCellsBilled, penalty, stepClimbCost, stepMalus } = step;
                 segClimbVerticalUnits += step.rawClimb;
                 verticalCost += stepClimbCost;
                 malus += stepMalus;
                 tokenElev = step.nextTokenElev;
+                floor = step.nextFloor;
                 if (tokenElev > segMaxElev)
                     segMaxElev = tokenElev;
                 terrainCost += penalty * sceneDistance;
@@ -991,14 +946,12 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 else
                     segCumCost += sceneDistance + stepClimbCost + stepMalus + penalty * sceneDistance;
                 stepCentroids.push({ x: currCentroid.x, y: currCentroid.y, cost: segCumCost });
-                const visualTerrainDelta = noTerrainClimb ? 0 : (cellTop - prevCellTop);
-                const visualStepDelta = visualTerrainDelta + manualDelta;
-                if (visualStepDelta !== 0)
+                if (stepDelta !== 0)
                 {
                     climbCells.push({
                         x: (prevCentroid.x + currCentroid.x) / 2,
                         y: (prevCentroid.y + currCentroid.y) / 2,
-                        delta: visualStepDelta
+                        delta: stepDelta
                     });
                 }
                 if (penalty > 0)
@@ -1012,7 +965,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                     if (jumping && j === lastRealJ)
                         landingTerrainCell = terrainMarker;
                 }
-                debug.push(`cell(${curr.i},${curr.j}) fp=${footprint.length} new=${newCells.length} cellTop=${cellTop} terrain=${prevTerrainTop}->${newTerrainTop} tokenE=${tokenElev} delta=${stepDelta} billed=${climbCellsBilled} penalty=${penalty}`);
+                debug.push(`cell(${curr.i},${curr.j}) fp=${footprint.length} new=${newCells.length} surface=${cellTop} floor=${floor} tokenE=${tokenElev} delta=${stepDelta} billed=${climbCellsBilled} penalty=${penalty}`);
                 debugMark(curr, cellCenter, penalty, tokenElev, climbCellsBilled);
                 for (const cellOffset of footprint)
                 {
@@ -1024,8 +977,6 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
                 }
 
                 prevFootprintKeys = new Set(footprint.map(cellOffset => `${cellOffset.i},${cellOffset.j}`));
-                prevTerrainTop = newTerrainTop;
-                prevCellTop = cellTop;
                 prevCentroid = currCentroid;
                 prev = curr;
             }

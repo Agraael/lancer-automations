@@ -1,5 +1,6 @@
 import { _buildCancelFn } from "../activations/flow-steps.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize } from "../tools/string-utils.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/index.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { updateStructure } from "../tools/wreck.js";
@@ -116,7 +117,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                     }
                     await startChoiceCard({
                         mode: "or",
-                        title: "HP MODIFIED",
+                        title: localize('LA.dialogTitle.hpModified'),
                         description: reasonText,
                         item,
                         originToken,
@@ -231,7 +232,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                     }
                     await startChoiceCard({
                         mode: "or",
-                        title: "HEAT MODIFIED",
+                        title: localize('LA.dialogTitle.heatModified'),
                         description: reasonText,
                         item,
                         originToken,

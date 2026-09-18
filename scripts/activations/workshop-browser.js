@@ -1,6 +1,8 @@
 import { ReactionManager, ReactionEditor, StartupScriptEditor, clearScriptCache } from "./reaction-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { escapeHtml as esc } from "../tools/string-utils.js";
+import { escapeHtml as esc, localize, localizeFormat } from "../tools/string-utils.js";
+import { getSupabase } from "../setup/supabase-client.js";
+import { getOrCreateInstallId } from "../setup/telemetry.js";
 
 const REPO_OWNER = 'Agraael';
 const REPO_NAME = 'Lancer-automations-workshop';
@@ -19,10 +21,17 @@ const REACTION_FIELDS = [
     'outOfCombat', 'dispositionFilter', 'triggerTarget', 'sceneReactor', 'sceneId'
 ];
 
+const STATS_VIEW = 'workshop_stats';
+
 const state = {
     tree: null,
     treeFetchedAt: 0,
     files: new Map(),
+    terms: new Map(),
+    stats: new Map(),
+    liked: new Set(),
+    statsFetchedAt: 0,
+    search: '',
     view: { mode: 'list', author: null },
     checked: new Set(),
     manager: null,
@@ -54,7 +63,64 @@ async function fetchFile(path, force = false)
         throw new Error(`Fetch failed for ${path} (${response.status})`);
     const text = await response.text();
     state.files.set(path, text);
+    state.terms.delete(path);
     return text;
+}
+
+// Likes and downloads (Supabase, keyed by workshopId)
+
+async function fetchStats(force = false)
+{
+    if (state.statsFetchedAt && !force)
+        return;
+    try
+    {
+        const client = getSupabase();
+        const installId = await getOrCreateInstallId();
+        const [statsRes, likedRes] = await Promise.all([
+            client.from(STATS_VIEW).select('workshop_id, likes, installs, downloads'),
+            client.rpc('workshop_liked_ids', { p_install: installId })
+        ]);
+        if (statsRes.error)
+            throw statsRes.error;
+        if (likedRes.error)
+            throw likedRes.error;
+        state.stats = new Map((statsRes.data || []).map(row => [row.workshop_id, row]));
+        state.liked = new Set(likedRes.data || []);
+        state.statsFetchedAt = Date.now();
+    }
+    catch (err)
+    {
+        console.warn('lancer-automations | Workshop stats unavailable:', err);
+    }
+}
+
+async function setLike(workshopId, liked)
+{
+    const { error } = await getSupabase().rpc('workshop_set_like', {
+        p_id: workshopId,
+        p_install: await getOrCreateInstallId(),
+        p_liked: liked
+    });
+    if (error)
+        throw error;
+}
+
+async function recordDownload(workshopId)
+{
+    try
+    {
+        const { error } = await getSupabase().rpc('workshop_record_download', {
+            p_id: workshopId,
+            p_install: await getOrCreateInstallId()
+        });
+        if (error)
+            throw error;
+    }
+    catch (err)
+    {
+        console.warn('lancer-automations | Workshop download not recorded:', err);
+    }
 }
 
 // Tree parsing and identity
@@ -372,29 +438,34 @@ async function importPath(path)
     const json = JSON.parse(text);
     const kind = classifyPayload(json);
     const workshopId = pathWorkshopId(path);
+    let count = 0;
     if (kind === 'automation')
     {
         await importAutomationPayload(json, workshopId);
-        return 1;
+        count = 1;
     }
-    if (kind === 'startup')
+    else if (kind === 'startup')
     {
         await importStartupPayload(json, workshopId, fileNameOf(path));
-        return 1;
+        count = 1;
     }
-    if (kind === 'pack')
+    else if (kind === 'pack')
     {
         const entries = packEntries(json, workshopId);
         for (const entry of entries)
             await importPackEntry(entry);
-        return entries.length;
+        count = entries.length;
     }
-    throw new Error(`Unrecognized file content: ${path}`);
+    else
+        throw new Error(`Unrecognized file content: ${path}`);
+    await recordDownload(workshopId);
+    return count;
 }
 
-function afterImport()
+async function afterImport()
 {
     clearScriptCache();
+    await fetchStats(true);
     state.manager?.render();
 }
 
@@ -409,7 +480,7 @@ async function openWorkshopFile(path)
     }
     catch (err)
     {
-        ui.notifications.error(`Could not open ${fileNameOf(path)}: ${err.message}`);
+        ui.notifications.error(localizeFormat('LA.notify.couldNotOpenFile', { file: fileNameOf(path), error: err.message }));
         renderCurrentView();
         return;
     }
@@ -448,7 +519,7 @@ async function openWorkshopFile(path)
     else if (kind === 'pack')
         openWorkshopPackDialog(path, json);
     else
-        ui.notifications.warn(`${fileNameOf(path)} is not a recognized automation, pack, or startup file.`);
+        ui.notifications.warn(localizeFormat('LA.notify.unrecognizedFile', { file: fileNameOf(path) }));
 }
 
 function openInnerPackEntryEditor(entry)
@@ -488,7 +559,118 @@ function openInnerPackEntryEditor(entry)
     }
 }
 
+// Search
+
+function allWorkshopPaths()
+{
+    return getContributors().flatMap(contributor => [...contributor.automations, ...contributor.packs, ...contributor.startups]);
+}
+
+async function ensureAllFilesFetched()
+{
+    const missing = allWorkshopPaths().filter(path => !state.files.has(path));
+    if (missing.length)
+        await Promise.allSettled(missing.map(path => fetchFile(path)));
+}
+
+/** Lowercased strings a file can be found by: path, name, LIDs, pack entry keys. */
+function searchTerms(path)
+{
+    if (state.terms.has(path))
+        return state.terms.get(path);
+    const terms = [pathWorkshopId(path)];
+    const text = state.files.get(path);
+    let json = null;
+    try
+    {
+        json = text === undefined ? null : JSON.parse(text);
+    }
+    catch
+    {
+        json = null;
+    }
+    const kind = classifyPayload(json);
+    if (kind === 'automation')
+        terms.push(json.name, json.lid);
+    else if (kind === 'pack')
+    {
+        terms.push(json.name, ...Object.keys(json.itemReactions || {}), ...Object.keys(json.generalReactions || {}),
+            ...(json.startupScripts || []).map(script => script?.name));
+    }
+    else if (kind === 'startup')
+        terms.push(json.name);
+    const lowered = terms.filter(term => typeof term === 'string' && term).map(term => term.toLowerCase());
+    state.terms.set(path, lowered);
+    return lowered;
+}
+
+function matchesSearch(path, query)
+{
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const terms = searchTerms(path);
+    return words.every(word => terms.some(term => term.includes(word)));
+}
+
 // Rendering helpers
+
+function statsHtml(workshopId)
+{
+    if (!state.statsFetchedAt)
+        return '';
+    const row = state.stats.get(workshopId);
+    const likes = row?.likes || 0;
+    const installs = row?.installs || 0;
+    const liked = state.liked.has(workshopId);
+    return `<span class="la-ws-stats" data-id="${esc(workshopId)}">
+        <a class="la-ws-like${liked ? ' liked' : ''}" title="${liked ? 'Unlike' : 'Like'}"><i class="${liked ? 'fas' : 'far'} fa-heart"></i> ${likes}</a>
+        <span class="la-ws-dl" title="Imported by ${installs} install${installs === 1 ? '' : 's'}"><i class="fas fa-download"></i> ${installs}</span>
+    </span>`;
+}
+
+function bindLike(statsEl)
+{
+    statsEl.querySelector('.la-ws-like')?.addEventListener('click', (event) =>
+    {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleLike(statsEl.dataset.id);
+    });
+}
+
+function refreshStats(workshopId)
+{
+    const selector = `.la-ws-stats[data-id="${CSS.escape(workshopId)}"]`;
+    for (const statsEl of Array.from(document.querySelectorAll(selector)))
+        statsEl.outerHTML = statsHtml(workshopId);
+    for (const statsEl of Array.from(document.querySelectorAll(selector)))
+        bindLike(statsEl);
+}
+
+async function toggleLike(workshopId)
+{
+    const liked = !state.liked.has(workshopId);
+    const row = state.stats.get(workshopId) || { workshop_id: workshopId, likes: 0, installs: 0, downloads: 0 };
+    const apply = (on) =>
+    {
+        if (on)
+            state.liked.add(workshopId);
+        else
+            state.liked.delete(workshopId);
+        row.likes = Math.max(0, row.likes + (on ? 1 : -1));
+        state.stats.set(workshopId, row);
+        refreshStats(workshopId);
+    };
+    apply(liked);
+    try
+    {
+        await setLike(workshopId, liked);
+    }
+    catch (err)
+    {
+        apply(!liked);
+        ui.notifications.warn(localizeFormat('LA.notify.workshopLikeFailed', { error: err.message }));
+    }
+}
 
 function statusBadge(status)
 {
@@ -574,58 +756,154 @@ function contributorBadgeSummary(contributor)
     return `<span style="font-size: 0.85em; color: var(--la-ink-dim);">${parts.join(', ')}</span>`;
 }
 
-function renderListView()
+function contributorLikesHtml(contributor)
 {
-    const contributors = getContributors();
-    const rows = contributors.map(contributor => `
+    if (!state.statsFetchedAt)
+        return '';
+    const paths = [...contributor.automations, ...contributor.packs, ...contributor.startups];
+    const likes = paths.reduce((sum, path) => sum + (state.stats.get(pathWorkshopId(path))?.likes || 0), 0);
+    return `<span class="la-ws-stats"><span class="la-ws-dl" title="${likes} like${likes === 1 ? '' : 's'}"><i class="fas fa-heart"></i> ${likes}</span></span>`;
+}
+
+function contributorRows()
+{
+    return getContributors().map(contributor => `
         <div class="reaction-item flexrow la-ws-contrib" data-author="${esc(contributor.author)}" style="cursor: pointer;">
             <span class="col-enabled"></span>
             <span class="col-type"><i class="fas fa-folder" title="Contributor" style="color: var(--primary-color);"></i></span>
             <span class="col-name"><strong>${esc(contributor.author)}</strong>
                 <span style="font-size: 0.85em; color: var(--la-ink-dim); margin-left: 6px;">${contributorSummary(contributor)}</span>
+                ${contributorLikesHtml(contributor)}
             </span>
             <span class="col-triggers">${contributorBadgeSummary(contributor)}</span>
             <span class="col-controls"><i class="fas fa-chevron-right"></i></span>
         </div>`).join('');
+}
 
-    state.root.innerHTML = `
+function searchRows()
+{
+    const hits = allWorkshopPaths().filter(path => matchesSearch(path, state.search));
+    return hits.map(path => `
+        <div class="reaction-item flexrow">
+            <span class="col-name"><span class="la-ws-file" data-path="${esc(path)}">${fileControlHtml(path)}</span></span>
+            <span class="col-triggers" style="color: var(--la-ink-dim);">${esc(authorOfId(pathWorkshopId(path)))}</span>
+            <span class="col-controls"></span>
+        </div>`).join('');
+}
+
+/** Fills the list shell: contributor folders, or flat file hits while a search is typed. */
+function renderListBody(root)
+{
+    const searching = state.search.trim() !== '';
+    const header = searching
+        ? `<span class="col-name">File</span><span class="col-triggers">Contributor</span><span class="col-controls"></span>`
+        : `<span class="col-enabled"></span><span class="col-type">Type</span><span class="col-name">Contributor</span><span class="col-triggers">Status</span><span class="col-controls"></span>`;
+    const rows = searching ? searchRows() : contributorRows();
+    const empty = searching ? 'No match.' : 'No contributors found.';
+    root.querySelector('.la-ws-body').innerHTML = `
+        <div class="reaction-header flexrow">${header}</div>
+        <div class="scrollable">
+            ${rows || `<p class="notes" style="text-align: center; padding: 16px;">${empty}</p>`}
+        </div>`;
+    const importBar = root.querySelector('.la-ws-import-bar');
+    importBar.style.display = searching ? '' : 'none';
+    if (searching)
+        wireFileControls(root);
+    else
+    {
+        for (const row of root.querySelectorAll('.la-ws-contrib'))
+            row.addEventListener('click', () => openContributor(row.dataset.author));
+    }
+}
+
+async function importSelected()
+{
+    const paths = [...state.checked];
+    if (!paths.length)
+        return ui.notifications.warn(localize('LA.notify.nothingSelected'));
+    let imported = 0;
+    const failed = [];
+    for (const path of paths)
+    {
+        try
+        {
+            imported += await importPath(path);
+            state.checked.delete(path);
+        }
+        catch (err)
+        {
+            failed.push(`${fileNameOf(path)}: ${err.message}`);
+        }
+    }
+    await afterImport();
+    if (imported)
+        ui.notifications.info(localizeFormat('LA.notify.importedWorkshopEntries', { count: imported, suffix: imported === 1 ? 'y' : 'ies' }));
+    for (const message of failed)
+        ui.notifications.error(localizeFormat('LA.notify.importFailed', { error: message }));
+}
+
+function renderListView()
+{
+    const root = state.root;
+    root.innerHTML = `
         <div class="lancer-action-buttons" style="margin: 0 0 8px 0;">
             <button type="button" class="lancer-action-btn la-ws-refresh"><i class="fas fa-rotate"></i> Refresh</button>
+            <input type="search" class="la-ws-search" placeholder="Search name, LID or contributor" value="${esc(state.search)}">
         </div>
         <p class="notes" style="margin-bottom: 8px; font-size: 11px; color: var(--la-ink-dim);">
             Want to share your own? <a class="la-ws-contribute" style="cursor: pointer; color: var(--primary-color); font-weight: bold;">Contribute on GitHub</a>
             <span style="float: right;">last sync: ${lastSyncLabel()}</span>
         </p>
-        <div class="reaction-list flexcol" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-            <div class="reaction-header flexrow">
-                <span class="col-enabled"></span>
-                <span class="col-type">Type</span>
-                <span class="col-name">Contributor</span>
-                <span class="col-triggers">Status</span>
-                <span class="col-controls"></span>
-            </div>
-            <div class="scrollable">
-                ${rows || '<p class="notes" style="text-align: center; padding: 16px;">No contributors found.</p>'}
-            </div>
+        <div class="reaction-list flexcol la-ws-body" style="flex: 1; display: flex; flex-direction: column; min-height: 0;"></div>
+        <div class="lancer-action-buttons la-ws-import-bar" style="margin: 8px 0 0 0; display: none;">
+            <button type="button" class="lancer-action-btn la-ws-import-selected"><i class="fas fa-file-import"></i> Import selected (<span class="la-ws-count">${state.checked.size}</span>)</button>
         </div>`;
 
-    const root = state.root;
     root.querySelector('.la-ws-refresh')?.addEventListener('click', async () =>
     {
         try
         {
             state.files.clear();
-            await fetchTree(true);
+            state.terms.clear();
+            await Promise.all([fetchTree(true), fetchStats(true)]);
         }
         catch (err)
         {
-            ui.notifications.error(`Workshop refresh failed: ${err.message}`);
+            ui.notifications.error(localizeFormat('LA.notify.workshopRefreshFailed', { error: err.message }));
         }
         renderCurrentView();
     });
     root.querySelector('.la-ws-contribute')?.addEventListener('click', () => window.open(CONTRIBUTE_URL, '_blank'));
-    for (const row of root.querySelectorAll('.la-ws-contrib'))
-        row.addEventListener('click', () => openContributor(row.dataset.author));
+    root.querySelector('.la-ws-import-selected')?.addEventListener('click', importSelected);
+
+    const input = root.querySelector('.la-ws-search');
+    let timer = null;
+    let searchToken = 0;
+    input?.addEventListener('input', () =>
+    {
+        clearTimeout(timer);
+        timer = setTimeout(async () =>
+        {
+            const token = ++searchToken;
+            state.search = input.value;
+            if (state.search.trim() === '')
+                state.checked.clear();
+            else
+                await ensureAllFilesFetched();
+            if (token === searchToken && root.isConnected)
+                renderListBody(root);
+        }, 150);
+    });
+
+    if (state.search.trim() !== '')
+    {
+        ensureAllFilesFetched().then(() =>
+        {
+            if (root.isConnected)
+                renderListBody(root);
+        });
+    }
+    renderListBody(root);
 }
 
 // Contributor view
@@ -649,7 +927,7 @@ async function openContributor(author)
 function fileControlHtml(path)
 {
     const checked = state.checked.has(path) ? 'checked' : '';
-    return `<input type="checkbox" class="la-ws-check" ${checked}><a class="la-ws-open">${esc(fileNameOf(path))}</a>${statusBadge(fileStatus(path))}`;
+    return `<input type="checkbox" class="la-ws-check" ${checked}><a class="la-ws-open">${esc(fileNameOf(path))}</a>${statusBadge(fileStatus(path))}${statsHtml(pathWorkshopId(path))}`;
 }
 
 function fileRow(path)
@@ -700,6 +978,9 @@ function wireFileControls(root)
     {
         const path = control.dataset.path;
         control.querySelector('.la-ws-open')?.addEventListener('click', () => openWorkshopFile(path));
+        const statsEl = control.querySelector('.la-ws-stats');
+        if (statsEl)
+            bindLike(statsEl);
         control.querySelector('.la-ws-check')?.addEventListener('change', (event) =>
         {
             const checked = event.currentTarget.checked;
@@ -767,31 +1048,7 @@ function renderContributorView(author)
 
     wireFileControls(root);
 
-    root.querySelector('.la-ws-import-selected')?.addEventListener('click', async () =>
-    {
-        const paths = [...state.checked];
-        if (!paths.length)
-            return ui.notifications.warn('Nothing selected.');
-        let imported = 0;
-        const failed = [];
-        for (const path of paths)
-        {
-            try
-            {
-                imported += await importPath(path);
-                state.checked.delete(path);
-            }
-            catch (err)
-            {
-                failed.push(`${fileNameOf(path)}: ${err.message}`);
-            }
-        }
-        afterImport();
-        if (imported)
-            ui.notifications.info(`Imported ${imported} workshop entr${imported === 1 ? 'y' : 'ies'}.`);
-        for (const message of failed)
-            ui.notifications.error(`Import failed: ${message}`);
-    });
+    root.querySelector('.la-ws-import-selected')?.addEventListener('click', importSelected);
 }
 
 // Pack dialog
@@ -821,26 +1078,29 @@ function openWorkshopPackDialog(path, json)
     }).join('');
 
     new Dialog({
-        title: `Pack: ${json.name || fileNameOf(path)} (${author})`,
-        content: `<div class="lancer-scroll" style="max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;">${body || '<p class="notes">Empty pack.</p>'}</div>`,
+        title: localizeFormat('LA.dialogTitle.packTitle', { name: json.name || fileNameOf(path), author }),
+        content: `
+            <div style="margin-bottom: 4px;">${statsHtml(workshopId)}</div>
+            <div class="lancer-scroll" style="max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;">${body || '<p class="notes">Empty pack.</p>'}</div>`,
         buttons: {
             import: {
                 icon: '<i class="fas fa-file-import"></i>',
-                label: 'Import selected',
+                label: localize('LA.reactionImport.importSelected'),
                 callback: async (html) =>
                 {
                     const chosen = new Set();
                     html.find('.la-wsp-check:checked').each((_index, element) => chosen.add(element.dataset.id));
                     const picked = entries.filter(entry => chosen.has(entry.workshopId));
                     if (!picked.length)
-                        return ui.notifications.warn('Nothing selected.');
+                        return ui.notifications.warn(localize('LA.notify.nothingSelected'));
                     for (const entry of picked)
                         await importPackEntry(entry);
-                    afterImport();
-                    ui.notifications.info(`Imported ${picked.length} entr${picked.length === 1 ? 'y' : 'ies'} from ${json.name || fileNameOf(path)}.`);
+                    await recordDownload(workshopId);
+                    await afterImport();
+                    ui.notifications.info(localizeFormat('LA.notify.importedEntriesFrom', { count: picked.length, suffix: picked.length === 1 ? 'y' : 'ies', source: json.name || fileNameOf(path) }));
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Close' }
+            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.close') }
         },
         default: 'import',
         render: (html) =>
@@ -852,6 +1112,9 @@ function openWorkshopPackDialog(path, json)
                 if (entry)
                     openInnerPackEntryEditor(entry);
             });
+            const statsEl = html[0].querySelector('.la-ws-stats');
+            if (statsEl)
+                bindLike(statsEl);
         }
     }, { width: 520, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
 }
@@ -867,7 +1130,7 @@ export async function renderWorkshopTab(manager, root)
         root.innerHTML = '<p class="notes" style="text-align: center; padding: 16px;"><i class="fas fa-spinner fa-spin"></i> Loading the workshop...</p>';
         try
         {
-            await fetchTree();
+            await Promise.all([fetchTree(), fetchStats()]);
         }
         catch (err)
         {

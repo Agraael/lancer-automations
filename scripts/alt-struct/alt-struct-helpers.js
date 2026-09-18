@@ -1,3 +1,5 @@
+import { localize } from '../tools/string-utils.js';
+
 // Build an alt-struct flow button (anchor).
 // attrs holds any extra data-* pairs (e.g. { 'check-type': 'hull', 'rem-struct': 3 }).
 export function altStructButton({ flowType, actorUuid, icon, label, attrs = {} })
@@ -6,7 +8,7 @@ export function altStructButton({ flowType, actorUuid, icon, label, attrs = {} }
         .map(([name, value]) => `data-${name}="${value}"`)
         .join(' ');
     return `<a class="alt-struct-flow-button lancer-button" data-flow-type="${flowType}" ${extra} data-actor-id="${actorUuid}">`
-        + `<i class="${icon} i--sm"></i> ${label}</a>`;
+        + `<i class="${icon} i--sm"></i> ${localize(label)}</a>`;
 }
 
 // Only structure-card.hbs and overheat-card.hbs render embedButtons.
@@ -23,7 +25,7 @@ export function getRollCount(roll, targetFace)
         : 0;
 }
 
-export async function destroyMech(actor, errorText = "The mech is DESTROYED.")
+export async function destroyMech(actor, errorText = localize('LA.altStruct.result.mechDestroyedPlain'))
 {
     try
     {

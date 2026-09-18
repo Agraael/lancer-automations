@@ -1,7 +1,7 @@
 import { getTelemetry, BUCKETS } from './telemetry-store.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { EVENT_TYPES } from './combat-telemetry.js';
-import { escapeHtml as _escape } from '../tools/string-utils.js';
+import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 
 const BUCKET_COLOR = {
     players: '#7bd3ff',
@@ -152,7 +152,7 @@ export function openTelemetryDebugWindow()
     const hookId = Hooks.on('updateCombat', _onCombatChange);
     const deleteHookId = Hooks.on('deleteCombat', () => _rerender());
     const dlg = new Dialog({
-        title: 'Battle Log · Telemetry Debug',
+        title: localize('LA.dialogTitle.battleLogTelemetryDebug'),
         content: `<div class="battelog-debug-body">${_contentHtml()}</div>`,
         buttons: {
             _hidden: { label: '',
@@ -189,7 +189,7 @@ export function openTelemetryDebugWindow()
                     game.clipboard.copyPlainText(json);
                 else
                     navigator.clipboard?.writeText(json);
-                ui.notifications?.info('Telemetry JSON copied.');
+                ui.notifications?.info(localize('LA.notify.telemetryJsonCopied'));
             });
             const feed = $root[0]?.querySelector?.('.battelog-debug-feed');
             if (feed)

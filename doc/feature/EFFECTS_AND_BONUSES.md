@@ -110,6 +110,8 @@ Subtype lists per type are in [`addGlobalBonus`](../API_EFFECTS.md#addGlobalBonu
 - **Targetter** - reverse it: the target applies the bonus to the attacker, for debuffs or reactive effects. Hidden for Range bonuses, which cannot use it. `applyToTargetter` in the [API fields](../API_EFFECTS.md#addGlobalBonus).
 - **Uses** - a charge count. The bonus is removed when it hits zero.
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
+
+Immunity bonuses take these filters too, and the dialog shows a different set per subtype. Damage, resistance, crit, hit and miss get Roll Type, Items (LID) and both code fields. Effect and provoke get the code fields only. Terrain, obstacle and elevation get none. The roles are reversed: `reactorToken` is you, `target` is the other party.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
 
 ---

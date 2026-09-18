@@ -1,6 +1,7 @@
 import { TG, createTokenTether } from '../interactive/canvas-helpers.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { createTokenMark } from '../interactive/target-shapes.js';
+import { localize } from '../tools/string-utils.js';
 
 export function durationOptionsHtml()
 {
@@ -65,8 +66,8 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
             includeSelf: true,
             urgent: true,
             autoConfirm: true,
-            title: 'Pick Token',
-            description: 'Select a token on the map to update the field.',
+            title: localize('LA.dialogTitle.pickToken'),
+            description: localize('LA.duration.selectATokenOnTheMap'),
             icon: 'fas fa-crosshairs'
         });
         if (selected && selected.length > 0)

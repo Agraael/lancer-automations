@@ -58,7 +58,12 @@ The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/F
 
 During a drag, **E** raises the token's elevation and **Q** lowers it, by one grid unit per press (the offset resets when the drag starts).
 
-With Terrain Height Tools, the token also **auto-elevates** to sit on the terrain under it, as you drag, on drop, and when you first place it. Your E/Q offset stacks on top. You can turn that off three ways:
+With Terrain Height Tools, the token also **auto-elevates** as you drag, on drop, and when you first place it. It has two modes, picked by the movement action:
+
+- **Ground** - the token stands on a surface. It climbs what it must, goes under overhangs and bridges it fits beneath, and comes down off ledges. Walk, climb, crawl and jump use it. E/Q add on top of the surface.
+- **Hold** - the elevation at drag start is a floor. The token rises only where terrain fills its space, comes back to the floor once clear, and never goes below it. Fly uses it. E/Q move the floor.
+
+Press **Z** to swap them for the session. The badge on the last waypoint shows which one is active. You can turn auto-elevation off three ways:
 
 - **Globally** - **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`).
 - **Measure ruler only** - **Disable Auto-elevation on Measure**.
@@ -84,14 +89,15 @@ Press **M** for the **movement wheel**: outside a drag it opens a radial picker.
 
 ## Keybinds
 
-V, B, M and X are rebindable under **Configure Controls → Lancer Automations**. E and Q are Foundry's own zoom-in / zoom-out keys, so you rebind them under **Core**.
+V, B, M, X and Z are rebindable under **Configure Controls → Lancer Automations**. E and Q are Foundry's own zoom-in / zoom-out keys, so you rebind them under **Core**.
 
 | Key | What it does |
 |-----|--------------|
 | **V** (hold) | **Free movement** - the next move doesn't spend the movement cap and ignores terrain penalties. |
 | **B** (hold) | **Debug movement** - the next move is recorded by Foundry but skips automation (no `onMove`, no history, no engagement update). |
 | **M** | **Movement wheel** - open the picker, or cycle the type mid-drag. |
-| **X** | **Toggle Pathfinding** - flips drag pathfinding on or off for this session, over whatever the setting says. |
+| **X** | **Toggle Pathfinding** - flips drag pathfinding on or off for this session. Needs Pathfind Drag Movement on. |
+| **Z** | **Swap Elevation Mode** - swaps Ground and Hold for this session. |
 | **E / Q** | During a drag, raise / lower elevation by one. |
 
 ---

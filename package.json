@@ -10,7 +10,7 @@
         "conventions": "python tools/convention_audit.py --list",
         "conventions:ci": "python tools/convention_audit.py --strict --rule module-id-redeclared --rule module-id-literal --rule settings-read --rule flag-read --rule helper-as-method --rule binding-in-generated-source --rule escape-html --rule log-prefix --rule token-by-id",
         "i18n:check": "python tools/i18n_audit.py --check --strict",
-        "check": "npm run lint:ci && npm run conventions:ci && npm run typecheck:ratchet"
+        "check": "npm run lint:ci && npm run conventions:ci && npm run i18n:check && npm run typecheck:ratchet"
     },
     "devDependencies": {
         "@stylistic/eslint-plugin": "^5.10.0",

@@ -4,6 +4,7 @@
 
 import { createShapePlacement, createPlacedShapeStore } from "../shape-placement-engine.js";
 import { getModuleSetting } from "../../tools/settings-utils.js";
+import { localize } from "../../tools/string-utils.js";
 import { MODULE_ID } from "../../tools/constants.js";
 import {
     pointerToWorld, makeSafe, suppressTokenInteraction, addGraphicsBelowTokens, addGraphicsAboveTokens,
@@ -1002,8 +1003,8 @@ const TOOLBAR_SCALE_KEY = 'advMeasureScale';
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID,TOOLBAR_SCALE_KEY, {
-        name: 'Advanced Measure: toolbar scale',
-        hint: 'Size of the measure toolbar.',
+        name: 'LA.settings.advMeasureScale.name',
+        hint: 'LA.settings.advMeasureScale.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -1015,7 +1016,11 @@ Hooks.once('init', () =>
         scope: 'client',
         config: false,
         type: String,
-        choices: { none: 'Disabled', tool: 'Only in Advanced Measure', always: 'Always' },
+        choices: {
+            none: 'LA.settings.ctrlRulerMode.choices.none',
+            tool: 'LA.settings.ctrlRulerMode.choices.tool',
+            always: 'LA.settings.ctrlRulerMode.choices.always',
+        },
         default: 'tool',
         onChange: () => refreshGlobalRulerDecoration(),
     });
@@ -1290,7 +1295,7 @@ function onFreeWheel(event)
     {
         event.preventDefault();
         event.stopPropagation();
-        setManualRadius(_saved.manualRadius + (event.deltaY < 0 ? 1 : -1));
+        setManualRadiusFromWheel(_saved.manualRadius + (event.deltaY < 0 ? 1 : -1));
         playUiSound('targeting');
     }
 }
@@ -1487,6 +1492,24 @@ function setManualRadius(value)
     renderToolbar();
 }
 
+let _wheelRebuildTimer = null;
+const WHEEL_REBUILD_HOLD_MS = 15;
+
+// Every wheel tick would rebuild the pulse in full, so the number updates at once and the pulse waits for the wheel to stop.
+function setManualRadiusFromWheel(value)
+{
+    _saved.manualRadius = Math.max(0, value);
+    renderToolbar();
+    if (_wheelRebuildTimer !== null)
+        clearTimeout(_wheelRebuildTimer);
+    _wheelRebuildTimer = setTimeout(() =>
+    {
+        _wheelRebuildTimer = null;
+        if (_open)
+            rebuildPulse();
+    }, WHEEL_REBUILD_HOLD_MS);
+}
+
 function clearPlacements()
 {
     _saved.store?.destroy();
@@ -1638,7 +1661,7 @@ function makeIconButton(iconClass, title, onClick)
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'lancer-action-btn la-mt-icon-btn';
-    button.title = title;
+    button.title = localize(title);
     button.appendChild(makeIcon(iconClass));
     button.addEventListener('mouseenter', () => playUiSound('statusHover'));
     button.addEventListener('click', () =>
@@ -1660,20 +1683,21 @@ function makeParamPopover(animate)
     return pop;
 }
 
+// Labels are keys, not text: this runs at import time, before i18n is loaded.
 const RANGE_SOURCES = [
-    { value: 'none', label: 'None', icon: 'systems/lancer/assets/icons/status_downandout.svg' },
-    { value: 'manual', label: 'Manual', icon: 'systems/lancer/assets/icons/range.svg' },
-    { value: 'threat', label: 'Threat', icon: 'cci cci-threat' },
-    { value: 'sensor', label: 'Sensor', icon: 'cci cci-sensor' },
-    { value: 'reach', label: 'Max Reach', icon: 'systems/lancer/assets/icons/nested_hexagons.svg' },
-    { value: 'weapon', label: 'Weapon', icon: 'cci cci-weapon' },
+    { value: 'none', label: 'LA.measure.source.none', icon: 'systems/lancer/assets/icons/status_downandout.svg' },
+    { value: 'manual', label: 'LA.measure.source.manual', icon: 'systems/lancer/assets/icons/range.svg' },
+    { value: 'threat', label: 'LA.measure.source.threat', icon: 'cci cci-threat' },
+    { value: 'sensor', label: 'LA.measure.source.sensor', icon: 'cci cci-sensor' },
+    { value: 'reach', label: 'LA.measure.source.reach', icon: 'systems/lancer/assets/icons/nested_hexagons.svg' },
+    { value: 'weapon', label: 'LA.measure.source.weapon', icon: 'cci cci-weapon' },
 ];
 
 const SHAPE_BUTTONS = [
-    { pattern: 'blast', label: 'Blast', icon: 'cci cci-blast' },
-    { pattern: 'burst', label: 'Burst', icon: 'cci cci-burst' },
-    { pattern: 'cone', label: 'Cone', icon: 'cci cci-cone' },
-    { pattern: 'line', label: 'Line', icon: 'cci cci-line' },
+    { pattern: 'blast', label: 'LA.measure.shape.blast', icon: 'cci cci-blast' },
+    { pattern: 'burst', label: 'LA.measure.shape.burst', icon: 'cci cci-burst' },
+    { pattern: 'cone', label: 'LA.measure.shape.cone', icon: 'cci cci-cone' },
+    { pattern: 'line', label: 'LA.measure.shape.line', icon: 'cci cci-line' },
 ];
 
 function makeIconDropdown(current, items, onSelect, onContext = null, isPinned = null, losControl = null)
@@ -1703,9 +1727,9 @@ function makeIconDropdown(current, items, onSelect, onContext = null, isPinned =
     trigger.className = 'lancer-action-btn la-mt-dd-trigger';
     if (current && current !== 'none')
         markActive(trigger, false);
-    trigger.title = currentItem.label;
+    trigger.title = localize(currentItem.label);
     const triggerLabel = document.createElement('span');
-    triggerLabel.textContent = currentItem.label;
+    triggerLabel.textContent = localize(currentItem.label);
     const caret = document.createElement('i');
     caret.className = 'fa-solid fa-caret-down la-mt-dd-caret';
     trigger.append(makeIcon(currentItem.icon), triggerLabel, caret);
@@ -1736,11 +1760,11 @@ function makeIconDropdown(current, items, onSelect, onContext = null, isPinned =
         row.type = 'button';
         row.className = 'la-mt-dd-item';
         row.disabled = !!item.disabled;
-        row.title = item.label;
+        row.title = localize(item.label);
         if (item.value === current)
             row.classList.add('active');
         const itemLabel = document.createElement('span');
-        itemLabel.textContent = item.label;
+        itemLabel.textContent = localize(item.label);
         row.append(makeIcon(item.icon), itemLabel);
         if (isPinned)
         {
@@ -1954,7 +1978,7 @@ function renderControlledChip()
     if (!tokens.length)
     {
         const name = document.createElement('span');
-        name.textContent = 'no token';
+        name.textContent = localize('LA.measure.noToken');
         name.style.color = '#999';
         chip.appendChild(name);
         return chip;
@@ -2115,7 +2139,7 @@ function renderRangeControls()
     const items = RANGE_SOURCES.map(src => ({
         value: src.value,
         icon: src.icon,
-        label: src.value === 'weapon' && refToken && !hasWeapon ? 'Weapon (none)' : src.label,
+        label: src.value === 'weapon' && refToken && !hasWeapon ? 'LA.measure.source.weaponNone' : src.label,
         disabled: !canResolve(src.value),
     }));
     const dropdown = makeIconDropdown(_saved.rangeSource, items, (value) => applyRangeSource(value === _saved.rangeSource && value !== 'none' ? 'none' : value), (value) =>
@@ -2195,7 +2219,7 @@ function renderWeaponPopover(refToken)
     {
         const empty = document.createElement('div');
         empty.className = 'la-mt-pop-empty';
-        empty.textContent = '(no weapons)';
+        empty.textContent = localize('LA.measure.noWeapons');
         pop.appendChild(empty);
         return pop;
     }
@@ -2977,14 +3001,14 @@ Hooks.on('getSceneControlButtons', (controls) =>
     };
     const tool = {
         name: 'advancedMeasure',
-        title: 'Advanced Measure Tool',
+        title: localize('LA.measure.toolTitle'),
         icon: 'la-mt-control-icon',
         toggle: true,
         active: isAdvancedMeasureActive(),
         onClick: (active) => setActive(active),
         onChange: (event, active) => setActive(active ?? !isAdvancedMeasureActive()),
         toolclip: {
-            heading: 'Advanced Measure Tool',
+            heading: localize('LA.measure.advancedMeasureTool'),
             items: [
                 { paragraph: 'Measure with AoE shapes and targets, Shift+click to mark tokens/hexes, and pulse a range around the controlled token(s).' },
                 { heading: 'Toggle', reference: measureShortcutLabel() },

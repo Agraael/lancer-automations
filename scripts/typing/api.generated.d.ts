@@ -72,14 +72,20 @@ interface LancerAutomationsAPI {
     getActivatedItems: typeof import("../interactive/deployables.js").getActivatedItems;
     getActorFlags: typeof import("../interactive/deployables.js").getActorFlags;
     getAllFlaggedEffects: typeof import("../bonuses/flagged-effects.js").getAllFlaggedEffects;
+    getApplicableImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getApplicableImmunityBonuses;
+    getAttackImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getAttackImmunityBonuses;
     getDeployableInfo: typeof import("../interactive/deployables.js").getDeployableInfo;
     getDeployableInfoSync: typeof import("../interactive/deployables.js").getDeployableInfoSync;
     getDowntimeActivities: typeof import("../tools/downtime.js").getDowntimeActivities;
+    getEffectImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getEffectImmunityBonuses;
     getEngagedTokens: typeof import("../combat/overwatch.js").getEngagedTokens;
     getExtraBars: typeof import("../tah/tokenStatBar.js").getExtraBars;
+    getGateImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getGateImmunityBonuses;
     getGlobalBonus: typeof import("../bonuses/genericBonuses.js").getGlobalBonus;
     getHexGroundElevation: typeof import("../combat/terrain-utils.js").getHexGroundElevation;
     getIsoProvider: typeof import("../setup/iso-settings.js").getIsoProvider;
+    getLAFlag: typeof import("../tools/flag-utils.js").getLAFlag;
+    getLAFlags: typeof import("../tools/flag-utils.js").getLAFlags;
     getLinkedActions: typeof import("../interactive/deployables.js").getLinkedActions;
     getLinkedBonuses: typeof import("../bonuses/genericBonuses.js").getLinkedBonuses;
     getLinkedDeployables: typeof import("../interactive/deployables.js").getLinkedDeployables;
@@ -172,6 +178,7 @@ interface LancerAutomationsAPI {
     setEffect: typeof import("../bonuses/flagged-effects.js").setEffect;
     setFlaggedEffect: typeof import("../bonuses/flagged-effects.js").setFlaggedEffect;
     setItemAsActivated: typeof import("../interactive/deployables.js").setItemAsActivated;
+    setLAFlag: typeof import("../tools/flag-utils.js").setLAFlag;
     setTokenFlag: typeof import("../socket.js").setTokenFlag;
     showMultiUserControlledChoiceCard: typeof import("../interactive/network.js").showMultiUserControlledChoiceCard;
     showOverlapStackPicker: typeof import("../interactive/canvas-helpers.js").showOverlapStackPicker;
@@ -196,6 +203,7 @@ interface LancerAutomationsAPI {
     unlinkEffectFromActor: typeof import("../bonuses/flagged-effects.js").unlinkEffectFromActor;
     unlinkEffectFromItem: typeof import("../bonuses/flagged-effects.js").unlinkEffectFromItem;
     unlockActorActionTypes: typeof import("../interactive/deployables.js").unlockActorActionTypes;
+    unsetLAFlag: typeof import("../tools/flag-utils.js").unsetLAFlag;
     unsetTokenFlag: typeof import("../socket.js").unsetTokenFlag;
     untilEndOfTurn: typeof import("../bonuses/duration-widget.js").untilEndOfTurn;
     untilStartOfTurn: typeof import("../bonuses/duration-widget.js").untilStartOfTurn;

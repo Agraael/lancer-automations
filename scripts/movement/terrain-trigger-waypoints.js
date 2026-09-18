@@ -296,7 +296,8 @@ function _injectSilents(doc, context, { triggerOn = true, tierOn = false } = {})
                     }
                 }
             }
-            if (transition && !_AUTO_ELEV_ACTIONS.has(waypoint.action) && !_AUTO_ELEV_ACTIONS.has(prev?.action))
+            if (transition && !_AUTO_ELEV_ACTIONS.has(waypoint.action) && !_AUTO_ELEV_ACTIONS.has(prev?.action)
+                && !waypoint._laClimbFlip && !prev?._laClimbFlip)
             {
                 if (prev)
                     rebuilt.push(_mkSilent(prev));
@@ -305,7 +306,7 @@ function _injectSilents(doc, context, { triggerOn = true, tierOn = false } = {})
             }
             prevKeys = currentKeys;
         }
-        if (tierCosts && tierBoundaries && idx < densePath.length - 1 && !_AUTO_ELEV_ACTIONS.has(waypoint.action))
+        if (tierCosts && tierBoundaries && idx < densePath.length - 1 && !_AUTO_ELEV_ACTIONS.has(waypoint.action) && !waypoint._laClimbFlip)
         {
             const costBefore = tierCosts[idx - 1];
             const costAfter = tierCosts[idx];
@@ -351,11 +352,15 @@ const _mkRoute = (pt, refs) => ({
 function _injectRoute(token, context)
 {
     const fp = context?.foundPath;
-    if (!Array.isArray(fp) || fp.length < 2)
+    if (!Array.isArray(fp) || !fp.length)
         return;
     if (canvas.grid?.isGridless)
         return;
     if (fp.some(/** @type {any} */ (wp) => wp?._laRouted || wp?._laSilent))
+        return;
+    const unreachable = Array.isArray(context?.unreachableWaypoints) ? context.unreachableWaypoints : [];
+    const clipped = unreachable.length > 0 && fp.length > 1 && !fp.at(-1).explicit;
+    if (fp.length + unreachable.length < 2)
         return;
 
     const doc = token.document;
@@ -363,31 +368,68 @@ function _injectRoute(token, context)
     const refWidth = src.width, refHeight = src.height, refShape = src.shape;
     const fallbackAction = fp.at(-1)?.action ?? fp[0]?.action ?? 'walk';
 
+    const routeBetween = (segStart, segEnd) =>
+    {
+        const segAction = segEnd.action ?? fallbackAction;
+        try
+        {
+            return computeMovementRoute(token, segStart, segEnd, { action: segAction });
+        }
+        catch (err)
+        {
+            console.warn(`${MODULE_ID} | route search failed for ${token.name}`, err);
+            return null;
+        }
+    };
+    const pushCorners = (segStart, segEnd, corners) =>
+    {
+        const refs = { refWidth, refHeight, refShape, action: segEnd.action ?? fallbackAction, baseElev: segStart.elevation ?? doc.elevation ?? 0 };
+        for (const corner of corners)
+            routed.push(_mkRoute(corner, refs));
+    };
+
     const routed = [fp[0]];
     let changed = false;
     for (let segIdx = 1; segIdx < fp.length; segIdx++)
     {
         const segStart = fp[segIdx - 1];
         const segEnd = fp[segIdx];
-        const segAction = segEnd.action ?? fallbackAction;
-        let corners = null;
-        try
-        {
-            corners = computeMovementRoute(token, segStart, segEnd, { action: segAction });
-        }
-        catch
-        {
-            corners = null;
-        }
+        const corners = routeBetween(segStart, segEnd);
         if (corners && corners.length)
         {
-            const refs = { refWidth, refHeight, refShape, action: segAction, baseElev: segStart.elevation ?? doc.elevation ?? 0 };
-            for (const corner of corners)
-                routed.push(_mkRoute(corner, refs));
+            pushCorners(segStart, segEnd, corners);
             changed = true;
         }
         routed.push(segEnd);
     }
+
+    const remaining = [];
+    let stuck = false;
+    for (const target of unreachable)
+    {
+        if (stuck)
+        {
+            remaining.push(target);
+            continue;
+        }
+        const clipPending = clipped && routed.at(-1) === fp.at(-1);
+        const segStart = clipPending ? routed.at(-2) : routed.at(-1);
+        const corners = routeBetween(segStart, target);
+        if (corners === null)
+        {
+            stuck = true;
+            remaining.push(target);
+            continue;
+        }
+        if (clipPending)
+            routed.pop();
+        if (corners.length)
+            pushCorners(segStart, target, corners);
+        routed.push(target);
+        changed = true;
+    }
+    if (unreachable.length)
+        context.unreachableWaypoints = remaining;
     if (changed)
         context.foundPath = routed;
 }

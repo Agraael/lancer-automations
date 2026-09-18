@@ -10,6 +10,7 @@ import { getActivationIcon } from '../tools/misc-tools.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { damageBonusScope } from '../bonuses/genericBonuses.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
+import { localize } from '../tools/string-utils.js';
 
 function activationChipContent(action)
 {
@@ -430,9 +431,9 @@ export async function laRenderItemExtras(item)
                 realMetas.push(resolveDeployRangeCount(item, combined[idx], ownerActor));
             });
             if (real.length)
-                html += laRenderDeployables(real, { label: 'EXTRA DEPLOYABLE', metas: realMetas });
+                html += laRenderDeployables(real, { label: localize('LA.deployables.extraDeployable'), metas: realMetas });
             if (fallbackHtml)
-                html += `<div style="margin-bottom:4px;">${real.length ? '' : laPopupSectionLabel('EXTRA DEPLOYABLE', '#4a1070')}${fallbackHtml}</div>`;
+                html += `<div style="margin-bottom:4px;">${real.length ? '' : laPopupSectionLabel(localize('LA.deployables.extraDeployable'), '#4a1070')}${fallbackHtml}</div>`;
         }
     }
 

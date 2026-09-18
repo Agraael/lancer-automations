@@ -15,9 +15,11 @@ import "./interactive/overlap-picker.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
 import './filters/customFilters.js';
+import "./fx/token-ground-shadow.js";
 import './setup/scene-dim-from-image.js';
 import { getModuleSetting } from './tools/settings-utils.js';
 import { MODULE_ID } from './tools/constants.js';
+import { localize, localizeFormat } from './tools/string-utils.js';
 import './setup/migrations.js';
 import "./setup/status-effects.js";
 import "./setup/qol-compat.js";
@@ -44,6 +46,7 @@ import {
     measureGridDistance, neighborKeys, getCellToward
 } from "./combat/grid-helpers.js";
 import { TerrainAPI } from "./combat/terrain-utils.js";
+import { laTokenHeight, laTokenGameplayHeight } from "./tools/token-height.js";
 import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/reinforcement.js";
 import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerFrequencyHooks, onRenderActorSheetPerFrequency } from "./combat/per-frequency-tags.js";
 
@@ -51,11 +54,14 @@ import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerF
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initLaWallLos } from "./vision/laWallLos.js";
+import { initTrigVisionSweep } from "./vision/trigVisionSweep.js";
 import { initSightlines } from "./vision/sightlines.js";
 import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
 import { smokeZoneGraphics, importTemplateMacroPresets } from "./setup/tmac-presets.js";
 import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
+import { initDragOriginSources } from "./vision/dragOriginSources.js";
+import { initDeltaStatusGuard } from "./vision/deltaStatusGuard.js";
 
 // Interactive
 import { laDetailPopup } from "./interactive/detail-renderers.js";
@@ -76,7 +82,7 @@ import { cancelRulerDrag ,
 import { ExtraConfigAPI, getAutoConsumeDisabled } from "./interactive/extra-config.js";
 import { openExtrasDialog } from "./interactive/extras-dialog.js";
 import { openExtraConfigDialog } from "./interactive/extra-config-dialog.js";
-import { getActorActions } from "./interactive/deployables.js";
+import { getActorActions, sweepStaleGrants } from "./interactive/deployables.js";
 
 // Activations
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
@@ -151,7 +157,7 @@ import {
     injectKnockbackCheckbox,
     injectNoBonusDmgCheckbox,
     getImmunityBonuses,
-    checkEffectImmunities,
+    getEffectImmunityBonuses,
     checkDamageResistances,
     initDamageCalcWrapper,
     consumeImmunityUse,
@@ -505,35 +511,35 @@ function openResetMovementDialog(token)
     if (!token)
         return;
     new Dialog({
-        title: `Movement History: ${token.name}`,
+        title: localizeFormat('LA.dialogTitle.movementHistoryFor', { name: token.name }),
         content: `
             <div class="lancer-dialog-header">
-                <h2 class="lancer-dialog-title">Movement History</h2>
+                <h2 class="lancer-dialog-title">${localize('LA.movement.historyTitle')}</h2>
                 <p class="lancer-dialog-subtitle">${token.name}</p>
             </div>
             <div class="form-group">
-                <p>What would you like to do with the movement history?</p>
+                <p>${localize('LA.movement.historyPrompt')}</p>
             </div>
         `,
         buttons: {
             revertOne: {
                 icon: '<i class="fas fa-step-backward"></i>',
-                label: "Revert Last Move",
+                label: localize("LA.movement.revertLastMove"),
                 callback: () => revertMovement(token)
             },
             clear: {
                 icon: '<i class="fas fa-trash"></i>',
-                label: "Reset History",
+                label: localize("LA.movement.resetHistory"),
                 callback: () => clearMovementHistory(token, false)
             },
             revert: {
                 icon: '<i class="fas fa-undo-alt"></i>',
-                label: "Reset & Revert All",
+                label: localize("LA.movement.resetAndRevertAll"),
                 callback: () => clearMovementHistory(token, true)
             },
             cancel: {
                 icon: '<i class="fas fa-times"></i>',
-                label: "Cancel"
+                label: localize("LA.common.cancel")
             }
         },
         default: "clear"
@@ -560,12 +566,15 @@ Hooks.on('init', () =>
     registerCardFocusFlags();
 
     initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
+    initTrigVisionSweep(); // Trig height rule for the rendered sweep: low walls block again past the peek range
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
     initLaWallLos(); // Per-wall "Blocks LA Line of Sight" flag: LA-only mirror edges
     initSightlines(); // B1 sightline rays + attack-card hover takeover from THT
     initBlindedVision(); // Blinded status clamps the token's sight to one space
     registerActionLimitsHooks();
     initVisionDisableOnSelect();
+    initDragOriginSources();
+    initDeltaStatusGuard();
     injectDisabledSchemaField();
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField();
@@ -579,15 +588,15 @@ Hooks.on('init', () =>
 
     registerElevTiltKeybindings(); // Rebindable Q/E elevation + W/S line tilt
     game.keybindings.register(MODULE_ID,'resetMovement', {
-        name: 'Reset Movement',
-        hint: 'Open the movement history reset dialog for the selected token.',
+        name: 'LA.keybindings.resetMovement.name',
+        hint: 'LA.keybindings.resetMovement.hint',
         editable: [{ key: 'KeyH' }],
         onDown: () =>
         {
             const token = canvas.tokens?.controlled[0];
             if (!token)
             {
-                ui.notifications.warn('Please select a token first.');
+                ui.notifications.warn(localize('LA.notify.pleaseSelectATokenFirst'));
                 return;
             }
             openResetMovementDialog(token);
@@ -596,13 +605,13 @@ Hooks.on('init', () =>
     });
     // No onDown: the card owns focus, so targeting-ui.js reads this binding from its own listener.
     game.keybindings.register(MODULE_ID,'cardTargeting', {
-        name: 'Toggle Card Targeting',
-        hint: 'Start or cancel the targeting picker of the open attack or damage card.',
+        name: 'LA.keybindings.cardTargeting.name',
+        hint: 'LA.keybindings.cardTargeting.hint',
         editable: [{ key: 'KeyT', modifiers: ['Control'] }],
     });
     game.keybindings.register(MODULE_ID,'advancedMeasure', {
-        name: 'Advanced Measure Tool',
-        hint: 'Toggle the standalone measure toolbar (shapes, single marks, reference range pulse).',
+        name: 'LA.keybindings.advancedMeasure.name',
+        hint: 'LA.keybindings.advancedMeasure.hint',
         editable: [{ key: 'KeyR', modifiers: ['Shift'] }],
         onDown: () =>
         {
@@ -806,7 +815,7 @@ Hooks.once('ready', async () =>
     initStatusIconHover();
     initStatusCounter();
     if (game.modules.get('status-halo')?.active && getModuleSetting('statusHalo'))
-        ui.notifications.warn('Lancer Automations: the Status Icon Halo setting duplicates the Status Halo module. Disable one of them.');
+        ui.notifications.warn(localize('LA.notify.lancerAutomationsTheStatusIconHaloSetting'));
 
     if (typeof libWrapper !== 'undefined')
     {
@@ -1069,15 +1078,17 @@ Hooks.on('deleteToken', () =>
 });
 
 const userHelpers = new Map();
+const userHelperTree = {};
 
-function registerUserHelper(name, fn)
+function registerUserHelper(name, value)
 {
-    if (typeof fn !== 'function')
+    if (typeof name !== 'string' || !name)
     {
-        console.warn(`lancer-automations | registerUserHelper: "${name}" is not a function.`);
+        console.warn(`lancer-automations | registerUserHelper: invalid name "${name}".`);
         return;
     }
-    userHelpers.set(name, fn);
+    userHelpers.set(name, value);
+    foundry.utils.setProperty(userHelperTree, name, value);
 }
 
 function getUserHelper(name)
@@ -1164,7 +1175,7 @@ registerBuiltinStartup({
     id: 'builtin-lasossis-items',
     settingKey: 'enableLaSossisItems',
     name: "LaSossis's Items",
-    description: "LaSossis's item activations",
+    description: localize('LA.main.lasossisSItemActivations'),
     filePath: 'startups/itemActivations.js'
 });
 
@@ -1172,7 +1183,7 @@ registerBuiltinStartup({
     id: 'builtin-lasossis-personal',
     settingKey: 'enablePersonalStuff',
     name: "LaSossis's Personal Stuff",
-    description: "Personal tweaks",
+    description: localize('LA.main.personalTweaks'),
     filePath: 'startups/personalStuff.js'
 });
 
@@ -1220,6 +1231,8 @@ Hooks.on('ready', async () =>
         getMovementBands,
         isPositionChange,
         tokenSpeed,
+        laTokenHeight,
+        laTokenGameplayHeight,
         smokeZoneGraphics,
         importTemplateMacroPresets,
         increaseMovementCap,
@@ -1233,6 +1246,7 @@ Hooks.on('ready', async () =>
         checkOnInitReactions,
         registerUserHelper,
         getUserHelper,
+        helpers: userHelperTree,
         getActiveGMId,
         getTokenOwnerUserId,
         delayedTokenAppearance,
@@ -1606,12 +1620,12 @@ function _openLaSheetMenu(app)
     const buttons = {
         extras: {
             icon: '<i class="fas fa-plus-circle"></i>',
-            label: 'Add Extra',
+            label: localize('LA.tokenHud.addExtra'),
             callback: () => openExtrasDialog(target),
         },
         effect: {
             icon: '<i class="fas fa-cog"></i>',
-            label: 'Add Effect',
+            label: localize('LA.tokenHud.addEffect'),
             callback: () =>
             {
                 if (isItem)
@@ -1625,12 +1639,12 @@ function _openLaSheetMenu(app)
     {
         buttons.extraConfig = {
             icon: '<i class="fas fa-sliders"></i>',
-            label: 'Extra Config',
+            label: localize('LA.tokenHud.extraConfig'),
             callback: () => openExtraConfigDialog(target),
         };
     }
     new Dialog({
-        title: 'Lancer Automations',
+        title: localize('LA.dialogTitle.lancerAutomations'),
         content: `
             <div class="lancer-dialog-header">
                 <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
@@ -1850,7 +1864,7 @@ Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) =>
         const token = hud.object;
         if (token?.actor)
         {
-            const button = $(`<div class="control-icon" data-action="bonus-menu" data-tooltip="Lancer EffectManager">
+            const button = $(`<div class="control-icon" data-action="bonus-menu" data-tooltip="${localize('LA.effectManager.title')}">
                 <i class="cci cci-accuracy i--m"></i>
             </div>`);
             button.on('click', (e) =>
@@ -2035,29 +2049,30 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) =>
         return true;
 
     const effectData = effect.toObject();
-    const immunitySources = checkEffectImmunities(actor, statusId, effect);
+    const immunityBonuses = getEffectImmunityBonuses(actor, statusId, effect, null, { ownerTokenId: token?.id });
+    const immunitySources = immunityBonuses.map(bonus => bonus.source || bonus.name || "Unknown Immunity");
     if (immunitySources.length > 0)
     {
         (async () =>
         {
             await Promise.resolve();
             await startChoiceCard({
-                title: "ACTIVATE IMMUNITY?",
-                description: `<b>${actor.name}</b> affected by <b>${statusId}</b>.<hr>Immunity from: <i>${immunitySources.join(", ")}</i>. Activate?`,
+                title: localize('LA.dialogTitle.activateImmunity'),
+                description: localizeFormat('LA.main.immunityPrompt', { name: actor.name, status: statusId, sources: immunitySources.join(', ') }),
                 icon: "mdi mdi-shield",
                 mode: "or",
                 choices: [
                     {
-                        text: "Yes (Resist Effect)",
+                        text: localize('LA.main.yesResistEffect'),
                         icon: "fas fa-check",
                         callback: async () =>
                         {
                             ui.notifications.info(`${actor.name} resisted ${statusId}`);
-                            await consumeImmunityUse(actor, 'effect');
+                            await consumeImmunityUse(actor, 'effect', null, { bonuses: immunityBonuses });
                         }
                     },
                     {
-                        text: "No (Allow Effect)",
+                        text: localize('LA.main.noAllowEffect'),
                         icon: "fas fa-times",
                         callback: async () =>
                         {
@@ -2266,6 +2281,18 @@ Hooks.on('preDeleteToken', (tokenDocument, _options, userId) =>
     handleTrigger('onTokenRemoved', { triggeringToken: token });
 });
 
+Hooks.on('deleteToken', (tokenDocument) =>
+{
+    if (game.user?.isGM)
+        sweepStaleGrants({ tokenId: tokenDocument.id });
+});
+
+Hooks.on('deleteItem', (item) =>
+{
+    if (game.user?.isGM)
+        sweepStaleGrants({ itemId: item.id });
+});
+
 
 Hooks.on('canvasReady', () =>
 {
@@ -2335,7 +2362,7 @@ Hooks.on('renderSettings', (app, html) =>
     };
     const divider = document.createElement('h4');
     divider.className = 'divider';
-    divider.textContent = 'Lancer Automations';
+    divider.textContent = localize('LA.moduleTitle');
     const overviewButton = makeBtn('lancer-automations-overview', 'fa-cog', 'Lancer Automations');
     const managerButton = makeBtn('lancer-automations-manager', 'fa-tasks', 'Automation Manager');
     settingsSection.append(divider, overviewButton, managerButton);

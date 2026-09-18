@@ -1,5 +1,6 @@
 import { laDetailPopup } from "../interactive/detail-renderers.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 import { chooseToken } from "../interactive/index.js";
 import { consumeAction } from "../tools/misc-tools.js";
 import { _flowSourceToken, _flowResolveActivationLabel } from "../fx/actionFX.js";
@@ -9,7 +10,7 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml)
     const effects = [...(targetActor?.effects ?? [])].filter(e => !e.disabled && (e.statuses?.size || e.name));
     if (!effects.length)
     {
-        ui.notifications.warn(`${targetActor?.name ?? 'Actor'} has no conditions to clear.`);
+        ui.notifications.warn(localizeFormat('LA.notify.noConditionsToClear', { name: targetActor?.name ?? localize('LA.common.actor') }));
         return null;
     }
     return new Promise((resolve) =>
@@ -86,12 +87,12 @@ export async function laStabilizePrompt(state)
         return new Promise((resolve) =>
         {
             new Dialog({
-                title: `Stabilize - ${actor.name}`,
+                title: localizeFormat('LA.dialogTitle.stabilizeFor', { name: actor.name }),
                 content: npcContent,
                 buttons: {
                     submit: {
                         icon: '<i class="fas fa-check"></i>',
-                        label: 'Stabilize',
+                        label: localize('LA.stabilize.stabilize'),
                         callback: () =>
                         {
                             state.data.option1 = 'Cool';
@@ -101,7 +102,7 @@ export async function laStabilizePrompt(state)
                     },
                     cancel: {
                         icon: '<i class="fas fa-times"></i>',
-                        label: 'Cancel',
+                        label: localize('LA.common.cancel'),
                         callback: () => resolve(false)
                     }
                 },
@@ -111,14 +112,14 @@ export async function laStabilizePrompt(state)
         });
     }
     const opt1 = [
-        { val: 'Cool', label: 'Cool Mech', icon: 'fas fa-thermometer-empty', detail: 'Clear all heat and the EXPOSED status.' },
-        { val: 'Repair', label: 'Restore HP', icon: 'cci cci-repair', detail: 'Spend 1 repair to regain HP.' }
+        { val: 'Cool', label: localize('LA.stabilize.cool.label'), icon: 'fas fa-thermometer-empty', detail: localize('LA.stabilize.cool.detail') },
+        { val: 'Repair', label: localize('LA.stabilize.repair.label'), icon: 'cci cci-repair', detail: localize('LA.stabilize.repair.detail') }
     ];
     const opt2 = [
-        { val: 'Reload', label: 'Reload', icon: 'cci cci-reload', detail: 'Reload all LOADING weapons.' },
-        { val: 'ClearBurn', label: 'Clear Burn', icon: 'cci cci-burn', detail: 'Remove all burn from yourself.' },
-        { val: 'ClearOwnCond', label: 'Clear Own Condition', icon: 'fas fa-user-shield', detail: 'Clear a condition affecting you (resolved manually).' },
-        { val: 'ClearOtherCond', label: 'Clear Ally Condition', icon: 'fas fa-hands-helping', detail: 'Clear a condition on an adjacent ally (resolved manually).' }
+        { val: 'Reload', label: localize('LA.stabilize.reload.label'), icon: 'cci cci-reload', detail: localize('LA.stabilize.reload.detail') },
+        { val: 'ClearBurn', label: localize('LA.stabilize.clearBurn.label'), icon: 'cci cci-burn', detail: localize('LA.stabilize.clearBurn.detail') },
+        { val: 'ClearOwnCond', label: localize('LA.stabilize.clearOwnCond.label'), icon: 'fas fa-user-shield', detail: localize('LA.stabilize.clearOwnCond.detail') },
+        { val: 'ClearOtherCond', label: localize('LA.stabilize.clearOtherCond.label'), icon: 'fas fa-hands-helping', detail: localize('LA.stabilize.clearOtherCond.detail') }
     ];
     const noRepair = actor.is_mech?.() && (actor.system.repairs?.value ?? 0) <= 0;
     const card = (o, group, disabled) => `
@@ -150,22 +151,22 @@ export async function laStabilizePrompt(state)
         let clearEffectId = null;
         let clearLabel = '';
         const stabilizeDialog = new Dialog({
-            title: `Stabilize - ${actor.name}`,
+            title: localizeFormat('LA.dialogTitle.stabilizeFor', { name: actor.name }),
             content,
             buttons: {
                 submit: {
                     icon: '<i class="fas fa-check"></i>',
-                    label: 'Submit',
+                    label: localize('LA.common.submit'),
                     callback: () =>
                     {
                         if (!pickedOption1 || !pickedOption2)
                         {
-                            ui.notifications.warn('Pick one option from each group.');
+                            ui.notifications.warn(localize('LA.notify.pickOneOptionFromEachGroup'));
                             return false;
                         }
                         if ((pickedOption2 === 'ClearOwnCond' || pickedOption2 === 'ClearOtherCond') && !clearEffectId)
                         {
-                            ui.notifications.warn('Select a condition to clear first.');
+                            ui.notifications.warn(localize('LA.notify.selectAConditionToClearFirst'));
                             return false;
                         }
                         state.data.option1 = pickedOption1;
@@ -180,7 +181,7 @@ export async function laStabilizePrompt(state)
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: 'Cancel',
+                    label: localize('LA.common.cancel'),
                     callback: () => resolve(false)
                 }
             },
@@ -211,7 +212,7 @@ export async function laStabilizePrompt(state)
                         if (optionValue === 'ClearOtherCond')
                         {
                             const origin = actor.getActiveTokens?.()?.[0];
-                            const picked = await chooseToken(origin, { title: 'PICK ALLY', includeSelf: false, count: 1 });
+                            const picked = await chooseToken(origin, { title: localize('LA.dialogTitle.pickAlly'), includeSelf: false, count: 1 });
                             targetActor = picked?.[0]?.actor;
                             if (!targetActor)
                                 return;

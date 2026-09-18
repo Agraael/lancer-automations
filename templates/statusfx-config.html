@@ -1,29 +1,29 @@
 <form>
     <div style="margin-bottom: 10px; padding: 8px; background: rgba(120,46,34,0.15); border: 1px solid #782e22; border-radius: 4px;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <label style="font-weight: bold; font-size: 1.1em;">Enable StatusFX (Master Toggle)</label>
+            <label style="font-weight: bold; font-size: 1.1em;">{{localize "LA.statusFxUi.enableStatusfxMasterToggle"}}</label>
             <input type="checkbox" name="master" id="la-statusfx-master" {{#if master}}checked{{/if}} />
         </div>
-        <p class="notes" style="margin: 4px 0 0; font-size: 0.85em; opacity: 0.8;">Handles all status visual effects. Overrides csm-lancer-qol if active.</p>
+        <p class="notes" style="margin: 4px 0 0; font-size: 0.85em; opacity: 0.8;">{{localize "LA.statusFxUi.handlesAllStatusVisualEffectsOverrides"}}</p>
     </div>
 
     <fieldset id="la-statusfx-rest" style="border: none; padding: 0; margin: 0;" {{#unless master}}disabled{{/unless}}>
         <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label style="font-weight: bold;">Low-quality mode</label>
+                <label style="font-weight: bold;">{{localize "LA.statusFxUi.lowQualityMode"}}</label>
                 <input type="checkbox" name="lowQuality" {{#if lowQuality}}checked{{/if}} />
             </div>
         </div>
         <div style="margin-bottom: 6px; padding: 4px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label style="font-weight: bold;">Additional Statuses &amp; Effects</label>
+                <label style="font-weight: bold;">{{localize "LA.statusFxUi.additionalStatusesAmpEffects"}}</label>
                 <input type="checkbox" name="additionalStatuses" {{#if additionalStatuses}}checked{{/if}} />
             </div>
-            <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Extra statuses (Resist All, Disengage, Grappling, etc.). Infection is always registered.</p>
+            <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{localize "LA.statusFxUi.extraStatusesResistAllDisengageGrappling"}}</p>
         </div>
 
-        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">TokenMagic Visual Effects</h2>
-        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">Requires TokenMagic module.</p>
+        <h2 style="border-bottom: 1px solid #782e22; margin-bottom: 6px;">{{localize "LA.statusFxUi.tokenmagicVisualEffects"}}</h2>
+        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">{{localize "LA.statusFxUi.requiresTokenmagicModule"}}</p>
 
         <div style="max-height: 240px; overflow-y: auto; border: 1px solid rgba(120,46,34,0.3); border-radius: 3px; padding: 4px 6px;">
         {{#each fxEffects}}
@@ -34,8 +34,8 @@
         {{/each}}
         </div>
 
-        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Auto-Status Icons</h2>
-        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">Toggle status icons based on actor data.</p>
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">{{localize "LA.statusFxUi.autoStatusIcons"}}</h2>
+        <p class="notes" style="margin-bottom: 4px; font-size: 0.85em; opacity: 0.8;">{{localize "LA.statusFxUi.toggleStatusIconsBasedOnActor"}}</p>
 
         {{#each autoStatuses}}
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.1);">
@@ -44,27 +44,27 @@
         </div>
         {{/each}}
 
-        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Action Effects</h2>
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">{{localize "LA.statusFxUi.actionEffects"}}</h2>
 
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,0.1); {{#unless hasWeaponFX}}opacity: 0.4;{{/unless}}">
-            <label style="font-weight: bold;">Enable Action FX (Boost, Hide, Shut Down, Fall, Overcharge…)</label>
+            <label style="font-weight: bold;">{{localize "LA.statusFxUi.enableActionFxBoostHideShut"}}</label>
             <input type="checkbox" name="actionFX" {{#if actionFX}}checked{{/if}} {{#unless hasWeaponFX}}disabled{{/unless}} />
         </div>
         <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">
-            {{#if hasWeaponFX}}Visual/audio effects for built-in actions. Volume is tied to the <b>Lancer Weapon FX</b> volume setting. Some effects need <b>JB2A Patreon</b>; without it they are skipped.{{else}}Requires the <b>Lancer Weapon FX</b> module to be installed and enabled.{{/if}}
+            {{#if hasWeaponFX}}Visual/audio effects for built-in actions. Volume is tied to the <b>{{localize "LA.statusFxUi.lancerWeaponFx"}}</b> {{localize "LA.statusFxUi.volumeSettingSomeEffectsNeed"}} <b>{{localize "LA.statusFxUi.jb2aPatreon"}}</b>; without it they are skipped.{{else}}Requires the <b>{{localize "LA.statusFxUi.lancerWeaponFx"}}</b> module to be installed and enabled.{{/if}}
         </p>
 
-        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">Death</h2>
+        <h2 style="border-bottom: 1px solid #782e22; margin: 8px 0 6px;">{{localize "LA.statusFxUi.death"}}</h2>
 
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;">
-            <label style="font-weight: bold;">Remove Statuses on Death</label>
+            <label style="font-weight: bold;">{{localize "LA.statusFxUi.removeStatusesOnDeath"}}</label>
             <input type="checkbox" name="removeStatusesOnDeath" {{#if removeStatusesOnDeath}}checked{{/if}} />
         </div>
-        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">Clear all status effects when structure reaches zero.</p>
+        <p class="notes" style="margin: 2px 0 0; font-size: 0.85em; opacity: 0.8;">{{localize "LA.statusFxUi.clearAllStatusEffectsWhenStructure"}}</p>
     </fieldset>
 
     <footer class="sheet-footer flexrow">
-        <button type="submit"><i class="fas fa-save"></i> Save</button>
+        <button type="submit"><i class="fas fa-save"></i> {{localize "LA.statusFxUi.save"}}</button>
     </footer>
 </form>
 

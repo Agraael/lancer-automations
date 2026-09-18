@@ -18,6 +18,7 @@ import { getLAFlag, setLAFlag } from "../../tools/flag-utils.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
+import { localize } from '../../tools/string-utils.js';
 const ZONE_TEXTURE_DRIFT = { x: 15, y: 15 };
 
 /**
@@ -480,7 +481,7 @@ async function _placeZoneInner(casterToken, options = {})
                     if (dist > range)
                     {
                         await result.template.delete();
-                        ui.notifications.warn("Target is out of range!");
+                        ui.notifications.warn(localize('LA.notify.targetIsOutOfRange'));
                         continue; // placing stays true -> retry
                     }
                 }

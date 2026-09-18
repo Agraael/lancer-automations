@@ -110,6 +110,9 @@ Hooks.once('init', () =>
 
     if (actions.teleport)
         actions.teleport.canSelect = () => false;
+    // Climb is only ever assigned by the elevation pass, never picked by hand.
+    if (actions.climb)
+        actions.climb.canSelect = () => false;
     if (actions.blink)
     {
         actions.blink.label = 'Teleport';

@@ -4,13 +4,14 @@ import { revertMovement, clearMovementHistory } from '../interactive/combat.js';
 import { modifyAction } from '../tools/misc-tools.js';
 import { activateCombatantSocket, deactivateCombatantSocket, modifyCombatantActivationsSocket } from '../socket.js';
 import { playUiSound } from './sound.js';
+import { localize } from '../tools/string-utils.js';
 
 const ACTION_DEFS = [
-    { key: 'protocol', icon: 'cci cci-protocol',                        color: '#00e5e5', label: 'Protocol' },
-    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', color: '#4caf50', label: 'Move',     isMove: true },
-    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  color: '#ff9800', label: 'Full Action' },
-    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  color: '#ff9800', label: 'Quick Action' },
-    { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'Reaction' },
+    { key: 'protocol', icon: 'cci cci-protocol',                        color: '#00e5e5', label: 'LA.action.protocol' },
+    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', color: '#4caf50', label: 'LA.action.move',     isMove: true },
+    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  color: '#ff9800', label: 'LA.action.full' },
+    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  color: '#ff9800', label: 'LA.action.quick' },
+    { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'LA.action.reaction' },
 ];
 
 function _canMod(actor)
@@ -133,8 +134,8 @@ export function buildCombatBar(actor, token)
         const actionValue = actions[def.key];
         const isAvailable = def.isMove ? (actionValue > 0) : !!actionValue;
         const tooltip = def.isMove
-            ? `${def.label}: ${actionValue ?? 0}`
-            : `${def.label}: ${isAvailable ? 'Available' : 'Spent'}`;
+            ? `${localize(def.label)}: ${actionValue ?? 0}`
+            : `${localize(def.label)}: ${localize(isAvailable ? 'LA.action.available' : 'LA.action.spent')}`;
 
         const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
         icon.on('mouseenter', () =>

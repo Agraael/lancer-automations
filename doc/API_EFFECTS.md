@@ -406,10 +406,11 @@ await api.triggerEffectImmunity(target, ['impaired'], reactorToken, true);
 <br>
 
 ```js
-api.checkEffectImmunities(actor, effectIdOrName, effect, state)
+api.checkEffectImmunities(actor, effectIdOrName, effect, state, tokens)
+api.getEffectImmunityBonuses(actor, effectIdOrName, effect, state, tokens)
 ```
 
-Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`), empty when the actor is not immune. Test `.length`: the empty array is truthy.
+Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`), empty when the actor is not immune. Test `.length`: the empty array is truthy. `getEffectImmunityBonuses` returns the bonus objects instead.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -417,6 +418,9 @@ Returns an array of source names (e.g. `["Immunity Bonus", "Armor Plating"]`), e
 | <kbd>effectIdOrName</kbd> | `string` | *required* | Effect ID or name to check immunity for |
 | <kbd>effect</kbd> | `ActiveEffect` | `null` | Optional effect object for additional context |
 | <kbd>state</kbd> | `Object` | `null` | Optional flow state |
+| <kbd>tokens</kbd> | `Object` | `{}` | `{ ownerTokenId, otherToken }`, the bearer and whoever applied the status |
+
+Called bare it returns the unfiltered list. Most status applications have no applier, a token HUD click included, so `applyToCondition` is often skipped here.
 
 ```js
 if (api.checkEffectImmunities(target.actor, 'prone').length) return;
@@ -471,10 +475,10 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 | <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"`, `"movement_extra"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Charges. Written to the linked effect's counter, the same one `consumeEffectCharge` reads |
-| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). Resistance burns at damage-apply time, not roll time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
+| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). An immunity charge burns where that immunity is consulted, never on the bearer's own roll, so resistance burns at damage-apply time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
-| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. |
-| <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty` and `target_modifier`. `target` is the Token, `entry` its HUD card (cover, prone). Evaluated per target when the HUD opens and again when its targets change or move. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
+| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. On an `immunity`, `actor` is the other party and the owner is `context.ownerTokenId`. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty`, `target_modifier` and every filtered `immunity`. `reactorToken` is the owner, `target` the Token rolled against. On an immunity `target` is the other party instead, and `entry` is `null`. Skipped, not failed, when there is no other party. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
 | <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For a dynamic per-target gate, see `applyToCondition`. |
 | <kbd>applyToTargetter</kbd> | `boolean` | Reverse direction: the bonus sits on the defender and applies to anyone rolling against it, never to the owner's own rolls. `condition` then runs in the attacker's flow (`state.actor` is the attacker, the owner is `context.ownerTokenId`) and `applyTo` filters attacker token IDs instead. Not for `stat` or `range`. How Brace grants its +1 difficulty. |
@@ -492,6 +496,16 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 | <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
 
 `"provoke"` acts like permanent DISENGAGE. No extra fields required.
+
+Filters honoured per subtype:
+
+| Subtype | Honoured |
+|:--------|:---------|
+| `damage`, `resistance`, `crit`, `hit`, `miss` | `rollTypes`, `itemLids`, `condition`, `applyToCondition` |
+| `effect`, `provoke` | `condition`, `applyToCondition` |
+| `terrain`, `obstacle`, `elevation` | none |
+
+`itemLids` filters the other party's weapon. `applyTo` and `applyToTargetter` are ignored. A filtered `resistance` is not written to `system.resistances`, so it no longer shows as a checked resistance on the sheet.
 
 </details>
 
@@ -891,24 +905,58 @@ await api.injectBonusToFlowState(triggerData.flowState, {
 <br>
 
 ```js
-api.getImmunityBonuses(actor, subtype?, state)   // → Array<object>
-api.checkDamageResistances(actor, damageType)     // → Array<string>
-api.applyDamageImmunities(actor, damages, state)  // → Array<object>
+api.getImmunityBonuses(actor, subtype?, state)              // → Array<object>
+api.checkDamageResistances(actor, damageType, allowedIds)   // → Array<string>
+api.applyDamageImmunities(actor, damages, state, bonuses)   // → Array<object>
 ```
 
 **Params:** <kbd>actor</kbd> `Actor | Token` · <kbd>subtype</kbd> `string` immunity subtype, omit for all · <kbd>damageType</kbd> `string` · <kbd>damages</kbd> `Array<{type, val}>`
 
 | Function | Description |
 |:---------|:------------|
-| `getImmunityBonuses` | Returns the actor's immunity bonuses of the given [subtype](API_REFERENCE.md#immunity-subtypes), or every immunity bonus when <kbd>subtype</kbd> is omitted. A Token resolves to its actor. Unknown subtypes log a console warning. |
-| `checkDamageResistances` | Source **names** of the "resistance" subtype bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. |
-| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. |
+| `getImmunityBonuses` | Returns the actor's immunity bonuses of the given [subtype](API_REFERENCE.md#immunity-subtypes), or every immunity bonus when <kbd>subtype</kbd> is omitted. A Token resolves to its actor. Unknown subtypes log a console warning. **No filters are applied**, so this is the raw list. |
+| `checkDamageResistances` | Source **names** of the "resistance" subtype bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. <kbd>allowedIds</kbd> (`string[]`, default `null`) keeps only the filtered bonuses whose id is listed, which is how a decision made during the damage flow reaches apply time. `null` filters nothing. |
+| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. <kbd>bonuses</kbd> (`object[]`, default `null`) supplies a prefiltered list instead of re-reading the flags. |
 
-`getImmunityBonuses` and `applyDamageImmunities` accept an optional <kbd>state</kbd> (`Object`, default `null`) for conditional immunity evaluation.
+`getImmunityBonuses` takes <kbd>state</kbd> only to fold in flow-scoped bonuses. To apply a bonus's own filters, use one of the three helpers below.
 
 ```js
 const resist = api.checkDamageResistances(target.actor, 'Energy');
 if (resist.length) console.log(`Resisted by ${resist.join(', ')}`);
+```
+
+</details>
+
+<details id="getApplicableImmunityBonuses">
+<summary><b><code>getApplicableImmunityBonuses</code></b><br><b><code>getAttackImmunityBonuses</code></b><br><b><code>getGateImmunityBonuses</code></b> → <code>any[]</code></summary>
+
+<br>
+
+```js
+api.getApplicableImmunityBonuses(actor, subtype, state, { flowType, ownerTokenId, otherToken })
+api.getAttackImmunityBonuses(actor, subtype, attackerActor, state, { defenderToken, attackerToken })
+api.getGateImmunityBonuses(actor, subtype, { ownerToken, otherToken, state })
+```
+
+`getImmunityBonuses` minus the bonuses their own filters reject.
+
+| Function | Use |
+|:---------|:----|
+| `getApplicableImmunityBonuses` | Inside a flow. Runs every filter. <kbd>flowType</kbd> picks the tag set (default `"damage"`). |
+| `getAttackImmunityBonuses` | `crit`, `hit`, `miss`. Adds `flowType: "attack"` and rebinds `state.actor` to the attacker. |
+| `getGateImmunityBonuses` | Outside a flow, for `effect` and `provoke`. Runs the two code fields only. |
+
+<kbd>ownerToken</kbd> is the bearer and becomes `reactorToken`. <kbd>otherToken</kbd> becomes `applyToCondition`'s `target`.
+
+Missing context skips a gate rather than failing it. With no context at all, the raw list comes back unfiltered.
+
+```js
+const immune = api.getAttackImmunityBonuses(target.actor, 'crit', state.actor, state, {
+    defenderToken: target,
+    attackerToken: attacker
+});
+if (immune.length)
+    await api.consumeImmunityUse(target.actor, 'crit', state, { bonuses: immune });
 ```
 
 </details>
@@ -919,18 +967,19 @@ if (resist.length) console.log(`Resisted by ${resist.join(', ')}`);
 <br>
 
 ```js
-await api.hasCritImmunity(actor, attackerActor, state)
-await api.hasHitImmunity(actor, attackerActor, state)
-await api.hasMissImmunity(actor, attackerActor, state)
+await api.hasCritImmunity(actor, attackerActor, state, tokens)
+await api.hasHitImmunity(actor, attackerActor, state, tokens)
+await api.hasMissImmunity(actor, attackerActor, state, tokens)
 ```
 
-Returns `true` if the actor has any immunity bonuses of the corresponding subtype.
+Returns `true` if the actor has any applicable immunity bonus of the corresponding subtype. Thin wrappers over [`getAttackImmunityBonuses`](#getApplicableImmunityBonuses), which returns the bonuses themselves when you need to burn the right charge.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actor</kbd> | `Actor` | *required* | The actor to check |
-| <kbd>attackerActor</kbd> | `Actor` | `null` | Optional attacker for conditional immunity checks |
+| <kbd>attackerActor</kbd> | `Actor` | `null` | The attacker. Without it nothing is filtered and any bonus counts |
 | <kbd>state</kbd> | `Object` | `null` | Optional flow state |
+| <kbd>tokens</kbd> | `Object` | `{}` | `{ defenderToken, attackerToken }`. Needed for `condition` to reach `reactorToken` and for `applyToCondition` to run at all |
 
 ```js
 if (await api.hasHitImmunity(target.actor, attackerActor, triggerData.flowState)) return;

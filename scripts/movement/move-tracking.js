@@ -12,6 +12,7 @@ import { splitPathAtCosts, legUsable, measurePathCost } from "./path-replay.js";
 import { findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { getBoostOfferMode } from "../setup/settings-register.js";
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
 // Bridges multi-segment moves where preUpdateToken fires per-segment.
 export const _moveHistoryCache = new Map();
 
@@ -706,9 +707,9 @@ export function _handleMovementCapExceeded(token, ctx)
             try
             {
                 result = await offerChoice({
-                    title: 'BOOST & MOVE',
+                    title: localize('LA.dialogTitle.boostAndMove'),
                     icon: 'modules/lancer-automations/icons/speedometer.svg',
-                    description: `Movement exceeds cap (${need}/${cap}). Boost adds +${boostSize}.`,
+                    description: localizeFormat('LA.movement.exceedsCapBoost', { need, cap, boost: boostSize }),
                     originToken: token,
                     userIdControl: getTokenOwnerUserId(token),
                     traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null, path: origWaypoints },
@@ -768,9 +769,9 @@ export function _handleMovementCapExceeded(token, ctx)
             try
             {
                 result = await offerChoice({
-                    title: 'OVERCHARGE & BOOST & MOVE',
+                    title: localize('LA.dialogTitle.overchargeBoostMove'),
                     icon: 'systems/lancer/assets/icons/macro-icons/overcharge.svg',
-                    description: `Movement exceeds cap+boost (${need}/${boostReach}). Overcharge grants an extra Boost (+${overBoostSize}).`,
+                    description: localizeFormat('LA.movement.exceedsCapOvercharge', { need, reach: boostReach, boost: overBoostSize }),
                     originToken: token,
                     userIdControl: getTokenOwnerUserId(token),
                     traceData: { tokenId: token.id, endPos: finalDest, newEndPos: null, path: origWaypoints },

@@ -3,6 +3,7 @@
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { executeReactorMeltdown } from "../tools/misc-tools.js";
 import { altStructButton, pushEmbedButton, destroyMech } from "./alt-struct-helpers.js";
+import { localize } from "../tools/string-utils.js";
 import { describeDestruction, destroyTraumaChoice, getValidSystems, getValidWeaponMounts, hasUniquePhysiology, isValidActor, showSystemTraumaDialog } from "./structure.js";
 
 const UNTIL_NEXT_TURN = { label: 'end', turns: 1, rounds: 0 };
@@ -45,7 +46,7 @@ const hullCheckOpts = (actor) => ({
     flowType: 'BaseStructureHullCheckFlow',
     actorUuid: actor.uuid,
     icon: 'fas fa-dice-d20',
-    label: 'HULL',
+    label: 'LA.common.hull',
     attrs: { 'check-type': 'hull' }
 });
 
@@ -111,17 +112,17 @@ export async function baseHandleHullCheckResult(actor, success)
     if (!isValidActor(actor))
         return null;
 
-    const title = "Direct Hit";
+    const title = localize('LA.altStruct.directHit');
     if (!success)
     {
         await destroyMech(actor);
-        return { title, description: "HULL check failed. The mech is <strong>DESTROYED</strong>." };
+        return { title, description: localize('LA.altStruct.result.hullFailedDestroyed') };
     }
     if (hasUniquePhysiology(actor))
-        return { title, description: "HULL save passed." };
+        return { title, description: localize('LA.altStruct.result.hullSavePassed') };
 
     await applyStatus(actor, ["stunned"], "Direct Hit (HULL check success)", UNTIL_NEXT_TURN);
-    return { title, description: "HULL check passed. Stunned until the end of your next turn." };
+    return { title, description: localize('LA.altStruct.result.hullPassedStunned') };
 }
 
 /** System Trauma: the 1d6 already picked weapon or system, this destroys the chosen one. */
@@ -157,20 +158,20 @@ export async function baseSelectDestructionTarget(state)
 async function baseDirectHitFallback(state, actor)
 {
     const remStruct = actor.system.structure.value;
-    const lead = "No valid weapons or systems remain, this becomes a <strong>DIRECT HIT</strong>.";
-    state.data.title = "Direct Hit";
+    const lead = localize('LA.altStruct.result.noValidEquipmentDirectHit');
+    state.data.title = localize('LA.altStruct.directHit');
 
     if (remStruct >= 3)
     {
         await applyStatus(actor, ["stunned"], "Direct Hit", UNTIL_NEXT_TURN);
-        state.data.description = `${lead} Stunned until the end of your next turn.`;
+        state.data.description = `${lead} ${localize('LA.altStruct.result.stunnedNextTurn')}`;
     }
     else if (remStruct === 2)
         state.data.description = `${lead}<br>${hullCheckButton(actor)}`;
     else
     {
         await destroyMech(actor);
-        state.data.description = `${lead} The mech is <strong>DESTROYED</strong>.`;
+        state.data.description = `${lead} ${localize('LA.altStruct.result.mechDestroyed')}`;
     }
     return true;
 }
@@ -239,7 +240,7 @@ export async function baseInsertEngCheckButton(state)
             flowType: 'BaseStressEngCheckFlow',
             actorUuid: actor.uuid,
             icon: 'fas fa-dice-d20',
-            label: 'ENGINEERING',
+            label: 'LA.altStruct.engineering',
             attrs: { 'check-type': 'eng' }
         });
     }
@@ -252,21 +253,21 @@ export async function baseHandleEngCheckResult(actor, success)
     if (!isValidActor(actor))
         return null;
 
-    const title = "Meltdown";
+    const title = localize('LA.altStruct.meltdownTitle');
     if (success)
     {
         await applyStatus(actor, ["exposed"], "Meltdown (ENGINEERING check success)");
-        return { title, description: "ENGINEERING check passed. Exposed." };
+        return { title, description: localize('LA.altStruct.result.engPassedExposed') };
     }
 
     const meltdown = altStructButton({
         flowType: 'MeltdownFlow',
         actorUuid: actor.uuid,
         icon: 'fas fa-radiation',
-        label: 'MELTDOWN',
+        label: 'LA.altStruct.meltdown',
         attrs: { 'countdown-formula': '1d6' }
     });
-    return { title, description: `ENGINEERING check failed. The reactor melts down after 1d6 of your turns, retry as a full action to prevent it.<br>${meltdown}` };
+    return { title, description: `${localize('LA.altStruct.result.engFailedMeltdown6')}<br>${meltdown}` };
 }
 
 // #endregion

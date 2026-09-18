@@ -8,15 +8,15 @@
         <i class="fas fa-info-circle"></i>
         <span>
             {{#if isHidden}}
-            <b>Hidden Information</b> is whispered to the requesting user only. Use it for things players have to actively scan to learn (system identities, vulnerabilities, secret triggers).
+            <b>{{localize "LA.scanUi.gmInput.hiddenInformation"}}</b> is whispered to the requesting user only. Use it for things players have to actively scan to learn (system identities, vulnerabilities, secret triggers).
             {{else}}
-            <b>Public Information</b> is broadcast to everyone. Use it for common knowledge or rumors any character might know.
+            <b>{{localize "LA.scanUi.gmInput.publicInformation"}}</b> is broadcast to everyone. Use it for common knowledge or rumors any character might know.
             {{/if}}
         </span>
     </div>
 
     <div style="margin-top:12px;">
-        <label style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Information to share</label>
+        <label style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">{{localize "LA.scanUi.gmInput.informationToShare"}}</label>
         <textarea name="scan-info" rows="6" placeholder="Type what the scan reveals..." style="width:100%;padding:6px 8px;border:1px solid #999;border-radius:3px;background:#fff;color:#222;font-family:inherit;font-size:0.9em;resize:vertical;"></textarea>
     </div>
 </div>

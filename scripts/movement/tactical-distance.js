@@ -517,7 +517,11 @@ Hooks.once('init', () =>
     game.settings.register(MODULE_ID, MODE_KEY, {
         scope: 'client',
         type: String,
-        choices: { off: 'Disabled', combat: 'Only in Combat', always: 'Always' },
+        choices: {
+            off: 'LA.settings.enableTacticalDistance.choices.off',
+            combat: 'LA.settings.enableTacticalDistance.choices.combat',
+            always: 'LA.settings.enableTacticalDistance.choices.always',
+        },
         default: 'combat',
         config: false
     });
@@ -530,7 +534,10 @@ Hooks.once('init', () =>
     game.settings.register(MODULE_ID, 'tacticalLabelPosition', {
         scope: 'client',
         type: String,
-        choices: { above: 'Above the token', below: 'Below the token' },
+        choices: {
+            above: 'LA.settings.tacticalLabelPosition.choices.above',
+            below: 'LA.settings.tacticalLabelPosition.choices.below',
+        },
         default: 'below',
         config: false
     });

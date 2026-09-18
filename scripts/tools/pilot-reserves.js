@@ -1,3 +1,5 @@
+import { localize, localizeFormat } from './string-utils.js';
+
 function _resolvePilot(tokenOrActor)
 {
     const actor = tokenOrActor?.actor ?? tokenOrActor;
@@ -56,19 +58,19 @@ export async function openAddReserveDialog(tokenOrActor)
     const pilot = _resolvePilot(tokenOrActor);
     if (!pilot)
     {
-        ui.notifications.warn('Select a pilot or mech token.'); return;
+        ui.notifications.warn(localize('LA.notify.selectAPilotOrMechToken')); return;
     }
 
     const reserveMap = await _fetchReservesByType();
 
     const TABS = [
-        { key: 'bonus',    label: 'Pilot Bonuses' },
-        { key: 'resource', label: 'Resource' },
-        { key: 'tactical', label: 'Tactical' },
-        { key: 'mech',     label: 'Mech' },
-        { key: 'custom',   label: 'Custom' },
-        { key: 'project',  label: 'Project' },
-        { key: 'org',      label: 'Organization' },
+        { key: 'bonus',    label: localize('LA.reserves.tab.bonus') },
+        { key: 'resource', label: localize('LA.reserves.tab.resource') },
+        { key: 'tactical', label: localize('LA.reserves.tab.tactical') },
+        { key: 'mech',     label: localize('LA.reserves.tab.mech') },
+        { key: 'custom',   label: localize('LA.reserves.tab.custom') },
+        { key: 'project',  label: localize('LA.reserves.tab.project') },
+        { key: 'org',      label: localize('LA.reserves.tab.org') },
     ];
     const tabNav = TABS.map((tab, i) =>
         `<a class="la-rtab${i === 0 ? ' active' : ''}" data-tab="${tab.key}" style="padding:4px 6px;font-size:0.78em;white-space:nowrap;cursor:pointer;text-align:center;border:1px solid var(--la-edge);border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)'};color:${i === 0 ? '#fff' : 'var(--la-ink)'};user-select:none;">${tab.label}</a>`
@@ -103,25 +105,25 @@ export async function openAddReserveDialog(tokenOrActor)
             <div class="la-rtab-content" data-tab="mech" style="display:none;">${buildList(reserveMap.Mech)}</div>
             <div class="la-rtab-content" data-tab="custom" style="display:none;">
                 <div style="display:flex;gap:2px;margin-bottom:6px;">${subtypeBtns}</div>
-                <div class="form-group"><label style="font-size:0.85em;">Resource Name</label><input type="text" id="cr-name" placeholder="Name"></div>
-                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="cr-desc" rows="2" style="width:100%;" placeholder="Details"></textarea></div>
+                <div class="form-group"><label style="font-size:0.85em;">Resource Name</label><input type="text" id="cr-name" placeholder="${localize('LA.common.name')}"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="cr-desc" rows="2" style="width:100%;" placeholder="${localize('LA.common.details')}"></textarea></div>
                 <button type="button" id="cr-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Reserve</button>
             </div>
             <div class="la-rtab-content" data-tab="project" style="display:none;">
-                <div class="form-group"><label style="font-size:0.85em;">Project Name</label><input type="text" id="pj-name" placeholder="Name"></div>
-                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="pj-desc" rows="2" style="width:100%;" placeholder="Details"></textarea></div>
+                <div class="form-group"><label style="font-size:0.85em;">Project Name</label><input type="text" id="pj-name" placeholder="${localize('LA.common.name')}"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Details</label><textarea id="pj-desc" rows="2" style="width:100%;" placeholder="${localize('LA.common.details')}"></textarea></div>
                 <div style="display:flex;gap:10px;margin:4px 0;">
                     <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-complicated"> Complicated</label>
                     <label style="display:flex;align-items:center;gap:3px;font-size:0.82em;"><input type="checkbox" id="pj-finished"> Finished</label>
                 </div>
                 <div class="form-group"><label style="font-size:0.85em;">Requirements</label>${requirementCheckboxes}</div>
-                <div class="form-group"><label style="font-size:0.85em;">Other</label><input type="text" id="pj-custom-req" placeholder="Custom requirement"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Other</label><input type="text" id="pj-custom-req" placeholder="${localize('LA.pilotReserves.ph.customRequirement')}"></div>
                 <button type="button" id="pj-add" style="width:100%;margin-top:4px;"><i class="fas fa-plus"></i> Add Project</button>
             </div>
             <div class="la-rtab-content" data-tab="org" style="display:none;">
-                <div class="form-group"><label style="font-size:0.85em;">Name</label><input type="text" id="org-name" placeholder="Organization Name"></div>
+                <div class="form-group"><label style="font-size:0.85em;">Name</label><input type="text" id="org-name" placeholder="${localize('LA.pilotReserves.ph.orgName')}"></div>
                 <div class="form-group"><label style="font-size:0.85em;">Type</label><select id="org-type">${orgOpts}</select></div>
-                <div class="form-group"><label style="font-size:0.85em;">Description</label><textarea id="org-desc" rows="2" style="width:100%;" placeholder="Purpose / Goal"></textarea></div>
+                <div class="form-group"><label style="font-size:0.85em;">Description</label><textarea id="org-desc" rows="2" style="width:100%;" placeholder="${localize('LA.pilotReserves.ph.orgPurpose')}"></textarea></div>
                 <div class="form-group"><label style="font-size:0.85em;">Start with</label>
                     <div style="display:flex;gap:3px;">
                         <a class="la-org-start active" data-val="efficiency" style="flex:1;padding:4px;font-size:0.82em;text-align:center;cursor:pointer;border:1px solid var(--la-edge);border-radius:3px;background:var(--primary-color);color:#fff;user-select:none;">Efficiency (+2)</a>
@@ -133,9 +135,9 @@ export async function openAddReserveDialog(tokenOrActor)
         </div>`;
 
     new Dialog({
-        title: `Reserves — ${pilot.name}`,
+        title: localizeFormat('LA.dialogTitle.reservesFor', { name: pilot.name }),
         content: BODY,
-        buttons: { close: { label: 'Close' } },
+        buttons: { close: { label: localize('LA.common.close') } },
         render: (html) =>
         {
             html.find('.la-rtab').on('click', function ()
@@ -166,27 +168,27 @@ export async function openAddReserveDialog(tokenOrActor)
                     return;
                 const itemData = doc.toObject(); delete itemData._id;
                 await pilot.createEmbeddedDocuments('Item', [itemData]);
-                ui.notifications.info(`Added "${doc.name}" to ${pilot.name}.`);
+                ui.notifications.info(localizeFormat('LA.notify.addedToPilot', { item: doc.name, pilot: pilot.name }));
             });
             html.find('#cr-add').on('click', async () =>
             {
                 const name = String(html.find('#cr-name').val()).trim();
                 if (!name)
                 {
-                    ui.notifications.warn('Enter a name.'); return;
+                    ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
                 await pilot.createEmbeddedDocuments('Item', [{ name,
                     type: 'reserve',
                     img: 'systems/lancer/assets/icons/reserve_tac.svg',
                     system: { lid: 'reserve_custom', type: html.find('.la-subtype-btn.active').data('val') || 'Resources', description: String(html.find('#cr-desc').val()), consumable: true, used: false } }]);
-                ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
+                ui.notifications.info(localizeFormat('LA.notify.addedToPilot', { item: name, pilot: pilot.name }));
             });
             html.find('#pj-add').on('click', async () =>
             {
                 const name = String(html.find('#pj-name').val()).trim();
                 if (!name)
                 {
-                    ui.notifications.warn('Enter a name.'); return;
+                    ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
                 const finished = html.find('#pj-finished').is(':checked');
                 const reqs = []; html.find('.proj-req:checked').each(function ()
@@ -204,21 +206,21 @@ export async function openAddReserveDialog(tokenOrActor)
                     type: 'reserve',
                     img: 'systems/lancer/assets/icons/reserve_tac.svg',
                     system: { lid: 'reserve_project', type: 'Project', label: 'Project', description: desc, consumable: false, used: false } }]);
-                ui.notifications.info(`Added project "${name}" to ${pilot.name}.`);
+                ui.notifications.info(localizeFormat('LA.notify.addedProjectToPilot', { item: name, pilot: pilot.name }));
             });
             html.find('#org-add').on('click', async () =>
             {
                 const name = String(html.find('#org-name').val()).trim();
                 if (!name)
                 {
-                    ui.notifications.warn('Enter a name.'); return;
+                    ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
                 const startStat = html.find('.la-org-start.active').data('val') || 'efficiency';
                 await pilot.createEmbeddedDocuments('Item', [{ name,
                     type: 'organization',
                     img: 'systems/lancer/assets/icons/encounter.svg',
                     system: { purpose: html.find('#org-type').val(), description: String(html.find('#org-desc').val()), efficiency: startStat === 'efficiency' ? 2 : 0, influence: startStat === 'influence' ? 2 : 0, actions: '' } }]);
-                ui.notifications.info(`Added "${name}" to ${pilot.name}.`);
+                ui.notifications.info(localizeFormat('LA.notify.addedToPilot', { item: name, pilot: pilot.name }));
             });
         }
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520, height: 520, resizable: false }).render(true);

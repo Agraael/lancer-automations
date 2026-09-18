@@ -24,64 +24,65 @@ export const ISO_SETTINGS = {
 const DEFS = [
     {
         key: ISO_SETTINGS.statBar,
-        name: 'Stat Bar / Nameplate / Status Icons',
-        hint: 'Keep them upright above the projected token.',
+        name: 'LA.settings.iso.statBar.name',
+        hint: 'LA.settings.iso.statBar.hint',
     },
     {
         key: ISO_SETTINGS.tacticalDistance,
-        name: 'Tactical Distance Labels',
-        hint: 'Keep drag-distance labels upright.',
+        name: 'LA.settings.iso.tacticalDistance.name',
+        hint: 'LA.settings.iso.tacticalDistance.hint',
     },
     {
         key: ISO_SETTINGS.waypointLabel,
-        name: 'Ruler Waypoint Labels',
-        hint: 'Place cost labels next to the projected token instead of its orthogonal cell.',
+        name: 'LA.settings.iso.waypointLabel.name',
+        hint: 'LA.settings.iso.waypointLabel.hint',
     },
     {
         key: ISO_SETTINGS.elevationAnimation,
-        name: 'Follow Terrain Elevation During Animation',
-        hint: 'Raise the mesh over THT ground during movement. Isometric Perspective only.',
+        name: 'LA.settings.iso.elevationAnimation.name',
+        hint: 'LA.settings.iso.elevationAnimation.hint',
     },
     {
         key: ISO_SETTINGS.restoreAnchor,
-        name: 'Restore Token Anchor on Non-Iso Scenes',
-        hint: 'Undo the anchor override Isometric Perspective applies even to non-iso scenes.',
+        name: 'LA.settings.iso.restoreAnchor.name',
+        hint: 'LA.settings.iso.restoreAnchor.hint',
     },
     {
         key: ISO_SETTINGS.scrollingText,
-        name: 'Scrolling Text',
-        hint: 'Show damage/status floating text over the projected token instead of the orthogonal cell.',
+        name: 'LA.settings.iso.scrollingText.name',
+        hint: 'LA.settings.iso.scrollingText.hint',
     },
     {
         key: ISO_SETTINGS.targetReticle,
-        name: 'Target Reticle',
-        hint: 'Move the target arrows/pips onto the projected token.',
+        name: 'LA.settings.iso.targetReticle.name',
+        hint: 'LA.settings.iso.targetReticle.hint',
     },
     {
         key: ISO_SETTINGS.clickZone,
-        name: 'Token Click Zone',
-        hint: 'Add a hover/click/select zone over the projected token, not just its orthogonal cell.',
+        name: 'LA.settings.iso.clickZone.name',
+        hint: 'LA.settings.iso.clickZone.hint',
     },
     {
         key: ISO_SETTINGS.selectionMarquee,
-        name: 'Drag-Select Rectangle',
-        hint: 'Draw and select with a proper screen rectangle instead of the skewed world box.',
+        name: 'LA.settings.iso.selectionMarquee.name',
+        hint: 'LA.settings.iso.selectionMarquee.hint',
     },
     {
         key: ISO_SETTINGS.moduleLabels,
-        name: 'Template & Terrain Labels',
-        hint: 'Keep TemplateMacro center labels and Terrain Height Tools labels upright.',
+        name: 'LA.settings.iso.moduleLabels.name',
+        hint: 'LA.settings.iso.moduleLabels.hint',
     },
     {
         key: ISO_SETTINGS.effectAspect,
-        name: 'Sequencer Effect Shape',
-        hint: 'Un-squash upright effects on iso scenes and keep beams flat on non-iso scenes.',
+        name: 'LA.settings.iso.effectAspect.name',
+        hint: 'LA.settings.iso.effectAspect.hint',
     },
     {
         key: ISO_SETTINGS.debugSelectionOverlay,
-        name: 'DEBUG: Draw Iso Selection Overlays',
-        hint: 'Draw the marquee polygon, per-token click zones, and center/mesh test points on the canvas.',
+        name: 'LA.settings.iso.debugSelectionOverlay.name',
+        hint: 'LA.settings.iso.debugSelectionOverlay.hint',
         defaultValue: false,
+        scope: 'client',
     },
 ];
 
@@ -92,7 +93,7 @@ export function registerIsoSettings()
         game.settings.register(MODULE_ID, def.key, {
             name: def.name,
             hint: def.hint,
-            scope: 'client',
+            scope: /** @type {'world' | 'client'} */ (def.scope ?? 'world'),
             config: false,
             type: Boolean,
             default: def.defaultValue ?? true,
@@ -104,7 +105,7 @@ export function registerIsoSettings()
 Hooks.on('refreshToken', (token) => _refreshTokenIsoDebug(token));
 Hooks.on('canvasReady', _refreshAllTokensIsoDebug);
 
-function _isoPerspectiveActive()
+export function isIsoPerspectiveActive()
 {
     const mod = game.modules.get(ISO_PERSPECTIVE_ID);
     if (!mod?.active)
@@ -112,17 +113,16 @@ function _isoPerspectiveActive()
     return !!getExternalSetting(ISO_PERSPECTIVE_ID, 'worldIsometricFlag', false);
 }
 
-function _grapeActive()
+export function isGrapeIsoActive()
 {
     return !!game.modules.get(GRAPE_ISO_ID)?.active;
 }
 
 export function isAnyIsoModuleActive()
 {
-    return _isoPerspectiveActive() || _grapeActive();
+    return isIsoPerspectiveActive() || isGrapeIsoActive();
 }
 
-// Active iso provider for the scene, or null.
 // Iso counter-transform state for a token, or null if not applicable.
 export function getIsoStateForToken(token)
 {
@@ -137,18 +137,19 @@ export function getIsoStateForToken(token)
     };
 }
 
+// Active iso provider for the scene, or null.
 export function getIsoProvider(scene)
 {
     const activeScene = scene ?? canvas.scene;
     if (!activeScene)
         return null;
 
-    if (_isoPerspectiveActive())
+    if (isIsoPerspectiveActive())
     {
         if (activeScene.getFlag(ISO_PERSPECTIVE_ID, 'isometricEnabled'))
             return ISO_PERSPECTIVE_PROVIDER;
     }
-    if (_grapeActive())
+    if (isGrapeIsoActive())
     {
         if (activeScene.getFlag(GRAPE_ISO_ID, 'is_isometric'))
             return GRAPE_PROVIDER;
@@ -203,7 +204,7 @@ export function isIsoFeatureEnabled(featureKey)
 // Some features only make sense for iso-perspective (elevationAnimation, restoreAnchor).
 export function isIsoPerspectiveFeatureEnabled(featureKey)
 {
-    if (!_isoPerspectiveActive())
+    if (!isIsoPerspectiveActive())
         return false;
     return !!getModuleSetting(featureKey);
 }

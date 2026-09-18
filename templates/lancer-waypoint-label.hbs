@@ -10,6 +10,9 @@
 	{{#if showPathfind}}
 	<div class="la-badge-pathfind{{#unless pathfindOn}} off{{/unless}}"><i class="fa-solid fa-route"></i></div>
 	{{/if}}
+	{{#if showElevMode}}
+	<div class="la-badge-elevmode {{elevMode}}"><i class="fa-solid {{elevIcon}}"></i></div>
+	{{/if}}
 	<div class="la-badge-row{{#unless showSecondLine}} empty{{/unless}}">
 		{{#if deltaCost}}<span class="la-delta">+{{deltaCost}}</span>{{/if}}
 		{{#if elevArrow}}

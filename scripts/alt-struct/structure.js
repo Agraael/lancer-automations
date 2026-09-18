@@ -2,6 +2,7 @@
 
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
 import { rollCard } from "../interactive/tools/rollCard.js";
@@ -9,13 +10,13 @@ import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
 import { altStructButton, pushEmbedButton, destroyMech, getRollCount } from "./alt-struct-helpers.js";
 
 const structTableTitles = [
-    "Crushing Hit",
-    "Direct Hit",
-    "System Trauma",
-    "System Trauma",
-    "System Trauma",
-    "Glancing Blow",
-    "Glancing Blow",
+    'LA.altStruct.crushingHit',
+    'LA.altStruct.directHit',
+    'LA.altStruct.systemTrauma',
+    'LA.altStruct.systemTrauma',
+    'LA.altStruct.systemTrauma',
+    'LA.altStruct.glancingBlow',
+    'LA.altStruct.glancingBlow',
 ];
 
 function structTableDescriptions(roll, remStruct)
@@ -23,24 +24,24 @@ function structTableDescriptions(roll, remStruct)
     switch (roll)
     {
         case 0:
-            return "Roll a <strong>HULL</strong> check. On a success, your mech is Dazed until the end of your next turn. On a Failure, your mech is immediately destroyed.";
+            return localize('LA.altStruct.struct.crushingHit');
         case 1:
             switch (remStruct)
             {
                 case 2:
-                    return "Roll a <strong>HULL</strong> check. On a success, your mech is Impaired and Slowed until the end of your next turn. On a failure, you take the <strong>SYSTEM TRAUMA</strong> result from this table, and your mech is Impaired and Immobilized until the end of your next turn. If there are no valid systems or weapons remaining, this result becomes a <strong>CRUSHING HIT</strong> instead.";
+                    return localize('LA.altStruct.struct.directHitTwoLeft');
                 case 1:
-                    return "You take the <strong>SYSTEM TRAUMA</strong> result from this table and must roll a <strong>HULL</strong> check. On a success, your mech is Impaired and Slowed until the end of your next turn. On a Failure, Your mech is Stunned until the end of your next turn. If there are no valid weapons or systems remaining, this result becomes a <strong>CRUSHING HIT</strong> instead.";
+                    return localize('LA.altStruct.struct.directHitOneLeft');
                 default:
-                    return "Your mech is Impaired and Slowed until the end of your next turn.";
+                    return localize('LA.altStruct.struct.directHit');
             }
         case 2:
         case 3:
         case 4:
-            return "Parts of your mech are torn off by the damage. Roll 1d6. On a 1–3, all weapons on one mount of your choice are destroyed; on a 4–6, a system of your choice is destroyed. LIMITED systems and weapons that are out of charges are not valid choices. If there are no valid choices remaining, it becomes the other result. If there are no valid systems or weapons remaining, this result becomes a <strong>DIRECT HIT</strong> instead.";
+            return localize('LA.altStruct.struct.systemTrauma');
         case 5:
         case 6:
-            return "Emergency systems kick in and stabilize your mech, but it's Impaired until the end of your next turn.";
+            return localize('LA.altStruct.struct.glancingBlow');
     }
     return "";
 }
@@ -50,15 +51,15 @@ export function describeDestruction(choice, destroyed)
     if (choice.type === "mount")
     {
         return {
-            title: "Weapons Destroyed",
+            title: localize('LA.dialogTitle.weaponsDestroyed'),
             description: destroyed.length > 0
-                ? `The following weapons on <strong>${choice.mount.name}</strong> have been destroyed: ${destroyed.join(', ')}`
-                : `No weapons on <strong>${choice.mount.name}</strong> could be destroyed as they are all indestructible.`
+                ? localizeFormat('LA.altStruct.weaponsDestroyedList', { mount: choice.mount.name, weapons: destroyed.join(', ') })
+                : localizeFormat('LA.altStruct.weaponsAllIndestructible', { mount: choice.mount.name })
         };
     }
     return {
-        title: "System Destroyed",
-        description: `System <strong>${choice.system.name}</strong> has been destroyed.`
+        title: localize('LA.dialogTitle.systemDestroyed'),
+        description: localizeFormat('LA.altStruct.systemDestroyedBody', { name: choice.system.name })
     };
 }
 
@@ -72,8 +73,8 @@ export async function interactiveSecondaryStructureRoll(state)
 
     const token = state.actor.getActiveTokens()?.[0] ?? null;
     const rolled = await rollCard({
-        title: "TEAR OFF",
-        description: "1-3: a weapon mount. 4-6: a system.",
+        title: localize('LA.dialogTitle.tearOff'),
+        description: localize('LA.altStruct.13AWeaponMount4'),
         roll: state.data.roll_str || "1d6",
         allowEdit: false,
         originToken: token,
@@ -90,13 +91,13 @@ export async function interactiveSecondaryStructureRoll(state)
     };
     if (roll.total <= 3)
     {
-        state.data.title = "Weapon Destruction";
-        state.data.desc = "On a 1–3, all weapons on one mount of your choice are destroyed";
+        state.data.title = localize('LA.altStruct.weaponDestruction');
+        state.data.desc = localize('LA.altStruct.tearOffWeaponDesc');
     }
     else
     {
-        state.data.title = "System Destruction";
-        state.data.desc = "On a 4–6, a system of your choice is destroyed";
+        state.data.title = localize('LA.altStruct.systemDestruction');
+        state.data.desc = localize('LA.altStruct.tearOffSystemDesc');
     }
     return true;
 }
@@ -105,7 +106,7 @@ export function isValidActor(actor)
 {
     if (!actor.is_mech() && !actor.is_npc())
     {
-        ui.notifications.warn("Only npcs and mechs can perform this action.");
+        ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanPerformThis'));
         return false;
     }
     return true;
@@ -160,8 +161,8 @@ export async function npcOneStructStep(state)
 
     if (!state.data)
         state.data = {};
-    state.data.title = "Crushing Hit";
-    state.data.desc = "Your mech is damaged beyond repair \u2013 it is destroyed. You may still exit it as normal.";
+    state.data.title = localize('LA.altStruct.crushingHit');
+    state.data.desc = localize('LA.altStruct.crushingHitDesc');
     state.data.result = undefined;
 
     const onPreStructureStep = game.lancer.flowSteps?.get("lancer-automations:onPreStructure");
@@ -199,7 +200,7 @@ export async function altRollStructure(state)
     if (remainingStructure >= actor.system.structure.max)
     {
         ui.notifications.info(
-            "The mech is at full Structure, no structure check to roll."
+            localize('LA.notify.fullStructure')
         );
         return false;
     }
@@ -223,7 +224,7 @@ export async function altRollStructure(state)
 
     state.data = {
         type: "structure",
-        title: structTableTitles[result],
+        title: localize(structTableTitles[result]),
         desc: structTableDescriptions(result, remainingStructure),
         remStruct: remainingStructure,
         val: actor.system.structure.value,
@@ -253,7 +254,7 @@ export async function structCheckMultipleOnes(state)
     let one_count = getRollCount(roll, 1);
     if (one_count > 1)
     {
-        state.data.title = structTableTitles[0];
+        state.data.title = localize(structTableTitles[0]);
         state.data.desc = structTableDescriptions(0, 1);
     }
 
@@ -303,15 +304,15 @@ export async function insertHullCheckButton(state)
         if (one_count > 1)
         {
             // Crushing Hit (Multiple 1's): Special HULL check
-            pushEmbedButton(state, { flowType: 'CrushingHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull' } });
+            pushEmbedButton(state, { flowType: 'CrushingHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull' } });
         }
         else if (rollTotal === 1 && structure === 2)
         {
             // Direct Hit with 2 Structure: HULL check with conditional TEAR OFF
-            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
+            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
         }
         else
-            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
+            pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
     }
     return true;
 }
@@ -360,9 +361,9 @@ export async function insertSecondaryRollButton(state)
     {
         state.data.embedButtons = state.data.embedButtons || [];
         if (hasWeaponsOrSystems)
-            pushEmbedButton(state, { flowType: 'secondaryStructureDirectHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'TEAR OFF' });
+            pushEmbedButton(state, { flowType: 'secondaryStructureDirectHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.tearOff' });
         else
-            pushEmbedButton(state, { flowType: 'TearOffDirectHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'DIRECT HIT' });
+            pushEmbedButton(state, { flowType: 'TearOffDirectHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.directHitCaps' });
     }
     return true;
 }
@@ -531,10 +532,10 @@ export async function showSystemTraumaDialog(actor, traumaType)
 
     if (traumaType === "weapon")
     {
-        titleHtml = "SYSTEM TRAUMA // WEAPON DESTRUCTION";
+        titleHtml = localize('LA.altStruct.traumaWeaponTitle');
         subtitle = actor.is_npc?.()
-            ? "Select a weapon to destroy."
-            : "Select a weapon mount to destroy. All destructible weapons on the selected mount will be destroyed.";
+            ? localize('LA.altStruct.selectWeapon')
+            : localize('LA.altStruct.selectWeaponMount');
         items = allMounts.map(mount =>
         {
             const allIndestructible = mount.weapons.length > 0 && mount.weapons.every(weapon =>
@@ -545,9 +546,9 @@ export async function showSystemTraumaDialog(actor, traumaType)
                 const isDestroyed = weapon.system?.destroyed === true;
                 const isIndestructible = !isDestroyed && (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
                 const badge = isDestroyed
-                    ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">✕ DESTROYED</span>`
+                    ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeDestroyed')}</span>`
                     : isIndestructible
-                        ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">INDESTRUCTIBLE</span>`
+                        ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeIndestructible')}</span>`
                         : '';
                 return `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${weapon.name}${badge}</span></div>`;
             }).join('');
@@ -582,7 +583,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
                 type: "system",
                 data: armamentRedundancy,
                 img: armamentRedundancy.img || "systems/lancer/assets/icons/mech_system.svg",
-                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${armamentRedundancy.name}</span></div><div style="font-size:0.82em;color:#bbb;margin-top:2px;">Destroy this system to prevent weapon destruction.</div>`,
+                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${armamentRedundancy.name}</span></div><div style="font-size:0.82em;color:#bbb;margin-top:2px;">${localize('LA.altStruct.armamentRedundancyHint')}</div>`,
                 sublabel: armamentRedundancy.system?.type || "SYSTEM",
                 selectable: true,
                 detail: {
@@ -596,16 +597,16 @@ export async function showSystemTraumaDialog(actor, traumaType)
     }
     else
     {
-        titleHtml = "SYSTEM TRAUMA // SYSTEM DESTRUCTION";
-        subtitle = "Select a system to destroy.";
+        titleHtml = localize('LA.altStruct.traumaSystemTitle');
+        subtitle = localize('LA.altStruct.selectSystem');
         items = allSystems.map(systemItem =>
         {
             const isDestroyed = systemItem.system?.destroyed === true;
             const isIndestructible = !isDestroyed && systemItem.system?.tags?.some(tag => tag.lid === 'tg_indestructible');
             const badge = isDestroyed
-                ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">✕ DESTROYED</span>`
+                ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeDestroyed')}</span>`
                 : isIndestructible
-                    ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">INDESTRUCTIBLE</span>`
+                    ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeIndestructible')}</span>`
                     : '';
             return {
                 id: `system_${systemItem.id}`,
@@ -656,12 +657,12 @@ export async function showSystemTraumaDialog(actor, traumaType)
         `;
 
         new Dialog({
-            title: "System Trauma",
+            title: localize('LA.dialogTitle.systemTrauma'),
             content,
             buttons: {
                 destroy: {
                     icon: '<i class="fas fa-trash"></i>',
-                    label: "Destroy",
+                    label: localize("LA.altStruct.destroy"),
                     callback: () =>
                     {
                         const item = items.find(candidateItem => candidateItem.id === selectedId);
@@ -672,7 +673,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
                         }
                         if (!item.selectable)
                         {
-                            ui.notifications.warn("This item cannot be destroyed.");
+                            ui.notifications.warn(localize('LA.notify.thisItemCannotBeDestroyed'));
                             resolve(null);
                             return;
                         }
@@ -684,7 +685,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel",
+                    label: localize("LA.common.cancel"),
                     callback: () => resolve(null)
                 }
             },
@@ -769,13 +770,13 @@ export async function manualSystemTrauma()
     }
     if (!token)
     {
-        ui.notifications.error("No token selected!");
+        ui.notifications.error(localize('LA.notify.noTokenSelected'));
         return;
     }
     const actor = token.actor;
     if (!actor || (!actor.is_mech() && !actor.is_npc()))
     {
-        ui.notifications.error("Selected token must be a mech or NPC!");
+        ui.notifications.error(localize('LA.notify.selectedTokenMustBeAMechOr'));
         return;
     }
 
@@ -786,17 +787,17 @@ export async function manualSystemTrauma()
 
     if (!hasWeapons && !hasSystems)
     {
-        ui.notifications.warn("No weapons or systems available to destroy!");
+        ui.notifications.warn(localize('LA.notify.noWeaponsOrSystemsAvailableToDestroy'));
         return;
     }
 
     let traumaType = null;
     await startChoiceCard({
-        title: "SYSTEM TRAUMA",
+        title: localize("LA.dialogTitle.systemTraumaCaps"),
         mode: "or",
         choices: [
             ...(hasWeapons ? [{
-                text: "Weapon Mount",
+                text: localize('LA.altStruct.weaponMount'),
                 icon: "cci cci-weapon",
                 callback: async () =>
                 {
@@ -804,7 +805,7 @@ export async function manualSystemTrauma()
                 }
             }] : []),
             ...(hasSystems ? [{
-                text: "System",
+                text: localize('LA.altStruct.system'),
                 icon: "cci cci-system",
                 callback: async () =>
                 {
@@ -824,7 +825,7 @@ export async function manualSystemTrauma()
 
     const destroyedItems = await destroyTraumaChoice(choice);
     const itemsList = destroyedItems.join(', ');
-    ui.notifications.info(`System Trauma: ${itemsList} destroyed`);
+    ui.notifications.info(localizeFormat('LA.notify.systemTraumaDestroyed', { items: itemsList }));
 
     ChatMessage.create({
         author: game.user.id,
@@ -832,11 +833,11 @@ export async function manualSystemTrauma()
         content: `
       <div class="card clipped-bot" style="margin: 0px;">
         <div class="lancer-header lancer-primary">
-          <i class="cci cci-structure i--m"></i> SYSTEM TRAUMA
+          <i class="cci cci-structure i--m"></i> ${localize('LA.altStruct.systemTraumaCaps')}
         </div>
         <div class="effect-text">
-          <p><strong>Type:</strong> ${traumaType === "weapon" ? "Weapon Destruction" : "System Destruction"}</p>
-          <p><strong>Destroyed:</strong> ${itemsList}</p>
+          <p><strong>${localize('LA.altStruct.cardType')}</strong> ${localize(traumaType === 'weapon' ? 'LA.altStruct.weaponDestruction' : 'LA.altStruct.systemDestruction')}</p>
+          <p><strong>${localize('LA.altStruct.cardDestroyed')}</strong> ${itemsList}</p>
         </div>
       </div>
     `
@@ -844,19 +845,13 @@ export async function manualSystemTrauma()
     console.log(`lancer-automations | alt-struct |Manual System Trauma complete - ${itemsList}`);
 }
 
-/**
- * Handles the "Tear Off" choice when a fallback to Direct Hit is needed.
- * (Triggered by a 2-4 on the structure table)
- */
+/** Tear Off choice when the fallback is a Direct Hit, a 2-4 on the structure table. */
 export async function selectDestructionTargetDirectHitFallback(state)
 {
     return handleTearOffChoice(state, true);
 }
 
-/**
- * Handles the "Tear Off" choice when a fallback to Crushing Hit is needed.
- * (Triggered by a failed HULL check on a Direct Hit)
- */
+/** Tear Off choice when the fallback is a Crushing Hit, a failed HULL check on a Direct Hit. */
 export async function selectDestructionTargetCrushingHitFallback(state)
 {
     return handleTearOffChoice(state, false);
@@ -882,15 +877,15 @@ async function handleTearOffChoice(state, isSystemTrauma)
     if (!choice)
     {
         const damage = actor.system.structure.max - actor.system.structure.value;
-        const hitType = isSystemTrauma ? "Direct Hit" : "Crushing Hit";
+        const hitType = localize(isSystemTrauma ? 'LA.altStruct.directHit' : 'LA.altStruct.crushingHit');
         const hitDescription = isSystemTrauma
-            ? "No weapons or systems available! This triggers a <strong>Direct Hit</strong>."
-            : "No weapons or systems available! This triggers a <strong>Crushing Hit</strong>.";
+            ? localize('LA.altStruct.noEquipmentDirectHit')
+            : localize('LA.altStruct.noEquipmentCrushingHit');
 
         const confirmed = await new Promise((resolve) =>
         {
             new Dialog({
-                title: "System Trauma - No Equipment Available",
+                title: localize('LA.dialogTitle.systemTraumaNoEquipmentAvailable'),
                 content: `
           <style>
             .no-equipment-dialog {
@@ -913,9 +908,9 @@ async function handleTearOffChoice(state, isSystemTrauma)
           </style>
           <div class="no-equipment-dialog">
             <div class="warning-icon"><i class="fas fa-exclamation-triangle"></i></div>
-            <h2>No Equipment Available</h2>
+            <h2>${localize('LA.altStruct.noEquipmentTitle')}</h2>
             <p>${hitDescription}</p>
-            <p>Click the button below to proceed with the ${hitType} roll.</p>
+            <p>${localizeFormat('LA.altStruct.proceedWithRoll', { hit: hitType })}</p>
           </div>
         `,
                 buttons: {
@@ -926,7 +921,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
                     },
                     cancel: {
                         icon: '<i class="fas fa-times"></i>',
-                        label: "Cancel",
+                        label: localize("LA.common.cancel"),
                         callback: () => resolve(false)
                     }
                 },
@@ -977,7 +972,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
     if (currentStructure === 1)
     {
         // generic-card.hbs has no embedButtons block, the anchor has to ride in the description
-        state.data.description += altStructButton({ flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'HULL', attrs: { 'check-type': 'hull', 'rem-struct': 1 } });
+        state.data.description += altStructButton({ flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull', 'rem-struct': 1 } });
     }
     return true;
 }
@@ -994,7 +989,7 @@ export async function tearOffDirectHitFlow(state)
     const confirmed = await new Promise((resolve) =>
     {
         new Dialog({
-            title: "System Trauma  - No Equipment Available",
+            title: localize("LA.dialogTitle.systemTraumaNoEquipmentAvailable"),
             content: `
               <style>
                 .no-equipment-dialog {
@@ -1025,12 +1020,12 @@ export async function tearOffDirectHitFlow(state)
             buttons: {
                 proceed: {
                     icon: '<i class="cci cci-structure"></i>',
-                    label: "Direct Hit",
+                    label: localize("LA.altStruct.directHit"),
                     callback: () => resolve(true)
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel",
+                    label: localize("LA.common.cancel"),
                     callback: () => resolve(false)
                 }
             },
@@ -1081,7 +1076,7 @@ export async function tearOffCrushingHitFlow(state)
     const confirmed = await new Promise((resolve) =>
     {
         new Dialog({
-            title: "Direct Hit - No Equipment Available",
+            title: localize('LA.dialogTitle.directHitNoEquipmentAvailable'),
             content: `
               <style>
                 .no-equipment-dialog {
@@ -1112,12 +1107,12 @@ export async function tearOffCrushingHitFlow(state)
             buttons: {
                 proceed: {
                     icon: '<i class="cci cci-structure"></i>',
-                    label: "Crushing Hit",
+                    label: localize("LA.altStruct.crushingHit"),
                     callback: () => resolve(true)
                 },
                 cancel: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel",
+                    label: localize("LA.common.cancel"),
                     callback: () => resolve(false)
                 }
             },
@@ -1192,31 +1187,31 @@ export async function handleDirectHitHullCheckResult(actor, success)
         }
     };
     const tearOff = () => hasWeaponsOrSystems
-        ? altStructButton({ flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'TEAR OFF' })
-        : altStructButton({ flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'CRUSHING HIT' });
+        ? altStructButton({ flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.tearOff' })
+        : altStructButton({ flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.crushingHitCaps' });
 
-    const title = "Direct Hit";
+    const title = localize('LA.altStruct.directHit');
     if (remStruct === 2)
     {
         if (success)
         {
             await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
-            return { title, description: "HULL check passed. Slowed and Impaired until the end of your next turn." };
+            return { title, description: localize('LA.altStruct.result.hullPassedSlowImpaired') };
         }
         if (hasWeaponsOrSystems)
             await applyHullEffects(["immobilized", "impaired"], "Direct Hit (HULL check failed)");
-        return { title, description: `HULL check failed.${hasWeaponsOrSystems ? " Immobilized and Impaired until the end of your next turn." : ""}<br>${tearOff()}` };
+        return { title, description: `${localize('LA.altStruct.result.hullFailed')}${hasWeaponsOrSystems ? ' ' + localize('LA.altStruct.result.immobilizedImpaired') : ''}<br>${tearOff()}` };
     }
 
     if (!hasWeaponsOrSystems)
-        return { title, description: `No valid weapons or systems remain.<br>${tearOff()}` };
+        return { title, description: `${localize('LA.altStruct.result.noValidEquipment')}<br>${tearOff()}` };
     if (success)
     {
         await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
-        return { title, description: `HULL check passed. Slowed and Impaired until the end of your next turn.<br>${tearOff()}` };
+        return { title, description: `${localize('LA.altStruct.result.hullPassedSlowImpaired')}<br>${tearOff()}` };
     }
     await applyHullEffects(["stunned"], "Direct Hit (HULL check failed)");
-    return { title, description: `HULL check failed. Stunned until the end of your next turn.<br>${tearOff()}` };
+    return { title, description: `${localize('LA.altStruct.result.hullFailedStunned')}<br>${tearOff()}` };
 }
 
 /** Crushing Hit (multiple 1s) after HULL check: success = Dazed, failure = mech destroyed. @returns {Promise<{title: string, description: string}|null>} */
@@ -1226,7 +1221,7 @@ export async function handleCrushingHitHullCheckResult(actor, success)
         return null;
 
     const token = actor.getActiveTokens()?.[0];
-    const title = "Crushing Hit";
+    const title = localize('LA.altStruct.crushingHit');
 
     if (success)
     {
@@ -1246,11 +1241,11 @@ export async function handleCrushingHitHullCheckResult(actor, success)
                 console.warn("lancer-automations | alt-struct |Could not apply Dazed effect:", error);
             }
         }
-        return { title, description: "HULL check passed. Dazed until the end of your next turn." };
+        return { title, description: localize('LA.altStruct.result.hullPassedDazed') };
     }
 
-    await destroyMech(actor, "HULL check failed! The mech is DESTROYED.");
-    return { title, description: "HULL check failed. The mech is <strong>DESTROYED</strong>." };
+    await destroyMech(actor, localize('LA.altStruct.result.hullFailedDestroyedPlain'));
+    return { title, description: localize('LA.altStruct.result.hullFailedDestroyed') };
 }
 
 /** Applies IMPAIRED on a Glancing Blow (5-6) structure roll. */

@@ -1306,8 +1306,32 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 
 #lancer-automations-config .la-opt-label {
     overflow: hidden;
+    white-space: nowrap;
+}
+
+#lancer-automations-config .la-opt-label-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    vertical-align: bottom;
+    transition: transform 0.25s ease;
+}
+
+/* A name too long for its column pans on hover instead of staying clipped */
+#lancer-automations-config .la-opt-label.la-pans:hover .la-opt-label-text {
+    max-width: none;
+    text-overflow: clip;
+    transform: translateX(var(--la-pan, 0));
+    transition: transform 1.6s linear 0.25s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #lancer-automations-config .la-opt-label-text,
+    #lancer-automations-config .la-opt-label.la-pans:hover .la-opt-label-text {
+        transition: none;
+    }
 }
 
 #lancer-automations-config .la-hint {

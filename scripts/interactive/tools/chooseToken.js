@@ -9,7 +9,7 @@ import {
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 import { getModuleSetting } from "../../tools/settings-utils.js";
-
+import { localizeFormat, localize } from "../../tools/string-utils.js";
 import {
     _queueCard, _queueCardUrgent, _createInfoCard, _updateInfoCard, _removeInfoCard,
 } from "../cards.js";
@@ -877,7 +877,7 @@ export function chooseToken(casterToken, options = {})
             {
                 if (!soft)
                 {
-                    ui.notifications.warn('Blast center out of range.');
+                    ui.notifications.warn(localize('LA.notify.blastCenterOutOfRange'));
                     return;
                 }
             }
@@ -918,7 +918,7 @@ export function chooseToken(casterToken, options = {})
             {
                 if (!soft)
                 {
-                    ui.notifications.warn('Burst target out of range.');
+                    ui.notifications.warn(localize('LA.notify.burstTargetOutOfRange'));
                     return;
                 }
             }
@@ -958,7 +958,7 @@ export function chooseToken(casterToken, options = {})
             {
                 if (!soft)
                 {
-                    ui.notifications.warn('Area center out of range.');
+                    ui.notifications.warn(localize('LA.notify.areaCenterOutOfRange'));
                     return;
                 }
             }
@@ -1062,7 +1062,7 @@ export function chooseToken(casterToken, options = {})
             projected.add(tokenId);
             if (count !== -1 && projected.size > count)
             {
-                ui.notifications.warn(`Maximum of ${count} target(s) already selected.`);
+                ui.notifications.warn(localizeFormat('LA.notify.maxTargetsSelectedParen', { count }));
                 return;
             }
             placement.included.add(tokenId);
@@ -1099,7 +1099,7 @@ export function chooseToken(casterToken, options = {})
             return {
                 id: placement.id,
                 index: idx,
-                label: `Area ${idx + 1}`,
+                label: localizeFormat('LA.measure.area', { n: idx + 1 }),
                 count: placement.included.size,
                 ignoreFilter: placement.ignoreFilter,
                 hasFilter: !!filter,
@@ -1538,7 +1538,7 @@ export function chooseToken(casterToken, options = {})
                 }
                 else
                 {
-                    ui.notifications.warn(`Maximum of ${count} targets already selected.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.maxTargetsSelected', { count }));
                     return;
                 }
             }

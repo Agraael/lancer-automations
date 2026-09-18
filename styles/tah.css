@@ -299,6 +299,26 @@
     cursor: context-menu;
     display: flex;
     align-items: stretch;
+    position: relative;
+}
+
+.la-hud-portrait {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    pointer-events: none;
+}
+
+.la-hud-portrait img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: bottom left;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
 }
 
 .la-hud-token-name {
@@ -1273,7 +1293,8 @@ input.la-status-search {
     border-width: 2px;
 }
 
-.la-waypoint-label .la-badge-pathfind {
+.la-waypoint-label .la-badge-pathfind,
+.la-waypoint-label .la-badge-elevmode {
     position: absolute;
     left: calc(50% + 24px);
     top: 50%;
@@ -1286,6 +1307,11 @@ input.la-status-search {
     align-items: center;
     justify-content: center;
     font-size: 10px;
+}
+
+.la-waypoint-label .la-badge-elevmode {
+    left: auto;
+    right: calc(50% + 24px);
 }
 
 .la-waypoint-label .la-badge-pathfind.off {
@@ -1401,6 +1427,10 @@ input.la-status-search {
     margin-bottom: 0;
     row-gap: 0;
     min-width: 0;
+}
+
+.la-compact-config .form-group[hidden] {
+    display: none;
 }
 
 .la-stat-bar-config>.form-group>label,

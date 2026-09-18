@@ -1,18 +1,19 @@
 import { getApiEntries, getTriggerHelperEntries, apiDocUrl } from '../setup/codemirror-hints.js';
+import { localize } from '../tools/string-utils.js';
 
 // Shown before any search; everything else is reachable from the search box.
 const CURATED_GROUPS = [
-    { label: 'Cancel & modify the trigger', names: ['triggerData.cancel', 'triggerData.cancelAction', 'triggerData.cancelAttack', 'triggerData.cancelTechAttack', 'triggerData.cancelCheck', 'triggerData.cancelChange', 'triggerData.cancelTriggeredMove', 'triggerData.changeTriggeredMove', 'triggerData.cancelStructure', 'triggerData.cancelStress', 'triggerData.cancelStructureOutcome', 'triggerData.cancelStressOutcome', 'triggerData.cancelHpChange', 'triggerData.cancelHeatChange', 'triggerData.modifyHpChange', 'triggerData.modifyHeatChange', 'triggerData.modifyRoll', 'triggerData.reroll', 'triggerData.changeRoll'] },
-    { label: 'Reach the reactor', names: ['triggerData.startRelatedFlow', 'triggerData.startRelatedFlowToReactor', 'triggerData.sendMessageToReactor', 'triggerData.endActivation', 'triggerData.debugActivation'] },
-    { label: 'Attacks & rolls', names: ['executeBasicAttack', 'executeTechAttack', 'executeDamageRoll', 'executeSkirmish', 'executeBarrage', 'attackWith', 'beginWeaponAttackFlow', 'executeStatRoll', 'executeForceCheck', 'executeContestedCheck', 'openHaseContestCard', 'executeSaveVsEffect'] },
-    { label: 'Activations', names: ['executeSimpleActivation', 'executeItemActivation', 'setItemAsActivated', 'getActivatedItems', 'endItemActivation'] },
-    { label: 'Effects', names: ['applyEffectsToTokens', 'removeEffectsByNameFromTokens', 'findEffectOnToken', 'findEffectsOnToken', 'findEffectFrom', 'hasStatus', 'getAllEffects', 'deleteEffect', 'consumeEffectCharge', 'triggerEffectImmunity', 'ensureLinkedEffect', 'linkEffectToItem', 'applyMark', 'findMarkedTokens', 'clearMarks'] },
-    { label: 'Bonuses', names: ['addGlobalBonus', 'removeGlobalBonus', 'addConstantBonus', 'removeConstantBonus', 'getGlobalBonuses', 'getConstantBonuses', 'ensureLinkedBonus', 'linkBonusToItem', 'unlinkBonusFromItem', 'getLinkedBonuses', 'injectBonusToFlowState'] },
-    { label: 'Cards & choices', names: ['startChoiceCard', 'confirmCard', 'askCard', 'pickCard', 'pickItem', 'startVoteCard', 'openChoiceMenu'] },
-    { label: 'Tokens & canvas', names: ['chooseToken', 'placeToken', 'moveToken', 'knockBackToken', 'placeZone', 'placeDeployable', 'spawnHardCover', 'createAura', 'ensureAura', 'findAura', 'getTokensInAura', 'deleteAuras'] },
-    { label: 'HUD actions', names: ['addExtraActions', 'removeExtraActions', 'lockActorAction', 'unlockActorAction', 'lockActorActionTypes', 'unlockActorActionTypes', 'disableActorAction', 'enableActorAction', 'disableActorActionTypes', 'enableActorActionTypes', 'destroyItem', 'disableItem', 'restoreItem', 'setActionOverlay', 'getActionOverlay', 'addExtraDeploymentLids', 'setHidePrimaryAction'] },
-    { label: 'Flags & gates', names: ['getActorFlags', 'addActorFlags', 'removeActorFlags', 'getItemFlags', 'addItemFlags', 'getTokenFlags', 'addTokenFlags', 'consumeGate', 'checkGate', 'clearGate', 'consumeOncePerRound', 'consumeOncePerTurn', 'getFlowFlag', 'setFlowFlag'] },
-    { label: 'Queries', names: ['getTokenDistance', 'getMinGridDistance', 'findItemByLid', 'getWeapons', 'getMaxWeaponRanges_WithBonus', 'isHostile', 'isFriendly', 'canProvokeReaction', 'hasLineOfSight', 'consumeItemResource', 'getTier', 'tierValue'] },
+    { label: 'LA.apiRef.group.cancelModify', names: ['triggerData.cancel', 'triggerData.cancelAction', 'triggerData.cancelAttack', 'triggerData.cancelTechAttack', 'triggerData.cancelCheck', 'triggerData.cancelChange', 'triggerData.cancelTriggeredMove', 'triggerData.changeTriggeredMove', 'triggerData.cancelStructure', 'triggerData.cancelStress', 'triggerData.cancelStructureOutcome', 'triggerData.cancelStressOutcome', 'triggerData.cancelHpChange', 'triggerData.cancelHeatChange', 'triggerData.modifyHpChange', 'triggerData.modifyHeatChange', 'triggerData.modifyRoll', 'triggerData.reroll', 'triggerData.changeRoll'] },
+    { label: 'LA.apiRef.group.reachReactor', names: ['triggerData.startRelatedFlow', 'triggerData.startRelatedFlowToReactor', 'triggerData.sendMessageToReactor', 'triggerData.endActivation', 'triggerData.debugActivation'] },
+    { label: 'LA.apiRef.group.attacksRolls', names: ['executeBasicAttack', 'executeTechAttack', 'executeDamageRoll', 'executeSkirmish', 'executeBarrage', 'attackWith', 'beginWeaponAttackFlow', 'executeStatRoll', 'executeForceCheck', 'executeContestedCheck', 'openHaseContestCard', 'executeSaveVsEffect'] },
+    { label: 'LA.apiRef.group.activations', names: ['executeSimpleActivation', 'executeItemActivation', 'setItemAsActivated', 'getActivatedItems', 'endItemActivation'] },
+    { label: 'LA.apiRef.group.effects', names: ['applyEffectsToTokens', 'removeEffectsByNameFromTokens', 'findEffectOnToken', 'findEffectsOnToken', 'findEffectFrom', 'hasStatus', 'getAllEffects', 'deleteEffect', 'consumeEffectCharge', 'triggerEffectImmunity', 'ensureLinkedEffect', 'linkEffectToItem', 'applyMark', 'findMarkedTokens', 'clearMarks'] },
+    { label: 'LA.apiRef.group.bonuses', names: ['addGlobalBonus', 'removeGlobalBonus', 'addConstantBonus', 'removeConstantBonus', 'getGlobalBonuses', 'getConstantBonuses', 'ensureLinkedBonus', 'linkBonusToItem', 'unlinkBonusFromItem', 'getLinkedBonuses', 'injectBonusToFlowState'] },
+    { label: 'LA.apiRef.group.cardsChoices', names: ['startChoiceCard', 'confirmCard', 'askCard', 'pickCard', 'pickItem', 'startVoteCard', 'openChoiceMenu'] },
+    { label: 'LA.apiRef.group.tokensCanvas', names: ['chooseToken', 'placeToken', 'moveToken', 'knockBackToken', 'placeZone', 'placeDeployable', 'spawnHardCover', 'createAura', 'ensureAura', 'findAura', 'getTokensInAura', 'deleteAuras'] },
+    { label: 'LA.apiRef.group.hudActions', names: ['addExtraActions', 'removeExtraActions', 'resolveGrant', 'findGrantedAction', 'isGrantStale', 'sweepStaleGrants', 'lockActorAction', 'unlockActorAction', 'lockActorActionTypes', 'unlockActorActionTypes', 'disableActorAction', 'enableActorAction', 'disableActorActionTypes', 'enableActorActionTypes', 'destroyItem', 'disableItem', 'restoreItem', 'setActionOverlay', 'getActionOverlay', 'addExtraDeploymentLids', 'setHidePrimaryAction'] },
+    { label: 'LA.apiRef.group.flagsGates', names: ['getActorFlags', 'addActorFlags', 'removeActorFlags', 'getItemFlags', 'addItemFlags', 'getTokenFlags', 'addTokenFlags', 'consumeGate', 'checkGate', 'clearGate', 'consumeOncePerRound', 'consumeOncePerTurn', 'getFlowFlag', 'setFlowFlag'] },
+    { label: 'LA.apiRef.group.queries', names: ['getTokenDistance', 'getMinGridDistance', 'findItemByLid', 'getWeapons', 'getMaxWeaponRanges_WithBonus', 'isHostile', 'isFriendly', 'canProvokeReaction', 'hasLineOfSight', 'consumeItemResource', 'consumeAction', 'gainAction', 'getTier', 'tierValue'] },
 ];
 
 const TAG_ROW = 'display: flex; align-items: baseline; gap: 5px; padding: 3px 8px; border-bottom: 1px solid var(--la-edge);';
@@ -55,7 +56,7 @@ function groupsHtml(byName)
         return `<div class="la-api-ref-group">
             <div class="la-api-ref-head" style="padding: 5px 8px; font-weight: bold; font-size: 0.85em; color: var(--la-ink); cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--primary-color), transparent 93%); border-bottom: 1px solid var(--la-edge);">
                 <span class="la-caret" style="display: inline-block; width: 0.7em;">&#9654;</span>
-                <span>${esc(group.label)}</span>
+                <span>${esc(localize(group.label))}</span>
             </div>
             <div class="la-api-ref-body" style="display: none;">${rows}</div>
         </div>`;
@@ -92,7 +93,7 @@ export function openApiRefPopup()
             <span class="la-api-ref-close" style="cursor: pointer; font-size: 1.2em; line-height: 1;">&times;</span>
         </div>
         <div style="padding: 6px 8px; border-bottom: 1px solid var(--la-edge);">
-            <input type="text" class="la-api-ref-search" placeholder="Search all functions..." style="width: 100%; box-sizing: border-box; padding: 3px 6px; font-size: 0.8em; font-family: inherit; background: var(--la-plate); color: var(--la-ink); border: 1px solid var(--la-edge); border-radius: 3px; outline: none;">
+            <input type="text" class="la-api-ref-search" placeholder="${localize('LA.apiRef.searchPlaceholder')}" style="width: 100%; box-sizing: border-box; padding: 3px 6px; font-size: 0.8em; font-family: inherit; background: var(--la-plate); color: var(--la-ink); border: 1px solid var(--la-edge); border-radius: 3px; outline: none;">
         </div>
         <div class="la-api-ref-list" style="max-height: 420px; overflow-y: auto;">${groupsHtml(byName)}</div>
     `;

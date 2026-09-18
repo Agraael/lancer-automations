@@ -31,8 +31,8 @@ function _applyState()
 export function initVisionDisableOnSelect()
 {
     game.settings.register(MODULE_ID, SETTING_MAX, {
-        name: 'Disable Vision Above N Controlled Tokens',
-        hint: 'Turn token vision off while more than N tokens are controlled (0 = never).',
+        name: 'LA.settings.disableVisionAboveControlled.name',
+        hint: 'LA.settings.disableVisionAboveControlled.hint',
         scope: 'world',
         type: Number,
         default: 5,

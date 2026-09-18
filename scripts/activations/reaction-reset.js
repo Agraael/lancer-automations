@@ -2,13 +2,14 @@
 /*global console, window */
 
 import { ReactionManager } from "./reaction-manager.js";
+import { localize } from "../tools/string-utils.js";
 export class ReactionReset extends FormApplication
 {
     static get defaultOptions()
     {
         return foundry.utils.mergeObject(super.defaultOptions, {
             id: "reaction-checker-reset",
-            title: "Reset Lancer Reaction Checker",
+            title: localize('LA.dialogTitle.resetReactionChecker'),
             template: "modules/lancer-automations/templates/reset-confirm.html",
             width: 400,
             height: "auto"
@@ -21,7 +22,7 @@ export class ReactionReset extends FormApplication
     render(force = false, options = {})
     {
         new Dialog({
-            title: "Reset Module Defaults",
+            title: localize('LA.dialogTitle.resetModuleDefaults'),
             content: `
                 <div style="margin-bottom: 20px;">
                     <p style="text-align: center; font-size: 1.2em; color: var(--color-text-dark-primary);">
@@ -37,7 +38,7 @@ export class ReactionReset extends FormApplication
             buttons: {
                 yes: {
                     icon: '<i class="fas fa-trash"></i>',
-                    label: "Reset Everything",
+                    label: localize("LA.activationManager.resetEverything"),
                     callback: async () =>
                     {
                         try
@@ -54,20 +55,20 @@ export class ReactionReset extends FormApplication
                             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, {});
                             await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, {});
 
-                            ui.notifications.info("Lancer Reaction Checker: Module reset to defaults.");
+                            ui.notifications.info(localize('LA.notify.lancerReactionCheckerModuleResetToDefaults'));
 
                             globalThis.location.reload();
                         }
                         catch (err)
                         {
-                            ui.notifications.error("Error resetting module: " + err.message);
+                            ui.notifications.error(localize('LA.notify.errorResettingModule') + err.message);
                             console.error(err);
                         }
                     }
                 },
                 no: {
                     icon: '<i class="fas fa-times"></i>',
-                    label: "Cancel"
+                    label: localize("LA.common.cancel")
                 }
             },
             default: "no"

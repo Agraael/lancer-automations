@@ -16,8 +16,8 @@ function _clearing(wrapped, ...args)
 Hooks.once('init', () =>
 {
     game.settings.register(MODULE_ID, SETTING_CACHE_ALL, {
-        name: 'Cache Settings Reads for All Modules',
-        hint: 'Caches settings reads from every module, not only this one.',
+        name: 'LA.settings.settingsCacheAllModules.name',
+        hint: 'LA.settings.settingsCacheAllModules.hint',
         scope: 'world',
         type: Boolean,
         default: false,

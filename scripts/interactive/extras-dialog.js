@@ -12,6 +12,7 @@ import {
     setExtraDeployableOpts,
     openDeployablePicker,
 } from './deployables.js';
+import { localize } from '../tools/string-utils.js';
 import { getActionOverlays, getActionOverlay, setActionOverlay, removeActionOverlay } from './action-overlays.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
@@ -84,12 +85,12 @@ function openActorPickerPopup(target, onAdded)
         : '<div style="padding:8px;text-align:center;color:var(--la-ink-dim);font-size:0.82em;font-style:italic;">No actors in world.</div>';
     const content = `
         <div class="lancer-dialog-header"><div class="lancer-dialog-title">ADD DEPLOYABLE ACTOR</div></div>
-        <input type="text" class="la-ap-search" placeholder="Search actors..." style="margin-top:8px;width:100%;height:28px;padding:2px 8px;font-size:0.9em;box-sizing:border-box;">
+        <input type="text" class="la-ap-search" placeholder="${localize('LA.common.searchActors')}" style="margin-top:8px;width:100%;height:28px;padding:2px 8px;font-size:0.9em;box-sizing:border-box;">
         <div class="la-ap-list lancer-scroll" style="margin-top:6px;max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${rowsHtml}</div>`;
     const dlg = new Dialog({
-        title: 'Add Deployable Actor',
+        title: localize('LA.dialogTitle.addDeployableActor'),
         content,
-        buttons: { close: { label: 'Close' } },
+        buttons: { close: { label: localize('LA.common.close') } },
         default: 'close',
         render: (/** @type {any} */ html) =>
         {
@@ -340,17 +341,17 @@ export function openExtrasDialog(target)
             <div class="la-extras-drawer lancer-dialog-base" style="position:absolute;top:0;left:100%;margin-left:8px;width:300px;height:100%;box-sizing:border-box;padding:12px;overflow:hidden;display:flex;flex-direction:column;background:var(--la-plate);color:var(--la-ink);font-family:var(--font-primary);border:1px solid var(--la-edge);box-shadow:-6px 0 16px rgba(0,0,0,0.45);transform:translateX(-100%);opacity:0;pointer-events:none;transition:transform 0.28s ease, opacity 0.28s ease;z-index:5;">
                 <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                     <div class="la-extras-drawer-title" style="font-size:0.82em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink);font-weight:bold;">New Action</div>
-                    <span class="la-extras-drawer-close" title="Close" style="cursor:pointer;color:var(--la-ink-dim);font-size:1.3em;line-height:1;padding:0 4px;">&times;</span>
+                    <span class="la-extras-drawer-close" title="${localize('LA.common.close')}" style="cursor:pointer;color:var(--la-ink-dim);font-size:1.3em;line-height:1;padding:0 4px;">&times;</span>
                 </div>
                 <div class="la-extras-editor-action" style="flex:1 1 auto;min-height:0;flex-direction:column;">
                     <div class="la-extras-action-fields" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding-right:2px;">
                     <div class="la-extras-act-basics">
                     <div style="display:grid;grid-template-columns:34px 1fr 1fr;gap:6px;align-items:center;">
                         <span class="la-extras-act-icon" title="Click to change icon" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${iconHtml(actIcon, 22)}</span>
-                        <input type="text" class="la-extras-act-name" placeholder="Name" style="height:26px;padding:2px 6px;font-size:0.9em;">
+                        <input type="text" class="la-extras-act-name" placeholder="${localize('LA.common.name')}" style="height:26px;padding:2px 6px;font-size:0.9em;">
                         <select class="la-extras-act-act" style="height:26px;padding:2px 6px;font-size:0.9em;">${actOptions}</select>
                     </div>
-                    <textarea class="la-extras-act-detail" placeholder="Detail (optional)" rows="2" style="margin-top:4px;width:100%;font-size:0.85em;padding:4px;box-sizing:border-box;"></textarea>
+                    <textarea class="la-extras-act-detail" placeholder="${localize('LA.extras.detailOptional')}" rows="2" style="margin-top:4px;width:100%;font-size:0.85em;padding:4px;box-sizing:border-box;"></textarea>
                     <div style="margin-top:4px;display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
                         <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;"><input type="checkbox" class="la-extras-act-loading"> Loading</label>
                         <label style="font-size:0.82em;display:flex;align-items:center;gap:4px;">Limited <input type="number" class="la-extras-act-uses" placeholder="—" min="1" max="99" style="width:46px;height:22px;font-size:0.85em;"></label>
@@ -394,17 +395,17 @@ export function openExtrasDialog(target)
                     </div>
                 </div>
                 <div class="la-extras-editor-dep" style="display:none;flex:1 1 auto;min-height:0;flex-direction:column;">
-                    <input type="text" class="la-extras-dep-search" placeholder="Search actors..." style="flex:0 0 auto;width:100%;height:26px;padding:2px 8px;font-size:0.9em;box-sizing:border-box;">
+                    <input type="text" class="la-extras-dep-search" placeholder="${localize('LA.common.searchActors')}" style="flex:0 0 auto;width:100%;height:26px;padding:2px 8px;font-size:0.9em;box-sizing:border-box;">
                     <div class="la-extras-dep-pick-list lancer-scroll" style="flex:1 1 auto;min-height:0;margin-top:6px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${depActorRows}</div>
                     <button class="la-extras-dep-find-lid" type="button" style="flex:0 0 auto;margin-top:8px;width:100%;height:28px;padding:2px 10px;font-size:0.85em;background:var(--primary-color);color:#fff;border:none;cursor:pointer;"><i class="fas fa-rocket"></i> Add by LID</button>
                 </div>
                 <div class="la-extras-editor-bar" style="display:none;flex:0 0 auto;">
                     <div style="display:grid;grid-template-columns:1fr 34px;gap:6px;align-items:center;">
-                        <input type="text" class="la-extras-bar-label" placeholder="Label" maxlength="14" style="height:26px;padding:2px 6px;font-size:0.9em;">
+                        <input type="text" class="la-extras-bar-label" placeholder="${localize('LA.common.label')}" maxlength="14" style="height:26px;padding:2px 6px;font-size:0.9em;">
                         <input type="color" class="la-extras-bar-color" value="#66cc66" style="width:32px;height:26px;padding:0;cursor:pointer;">
                     </div>
                     <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                        <input type="number" class="la-extras-bar-val" placeholder="Value" value="1" style="height:26px;padding:2px 6px;font-size:0.9em;">
+                        <input type="number" class="la-extras-bar-val" placeholder="${localize('LA.common.value')}" value="1" style="height:26px;padding:2px 6px;font-size:0.9em;">
                         <input type="number" class="la-extras-bar-max" placeholder="Max" value="3" style="height:26px;padding:2px 6px;font-size:0.9em;">
                     </div>
                     <button class="la-extras-bar-add" style="margin-top:8px;width:100%;background:var(--primary-color);color:#fff;border:none;padding:4px 12px;cursor:pointer;font-size:0.85em;font-weight:bold;">Add Bar</button>
@@ -450,11 +451,11 @@ export function openExtrasDialog(target)
     /** @type {any} */
     const dialogOpts = { width: 480, height: 'auto', top: 450, left: 150, classes: ['lancer-dialog-base', 'lancer-no-title'] };
     const dlg = new Dialog({
-        title: 'Extras',
+        title: localize('LA.dialogTitle.extras'),
         content: `<div class="la-extras-body" style="position:relative;overflow:visible;">${renderContent()}</div>`,
         buttons: {
             save: {
-                label: 'Save',
+                label: localize('LA.common.save'),
                 callback: (html) => commitAllInputs(html),
             },
         },
@@ -532,7 +533,7 @@ export function openExtrasDialog(target)
                         ? rangeList.map((/** @type {any} */ rangeEntry) => rangeRowHtml(rangeEntry.val, rangeEntry.type)).join('')
                         : rangeRowHtml());
                     editingName = src.name;
-                    drawerFind('.la-extras-act-add').text('Save Changes');
+                    drawerFind('.la-extras-act-add').text(localize('LA.extras.saveChanges'));
                     applyCombatMode();
                 };
                 const clearActionForm = () =>
@@ -615,7 +616,7 @@ export function openExtrasDialog(target)
                     drawerFind('.la-extras-act-basics').css('display', on ? 'none' : '');
                     drawerFind('.la-extras-overlay-note').css('display', on ? 'block' : 'none');
                     drawerFind('input[name="la-extras-combat-mode"][value=""]').closest('label').css('display', on ? 'none' : 'flex');
-                    drawerFind('.la-extras-act-add').text(on ? 'Save Combat' : 'Add Action');
+                    drawerFind('.la-extras-act-add').text(localize(on ? 'LA.extras.saveCombat' : 'LA.extras.addAction'));
                     applyCombatMode();
                 };
                 drawerFind('.la-extras-drawer-close').on('click', () => closeDrawer());
@@ -708,7 +709,7 @@ export function openExtrasDialog(target)
                     const name = overlayEditing ? overlayEditing.name : String(drawerFind('.la-extras-act-name').val() ?? '').trim();
                     if (!name)
                     {
-                        ui.notifications.warn('Action needs a name.');
+                        ui.notifications.warn(localize('LA.notify.actionNeedsAName'));
                         return;
                     }
                     const activation = String(drawerFind('.la-extras-act-act').val() ?? 'Quick');
@@ -986,7 +987,7 @@ export function openExtrasDialog(target)
                         color: { kind: 'solid', stops: [color] },
                     });
                     if (!created)
-                        ui.notifications?.warn('Could not add extra bar.');
+                        ui.notifications?.warn(localize('LA.notify.couldNotAddExtraBar'));
                     rerender();
                 });
                 html.find('.la-extras-remove-bar').on('click', async (ev) =>

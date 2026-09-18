@@ -15,6 +15,8 @@ const JB2A_FALLBACKS = {
     'jb2a.ui.miss.red':        { src: 'jb2a.ui.miss.white' },
 
     'jb2a.zoning.directional.once.redyellow.line200.01': { src: 'jb2a.zoning.directional.once.bluegreen.line200.02', tint: 0xffcc33 },
+    'jb2a.zoning.directional.once.bluegreen.line400.03': { src: 'jb2a.zoning.directional.once.bluegreen.line400.01' },
+    'jb2a.zoning.directional.once.redyellow.line400.03': { src: 'jb2a.zoning.directional.once.bluegreen.line400.01', tint: 0xff8800 },
     'jb2a.zoning.inward.square.once.redyellow.01.01':    { src: 'jb2a.zoning.inward.circle.once.bluegreen.01.01', tint: 0xffcc33 },
 
     'jb2a.markers_scifi.001.complete.003.white': { src: 'jb2a.markers_scifi.001.complete.001.white' },

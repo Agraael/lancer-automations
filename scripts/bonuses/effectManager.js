@@ -96,33 +96,46 @@ import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
 import { TG } from "../interactive/canvas-helpers.js";
+import { localize, localizeFormat } from "../tools/string-utils.js";
 
 // Bonus composition modes. First entry is the default for backward compatibility.
 const RANGE_BONUS_MODES = [
-    { value: 'add', label: 'Add Value' },
-    { value: 'override', label: 'Override Value' },
-    { value: 'change', label: 'Change All Ranges' },
+    { value: 'add', label: 'LA.effectManager.mode.addValue' },
+    { value: 'override', label: 'LA.effectManager.mode.overrideValue' },
+    { value: 'change', label: 'LA.effectManager.mode.changeAllRanges' },
 ];
 const TAG_BONUS_MODES = [
-    { value: 'add', label: 'Add Value' },
-    { value: 'override', label: 'Override Value' },
+    { value: 'add', label: 'LA.effectManager.mode.addValue' },
+    { value: 'override', label: 'LA.effectManager.mode.overrideValue' },
 ];
 const DAMAGE_BONUS_MODES = [
-    { value: 'add', label: 'Bonus' },
-    { value: 'add_base', label: 'Add' },
-    { value: 'replace', label: 'Replace' },
-    { value: 'change_type', label: 'Change Type' },
+    { value: 'add', label: 'LA.effectManager.mode.bonus' },
+    { value: 'add_base', label: 'LA.effectManager.mode.add' },
+    { value: 'replace', label: 'LA.effectManager.mode.replace' },
+    { value: 'change_type', label: 'LA.effectManager.mode.changeType' },
 ];
 const DAMAGE_CHANGE_TYPE_SCOPES = [
-    { value: 'base', label: 'Weapon damage' },
-    { value: 'bonus', label: 'Bonus damage' },
-    { value: 'all', label: 'Both' },
+    { value: 'base', label: 'LA.effectManager.mode.weaponDamage' },
+    { value: 'bonus', label: 'LA.effectManager.mode.bonusDamage' },
+    { value: 'all', label: 'LA.effectManager.mode.both' },
 ];
 const STAT_BONUS_MODES = [
-    { value: 'add', label: 'Add' },
-    { value: 'replace', label: 'Replace' },
+    { value: 'add', label: 'LA.effectManager.mode.add' },
+    { value: 'replace', label: 'LA.effectManager.mode.replace' },
 ];
 const DAMAGE_CHANGE_TYPE_ALL = 'all';
+
+// Filter fields the dialog offers per immunity subtype. Absent subtype is left untouched on save.
+// rollTypes names which roll-type panel applies.
+const IMMUNITY_FILTER_FIELDS = {
+    damage:     { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
+    resistance: { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
+    effect:     { condition: true, applyToCondition: true },
+    provoke:    { condition: true, applyToCondition: true },
+    crit:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
+    hit:    { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
+    miss:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
+};
 
 /** Renders a code field row: preview badge + Edit/Clear buttons; code stored in a hidden input. */
 function codeFieldRow(id, label, placeholder)
@@ -369,7 +382,7 @@ function openCodeFieldDialog(html, fieldId, title, defaultCode = '')
     let resizeObserver;
 
     new Dialog({
-        title: `Edit ${title}`,
+        title: localizeFormat('LA.effectManager.editTitle', { title }),
         content: `<div class="lcm-host"></div>
             <style>
                 .lcm-dialog .window-content { padding:0 !important; overflow:hidden !important; background:#272822; }
@@ -380,7 +393,7 @@ function openCodeFieldDialog(html, fieldId, title, defaultCode = '')
             </style>`,
         buttons: {
             save: {
-                label: "Save",
+                label: localize("LA.common.save"),
                 icon: '<i class="fas fa-save" style="margin-right:8px;"></i>',
                 callback: () =>
                 {
@@ -390,7 +403,7 @@ function openCodeFieldDialog(html, fieldId, title, defaultCode = '')
                 }
             },
             cancel: {
-                label: "Cancel",
+                label: localize("LA.common.cancel"),
                 icon: '<i class="fas fa-times" style="margin-right:8px;"></i>'
             }
         },
@@ -480,7 +493,7 @@ function openStatusPicker(targetInput)
     }).join('');
 
     const dialog = new Dialog({
-        title: 'Pick Status',
+        title: localize('LA.dialogTitle.pickStatus'),
         content: `
             <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
                 <h1 class="lancer-dialog-title">PICK STATUS</h1>
@@ -492,7 +505,7 @@ function openStatusPicker(targetInput)
         `,
         buttons: {
             confirm: {
-                label: '<i class="fas fa-check"></i> Confirm',
+                label: `<i class="fas fa-check"></i> ${localize('LA.common.confirm')}`,
                 callback: (html) =>
                 {
                     const selected = html.find('.lancer-status-entry.selected').map(function ()
@@ -503,7 +516,7 @@ function openStatusPicker(targetInput)
                         targetInput.val(selected.join(', '));
                 }
             },
-            cancel: { label: '<i class="fas fa-times"></i> Cancel',
+            cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
                 callback: () =>
                 {} }
         },
@@ -521,38 +534,38 @@ function openStatusPicker(targetInput)
 }
 
 const CONSUMPTION_TRIGGER_LIST = [
-    { value: 'onAttack', label: 'On Attack' },
-    { value: 'onHit', label: 'On Hit' },
-    { value: 'onMiss', label: 'On Miss' },
-    { value: 'onPreDamage', label: 'On Pre Damage' },
-    { value: 'onDamage', label: 'On Damage' },
-    { value: 'onTechAttack', label: 'On Tech Attack' },
-    { value: 'onTechHit', label: 'On Tech Hit' },
-    { value: 'onMove', label: 'On Move' },
-    { value: 'onPreMove', label: 'On Pre Move' },
-    { value: 'onInitActivation', label: 'On Init Activation' },
-    { value: 'onActivation', label: 'On Activation' },
-    { value: 'onInitEndActivation', label: 'On Init End Activation' },
-    { value: 'onEndActivation', label: 'On End Activation' },
-    { value: 'onDeploy', label: 'On Deploy' },
-    { value: 'onCheck', label: 'On Check' },
-    { value: 'onHeatGain', label: 'On Heat' },
-    { value: 'onHpLoss', label: 'On HP Loss' },
-    { value: 'onTurnStart', label: 'On Turn Start' },
-    { value: 'onTurnEnd', label: 'On Turn End' },
-    { value: 'onRoundStart', label: 'On Round Start' },
-    { value: 'onEnterCombat', label: 'On Enter Combat' },
-    { value: 'onExitCombat', label: 'On Exit Combat' },
-    { value: 'onPreStatusApplied', label: 'On Pre Status Applied' },
-    { value: 'onPreStatusRemoved', label: 'On Pre Status Removed' },
-    { value: 'onStatusApplied', label: 'On Status Applied' },
-    { value: 'onStatusRemoved', label: 'On Status Removed' }
+    { value: 'onAttack', label: 'LA.effectManager.trigger.onAttack' },
+    { value: 'onHit', label: 'LA.effectManager.trigger.onHit' },
+    { value: 'onMiss', label: 'LA.effectManager.trigger.onMiss' },
+    { value: 'onPreDamage', label: 'LA.effectManager.trigger.onPreDamage' },
+    { value: 'onDamage', label: 'LA.effectManager.trigger.onDamage' },
+    { value: 'onTechAttack', label: 'LA.effectManager.trigger.onTechAttack' },
+    { value: 'onTechHit', label: 'LA.effectManager.trigger.onTechHit' },
+    { value: 'onMove', label: 'LA.effectManager.trigger.onMove' },
+    { value: 'onPreMove', label: 'LA.effectManager.trigger.onPreMove' },
+    { value: 'onInitActivation', label: 'LA.effectManager.trigger.onInitActivation' },
+    { value: 'onActivation', label: 'LA.effectManager.trigger.onActivation' },
+    { value: 'onInitEndActivation', label: 'LA.effectManager.trigger.onInitEndActivation' },
+    { value: 'onEndActivation', label: 'LA.effectManager.trigger.onEndActivation' },
+    { value: 'onDeploy', label: 'LA.effectManager.trigger.onDeploy' },
+    { value: 'onCheck', label: 'LA.effectManager.trigger.onCheck' },
+    { value: 'onHeatGain', label: 'LA.effectManager.trigger.onHeatGain' },
+    { value: 'onHpLoss', label: 'LA.effectManager.trigger.onHpLoss' },
+    { value: 'onTurnStart', label: 'LA.effectManager.trigger.onTurnStart' },
+    { value: 'onTurnEnd', label: 'LA.effectManager.trigger.onTurnEnd' },
+    { value: 'onRoundStart', label: 'LA.effectManager.trigger.onRoundStart' },
+    { value: 'onEnterCombat', label: 'LA.effectManager.trigger.onEnterCombat' },
+    { value: 'onExitCombat', label: 'LA.effectManager.trigger.onExitCombat' },
+    { value: 'onPreStatusApplied', label: 'LA.effectManager.trigger.onPreStatusApplied' },
+    { value: 'onPreStatusRemoved', label: 'LA.effectManager.trigger.onPreStatusRemoved' },
+    { value: 'onStatusApplied', label: 'LA.effectManager.trigger.onStatusApplied' },
+    { value: 'onStatusRemoved', label: 'LA.effectManager.trigger.onStatusRemoved' }
 ];
 
 function consumptionTriggerCheckboxesHtml()
 {
     return CONSUMPTION_TRIGGER_LIST
-        .map(triggerOption => `<label><input type="checkbox" value="${triggerOption.value}"> ${triggerOption.label}</label>`)
+        .map(triggerOption => `<label><input type="checkbox" value="${triggerOption.value}"> ${localize(triggerOption.label)}</label>`)
         .join('');
 }
 
@@ -668,37 +681,37 @@ function triggerFieldsHtml(prefix, tokensHtml)
             </div>
             <div class="te-row-2col">
                 <div class="form-group cfilter-itemLid" style="display:none;">
-                    <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Item:</label>
+                    <label data-tooltip="${localize('LA.effectManager.tip.consumeItemLid')}">Item:</label>
                     <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
+                        <input type="text" id="${prefix}-filter-itemLid" placeholder="${localize('LA.effectManager.ph.itemLidEg')}" style="flex:1;">
                         <button type="button" class="find-lid-btn" data-target="${prefix}-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                     </div>
                 </div>
                 <div class="form-group cfilter-itemId" style="display:none;">
-                    <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Item ID:</label>
+                    <label data-tooltip="${localize('LA.effectManager.tip.consumeItemId')}">Item ID:</label>
                     <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemId" placeholder="Item ID" style="flex:1;">
+                        <input type="text" id="${prefix}-filter-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
                         <button type="button" class="item-picker-btn" data-target="${prefix}-filter-itemId" data-token-source="${prefix}-target" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                     </div>
                 </div>
             </div>
             <div class="form-group cfilter-actionName" style="display:none;">
-                <label data-tooltip="Only consume a charge when this specific action is activated, e.g. Boost.">Consume on action:</label>
-                <input type="text" id="${prefix}-filter-actionName" placeholder="e.g. Boost">
+                <label data-tooltip="${localize('LA.effectManager.tip.consumeActionEg')}">Consume on action:</label>
+                <input type="text" id="${prefix}-filter-actionName" placeholder="${localize('LA.effectManager.ph.actionEg')}">
             </div>
             <div class="form-group cfilter-check" style="display:none;">
                 <label>Check:</label>
                 <input type="text" id="${prefix}-filter-checkType" placeholder="hull" style="width:50%;">
             </div>
             <div class="form-group cfilter-statusId" style="display:none;">
-                <label data-tooltip="Only consume when one of these statuses is applied or removed (comma-separated).">Status:</label>
+                <label data-tooltip="${localize('LA.effectManager.tip.consumeStatus')}">Status:</label>
                 <div style="flex:1; display:flex; gap:3px;">
-                    <input type="text" id="${prefix}-filter-statusId" placeholder="e.g. lockon, shredded" style="flex:1;">
+                    <input type="text" id="${prefix}-filter-statusId" placeholder="${localize('LA.effectManager.ph.statusEg')}" style="flex:1;">
                     <button type="button" class="status-picker-btn" data-target="${prefix}-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
                 </div>
             </div>
             <div class="form-group cfilter-role" style="display:none;">
-                <label data-tooltip="Consume when the origin did the action, or was targeted by it.">Consume as:</label>
+                <label data-tooltip="${localize('LA.effectManager.tip.consumeRoleOrigin')}">Consume as:</label>
                 <select id="${prefix}-filter-role" style="width:50%;">
                     <option value="">Source</option>
                     <option value="target">Target</option>
@@ -759,14 +772,14 @@ function setupTriggerUI(html, prefix)
 
         if (!targetToken?.actor)
         {
-            ui.notifications.warn("Please select a target token first.");
+            ui.notifications.warn(localize('LA.notify.pleaseSelectATargetTokenFirst'));
             return;
         }
 
         const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
         if (items.length === 0)
         {
-            ui.notifications.warn(`${targetToken.name} has no valid items.`);
+            ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
             return;
         }
 
@@ -791,7 +804,7 @@ function setupTriggerUI(html, prefix)
         };
 
         const pickerDialog = new Dialog({
-            title: `Select Item on ${targetToken.name}`,
+            title: localizeFormat('LA.effectManager.selectItemOn', { name: targetToken.name }),
             content: `
                 <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
                     <h1 class="lancer-dialog-title">Select Item on ${targetToken.name.toUpperCase()}</h1>
@@ -802,7 +815,7 @@ function setupTriggerUI(html, prefix)
                 </div>
             `,
             buttons: {
-                cancel: { label: '<i class="fas fa-times"></i> Cancel',
+                cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
                     callback: () =>
                     {} }
             },
@@ -1210,7 +1223,7 @@ export async function executeEffectManager(options = {})
                     </div>
                 </div>
                 <input type="hidden" id="std-effect" value="Bolster">
-                <input type="text" id="std-effect-search" placeholder="Search effects..." style="height:24px; font-size:0.85em; padding:0 6px;">
+                <input type="text" id="std-effect-search" placeholder="${localize('LA.common.searchEffects')}" style="height:24px; font-size:0.85em; padding:0 6px;">
                 <div id="std-effect-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:color-mix(in srgb, var(--la-plate), var(--la-ink) 7%); border-radius:4px; border:1px solid var(--la-edge);">
                      ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(statusEffect =>
                         {
@@ -1239,7 +1252,7 @@ export async function executeEffectManager(options = {})
             </div>
             <div class="form-group">
                 <label>Note:</label>
-                <input type="text" id="std-note" placeholder="Optional note">
+                <input type="text" id="std-note" placeholder="${localize('LA.common.optionalNote')}">
             </div>
             <div class="te-section">Consumption</div>
             ${triggerFieldsHtml('std', tokensHtml)}
@@ -1274,7 +1287,7 @@ export async function executeEffectManager(options = {})
             <div class="form-group two-col" style="grid-template-columns: 80px 1fr 60px 60px;">
                 <label>Name:</label>
                 <div style="display:flex; gap:4px; align-items:center; min-width:0; width:100%;">
-                    <input type="text" id="cust-name" placeholder="Status Name" style="flex:1; min-width:0;">
+                    <input type="text" id="cust-name" placeholder="${localize('LA.effectManager.ph.statusName')}" style="flex:1; min-width:0;">
                     <button type="button" class="save-status-btn" title="Save Status (add Name + Icon + Description to the Saved list)" style="flex:0 0 28px; width:28px; height:28px; padding:0; line-height:1;"><i class="fas fa-save"></i></button>
                 </div>
                 <label style="text-align:right; padding-right:5px;">Stack:</label>
@@ -1290,7 +1303,7 @@ export async function executeEffectManager(options = {})
             </div>
             <div class="form-group">
                 <label>Description:</label>
-                <textarea id="cust-description" rows="2" placeholder="Shown when the status is hovered" style="flex:1; min-width:0; resize:vertical;"></textarea>
+                <textarea id="cust-description" rows="2" placeholder="${localize('LA.effectManager.ph.statusDescription')}" style="flex:1; min-width:0; resize:vertical;"></textarea>
             </div>
             <div class="te-section">Duration</div>
             <div class="form-group">
@@ -1308,7 +1321,7 @@ export async function executeEffectManager(options = {})
             </div>
             <div class="form-group">
                 <label>Note:</label>
-                <input type="text" id="cust-note" placeholder="Optional note">
+                <input type="text" id="cust-note" placeholder="${localize('LA.common.optionalNote')}">
             </div>
             <div class="te-section">Consumption</div>
             ${triggerFieldsHtml('cust', tokensHtml)}
@@ -1367,7 +1380,7 @@ export async function executeEffectManager(options = {})
                 <label>Icon:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <img id="bonus-icon-preview" src="" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid var(--la-edge); border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
-                    <input type="text" id="bonus-icon" placeholder="Auto (based on bonus type)" style="flex:1; min-width:0;">
+                    <input type="text" id="bonus-icon" placeholder="${localize('LA.effectManager.ph.iconAuto')}" style="flex:1; min-width:0;">
                     <button type="button" class="file-picker" data-type="image" data-target="bonus-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
             </div>
@@ -1389,9 +1402,9 @@ export async function executeEffectManager(options = {})
                 <label style="flex:0 0 70px;">Uses:</label>
                 <div style="display:flex; gap:4px; align-items:center;">
                     <button type="button" class="bonus-uses-step" data-step="-1" title="Decrement" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                    <input type="number" id="bonus-uses" placeholder="Infinite" min="1" style="flex:0 0 70px; min-width:70px; max-width:70px; text-align:center;">
+                    <input type="number" id="bonus-uses" placeholder="${localize('LA.effectManager.ph.usesInfinite')}" min="1" style="flex:0 0 70px; min-width:70px; max-width:70px; text-align:center;">
                     <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                    <label id="bonus-consume-usage-row" style="display:none; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;" data-tooltip="Burn 1 use only when this bonus actually applies">
+                    <label id="bonus-consume-usage-row" style="display:none; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;" data-tooltip="${localize('LA.effectManager.tip.consumeOnUsage')}">
                         <input type="checkbox" id="bonus-consumeOnUsage" checked> Consume on usage
                     </label>
                 </div>
@@ -1435,33 +1448,33 @@ export async function executeEffectManager(options = {})
                 </div>
                 <div class="te-row-2col">
                     <div class="form-group bonus-filter-itemLid" style="display:none;">
-                        <label data-tooltip="Only consume a charge when this specific item is used. Leave empty to consume on any item.">Item:</label>
+                        <label data-tooltip="${localize('LA.effectManager.tip.consumeItemLid')}">Item:</label>
                         <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemLid" placeholder="e.g. mw_assault_rifle" style="flex:1;">
+                            <input type="text" id="bonus-filter-itemLid" placeholder="${localize('LA.effectManager.ph.itemLidEg')}" style="flex:1;">
                             <button type="button" class="find-lid-btn" data-target="bonus-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                         </div>
                     </div>
                     <div class="form-group bonus-filter-itemId" style="display:none;">
-                        <label data-tooltip="Only consume a charge when this specific item (by actor item ID) is used.">Item ID:</label>
+                        <label data-tooltip="${localize('LA.effectManager.tip.consumeItemId')}">Item ID:</label>
                         <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemId" placeholder="Item ID" style="flex:1;">
+                            <input type="text" id="bonus-filter-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
                             <button type="button" class="item-picker-btn" data-target="bonus-filter-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                         </div>
                     </div>
                 </div>
                 <div class="form-group bonus-filter-actionName" style="display:none;">
-                    <label data-tooltip="Only consume a charge when this specific action is activated.">Consume on action:</label>
-                    <input type="text" id="bonus-filter-actionName" placeholder="e.g. Boost">
+                    <label data-tooltip="${localize('LA.effectManager.tip.consumeAction')}">Consume on action:</label>
+                    <input type="text" id="bonus-filter-actionName" placeholder="${localize('LA.effectManager.ph.actionEg')}">
                 </div>
                 <div class="form-group bonus-filter-statusId" style="display:none;">
-                    <label data-tooltip="Only consume when one of these statuses is applied or removed (comma-separated).">Status:</label>
+                    <label data-tooltip="${localize('LA.effectManager.tip.consumeStatus')}">Status:</label>
                     <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="bonus-filter-statusId" placeholder="e.g. lockon, shredded" style="flex:1;">
+                        <input type="text" id="bonus-filter-statusId" placeholder="${localize('LA.effectManager.ph.statusEg')}" style="flex:1;">
                         <button type="button" class="bonus-status-picker-btn" data-target="bonus-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
                     </div>
                 </div>
                 <div class="form-group bonus-filter-role" style="display:none;">
-                    <label data-tooltip="Consume when the bearer did the action, or was targeted by it.">Consume as:</label>
+                    <label data-tooltip="${localize('LA.effectManager.tip.consumeRoleBearer')}">Consume as:</label>
                     <select id="bonus-filter-role" style="width:50%;">
                         <option value="">Source</option>
                         <option value="target">Target</option>
@@ -1474,7 +1487,7 @@ export async function executeEffectManager(options = {})
                 </div>
                 <div class="form-group bonus-filter-check" style="display:none;">
                     <label>Check type:</label>
-                    <input type="text" id="bonus-filter-checkType" placeholder="e.g. hull">
+                    <input type="text" id="bonus-filter-checkType" placeholder="${localize('LA.effectManager.ph.checkTypeEg')}">
                 </div>
                 <div class="form-group bonus-filter-checkValues" style="display:none;">
                     <label>Above:</label>
@@ -1488,7 +1501,7 @@ export async function executeEffectManager(options = {})
                     <div class="form-group" style="flex:0 0 auto; margin:0; display:flex; gap:6px; align-items:center;">
                         <label style="flex:0 0 auto;">Mode:</label>
                         <select id="bonus-statMode" style="flex:0 0 auto; width:auto; min-width:90px;">
-                            ${STAT_BONUS_MODES.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
+                            ${STAT_BONUS_MODES.map(mode => `<option value="${mode.value}">${localize(mode.label)}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group" style="flex:1; min-width:0; margin:0; display:flex; gap:6px; align-items:center;">
@@ -1549,13 +1562,13 @@ export async function executeEffectManager(options = {})
                 <div class="form-group" style="justify-content:flex-start;">
                     <label>Mode:</label>
                     <select id="bonus-damageMode" style="flex:0.6;">
-                        ${DAMAGE_BONUS_MODES.map(mode => `<option value="${mode.value}">${mode.label}</option>`).join('')}
+                        ${DAMAGE_BONUS_MODES.map(mode => `<option value="${mode.value}">${localize(mode.label)}</option>`).join('')}
                     </select>
                 </div>
                 <div class="form-group" id="bonus-damageScope-row" style="justify-content:flex-start; display:none;">
                     <label>Scope:</label>
                     <select id="bonus-damageScope" style="flex:0.6;">
-                        ${DAMAGE_CHANGE_TYPE_SCOPES.map(scope => `<option value="${scope.value}">${scope.label}</option>`).join('')}
+                        ${DAMAGE_CHANGE_TYPE_SCOPES.map(scope => `<option value="${scope.value}">${localize(scope.label)}</option>`).join('')}
                     </select>
                 </div>
                 <div id="bonus-damageMode-warning" style="display:none; color:#c33; font-size:0.85em; margin: 4px 0 6px; padding: 4px 8px; background: rgba(204,51,51,0.08); border-left: 3px solid #c33;">
@@ -1643,7 +1656,7 @@ export async function executeEffectManager(options = {})
                 </div>
                 <div id="bonus-immunity-effects-row">
                     <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Status Effects:</label>
-                    <input type="text" id="bonus-immunity-effect-search" placeholder="Search effects..." style="width:100%; height:24px; font-size:0.85em; padding:0 6px; margin-bottom:4px;">
+                    <input type="text" id="bonus-immunity-effect-search" placeholder="${localize('LA.common.searchEffects')}" style="width:100%; height:24px; font-size:0.85em; padding:0 6px; margin-bottom:4px;">
                     <div id="bonus-immunity-effects" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:color-mix(in srgb, var(--la-plate), var(--la-ink) 7%); border-radius:4px; border:1px solid var(--la-edge);">
                         ${statusEffectIconsHtml}
                     </div>
@@ -1754,31 +1767,31 @@ export async function executeEffectManager(options = {})
                 <details class="te-advanced">
                     <summary>Filters</summary>
                     <div class="te-row-2col">
-                        <div class="form-group">
-                            <label data-tooltip="Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.">Items (LID):</label>
+                        <div class="form-group" id="row-bonus-itemLids">
+                            <label data-tooltip="${localize('LA.effectManager.tip.applyItemLids')}">Items (LID):</label>
                             <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-itemLids" placeholder="e.g. mb_knife, cqb_shotgun" style="flex:1;">
+                                <input type="text" id="bonus-itemLids" placeholder="${localize('LA.effectManager.ph.itemLidsEg')}" style="flex:1;">
                                 <button type="button" class="find-lid-btn" data-target="bonus-itemLids" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label data-tooltip="Apply this bonus selectively to a specific item ID on an actor.">Item ID:</label>
+                        <div class="form-group" id="row-bonus-itemId">
+                            <label data-tooltip="${localize('LA.effectManager.tip.applyItemId')}">Item ID:</label>
                             <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-itemId" placeholder="Item ID" style="flex:1;">
+                                <input type="text" id="bonus-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
                                 <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
                             </div>
                         </div>
                     </div>
-                    <div class="te-row-2col">
+                    <div class="te-row-2col" id="row-bonus-tokens">
                         <div class="form-group">
-                            <label data-tooltip="Apply this bonus to specific token IDs. Use the selector to pick tokens from the map.">Tokens:</label>
+                            <label data-tooltip="${localize('LA.effectManager.tip.applyTokens')}">Tokens:</label>
                             <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-applyTo" placeholder="Token IDs" style="flex:1;">
+                                <input type="text" id="bonus-applyTo" placeholder="${localize('LA.effectManager.ph.tokenIds')}" style="flex:1;">
                                 <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
                             </div>
                         </div>
                         <div class="form-group" style="justify-content:flex-start;">
-                            <label data-tooltip="If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers." style="flex:0 0 auto; margin-right:6px;">Targetter:</label>
+                            <label data-tooltip="${localize('LA.effectManager.tip.applyToTargetter')}" style="flex:0 0 auto; margin-right:6px;">Targetter:</label>
                             <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content; flex:0 0 auto;">
                         </div>
                     </div>
@@ -1812,7 +1825,7 @@ export async function executeEffectManager(options = {})
     };
 
     const dialog = new Dialog({
-        title: "Effect Manager",
+        title: localize('LA.dialogTitle.effectManager'),
         content: content,
         buttons: {},
         close: () =>
@@ -2044,7 +2057,7 @@ export async function executeEffectManager(options = {})
                 if (!statusEffect)
                     return '';
                 const desc = /** @type {any} */ (statusEffect).description;
-                return typeof desc === 'string' && desc.trim() ? desc : '';
+                return typeof desc === 'string' && desc.trim() ? localize(desc) : '';
             };
             let _laHoverTip = null;
             const _hideEffectTooltip = () =>
@@ -2211,9 +2224,9 @@ export async function executeEffectManager(options = {})
                 const icon = String(html.find('#cust-icon').val() || '').trim();
                 const description = String(html.find('#cust-description').val() || '').trim();
                 if (!name)
-                    return ui.notifications.warn('Name is required to save a status.');
+                    return ui.notifications.warn(localize('LA.notify.nameIsRequiredToSaveAStatus'));
                 if (!icon)
-                    return ui.notifications.warn('Icon is required to save a status.');
+                    return ui.notifications.warn(localize('LA.notify.iconIsRequiredToSaveAStatus'));
                 const list = game.settings.get('temporary-custom-statuses', 'savedStatuses') || [];
                 const existing = list.find(saved => saved.name === name);
                 if (existing)
@@ -2232,15 +2245,20 @@ export async function executeEffectManager(options = {})
                 for (const savedStatus of list)
                     $sel.append(`<option value="${savedStatus.name}" data-icon="${savedStatus.icon}">${savedStatus.name}</option>`);
                 $sel.val(prev || name);
-                ui.notifications.info(`Saved "${name}" to custom statuses.`);
+                ui.notifications.info(localizeFormat('LA.notify.savedCustomStatus', { name }));
             });
 
             const _codeFieldMeta = {
-                'bonus-condition':        { title: 'Condition',            def: '(state, actor, data, context) => { return true; }' },
-                'bonus-applyToCondition': { title: 'Apply-to Condition',   def: '(target, state, reactorToken) => { return true; }' },
-                'std-evaluate':           { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
-                'cust-evaluate':          { title: 'Consumption Evaluate', def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
-                'cust-changes':           { title: 'Active Effect Changes', def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": 1 }\n]' },
+                'bonus-condition':        { title: localize('LA.effectManager.codeField.condition'),            def: '(state, actor, data, context) => { return true; }' },
+                'bonus-applyToCondition': { title: localize('LA.effectManager.codeField.applyToCondition'),   def: '(target, state, reactorToken) => { return true; }' },
+                'std-evaluate':           { title: localize('LA.effectManager.codeField.consumptionEvaluate'), def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
+                'cust-evaluate':          { title: localize('LA.effectManager.codeField.consumptionEvaluate'), def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
+                'cust-changes':           { title: localize('LA.effectManager.codeField.activeEffectChanges'), def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": 1 }\n]' },
+            };
+            // Immunity flips who is who: the bearer is the defender, so the other party is the attacker.
+            const _immunityCodeDefs = {
+                'bonus-condition':        '(state, attacker, data, context) => { return true; }',
+                'bonus-applyToCondition': '(attacker, state, me) => { return true; }',
             };
             const _rebuildPresetSelect = (prefix) =>
             {
@@ -2261,11 +2279,11 @@ export async function executeEffectManager(options = {})
                 const name = await new Promise((resolve) =>
                 {
                     new Dialog({
-                        title: 'Save Preset',
+                        title: localize('LA.dialogTitle.savePreset'),
                         content: '<p style="padding:6px 8px;">Preset name:</p><input type="text" id="preset-name-input" style="width:100%; padding:4px;">',
                         buttons: {
-                            save: { icon: '<i class="fas fa-save"></i>', label: 'Save', callback: (dlgHtml) => resolve(String(dlgHtml.find('#preset-name-input').val() || '').trim()) },
-                            cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel', callback: () => resolve('') }
+                            save: { icon: '<i class="fas fa-save"></i>', label: localize('LA.common.save'), callback: (dlgHtml) => resolve(String(dlgHtml.find('#preset-name-input').val() || '').trim()) },
+                            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel'), callback: () => resolve('') }
                         },
                         default: 'save',
                         close: () => resolve(''),
@@ -2282,11 +2300,11 @@ export async function executeEffectManager(options = {})
                     const overwrite = await new Promise((resolve) =>
                     {
                         new Dialog({
-                            title: 'Preset Exists',
-                            content: `<p style="padding:6px 8px;">A preset named "${name}" already exists. Overwrite?</p>`,
+                            title: localize('LA.dialogTitle.presetExists'),
+                            content: `<p style="padding:6px 8px;">${localizeFormat('LA.effectManager.presetExists', { name })}</p>`,
                             buttons: {
-                                yes: { icon: '<i class="fas fa-check"></i>', label: 'Overwrite', callback: () => resolve(true) },
-                                no:  { icon: '<i class="fas fa-times"></i>', label: 'Cancel', callback: () => resolve(false) }
+                                yes: { icon: '<i class="fas fa-check"></i>', label: localize('LA.effectManager.mode.overwrite'), callback: () => resolve(true) },
+                                no:  { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel'), callback: () => resolve(false) }
                             },
                             default: 'yes',
                             close: () => resolve(false)
@@ -2302,7 +2320,7 @@ export async function executeEffectManager(options = {})
                 _rebuildPresetSelect(prefix);
                 html.find(`#${prefix}-preset-load`).val(name);
                 renderManagePresets();
-                ui.notifications.info(`Saved preset "${name}".`);
+                ui.notifications.info(localizeFormat('LA.notify.savedPreset', { name }));
             });
             html.find('#std-preset-load, #cust-preset-load, #bonus-preset-load').change(function ()
             {
@@ -2316,7 +2334,7 @@ export async function executeEffectManager(options = {})
                 if (!preset)
                     return;
                 applyPresetData(html, prefix, preset.data);
-                ui.notifications.info(`Loaded preset "${name}".`);
+                ui.notifications.info(localizeFormat('LA.notify.loadedPreset', { name }));
             });
             html.find('.std-preset-delete, .cust-preset-delete, .bonus-preset-delete').click(async function ()
             {
@@ -2324,7 +2342,7 @@ export async function executeEffectManager(options = {})
                 const $sel = html.find(`#${prefix}-preset-load`);
                 const name = String($sel.val() || '');
                 if (!name)
-                    return ui.notifications.warn('Select a preset to delete first.');
+                    return ui.notifications.warn(localize('LA.notify.selectAPresetToDeleteFirst'));
                 const all = getStoredPresets();
                 const cat = presetCategoryFor(prefix);
                 all[cat] = (all[cat] || []).filter(p => p.name !== name);
@@ -2332,7 +2350,7 @@ export async function executeEffectManager(options = {})
                 _rebuildPresetSelect(prefix);
                 $sel.val('');
                 renderManagePresets();
-                ui.notifications.info(`Deleted preset "${name}".`);
+                ui.notifications.info(localizeFormat('LA.notify.deletedPreset', { name }));
             });
 
             const renderManagePresets = () =>
@@ -2365,7 +2383,7 @@ export async function executeEffectManager(options = {})
                     return;
                 const tabButton = html.find(`.te-tab[data-tab="${cat}"]`);
                 if (!tabButton.length)
-                    return ui.notifications.warn('That tab is not available.');
+                    return ui.notifications.warn(localize('LA.notify.thatTabIsNotAvailable'));
                 tabButton.trigger('click');
                 applyPresetData(html, prefix, preset.data);
                 html.find(`#${prefix}-preset-load`).val(name);
@@ -2381,7 +2399,7 @@ export async function executeEffectManager(options = {})
                 await setStoredPresets(all);
                 _rebuildPresetSelect(prefix);
                 renderManagePresets();
-                ui.notifications.info(`Deleted preset "${name}".`);
+                ui.notifications.info(localizeFormat('LA.notify.deletedPreset', { name }));
             });
 
             const formatSnippet = (obj) => JSON.stringify(obj, null, 4)
@@ -2463,7 +2481,7 @@ export async function executeEffectManager(options = {})
                         }
                         catch
                         {
-                            ui.notifications.warn('Active Effect Changes could not be parsed; left out of the snippet.');
+                            ui.notifications.warn(localize('LA.notify.activeEffectChangesCouldNotBeParsed'));
                         }
                     }
                 }
@@ -2477,7 +2495,7 @@ export async function executeEffectManager(options = {})
                 let editor;
                 let resizeObserver;
                 new Dialog({
-                    title: 'Extract Code',
+                    title: localize('LA.dialogTitle.extractCode'),
                     content: `<div class="lcm-host"></div>
                         <style>
                             .lcm-dialog .window-content { padding:0 !important; overflow:hidden !important; background:#272822; }
@@ -2488,16 +2506,16 @@ export async function executeEffectManager(options = {})
                         </style>`,
                     buttons: {
                         copy: {
-                            label: 'Copy',
+                            label: localize('LA.common.copy'),
                             icon: '<i class="fas fa-copy" style="margin-right:8px;"></i>',
                             callback: async () =>
                             {
                                 await navigator.clipboard.writeText(code);
-                                ui.notifications.info('Copied to clipboard.');
+                                ui.notifications.info(localize('LA.notify.copiedToClipboard'));
                             }
                         },
                         close: {
-                            label: 'Close',
+                            label: localize('LA.common.close'),
                             icon: '<i class="fas fa-times" style="margin-right:8px;"></i>'
                         }
                     },
@@ -2546,15 +2564,17 @@ export async function executeEffectManager(options = {})
                 }
                 catch (err)
                 {
-                    ui.notifications.error(`Extract failed: ${err.message}`);
+                    ui.notifications.error(localizeFormat('LA.notify.extractFailed', { error: err.message }));
                 }
             });
 
             html.find('.code-field-badge').click(function ()
             {
                 const id = $(this).data('target');
-                const meta = _codeFieldMeta[id] ?? { title: 'Code', def: '' };
-                openCodeFieldDialog(html, id, meta.title, meta.def);
+                const meta = _codeFieldMeta[id] ?? { title: localize('LA.effectManager.codeField.code'), def: '' };
+                const isImmunity = String(html.find('#bonus-type').val() ?? '') === 'immunity';
+                const def = (isImmunity && _immunityCodeDefs[id]) ? _immunityCodeDefs[id] : meta.def;
+                openCodeFieldDialog(html, id, meta.title, def);
             });
             html.find('.code-clear-btn').click(function ()
             {
@@ -2614,14 +2634,14 @@ export async function executeEffectManager(options = {})
                                 duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
                             }, groupOptions);
                         }
-                        ui.notifications.info(`Applied ${effectName} to ${_emTargetLabel(liveTokens)}.`);
+                        ui.notifications.info(localizeFormat('LA.notify.appliedTo', { effect: effectName, target: _emTargetLabel(liveTokens) }));
                     }
                     else
                     {
                         const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
                         if (!doc)
-                            return ui.notifications.error("Target not found!");
+                            return ui.notifications.error(localize('LA.notify.targetNotFound'));
                         const linkOpts = {
                             effectNames: effectName,
                             note: note,
@@ -2631,7 +2651,7 @@ export async function executeEffectManager(options = {})
                             await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
-                        ui.notifications.info(`Applied ${effectName} to ${doc.name}${doc.documentName === 'Item' ? ' (item)' : ' (prototype)'}.`);
+                        ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: effectName, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
                     }
                     setTimeout(updateManageTabCount, 200);
 
@@ -2649,7 +2669,7 @@ export async function executeEffectManager(options = {})
                     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
 
                     if (!name)
-                        return ui.notifications.error("Name is required!");
+                        return ui.notifications.error(localize('LA.notify.nameIsRequired'));
 
                     const perEach = originID === EACH_ORIGIN;
                     const docOrigin = perEach ? '' : originID;
@@ -2677,12 +2697,12 @@ export async function executeEffectManager(options = {})
                         {
                             const parsed = (new Function(`return (${changesSrc});`))();
                             if (!Array.isArray(parsed))
-                                return ui.notifications.error('Active Effect Changes must be an array.');
+                                return ui.notifications.error(localize('LA.notify.activeEffectChangesMustBeAnArray'));
                             extraOptions.changes = parsed;
                         }
                         catch (err)
                         {
-                            return ui.notifications.error(`Active Effect Changes parse error: ${err.message}`);
+                            return ui.notifications.error(localizeFormat('LA.notify.aeChangesParseError', { error: err.message }));
                         }
                     }
 
@@ -2712,14 +2732,14 @@ export async function executeEffectManager(options = {})
                                 duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
                             }, groupOptions);
                         }
-                        ui.notifications.info(`Applied ${name} to ${_emTargetLabel(liveTokens)}.`);
+                        ui.notifications.info(localizeFormat('LA.notify.appliedTo', { effect: name, target: _emTargetLabel(liveTokens) }));
                     }
                     else
                     {
                         const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
                         if (!doc)
-                            return ui.notifications.error("Target not found!");
+                            return ui.notifications.error(localize('LA.notify.targetNotFound'));
                         const linkOpts = {
                             effectNames: effectData,
                             note: note,
@@ -2729,7 +2749,7 @@ export async function executeEffectManager(options = {})
                             await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
-                        ui.notifications.info(`Applied ${name} to ${doc.name}${doc.documentName === 'Item' ? ' (item)' : ' (prototype)'}.`);
+                        ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: name, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
                     }
                     setTimeout(updateManageTabCount, 200);
                 }
@@ -3146,14 +3166,14 @@ export async function executeEffectManager(options = {})
 
                 if (!targetToken?.actor)
                 {
-                    ui.notifications.warn("Please select a target token on the map, or fill in the 'Apply to tokens' field first, to pick an item from them.");
+                    ui.notifications.warn(localize('LA.notify.pleaseSelectATargetTokenOnThe'));
                     return;
                 }
 
                 const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
                 if (items.length === 0)
                 {
-                    ui.notifications.warn(`${targetToken.name} has no valid items.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
                     return;
                 }
 
@@ -3178,7 +3198,7 @@ export async function executeEffectManager(options = {})
                 };
 
                 const dialog = new Dialog({
-                    title: `Select Item on ${targetToken.name}`,
+                    title: localizeFormat('LA.effectManager.selectItemOn', { name: targetToken.name }),
                     content: `
                         <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
                             <h1 class="lancer-dialog-title">Select Item on ${targetToken.name.toUpperCase()}</h1>
@@ -3189,7 +3209,7 @@ export async function executeEffectManager(options = {})
                         </div>
                     `,
                     buttons: {
-                        cancel: { label: '<i class="fas fa-times"></i> Cancel',
+                        cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
                             callback: () =>
                             {} }
                     },
@@ -3231,11 +3251,16 @@ export async function executeEffectManager(options = {})
                 const itemLidsStr = String(html.find('#bonus-itemLids').val());
                 const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
-                let rollTypes = [];
+                let rollPanel = null;
                 if (type === 'accuracy' || type === 'difficulty')
-                    rollTypes = html.find('#bonus-rollTypes-roll input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+                    rollPanel = 'roll';
                 else if (type === 'damage')
-                    rollTypes = html.find('#bonus-rollTypes-damage input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+                    rollPanel = 'damage';
+                else if (type === 'immunity')
+                    rollPanel = IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')]?.rollTypes ?? null;
+                const rollTypes = rollPanel
+                    ? html.find(`#bonus-rollTypes-${rollPanel} input:checked`).map((_, el) => /** @type {HTMLInputElement} */ (el).value).get()
+                    : [];
 
                 const applyToStr = String(html.find('#bonus-applyTo').val());
                 const applyTo = applyToStr ? applyToStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
@@ -3320,6 +3345,15 @@ export async function executeEffectManager(options = {})
                 else if (type === 'immunity')
                 {
                     bonusData.subtype = html.find('#bonus-immunity-subtype').val();
+                    const allowed = IMMUNITY_FILTER_FIELDS[bonusData.subtype];
+                    if (allowed)
+                    {
+                        for (const field of ['rollTypes', 'itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
+                        {
+                            if (!allowed[field])
+                                delete bonusData[field];
+                        }
+                    }
                     if (bonusData.subtype === 'effect')
                     {
                         bonusData.effects = [];
@@ -3365,7 +3399,6 @@ export async function executeEffectManager(options = {})
                 if (customIcon)
                     addOptions.icon = customIcon;
 
-                // Build consumption config
                 const consumptionTriggers = html.find('#bonus-trigger input:checked')
                     .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
                 if (consumptionTriggers.length > 0)
@@ -3414,11 +3447,11 @@ export async function executeEffectManager(options = {})
                 const targetID = String(html.find('#bonus-target').val());
                 const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
                 if (!resolvedTargets.length)
-                    return ui.notifications.error("Target not found!");
+                    return ui.notifications.error(localize('LA.notify.targetNotFound'));
                 const { bonusData, addOptions, duration } = gatherBonusFormData(type);
                 const durOrigin = html.find('#bonus-durOrigin').val();
                 if (bonusData.uses === undefined && (addOptions.consumption || bonusData.consumeOnUsage === true))
-                    ui.notifications.warn(`${bonusData.name}: no Uses set - consumed on first use.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.noUsesSet', { name: bonusData.name }));
                 for (const entry of resolvedTargets)
                 {
                     const targetIsItem = !!entry.item;
@@ -3439,7 +3472,6 @@ export async function executeEffectManager(options = {})
                 setTimeout(updateManageTabCount, 200);
             };
 
-            // Bonus type selector - show/hide relevant inputs
             const ensureUsesForConsumption = () =>
             {
                 const $uses = html.find('#bonus-uses');
@@ -3468,6 +3500,30 @@ export async function executeEffectManager(options = {})
                 $row.css('display', show ? 'inline-flex' : 'none');
                 ensureUsesForConsumption();
             };
+
+            const updateFilterRows = () =>
+            {
+                const uiType = String(html.find('#bonus-type').val() ?? '');
+                const isImmunity = uiType === 'immunity';
+                const fields = isImmunity
+                    ? (IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')] ?? {})
+                    : {};
+                const showItems = isImmunity
+                    ? Object.keys(fields).length > 0
+                    : ['roll', 'damage', 'tag', 'range', 'target_modifier'].includes(uiType);
+                html.find('#bonus-items-row').toggle(showItems);
+                if (!showItems)
+                    return;
+                html.find('#row-bonus-rollTypes-roll').toggle(isImmunity ? fields.rollTypes === 'roll' : uiType === 'roll');
+                html.find('#row-bonus-rollTypes-damage').toggle(isImmunity ? fields.rollTypes === 'damage' : uiType === 'damage');
+                html.find('#row-bonus-itemLids').toggle(!isImmunity || !!fields.itemLids);
+                html.find('#row-bonus-itemId').toggle(!isImmunity || !!fields.itemId);
+                html.find('#row-bonus-tokens').toggle(!isImmunity || !!fields.applyTo);
+                html.find('#bonus-condition-badge').closest('.form-group').toggle(!isImmunity || !!fields.condition);
+                html.find('#bonus-applyToCondition-badge').closest('.form-group').toggle(!isImmunity || !!fields.applyToCondition);
+                html.find('#bonus-condition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.conditionImmunity' : 'LA.effectManager.tip.conditionRoll'));
+                html.find('#bonus-applyToCondition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.applyToConditionImmunity' : 'LA.effectManager.tip.applyToConditionRoll'));
+            };
             html.find('#bonus-consumeOnUsage').on('change', ensureUsesForConsumption);
             html.find('#bonus-trigger').on('change', 'input', ensureUsesForConsumption);
 
@@ -3478,13 +3534,7 @@ export async function executeEffectManager(options = {})
                 html.find(`#bonus-type-${type}`).show();
                 updateConsumeUsageRow();
 
-                const showItems = type === 'roll' || type === 'damage' || type === 'tag' || type === 'range' || type === 'target_modifier';
-                html.find('#bonus-items-row').toggle(showItems);
-                if (showItems)
-                {
-                    html.find('#row-bonus-rollTypes-roll').toggle(type === 'roll');
-                    html.find('#row-bonus-rollTypes-damage').toggle(type === 'damage');
-                }
+                updateFilterRows();
 
                 // Range bonuses are applied via libWrapper on currentProfile(); applyToTargetter makes no sense for them
                 const targetter = html.find('#bonus-applyToTargetter');
@@ -3503,6 +3553,7 @@ export async function executeEffectManager(options = {})
                 html.find('#bonus-immunity-effects-row').toggle(subtype === 'effect');
                 html.find('#bonus-immunity-damage-row').toggle(subtype === 'damage' || subtype === 'resistance');
                 updateConsumeUsageRow();
+                updateFilterRows();
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             });
@@ -3621,7 +3672,6 @@ export async function executeEffectManager(options = {})
                 }
             });
 
-            // Clear all bonuses
             html.find('#bonus-clear-all').click(async () =>
             {
                 const targetID = String(html.find('#bonus-target').val());
@@ -3633,7 +3683,6 @@ export async function executeEffectManager(options = {})
                 setTimeout(updateManageTabCount, 200);
             });
 
-            // Initial tab selection
             if (options.initialTab)
             {
                 html.find('.te-tab').removeClass('active');

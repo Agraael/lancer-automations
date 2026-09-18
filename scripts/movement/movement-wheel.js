@@ -1,4 +1,6 @@
 import { playUiSound } from '../tah/sound.js';
+import { floatDragFeedback } from './keybindings.js';
+import { localize } from '../tools/string-utils.js';
 import { openRadialWheel, closeRadialWheel, isRadialWheelOpen } from '../tools/radial-wheel.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -52,28 +54,6 @@ function commitSelection(key, token)
     layer?.recalculatePlannedMovementPaths?.();
 }
 
-// Bumps the layer override only; Foundry resets it at drag drop, so the change is per-drag.
-function cycleDragMovementAction()
-{
-    const layer = /** @type {any} */ (canvas.tokens);
-    const token = layer?._draggedToken;
-    if (!token)
-        return false;
-    const items = buildItems(token);
-    if (!items.length)
-        return false;
-    const keys = items.map(it => it.key);
-    const currentAction = layer._dragMovementAction ?? token.document.movementAction;
-    const idx = keys.indexOf(currentAction);
-    const next = keys[(idx + 1 + keys.length) % keys.length];
-    if (!next || next === currentAction)
-        return false;
-    layer._dragMovementAction = next;
-    layer.recalculatePlannedMovementPaths?.();
-    playUiSound('toggle');
-    return true;
-}
-
 function buildIconContent(cfg, buttonEl)
 {
     const img = /** @type {any} */ (cfg)?.img;
@@ -124,21 +104,38 @@ export function toggleMovementWheel()
 Hooks.once('init', () =>
 {
     game.keybindings.register(MODULE_ID, 'movementWheel', {
-        name: 'Movement Type Wheel',
-        hint: 'Outside a drag: open a radial picker. During a drag: cycle the active drag\'s action without touching the token.',
+        name: 'LA.keybindings.movementWheel.name',
+        hint: 'LA.keybindings.movementWheel.hint',
         editable: [{ key: 'KeyM' }],
         onDown: () =>
         {
-            const layer = /** @type {any} */ (canvas.tokens);
-            if (layer?._draggedToken)
-            {
-                cycleDragMovementAction();
-                return true;
-            }
+            // Core Tab already cycles the action mid-drag, and handles shift-reverse.
+            if (/** @type {any} */ (canvas.tokens)?._draggedToken)
+                return false;
             toggleMovementWheel();
             return true;
         },
         repeat: false,
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
+});
+
+// Core's Tab cycle is silent; give it the wheel's feedback.
+Hooks.once('ready', () =>
+{
+    if (!game.modules.get('lib-wrapper')?.active)
+        return;
+    libWrapper.register(MODULE_ID, 'foundry.canvas.layers.TokenLayer.prototype._onCycleViewKey', function(wrapped, event)
+    {
+        const dragging = !!this._draggedToken;
+        const handled = wrapped.call(this, event);
+        if (handled && dragging)
+        {
+            playUiSound('toggle');
+            const label = CONFIG.Token?.movement?.actions?.[this._dragMovementAction]?.label;
+            if (label)
+                floatDragFeedback(localize(label));
+        }
+        return handled;
+    }, 'WRAPPER');
 });

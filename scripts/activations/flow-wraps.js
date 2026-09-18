@@ -3,6 +3,7 @@
 import { ActiveFlowState } from './flows.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 import {
     injectNoBonusDmgCheckbox,
     injectThrottledCheckbox,
@@ -142,7 +143,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
     const label = document.createElement('label');
     label.className = 'flexrow accdiff-weight lancer-border-primary';
     label.setAttribute('for', 'accdiff-flat-bonus');
-    label.textContent = 'Flat Modifier';
+    label.textContent = localize('LA.flow.flatModifier');
 
     const grid = document.createElement('div');
     grid.className = `la-stat-flat-mod accdiff-grid accdiff-flat-bonus ${_scope}`.trim();
@@ -638,7 +639,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
         const action = state.data?.action;
         if (action?.recharge && action?.charged === false)
         {
-            ui.notifications.warn(`${action.name} has not recharged! (Recharge ${action.recharge}+)`);
+            ui.notifications.warn(localizeFormat('LA.notify.hasNotRecharged', { name: action.name, recharge: action.recharge }));
             return false;
         }
         return true;

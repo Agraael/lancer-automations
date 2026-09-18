@@ -451,6 +451,24 @@ api.placeZone(token, {
 
 </details>
 
+<details id="smokeZoneGraphics">
+<summary><b><code>smokeZoneGraphics</code></b> → <code>Object</code></summary>
+
+<br>
+
+```js
+api.smokeZoneGraphics()
+```
+
+The "Smoke" preset's templatemacro graphics state (animated JB2A smoke fill, grey outline, above tokens), ready for `placeZone`'s `tmacGraphics`. Picks whichever JB2A module is installed.
+
+**Example:**
+```js
+await api.placeZone(token, { size: 2, tmacGraphics: api.smokeZoneGraphics() });
+```
+
+</details>
+
 <details id="tokensInTemplate">
 <summary><b><code>tokensInTemplate</code></b> → <code>Array&lt;Token&gt;</code></summary>
 

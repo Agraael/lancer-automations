@@ -1,3 +1,5 @@
+import { localize, localizeFormat } from './string-utils.js';
+
 let _sharedPackItemCache = null;
 
 Hooks.on('lancer-automations.clearCaches', () =>
@@ -91,7 +93,7 @@ export async function openItemBrowserDialog()
     return new Promise((resolve) =>
     {
         const dialog = new Dialog({
-            title: "Find Item",
+            title: localize('LA.dialogTitle.findItem'),
             content: `
                 <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
                     <h1 class="lancer-dialog-title">Find Item</h1>
@@ -100,7 +102,7 @@ export async function openItemBrowserDialog()
                 <div class="lancer-search-container" style="margin-bottom:8px;display:flex;gap:6px;align-items:center;">
                     <div style="flex:2;position:relative;">
                         <i class="fas fa-search lancer-search-icon"></i>
-                        <input type="text" id="item-search" placeholder="Search by name or LID..." style="padding-left:35px;">
+                        <input type="text" id="item-search" placeholder="${localize('LA.common.searchByNameOrLid')}" style="padding-left:35px;">
                     </div>
                     <select id="type-filter" style="flex:1;">
                         <option value="">All Types</option>
@@ -117,7 +119,7 @@ export async function openItemBrowserDialog()
                 </div>
             `,
             buttons: {
-                cancel: { label: '<i class="fas fa-times"></i> Cancel', callback: () => resolve(null) }
+                cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`, callback: () => resolve(null) }
             },
             render: (html) =>
             {
@@ -199,7 +201,7 @@ export async function openItemBrowserDialog()
                     if (lid)
                     {
                         await navigator.clipboard.writeText(lid);
-                        ui.notifications.info(`Copied LID: ${lid}`);
+                        ui.notifications.info(localizeFormat('LA.notify.copiedLid', { lid }));
                     }
                 });
 

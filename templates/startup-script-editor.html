@@ -17,14 +17,14 @@
         <div class="form-group">
             <div class="form-fields flexrow" style="gap: 10px;">
                 <div style="flex: 2;">
-                    <label style="font-weight: bold;">Name</label>
+                    <label style="font-weight: bold;">{{localize "LA.startupScript.name"}}</label>
                     <input type="text" name="name" value="{{name}}" placeholder="e.g. My Helper Library" {{#if builtin}}readonly{{/if}}>
-                    <p class="notes">A unique name for this startup script.</p>
+                    <p class="notes">{{localize "LA.startupScript.aUniqueNameForThisStartup"}}</p>
                 </div>
                 <div style="flex: 3;">
-                    <label style="font-weight: bold;">Description <span class="optional">(optional)</span></label>
+                    <label style="font-weight: bold;">{{localize "LA.startupScript.description"}} <span class="optional">(optional)</span></label>
                     <input type="text" name="description" value="{{description}}" placeholder="Brief notes shown in the list..." {{#if builtin}}readonly{{/if}}>
-                    <p class="notes">Shown in the Startup tab list.</p>
+                    <p class="notes">{{localize "LA.startupScript.shownInTheStartupTabList"}}</p>
                 </div>
             </div>
         </div>
@@ -33,12 +33,12 @@
         <div class="form-group" style="margin-bottom: 10px; padding: 8px 10px; background: color-mix(in srgb, var(--la-ink), transparent 95%); border-radius: 4px;">
             <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-weight: bold; margin: 0;">
                 <input type="checkbox" name="enabled" {{#if enabled}}checked{{/if}} {{#if builtin}}disabled{{/if}}>
-                <span>Enabled</span>
-                <span style="font-weight: normal; font-size: 0.85em; color: var(--la-ink-dim);">(disabled scripts are skipped on startup)</span>
+                <span>{{localize "LA.startupScript.enabled"}}</span>
+                <span style="font-weight: normal; font-size: 0.85em; color: var(--la-ink-dim);">{{localize "LA.startupScript.disabledScriptsAreSkippedOnStartup"}}</span>
             </label>
         </div>
 
-        <label style="font-weight: bold; display: block; margin-bottom: 4px;">Code</label>
+        <label style="font-weight: bold; display: block; margin-bottom: 4px;">{{localize "LA.startupScript.code"}}</label>
     </div>
 
     <!-- Stretchy code editor -->
@@ -50,17 +50,15 @@
     <!-- Fixed bottom: notes + save -->
     <div class="sse-bottom">
         <p class="notes" style="margin: 6px 0 8px;">
-            JavaScript code executed on module ready.
-            Available: <code>api</code> — use <code>api.registerUserHelper(name, fn)</code> to register reusable
-            helpers, then access them in activations via <code>api.getUserHelper(name)</code>.
+            {{{localize "LA.startupEditor.scriptsNote"}}}
         </p>
         {{#if builtin}}
         <button type="button" onclick="this.closest('.app')?.querySelector('.close')?.click()">
-            <i class="fas fa-times"></i> Close
+            <i class="fas fa-times"></i> {{localize "LA.startupScript.close"}}
         </button>
         {{else}}
         <button type="submit">
-            <i class="far fa-save"></i> Save Script
+            <i class="far fa-save"></i> {{localize "LA.startupScript.saveScript"}}
         </button>
         {{/if}}
     </div>

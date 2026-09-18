@@ -4,6 +4,7 @@ import { getLAFlag, setLAFlag, unsetLAFlag } from "./flag-utils.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { playStandingUpFX, playTeleportFX } from "../fx/actionFX.js";
 import { executeDamageRoll, executeSimpleActivation } from "./misc-tools.js";
+import { localize, localizeFormat } from "./string-utils.js";
 
 /** Add a virtual LA movement entry for actions that cost movement without physically moving the token. */
 async function addVirtualMovement(token, cost)
@@ -42,14 +43,14 @@ export async function executeStandingUp(token)
     const hasProne = !!findEffectOnToken(token, effect => effect.statuses?.has('prone'));
     if (!hasProne)
     {
-        ui.notifications.info(`${token.name} is not Prone.`);
+        ui.notifications.info(localizeFormat('LA.notify.notProne', { name: token.name }));
         return;
     }
     const speed = token.actor.system?.speed ?? 0;
     await executeSimpleActivation(token.actor, {
         title: 'Standing Up',
         action: { name: 'Standing Up', activation: 'Movement' },
-        detail: `Stands up, using their standard move (+${speed} speed). Removes Prone.`
+        detail: localizeFormat('LA.movement.standingUpDetail', { speed })
     });
 }
 
@@ -72,8 +73,8 @@ export async function boostMove(token, options = {})
         return null;
     return api.moveTokenRuler(token, {
         range: token.actor.system.speed,
-        title: "BOOST",
-        description: "Move up to your speed.",
+        title: localize('LA.dialogTitle.boostCaps'),
+        description: localize('LA.movement.moveUpToYourSpeed'),
         ...options
     });
 }
@@ -92,8 +93,8 @@ export async function executeTeleport(token, cost)
         teleport: true,
         range: speed,
         cost: moveCost,
-        title: "TELEPORT",
-        description: `Select destination within Range ${speed}. Costs ${moveCost} movement.`
+        title: localize('LA.dialogTitle.teleportCaps'),
+        description: localizeFormat('LA.movement.teleportPrompt', { range: speed, cost: moveCost })
     });
     if (result)
     {
@@ -136,7 +137,7 @@ export async function executeFall(targetToken)
     {
         if (hasFallingEffect)
         {
-            ui.notifications.warn('Token is already on the ground');
+            ui.notifications.warn(localize('LA.notify.tokenIsAlreadyOnTheGround'));
             await removeEffectsByNameFromTokens({
                 tokens: [targetToken],
                 effectNames: ["Falling"]
@@ -152,7 +153,7 @@ export async function executeFall(targetToken)
     const totalFallAmount = fallStartElevation - newElevation;
 
     await tokenDoc.update({ elevation: newElevation });
-    ui.notifications.info(`Token has fallen ${fallAmount} space${fallAmount !== totalFallAmount ? ` (for a total of ${totalFallAmount})` : ''}`);
+    ui.notifications.info(localizeFormat('LA.notify.tokenHasFallen', { amount: fallAmount, total: fallAmount !== totalFallAmount ? ` (for a total of ${totalFallAmount})` : '' }));
 
     if (newElevation <= maxGroundHeight)
     {

@@ -1,13 +1,13 @@
 /* global $, window, game, ui, CONFIG, Hooks, fromUuid, Dialog, FilePicker */
 
 import { laRenderWeaponBody, laRenderModBody, laRenderCoreBonusBody, laRenderCoreSystemBody, laFormatDetailHtml, laRenderActionDetail, laRenderActions, laPopupSectionLabel, laRenderDeployables, laRenderTags, laDetailPopup, stripDeployOwner } from '../interactive/detail-renderers.js';
-import { weaponSkirmishable, executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeProfileSwitch, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
+import { weaponSkirmishable, executeSkirmish, executeBarrage, executeFight, executeSimpleActivation, executeItemActivation, executeProfileSwitch, executeBasicAttack, executeDamageRoll, executeTechAttack, executeExtraActionCombat, executeReactorMeltdown, executeReactorExplosion, executeFall, executeStandingUp, executeTeleport, getActorActionItems, hasReactionAvailable, getWeaponProfiles_WithBonus, getActorMaxThreat, getMaxWeaponRanges_WithBonus, getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { getPerSceneLimitFromSub, getPerRoundLimitFromSub, getPerTurnLimitFromSub, rankSubKey, getSubUsed } from '../combat/per-frequency-tags.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, setLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID, BOOST_DETAIL } from '../tools/constants.js';
 import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, resetMovementCap } from '../interactive/combat.js';
-import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
+import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, gateActions, resolveGrant, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
 import { applyActionOverlays } from '../interactive/action-overlays.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
 import { getBoostOfferMode } from '../setup/settings-register.js';
@@ -34,6 +34,7 @@ import { getActorMaxReach_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { isLancerRulerActive } from '../movement/cost-rules.js';
 import { resurrect } from '../tools/wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
+import { buildPortrait } from './portrait.js';
 import { buildCombatBar } from './combat-bar.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup, hasAutomation } from './hud-popups.js';
@@ -44,6 +45,7 @@ import { BondPanel } from './bond-panel.js';
 import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
 import { _resolveExtraBarValues, updateExtraBarValue } from './tokenStatBar.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 
 async function _toggleTokenInCombat(token)
 {
@@ -69,6 +71,16 @@ async function _toggleTokenInCombat(token)
 
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
 const HUD_TOP  = 115;   // below Foundry's top nav bar
+const PORTRAIT_TOP_RATIO = 1;
+
+/** Screen-space bottom edge of the visible scene tab row, 0 when it is hidden. */
+function sceneNavBottom()
+{
+    // The container is stretched by some UI modules; the active menu is the row you can see.
+    const row = document.getElementById('scene-navigation-active') ?? document.getElementById('scene-navigation');
+    const rect = row?.getBoundingClientRect();
+    return rect && rect.height > 0 ? rect.bottom : 0;
+}
 
 const ROW_MAX_WIDTH = 250;
 
@@ -276,12 +288,12 @@ export class LancerHUD
             </div>
         `;
         const dlg = new Dialog({
-            title: 'Link Narrative HUD',
+            title: localize('LA.dialogTitle.linkNarrativeHud'),
             content,
             buttons: {
                 link: {
                     icon: '<i class="fas fa-link"></i>',
-                    label: 'Link',
+                    label: localize('LA.tokenHud.label.link'),
                     callback: async (html) =>
                     {
                         const uuid = String(/** @type {any} */ (html).find('[name="pilot-uuid"]').val() || '');
@@ -292,7 +304,7 @@ export class LancerHUD
                 },
                 unlink: {
                     icon: '<i class="fas fa-unlink"></i>',
-                    label: 'Unlink',
+                    label: localize('LA.tokenHud.label.unlink'),
                     callback: async () =>
                     {
                         await game.settings.set(MODULE_ID,'tah.narrativeLinkedActorUuid', '');
@@ -300,7 +312,7 @@ export class LancerHUD
                             this.bindNarrative();
                     },
                 },
-                cancel: { icon: '<i class="fas fa-times"></i>', label: 'Cancel' },
+                cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
             },
             default: 'link',
             render: (html) =>
@@ -587,7 +599,7 @@ export class LancerHUD
         let _dispLabel = null;
         if (!this._narrativeMode && getModuleSetting('tah.showDisposition'))
         {
-            const d = getTokenDispositionInfo(this._token) ?? { color: '#888', label: 'Unknown' };
+            const d = getTokenDispositionInfo(this._token) ?? { color: '#888', label: localize('LA.tokenHud.label.unknown') };
             _dispColor = d.color;
             _dispLabel = d.label;
         }
@@ -670,9 +682,32 @@ export class LancerHUD
         // c1 must exist in DOM before we can measure it below, so build hud first
         const savedPos = getModuleSetting('tah.position');
         const startLeft = savedPos?.left ?? HUD_LEFT;
-        const startTop  = savedPos?.top  ?? HUD_TOP;
-        const hud = $(`<div id="la-hud" style="left:${startLeft}px;top:${startTop}px;"></div>`);
+
         const uiScale = tahScale();
+        // Saved and default tops are the name band's position without a portrait.
+        // A portrait offsets the HUD down by its own height so the art sits above.
+        let defaultBase = HUD_TOP;
+        let portraitOffset = 0;
+        const portrait = buildPortrait(
+            this._narrativeMode ? null : this._token,
+            actor,
+            (measured) =>
+            {
+                const next = Math.round(measured * uiScale);
+                const current = parseInt(this._el?.css('top') ?? '');
+                if (Number.isFinite(current))
+                    this._el.css('top', `${current - portraitOffset + next}px`);
+                portraitOffset = next;
+            },
+        );
+        if (portrait)
+        {
+            titleEl.append(portrait.el);
+            portraitOffset = Math.round(portrait.height * uiScale);
+        }
+        const startTop = (savedPos?.top ?? defaultBase) + portraitOffset;
+
+        const hud = $(`<div id="la-hud" style="left:${startLeft}px;top:${startTop}px;"></div>`);
         if (uiScale !== 1)
             hud.css({ transform: `scale(${uiScale})`, 'transform-origin': 'top left' });
         if (animate)
@@ -680,6 +715,13 @@ export class LancerHUD
         hud.append(c1);
         $('body').append(hud);
         this._el = hud;
+        // With a portrait the default top is half the no-portrait one, so the art has room above.
+        if (portrait)
+        {
+            defaultBase = Math.round(HUD_TOP * PORTRAIT_TOP_RATIO);
+            if (!savedPos)
+                hud.css('top', `${defaultBase + portraitOffset}px`);
+        }
         if (animate)
             hud.animate({ opacity: 1, left: startLeft }, 350);
 
@@ -786,7 +828,7 @@ export class LancerHUD
         {
             ev.stopPropagation();
             game.settings.set(MODULE_ID,'tah.position', null);
-            hud.animate({ left: HUD_LEFT, top: HUD_TOP }, 200);
+            hud.animate({ left: HUD_LEFT, top: defaultBase + portraitOffset }, 200);
         });
 
         let dragStart = null;
@@ -813,9 +855,12 @@ export class LancerHUD
         {
             if (!dragStart)
                 return;
+            const moved = parseInt(hud.css('left')) !== dragStart.left || parseInt(hud.css('top')) !== dragStart.top;
             dragStart = null;
             hud.css('cursor', '');
-            const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) };
+            if (!moved)
+                return;
+            const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) - portraitOffset };
             game.settings.set(MODULE_ID,'tah.position', pos);
         });
 
@@ -903,7 +948,9 @@ export class LancerHUD
                 this._c3SourceItem = null; this._c4SourceItem = null;
                 {
                     const colLabel = /** @type {any} */ (cat).colLabel;
-                    c2.find('.la-hud-col-label').text(typeof colLabel === 'function' ? colLabel() : colLabel);
+                    c2.find('.la-hud-col-label')
+                        .attr('data-col', 'category')
+                        .text(typeof colLabel === 'function' ? colLabel() : colLabel);
                 }
                 this._openCol(c2, /** @type {any} */ (cat).getItems(), row);
                 c2.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' }).show().animate({ opacity: 1, marginLeft: 0 }, 140, function()
@@ -1164,13 +1211,15 @@ export class LancerHUD
                             listFavorites();
                     }
                 });
-                c2.find('.la-hud-col-label').text('Favorites');
+                c2.find('.la-hud-col-label')
+                    .attr('data-col', 'favorites')
+                    .text(localize('LA.tokenHud.col.favorites'));
             };
             listFavorites();
         };
         this._openFavorites = openFavorites;
         const favIconInner = favIcon.find('.la-hud-fav-icon');
-        const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').text() === 'Favorites';
+        const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').attr('data-col') === 'favorites';
         this._toggleFavorites = () =>
         {
             if (isFavoritesOpen())
@@ -1281,6 +1330,15 @@ export class LancerHUD
         };
     }
 
+    _applyGate(/** @type {any} */ row, /** @type {any} */ action)
+    {
+        if (action?._gate === 'disabled')
+            row.statusKind = 'unavailable';
+        else if (action?._gate === 'locked')
+            row.softDisabled = true;
+        return row;
+    }
+
     // Shared row: destroyed-strike label + getItemStatus badge + _statusColors stripe; badge/badgeColor/statusKind overridable. Extra opts (onClick/onRightClick/getChildren/highlightBg/…) pass through.
     _itemRow(/** @type {any} */ item, /** @type {any} */ opts = {})
     {
@@ -1355,7 +1413,7 @@ export class LancerHUD
         {
             const now = getActionLockInfo(this._actor, actionName, activation);
             if (isActionDisabledByStatus(this._actor, actionName) || now.itemLocks.length || now.sources.length)
-                ui.notifications.warn(`${actionName} is locked on ${this._actor.name}. Firing anyway.`);
+                ui.notifications.warn(localizeFormat('LA.notify.actionLockedFiringAnyway', { action: actionName, name: this._actor.name }));
             return origClick?.();
         };
         if (origBroadcast)
@@ -1427,7 +1485,7 @@ export class LancerHUD
             if (item.isSectionLabel)
             {
                 const iconHtml = item.icon ? laHudRenderIcon(item.icon) : '';
-                col.append(`<div class="la-hud-section-label">${iconHtml}${item.label}</div>`);
+                col.append(`<div class="la-hud-section-label">${iconHtml}${item.text ?? item.label}</div>`);
                 continue;
             }
             if (item.inputCell)
@@ -1594,7 +1652,7 @@ export class LancerHUD
             const rawChildren = item.getChildren ? item.getChildren() : null;
             const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel || !!item.isBondPanel;
             const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
-            const row = this._makeRow(item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount, item.sizeLevel ?? null);
+            const row = this._makeRow(item.text ?? item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount, item.sizeLevel ?? null);
             if (item.onBadgeClick)
             {
                 row.find('.la-hud-badge').css('cursor', 'pointer').on('click', (ev) =>
@@ -1944,7 +2002,7 @@ export class LancerHUD
         }
         else if (childCol === this._c4)
             this._c4SourceItem = item;
-        childCol.find('.la-hud-col-label').text(item.childColLabel ?? '');
+        childCol.find('.la-hud-col-label').attr('data-col', 'child').text(item.childColLabel ?? '');
         childCol.css({ left: parentCol.position().left / tahScale() + parentCol.outerWidth() });
         this._openCol(childCol, children, row);
         childCol.stop(true).css({ opacity: 0, marginLeft: -10, pointerEvents: 'none' })
@@ -2002,30 +2060,31 @@ export class LancerHUD
             return this._catActionsPilot(actor);
 
         return {
-            label: 'Actions',
-            colLabel: 'Actions',
+            label: localize('LA.tokenHud.label.actions'),
+            colLabel: localize('LA.tokenHud.label.actions'),
             icon: 'mdi mdi-hexagon-outline',
             getItems: () => [
                 {
                     label: 'Basic',
+                    text: localize('LA.tokenHud.label.basic'),
                     icon: 'mdi mdi-hexagon-outline',
-                    childColLabel: actor.type === 'mech' ? 'Action' : 'Quick',
+                    childColLabel: localize(actor.type === 'mech' ? 'LA.tokenHud.col.action' : 'LA.tokenHud.label.quick'),
                     getChildren: () => [
                         ...(actor.type === 'mech' ? [
-                            this._lockable({ label: 'Overcharge', icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Once per turn, you can OVERCHARGE your mech, allowing you to make any quick action as a free action, even actions you have already taken this turn.\n\nThe first time you OVERCHARGE, take 1 heat.\nThe second time, take 1d3 heat.\nThe third time, take 1d6 heat.\nEach time after, take 1d6+4 heat.\n\nA FULL REPAIR resets this counter.' }) }, 'Overcharge'),
-                            { isSectionLabel: true, label: 'Quick' },
+                            this._lockable({ label: localize('LA.tokenHud.label.overcharge'), icon: 'systems/lancer/assets/icons/overcharge.svg', onClick: () => /** @type {any} */ (actor.beginOverchargeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginOverchargeFlow(), onRightClick: this._actionPopup({ name: 'Overcharge', activation: 'Free', detail: 'Once per turn, you can OVERCHARGE your mech, allowing you to make any quick action as a free action, even actions you have already taken this turn.\n\nThe first time you OVERCHARGE, take 1 heat.\nThe second time, take 1d3 heat.\nThe third time, take 1d6 heat.\nEach time after, take 1d6+4 heat.\n\nA FULL REPAIR resets this counter.' }) }, 'Overcharge'),
+                            { isSectionLabel: true, label: localize('LA.tokenHud.label.quick') },
                         ] : []),
                         ...(/** @type {any} */ (this._catQuickActions().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
-                        { isSectionLabel: true, label: 'Full' },
+                        { isSectionLabel: true, label: localize('LA.tokenHud.label.full') },
                         ...(/** @type {any} */ (this._catFullAction().getItems().find(i => i.label === 'Basic'))?.getChildren?.() ?? []),
                     ],
                 },
-                { label: 'Attacks', childColLabel: 'Attacks', icon: 'systems/lancer/assets/icons/role_striker.svg', getChildren: () => this._catAttacks().getItems() },
-                { label: 'Quick Actions', childColLabel: 'Quick Actions',    icon: getActivationIcon('Quick'), getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
-                this._lockCat({ label: 'Full Actions',  childColLabel: 'Full Actions',     icon: getActivationIcon('Full'), getChildren: () => this._getActionsByActivation(actor, 'Full', 'Actions') }, 'full'),
-                this._lockCat({ label: 'Reaction',      childColLabel: 'Reaction', icon: getActivationIcon('Reaction'), getChildren: () => this._catReactions().getItems() }, 'reaction'),
-                this._lockCat({ label: 'Protocol',      childColLabel: 'Protocol', icon: getActivationIcon('Protocol'), getChildren: () => this._catProtocols().getItems() }, 'protocol'),
-                this._lockCat({ label: 'Free Actions',  childColLabel: 'Free Actions',     icon: getActivationIcon('Free'), getChildren: () => this._catFreeActions().getItems() }, 'free'),
+                { label: localize('LA.tokenHud.label.attacks'), childColLabel: localize('LA.tokenHud.label.attacks'), icon: 'systems/lancer/assets/icons/role_striker.svg', getChildren: () => this._catAttacks().getItems() },
+                { label: localize('LA.tokenHud.label.quickActions'), childColLabel: localize('LA.tokenHud.label.quickActions'),    icon: getActivationIcon('Quick'), getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
+                this._lockCat({ label: localize('LA.tokenHud.label.fullActions'),  childColLabel: localize('LA.tokenHud.label.fullActions'),     icon: getActivationIcon('Full'), getChildren: () => this._getActionsByActivation(actor, 'Full', 'Actions') }, 'full'),
+                this._lockCat({ label: localize('LA.action.reaction'),      childColLabel: localize('LA.action.reaction'), icon: getActivationIcon('Reaction'), getChildren: () => this._catReactions().getItems() }, 'reaction'),
+                this._lockCat({ label: localize('LA.action.protocol'),      childColLabel: localize('LA.action.protocol'), icon: getActivationIcon('Protocol'), getChildren: () => this._catProtocols().getItems() }, 'protocol'),
+                this._lockCat({ label: localize('LA.tokenHud.label.freeActions'),  childColLabel: localize('LA.tokenHud.label.freeActions'),     icon: getActivationIcon('Free'), getChildren: () => this._catFreeActions().getItems() }, 'free'),
                 ...(() =>
                 {
                     const deactItems = actor.items.filter(item =>
@@ -2035,8 +2094,8 @@ export class LancerHUD
                     if (!deactItems.length)
                         return [];
                     return [{
-                        label: 'Deactivate',
-                        childColLabel: 'Deactivate',
+                        label: localize('LA.tokenHud.label.deactivate'),
+                        childColLabel: localize('LA.tokenHud.label.deactivate'),
                         icon: 'systems/lancer/assets/icons/status_shutdown.svg',
                         getChildren: () => deactItems.map(item =>
                         {
@@ -2063,7 +2122,7 @@ export class LancerHUD
     _catResources()
     {
         return {
-            label: 'Resources',
+            label: localize('LA.tokenHud.label.resources'),
             icon: 'mdi mdi-database-outline',
             // One source → use its name as the col header; two or more → "Resources".
             colLabel: () =>
@@ -2074,8 +2133,10 @@ export class LancerHUD
                 const hasAmmo = this._ammoItems().length > 0;
                 const sum = (hasCounters ? 1 : 0) + (hasExtras ? 1 : 0) + (hasCustom ? 1 : 0) + (hasAmmo ? 1 : 0);
                 if (sum === 1)
-                    return hasCounters ? 'Resources' : hasExtras ? 'Extra' : hasCustom ? 'Custom' : 'Ammo';
-                return 'Resources';
+                    return localize(hasCounters ? 'LA.tokenHud.col.resources'
+                        : hasExtras ? 'LA.tokenHud.col.extra'
+                            : hasCustom ? 'LA.tokenHud.label.custom' : 'LA.tokenHud.label.ammo');
+                return localize('LA.tokenHud.col.resources');
             },
             getItems: () =>
             {
@@ -2113,7 +2174,7 @@ export class LancerHUD
         {
             const deployAction = applyActionOverlays(actor, [{ name: actor.name, activation: sys.activation, detail: sys.detail ?? '' }])[0];
             items.push({
-                label: 'Activation',
+                label: localize('LA.tokenHud.label.activation'),
                 icon: getActivationIcon(deployAction),
                 hoverData: { actor, item: null, action: deployAction, category: 'Actions' },
                 onClick: () => executeSimpleActivation(actor, { title: actor.name, action: deployAction, detail: sys.detail ?? '' }),
@@ -2125,15 +2186,15 @@ export class LancerHUD
         if (sys.recall != null)
         {
             items.push({
-                label: 'Recall',
+                label: localize('LA.tokenHud.label.recall'),
                 icon: getActivationIcon({ activation: sys.recall }),
                 onClick: () => this._token.document.delete(),
             });
         }
 
-        for (const extra of (getLAFlag(actor,'extraActions') ?? []))
+        for (const extra of gateActions(/** @type {any[]} */ (getLAFlag(actor,'extraActions') ?? []), actor))
         {
-            items.push({
+            items.push(this._applyGate({
                 label: extra.name,
                 icon: extra.icon ?? getActivationIcon(extra),
                 hoverData: { actor, item: null, action: extra, category: 'Actions' },
@@ -2146,7 +2207,7 @@ export class LancerHUD
                         await executeExtraActionCombat(actor, extra, null);
                 },
                 onRightClick: this._actionPopup(extra),
-            });
+            }, extra));
         }
 
         for (const action of applyActionOverlays(actor, sys.actions ?? []))
@@ -2162,23 +2223,23 @@ export class LancerHUD
 
         const token = this._token;
         const toolPopup = (toolAction) => this._actionPopup(toolAction);
-        items.push({ isSectionLabel: true, label: 'Tools' });
+        items.push({ isSectionLabel: true, label: localize('LA.tokenHud.label.tools') });
         items.push({
-            label: 'Basic Attack',
+            label: localize('LA.tokenHud.label.basicAttack'),
             icon: 'mdi mdi-target',
             hoverData: { actor, item: null, action: { name: 'Basic Attack', activation: 'Tool' }, category: 'Actions' },
             onClick: () => executeBasicAttack(actor),
             onRightClick: toolPopup({ name: 'Basic Attack', activation: 'Tool', detail: 'Tool: roll a bare attack against one target.' }),
         });
         items.push({
-            label: 'Basic Tech',
+            label: localize('LA.tokenHud.label.basicTech'),
             icon: ICON_TECH_QUICK,
             hoverData: { actor, item: null, action: { name: 'Basic Tech', activation: 'Tool' }, category: 'Actions' },
             onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }),
             onRightClick: toolPopup({ name: 'Basic Tech', activation: 'Tool', tech_attack: true, detail: 'Tool: roll a bare TECH ATTACK against one target\'s E-DEFENSE. No effect applied.' }),
         });
         items.push({
-            label: 'Damage',
+            label: localize('LA.tokenHud.label.damage'),
             icon: 'mdi mdi-flare',
             hoverData: { actor, item: null, action: { name: 'Damage', activation: 'Tool' }, category: 'Actions' },
             onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic'),
@@ -2186,8 +2247,8 @@ export class LancerHUD
         });
 
         return {
-            label: 'Actions',
-            colLabel: 'Actions',
+            label: localize('LA.tokenHud.label.actions'),
+            colLabel: localize('LA.tokenHud.label.actions'),
             icon: 'mdi mdi-hexagon-outline',
             getItems: () => items,
         };
@@ -2201,10 +2262,10 @@ export class LancerHUD
         const basicQuick = () => [
             this._simpleItem('Boost',    'modules/lancer-automations/icons/speedometer.svg', { name: 'Boost',    activation: 'Quick'          }, BOOST_DETAIL),
             this._simpleItem('Hide',     'systems/lancer/assets/icons/status_hidden.svg',    { name: 'Hide',     activation: 'Quick'          }, 'Obscure your position, becoming HIDDEN and unable to be identified, precisely located, or targeted directly by attacks or hostile actions.'),
-            this._simpleItem('Search',   'modules/lancer-automations/icons/search.svg',      { name: 'Search',   activation: 'Quick'          }, 'Make a contested skill check, adding bonuses from triggers as normal. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
+            this._simpleItem('Search',   'modules/lancer-automations/icons/search.svg',      { name: 'Search',   activation: 'Quick'          }, 'As a pilot on foot, make a contested skill check, adding bonuses from triggers as normal. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found using SEARCH, they immediately lose HIDDEN and can be located again by any character.'),
             ...(showAHIS ? [this._simpleItem('Interact', 'mdi mdi-gesture-tap',       { name: 'Interact', activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
             this._simpleItem('Prepare',  'mdi mdi-lightbulb-outline',  { name: 'Prepare',  activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
-            { label: 'Reload', icon: 'mdi mdi-magazine-rifle', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: actionPopup({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
+            { label: localize('LA.tokenHud.label.reload'), icon: 'mdi mdi-magazine-rifle', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: actionPopup({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
         ];
         const basicFull = () => [
             this._simpleItem('Disengage', 'mdi mdi-run-fast', { name: 'Disengage', activation: 'Full' }, 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.'),
@@ -2212,26 +2273,27 @@ export class LancerHUD
             this._simpleItem('Jockey',    'mdi mdi-hook',     { name: 'Jockey',    activation: 'Full' }, 'To JOCKEY, you must be adjacent to a mech. As a full action, make a contested skill check using GRIT. The mech contests with HULL. On a success, climb onto the mech, sharing its space.\nChoose one: DISTRACT (mech is IMPAIRED and SLOWED), SHRED (deal 2 heat), or DAMAGE (deal 4 kinetic damage).'),
         ];
         return {
-            label: 'Actions',
-            colLabel: 'Actions',
+            label: localize('LA.tokenHud.label.actions'),
+            colLabel: localize('LA.tokenHud.label.actions'),
             icon: 'mdi mdi-hexagon-outline',
             getItems: () => [
                 {
                     label: 'Basic',
+                    text: localize('LA.tokenHud.label.basic'),
                     icon: 'mdi mdi-hexagon-outline',
-                    childColLabel: 'Quick',
+                    childColLabel: localize('LA.tokenHud.label.quick'),
                     getChildren: () => [
                         ...basicQuick(),
-                        { isSectionLabel: true, label: 'Full' },
+                        { isSectionLabel: true, label: localize('LA.tokenHud.label.full') },
                         ...basicFull(),
                     ],
                 },
-                { label: 'Attacks', childColLabel: 'Attacks', icon: 'systems/lancer/assets/icons/role_striker.svg', getChildren: () => this._catAttacks().getItems() },
-                { label: 'Quick Actions', childColLabel: 'Quick Actions', icon: getActivationIcon('Quick'), getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
-                this._lockCat({ label: 'Full Actions',  childColLabel: 'Full Actions',  icon: getActivationIcon('Full'), getChildren: () => this._getActionsByActivation(actor, 'Full',  'Actions') }, 'full'),
-                this._lockCat({ label: 'Reaction',      childColLabel: 'Reaction',      icon: getActivationIcon('Reaction'), getChildren: () => this._catReactions().getItems() }, 'reaction'),
-                this._lockCat({ label: 'Protocol',      childColLabel: 'Protocol',      icon: getActivationIcon('Protocol'), getChildren: () => this._catProtocols().getItems() }, 'protocol'),
-                this._lockCat({ label: 'Free Actions',  childColLabel: 'Free Actions',  icon: getActivationIcon('Free'), getChildren: () => this._catFreeActions().getItems() }, 'free'),
+                { label: localize('LA.tokenHud.label.attacks'), childColLabel: localize('LA.tokenHud.label.attacks'), icon: 'systems/lancer/assets/icons/role_striker.svg', getChildren: () => this._catAttacks().getItems() },
+                { label: localize('LA.tokenHud.label.quickActions'), childColLabel: localize('LA.tokenHud.label.quickActions'), icon: getActivationIcon('Quick'), getChildren: () => this._getActionsByActivation(actor, 'Quick', 'Actions') },
+                this._lockCat({ label: localize('LA.tokenHud.label.fullActions'),  childColLabel: localize('LA.tokenHud.label.fullActions'),  icon: getActivationIcon('Full'), getChildren: () => this._getActionsByActivation(actor, 'Full',  'Actions') }, 'full'),
+                this._lockCat({ label: localize('LA.action.reaction'),      childColLabel: localize('LA.action.reaction'),      icon: getActivationIcon('Reaction'), getChildren: () => this._catReactions().getItems() }, 'reaction'),
+                this._lockCat({ label: localize('LA.action.protocol'),      childColLabel: localize('LA.action.protocol'),      icon: getActivationIcon('Protocol'), getChildren: () => this._catProtocols().getItems() }, 'protocol'),
+                this._lockCat({ label: localize('LA.tokenHud.label.freeActions'),  childColLabel: localize('LA.tokenHud.label.freeActions'),  icon: getActivationIcon('Free'), getChildren: () => this._catFreeActions().getItems() }, 'free'),
             ],
         };
     }
@@ -2241,21 +2303,21 @@ export class LancerHUD
         const actor = this._actor;
         const token = this._token;
         return {
-            label: 'Deployables',
-            colLabel: 'Tools',
+            label: localize('LA.tokenHud.label.deployables'),
+            colLabel: localize('LA.tokenHud.label.tools'),
             icon: 'systems/lancer/assets/icons/deployable.svg',
             getItems: () =>
             {
                 const deployableRows = this._deployableRows(actor);
                 return [
-                    { label: 'Deploy Item', icon: 'systems/lancer/assets/icons/deployable.svg', onClick: () => openDeployableMenu(actor) },
-                    { label: 'Recall Item', icon: 'modules/lancer-automations/icons/up-card.svg',     onClick: () => recallDeployable(token) },
+                    { label: localize('LA.tokenHud.label.deployItem'), icon: 'systems/lancer/assets/icons/deployable.svg', onClick: () => openDeployableMenu(actor) },
+                    { label: localize('LA.tokenHud.label.recallItem'), icon: 'modules/lancer-automations/icons/up-card.svg',     onClick: () => recallDeployable(token) },
                     {
-                        label: 'Link/Unlink Actor',
+                        label: localize('LA.tokenHud.label.linkUnlinkActor'),
                         icon: 'modules/lancer-automations/icons/linked-rings.svg',
                         onClick: () => promptLinkOrUnlinkActor(token),
                     },
-                    ...(deployableRows.length ? [{ isSectionLabel: true, label: 'Deployables' }, ...deployableRows] : []),
+                    ...(deployableRows.length ? [{ isSectionLabel: true, label: localize('LA.tokenHud.label.deployables') }, ...deployableRows] : []),
                 ];
             },
         };
@@ -2353,24 +2415,24 @@ export class LancerHUD
         const token = this._token;
         const actionPopup = action => this._actionPopup(action);
         return {
-            label: 'Attacks',
-            colLabel: 'Attacks',
+            label: localize('LA.tokenHud.label.attacks'),
+            colLabel: localize('LA.tokenHud.label.attacks'),
             getItems: () => this._enrichHoverData([
                 ...(actor.type === 'mech' || actor.type === 'npc' ? [
-                    this._lockable({ label: 'Skirmish',          icon: 'modules/lancer-automations/icons/skirmish.svg', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish', 'Quick'),
-                    this._lockable({ label: 'Barrage',           icon: 'modules/lancer-automations/icons/barrage.svg', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage', 'Full'),
+                    this._lockable({ label: localize('LA.tokenHud.label.skirmish'),          icon: 'modules/lancer-automations/icons/skirmish.svg', onClick: () => executeSkirmish(actor),    broadcastFn: (t, a) => executeSkirmish(a),    onRightClick: actionPopup({ name: 'Skirmish',          activation: 'Quick', detail: 'When you SKIRMISH, you attack with a single weapon MOUNT. \r \n To SKIRMISH, choose a mount and a valid target within RANGE (or THREAT), then make an attack with the primary weapon on that mount. \r &bull; You may also attack with an AUXILIARY weapon on the same mount. That weapon does not deal bonus damage. \r &bull; SUPERHEAVY weapons are too cumbersome to use in a SKIRMISH, and can only be fired as part of a BARRAGE.' }) }, 'Skirmish', 'Quick'),
+                    this._lockable({ label: localize('LA.tokenHud.label.barrage'),           icon: 'modules/lancer-automations/icons/barrage.svg', onClick: () => executeBarrage(actor),     broadcastFn: (t, a) => executeBarrage(a),     onRightClick: actionPopup({ name: 'Barrage',           activation: 'Full',  detail: 'When you BARRAGE, you attack with two weapon MOUNTS, or with one SUPERHEAVY weapon. \r \n To BARRAGE, choose your mounts (or one SUPERHEAVY) and either one target or different targets within range, then make an attack with the primary weapon on each mount. \r &bull; You may also attack with an AUXILIARY weapon on each mount that was fired, so long as it has not yet been fired this action. These AUXILIARY weapons do not deal bonus damage. \r &bull; SUPERHEAVY weapons can only be fired as part of a BARRAGE.' }) }, 'Barrage', 'Full'),
                     this._simpleItem('Ram',     'modules/lancer-automations/icons/ram.svg', { name: 'Ram',     activation: 'Quick' }, 'When you RAM, you make a melee attack with the aim of knocking a target down or back. \r \n To RAM, make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.'),
                     this._simpleItem('Grapple', 'modules/lancer-automations/icons/grappling.svg', { name: 'Grapple', activation: 'Quick' }, 'When you GRAPPLE, you grab hold of a target to overpower them. \r \n To GRAPPLE, choose an adjacent character and make a melee attack. On a hit: \r &bull; both characters become ENGAGED; \r &bull; neither can BOOST or take reactions while grappled; \r &bull; the smaller becomes IMMOBILIZED and is dragged when the larger moves. If same SIZE, contested HULL check at start of turn decides who is larger. \r \n A GRAPPLE ends when adjacency breaks, the attacker ends it as a free action, or the defender wins a contested HULL check as a quick action.'),
-                    this._lockable({ label: 'Improvised Attack', icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: actionPopup({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack', 'Full'),
+                    this._lockable({ label: localize('LA.tokenHud.label.improvisedAttack'), icon: 'mdi mdi-hexagon-slice-6', onClick: () => executeBasicAttack(actor), broadcastFn: (t, a) => executeBasicAttack(a), onRightClick: actionPopup({ name: 'Improvised Attack', activation: 'Full',  detail: 'When you make an IMPROVISED ATTACK, you attack with a rifle butt, fist, or another improvised melee weapon. You can use anything from the butt of a weapon to a slab of concrete or a length of hull plating &mdash; the flavor of the attack is up to you! \r \n To make an IMPROVISED ATTACK, make a melee attack against an adjacent target. On a success, they take 1d6 kinetic damage.' }) }, 'Improvised Attack', 'Full'),
                 ] : []),
                 ...(actor.type === 'pilot' ? [
-                    this._lockable({ label: 'Fight', icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: actionPopup({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight', 'Full'),
+                    this._lockable({ label: localize('LA.tokenHud.label.fight'), icon: 'modules/lancer-automations/icons/crossed-slashes.svg', onClick: () => executeFight(actor), broadcastFn: (t, a) => executeFight(a), onRightClick: actionPopup({ name: 'Fight', activation: 'Full', detail: 'Make a melee or ranged attack with a pilot weapon.' }) }, 'Fight', 'Full'),
                 ] : []),
-                { isSectionLabel: true, label: 'Tools' },
-                { label: 'Basic Attack',  icon: 'mdi mdi-target', onClick: () => executeBasicAttack(actor), broadcastFn: (bcToken, bcActor) => executeBasicAttack(bcActor), onRightClick: actionPopup({ name: 'Basic Attack', activation: 'Tool', detail: 'Tool: roll a bare attack against one target.' }) },
-                { label: 'Damage',        icon: 'mdi mdi-flare',       onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic'), onRightClick: actionPopup({ name: 'Damage', activation: 'Tool', detail: 'Tool: apply arbitrary damage to your target(s).' }) },
-                { label: 'Throw Weapon',  icon: 'systems/lancer/assets/icons/thrown.svg',      onClick: () => openThrowMenu(actor),    broadcastFn: (bcToken, bcActor) => openThrowMenu(bcActor), onRightClick: actionPopup({ name: 'Throw Weapon', activation: 'Tool', detail: 'Throw an equipped THROWN weapon, dropping it as a token on the map. Retrieve it with Pickup Weapon.' }) },
-                { label: 'Pickup Weapon', icon: 'modules/lancer-automations/icons/pickup.svg', onClick: () => pickupWeaponToken(token), broadcastFn: (bcToken) => pickupWeaponToken(bcToken), keepOpen: true, onRightClick: actionPopup({ name: 'Pickup Weapon', activation: 'Tool', detail: 'Pick up a weapon you previously threw, returning it to your loadout.' }) },
+                { isSectionLabel: true, label: localize('LA.tokenHud.label.tools') },
+                { label: localize('LA.tokenHud.label.basicAttack'),  icon: 'mdi mdi-target', onClick: () => executeBasicAttack(actor), broadcastFn: (bcToken, bcActor) => executeBasicAttack(bcActor), onRightClick: actionPopup({ name: 'Basic Attack', activation: 'Tool', detail: 'Tool: roll a bare attack against one target.' }) },
+                { label: localize('LA.tokenHud.label.damage'),        icon: 'mdi mdi-flare',       onClick: () => executeDamageRoll(token, [...(game.user?.targets ?? [])], '0', 'Kinetic'), onRightClick: actionPopup({ name: 'Damage', activation: 'Tool', detail: 'Tool: apply arbitrary damage to your target(s).' }) },
+                { label: localize('LA.tokenHud.label.throwWeapon'),  icon: 'systems/lancer/assets/icons/thrown.svg',      onClick: () => openThrowMenu(actor),    broadcastFn: (bcToken, bcActor) => openThrowMenu(bcActor), onRightClick: actionPopup({ name: 'Throw Weapon', activation: 'Tool', detail: 'Throw an equipped THROWN weapon, dropping it as a token on the map. Retrieve it with Pickup Weapon.' }) },
+                { label: localize('LA.tokenHud.label.pickupWeapon'), icon: 'modules/lancer-automations/icons/pickup.svg', onClick: () => pickupWeaponToken(token), broadcastFn: (bcToken) => pickupWeaponToken(bcToken), keepOpen: true, onRightClick: actionPopup({ name: 'Pickup Weapon', activation: 'Tool', detail: 'Pick up a weapon you previously threw, returning it to your loadout.' }) },
             ], { actor, category: 'Attacks' }),
         };
     }
@@ -2390,8 +2452,8 @@ export class LancerHUD
             return first ? `${first.type} Mount` : 'Mounts';
         };
         return {
-            label: 'Weapons',
-            colLabel: actor?.type === 'npc' || actor?.type === 'pilot' ? 'Weapons' : firstMountName(),
+            label: localize('LA.tokenHud.label.weapons'),
+            colLabel: actor?.type === 'npc' || actor?.type === 'pilot' ? localize('LA.tokenHud.label.weapons') : firstMountName(),
             icon: 'systems/lancer/assets/icons/weapon.svg',
             getItems: () =>
             {
@@ -2404,10 +2466,10 @@ export class LancerHUD
                 allMounts().forEach((mount, idx) =>
                 {
                     if (idx > 0)
-                        result.push({ label: `${mount.type} Mount` || `Mount ${idx + 1}`, isSectionLabel: true });
+                        result.push({ label: localizeFormat('LA.tokenHud.label.mount', { type: mount.type }), isSectionLabel: true });
                     if (mount.bracing)
                     {
-                        result.push({ label: `<span style="${MUTED}">Locked</span>` });
+                        result.push({ label: `<span style="${MUTED}">${localize('LA.tokenHud.label.locked')}</span>` });
                         return;
                     }
                     // A Flex mount with a Main (or larger) weapon has no remaining capacity
@@ -2428,7 +2490,7 @@ export class LancerHUD
                                 result.push(this._weaponItem(weapon, mod, mount));
                         }
                         else if (!flexBlocked)
-                            result.push({ label: `<span style="${MUTED}">Empty</span>` });
+                            result.push({ label: `<span style="${MUTED}">${localize('LA.tokenHud.label.empty')}</span>` });
                     });
                 });
                 return result;
@@ -2443,8 +2505,8 @@ export class LancerHUD
         if (actor.type === 'deployable' || actor.type === 'pilot')
         {
             return {
-                label: 'Tech',
-                colLabel: 'Tech',
+                label: localize('LA.tokenHud.label.tech'),
+                colLabel: localize('LA.tokenHud.label.tech'),
                 icon: 'systems/lancer/assets/icons/tech_quick.svg',
                 getItems: () => [
                     ...this._catInvades().getItems(),
@@ -2454,25 +2516,26 @@ export class LancerHUD
             };
         }
         return {
-            label: 'Tech',
-            colLabel: 'Tech',
+            label: localize('LA.tokenHud.label.tech'),
+            colLabel: localize('LA.tokenHud.label.tech'),
             icon: 'systems/lancer/assets/icons/tech_quick.svg',
             getItems: () => [
                 {
                     label: 'Basic',
+                    text: localize('LA.tokenHud.label.basic'),
                     icon: 'mdi mdi-hexagon-outline',
-                    childColLabel: 'Quick Tech',
+                    childColLabel: localize('LA.tokenHud.label.quickTech'),
                     getChildren: () => this._enrichHoverData([
-                        this._lockable({ label: 'Basic Tech', icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: actionPopup({ name: 'Basic Tech', activation: 'Tool', tech_attack: true, detail: 'Tool: roll a bare TECH ATTACK against one target\'s E-DEFENSE. No effect applied.' }) }, 'Basic Tech', 'Quick Tech'),
-                        this._lockable({ label: 'Scan',       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }), onRightClick: actionPopup({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. Make a tech attack against them. On a success, you discover all of their statistics (HP, Heat, Armor, Speed, Evasion, E-Defense, and all talent ranks, system and weapon loadouts, traits, and core systems).' }) }, 'Scan', 'Quick Tech'),
-                        this._lockable({ label: 'Lock On',    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: actionPopup({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) }, 'Lock On', 'Quick Tech'),
-                        this._lockable({ label: 'Bolster',    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: actionPopup({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) }, 'Bolster', 'Quick Tech'),
-                        this._lockable({ label: 'Invade',     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: actionPopup({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, deal 2 heat and choose one of the available Invade options.' }) }, 'Invade', 'Quick Tech'),
+                        this._lockable({ label: localize('LA.tokenHud.label.basicTech'), icon: ICON_TECH_QUICK, onClick: () => executeTechAttack(actor, { title: 'Basic Tech', grit: actor.system?.tech_attack, attack_type: 'Tech' }), onRightClick: actionPopup({ name: 'Basic Tech', activation: 'Tool', tech_attack: true, detail: 'Tool: roll a bare TECH ATTACK against one target\'s E-DEFENSE. No effect applied.' }) }, 'Basic Tech', 'Quick Tech'),
+                        this._lockable({ label: localize('LA.tokenHud.label.scan'),       icon: 'modules/lancer-automations/icons/radar-sweep.svg', onClick: () => executeSimpleActivation(actor, { title: 'Scan',     action: { name: 'Scan',     activation: 'Quick' }, detail: 'Choose a character or object within SENSORS and line of sight, then ask the GM for one of: its full statistics and loadout, one piece of hidden information, or generic public information. Only current at the time of the SCAN.' }), onRightClick: actionPopup({ name: 'Scan',     activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character or object within SENSORS and line of sight, then ask the GM for one of: its full statistics and loadout, one piece of hidden information, or generic public information. Only current at the time of the SCAN.' }) }, 'Scan', 'Quick Tech'),
+                        this._lockable({ label: localize('LA.tokenHud.label.lockOn'),    icon: 'systems/lancer/assets/icons/white/condition_lockon.svg', onClick: () => executeSimpleActivation(actor, { title: 'Lock On',  action: { name: 'Lock On',  activation: 'Quick' }, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }),  onRightClick: actionPopup({ name: 'Lock On',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS and line of sight. They gain the LOCK ON condition. Any character making an attack against a character with LOCK ON may choose to gain +1 Accuracy on that attack and then clear the LOCK ON condition after that attack resolves.' }) }, 'Lock On', 'Quick Tech'),
+                        this._lockable({ label: localize('LA.tokenHud.label.bolster'),    icon: 'modules/lancer-automations/icons/upgrade.svg', onClick: () => executeSimpleActivation(actor, { title: 'Bolster',  action: { name: 'Bolster',  activation: 'Quick' }, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }),                                                              onRightClick: actionPopup({ name: 'Bolster',  activation: 'Quick Tech', tech_attack: true, detail: 'Choose a character within SENSORS. They receive +2 Accuracy on the next skill check or save they make between now and the end of their next turn. Characters can only benefit from one BOLSTER at a time.' }) }, 'Bolster', 'Quick Tech'),
+                        this._lockable({ label: localize('LA.tokenHud.label.invade'),     icon: 'modules/lancer-automations/icons/cpu-shot.svg', onClick: () => executeInvade(actor),                                                                                                                                                                                                                                                                                                                                                                       onRightClick: actionPopup({ name: 'Invade',   activation: 'Full Tech',  tech_attack: true, detail: 'Make a tech attack against a target. On success, deal 2 heat and choose one of the available Invade options.' }) }, 'Invade', 'Quick Tech'),
                     ], { actor, category: 'Tech' }),
                 },
-                { label: 'Invades',    childColLabel: 'Invades',    icon: getActivationIcon('Invade'), getChildren: () => this._catInvades().getItems() },
-                { label: 'Quick Tech', childColLabel: 'Quick Tech', icon: getActivationIcon('Quick Tech'), getChildren: () => this._getActionsByActivation(actor, 'Quick Tech', 'Tech') },
-                { label: 'Full Tech',  childColLabel: 'Full Tech',  icon: getActivationIcon('Full Tech'), getChildren: () => this._getActionsByActivation(actor, 'Full Tech', 'Tech') },
+                { label: localize('LA.tokenHud.label.invades'),    childColLabel: localize('LA.tokenHud.label.invades'),    icon: getActivationIcon('Invade'), getChildren: () => this._catInvades().getItems() },
+                { label: localize('LA.tokenHud.label.quickTech'), childColLabel: localize('LA.tokenHud.label.quickTech'), icon: getActivationIcon('Quick Tech'), getChildren: () => this._getActionsByActivation(actor, 'Quick Tech', 'Tech') },
+                { label: localize('LA.tokenHud.label.fullTech'),  childColLabel: localize('LA.tokenHud.label.fullTech'),  icon: getActivationIcon('Full Tech'), getChildren: () => this._getActionsByActivation(actor, 'Full Tech', 'Tech') },
             ],
         };
     }
@@ -2481,8 +2544,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Invades',
-            colLabel: 'Invades',
+            label: localize('LA.tokenHud.label.invades'),
+            colLabel: localize('LA.tokenHud.label.invades'),
             getItems: () => this._getInvadeOptions(actor).map(opt => this._lockable({
                 label: opt.destroyed ? this._destroyedLabel(opt.name) : opt.name,
                 icon: 'modules/lancer-automations/icons/cpu-shot.svg',
@@ -2507,22 +2570,22 @@ export class LancerHUD
                 this._simpleItem('Boost',     'modules/lancer-automations/icons/speedometer.svg',  { name: 'Boost',     activation: 'Quick'          }, BOOST_DETAIL),
                 ...(showAHIS && actor.type !== 'npc' ? [this._simpleItem('Aid', 'modules/lancer-automations/icons/medical-pack.svg', { name: 'Aid', activation: 'Quick' }, 'You assist a mech so it can Stabilize more easily. Choose an adjacent character. On their next turn, they may Stabilize as a quick action. They can choose to take this action even if they normally would not be able to take actions (for example, by being affected by the Stunned condition).')] : []),
                 this._simpleItem('Hide',      'systems/lancer/assets/icons/status_hidden.svg',     { name: 'Hide',      activation: 'Quick'          }, 'Obscure the position of your mech, becoming HIDDEN and unable to be identified, precisely located, or be targeted directly by attacks or hostile actions.'),
-                this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. Once a HIDDEN character has been found, they immediately lose HIDDEN.'),
+                this._simpleItem('Search',    'modules/lancer-automations/icons/search.svg',       { name: 'Search',    activation: 'Quick'          }, 'Choose a character within your SENSORS that you suspect is HIDDEN and make a contested SYSTEMS check against their AGILITY. Once a HIDDEN character has been found using SEARCH, they immediately lose HIDDEN and can be located again by any character.'),
                 this._blockIf(this._simpleItem('Shut Down', 'systems/lancer/assets/icons/status_shutdown.svg',   { name: 'Shut Down', activation: 'Quick'          }, 'When you SHUT DOWN, your mech powers off to end tech effects and cool down. \r \n As a quick action, your mech takes the SHUT DOWN status: \r &bull; all heat is cleared, as is EXPOSED; \r &bull; cascading NHPs return to normal; \r &bull; tech-caused statuses (LOCK ON, etc.) immediately end; \r &bull; the mech gains IMMUNITY to all tech actions and attacks; \r &bull; the mech is STUNNED indefinitely. \r \n The only way to remove SHUT DOWN is to BOOT UP.'), actor.statuses?.has('shutdown'), 'Already SHUT DOWN.'),
                 ...(showAHIS ? [this._simpleItem('Handle',    'modules/lancer-automations/icons/hand-truck.svg',   { name: 'Handle',    activation: 'Protocol/Quick' }, 'As a protocol or quick action, start to handle an adjacent object or willing character by lifting or dragging them. Mechs can drag characters or objects up to twice their SIZE but are SLOWED while doing so. They can also lift characters or objects of equal or lesser SIZE overhead but are IMMOBILIZED while doing so.')] : []),
                 ...(showAHIS ? [this._simpleItem('Interact',  'mdi mdi-gesture-tap',        { name: 'Interact',  activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
                 this._simpleItem('Prepare',   'mdi mdi-lightbulb-outline',   { name: 'Prepare',   activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
                 ...(actor.type !== 'npc' ? [this._blockIf(this._simpleItem('Eject',     'mdi mdi-parachute',    { name: 'Eject',     activation: 'Quick'          }, 'EJECT as a quick action, flying 6 spaces in the direction of your choice; however, this is a single-use system for emergency use only – it leaves your mech IMPAIRED. Your mech remains IMPAIRED and you cannot EJECT again until your next FULL REPAIR.'), this._pilotHasTokenOnScene(), 'The pilot already has a token on this scene.')] : []),
-                this._blockIf(this._lockable({ label: 'Standing Up', icon: 'mdi mdi-eject', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up', 'Quick'), !actor.statuses?.has('prone'), 'Standing Up requires the PRONE status.'),
+                this._blockIf(this._lockable({ label: localize('LA.tokenHud.label.standingUp'), icon: 'mdi mdi-eject', onClick: () => executeStandingUp(this._token), broadcastFn: (_t, a) => executeStandingUp(a.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Standing Up', activation: 'Movement', detail: 'Stand up instead of taking your standard move. Removes Prone and grants +Speed movement.' }) }, 'Standing Up', 'Quick'), !actor.statuses?.has('prone'), 'Standing Up requires the PRONE status.'),
             ];
             if (actor.type === 'mech')
-                items.push({ label: 'Self Destruct', icon: 'mdi mdi-bomb', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'When you SELF DESTRUCT, you overload your reactor in a final, catastrophic play. \r \n As a quick action, initiate a reactor meltdown. The mech explodes at the end of your next turn, or at the end of one of your turns within the following two rounds (your choice): \r &bull; the mech is annihilated, killing anyone inside; \r &bull; a BURST 2 explosion deals 4d6 explosive damage; \r &bull; characters caught who succeed on an AGILITY save take half damage.' }) });
+                items.push({ label: localize('LA.tokenHud.label.selfDestruct'), icon: 'mdi mdi-bomb', onClick: () => /** @type {any} */ (executeReactorMeltdown(actor)), broadcastFn: (_t, a) => executeReactorMeltdown(a), onRightClick: ap({ name: 'Self Destruct', activation: 'Quick', detail: 'When you SELF DESTRUCT, you overload your reactor in a final, catastrophic play. \r \n As a quick action, initiate a reactor meltdown. The mech explodes at the end of your next turn, or at the end of one of your turns within the following two rounds (your choice): \r &bull; the mech is annihilated, killing anyone inside; \r &bull; a BURST 2 explosion deals 4d6 explosive damage; \r &bull; characters caught who succeed on an AGILITY save take half damage.' }) });
             return this._enrichHoverData(items, { actor, category: 'Actions' });
         };
         return {
-            label: 'Quick Actions',
-            colLabel: 'Quick Actions',
-            getItems: () => [{ label: 'Basic', childColLabel: 'Basic', getChildren: basicChildren }, ...this._getActionsByActivation(actor, 'Quick', 'Actions')],
+            label: localize('LA.tokenHud.label.quickActions'),
+            colLabel: localize('LA.tokenHud.label.quickActions'),
+            getItems: () => [{ label: 'Basic', text: localize('LA.tokenHud.label.basic'), childColLabel: localize('LA.tokenHud.label.basic'), getChildren: basicChildren }, ...this._getActionsByActivation(actor, 'Quick', 'Actions')],
         };
     }
 
@@ -2538,13 +2601,13 @@ export class LancerHUD
                 ...(actor.type !== 'npc' ? [this._blockIf(this._simpleItem('Dismount',  'mdi mdi-location-exit',  { name: 'Dismount',  activation: 'Full' }, 'When you DISMOUNT, you climb off of a mech. You can DISMOUNT as a full action. When you DISMOUNT, you are placed in an adjacent space – if there are no free spaces, you cannot DISMOUNT. Additionally, you can also DISMOUNT willing allied mechs or vehicles you have MOUNTED.'), this._pilotHasTokenOnScene(), 'The pilot already has a token on this scene.')] : []),
             ];
             if (actor.type === 'mech' || actor.type === 'npc')
-                items.push({ label: 'Stabilize', icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose ONE of these two items: \r &bull; Cool your mech (clearing all heat and ending the EXPOSED status); \r &bull; Spend ONE Repair to heal your mech to max HP. \r \n Additionally, choose ONE the following four items: \r &bull; Reload all LOADING weapons on your mech; \r &bull; Clear any burn on your mech; \r &bull; Clear ONE condition from yourself NOT caused by your own systems/talents (etc); \r &bull; Clear ONE condition from an ADJACENT ally NOT caused by their own systems/talents (etc).' }) });
+                items.push({ label: localize('LA.tokenHud.label.stabilize'), icon: 'systems/lancer/assets/icons/repair.svg', onClick: () => /** @type {any} */ (actor.beginStabilizeFlow()), broadcastFn: (_t, a) => /** @type {any} */ (a).beginStabilizeFlow(), onRightClick: ap({ name: 'Stabilize', activation: 'Full', detail: 'To STABILIZE, choose ONE of these two items: \r &bull; Cool your mech (clearing all heat and ending the EXPOSED status); \r &bull; Spend ONE Repair to heal your mech to max HP. \r \n Additionally, choose ONE the following four items: \r &bull; Reload all LOADING weapons on your mech; \r &bull; Clear any burn on your mech; \r &bull; Clear ONE condition from yourself NOT caused by your own systems/talents (etc); \r &bull; Clear ONE condition from an ADJACENT ally NOT caused by their own systems/talents (etc).' }) });
             return this._enrichHoverData(items, { actor, category: 'Actions' });
         };
         return {
-            label: 'Full Action',
-            colLabel: 'Full Action',
-            getItems: () => [{ label: 'Basic', childColLabel: 'Basic', getChildren: basicChildren }, ...this._getActionsByActivation(actor, 'Full', 'Actions')],
+            label: localize('LA.action.full'),
+            colLabel: localize('LA.action.full'),
+            getItems: () => [{ label: 'Basic', text: localize('LA.tokenHud.label.basic'), childColLabel: localize('LA.tokenHud.label.basic'), getChildren: basicChildren }, ...this._getActionsByActivation(actor, 'Full', 'Actions')],
         };
     }
 
@@ -2552,8 +2615,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Reactions',
-            colLabel: 'Reactions',
+            label: localize('LA.tokenHud.label.reactions'),
+            colLabel: localize('LA.tokenHud.label.reactions'),
             getItems: () =>
             {
                 const reactionAvail = hasReactionAvailable(actor);
@@ -2586,8 +2649,8 @@ export class LancerHUD
         const actor = this._actor;
         const ap = a => this._actionPopup(a);
         return {
-            label: 'Protocols',
-            colLabel: 'Protocols',
+            label: localize('LA.tokenHud.label.protocols'),
+            colLabel: localize('LA.tokenHud.label.protocols'),
             getItems: () => this._enrichHoverData([
                 ...this._getActionsByActivation(actor, 'Protocol', 'Actions'),
             ], { actor, category: 'Actions' }),
@@ -2599,8 +2662,8 @@ export class LancerHUD
         const actor = this._actor;
         const showAHIS = getModuleSetting('tah.showAidHandleInteractSqueeze') ?? false;
         return {
-            label: 'Free Actions',
-            colLabel: 'Free Actions',
+            label: localize('LA.tokenHud.label.freeActions'),
+            colLabel: localize('LA.tokenHud.label.freeActions'),
             getItems: () => this._enrichHoverData([
                 ...(showAHIS && actor.type !== 'deployable' ? [this._simpleItem('Squeeze', 'modules/lancer-automations/icons/contract.svg', { name: 'Squeeze', activation: 'Free' }, 'A character may squeeze as a free action, treating themselves as one Size smaller for the purposes of movement. While squeezing, the character is additionally treated as Prone. The character may stop squeezing as a free action while in a space able to accommodate their normal Size.')] : []),
                 ...this._getActionsByActivation(actor, 'Free', 'Actions'),
@@ -2614,12 +2677,12 @@ export class LancerHUD
         const isNpc = actor.type === 'npc';
 
         const statDefs = [
-            { key: 'hull', label: 'Hull' },
-            { key: 'agi',  label: 'Agility' },
-            { key: 'sys',  label: 'Systems' },
-            { key: 'eng',  label: 'Engineering' },
-            { key: 'grit', label: 'Grit' },
-            { key: 'tier', label: 'Tier' },
+            { key: 'hull', label: localize('LA.tokenHud.label.hull') },
+            { key: 'agi',  label: localize('LA.tokenHud.label.agility') },
+            { key: 'sys',  label: localize('LA.tokenHud.label.systems') },
+            { key: 'eng',  label: localize('LA.tokenHud.label.engineering') },
+            { key: 'grit', label: localize('LA.tokenHud.label.grit') },
+            { key: 'tier', label: localize('LA.tokenHud.label.tier') },
         ];
         const statsItems = statDefs
             .filter(stat => actor.system[stat.key] !== undefined)
@@ -2634,14 +2697,14 @@ export class LancerHUD
                 onRightClick: this._actionPopup({ name: stat.label, activation: 'Check', detail: `Roll 1d20 + ${stat.label.toUpperCase()} (${(actor.system[stat.key] >= 0 ? '+' : '') + actor.system[stat.key]}).` }),
             }));
         statsItems.push(/** @type {any} */ ({
-            label: 'Contest',
+            label: localize('LA.tokenHud.label.contest'),
             icon: 'mdi mdi-ab-testing',
             hoverData: { actor, item: null, action: { name: 'Contest' }, category: 'Skills' },
             onClick: () => openHaseContestCard({ tokenA: this._token }),
             onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: 'Contested check between two tokens, each rolling its own stat. Higher total wins.' }),
         }));
         statsItems.push(/** @type {any} */ ({
-            label: 'Force Check',
+            label: localize('LA.tokenHud.label.forceCheck'),
             icon: 'mdi mdi-alert-circle-check-outline',
             hoverData: { actor, item: null, action: { name: 'Force Check' }, category: 'Skills' },
             onClick: () => openForceCheckCard({ tokenA: this._token, saveVs: this._token }),
@@ -2669,7 +2732,7 @@ export class LancerHUD
                         dataKey: 'skill-id',
                         dataValue: skill.id,
                         title: skill.name,
-                        subtitle: `Trigger · +${bonus}`,
+                        subtitle: localizeFormat('LA.tokenHud.detail.triggerBonus', { bonus }),
                         bodyHtml: (skill.system?.description ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('DESCRIPTION', '#1565c0')}<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-top:2px;">${laFormatDetailHtml(skill.system.description)}</div></div>` : '')
                             + (skill.system?.detail ? `<div>${laPopupSectionLabel('DETAIL', '#e65100')}<div style="font-size:0.82em;color:#bbb;line-height:1.4;margin-top:2px;">${laFormatDetailHtml(skill.system.detail)}</div></div>` : ''),
                         theme: 'system',
@@ -2686,7 +2749,7 @@ export class LancerHUD
             }
             // Generic untrained trigger (1d20+0), like alternative sheets' "Other Skill".
             skillItems.push({
-                label: 'Other Skill',
+                label: localize('LA.tokenHud.label.otherSkill'),
                 badge: '+0',
                 badgeColor: '#777',
                 icon: 'systems/lancer/assets/icons/white/skill.svg',
@@ -2696,8 +2759,8 @@ export class LancerHUD
                     cssClass: 'la-hud-popup la-hud-skill-popup',
                     dataKey: 'skill-name',
                     dataValue: 'Other Skill',
-                    title: 'Other Skill',
-                    subtitle: 'Untrained Trigger · +0',
+                    title: localize('LA.tokenHud.label.otherSkill'),
+                    subtitle: localize('LA.tokenHud.detail.untrainedTrigger0'),
                     bodyHtml: '<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Roll a trigger you have no training in: 1d20 + 0. For improvised checks not covered by your pilot skills.</div>',
                     theme: 'system',
                     item: null,
@@ -2710,8 +2773,8 @@ export class LancerHUD
         if (isNpc)
         {
             return {
-                label: 'Skills',
-                colLabel: 'Skills',
+                label: localize('LA.tokenHud.label.skills'),
+                colLabel: localize('LA.tokenHud.label.skills'),
                 icon: 'mdi mdi-tune-vertical',
                 getItems: () => [
                     ...statsItems,
@@ -2720,12 +2783,12 @@ export class LancerHUD
         }
 
         return {
-            label: 'Attributes',
-            colLabel: 'Attributes',
+            label: localize('LA.tokenHud.label.attributes'),
+            colLabel: localize('LA.tokenHud.label.attributes'),
             icon: 'mdi mdi-chart-bar',
             getItems: () => [
-                { label: 'Skills',   childColLabel: 'Skills',   icon: 'mdi mdi-tune-vertical', getChildren: () => statsItems },
-                ...(skillItems.length ? [{ label: 'Triggers', childColLabel: 'Triggers', icon: 'modules/lancer-automations/icons/skills.svg', getChildren: () => skillItems }] : []),
+                { label: localize('LA.tokenHud.label.skills'),   childColLabel: localize('LA.tokenHud.label.skills'),   icon: 'mdi mdi-tune-vertical', getChildren: () => statsItems },
+                ...(skillItems.length ? [{ label: localize('LA.tokenHud.label.triggers'), childColLabel: localize('LA.tokenHud.label.triggers'), icon: 'modules/lancer-automations/icons/skills.svg', getChildren: () => skillItems }] : []),
             ],
         };
     }
@@ -2734,8 +2797,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         const items = [
-            { label: 'Glossary', icon: 'systems/lancer/assets/icons/compendium.svg', isGlossaryPanel: true },
-            { label: 'Effect Manager',
+            { label: localize('LA.tokenHud.label.glossary'), icon: 'systems/lancer/assets/icons/compendium.svg', isGlossaryPanel: true },
+            { label: localize('LA.tokenHud.label.effectManager'),
                 icon: 'mdi mdi-cogs',
                 onClick: () =>
                 {
@@ -2747,7 +2810,7 @@ export class LancerHUD
                 },
                 onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: 'Apply statuses, custom effects and bonuses to tokens.' }),
             },
-            { label: 'Vote',
+            { label: localize('LA.tokenHud.label.vote'),
                 icon: 'modules/lancer-automations/icons/vote.svg',
                 onClick: () =>
                 {
@@ -2759,18 +2822,18 @@ export class LancerHUD
                 },
                 onRightClick: this._actionPopup({ name: 'Vote', activation: 'Tool', detail: 'Start a choice or vote card for the players.' }),
             },
-            { label: 'Contest',
+            { label: localize('LA.tokenHud.label.contest'),
                 icon: 'mdi mdi-ab-testing',
                 onClick: () => openHaseContestCard(),
                 onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: 'Contested check between two tokens, each rolling its own stat. Higher total wins.' }),
             },
-            { label: 'Force Check',
+            { label: localize('LA.tokenHud.label.forceCheck'),
                 icon: 'mdi mdi-alert-circle-check-outline',
                 onClick: () => openForceCheckCard(),
                 onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: 'Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.' }),
             },
         ];
-        items.push({ label: 'Downtime',
+        items.push({ label: localize('LA.tokenHud.label.downtime'),
             icon: 'systems/lancer/assets/icons/white/downtime.svg',
             onClick: async () =>
             {
@@ -2781,7 +2844,7 @@ export class LancerHUD
         });
         if (linked && actor)
         {
-            items.push({ label: 'Reserve',
+            items.push({ label: localize('LA.tokenHud.label.reserve'),
                 icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                 onClick: () =>
                 {
@@ -2792,8 +2855,8 @@ export class LancerHUD
             });
         }
         return {
-            label: 'Utility',
-            colLabel: 'Utility',
+            label: localize('LA.tokenHud.label.utility'),
+            colLabel: localize('LA.tokenHud.label.utility'),
             icon: 'modules/lancer-automations/icons/tinker.svg',
             getItems: () => items,
         };
@@ -2807,7 +2870,7 @@ export class LancerHUD
         const isMechOrNpc = actor?.type === 'mech' || actor?.type === 'npc';
 
         const gameplayItems = [
-            { label: 'Full Repair',
+            { label: localize('LA.tokenHud.label.fullRepair'),
                 icon: 'modules/lancer-automations/icons/auto-repair.svg',
                 onClick: async () =>
                 {
@@ -2819,8 +2882,8 @@ export class LancerHUD
                         return;
                     }
                     const ok = await Dialog.confirm({
-                        title: 'FULL REPAIR',
-                        content: `<p>Fully repair these ${actors.length} units?</p><p style="opacity:0.75;">${actors.map(a => a.name).join(', ')}</p>`,
+                        title: localize('LA.dialogTitle.fullRepair'),
+                        content: localizeFormat('LA.tokenHud.confirmFullRepair', { count: actors.length, names: actors.map(a => a.name).join(', ') }),
                     });
                     if (!ok)
                         return;
@@ -2839,12 +2902,12 @@ export class LancerHUD
                     }
                 },
                 onRightClick: this._actionPopup({ name: 'Full Repair', activation: 'Tool', detail: 'Run a Full Repair on the selected unit(s).' }) },
-            { label: 'Link to Token',
+            { label: localize('LA.tokenHud.label.linkToToken'),
                 icon: 'modules/lancer-automations/icons/pin.svg',
                 onClick: async () =>
                 {
                     const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
-                    const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: 'LINK TO TOKEN', description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
+                    const picked = await api?.chooseToken?.(token, { count: 1, includeSelf: false, title: localize('LA.dialogTitle.linkToToken'), description: `Which token should ${token.name} be linked to?`, icon: 'cci cci-deployable' });
                     if (!picked || !picked.length)
                         return;
                     const target = picked[0];
@@ -2854,7 +2917,7 @@ export class LancerHUD
                 onRightClick: this._actionPopup({ name: 'Link to Token', activation: 'Tool', detail: 'Link this token to an owner token (deployable-style ownership).' }) },
             ...(isMechOrNpc ? [
                 {
-                    label: 'Structure',
+                    label: localize('LA.tokenHud.label.structure'),
                     icon: 'systems/lancer/assets/icons/macro-icons/condition_shredded.svg',
                     onClick: async () =>
                     {
@@ -2864,7 +2927,7 @@ export class LancerHUD
                     onRightClick: this._actionPopup({ name: 'Structure', activation: 'Tool', detail: 'Drop HP to 0 and roll a structure check.' }),
                 },
                 {
-                    label: 'Overheat',
+                    label: localize('LA.tokenHud.label.overheat'),
                     icon: 'systems/lancer/assets/icons/macro-icons/damage_heat.svg',
                     onClick: async () =>
                     {
@@ -2874,18 +2937,18 @@ export class LancerHUD
                     },
                     onRightClick: this._actionPopup({ name: 'Overheat', activation: 'Tool', detail: 'Fill the heat track and roll an overheat check.' }),
                 },
-                { label: 'Suicide',          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }), onRightClick: this._actionPopup({ name: 'Suicide', activation: 'Tool', detail: 'Zero structure, stress and HP.' }) },
-                { label: 'Reactor Explosion', icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token), onRightClick: this._actionPopup({ name: 'Reactor Explosion', activation: 'Tool', detail: 'Detonate the reactor: blast damage around the token.' }) },
+                { label: localize('LA.tokenHud.label.suicide'),          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }), onRightClick: this._actionPopup({ name: 'Suicide', activation: 'Tool', detail: 'Zero structure, stress and HP.' }) },
+                { label: localize('LA.tokenHud.label.reactorExplosion'), icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token), onRightClick: this._actionPopup({ name: 'Reactor Explosion', activation: 'Tool', detail: 'Detonate the reactor: blast damage around the token.' }) },
             ] : []),
             ...(getLAFlag(token.document,'isWreck') ? [
-                { label: 'Resurrect', icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token), onRightClick: this._actionPopup({ name: 'Resurrect', activation: 'Tool', detail: 'Restore this wreck to a live unit.' }) },
+                { label: localize('LA.tokenHud.label.resurrect'), icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token), onRightClick: this._actionPopup({ name: 'Resurrect', activation: 'Tool', detail: 'Restore this wreck to a live unit.' }) },
             ] : []),
             ...(actor?.type === 'npc' ? [
-                { label: 'Recharge', icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor).beginRechargeFlow(), onRightClick: this._actionPopup({ name: 'Recharge', activation: 'Tool', detail: 'Roll the NPC recharge flow for uncharged systems.' }) },
-                { label: 'Reload Weapon', icon: 'mdi mdi-magazine-rifle',       onClick: () => reloadOneWeapon(token), broadcastFn: (targetToken) => reloadOneWeapon(targetToken), onRightClick: this._actionPopup({ name: 'Reload Weapon', activation: 'Tool', detail: 'Reload one Loading weapon.' }) },
+                { label: localize('LA.tokenHud.label.recharge'), icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor).beginRechargeFlow(), onRightClick: this._actionPopup({ name: 'Recharge', activation: 'Tool', detail: 'Roll the NPC recharge flow for uncharged systems.' }) },
+                { label: localize('LA.tokenHud.label.reloadWeapon'), icon: 'mdi mdi-magazine-rifle',       onClick: () => reloadOneWeapon(token), broadcastFn: (targetToken) => reloadOneWeapon(targetToken), onRightClick: this._actionPopup({ name: 'Reload Weapon', activation: 'Tool', detail: 'Reload one Loading weapon.' }) },
             ] : []),
-            { label: 'Generate Scan', icon: 'mdi mdi-qrcode-scan', onClick: () => executeGenerateScan(this._tokens?.length ? this._tokens : [token]), onRightClick: this._actionPopup({ name: 'Generate Scan', activation: 'Tool', detail: 'Create the scan journal for the selected token(s).' }) },
-            { label: 'Effect Manager',
+            { label: localize('LA.tokenHud.label.generateScan'), icon: 'mdi mdi-qrcode-scan', onClick: () => executeGenerateScan(this._tokens?.length ? this._tokens : [token]), onRightClick: this._actionPopup({ name: 'Generate Scan', activation: 'Tool', detail: 'Create the scan journal for the selected token(s).' }) },
+            { label: localize('LA.tokenHud.label.effectManager'),
                 icon: 'mdi mdi-cogs',
                 onClick: () =>
                 {
@@ -2896,7 +2959,7 @@ export class LancerHUD
                         /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.');
                 },
                 onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: 'Apply statuses, custom effects and bonuses to tokens.' }) },
-            { label: 'Reinforcement', icon: 'modules/lancer-automations/icons/rally-the-troops.svg', onClick: () => delayedTokenAppearance(), onRightClick: this._actionPopup({ name: 'Reinforcement', activation: 'Tool', detail: 'Hide selected tokens and reveal them as reinforcements at a target round.' }) },
+            { label: localize('LA.tokenHud.label.reinforcement'), icon: 'modules/lancer-automations/icons/rally-the-troops.svg', onClick: () => delayedTokenAppearance(), onRightClick: this._actionPopup({ name: 'Reinforcement', activation: 'Tool', detail: 'Hide selected tokens and reveal them as reinforcements at a target round.' }) },
             { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', icon: 'systems/lancer/assets/icons/white/status_hidden.svg', onClick: () => token.document.update({ hidden: !token.document.hidden }), onRightClick: this._actionPopup({ name: 'Hide / Reveal Token', activation: 'Tool', detail: 'Toggle this token\'s hidden state.' }) },
         ];
 
@@ -2905,12 +2968,12 @@ export class LancerHUD
 
         const ap = a => this._actionPopup(a);
         const movementItems = [
-            { label: 'Knockback',      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: 'KNOCKBACK', description: 'Place each token at its knockback destination.', urgent: false }), onRightClick: ap({ name: 'Knockback', activation: 'Movement', detail: 'Move tokens to picked destinations as forced movement.' }) },
-            this._lockable({ label: 'Teleport', icon: 'modules/lancer-automations/icons/teleport.svg', onClick: () => executeTeleport(token), broadcastFn: (_token, targetActor) => executeTeleport(targetActor.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Teleport', activation: 'Movement', detail: 'Teleport to a destination within your speed range. Costs speed in movement.' }) }, 'Teleport'),
-            { label: 'Fall', icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token), onRightClick: ap({ name: 'Fall', activation: 'Movement', detail: 'Drop to ground level and take falling damage.' }) },
-            { label: 'Reset History',  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false), onRightClick: ap({ name: 'Reset History', activation: 'Movement', detail: 'Clear this token\'s recorded movement history.' }) },
-            { label: 'Revert Last Movement', icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token), onRightClick: ap({ name: 'Revert Last Movement', activation: 'Movement', detail: 'Move the token back along its last recorded move.' }) },
-            { label: 'Revert All Movements', icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true), onRightClick: ap({ name: 'Revert All Movements', activation: 'Movement', detail: 'Move the token back to where its history started.' }) },
+            { label: localize('LA.tokenHud.label.knockback'),      icon: 'modules/lancer-automations/icons/push.svg', onClick: () => knockBackToken([token], -1, { title: localize('LA.card.knockback'), description: 'Place each token at its knockback destination.', urgent: false }), onRightClick: ap({ name: 'Knockback', activation: 'Movement', detail: 'Move tokens to picked destinations as forced movement.' }) },
+            this._lockable({ label: localize('LA.tokenHud.label.teleport'), icon: 'modules/lancer-automations/icons/teleport.svg', onClick: () => executeTeleport(token), broadcastFn: (_token, targetActor) => executeTeleport(targetActor.getActiveTokens()?.[0]), onRightClick: ap({ name: 'Teleport', activation: 'Movement', detail: 'Teleport to a destination within your speed range. Costs speed in movement.' }) }, 'Teleport'),
+            { label: localize('LA.tokenHud.label.fall'), icon: 'modules/lancer-automations/icons/falling.svg', onClick: () => executeFall(token), onRightClick: ap({ name: 'Fall', activation: 'Movement', detail: 'Drop to ground level and take falling damage.' }) },
+            { label: localize('LA.tokenHud.label.resetHistory'),  icon: 'modules/lancer-automations/icons/trash-can.svg', onClick: () => clearMovementHistory(token, false), onRightClick: ap({ name: 'Reset History', activation: 'Movement', detail: 'Clear this token\'s recorded movement history.' }) },
+            { label: localize('LA.tokenHud.label.revertLastMovement'), icon: 'modules/lancer-automations/icons/anticlockwise-rotation.svg', onClick: () => revertMovement(token), onRightClick: ap({ name: 'Revert Last Movement', activation: 'Movement', detail: 'Move the token back along its last recorded move.' }) },
+            { label: localize('LA.tokenHud.label.revertAllMovements'), icon: 'modules/lancer-automations/icons/backward-time.svg', onClick: () => clearMovementHistory(token, true), onRightClick: ap({ name: 'Revert All Movements', activation: 'Movement', detail: 'Move the token back to where its history started.' }) },
             // Move Cap editable input when cap tracking is on, otherwise just show base speed.
             ...(capEnabled ? [{
                 inputCell: true,
@@ -2969,7 +3032,7 @@ export class LancerHUD
                 cssClass: 'la-hud-popup',
                 dataKey: 'range-breakdown',
                 dataValue: rangeType,
-                title: `${rangeType} Breakdown`,
+                title: localizeFormat('LA.dialogTitle.rangeBreakdown', { type: rangeType }),
                 subtitle: actor.name,
                 bodyHtml,
                 theme: 'system',
@@ -3035,7 +3098,7 @@ export class LancerHUD
                         setAdvancedMeasureState({ movementReachEnabled: false });
                 },
             }] : []),
-            { isSectionLabel: true, label: 'Custom' },
+            { isSectionLabel: true, label: localize('LA.tokenHud.label.custom') },
             {
                 inputCell: true,
                 subtype: 'increment',
@@ -3072,20 +3135,20 @@ export class LancerHUD
         ];
 
         return {
-            label: 'Utility',
-            colLabel: 'Utility',
+            label: localize('LA.tokenHud.label.utility'),
+            colLabel: localize('LA.tokenHud.label.utility'),
             icon: 'modules/lancer-automations/icons/tinker.svg',
             getItems: () => [
-                { label: 'Gameplay',  childColLabel: 'Gameplay',  icon: 'modules/lancer-automations/icons/pawn.svg', getChildren: () => gameplayItems },
-                { label: 'Movement',  childColLabel: 'Movement',  icon: 'mdi mdi-arrow-right-bold-hexagon-outline', getChildren: () => movementItems },
-                ...(rangeItems.length > 0 ? [{ label: 'Measures', childColLabel: 'Measures', icon: 'mdi mdi-ruler-square-compass', getChildren: () => rangeItems }] : []),
-                { label: 'Log', icon: 'modules/lancer-automations/icons/checklist.svg', isLogPanel: true },
-                { label: 'Glossary', icon: 'systems/lancer/assets/icons/compendium.svg', isGlossaryPanel: true },
-                { label: 'Misc',
-                    childColLabel: 'Misc',
+                { label: localize('LA.tokenHud.label.gameplay'),  childColLabel: localize('LA.tokenHud.label.gameplay'),  icon: 'modules/lancer-automations/icons/pawn.svg', getChildren: () => gameplayItems },
+                { label: localize('LA.tokenHud.label.movement'),  childColLabel: localize('LA.tokenHud.label.movement'),  icon: 'mdi mdi-arrow-right-bold-hexagon-outline', getChildren: () => movementItems },
+                ...(rangeItems.length > 0 ? [{ label: localize('LA.tokenHud.label.measures'), childColLabel: localize('LA.tokenHud.label.measures'), icon: 'mdi mdi-ruler-square-compass', getChildren: () => rangeItems }] : []),
+                { label: localize('LA.tokenHud.label.log'), icon: 'modules/lancer-automations/icons/checklist.svg', isLogPanel: true },
+                { label: localize('LA.tokenHud.label.glossary'), icon: 'systems/lancer/assets/icons/compendium.svg', isGlossaryPanel: true },
+                { label: localize('LA.tokenHud.label.misc'),
+                    childColLabel: localize('LA.tokenHud.label.misc'),
                     icon: 'modules/lancer-automations/icons/open-folder.svg',
                     getChildren: () => [
-                        { label: 'Vote',
+                        { label: localize('LA.tokenHud.label.vote'),
                             icon: 'mdi mdi-vote',
                             onClick: () =>
                             {
@@ -3094,28 +3157,28 @@ export class LancerHUD
                                     (ui.notifications).error('Lancer Automations API not found or outdated.');
                             },
                             onRightClick: ap({ name: 'Vote', activation: 'Tool', detail: 'Start a choice or vote card for the players.' }) },
-                        { label: 'Downtime',
+                        { label: localize('LA.tokenHud.label.downtime'),
                             icon: 'systems/lancer/assets/icons/white/downtime.svg',
                             onClick: async () =>
                             {
                                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; await api?.executeDowntime?.();
                             },
                             onRightClick: ap({ name: 'Downtime', activation: 'Tool', detail: 'Open the downtime activities dialog, with rolls and journal logging.' }) },
-                        { label: 'Reserve',
+                        { label: localize('LA.tokenHud.label.reserve'),
                             icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                             onClick: () =>
                             {
                                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; api?.openAddReserveDialog?.(token);
                             },
                             onRightClick: ap({ name: 'Reserve', activation: 'Tool', detail: 'Add a reserve to the pilot.' }) },
-                        { label: 'Rest',
+                        { label: localize('LA.tokenHud.label.rest'),
                             icon: 'modules/lancer-automations/icons/night-sleep.svg',
                             onClick: () =>
                             {
                                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; api?.executeRest?.(token);
                             },
                             onRightClick: ap({ name: 'Rest', activation: 'Tool', detail: 'Open the rest dialog: spend repairs, clear heat and conditions.' }) },
-                        { label: 'Add Extra',
+                        { label: localize('LA.tokenHud.label.addExtra'),
                             icon: 'modules/lancer-automations/icons/files.svg',
                             onClick: () => openExtrasDialog(actor),
                             onRightClick: ap({ name: 'Add Extra', activation: 'Tool', detail: 'Attach extra actions, deployables, or resource bars to the actor.' }) },
@@ -3128,8 +3191,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Systems',
-            colLabel: 'Systems',
+            label: localize('LA.tokenHud.label.systems'),
+            colLabel: localize('LA.tokenHud.label.systems'),
             icon: 'systems/lancer/assets/icons/mech_system.svg',
             getItems: () =>
             {
@@ -3251,7 +3314,7 @@ export class LancerHUD
         if (lids.length)
         {
             if (children.length)
-                children.push({ isSectionLabel: true, label: 'Deployables' });
+                children.push({ isSectionLabel: true, label: localize('LA.tokenHud.label.deployables') });
             for (const lid of lids)
             {
                 const depInfo = getDeployableInfoSync(lid, actor);
@@ -3280,7 +3343,7 @@ export class LancerHUD
         const ammoArr = sys.ammo ?? [];
         if (ammoArr.filter(a => a.name).length)
         {
-            children.push({ isSectionLabel: true, label: 'Ammo' });
+            children.push({ isSectionLabel: true, label: localize('LA.tokenHud.label.ammo') });
             ammoArr.forEach((ammo, idx) =>
             {
                 if (!ammo.name)
@@ -3336,8 +3399,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Frame',
-            colLabel: 'Frame',
+            label: localize('LA.tokenHud.label.frame'),
+            colLabel: localize('LA.tokenHud.label.frame'),
             icon: 'systems/lancer/assets/icons/frame.svg',
             getItems: () =>
             {
@@ -3370,9 +3433,9 @@ export class LancerHUD
                         onClick: () => /** @type {any} */ (frame).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'frame-id', dataValue: frame.id, title: frame.name, subtitle: frameSubtitle, bodyHtml: currentStats + mountsHtml + baseStats, theme: 'frame', item: frame, row }),
                     },
-                    { label: 'Core Power',  childColLabel: 'Core Power',  icon: 'modules/lancer-automations/icons/materials-science.svg', getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
-                    { label: 'Traits',      childColLabel: 'Traits',      icon: 'systems/lancer/assets/icons/trait.svg', getChildren: () => this._frameTraitItems(frame, actor) },
-                    { label: 'Core Bonus',  childColLabel: 'Core Bonus',  icon: 'systems/lancer/assets/icons/core_bonus.svg', getChildren: () => this._coreBonusItems(actor) },
+                    { label: localize('LA.tokenHud.label.corePower'),  childColLabel: localize('LA.tokenHud.label.corePower'),  icon: 'modules/lancer-automations/icons/materials-science.svg', getChildren: () => this._corePowerItems(frame, actor), onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-frame-popup', dataKey: 'core-system', dataValue: frame.id, title: frame.system?.core_system?.name ?? 'Core System', subtitle: frame.name, bodyHtml: laRenderCoreSystemBody(frame.system?.core_system), theme: 'frame', item: frame, row }) },
+                    { label: localize('LA.tokenHud.label.traits'),      childColLabel: localize('LA.tokenHud.label.traits'),      icon: 'systems/lancer/assets/icons/trait.svg', getChildren: () => this._frameTraitItems(frame, actor) },
+                    { label: localize('LA.tokenHud.label.coreBonus'),  childColLabel: localize('LA.tokenHud.label.coreBonus'),  icon: 'systems/lancer/assets/icons/core_bonus.svg', getChildren: () => this._coreBonusItems(actor) },
                 ]);
                 const intLids = [
                     ...(frame.system?.traits ?? []).flatMap((/** @type {any} */ t) => t.integrated ?? []),
@@ -3380,8 +3443,8 @@ export class LancerHUD
                 ];
                 const intDepLids = /** @type {string[]} */ (frame.system?.core_system?.deployables ?? []);
                 if (intLids.length || intDepLids.length)
-                    rows.push({ label: 'Integrated', childColLabel: 'Integrated', icon: 'systems/lancer/assets/icons/system.svg', getChildren: () => this._frameIntegratedItems(frame, actor, intLids, intDepLids) });
-                rows.push({ label: 'Reserves',    childColLabel: 'Reserves',    icon: 'systems/lancer/assets/icons/white/reserve_mech.svg', getChildren: () => this._catReserves({ source: actor.system?.pilot?.value, typeFilter: 'Mech' }).getItems() });
+                    rows.push({ label: localize('LA.tokenHud.label.integrated'), childColLabel: localize('LA.tokenHud.label.integrated'), icon: 'systems/lancer/assets/icons/system.svg', getChildren: () => this._frameIntegratedItems(frame, actor, intLids, intDepLids) });
+                rows.push({ label: localize('LA.tokenHud.label.reserves'),    childColLabel: localize('LA.tokenHud.label.reserves'),    icon: 'systems/lancer/assets/icons/white/reserve_mech.svg', getChildren: () => this._catReserves({ source: actor.system?.pilot?.value, typeFilter: 'Mech' }).getItems() });
                 if (actor?.system?.overcharge_sequence)
                 {
                     const ocSeq = actor.system.overcharge_sequence.split(',').map(s => s.trim());
@@ -3418,7 +3481,7 @@ export class LancerHUD
     }
 
     /** @param {{ source?: any, typeFilter?: string|null, excludeType?: string|null, label?: string }} [opts] */
-    _catReserves({ source, typeFilter = null, excludeType = null, label = 'Reserves' } = {})
+    _catReserves({ source, typeFilter = null, excludeType = null, label = localize('LA.tokenHud.col.reserves') } = {})
     {
         return {
             label,
@@ -3510,7 +3573,7 @@ export class LancerHUD
         const next = (group ?? []).find(/** @type {any} */ copy => !copy.system?.used);
         if (!next)
         {
-            ui.notifications?.info('All copies of this reserve are already used.');
+            ui.notifications?.info(localize('LA.notify.allCopiesOfThisReserveAreAlready'));
             return;
         }
         if (!isAutoConsumeDisabled(group[0], 'reserveUsed'))
@@ -3522,8 +3585,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Pilot',
-            colLabel: 'Pilot',
+            label: localize('LA.tokenHud.label.pilot'),
+            colLabel: localize('LA.tokenHud.label.pilot'),
             icon: 'mdi mdi-card-account-details-star-outline',
             getItems: () =>
             {
@@ -3583,7 +3646,7 @@ export class LancerHUD
                         const reserveRows = this._catReserves({ source: actor, excludeType: 'Mech' }).getItems().filter(/** @type {any} */ r => !r.isSectionLabel);
                         if (!reserveRows.length)
                             return [];
-                        return [{ isSectionLabel: true, label: 'RESERVES' }, ...reserveRows];
+                        return [{ isSectionLabel: true, label: localize('LA.tokenHud.label.reserves') }, ...reserveRows];
                     })(),
                     ...this._bondRows(actor),
                 ];
@@ -3598,7 +3661,7 @@ export class LancerHUD
             return [];
         const bondState = actor.system?.bond_state ?? {};
         return [
-            { isSectionLabel: true, label: 'BOND' },
+            { isSectionLabel: true, label: localize('LA.tokenHud.label.bond') },
             {
                 label: bond.name,
                 icon: 'systems/lancer/assets/icons/bond.svg',
@@ -3630,9 +3693,9 @@ export class LancerHUD
                 onValueChanged: (/** @type {number} */ newVal) => actor.update({ 'system.bond_state.xp.value': newVal }),
             },
             {
-                label: 'Powers',
+                label: localize('LA.tokenHud.label.powers'),
                 icon: 'modules/lancer-automations/icons/spiked-halo.svg',
-                childColLabel: 'Powers',
+                childColLabel: localize('LA.tokenHud.label.powers'),
                 getChildren: () => this._bondPowerItems(bond),
             },
         ];
@@ -3664,10 +3727,10 @@ export class LancerHUD
                 {
                     if (hasUses && uses.value <= 0)
                     {
-                        ui.notifications.warn(`${power.name} has no uses left.`);
+                        ui.notifications.warn(localizeFormat('LA.notify.powerNoUsesLeft', { name: power.name }));
                         return;
                     }
-                    bond.beginBondPowerFlow?.(powerIdx);
+                    executeItemActivation(bond, { path: `powers.${powerIdx}` });
                 },
                 onRightClick: (/** @type {any} */ row) =>
                 {
@@ -3696,7 +3759,7 @@ export class LancerHUD
             });
         });
         rows.push({
-            label: 'Unlock power',
+            label: localize('LA.tokenHud.label.unlockPower'),
             icon: 'mdi mdi-lock-open-plus-outline',
             onClick: () => this._openUnlockPowerDialog(bond),
         });
@@ -3710,7 +3773,7 @@ export class LancerHUD
             .filter(entry => !entry.power.unlocked);
         if (!locked.length)
         {
-            ui.notifications.info('All powers of this bond are unlocked.');
+            ui.notifications.info(localize('LA.notify.allPowersOfThisBondAreUnlocked'));
             return;
         }
         const entriesHtml = locked.map(entry =>
@@ -3729,7 +3792,7 @@ export class LancerHUD
             </div>`;
         }).join('');
         const dialog = new Dialog({
-            title: 'Unlock Power',
+            title: localize('LA.dialogTitle.unlockPower'),
             content: `
                 <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
                     <div class="lancer-dialog-title">UNLOCK POWER</div>
@@ -3737,7 +3800,7 @@ export class LancerHUD
                 </div>
                 <div style="max-height:400px;overflow-y:auto;">${entriesHtml}</div>`,
             buttons: {
-                cancel: { label: '<i class="fas fa-times"></i> Cancel' },
+                cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}` },
             },
             render: (/** @type {any} */ html) =>
             {
@@ -3760,8 +3823,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Gear',
-            colLabel: 'Gear',
+            label: localize('LA.tokenHud.label.gear'),
+            colLabel: localize('LA.tokenHud.label.gear'),
             icon: 'mdi mdi-bag-personal-outline',
             getItems: () =>
             {
@@ -3827,8 +3890,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Class',
-            colLabel: 'Class',
+            label: localize('LA.tokenHud.label.class'),
+            colLabel: localize('LA.tokenHud.label.class'),
             icon: `systems/lancer/assets/icons/npc_tier_${Math.min(3, Math.max(1, /** @type {any} */ (this._actor?.system)?.tier ?? 1))}.svg`,
             getItems: () =>
             {
@@ -3903,8 +3966,8 @@ export class LancerHUD
                             row,
                         }),
                     },
-                    { label: 'Templates', childColLabel: 'Templates', icon: 'systems/lancer/assets/icons/npc_template.svg', getChildren: () => this._npcTemplateItems(actor) },
-                    { label: 'Traits',    childColLabel: 'Traits',    icon: 'systems/lancer/assets/icons/trait.svg', getChildren: () => this._npcTraitItems(actor) },
+                    { label: localize('LA.tokenHud.label.templates'), childColLabel: localize('LA.tokenHud.label.templates'), icon: 'systems/lancer/assets/icons/npc_template.svg', getChildren: () => this._npcTemplateItems(actor) },
+                    { label: localize('LA.tokenHud.label.traits'),    childColLabel: localize('LA.tokenHud.label.traits'),    icon: 'systems/lancer/assets/icons/trait.svg', getChildren: () => this._npcTraitItems(actor) },
                 ];
             },
         };
@@ -3928,7 +3991,7 @@ export class LancerHUD
                     dataKey: 'npctemplate-id',
                     dataValue: tmpl.id,
                     title: tmpl.name,
-                    subtitle: 'Template',
+                    subtitle: localize('LA.tokenHud.detail.template'),
                     bodyHtml: desc,
                     theme: 'frame',
                     item: tmpl,
@@ -3991,8 +4054,8 @@ export class LancerHUD
             tg_free_action:  'Free Action',
         });
         return {
-            label: 'Systems',
-            colLabel: 'Systems',
+            label: localize('LA.tokenHud.label.systems'),
+            colLabel: localize('LA.tokenHud.label.systems'),
             icon: 'systems/lancer/assets/icons/mech_system.svg',
             getItems: () =>
             {
@@ -4015,8 +4078,12 @@ export class LancerHUD
                     const npcSysChildren = () =>
                     {
                         const sysActions = /** @type {any[]} */ (applyActionOverlays(item, sys.actions ?? []));
-                        const extraActions = /** @type {any[]} */ (getLAFlag(item,'extraActions') || [])
-                            .filter(/** @type {any} */ action => linkTierGate(action, actor, item));
+                        const extraActions = /** @type {any[]} */ (gateActions(
+                            /** @type {any[]} */ (getLAFlag(item,'extraActions') || [])
+                                .filter(/** @type {any} */ action => linkTierGate(action, actor, item)),
+                            actor,
+                            item
+                        ));
                         const npcRightClick = (/** @type {any} */ row) =>
                         {
                             const trigger = sys.trigger ? `<div style="font-size:0.8em;color:#888;margin-bottom:4px;"><b>Trigger:</b> ${laFormatDetailHtml(sys.trigger)}</div>` : '';
@@ -4059,7 +4126,7 @@ export class LancerHUD
                         if (depLids.length)
                         {
                             if (baseRows.length)
-                                baseRows.push({ isSectionLabel: true, label: 'Deployables' });
+                                baseRows.push({ isSectionLabel: true, label: localize('LA.tokenHud.label.deployables') });
                             for (const lid of depLids)
                             {
                                 const depInfo = getDeployableInfoSync(lid, actor);
@@ -4087,7 +4154,7 @@ export class LancerHUD
                             const charged = !action.recharge || action.charged !== false;
                             const eaBadge = action.recharge ? rechargeIcon(charged) : null;
                             const eaBadgeColor = action.recharge ? (charged ? '#3a9e6e' : '#c33') : null;
-                            baseRows.push({
+                            baseRows.push(this._applyGate(this._lockable({
                                 label: `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${action.name}`,
                                 badge: eaBadge,
                                 badgeColor: eaBadgeColor,
@@ -4095,7 +4162,7 @@ export class LancerHUD
                                 onClick: () => executeSimpleActivation(actor, { title: action.name, action, detail: action.detail ?? '' }, { item }),
                                 onRightClick: this._actionPopup(action, item),
                                 hoverData: { actor, item, action, category: 'Systems' },
-                            });
+                            }, action.name, action.activation), action));
                         }
                         return baseRows;
                     };
@@ -4157,7 +4224,7 @@ export class LancerHUD
         if (activeSynergies.length)
         {
             const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
-            rows.push({ label: 'ACTIVE', isSectionLabel: true });
+            rows.push({ label: localize('LA.tokenHud.label.active'), isSectionLabel: true });
             activeSynergies.forEach((/** @type {any} */ synergy, /** @type {number} */ idx) =>
             {
                 const detail = String(synergy?.detail ?? '');
@@ -4192,7 +4259,7 @@ export class LancerHUD
             });
         }
 
-        rows.push({ label: 'CHARGE', isSectionLabel: true });
+        rows.push({ label: localize('LA.tokenHud.label.charge'), isSectionLabel: true });
         const self = this;
         rows.push({
             inputCell: true,
@@ -4211,7 +4278,7 @@ export class LancerHUD
 
         if ((passiveName && coreSystem?.passive_effect) || passiveActions.length)
         {
-            rows.push({ label: 'PASSIVE', isSectionLabel: true });
+            rows.push({ label: localize('LA.tokenHud.label.passive'), isSectionLabel: true });
             if (passiveName)
             {
                 rows.push({
@@ -4231,7 +4298,7 @@ export class LancerHUD
 
         if (counters.length)
         {
-            rows.push({ label: 'RESOURCES', isSectionLabel: true });
+            rows.push({ label: localize('LA.tokenHud.label.resources'), isSectionLabel: true });
             counters.forEach((/** @type {any} */ counter, /** @type {number} */ cidx) =>
             {
                 const path = `system.core_system.counters.${cidx}.value`;
@@ -4412,8 +4479,8 @@ export class LancerHUD
     {
         const actor = this._actor;
         return {
-            label: 'Talents',
-            colLabel: 'Talents',
+            label: localize('LA.tokenHud.label.talents'),
+            colLabel: localize('LA.tokenHud.label.talents'),
             icon: 'systems/lancer/assets/icons/white/talent.svg',
             getItems: () =>
             {
@@ -4489,11 +4556,7 @@ export class LancerHUD
                 badge: freq?.badge ?? null,
                 badgeColor: freq?.badgeColor ?? null,
                 icon: this._rankIcon(i + 1),
-                onClick: () =>
-                {
-                    const F = /** @type {any} */ (game).lancer?.flows?.get('TalentFlow'); if (F)
-                        new F(talent, { title: talent.name, rank, lvl: i }).begin();
-                },
+                onClick: () => executeItemActivation(talent, { path: `ranks.${i}` }),
                 childColLabel: rankLabel,
                 getChildren: (actions.length || counters.length) ? () => this._talentRankActionItems(talent.system.ranks[i], talent, i) : undefined,
                 onRightClick: (row) =>
@@ -4539,7 +4602,7 @@ export class LancerHUD
                     }
                     else
                     {
-                        /** @type {any} */ (talent).beginActivationFlow(`system.ranks.${rankIdx}.actions.${actionIdx}`);
+                        executeItemActivation(talent, { path: `ranks.${rankIdx}.actions.${actionIdx}` });
                     }
                 },
                 onRightClick: this._actionPopup(action, talent, null, { subKey: rankSubKey(rankIdx) }),
@@ -4549,7 +4612,7 @@ export class LancerHUD
         if (counters.length)
         {
             if (hasBoth)
-                items.push({ label: 'RESOURCES', isSectionLabel: true });
+                items.push({ label: localize('LA.tokenHud.label.resources'), isSectionLabel: true });
             counters.forEach((counter, cidx) =>
             {
                 const path    = `system.ranks.${rankIdx}.counters.${cidx}.value`;
@@ -4652,7 +4715,7 @@ export class LancerHUD
                         if (item?.sheet)
                             item.sheet.render(true);
                         else
-                            ui.notifications?.warn(`Linked item not found: ${entry.linkedItemUuid}`);
+                            ui.notifications?.warn(localizeFormat('LA.notify.linkedItemNotFound', { uuid: entry.linkedItemUuid }));
                     },
                 } : {}),
             });
@@ -4748,7 +4811,6 @@ export class LancerHUD
         const actor = this._actor;
         const ammoItems = [];
 
-        // Collect all mech systems
         const systems = actor.type === 'mech'
             ? (actor.system?.loadout?.systems ?? []).map(s => s?.value).filter(Boolean)
             : (actor.items?.filter(i => i.type === 'mech_system') ?? []);
@@ -4793,8 +4855,8 @@ export class LancerHUD
         }
 
         return {
-            label: 'Ammo',
-            colLabel: 'Ammo',
+            label: localize('LA.tokenHud.label.ammo'),
+            colLabel: localize('LA.tokenHud.label.ammo'),
             getItems: () => ammoItems.length ? ammoItems : [],
         };
     }
@@ -4803,7 +4865,7 @@ export class LancerHUD
 
     _catStatuses()
     {
-        return { label: 'Statuses', icon: 'systems/lancer/assets/icons/white/accuracy.svg', isStatusPanel: true };
+        return { label: localize('LA.tokenHud.label.statuses'), icon: 'systems/lancer/assets/icons/white/accuracy.svg', isStatusPanel: true };
     }
 
     // MACROS panel (per-client list of Foundry macro shortcuts)
@@ -4811,8 +4873,8 @@ export class LancerHUD
     _catMacros()
     {
         return {
-            label: 'Macros',
-            colLabel: 'Macros',
+            label: localize('LA.tokenHud.label.macros'),
+            colLabel: localize('LA.tokenHud.label.macros'),
             icon: 'mdi mdi-file-code-outline',
             getItems: () => this._buildMacroItems(),
         };
@@ -4874,7 +4936,7 @@ export class LancerHUD
             };
         });
         items.push({
-            label: 'Add macro...',
+            label: localize('LA.tokenHud.label.addMacro'),
             icon: 'fas fa-plus',
             keepOpen: true,
             onClick: () => this._openAddMacroDialog(),
@@ -4907,7 +4969,7 @@ export class LancerHUD
             </div>
             <div class="la-tah-edit" style="margin-top:8px;display:flex;align-items:center;gap:8px;padding:6px;background:var(--la-plate);border:1px solid #cbd6e8;opacity:0.5;pointer-events:none;">
                 <span class="la-tah-edit-icon" title="Click to change icon" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #ccc;background:#fff;flex-shrink:0;"></span>
-                <input type="text" class="la-tah-edit-name" placeholder="(select a macro)" style="flex:1;height:26px;padding:2px 6px;font-size:0.9em;">
+                <input type="text" class="la-tah-edit-name" placeholder="${localize('LA.tokenHud.selectMacro')}" style="flex:1;height:26px;padding:2px 6px;font-size:0.9em;">
                 <label class="la-tah-edit-invert-label" title="Invert SVG (white → black)" style="display:flex;align-items:center;gap:4px;font-size:0.78em;color:#666;opacity:0.4;">
                     <input type="checkbox" class="la-tah-edit-invert" disabled>Invert
                 </label>
@@ -4935,11 +4997,11 @@ export class LancerHUD
             await this._saveMacroList(cur);
         };
         const dlg = new Dialog({
-            title: 'Add Macro',
+            title: localize('LA.dialogTitle.addMacro'),
             content,
             buttons: {
-                add: { label: 'Add', callback: () => addEntry() },
-                cancel: { label: 'Cancel' },
+                add: { label: localize('LA.tokenHud.label.add'), callback: () => addEntry() },
+                cancel: { label: localize('LA.common.cancel') },
             },
             default: 'add',
             render: (html) =>
@@ -5223,7 +5285,7 @@ export class LancerHUD
             const rangeLabel = 'Reach: ' + Object.entries(rangeMap)
                 .map(([type, val]) => `<i class="cci ${RANGE_CCI[type] ?? 'cci-range'}" style="font-size:1.1em;vertical-align:middle;"></i>${val}`)
                 .join(' ');
-            return [{ label: 'RANGE', isSectionLabel: true }, {
+            return [{ label: localize('LA.tokenHud.label.range'), isSectionLabel: true }, {
                 inputCell: true,
                 subtype: 'toggle',
                 name: rangeLabel,
@@ -5254,6 +5316,7 @@ export class LancerHUD
                 defaultActions: [
                     {
                         label: 'FIGHT',
+                        text: localize('LA.tokenHud.label.fight'),
                         favKey: `${weapon.uuid}|FIGHT`,
                         icon: 'modules/lancer-automations/icons/crossed-slashes.svg',
                         onClick: () => executeFight(actor, weapon),
@@ -5376,6 +5439,13 @@ export class LancerHUD
             const subtitleParts = [action.activation ?? ''];
             if (sourceName)
                 subtitleParts.push(sourceType ? `${sourceName} (${sourceType})` : sourceName);
+            else if (action._grant)
+            {
+                const grantorName = resolveGrant(action)?.token?.name ?? null;
+                const grantLabel = action._grant.label ?? null;
+                if (grantorName || grantLabel)
+                    subtitleParts.push(grantorName && grantLabel ? `${grantorName} (${grantLabel})` : (grantorName ?? grantLabel));
+            }
             const theme = themeOverride ?? activationTheme(action.activation);
             const sourceItem = typeof source === 'string' ? null : source;
             const actorForExtra = this._actor;
@@ -5423,9 +5493,9 @@ export class LancerHUD
                 status.badgeColor = charged ? '#3a9e6e' : '#c33';
             }
             const displayName = actionDisplayName(sourceItem, action);
-            return this._lockable({
+            return this._applyGate(this._lockable({
                 label: status.destroyed ? this._destroyedLabel(displayName)
-                    : ((action._sourceItemId || action._addedViaExtrasUI) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${displayName}` : displayName),
+                    : ((action._sourceItemId || action._addedViaExtrasUI || action._isExtra) ? `<span style="color:#e8a030;font-size:0.7em;vertical-align:middle;">●</span> ${displayName}` : displayName),
                 badge: status.badge ?? null,
                 badgeColor: status.badgeColor ?? null,
                 icon: _coreActive ? 'systems/lancer/assets/icons/corepower.svg' : (action.icon ?? getActivationIcon(action) ?? sourceItem?.img ?? null),
@@ -5479,8 +5549,8 @@ export class LancerHUD
                         else
                         {
                             const ri = rankIdx ?? 0;
-                            const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ a => a.name === action.name);
-                            si.beginActivationFlow(`system.ranks.${ri}.actions.${Math.max(ai, 0)}`);
+                            const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ candidate => candidate.name === action.name);
+                            executeItemActivation(si, { path: `ranks.${ri}.actions.${Math.max(ai, 0)}` });
                         }
                     }
                     else
@@ -5532,7 +5602,7 @@ export class LancerHUD
                             {
                                 const ri = rankIdx ?? 0;
                                 const ai = (equiv.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ ac => ac.name === action.name);
-                                equiv.beginActivationFlow(`system.ranks.${ri}.actions.${ai >= 0 ? ai : 0}`);
+                                executeItemActivation(equiv, { path: `ranks.${ri}.actions.${ai >= 0 ? ai : 0}` });
                             }
                         }
                     }
@@ -5544,7 +5614,7 @@ export class LancerHUD
                 },
                 onRightClick: this._actionPopup(action, sourceItem, null, talentSubKey ? { subKey: talentSubKey } : null),
                 hoverData: { actor, item: sourceItem ?? null, action, category },
-            }, displayName, activationType);
+            }, displayName, activationType), action);
         });
     }
 
@@ -5829,14 +5899,16 @@ export class LancerHUD
         });
         this._kbFocusRow(parentDepth, bestIdx);
     }
-    _kbResultsLabel()
+    // Which column 2 is showing. Read from data-col, not the header text: the text is
+    // translated, so comparing it would tie navigation to the active language.
+    _kbResultsKey()
     {
-        return this._c2 && this._c2.is(':visible') ? this._c2.find('.la-hud-col-label').text() : '';
+        return this._c2 && this._c2.is(':visible') ? (this._c2.find('.la-hud-col-label').attr('data-col') ?? '') : '';
     }
     _kbInResults()
     {
-        const label = this._kbResultsLabel();
-        return this._kbCol === 2 && (label === 'Favorites' || label === 'Results');
+        const col = this._kbResultsKey();
+        return this._kbCol === 2 && (col === 'favorites' || col === 'results');
     }
     // Above the top of the tree: an open search wins, then open results/favorites, else open favorites.
     _kbTopJump()
@@ -5848,8 +5920,8 @@ export class LancerHUD
             this._kbRestore(originRow);
             this._clearC1Active?.();
         };
-        let label = this._kbResultsLabel();
-        if (label !== 'Results' && this._searchBar && this._searchBar.is(':visible'))
+        let col = this._kbResultsKey();
+        if (col !== 'results' && this._searchBar && this._searchBar.is(':visible'))
         {
             if (!String(this._searchBar.val()).trim())
             {
@@ -5859,9 +5931,9 @@ export class LancerHUD
                 return true;
             }
             this._searchBar.trigger('input');
-            label = this._kbResultsLabel();
+            col = this._kbResultsKey();
         }
-        if (label !== 'Favorites' && label !== 'Results')
+        if (col !== 'favorites' && col !== 'results')
         {
             if (!this._toggleFavorites)
                 return false;
@@ -5879,7 +5951,7 @@ export class LancerHUD
     // Leaving favorites / search results: close favorites and hand the cursor back to the first category.
     _kbExitResults()
     {
-        if (this._kbResultsLabel() === 'Favorites')
+        if (this._kbResultsKey() === 'favorites')
             this._toggleFavorites?.();
         this._kbFocusRow(1, 0);
     }
@@ -5993,8 +6065,8 @@ export class LancerHUD
         if (!this._kbEnsureFocus())
         {
             // Fresh cursor with favorites or search results already open: enter that column first.
-            const label = this._kbResultsLabel();
-            if ((label === 'Favorites' || label === 'Results') && this._kbRows(2).length)
+            const col = this._kbResultsKey();
+            if ((col === 'favorites' || col === 'results') && this._kbRows(2).length)
                 this._kbFocusRow(2, 0);
             else
                 this._kbFocusRow(this._kbCol, this._kbIdx);

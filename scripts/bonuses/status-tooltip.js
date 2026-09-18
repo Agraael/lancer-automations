@@ -4,6 +4,7 @@ import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './gene
 import { linkedBonusConditionLines } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 import { effectStack } from './flagged-effects.js';
+import { localize } from '../tools/string-utils.js';
 
 /**
  * @typedef {Object} StatusTooltipData
@@ -121,8 +122,10 @@ export function bonusText(bonus, actor = null, uses = getBonusUsesInfo(actor, bo
 /** Effect description, falling back to the status config it carries. */
 export function descriptionHtml(effect)
 {
+    // Foundry copies the CONFIG description onto the effect when it is applied, so an
+    // applied effect carries whatever CONFIG held, key included.
     if (effect?.description)
-        return effect.description;
+        return localize(effect.description);
     for (const id of effect?.statuses ?? [])
     {
         const config = CONFIG.statusEffects.find(entry => entry.id === id);

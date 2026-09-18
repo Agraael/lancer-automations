@@ -12,6 +12,7 @@ import {
     setConsumeOn,
 } from './extra-config.js';
 import { itemActionSubs, detectHitGatedScopes } from '../combat/per-frequency-tags.js';
+import { localize } from '../tools/string-utils.js';
 import { getExtraDeployableOpts, setExtraDeployableOpts, getDeployableInfoSync, isPrimaryActionHidden, setHidePrimaryAction } from './deployables.js';
 import { tierGateControl, bindTierGate, tierGateApplies } from './tier-gate.js';
 
@@ -148,10 +149,10 @@ export function openExtraConfigDialog(item)
     };
 
     const dlg = new Dialog({
-        title: 'Extra Config',
+        title: localize('LA.dialogTitle.extraConfig'),
         content: `<div class="la-ec-body">${renderContent()}</div>`,
         buttons: {
-            close: { label: 'Close' },
+            close: { label: localize('LA.common.close') },
         },
         default: 'close',
         render: (html) =>

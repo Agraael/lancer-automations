@@ -5,6 +5,7 @@ import { getSettingEnabled } from '../setup/settings-register.js';
 import { drawDashedEdges } from '../interactive/canvas-helpers.js';
 import { canShareTools, canSeeToolsFrom } from '../interactive/presence.js';
 import { thtApi } from '../movement/movement-utils.js';
+import { laTokenGameplayHeight } from '../tools/token-height.js';
 import { getTerrainTypeMap } from '../movement/cost-rules.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -511,12 +512,7 @@ function _drawCutRay(gfx, pointA, pointB, blockPoint)
 function _zoneHeight(ref, eyeHeight)
 {
     if (ref instanceof foundry.canvas.placeables.Token)
-    {
-        const doc = ref.document;
-        const size = Number(ref.actor?.system?.size);
-        const vertical = (Number.isFinite(size) && size > 0) ? size : (Number(doc?.width) || 1);
-        return (doc?.elevation ?? 0) + vertical;
-    }
+        return (ref.document?.elevation ?? 0) + laTokenGameplayHeight(ref.document);
     return eyeHeight - 0.1;
 }
 
@@ -679,8 +675,8 @@ function _wrapThtHover()
 export function initSightlines()
 {
     game.settings.register(MODULE_ID, SETTING_ATTACK_HOVER, {
-        name: 'Replace the THT ruler on attack hover',
-        hint: 'Hovering a target on an attack card draws Lancer line of sight instead of THT\'s ruler.',
+        name: 'LA.settings.lancerLosAttackHover.name',
+        hint: 'LA.settings.lancerLosAttackHover.hint',
         scope: 'world',
         config: false,
         type: Boolean,

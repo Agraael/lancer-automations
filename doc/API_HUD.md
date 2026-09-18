@@ -34,17 +34,18 @@ api.getLinkedActions(target)                      // → Object[] (same function
 <br>
 
 ```js
-await api.addExtraActions(target, actions)        // add to Item, Token, or Actor
-await api.removeExtraActions(target, filter?)     // string name, predicate, or null (clear all)
+await api.addExtraActions(target, actions, opts?)  // add to Item, Token, or Actor
+await api.removeExtraActions(target, filter?)      // string name, predicate, or null (clear all)
 ```
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Item\|Token\|Actor` | Item stores on itself. Token/Actor stores on the actor |
 | <kbd>actions</kbd> | `ExtraAction\|ExtraAction[]` | One action or an array |
+| <kbd>opts.grant</kbd> | `ActionGrant` | Stamped as `_grant` on every entry that carries none of its own. See [Granted actions](#granted-actions) |
 | <kbd>filter</kbd> | `Function\|string\|string[]\|null` | Predicate, name, array of names, or null (clear all) |
 
-`addExtraActions` skips any entry whose `name` already exists on the target, so an `onInit` that adds the same action every time is idempotent and stored charge state survives.
+`addExtraActions` skips any entry whose `name` **and grantor** already exist on the target, so an `onInit` that adds the same action every time is idempotent and stored charge state survives. Two different grantors of the same action name stay separate entries, each revocable on its own.
 
 **`ExtraAction` shape** (`LancerAction` + extras):
 
@@ -56,9 +57,10 @@ await api.removeExtraActions(target, filter?)     // string name, predicate, or 
 | `lid`, `cost`, `heat_cost`, `frequency`, `init`, `trigger`, `terse` | various | Standard `LancerAction` fields |
 | `tech_attack` | `boolean` | Routes click through `beginTechAttackFlow` |
 | `damage`, `range` | `Array<{val,type}>` | Same shape as system actions. Consumed in combat mode |
-| `mech`, `pilot` | `boolean` | Visibility gates |
 | `tags` | `Array<{lid,val}>` | Standard Lancer tags. Weapon tags (`tg_smart` etc.) coexist with consumable tags |
 | `icon` | `string` | TAH icon override (path or FontAwesome class) |
+| `condition` | `(actor, action, item) => string\|boolean` | Runtime gate, see [Conditional actions](#conditional-actions) |
+| `_grant` | `ActionGrant` | Grantor stamp, see [Granted actions](#granted-actions). Set it through `opts.grant`, not by hand |
 | `recharge`, `charged` | `number`, `boolean` | Charge state for `tg_recharge` actions |
 | `loaded` | `boolean` | Charge state for `tg_loading` actions |
 | `uses` | `{value,max}` | Charge state for `tg_limited` actions |
@@ -83,6 +85,76 @@ await api.addExtraActions(myItem, { name: "Suppressive Fire", activation: "Quick
 await api.removeExtraActions(myToken, "Custom Strike");
 await api.addExtraActions(actor, { name: "Plasma Lance", activation: "Quick", laCombat: "attack",
   tags: [{ lid: "tg_smart" }], damage: [{ val: "2d6", type: "Energy" }], range: [{ type: "Range", val: 10 }] });
+```
+
+</details>
+
+<details id="conditional-actions">
+<summary><b>Conditional actions</b> - the <code>condition</code> gate</summary>
+
+<br>
+
+```js
+condition: (actor, action, item) => 'hidden' | 'locked' | 'disabled' | 'visible'
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>actor</kbd> | `Actor\|null` | The holder |
+| <kbd>action</kbd> | `any` | The stored entry, `_grant` included |
+| <kbd>item</kbd> | `Item\|null` | Holding item, `null` when actor-held |
+
+| Return | Row |
+|:-------|:----|
+| `'hidden'` / `false` | not shown |
+| `'locked'` | grey, same as [`lockActorAction`](#lockActorAction) |
+| `'disabled'` | yellow, same as [`disableActorAction`](#disableActorAction) |
+| `'visible'` / anything else | normal |
+
+Runs once per row each time the HUD is built, and must be synchronous. If it throws, the error is logged and the row shows as normal.
+
+Saved as `@@fn:` text and rebuilt when read, so it cannot use variables from outside itself. Read what it needs from `actor`, `action` and `item`.
+
+</details>
+
+<details id="granted-actions">
+<summary><b><code>resolveGrant</code></b> → <code>{ token, actor, item } | null</code><br><b><code>findGrantedAction</code></b> → <code>{ action, token, actor, item } | null</code><br><b><code>isGrantStale</code></b> → <code>boolean</code><br><b><code>sweepStaleGrants</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+api.resolveGrant(actionOrGrant)
+api.findGrantedAction(holder, name)
+api.isGrantStale(action)
+await api.sweepStaleGrants({ tokenId, itemId })
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>actionOrGrant</kbd> | `any` | An action carrying `_grant`, or a grant on its own |
+| <kbd>holder</kbd> | `Item\|Token\|Actor` | Whose sheet carries the action |
+| <kbd>name</kbd> | `string` | The action's name |
+| <kbd>action</kbd> | `any` | The stored entry, for `isGrantStale` |
+| <kbd>tokenId</kbd> / <kbd>itemId</kbd> | `string\|null` | What `sweepStaleGrants` removes grants for |
+
+`opts.grant` on [`addExtraActions`](#addExtraActions) marks an action with who gave it.
+
+**`ActionGrant`**
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| <kbd>tokenId</kbd> | `string` | Token that gave the action. Used to take it back |
+| <kbd>actorUuid</kbd> | `string` | Actor that gave it |
+| <kbd>itemId</kbd> | `string` | Item that gave it |
+| <kbd>sceneId</kbd> | `string\|null` | Set from the current scene when absent |
+| <kbd>label</kbd> | `string` | Text for display |
+
+`resolveGrant` takes an action carrying `_grant`, or a grant on its own. `findGrantedAction` finds the action on the holder by name first.
+
+`isGrantStale` is checked when a row is read. `sweepStaleGrants` deletes the entries, and runs on the GM client on `deleteToken` and `deleteItem`. Use [`condition`](#conditional-actions) for range, adjacency and resource checks.
+
+```js
+await api.removeExtraActions(ally.actor, entry => entry._grant?.tokenId === bastion.id);
 ```
 
 </details>

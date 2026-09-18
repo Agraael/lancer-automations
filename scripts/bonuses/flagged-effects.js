@@ -10,6 +10,7 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { hasExecutorGM, isExecutorGM } from '../tools/misc-tools.js';
 import { playStatusAddedFX } from '../fx/actionFX.js';
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
 function log(...args)
 {
     console.log("lancer-automations |", ...args);
@@ -186,7 +187,7 @@ export async function pushEffect(targetID, effect, duration, note, originID)
     if (!canActDirectly && !hasExecutorGM())
     {
         log('There is no active GM.');
-        return ui.notifications.error('There must be an active GM for this to work.');
+        return ui.notifications.error(localize('LA.notify.thereMustBeAnActiveGmFor'));
     }
     if (canActDirectly)
     {
@@ -413,7 +414,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         if (!statusEffect)
         {
             if (!isAdditionalStatusUnavailable(effectName))
-                ui.notifications.error(`Effect ${effectName} not found`);
+                ui.notifications.error(localizeFormat('LA.notify.effectNotFound', { name: effectName }));
             return;
         }
 
@@ -459,7 +460,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             }
 
             await existingEffect.update(/** @type {any} */ (updateData));
-            ui.notifications.info(`Increased stack of ${statusEffect.name} on ${target.name} to ${newStack}.`);
+            ui.notifications.info(localizeFormat('LA.notify.increasedStack', { effect: statusEffect.name, target: target.name, stack: newStack }));
             return;
         }
 
@@ -596,7 +597,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
 
     if (!effectNames || effectsToApply.length === 0)
     {
-        ui.notifications.error('No effect name(s) specified!');
+        ui.notifications.error(localize('LA.notify.noEffectNameSSpecified'));
         return [];
     }
 
@@ -608,7 +609,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
     if (hasLimitedDuration && !game.combat?.started)
     {
         const names = effectsToApply.map(effect => typeof effect === 'string' ? effect : effect?.name).filter(Boolean).join(', ');
-        ui.notifications.warn(`Out of combat: ${names} duration will not tick.`);
+        ui.notifications.warn(localizeFormat('LA.notify.outOfCombatDuration', { names }));
     }
 
     const validTokens = [];
@@ -706,17 +707,17 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
             if (checkEffectCallback && hasEffect)
             {
                 // Custom callback blocking
-                ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
+                ui.notifications.warn(localizeFormat('LA.notify.alreadyHasEffect', { name: token.name, effect: effectNameForLog.split('.').pop() }));
             }
             else if ((extraOptions?.consumption?.groupId || extraOptions?.linkedBonusId) && hasEffect)
             {
                 // Groups/Bonuses check blocking
-                ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()} (Group/Bonus conflict)!`);
+                ui.notifications.warn(localizeFormat('LA.notify.alreadyHasEffectConflict', { name: token.name, effect: effectNameForLog.split('.').pop() }));
             }
             else if (hasEffect)
             {
                 // Standard blocking (no stack allowed)
-                ui.notifications.warn(`${token.name} already has ${effectNameForLog.split('.').pop()}!`);
+                ui.notifications.warn(localizeFormat('LA.notify.alreadyHasEffect', { name: token.name, effect: effectNameForLog.split('.').pop() }));
             }
             else
                 effectsToApplyToToken.push(resolvedEffectData);
@@ -835,7 +836,7 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
         if (!statusEffect)
         {
             if (!isAdditionalStatusUnavailable(effectName))
-                ui.notifications.error(`Effect ${effectName} not found`);
+                ui.notifications.error(localizeFormat('LA.notify.effectNotFound', { name: effectName }));
             return null;
         }
         effectData = {
@@ -1322,7 +1323,7 @@ export async function removeEffectsByNameFromTokens(options = {})
 
     if (!effectNames || effectsToRemove.length === 0)
     {
-        ui.notifications.error('No effect name(s) specified for removal!');
+        ui.notifications.error(localize('LA.notify.noEffectNameSSpecifiedForRemoval'));
         return [];
     }
 
@@ -1716,9 +1717,9 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
 export async function deleteAllEffects(tokens)
 {
     if (!tokens || tokens.length === 0)
-        return ui.notifications.error('No tokens provided for effect removal!');
+        return ui.notifications.error(localize('LA.notify.noTokensProvidedForEffectRemoval'));
 
-    ui.notifications.info(`Removing all effects from ${tokens.length} tokens...`);
+    ui.notifications.info(localizeFormat('LA.notify.removingAllEffects', { count: tokens.length }));
 
     for (const token of tokens)
     {

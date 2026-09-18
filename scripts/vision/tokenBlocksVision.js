@@ -5,7 +5,9 @@ import { invalidateLosCaches } from './lancerDetectionModes.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { laTokenHeight } from '../tools/token-height.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
 const FLAG_KEY = 'blocksLineOfSight';
 const LA_ONLY_FLAG_KEY = 'blocksLaLosOnly';
 const EDGE_PREFIX = 'la-block-los';
@@ -74,21 +76,11 @@ function _removeEdges(token)
 function _getTokenElevationBounds(token)
 {
     const doc = token.document ?? token;
-    const grid = canvas?.grid?.distance ?? 1;
     const elevation = doc.elevation ?? 0;
 
     let losTotal = token.losHeight;
     if (typeof losTotal !== 'number')
-    {
-        const flagHeight = doc.flags?.['wall-height']?.tokenHeight;
-        if (flagHeight && flagHeight > 0)
-            losTotal = elevation + flagHeight;
-        else
-        {
-            const size = token.actor?.system?.size;
-            losTotal = elevation + ((size && size > 0) ? size * grid : grid);
-        }
-    }
+        losTotal = elevation + laTokenHeight(doc);
 
     // Sit 0.1 below LOS height so same-height tokens peek above.
     const top = Math.max(elevation + 0.01, losTotal - 0.1);
@@ -172,7 +164,7 @@ function _refreshToken(token)
     _removeEdges(token);
     _installEdges(token);
     invalidateLosCaches();
-    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
+    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
 }
 
 function _refreshAll()
@@ -185,7 +177,7 @@ function _refreshAll()
         _installEdges(token);
     }
     invalidateLosCaches();
-    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
+    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
 }
 
 /** Rebuild every token's blocker edges, for LA LOS mode changes. */
@@ -206,13 +198,13 @@ function _onRenderTokenConfig(app, html)
     const block = `
         <hr/>
         <div class="form-group">
-            <label data-tooltip="Token blocks line of sight through its bounding box. The Bulwark status enables this automatically while active.">Blocks Line of Sight</label>
+            <label data-tooltip="${localize('LA.vision.blocksLosTip')}">${localize('LA.vision.blocksLos')}</label>
             <div class="form-fields">
                 <input type="checkbox" name="flags.${MODULE_ID}.${FLAG_KEY}" ${checked ? 'checked' : ''}>
             </div>
         </div>
         <div class="form-group">
-            <label data-tooltip="Blocks Lancer line of sight, not Foundry vision.">Blocks LA Line of Sight Only</label>
+            <label data-tooltip="${localize('LA.vision.blocksLaLosOnlyTip')}">${localize('LA.vision.blocksLaLosOnly')}</label>
             <div class="form-fields">
                 <input type="checkbox" name="flags.${MODULE_ID}.${LA_ONLY_FLAG_KEY}" ${laOnlyChecked ? 'checked' : ''}>
             </div>
@@ -225,8 +217,8 @@ function _onRenderTokenConfig(app, html)
 export function initTokenBlocksVision()
 {
     game.settings.register(MODULE_ID, SETTING_BULWARK_BLOCKS, {
-        name: 'Bulwark blocks line of sight',
-        hint: 'Tokens with the Bulwark status block line of sight.',
+        name: 'LA.settings.bulwarkBlocksLineOfSight.name',
+        hint: 'LA.settings.bulwarkBlocksLineOfSight.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -247,7 +239,7 @@ export function initTokenBlocksVision()
     {
         _removeEdges({ id: tokenDoc.id });
         invalidateLosCaches();
-        canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true }, true);
+        canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
     });
 
     Hooks.on('updateToken', (tokenDoc, change) =>

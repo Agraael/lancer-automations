@@ -117,6 +117,14 @@ When both could see a target, **Sensors win**. Both are limited to combat out of
 
 A per-token **Detection Visual** (Token Config **L.A** tab) sets how a token reads: **Default**, **Simple Object**, **Visible**, or **Ignore** - any non-default also turns Sensors off for it.
 
+**Battlefield Awareness: style** (`lancerAwarenessStyle`) sets how much of the token the overlay covers:
+
+- **Translucent** - silhouette at partial opacity, the default.
+- **Silhouette** - solid black body.
+- **Outline only** - contour and sweep, no body. A contact outside your vision shows nothing inside it.
+
+The sweep rides the contour in every style. Per-token **Detection Visual** still wins over it.
+
 **`basicSightTo999`** gives new tokens full basic sight, and **Refresh Tokens** re-applies the modes across scenes and actors.
 
 <br clear="right"/>

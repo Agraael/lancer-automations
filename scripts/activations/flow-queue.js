@@ -41,16 +41,19 @@ let innerChain = Promise.resolve();
 // Number of queued flows currently executing (one per active chain). Used to
 // derive the "waiting" count for the indicator: total - active.
 let activeCount = 0;
+let _lastQueuedState = null;
 
-function _queueOn(getChain, setChain, fn, label)
+function _queueOn(getChain, setChain, fn, label, state = null)
 {
     const wasIdle = queueLabels.length === 0;
+    const prevState = _lastQueuedState;
+    _lastQueuedState = state;
     queueLabels.push({ label, queuedAt: _hhmmss() });
     _renderIndicator();
     const next = getChain().then(async () =>
     {
-        if (!wasIdle)
-            await new Promise(r => setTimeout(r, INTER_FLOW_DELAY_MS));
+        if (!wasIdle && (!state || state !== prevState))
+            await new Promise(resolve => setTimeout(resolve, INTER_FLOW_DELAY_MS));
         activeCount++;
         _renderIndicator();
         try
@@ -74,19 +77,19 @@ function _queueOn(getChain, setChain, fn, label)
     return next;
 }
 
-export function queue(fn, label = 'Flow')
+export function queue(fn, label = 'Flow', state = null)
 {
     if (_flowBodyDepth > 0)
     {
-        return _queueOn(() => innerChain, c =>
+        return _queueOn(() => innerChain, updated =>
         {
-            innerChain = c;
-        }, fn, label);
+            innerChain = updated;
+        }, fn, label, state);
     }
-    return _queueOn(() => chain, c =>
+    return _queueOn(() => chain, updated =>
     {
-        chain = c;
-    }, fn, label);
+        chain = updated;
+    }, fn, label, state);
 }
 
 export function _flowQueueDebug()
@@ -192,11 +195,15 @@ function _injectStyles()
     document.head.appendChild(style);
 }
 
-// Lancer flow steps that open the .lancer-hud roll card. Only these get queued.
+// Lancer flow steps that open the .lancer-hud roll card.
 const HUD_STEPS_TO_QUEUE = [
     'showAttackHUD',
     'showDamageHUD',
     'showStatRollHUD',
+];
+
+const PRE_HUD_STEPS_TO_QUEUE = [
+    'setDamageTargets',
 ];
 
 export function initFlowQueue()
@@ -204,18 +211,20 @@ export function initFlowQueue()
     const flowSteps = game.lancer?.flowSteps;
     if (!flowSteps)
         return;
-    for (const stepName of HUD_STEPS_TO_QUEUE)
+    for (const stepName of [...HUD_STEPS_TO_QUEUE, ...PRE_HUD_STEPS_TO_QUEUE])
     {
         const original = flowSteps.get(stepName);
         if (!original)
             continue;
+        const isHud = HUD_STEPS_TO_QUEUE.includes(stepName);
         flowSteps.set(stepName, async function (state, options)
         {
             return queue(() =>
             {
-                playRollHudFx(stepName, state);
+                if (isHud)
+                    playRollHudFx(stepName, state);
                 return original(state, options);
-            }, _hudLabel(stepName, state));
+            }, _hudLabel(stepName, state), state);
         });
     }
 }

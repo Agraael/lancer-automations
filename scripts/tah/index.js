@@ -73,8 +73,8 @@ function _scheduleTahZUpdate()
 Hooks.on('init', () =>
 {
     game.settings.register(MODULE_ID, SETTING, {
-        name: 'Token Action HUD',
-        hint: 'Show a cascading action HUD when a token is selected. Requires reload.',
+        name: 'LA.settings.tahEnabled.name',
+        hint: 'LA.settings.tahEnabled.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -87,8 +87,8 @@ Hooks.on('init', () =>
         },
     });
     game.settings.register(MODULE_ID, SETTING_ABOVE_SHEETS, {
-        name: 'TAH Above Actor Sheets',
-        hint: 'Keep the TAH on top of open actor sheets.',
+        name: 'LA.settings.tah.aboveActorSheets.name',
+        hint: 'LA.settings.tah.aboveActorSheets.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -101,8 +101,8 @@ Hooks.on('init', () =>
     Hooks.on('closeActorSheetV2', _scheduleTahZUpdate);
     document.addEventListener('mousedown', _scheduleTahZUpdate, { capture: true });
     game.keybindings.register(MODULE_ID, 'tah.toggleSearch', {
-        name: 'TAH: Toggle Search',
-        hint: 'Open or close the Token Action HUD search bar.',
+        name: 'LA.keybindings.tah.toggleSearch.name',
+        hint: 'LA.keybindings.tah.toggleSearch.hint',
         editable: [{ key: 'KeyF', modifiers: ['Shift'] }],
         onDown: () =>
         {
@@ -115,8 +115,8 @@ Hooks.on('init', () =>
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
     game.keybindings.register(MODULE_ID, 'tah.toggleFavorites', {
-        name: 'TAH: Toggle Favorites',
-        hint: 'Open or close the Token Action HUD favorites column.',
+        name: 'LA.keybindings.tah.toggleFavorites.name',
+        hint: 'LA.keybindings.tah.toggleFavorites.hint',
         editable: [{ key: 'KeyX', modifiers: ['Shift'] }],
         onDown: () =>
         {
@@ -129,8 +129,8 @@ Hooks.on('init', () =>
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
     game.keybindings.register(MODULE_ID, 'tah.toggleStatuses', {
-        name: 'TAH: Toggle Statuses',
-        hint: 'Open or close the Token Action HUD statuses panel.',
+        name: 'LA.keybindings.tah.toggleStatuses.name',
+        hint: 'LA.keybindings.tah.toggleStatuses.hint',
         editable: [{ key: 'KeyZ', modifiers: ['Shift'] }],
         onDown: () =>
         {
@@ -143,8 +143,8 @@ Hooks.on('init', () =>
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
     game.settings.register(MODULE_ID, 'tah.clickToOpen', {
-        name: 'Click to Open',
-        hint: 'Open categories on click instead of hover.',
+        name: 'LA.settings.tah.clickToOpen.name',
+        hint: 'LA.settings.tah.clickToOpen.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -169,7 +169,7 @@ Hooks.on('init', () =>
         },
     });
     game.settings.register(MODULE_ID, 'tah.narrativeLinkedActorUuid', {
-        name: 'Narrative Linked Actor',
+        name: 'LA.settings.tah.narrativeLinkedActorUuid.name',
         scope: 'client',
         config: false,
         type: String,
@@ -182,8 +182,8 @@ Hooks.on('init', () =>
         default: true,
     });
     game.settings.register(MODULE_ID, 'tah.hoverCloseDelay', {
-        name: 'Hover Close Delay (seconds)',
-        hint: 'How long the HUD stays open after the mouse leaves.',
+        name: 'LA.settings.tah.hoverCloseDelay.name',
+        hint: 'LA.settings.tah.hoverCloseDelay.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -191,16 +191,16 @@ Hooks.on('init', () =>
         range: { min: 0, max: 3, step: 0.5 },
     });
     game.settings.register(MODULE_ID, 'tah.keyboardNav', {
-        name: 'Keyboard Navigation',
-        hint: 'Move around the HUD with Shift+WASD, Shift+E to click, Shift+Q to right-click.',
+        name: 'LA.settings.tah.keyboardNav.name',
+        hint: 'LA.settings.tah.keyboardNav.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID, 'tah.keyboardNavResetDelay', {
-        name: 'Keyboard Nav Reset Delay (seconds)',
-        hint: 'How long the keyboard cursor stays after the last Shift+WASD key.',
+        name: 'LA.settings.tah.keyboardNavResetDelay.name',
+        hint: 'LA.settings.tah.keyboardNavResetDelay.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -208,16 +208,16 @@ Hooks.on('init', () =>
         range: { min: 1, max: 10, step: 0.5 },
     });
     game.settings.register(MODULE_ID, 'tah.preventWasdMovement', {
-        name: 'Block WASD / QE Movement',
-        hint: 'Stop bare W/A/S/D/Q/E from moving the token.',
+        name: 'LA.settings.tah.preventWasdMovement.name',
+        hint: 'LA.settings.tah.preventWasdMovement.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE_ID, 'tah.maxColumnItems', {
-        name: 'Max items per column',
-        hint: 'Rows per column before it scrolls (0 = no cap, top menu never capped).',
+        name: 'LA.settings.tah.maxColumnItems.name',
+        hint: 'LA.settings.tah.maxColumnItems.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -225,8 +225,8 @@ Hooks.on('init', () =>
         range: { min: 0, max: 50, step: 1 },
     });
     game.settings.register(MODULE_ID, 'tah.wheelRadiusOffset', {
-        name: 'Wheel Radius Offset',
-        hint: 'Push the radial wheels further from the token, or pull them closer.',
+        name: 'LA.settings.tah.wheelRadiusOffset.name',
+        hint: 'LA.settings.tah.wheelRadiusOffset.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -234,16 +234,16 @@ Hooks.on('init', () =>
         range: { min: -40, max: 120, step: 5 },
     });
     game.settings.register(MODULE_ID, 'tah.rangePreview', {
-        name: 'Weapon Range Preview',
-        hint: 'Show weapon range on the map when hovering items in the HUD.',
+        name: 'LA.settings.tah.rangePreview.name',
+        hint: 'LA.settings.tah.rangePreview.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID, 'tah.uiScale', {
-        name: 'HUD Scale',
-        hint: 'Size of the Token Action HUD and its popups.',
+        name: 'LA.settings.tah.uiScale.name',
+        hint: 'LA.settings.tah.uiScale.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -258,24 +258,24 @@ Hooks.on('init', () =>
         default: [],
     });
     game.settings.register(MODULE_ID, 'tah.showAidHandleInteractSqueeze', {
-        name: 'Aid / Handle / Interact / Squeeze Actions',
-        hint: 'Show these actions in the Actions category. They come from PPG (Prototype Pattern Group).',
+        name: 'LA.settings.tah.showAidHandleInteractSqueeze.name',
+        hint: 'LA.settings.tah.showAidHandleInteractSqueeze.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: false,
     });
     game.settings.register(MODULE_ID, 'tah.rangePreviewOnAttackCard', {
-        name: 'Range Preview on Attack Card',
-        hint: 'Pulse the attacker\'s weapon/tech range on the canvas when an attack card prints.',
+        name: 'LA.settings.tah.rangePreviewOnAttackCard.name',
+        hint: 'LA.settings.tah.rangePreviewOnAttackCard.hint',
         scope: 'client',
         config: false,
         type: Boolean,
         default: true,
     });
     game.settings.register(MODULE_ID, 'tah.uiSoundVolume', {
-        name: 'UI Sound Volume',
-        hint: 'Volume of TAH hover/click sounds.',
+        name: 'LA.settings.tah.uiSoundVolume.name',
+        hint: 'LA.settings.tah.uiSoundVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -283,8 +283,8 @@ Hooks.on('init', () =>
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE_ID, 'tah.tokenFeedbackVolume', {
-        name: 'Token Feedback Volume',
-        hint: 'Volume of token feedback sounds (hover, select, target, drag, move, elevation key).',
+        name: 'LA.settings.tah.tokenFeedbackVolume.name',
+        hint: 'LA.settings.tah.tokenFeedbackVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -292,8 +292,8 @@ Hooks.on('init', () =>
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE_ID, 'tah.damageSoundVolume', {
-        name: 'Damage / Stat Sound Volume',
-        hint: 'Volume of damage, HP/heat/burn/overshield/infection sounds.',
+        name: 'LA.settings.tah.damageSoundVolume.name',
+        hint: 'LA.settings.tah.damageSoundVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -301,8 +301,8 @@ Hooks.on('init', () =>
         range: { min: 0, max: 1, step: 0.05 },
     });
     game.settings.register(MODULE_ID, 'tah.actionFxVolume', {
-        name: 'Action FX Volume',
-        hint: 'Volume of action FX sounds (skirmish, barrage, ram).',
+        name: 'LA.settings.tah.actionFxVolume.name',
+        hint: 'LA.settings.tah.actionFxVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -316,8 +316,8 @@ Hooks.on('init', () =>
         default: false,
     });
     game.settings.register(MODULE_ID, 'tah.battleLogVolume', {
-        name: 'Battle Log Sound Volume',
-        hint: 'Volume of the Battle Log intro sounds (fade-in, typing loop, result impact).',
+        name: 'LA.settings.tah.battleLogVolume.name',
+        hint: 'LA.settings.tah.battleLogVolume.hint',
         scope: 'client',
         config: false,
         type: Number,
@@ -355,8 +355,8 @@ Hooks.on('init', () =>
         type: String,
         default: 'intro',
         choices: {
-            intro: 'Intro start',
-            result: 'Result reveal',
+            intro: 'LA.settings.tah.battleLog.themeStart.choices.intro',
+            result: 'LA.settings.tah.battleLog.themeStart.choices.result',
         },
     });
     game.settings.register(MODULE_ID, 'tah.telemetryFriendlyMechAsSquad', {
@@ -440,6 +440,69 @@ Hooks.on('init', () =>
         config: false,
         type: Object,
         default: null,
+    });
+    game.settings.register(MODULE_ID, 'tah.portrait.mode', {
+        name: 'LA.settings.tah.portrait.mode.name',
+        hint: 'LA.settings.tah.portrait.mode.hint',
+        scope: 'client',
+        config: false,
+        type: String,
+        choices: {
+            off: 'LA.settings.tah.portrait.mode.choices.off',
+            token: 'LA.settings.tah.portrait.mode.choices.token',
+            actor: 'LA.settings.tah.portrait.mode.choices.actor',
+        },
+        default: 'off',
+        onChange: () =>
+        {
+            game.settings.set(MODULE_ID, 'tah.position', null);
+            Hooks.callAll('forceUpdateTokenActionHud');
+        },
+    });
+    game.settings.register(MODULE_ID, 'tah.portrait.scope', {
+        name: 'LA.settings.tah.portrait.scope.name',
+        hint: 'LA.settings.tah.portrait.scope.hint',
+        scope: 'client',
+        config: false,
+        type: String,
+        choices: {
+            mechPilot: 'LA.settings.tah.portrait.scope.choices.mechPilot',
+            all: 'LA.settings.tah.portrait.scope.choices.all',
+        },
+        default: 'mechPilot',
+        onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
+    });
+    game.settings.register(MODULE_ID, 'tah.portrait.mechUsePilot', {
+        name: 'LA.settings.tah.portrait.mechUsePilot.name',
+        hint: 'LA.settings.tah.portrait.mechUsePilot.hint',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
+    });
+    game.settings.register(MODULE_ID, 'tah.portrait.trim', {
+        name: 'LA.settings.tah.portrait.trim.name',
+        hint: 'LA.settings.tah.portrait.trim.hint',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true,
+        onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
+    });
+    game.settings.register(MODULE_ID, 'tah.portrait.scale', {
+        name: 'LA.settings.tah.portrait.scale.name',
+        hint: 'LA.settings.tah.portrait.scale.hint',
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0.5, max: 2.5, step: 0.05 },
+        onChange: () =>
+        {
+            game.settings.set(MODULE_ID, 'tah.position', null);
+            Hooks.callAll('forceUpdateTokenActionHud');
+        },
     });
     // Per-client macro shortcuts for the TAH "Macros" category: { macroId, name, icon }.
     game.settings.register(MODULE_ID, 'tah.macroList', {

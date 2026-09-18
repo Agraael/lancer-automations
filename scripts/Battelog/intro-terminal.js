@@ -1,7 +1,7 @@
 // Shared CRT shell: playTerminal + typeTerminalLines are reused by seasonal/annual.js.
 import { playBattleLogSound, playBattleLogTheme } from '../tah/sound.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { escapeHtml as _escape } from '../tools/string-utils.js';
+import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 
 const INTRO_SPEED = 1.7;
 
@@ -271,7 +271,7 @@ export function playTerminalIntro({ outcome = 'VICTORY', battle = {}, mvpId = nu
         color,
         theme: outcome,
         speed,
-        header: 'LANCER // BATTLE LOG ANALYSIS',
+        header: localize('LA.battleLog.intro.lancerBattleLogAnalysis'),
         dress: { readout: ['GRID 07-Δ', 'LAT 62.4°N', 'LON 129.7°E', `RND ${_escape(rounds)}`] },
         run: (overlay, { finish, body }) => _run(overlay, { outcome, battle, mvpId, extraLines, speed, onDone: finish, body }),
     });
@@ -402,34 +402,34 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
     const mvpPlayer = mvpId ? players.find(player => player.id === mvpId) ?? null : null;
 
     const lines = [
-        { label: '> parsing battlefield telemetry ..........', result: 'OK' },
-        { label: '> reconstructing engagement timeline .....', result: rounds + ' ROUNDS' },
-        { label: '> hostiles encountered ...................', result: hostiles.length + ' CONTACTS' },
+        { label: localize('LA.battleLog.intro.parsing'), result: 'OK' },
+        { label: localize('LA.battleLog.intro.timeline'), result: rounds + ' ROUNDS' },
+        { label: localize('LA.battleLog.intro.hostiles'), result: hostiles.length + ' CONTACTS' },
         {
-            label: '> tallying confirmed kills ...............',
+            label: localize('LA.battleLog.intro.kills'),
             result: String(totalKills),
             resultHtml: String(totalKills) + ' <span class="battelog-icon-mask battelog-icon-destroyed battelog-intro-result-icon kills"></span>',
         },
         {
-            label: '> squad general efficiency ...............',
+            label: localize('LA.battleLog.intro.efficiency'),
             result: avgEff + '% AVG',
             resultHtml: avgEff + '% <i class="fas fa-crosshairs battelog-intro-result-icon accuracy"></i>',
         },
         {
-            label: '> structural integrity ...................',
+            label: localize('LA.battleLog.intro.integrity'),
             result: hullPct + '% HP / ' + reactorPct + '% HEAT',
             resultHtml: hullPct + '% <i class="fas fa-heart-pulse battelog-intro-result-icon hp"></i>'
                 + ' / ' + reactorPct + '% <i class="fas fa-thermometer-half battelog-intro-result-icon heat"></i>',
             sfx: 'long',
         },
         {
-            label: '> squad integrity check ..................',
+            label: localize('LA.battleLog.intro.squadCheck'),
             result: squad,
             resultHtml: squadRatio + ' <i class="cci cci-frame battelog-intro-result-icon squad"></i>',
             sfx: 'long',
         },
-        mvpPlayer ? { label: '> designating match MVP ..................', result: mvpPlayer.callsign, sfx: 'short' } : null,
-        { label: '> computing engagement result ............', result: null },
+        mvpPlayer ? { label: localize('LA.battleLog.intro.mvp'), result: mvpPlayer.callsign, sfx: 'short' } :null,
+        { label: localize('LA.battleLog.intro.result'), result: null },
     ].filter(Boolean);
 
     if (extraLines.length > 0)

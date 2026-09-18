@@ -41,7 +41,7 @@
         <div class="la-kb-name">{{this.title}}{{#if this.stepCount}}<span class="la-tour-steps">{{this.stepCount}} steps</span>{{/if}}</div>
         {{#if this.description}}<div class="la-kb-hint">{{this.description}}</div>{{/if}}
     </div>
-    <button type="button" class="la-tour-play lancer-action-btn la-primary" title="Start tour"><i class="fas fa-play"></i> Play</button>
+    <button type="button" class="la-tour-play lancer-action-btn la-primary" title="Start tour"><i class="fas fa-play"></i> {{localize "LA.configUi.play"}}</button>
 </div>
 {{else if this.isTable}}
 <table class="la-config-table">
@@ -86,7 +86,7 @@
 {{else}}
 <div class="form-group la-opt-row {{#if this.isColor}}la-color-row{{/if}} {{#if this.isLocked}}la-gm-locked{{/if}}">
     <label>
-        <span class="la-opt-label">{{this.label}}</span>
+        <span class="la-opt-label"><span class="la-opt-label-text">{{this.label}}</span></span>
         {{#if this.hint}}<i class="fas fa-circle-question la-hint" data-tooltip="{{this.hint}}"></i>{{/if}}
         {{#if this.isLocked}}<span class="la-gm-tag">GM</span>{{/if}}
     </label>
@@ -127,19 +127,19 @@
 <form class="lancer-dialog-base la-config-form" autocomplete="off">
     <header class="lancer-dialog-header la-config-banner">
         <div class="la-banner-title">
-            <div class="lancer-dialog-title">LANCER AUTOMATIONS</div>
-            <div class="lancer-dialog-subtitle">Module configuration</div>
+            <div class="lancer-dialog-title">{{localize "LA.configUi.lancerAutomations"}}</div>
+            <div class="lancer-dialog-subtitle">{{localize "LA.configUi.moduleConfiguration"}}</div>
         </div>
         <label class="la-config-search">
             <i class="fas fa-search"></i>
             <input type="text" class="la-config-search-input" placeholder="Search settings" aria-label="Search settings" />
-            <kbd>Ctrl F</kbd>
+            <kbd>{{localize "LA.configUi.ctrlF"}}</kbd>
             <span class="la-config-search-clear" title="Clear"><i class="fas fa-times"></i></span>
         </label>
         <nav class="la-config-links" aria-label="Module links">
             <a href="https://agraael.github.io/lancer-automations/" target="_blank" rel="noopener" title="Documentation"><i class="fab fa-github"></i>Doc</a>
-            <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener" title="Contact me (Discord)"><i class="fab fa-discord"></i>Contact me</a>
-            <a href="https://www.patreon.com/c/LaSossis" target="_blank" rel="noopener" title="Support on Patreon"><i class="fab fa-patreon"></i>Patreon</a>
+            <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener" title="Contact me (Discord)"><i class="fab fa-discord"></i>{{localize "LA.configUi.contactMe"}}</a>
+            <a href="https://www.patreon.com/c/LaSossis" target="_blank" rel="noopener" title="Support on Patreon"><i class="fab fa-patreon"></i>{{localize "LA.configUi.patreon"}}</a>
             <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener" title="Support on Ko-fi"><i class="fas fa-mug-hot"></i>Ko-fi</a>
         </nav>
     </header>
@@ -208,7 +208,7 @@
     </div>
 
     <footer class="la-config-footer">
-        <span class="la-footer-note">Changes apply on save. Some settings ask for a reload.</span>
-        <button type="submit" class="la-config-save lancer-action-btn la-primary"><i class="fas fa-save"></i> Save</button>
+        <span class="la-footer-note">{{localize "LA.configUi.changesApplyOnSaveSomeSettings"}}</span>
+        <button type="submit" class="la-config-save lancer-action-btn la-primary"><i class="fas fa-save"></i> {{localize "LA.configUi.save"}}</button>
     </footer>
 </form>

@@ -4,7 +4,7 @@ import { injectExtraDataUtility } from './flows.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { accDiffTargetToken } from '../combat/grid-helpers.js';
-import { applyDamageImmunities, convertHeatToEnergyIfHeatless, hasCritImmunity, hasHitImmunity, hasMissImmunity, consumeImmunityUse, burnBonusUsageForFlow } from '../bonuses/genericBonuses.js';
+import { applyDamageImmunities, getApplicableImmunityBonuses, getAttackImmunityBonuses, convertHeatToEnergyIfHeatless, consumeImmunityUse, burnBonusUsageForFlow } from '../bonuses/genericBonuses.js';
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
@@ -18,6 +18,7 @@ import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor
 import { noteActivation } from '../movement/move-tracking.js';
 import { recordRollSnapshot } from '../uplink/snapshots.js';
 
+import { localize, localizeFormat } from '../tools/string-utils.js';
 // Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
 function checkAttribution(state)
 {
@@ -86,11 +87,23 @@ export async function onAttackStep(state)
 }
 
 // printAttackCard serializes hit/crit into the message flag, so this has to run ahead of it.
+async function announceAttackImmunity(token, label, body, bonuses, fill)
+{
+    broadcastFloatTokenText(token, label, fill);
+    const sources = [...new Set(bonuses.map(bonus => bonus.source || bonus.name).filter(Boolean))];
+    const from = sources.length ? `<br><i>${localizeFormat('LA.flow.immunityFrom', { sources: sources.join(', ') })}</i>` : '';
+    await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ token: token.document }),
+        content: `<div class="lancer-chat-message"><b>${label}</b><br>${body}${from}</div>`
+    });
+}
+
 export async function hitImmunityStep(state)
 {
     state = injectExtraDataUtility(state);
     const targetInfos = state.data?.acc_diff?.targets || [];
     const hitResults = state.data?.hit_results || [];
+    const attackerToken = state.actor?.token ? canvas.tokens.get(state.actor.token.id) : state.actor?.getActiveTokens?.()?.[0];
 
     for (let index = 0; index < hitResults.length; index++)
     {
@@ -101,35 +114,38 @@ export async function hitImmunityStep(state)
         if (!targetToken)
             continue;
 
-        if (await hasCritImmunity(targetToken.actor, state.actor, state) && (hitResult?.crit || attackResult?.crit))
+        const immunityBonuses = (subtype) => getAttackImmunityBonuses(targetToken.actor, subtype, state.actor, state, { defenderToken: targetToken, attackerToken });
+
+        const critImmunity = immunityBonuses('crit');
+        if (critImmunity.length > 0 && (hitResult?.crit || attackResult?.crit))
         {
             if (hitResult)
                 hitResult.crit = false;
             if (attackResult)
                 attackResult.crit = false;
-            ui.notifications.info(`${targetToken.name} is immune to Critical Hits!`);
-            await consumeImmunityUse(targetToken.actor, 'crit', state);
+            await announceAttackImmunity(targetToken, localize('LA.flow.critImmune'), localizeFormat('LA.notify.immuneToCrits', { name: targetToken.name }), critImmunity, 0xcccccc);
+            await consumeImmunityUse(targetToken.actor, 'crit', state, { bonuses: critImmunity });
         }
 
-        const missImmunity = await hasMissImmunity(targetToken.actor, state.actor, state);
-        const hitImmunity = await hasHitImmunity(targetToken.actor, state.actor, state);
-        if (missImmunity && hitImmunity)
+        const missImmunity = immunityBonuses('miss');
+        const hitImmunity = immunityBonuses('hit');
+        if (missImmunity.length > 0 && hitImmunity.length > 0)
         {
-            ui.notifications.info(`${targetToken.name} is immune to miss and hit - these effects cancel each other`);
+            await announceAttackImmunity(targetToken, localize('LA.flow.immunityWash'), localizeFormat('LA.notify.immuneMissAndHit', { name: targetToken.name }), [...missImmunity, ...hitImmunity], 0x999999);
             continue;
         }
 
-        if (missImmunity && (hitResult?.miss || attackResult?.miss))
+        if (missImmunity.length > 0 && (hitResult?.miss || attackResult?.miss))
         {
             if (hitResult)
                 hitResult.hit = true;
             if (attackResult)
                 attackResult.hit = true;
-            ui.notifications.info(`${targetToken.name} is immune to miss - attack hits!`);
-            await consumeImmunityUse(targetToken.actor, 'miss', state);
+            await announceAttackImmunity(targetToken, localize('LA.flow.missImmune'), localizeFormat('LA.notify.immuneToMiss', { name: targetToken.name }), missImmunity, 0xffa500);
+            await consumeImmunityUse(targetToken.actor, 'miss', state, { bonuses: missImmunity });
         }
 
-        if (hitImmunity && (hitResult?.hit || attackResult?.hit))
+        if (hitImmunity.length > 0 && (hitResult?.hit || attackResult?.hit))
         {
             if (hitResult)
             {
@@ -141,8 +157,8 @@ export async function hitImmunityStep(state)
                 attackResult.hit = false;
                 attackResult.crit = false;
             }
-            ui.notifications.info(`${targetToken.name} is immune to Hits: attack misses!`);
-            await consumeImmunityUse(targetToken.actor, 'hit', state);
+            await announceAttackImmunity(targetToken, localize('LA.flow.hitImmune'), localizeFormat('LA.notify.immuneToHits', { name: targetToken.name }), hitImmunity, 0xcccccc);
+            await consumeImmunityUse(targetToken.actor, 'hit', state, { bonuses: hitImmunity });
         }
     }
     return true;
@@ -222,7 +238,7 @@ export async function onPreDamageStep(state)
         trigger: 'onPreDamage',
         cancelKey: 'cancelDamage',
         reason: "This damage roll has been prevented.",
-        title: "DAMAGE PREVENTED",
+        title: localize('LA.dialogTitle.damagePrevented'),
         token,
         data: {
             weapon,
@@ -259,15 +275,23 @@ export async function onDamageStep(state)
 
         if (targetInfo.damage && targetToken.actor)
         {
+            const immunities = getApplicableImmunityBonuses(targetToken.actor, 'damage', state, { ownerTokenId: targetToken.id, otherToken: token });
             const preTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
-            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state);
+            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state, immunities);
             const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             if (postTotal < preTotal)
             {
-                await consumeImmunityUse(targetToken.actor, 'damage', state);
+                await consumeImmunityUse(targetToken.actor, 'damage', state, { bonuses: immunities });
                 broadcastFloatTokenText(targetToken, 'Immune', 0xcccccc);
             }
             targetInfo.damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.damage);
+        }
+        if (targetToken.actor)
+        {
+            // Rides into the damage card via printDamageCard's spread, so every client sees the same verdict.
+            targetInfo.laResistance = getApplicableImmunityBonuses(targetToken.actor, 'resistance', state, { ownerTokenId: targetToken.id, otherToken: token })
+                .map(bonus => bonus.id)
+                .filter(Boolean);
         }
         if (Array.isArray(targetInfo.bonus_damage) && targetToken.actor)
             targetInfo.bonus_damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.bonus_damage);
@@ -307,7 +331,7 @@ export async function onPreStructureStep(state)
         trigger: 'onPreStructure',
         cancelKey: 'cancelStructure',
         reason: "Structure damage has been prevented.",
-        title: "STRUCTURE PREVENTED",
+        title: localize('LA.dialogTitle.structurePrevented'),
         token,
         data: { remainingStructure: actor?.system?.structure?.value ?? 0 }
     });
@@ -328,7 +352,7 @@ export async function onStructureStep(state)
         trigger: 'onStructure',
         cancelKey: 'cancelStructureOutcome',
         reason: "Structure outcome has been overridden.",
-        title: "STRUCTURE OUTCOME OVERRIDDEN",
+        title: localize('LA.dialogTitle.structureOverridden'),
         token,
         data: {
             remainingStructure: actor?.system?.structure?.value ?? 0,
@@ -351,7 +375,7 @@ export async function onPreStressStep(state)
         trigger: 'onPreStress',
         cancelKey: 'cancelStress',
         reason: "Stress damage has been prevented.",
-        title: "STRESS PREVENTED",
+        title: localize('LA.dialogTitle.stressPrevented'),
         token,
         data: { remainingStress: actor?.system?.stress?.value ?? 0 }
     });
@@ -372,7 +396,7 @@ export async function onStressStep(state)
         trigger: 'onStress',
         cancelKey: 'cancelStressOutcome',
         reason: "Stress outcome has been overridden.",
-        title: "STRESS OUTCOME OVERRIDDEN",
+        title: localize('LA.dialogTitle.stressOverridden'),
         token,
         data: {
             remainingStress: actor?.system?.stress?.value ?? 0,
@@ -714,7 +738,7 @@ export async function stunnedAutoFailStep(state)
     await ChatMessage.create({
         speaker: ChatMessage.getSpeaker({ token: token.document }),
         content: `<div class="lancer-chat-message"><b>${statLabel}</b><br>`
-            + `<span style="color:#c0392b;font-weight:bold;">AUTOMATIC FAILURE</span>: ${token.name} is <b>Stunned</b> and automatically fails ${statLabel} checks and saves.</div>`
+            + localizeFormat('LA.flow.stunnedAutoFail', { name: token.name, stat: statLabel }) + '</div>'
     });
 
     return true;
@@ -729,7 +753,7 @@ export async function onInitCheckStep(state)
         trigger: 'onInitCheck',
         cancelKey: 'cancelCheck',
         reason: "This check has been canceled.",
-        title: "CHECK CANCELED",
+        title: localize('LA.dialogTitle.checkCanceled'),
         token,
         data: {
             statName: state.data?.title || 'Unknown',
@@ -758,7 +782,7 @@ export async function onInitAttackStep(state)
         trigger: 'onInitAttack',
         cancelKey: 'cancelAttack',
         reason: "This attack has been canceled.",
-        title: "ATTACK CANCELED",
+        title: localize('LA.dialogTitle.attackCanceled'),
         token,
         data: {
             weapon,
@@ -788,7 +812,7 @@ export async function onInitTechAttackStep(state)
         trigger: 'onInitTechAttack',
         cancelKey: 'cancelTechAttack',
         reason: "This tech attack has been canceled.",
-        title: "TECH ATTACK CANCELED",
+        title: localize('LA.dialogTitle.techAttackCanceled'),
         token,
         data: {
             techItem,
@@ -904,7 +928,7 @@ export async function onActivationStep(state)
             reactionJustConsumed = true;
         }
         else
-            ui.notifications.warn(`${token.name} has no reaction available!`);
+            ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token.name }));
     }
 
     const isEndActivation = !!state.la_extraData?.endActivation;

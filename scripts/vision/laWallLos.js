@@ -69,7 +69,7 @@ function _refreshWall(wallDoc)
     if (_shouldMirror(wallDoc))
         _addMirror(wallDoc);
     invalidateLosCaches();
-    canvas.perception?.update?.({ refreshVision: true }, true);
+    canvas.perception?.update?.({ refreshVision: true });
 }
 
 function _refreshAll()
@@ -157,8 +157,8 @@ export function initLaWallLos()
     _patchSweepEdgeTypes();
     _patchWallColor();
     game.settings.register(MODULE_ID, SETTING_FLAG_ONLY, {
-        name: 'Flagged walls only',
-        hint: 'Lancer line of sight uses only LA-flagged walls.',
+        name: 'LA.settings.lancerLosFlagOnly.name',
+        hint: 'LA.settings.lancerLosFlagOnly.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -167,7 +167,7 @@ export function initLaWallLos()
         {
             _refreshAll();
             refreshTokenBlockEdges();
-            canvas?.perception?.update?.({ refreshVision: true }, true);
+            canvas?.perception?.update?.({ refreshVision: true });
         }
     });
     Hooks.on('canvasReady', _refreshAll);
@@ -182,7 +182,7 @@ export function initLaWallLos()
             return;
         canvas.edges.delete(_edgeId(wallDoc));
         invalidateLosCaches();
-        canvas.perception?.update?.({ refreshVision: true }, true);
+        canvas.perception?.update?.({ refreshVision: true });
     });
     Hooks.on('updateWall', (wallDoc, change) =>
     {

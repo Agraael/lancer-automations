@@ -1,5 +1,6 @@
 import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
 import { MODULE_ID } from "../../tools/constants.js";
+import { localize } from "../../tools/string-utils.js";
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
@@ -136,7 +137,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         const unbindEscape = bindCardEscape(cancel, () => isSingleTargetPickerActive() || isAreaPickerActive());
 
         cardEl = _createInfoCard("forceCheck", {
-            title: "FORCE CHECK",
+            title: localize('LA.dialogTitle.forceCheckCaps'),
             onCancel: cancel,
         });
 

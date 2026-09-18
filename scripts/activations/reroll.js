@@ -1,6 +1,7 @@
 /* global game */
 
 import { MODULE_ID } from '../tools/constants.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 
 const _clone = (value) => (typeof foundry?.utils?.deepClone === 'function' ? foundry.utils.deepClone(value) : JSON.parse(JSON.stringify(value ?? null)));
 const _snapshotAttackLike = (state) => ({
@@ -423,13 +424,13 @@ async function applyBonusRerolls(state, rollType, def)
         const currentRoll = def.getRoll(state);
         const rollLineHtml = currentRoll ? `<code>${currentRoll.formula}</code> = <b>${currentRoll.total}</b>` : null;
         const offer = await api.startChoiceCard({
-            title: `${upperName} \u2014 USE REROLL?`,
+            title: localizeFormat('LA.dialogTitle.useReroll', { name: upperName }),
             description: rollLineHtml ?? undefined,
             originToken: token,
             userIdControl,
             choices: [
-                { text: `Use - (${subtype})`, icon: 'fas fa-dice' },
-                { text: 'Keep', icon: 'fas fa-times' }
+                { text: localizeFormat('LA.reroll.use', { subtype }), icon: 'fas fa-dice' },
+                { text: localize('LA.reroll.keep'), icon: 'fas fa-times' }
             ]
         });
         if (offer?.choiceIdx !== 0)
@@ -438,12 +439,12 @@ async function applyBonusRerolls(state, rollType, def)
         const chooseHandler = async (orig, alt) =>
         {
             const pick = await api.startChoiceCard({
-                title: `${upperName} \u2014 KEEP WHICH?`,
+                title: localizeFormat('LA.dialogTitle.keepWhich', { name: upperName }),
                 originToken: token,
                 userIdControl,
                 choices: [
-                    { text: `Alt (${alt ?? '?'})`, icon: 'fas fa-dice' },
-                    { text: `Original (${orig ?? '?'})`, icon: 'fas fa-undo' }
+                    { text: localizeFormat('LA.reroll.alt', { value: alt ?? '?' }), icon: 'fas fa-dice' },
+                    { text: localizeFormat('LA.reroll.original', { value: orig ?? '?' }), icon: 'fas fa-undo' }
                 ]
             });
             return pick?.choiceIdx === 0;

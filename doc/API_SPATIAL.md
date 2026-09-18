@@ -326,6 +326,24 @@ const occupied = new Set(api.getTokenCells(token).map(([row, col]) => `${col},${
 
 </details>
 
+<details id="laTokenHeight">
+<summary><b><code>laTokenHeight</code></b> → <code>number</code><br><b><code>laTokenGameplayHeight</code></b> → <code>number</code></summary>
+
+<br>
+
+```js
+api.laTokenHeight(tokenDoc)
+api.laTokenGameplayHeight(tokenDoc)
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>tokenDoc</kbd> | `TokenDocument` | The token to measure |
+
+`laTokenHeight`: sight height, wall-height flag or SIZE + 0.1. `laTokenGameplayHeight`: the same snapped to the closest SIZE (0.5, 1, 2, 3...).
+
+</details>
+
 <details id="getMaxGroundHeightUnderToken">
 <summary><b><code>getMaxGroundHeightUnderToken</code></b> → <code>number</code></summary>
 

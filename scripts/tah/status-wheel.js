@@ -9,6 +9,7 @@ import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
 import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { localize } from '../tools/string-utils.js';
 const ICON_SIZE = 24;
 // Matches Foundry's own tooltip dwell, the wheel is swept through so an instant tip would flicker.
 const TIP_DELAY_MS = 500;
@@ -355,7 +356,7 @@ export function toggleStatusWheel()
     }
     if (!getModuleSetting('tahEnabled'))
     {
-        ui.notifications.info('Enable the Token Action HUD to use the status wheel.');
+        ui.notifications.info(localize('LA.notify.enableTahForStatusWheel'));
         return;
     }
     const token = canvas.tokens?.controlled?.[0] ?? null;
@@ -364,7 +365,7 @@ export function toggleStatusWheel()
     const items = wheelItems(token);
     if (!items.length)
     {
-        ui.notifications.info('No active or starred statuses. Star some in the Token Action HUD status panel.');
+        ui.notifications.info(localize('LA.notify.noActiveOrStarredStatusesStarSome'));
         return;
     }
     _openToken = token;
@@ -405,8 +406,8 @@ Hooks.on('deleteToken', (tokenDoc) =>
 Hooks.once('init', () =>
 {
     game.keybindings.register(MODULE_ID, 'statusWheel', {
-        name: 'Status Wheel',
-        hint: 'Open a radial wheel of the statuses on the selected token plus the ones starred in the HUD.',
+        name: 'LA.keybindings.statusWheel.name',
+        hint: 'LA.keybindings.statusWheel.hint',
         editable: [{ key: 'KeyG' }],
         onDown: () =>
         {

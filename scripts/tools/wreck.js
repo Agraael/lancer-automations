@@ -2,8 +2,10 @@
 
 import { MODULE_ID } from './constants.js';
 import { getModuleSetting } from './settings-utils.js';
+import { laTokenGameplayHeight } from './token-height.js';
 import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
-import { escapeHtml as _escapeText } from './string-utils.js';
+import { escapeHtml as _escapeText, localize, localizeFormat } from './string-utils.js';
+import { FLAG_PORTRAIT_MODE, FLAG_PORTRAIT_IMG, FLAG_PORTRAIT_MECH_PILOT, PORTRAIT_MODES, PORTRAIT_PILOT } from '../tah/portrait.js';
 
 function log(...args)
 {
@@ -390,8 +392,7 @@ async function spawnDifficultTerrain(token)
         const terrainAPI = globalThis.terrainHeightTools;
         if (!terrainAPI)
             return;
-        const wallHeight = token.actor?.prototypeToken?.flags?.['wall-height']?.tokenHeight;
-        const rawHeight = wallHeight ?? (token.actor?.system?.size ?? 1);
+        const rawHeight = laTokenGameplayHeight(token.document);
         const terrainHeight = Math.floor(rawHeight * 2) / 2;
         const cells = getTokenCells(token);
         if (cells.length === 0)
@@ -750,7 +751,7 @@ export function tileHUDButton(app, html)
     const button = document.createElement('div');
     button.classList.add('control-icon', MODULE_ID);
     button.title = 'Resurrect';
-    button.dataset.tooltip = 'Resurrect';
+    button.dataset.tooltip = localize('LA.wreck.resurrect');
     const icon = document.createElement('i');
     icon.classList.add('fas', 'fa-person-rays');
     button.appendChild(icon);
@@ -884,12 +885,13 @@ function _renderWreckTab(app, html, data)
 
     const sections = [];
     if (showWreck)
-        sections.push({ title: 'Wreck', html: _buildWreckSectionHtml(flags) });
-    sections.push({ title: 'Detection', html: _buildAwarenessSectionHtml(flags) });
-    sections.push({ title: 'Stat Hint', html: _buildStatHintSectionHtml(flags) });
+        sections.push({ title: localize('LA.wreck.sectionWreck'), html: _buildWreckSectionHtml(flags) });
+    sections.push({ title: localize('LA.wreck.sectionDetection'), html: _buildAwarenessSectionHtml(flags) });
+    sections.push({ title: localize('LA.wreck.sectionStatHint'), html: _buildStatHintSectionHtml(flags) });
     if (game.user?.isGM)
-        sections.push({ title: 'Scan', cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
-    sections.push({ title: 'Elevation', html: _buildElevationSectionHtml(flags) });
+        sections.push({ title: localize('LA.wreck.sectionScan'), cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
+    sections.push({ title: localize('LA.wreck.sectionElevation'), html: _buildElevationSectionHtml(flags) });
+    sections.push({ title: localize('LA.wreck.sectionPortrait'), html: _buildPortraitSectionHtml(flags, actorType) });
     const sectionsHtml = sections.map((section, idx) => _wrapSection(section, idx > 0)).join('');
 
     const tabHtml = `<div class="tab scrollable" data-group="sheet" data-tab="la"><div class="la-compact-config">${sectionsHtml}</div></div>`;
@@ -908,6 +910,18 @@ function _renderWreckTab(app, html, data)
         if (typeof app.setPosition === 'function')
             app.setPosition({ height: 'auto' });
     });
+
+    const portraitSelect = laTab?.querySelector('[data-la-portrait-mode]');
+    const portraitImgRow = laTab?.querySelector('[data-la-portrait-img]');
+    if (portraitSelect && portraitImgRow)
+    {
+        portraitSelect.addEventListener('change', () =>
+        {
+            portraitImgRow.hidden = portraitSelect.value !== PORTRAIT_MODES.CUSTOM;
+            if (typeof app.setPosition === 'function')
+                app.setPosition({ height: 'auto' });
+        });
+    }
 
     for (const btn of rootEl.querySelectorAll('button.la-pick-folder'))
     {
@@ -973,21 +987,21 @@ function _buildWreckSectionHtml(flags)
             <label>Wreck Image Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckImgPath" value="${imgPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckImgPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckImgPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">
             <label>Wreck Effect Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effectPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckEffectPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckEffectPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">
             <label>Wreck Sound Path</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${soundPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckSoundPath" data-tooltip="Pick a folder: a random file is used on each death" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckSoundPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
             </div>
         </div>
         <div class="form-group">
@@ -1057,7 +1071,7 @@ function _buildStatHintSectionHtml(flags)
         <div class="form-group">
             <label>Unknown Label</label>
             <div class="form-fields">
-                <input type="text" name="flags.${MODULE_ID}.statHintUnknownLabel" value="${_escapeText(unknownLabel)}" placeholder="Default (use global setting)">
+                <input type="text" name="flags.${MODULE_ID}.statHintUnknownLabel" value="${_escapeText(unknownLabel)}" placeholder="${localize('LA.wreck.defaultGlobalSetting')}">
             </div>
             <p class="notes">Stat hint header for this token while unscanned.</p>
         </div>
@@ -1083,6 +1097,51 @@ function _buildElevationSectionHtml(flags)
             <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
             <p class="notes">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
         </div>
+    `;
+}
+
+function _buildPortraitSectionHtml(flags, actorType)
+{
+    const mode = flags[FLAG_PORTRAIT_MODE] ?? PORTRAIT_MODES.DEFAULT;
+    const img = flags[FLAG_PORTRAIT_IMG] ?? '';
+    const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
+    const pilot = flags[FLAG_PORTRAIT_MECH_PILOT] ?? PORTRAIT_PILOT.DEFAULT;
+    const pilotOpt = (val, label) => `<option value="${val}" ${pilot === val ? 'selected' : ''}>${label}</option>`;
+    const pilotRow = actorType !== 'mech' ? '' : `
+        <div class="form-group">
+            <label>Use Pilot Portrait</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.${FLAG_PORTRAIT_MECH_PILOT}" data-dtype="String">
+                    ${pilotOpt(PORTRAIT_PILOT.DEFAULT, 'Default (use global setting)')}
+                    ${pilotOpt(PORTRAIT_PILOT.YES, 'Yes')}
+                    ${pilotOpt(PORTRAIT_PILOT.NO, 'No')}
+                </select>
+            </div>
+            <p class="notes">Draw the linked pilot's art instead of the mech's.</p>
+        </div>
+    `;
+    return `
+        <div class="form-group">
+            <label>HUD Portrait</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.${FLAG_PORTRAIT_MODE}" data-dtype="String" data-la-portrait-mode>
+                    ${opt(PORTRAIT_MODES.DEFAULT, 'Default (use global setting)')}
+                    ${opt(PORTRAIT_MODES.TOKEN, 'Token art')}
+                    ${opt(PORTRAIT_MODES.ACTOR, 'Actor portrait')}
+                    ${opt(PORTRAIT_MODES.CUSTOM, 'Custom image')}
+                    ${opt(PORTRAIT_MODES.OFF, 'Off')}
+                </select>
+            </div>
+            <p class="notes">Artwork shown above the Token Action HUD name band.</p>
+        </div>
+        <div class="form-group" data-la-portrait-img ${mode === PORTRAIT_MODES.CUSTOM ? '' : 'hidden'}>
+            <label>Portrait Image</label>
+            <div class="form-fields">
+                <file-picker name="flags.${MODULE_ID}.${FLAG_PORTRAIT_IMG}" type="imagevideo" value="${_escapeText(img)}"></file-picker>
+            </div>
+            <p class="notes">Used when the portrait is set to Custom image.</p>
+        </div>
+        ${pilotRow}
     `;
 }
 
@@ -1243,14 +1302,14 @@ function _promptLinkScanDoc(rootEl, tokenDoc, app)
         </div>
         <div class="form-group" style="flex-direction: column; align-items: stretch;">
             <label>Journal Entry</label>
-            <input type="text" class="la-scan-search" placeholder="Search by name…" autocomplete="off">
+            <input type="text" class="la-scan-search" placeholder="${localize('LA.common.searchByName')}" autocomplete="off">
             <div class="la-scan-list">${rows}<div class="la-scan-empty" style="display:none;">No matches.</div></div>
             <input type="hidden" name="scan-journal" value="${preselectedId}">
             <p class="notes">Stamps the chosen journal as this token's scan document.</p>
         </div>
     `;
     new globalThis.Dialog({
-        title: `Link Scan Document: ${actor.name}`,
+        title: localizeFormat('LA.dialogTitle.linkScanDocument', { name: actor.name }),
         content,
         render: (html) =>
         {
@@ -1292,7 +1351,7 @@ function _promptLinkScanDoc(rootEl, tokenDoc, app)
         },
         buttons: {
             link: {
-                label: '<i class="fas fa-link"></i> Link',
+                label: `<i class="fas fa-link"></i> ${localize('LA.scan.link')}`,
                 callback: async (html) =>
                 {
                     const root = html?.[0] ?? html;
@@ -1314,7 +1373,7 @@ function _promptLinkScanDoc(rootEl, tokenDoc, app)
                     _refreshScanSection(rootEl, tokenDoc, app);
                 },
             },
-            cancel: { label: '<i class="fas fa-times"></i> Cancel' },
+            cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}` },
         },
         default: 'link',
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 420 }).render(true);
@@ -1329,14 +1388,14 @@ async function _unlinkScanDocs(rootEl, tokenDoc, app)
     if (!docs.length)
         return;
     const confirmed = await globalThis.Dialog.confirm({
-        title: `Unlink Scan Document: ${actor.name}`,
+        title: localizeFormat('LA.dialogTitle.unlinkScanDocument', { name: actor.name }),
         content: `
             <div class="lancer-dialog-header">
-                <h2 class="lancer-dialog-title">Unlink Scan Document</h2>
+                <h2 class="lancer-dialog-title">${localize('LA.wreck.unlinkScanDocument')}</h2>
                 <p class="lancer-dialog-subtitle">${_escapeText(actor.name)}</p>
             </div>
             <div class="form-group">
-                <p>Remove the scan flag from ${docs.length} journal(s) linked to ${_escapeText(actor.name)}? The journals are not deleted.</p>
+                <p>${localizeFormat('LA.wreck.unlinkScanPrompt', { count: docs.length, name: _escapeText(actor.name) })}</p>
             </div>
         `,
         options: { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 420 },
@@ -1345,7 +1404,7 @@ async function _unlinkScanDocs(rootEl, tokenDoc, app)
         return;
     for (const entry of docs)
         await unsetLAFlag(entry,'scan');
-    globalThis.ui?.notifications?.info(`Unlinked scan document(s) from ${actor.name}.`);
+    globalThis.ui?.notifications?.info(localizeFormat('LA.notify.unlinkedScanDocuments', { name: actor.name }));
     _refreshScanSection(rootEl, tokenDoc, app);
 }
 
