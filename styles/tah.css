@@ -312,7 +312,8 @@
     pointer-events: none;
 }
 
-.la-hud-portrait img {
+.la-hud-portrait img,
+.la-hud-portrait video {
     display: block;
     width: 100%;
     height: 100%;

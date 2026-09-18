@@ -2086,11 +2086,11 @@
         "name": "Data Collection Consent"
       },
       "debugAutomation": {
-        "hint": "Console logs from the reaction / trigger pipeline: which trigger fires, which reactions match, why each one is skipped or evaluated, and which activation fires.",
+        "hint": "Console logs from the reaction / trigger pipeline: which trigger fires, which reactions match or skip, and what activates.",
         "name": "Debug: Automation System"
       },
       "debugForceJb2aFree": {
-        "hint": "Pretend the JB2A Patreon module is not installed; route all premium assets through the free-version fallback registry. For testing only.",
+        "hint": "Pretend the JB2A Patreon module is not installed, routing premium assets through the free-version fallback. For testing only.",
         "name": "Debug: Force JB2A Free Fallbacks"
       },
       "debugMovement": {
@@ -2147,7 +2147,7 @@
         "name": "Maria's Alternate Structure & Stress Rules"
       },
       "enableAttackTargeting": {
-        "hint": "Adds an LA target/range picker to the attack HUD; hold Shift to target multiple.",
+        "hint": "Adds an LA target/range picker to the attack HUD. Hold Shift to target multiple.",
         "name": "LA Attack Targeting"
       },
       "enableBoostOffer": {
@@ -2160,7 +2160,7 @@
         "name": "Boost & Move Offer"
       },
       "enableDamageTargeting": {
-        "hint": "Adds the LA target/range picker to the damage HUD; hold Shift to target multiple.",
+        "hint": "Adds the LA target/range picker to the damage HUD. Hold Shift to target multiple.",
         "name": "LA Damage Targeting"
       },
       "enableInfectionDamageIntegration": {
@@ -2172,7 +2172,7 @@
         "name": "Automate Knockback on Hit"
       },
       "enableLaSossisItems": {
-        "hint": "Those are the item activations i made for myself, it wil create a startup script that registers them as default item activations.",
+        "hint": "My own item activations, registered as defaults by a startup script.",
         "name": "LaSossis's Items"
       },
       "enableMovementCapDetection": {
@@ -2322,7 +2322,7 @@
         "name": "Replace the THT ruler on attack hover"
       },
       "lancerLosDebug": {
-        "hint": "Draw the tested sightlines from controlled tokens; green clear, red blocked.",
+        "hint": "Draw the tested sightlines from controlled tokens. Green clear, red blocked.",
         "name": "Debug overlay"
       },
       "lancerLosFlagOnly": {
@@ -2688,7 +2688,7 @@
         "name": "Target Info Labels"
       },
       "tokenGroundShadow": {
-        "hint": "Casts each token’s own silhouette on the ground, thrown further and softer the higher it stands. Uses the Terrain Height Tools light angle when that module is present.",
+        "hint": "Casts each token’s own silhouette on the ground, thrown further and softer the higher it stands.",
         "name": "Token ground shadow"
       },
       "tokenGroundShadowOpacity": {
@@ -2741,7 +2741,7 @@
           "silhouette": "Token shape corners (recommended)",
           "silhouette2": "Token shape corners x2"
         },
-        "hint": "Vision sample points per token, one vision sweep each. Token shape follows the real outline; Adaptive uses 8 for size 3+, else 4.",
+        "hint": "Vision sample points per token, one vision sweep each. Token shape follows the real outline. Adaptive uses 8 for size 3+, else 4.",
         "name": "Vision From Edge: Sample Density"
       },
       "visionFromEdgeSampleOffset": {
@@ -2934,11 +2934,11 @@
         "label": "Ctrl Ruler"
       },
       "disableAutoElevationOnMeasure": {
-        "hint": "Ignore THT terrain elevation in the measure ruler labels; token drags are unaffected.",
+        "hint": "Ignore THT terrain elevation in the measure ruler labels. Token drags are unaffected.",
         "label": "Disable Auto-elevation on Measure"
       },
       "disableAutoTerrainElevation": {
-        "hint": "Stop tracking THT terrain elevation during ruler moves; Q/E offsets still work.",
+        "hint": "Stop tracking THT terrain elevation during ruler moves. Q/E offsets still work.",
         "label": "Disable Auto-elevation from Terrain"
       },
       "displayToolsToOthers": {
@@ -3195,7 +3195,7 @@
         "label": "Scan journal source"
       },
       "scanPlayerOwnershipMode": {
-        "hint": "Who gets ownership when a player runs a scan; GM scans always grant to all players.",
+        "hint": "Who gets ownership when a player runs a scan. GM scans always grant to all players.",
         "label": "Player Ownership"
       },
       "scanRevealAllies": {
@@ -3285,7 +3285,7 @@
           "label": "General"
         },
         "groundShadow": {
-          "hint": "Thrown along the Terrain Height Tools light angle, so tokens and terrain read as one scene. Without that module it falls back to a bearing of 225.",
+          "hint": "Thrown along the Terrain Height Tools light angle. Falls back to a bearing of 225 without that module.",
           "label": "Ground shadow"
         },
         "isometricIntegrations": {
@@ -3548,7 +3548,7 @@
         "label": "Auto-Injected Bar Width (%)"
       },
       "statBarAutoInjectTalents": {
-        "hint": "Add a bar for every talent counter and frame core counter; deleted bars are not re-added.",
+        "hint": "Add a bar for every talent counter and frame core counter. Deleted bars are not re-added.",
         "label": "Auto-add Talent & Frame Counter Bars"
       },
       "statBarDefaultCombatOnly": {
@@ -4072,7 +4072,7 @@
           "label": "Damage / Stat Feedback"
         },
         "disableAwards": {
-          "hint": "No awards or MVP auto-pick; the GM can still pick MVP manually.",
+          "hint": "No awards or MVP auto-pick. The GM can still pick MVP manually.",
           "label": "Disable awards"
         },
         "narrativeMode": {
@@ -4144,7 +4144,7 @@
           "label": "Debug: log every telemetry event"
         },
         "telemetryFriendlyMechAsSquad": {
-          "hint": "Squad membership normally means owned by a player. This also counts FRIENDLY mechs that no player owns, so GM-run pilots and solo testing still show up in the log.",
+          "hint": "Also counts FRIENDLY mechs that no player owns, so GM-run pilots show up in the log.",
           "label": "Friendly mechs count as squad"
         },
         "tokenFeedbackVolume": {

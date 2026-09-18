@@ -221,17 +221,23 @@ export function buildPortrait(token, actor, onMeasured)
     const width = Math.round(height / knownRatio);
     const el = $('<div class="la-hud-portrait"></div>');
     el.css({ width: `${width}px`, height: `${height}px` });
-    const img = $('<img>').attr('src', src).attr('alt', '');
+    const isVideo = foundry.helpers.media.VideoHelper.hasVideoExtension(src);
+    const img = isVideo
+        ? $('<video>').prop({ autoplay: true, muted: true, loop: true, playsInline: true })
+        : $('<img>').attr('alt', '');
+    img.attr('src', src);
     if (knownTrim)
         applyTrim(el, img, knownTrim, knownRatio, height);
-    img.on('load', function ()
+    img.on(isVideo ? 'loadeddata' : 'load', function ()
     {
-        const node = /** @type {HTMLImageElement} */ (this);
-        const natural = node.naturalWidth ? node.naturalHeight / node.naturalWidth : DEFAULT_RATIO;
+        const node = /** @type {HTMLImageElement & HTMLVideoElement} */ (this);
+        const naturalWidth = isVideo ? node.videoWidth : node.naturalWidth;
+        const naturalHeight = isVideo ? node.videoHeight : node.naturalHeight;
+        const natural = naturalWidth ? naturalHeight / naturalWidth : DEFAULT_RATIO;
         _ratioCache.set(src, natural);
         if (!el[0].isConnected)
             return;
-        if (trimOn)
+        if (trimOn && !isVideo)
         {
             const box = _trimCache.has(src) ? _trimCache.get(src) : measureTrim(node);
             _trimCache.set(src, box);
