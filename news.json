@@ -2,6 +2,19 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-09-18-lancer-4-3-1",
+            "date": "2026-09-18",
+            "title": "Lancer Automations 4.3.1",
+            "body": [
+                "<p>Visuals and a bit of UI this time. <b>THT fork</b>: Tanaka contours and shadow casting for elevation on 2D maps, tokens shown below terrain, shadows under elevated tokens.</p>",
+                "<p><b>Ruler</b>: Ground and Hold modes (Z to switch). New <b>token FX</b> for Danger Zone, Impaired, Prone, Meltdown, Lock On, Slow, Exposed, Overshield and more. <b>Token portraits</b> in the TAH. Workshop <b>likes and download counts</b>.</p>",
+                "<p>THT, Template Macro and Lancer Automations updated. Long post, lots of images.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/169919048",
+            "linkLabel": "Lancer Automations 4.3.1 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-09-12-boost-offer-loop",
             "date": "2026-09-12",
             "title": "Boost offer looping?",
