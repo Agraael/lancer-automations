@@ -8,7 +8,7 @@ import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { consumeEffectCharge, runInOnInitTriggerContext } from "../bonuses/flagged-effects.js";
 import { deferResistanceEffectConsumption } from "../bonuses/genericBonuses.js";
 import { getTokenDistance } from "../combat/overwatch.js";
-import { getItemLID, isItemAvailable, hasReactionAvailable, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
+import { getItemLID, isItemAvailable, hasReactionAvailable, consumeReaction, reserveReaction, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
@@ -635,10 +635,26 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
     };
 }
 
+function _spendsReactionOnStart(reaction)
+{
+    return getModuleSetting('consumeReaction')
+        && (reaction?.actionType ?? 'Reaction') === 'Reaction'
+        && reaction?.checkReaction !== false;
+}
+
 export function _buildStartRelatedFlow(token, item, reaction, activationName, extraData = {})
 {
     return async () =>
     {
+        if (_spendsReactionOnStart(reaction) && !extraData?.reactionConsumed)
+        {
+            if (!(await consumeReaction(token)))
+            {
+                ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token?.name ?? '?' }));
+                return false;
+            }
+            extraData = { ...extraData, reactionConsumed: true };
+        }
         if (item)
         {
             const reactionPath = reaction?.reactionPath;
@@ -702,9 +718,11 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName)
         if (!targetUserId || targetUserId === game.user.id)
             return _buildStartRelatedFlow(token, item, reaction, activationName, extraData)();
         const requestId = wait ? `srf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
+        if (_spendsReactionOnStart(reaction))
+            reserveReaction(token);
         game.socket.emit('module.lancer-automations', {
             action: 'startRelatedFlow',
-            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, actionType, effectDescription, extraData: extraData ?? {}, requestId }
+            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, actionType, checkReaction: reaction?.checkReaction, effectDescription, extraData: extraData ?? {}, requestId }
         });
         if (wait && requestId)
         {
@@ -880,7 +898,7 @@ async function checkReactions(triggerType, data)
             {
                 activation.catch(error => console.error(`lancer-automations | Error auto-activating scene reaction:`, error));
                 if (reaction.awaitActivationCompletion !== false)
-                    reactionsPromises.push(activation);
+                    reactionsPromises.push({ name: reactionName, promise: activation });
             }
         }
         catch (error)
@@ -1203,7 +1221,7 @@ async function checkReactions(triggerType, data)
                                     {
                                         activation.catch(error => console.error(`lancer-automations | Error auto-activating reaction:`, error));
                                         if (reaction.awaitActivationCompletion !== false)
-                                            reactionsPromises.push(activation);
+                                            reactionsPromises.push({ name: activationName, promise: activation });
                                     }
                                 }
                                 catch (error)
@@ -1276,7 +1294,7 @@ async function checkReactions(triggerType, data)
                             {
                                 activation.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
                                 if (reaction.awaitActivationCompletion !== false)
-                                    reactionsPromises.push(activation);
+                                    reactionsPromises.push({ name: reactionName, promise: activation });
                             }
                         }
                         catch (error)
@@ -1344,7 +1362,7 @@ async function checkReactions(triggerType, data)
                             {
                                 activation.catch(error => console.error(`lancer-automations | Error auto-activating general reaction:`, error));
                                 if (reaction.awaitActivationCompletion !== false)
-                                    reactionsPromises.push(activation);
+                                    reactionsPromises.push({ name: reactionName, promise: activation });
                             }
                         }
                         catch (error)
@@ -1392,8 +1410,23 @@ async function checkReactions(triggerType, data)
         }
     }
 
+    const collected = new Map();
     if (reactionsPromises.length > 0)
-        await Promise.all(reactionsPromises);
+    {
+        const settled = await Promise.all(reactionsPromises.map(entry => entry.promise));
+        settled.forEach((value, index) =>
+        {
+            if (value === undefined)
+                return;
+            const name = reactionsPromises[index].name;
+            if (!collected.has(name))
+                collected.set(name, []);
+            collected.get(name).push(value);
+        });
+    }
+    const results = {};
+    for (const [name, values] of collected)
+        results[name] = values.length === 1 ? values[0] : values;
 
     if (reactionDebounceTimer)
         clearTimeout(reactionDebounceTimer);
@@ -1465,6 +1498,7 @@ async function checkReactions(triggerType, data)
             reactionDebounceTimer = null;
         }
     }, REACTION_DEBOUNCE_MS);
+    return results;
 }
 
 // originId may be the triggering token, a single target, or inside targets[]; role 'source' = caused it, 'target' = was hit by it, else either side.
@@ -1709,8 +1743,9 @@ async function _handleTriggerBody(triggerType, data)
 
         const reactionsPromise = checkReactions(triggerType, data);
         const consumptionPromise = processEffectConsumption(triggerType, data);
-        await reactionsPromise;
+        const results = await reactionsPromise;
         await consumptionPromise;
+        return results;
     });
 }
 

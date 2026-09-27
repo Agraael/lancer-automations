@@ -11,6 +11,7 @@ import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, tar
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { predictBonusDamage } from './flow-wraps.js';
 import { escapeHtml } from '../tools/string-utils.js';
+import { accDiffTargetInvisible } from '../combat/grid-helpers.js';
 
 function buildHitChanceFor(state)
 {
@@ -35,9 +36,7 @@ function buildHitChanceFor(state)
         if (targetEntry)
         {
             netAcc = Number(targetEntry.total) || 0;
-            invisible = targetEntry.plugins?.invisibility
-                ? !!targetEntry.plugins.invisibility.data
-                : !!actor.statuses?.has?.('invisible');
+            invisible = accDiffTargetInvisible(targetEntry, actor);
         }
         else
         {

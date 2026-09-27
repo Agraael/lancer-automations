@@ -70,8 +70,9 @@ function damageLine(list)
 function targetingRow(snapshot)
 {
     const rangeEntries = Object.entries(snapshot.ranges || {});
+    const damageTotal = snapshot.raw?.base?.total;
     const damageEntries = snapshot.kind === 'damage'
-        ? [...(snapshot.raw.weapon?.damage || []), ...(snapshot.raw.weapon?.bonusDamage || [])]
+        ? [...(damageTotal?.damage || snapshot.raw.weapon?.damage || []), ...(damageTotal?.bonusDamage || snapshot.raw.weapon?.bonusDamage || [])]
         : snapshot.attackDamage || [];
     if (!rangeEntries.length && !damageEntries.length)
         return '';
@@ -218,10 +219,11 @@ function damageBody(snapshot)
     const weapon = raw.weapon || {};
     const base = raw.base || {};
     const laRows = snapshot.laRows || {};
-    const bonusDamage = withoutSynced([...(weapon.bonusDamage || []), ...(base.bonusDamage || [])], laRows.global);
+    const total = base.total || { damage: weapon.damage, bonusDamage: [...(weapon.bonusDamage || []), ...(base.bonusDamage || [])] };
+    const bonusDamage = withoutSynced(total.bonusDamage || [], laRows.global);
 
     rows.push(`<div class="lau-cols">
-        <div class="lau-col">${sectionHeader('', 'Base Damage')}${damageLine(weapon.damage) || '<div class="lau-dmg">none</div>'}</div>
+        <div class="lau-col">${sectionHeader('', 'Base Damage')}${damageLine(total.damage) || '<div class="lau-dmg">none</div>'}</div>
         <div class="lau-col">${sectionHeader('', 'Bonus Damage')}${damageLine(bonusDamage) || '<div class="lau-dmg">none</div>'}</div>
     </div>`);
 

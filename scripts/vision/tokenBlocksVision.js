@@ -2,6 +2,7 @@
 
 import { laLosFlagOnly } from './laWallLos.js';
 import { invalidateLosCaches } from './lancerDetectionModes.js';
+import { _isMovementAnimating } from './visionFromEdge.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
@@ -14,6 +15,13 @@ const EDGE_PREFIX = 'la-block-los';
 // Id segment that keeps LA-only edges out of the vanilla basic-sight veto.
 const LA_ONLY_MARK = 'laonly-';
 const SETTING_BULWARK_BLOCKS = 'bulwarkBlocksLineOfSight';
+// Scanning every canvas.edges key to find 6 edges cost O(all walls) per animation frame.
+const _edgeIdsByToken = new Map();
+const SETTING_THROTTLE_FPS = 'visionAnimationThrottleFps';
+// Capped even when the vision throttle is off: the apply re-sweeps every light and vision source.
+const ANIMATION_FALLBACK_FPS = 10;
+const _lastApplyAt = new Map();
+const _trailingApply = new Map();
 
 function shouldTokenBlock(token)
 {
@@ -39,41 +47,37 @@ function shouldTokenBlockLaOnly(token)
     return !shouldTokenBlock(token);
 }
 
+function _tokenKey(token)
+{
+    return token?.id ?? token?.document?.id;
+}
+
 function _edgePrefix(token)
 {
-    const id = token.id ?? token.document?.id;
-    return `${EDGE_PREFIX}-${id}-`;
+    return `${EDGE_PREFIX}-${_tokenKey(token)}-`;
 }
 
 function _hasEdges(token)
 {
     if (!canvas?.edges)
         return false;
-    const prefix = _edgePrefix(token);
-    for (const key of canvas.edges.keys())
-    {
-        if (key.startsWith(prefix))
-            return true;
-    }
-    return false;
+    return _edgeIdsByToken.has(_tokenKey(token));
 }
 
 function _removeEdges(token)
 {
+    const key = _tokenKey(token);
+    const ids = _edgeIdsByToken.get(key);
+    if (!ids)
+        return;
+    _edgeIdsByToken.delete(key);
     if (!canvas?.edges)
         return;
-    const prefix = _edgePrefix(token);
-    const toDelete = [];
-    for (const key of canvas.edges.keys())
-    {
-        if (key.startsWith(prefix))
-            toDelete.push(key);
-    }
-    for (const key of toDelete)
-        canvas.edges.delete(key);
+    for (const id of ids)
+        canvas.edges.delete(id);
 }
 
-function _getTokenElevationBounds(token)
+function getTokenElevationBounds(token)
 {
     const doc = token.document ?? token;
     const elevation = doc.elevation ?? 0;
@@ -125,9 +129,11 @@ function _addEdges(token, laOnly = false)
     if (!segments.length)
         return;
     const prefix = _edgePrefix(token);
-    const { top, bottom } = _getTokenElevationBounds(token);
+    const { top, bottom } = getTokenElevationBounds(token);
     // Wall Height's _testEdgeInclusion reads edge.object.document.flags['wall-height']; give it a stub.
     const wallStub = { document: { flags: { 'wall-height': { top, bottom } } } };
+    const key = _tokenKey(token);
+    const installed = _edgeIdsByToken.get(key) ?? [];
     for (let segIdx = 0; segIdx < segments.length; segIdx++)
     {
         const id = laOnly ? `${prefix}${LA_ONLY_MARK}${segIdx}` : `${prefix}${segIdx}`;
@@ -141,7 +147,9 @@ function _addEdges(token, laOnly = false)
             move: CONST.WALL_SENSE_TYPES.NONE
         });
         canvas.edges.set(id, edge);
+        installed.push(id);
     }
+    _edgeIdsByToken.set(key, installed);
 }
 
 function _installEdges(token)
@@ -157,27 +165,77 @@ function _installEdges(token)
         _addEdges(token, true);
 }
 
+function _clearTrailing(key)
+{
+    const timer = _trailingApply.get(key);
+    if (timer === undefined)
+        return;
+    globalThis.clearTimeout(timer);
+    _trailingApply.delete(key);
+}
+
+// refreshLighting/refreshVision only re-render; the polygons re-sweep on the initialize flags.
+function _applyToken(token)
+{
+    _removeEdges(token);
+    _installEdges(token);
+    invalidateLosCaches();
+    canvas.perception?.update?.({ refreshEdges: true, initializeLighting: true, initializeVision: true });
+}
+
+function _throttleMs()
+{
+    const fps = Number(getModuleSetting(SETTING_THROTTLE_FPS)) || 0;
+    return 1000 / (fps > 0 ? fps : ANIMATION_FALLBACK_FPS);
+}
+
 function _refreshToken(token)
 {
     if (!token)
         return;
-    _removeEdges(token);
-    _installEdges(token);
-    invalidateLosCaches();
-    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
+    const key = _tokenKey(token);
+    if (!_isMovementAnimating(token))
+    {
+        _clearTrailing(key);
+        _lastApplyAt.delete(key);
+        _applyToken(token);
+        return;
+    }
+    const throttleMs = _throttleMs();
+    const now = globalThis.performance.now();
+    if ((now - (_lastApplyAt.get(key) ?? 0)) >= throttleMs)
+    {
+        _clearTrailing(key);
+        _lastApplyAt.set(key, now);
+        _applyToken(token);
+        return;
+    }
+    // The last frame usually lands inside the window; without this the edges freeze a step behind.
+    _clearTrailing(key);
+    _trailingApply.set(key, globalThis.setTimeout(() =>
+    {
+        _trailingApply.delete(key);
+        if (token.destroyed)
+            return;
+        _lastApplyAt.set(key, globalThis.performance.now());
+        _applyToken(token);
+    }, throttleMs * 1.5));
 }
 
 function _refreshAll()
 {
     if (!canvas?.tokens)
         return;
+    for (const key of [..._trailingApply.keys()])
+        _clearTrailing(key);
+    _lastApplyAt.clear();
+    // Purge by bookkeeping, not by placeable: a token that left the scene still owns edges.
+    for (const key of [..._edgeIdsByToken.keys()])
+        _removeEdges({ id: key });
     for (const token of canvas.tokens.placeables)
-    {
-        _removeEdges(token);
         _installEdges(token);
-    }
     invalidateLosCaches();
-    canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
+    canvas.perception?.update?.({ refreshEdges: true, initializeLighting: true, initializeVision: true });
 }
 
 /** Rebuild every token's blocker edges, for LA LOS mode changes. */
@@ -237,9 +295,11 @@ export function initTokenBlocksVision()
 
     Hooks.on('deleteToken', (tokenDoc) =>
     {
+        _clearTrailing(tokenDoc.id);
+        _lastApplyAt.delete(tokenDoc.id);
         _removeEdges({ id: tokenDoc.id });
         invalidateLosCaches();
-        canvas.perception?.update?.({ refreshEdges: true, refreshVision: true, refreshLighting: true });
+        canvas.perception?.update?.({ refreshEdges: true, initializeLighting: true, initializeVision: true });
     });
 
     Hooks.on('updateToken', (tokenDoc, change) =>

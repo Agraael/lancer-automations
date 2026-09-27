@@ -1,4 +1,4 @@
-// B1 sightline renderer: cutoff rays with underlay traversal bands (THT terrain, GAA auras, templates).
+// B1 sightline renderer: cutoff rays with underlay traversal bands (THT terrain, GAA auras, templates, tokens).
 
 import { computeSightlineRays } from './lancerDetectionModes.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
@@ -33,6 +33,15 @@ function _drawChipGlyph(gfx, x, y, lane, color)
         gfx.lineStyle(0);
         gfx.beginFill(color, 1);
         gfx.drawPolygon([x, y - 4.5, x + 4.5, y + 3.5, x - 4.5, y + 3.5]);
+        gfx.endFill();
+        return;
+    }
+    if (lane === 'token')
+    {
+        gfx.lineStyle(0);
+        gfx.beginFill(color, 1);
+        gfx.drawCircle(x, y - 2.8, 2.1);
+        gfx.drawRoundedRect(x - 3.4, y + 0.4, 6.8, 4.2, 2);
         gfx.endFill();
         return;
     }
@@ -319,10 +328,15 @@ function _templateCellTest(template)
     };
 }
 
+function _templateFlags(doc)
+{
+    return doc.flags?.templatemacro ?? {};
+}
+
 // Same vertical rule as movement penalties: elevationGated templates span elevation to elevation + range.
 function _templateBand(doc)
 {
-    const flags = doc.flags?.templatemacro ?? {};
+    const flags = _templateFlags(doc);
     if (!flags.elevationGated)
         return null;
     const bottom = doc.elevation ?? 0;
@@ -339,6 +353,8 @@ function _templateZones(pointA, pointB, sampleCount, heightA, heightB)
         const shape = template.shape;
         const doc = template.document;
         if (!shape || !doc)
+            continue;
+        if (!_templateFlags(doc).laLineOfSight)
             continue;
         const cellTest = _templateCellTest(template)
             ?? ((point) => shape.contains(point.x - doc.x, point.y - doc.y));
@@ -379,6 +395,8 @@ function _auraZones(pointA, pointB, sampleCount, viewer, heightA, heightB)
             const point = _lerp(pointA, pointB, tPos);
             for (const hit of api.getAurasContainingPoint(point.x, point.y, { elevation: heightAt(tPos) }) ?? [])
             {
+                if (!hit.aura?.laLineOfSight)
+                    continue;
                 if (hit.parent?.document?.id !== viewerId)
                 {
                     candidates.set(keyOf(hit), {
@@ -401,6 +419,36 @@ function _auraZones(pointA, pointB, sampleCount, viewer, heightA, heightB)
     {
         return [];
     }
+}
+
+function _tokenZones(pointA, pointB, sampleCount, viewer, target, heightA, heightB)
+{
+    const zones = [];
+    const heightAt = (tPos) => heightA + (heightB - heightA) * tPos;
+    const endpointIds = new Set([viewer, target]
+        .filter(ref => ref instanceof foundry.canvas.placeables.Token)
+        .map(ref => ref.document.id));
+    for (const token of canvas?.tokens?.placeables ?? [])
+    {
+        const doc = token.document;
+        const shape = token.getShape?.();
+        if (!doc || !shape?.contains || endpointIds.has(doc.id) || !token.visible)
+            continue;
+        const inside = (point) => shape.contains(point.x - doc.x, point.y - doc.y);
+        if (inside(pointA) || inside(pointB))
+            continue;
+        const bottom = doc.elevation ?? 0;
+        const top = bottom + laTokenGameplayHeight(doc);
+        const color = _colorOf(/** @type {any} */ (token)._getBorderColor?.(), 0x999999);
+        const testFn = (point, tPos) =>
+        {
+            const rayHeight = heightAt(tPos);
+            return rayHeight >= bottom && rayHeight <= top && inside(point);
+        };
+        for (const [t0, t1] of _sampleIntervals(pointA, pointB, sampleCount, testFn))
+            zones.push({ lane: 'token', color, alpha: 0.85, t0, t1 });
+    }
+    return zones;
 }
 
 function _perp(pointA, pointB)
@@ -520,7 +568,7 @@ function _drawPair(group, viewer, target)
 {
     const result = computeSightlineRays(viewer, target);
     if (!result)
-        return;
+        return null;
     const gfx = group._gfx;
     const addSeg = (from, to, color) =>
     {
@@ -559,27 +607,30 @@ function _drawPair(group, viewer, target)
             ..._terrainZones(ray.a, ray.b, zoneHeightV, zoneHeightT),
             ..._auraZones(ray.a, ray.b, sampleCount, viewer, zoneHeightV, zoneHeightT),
             ..._templateZones(ray.a, ray.b, sampleCount, zoneHeightV, zoneHeightT),
+            ..._tokenZones(ray.a, ray.b, sampleCount, viewer, target, zoneHeightV, zoneHeightT),
         ];
         _drawZoneMarks(gfx, group._chips, ray.a, ray.b, zones, tMax);
     }
+    return result;
 }
 
 /**
  * Draws B1 sightlines from viewer to each target under the given key, replacing that key's previous draw.
  * @param {string} key
- * @param {Token} viewer
- * @param {(Token|{x: number, y: number, h?: number})[]} targets
+ * @param {Token|{x: number, y: number, h?: number, cells?: {x: number, y: number}[]}} viewer
+ * @param {(Token|{x: number, y: number, h?: number, cells?: {x: number, y: number}[]})[]} targets
+ * @returns {any[]} per-target ray results, index-aligned with `targets`
  */
 export function drawSightlines(key, viewer, targets)
 {
     clearSightlines(key);
     if (!viewer || !targets?.length || !canvas?.ready)
-        return;
+        return [];
     const group = _groupFor(key);
-    for (const target of targets)
-        _drawPair(group, viewer, target);
+    const results = targets.map(target => _drawPair(group, viewer, target));
     if (group._pulseSegs.length)
         _ensureTicker();
+    return results;
 }
 
 // Token ids travel, not geometry: every client already has the walls and terrain to redraw it.

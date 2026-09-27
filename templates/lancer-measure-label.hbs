@@ -1,0 +1,31 @@
+<div class="la-waypoint-label la-measure {{cssClass}}">
+	<div class="la-badge-icon">
+		<i class="la-icon {{iconClass}}"></i>
+	</div>
+	<div class="la-badge-disc">
+		<span class="la-total">{{totalDistance}}</span>
+		{{#if units}}<span class="la-units">{{units}}</span>{{/if}}
+	</div>
+	{{#if secret}}
+	<div class="la-badge-secret"><i class="fa-solid fa-eye-slash"></i></div>
+	{{/if}}
+	{{#if los}}
+	<div class="la-badge-row la-los-row">
+		<i class="la-icon la-los-icon {{losIcon}}"></i>
+		<span class="la-los">{{losLabel}}</span>
+	</div>
+	{{/if}}
+	<div class="la-badge-row{{#unless showSecondLine}} empty{{/unless}}">
+		{{#if deltaDistance}}
+		<span class="la-delta">{{deltaDistance}}</span>
+		{{/if}}
+		{{#if horizontal}}
+		<i class="la-icon la-horiz-icon fa-solid fa-left-right"></i>
+		<span class="la-horiz">{{horizontal}}</span>
+		{{/if}}
+		{{#if elevIcon}}
+		<i class="la-icon {{elevIcon}}"></i>
+		<span class="la-elev">{{elevAbs}}</span>
+		{{/if}}
+	</div>
+</div>

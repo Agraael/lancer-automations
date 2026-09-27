@@ -2,6 +2,19 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-09-27-lancer-4-3-8",
+            "date": "2026-09-27",
+            "title": "Lancer Automations 4.3.8",
+            "body": [
+                "<p>Little patch this week, I've been sick and exhausted from my DM session.</p>",
+                "<p>An <b>action tape</b> under the combat bar records what each token did, per round. The <b>narrative TAH</b> now holds a roster of pilots and NPCs, with <b>clocks and burdens</b>. The LA line of sight is on the <b>measure ruler</b>, Tab to switch mode. <b>Post-activation triggers</b> for automation authors.</p>",
+                "<p>New on Patreon: <b>feature proposals</b>. Details in the post.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-3-8-and-170612110",
+            "linkLabel": "Lancer Automations 4.3.8 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-09-18-lancer-4-3-1",
             "date": "2026-09-18",
             "title": "Lancer Automations 4.3.1",

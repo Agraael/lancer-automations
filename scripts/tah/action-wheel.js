@@ -191,6 +191,8 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyF' }],
         onDown: () =>
         {
+            if (/** @type {any} */ (canvas.tokens)?._draggedToken)
+                return false;
             if (!canvas.tokens?.controlled?.length && !getModuleSetting('tah.narrativeMode'))
                 return false;
             toggleActionWheel();

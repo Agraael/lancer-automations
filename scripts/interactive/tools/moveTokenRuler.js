@@ -16,6 +16,7 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { moveTokenTo, awaitMovementSettled } from "../../movement/move-api.js";
 import { _transformFoundPath } from "../../movement/terrain-trigger-waypoints.js";
 import { makeWallBlocker } from "../../movement/wall-block.js";
+import { freeTwinOf, parseAction } from "../../movement/movement-actions.js";
 
 import { localize } from '../../tools/string-utils.js';
 // Above this budget the cost-aware Dijkstra sweep gets too big; fall back to plain grid range.
@@ -56,6 +57,13 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
     if (action && !actions[action])
         console.warn(`lancer-automations | moveTokenRuler: unknown movement action "${action}", core falls back to displace.`);
     const unconstrained = !!(action && (actions[action]?.teleport || action === 'displace' || action === 'forced'));
+    const freeAction = (base) =>
+    {
+        if (!free)
+            return base;
+        const twin = freeTwinOf(base);
+        return twin in actions ? twin : base;
+    };
 
     const picked = await _queueCard(() => new Promise((resolve) =>
     {
@@ -78,7 +86,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                     width: doc.width,
                     height: doc.height,
                     shape: doc.shape,
-                    action: action ?? doc.movementAction,
+                    action: freeAction(action ?? doc.movementAction),
                     snapped: false,
                     explicit: false,
                     checkpoint: true
@@ -179,7 +187,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 width: doc.width,
                 height: doc.height,
                 shape: doc.shape,
-                action: action ?? moveTok._getDragMovementAction(),
+                action: freeAction(action ?? moveTok._getDragMovementAction()),
                 snapped: true,
                 explicit: true,
                 checkpoint: true
@@ -298,7 +306,9 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 return 0;
             try
             {
-                const usedCost = moveTok.measureMovementPath([state.origin, ...state.waypoints], { preview: true }).cost;
+                const billed = [state.origin, ...state.waypoints]
+                    .map(waypoint => ({ ...waypoint, action: parseAction(waypoint.action).base }));
+                const usedCost = moveTok.measureMovementPath(billed, { preview: true }).cost;
                 return Number.isFinite(usedCost) ? usedCost : 0;
             }
             catch

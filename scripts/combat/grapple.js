@@ -339,7 +339,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                                     await api.executeBasicAttack(reactorToken.actor, {
                                         title: "Grapple",
                                         attack_type: "Melee"
-                                    });
+                                    }, { tapeRecorded: true });
                                 }
                             },
                             {

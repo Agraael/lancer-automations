@@ -2,7 +2,7 @@
 
 import { MODULE_ID } from './constants.js';
 import { getModuleSetting } from './settings-utils.js';
-import { laTokenGameplayHeight } from './token-height.js';
+import { laTokenGameplayHeight, laTokenHeight } from './token-height.js';
 import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
 import { escapeHtml as _escapeText, localize, localizeFormat } from './string-utils.js';
 import { FLAG_PORTRAIT_MODE, FLAG_PORTRAIT_IMG, FLAG_PORTRAIT_MECH_PILOT, PORTRAIT_MODES, PORTRAIT_PILOT } from '../tah/portrait.js';
@@ -658,6 +658,7 @@ async function wreckIt(token)
                                         isWreck: true,
                                         tokenDocument: token.document.toObject(),
                                     },
+                                    'wall-height': { tokenHeight: laTokenHeight(token.document) },
                                     lancer: {
                                         manual_token_size: token.document.getFlag('lancer', 'manual_token_size') ?? false,
                                     },
@@ -886,11 +887,13 @@ function _renderWreckTab(app, html, data)
     const sections = [];
     if (showWreck)
         sections.push({ title: localize('LA.wreck.sectionWreck'), html: _buildWreckSectionHtml(flags) });
-    sections.push({ title: localize('LA.wreck.sectionDetection'), html: _buildAwarenessSectionHtml(flags) });
-    sections.push({ title: localize('LA.wreck.sectionStatHint'), html: _buildStatHintSectionHtml(flags) });
+    sections.push({
+        title: localize('LA.wreck.sectionAwareness'),
+        html: _buildAwarenessSectionHtml(flags) + _buildStatHintSectionHtml(flags)
+    });
     if (game.user?.isGM)
         sections.push({ title: localize('LA.wreck.sectionScan'), cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
-    sections.push({ title: localize('LA.wreck.sectionElevation'), html: _buildElevationSectionHtml(flags) });
+    sections.push({ title: localize('LA.wreck.sectionMovement'), html: _buildMovementSectionHtml(flags) });
     sections.push({ title: localize('LA.wreck.sectionPortrait'), html: _buildPortraitSectionHtml(flags, actorType) });
     const sectionsHtml = sections.map((section, idx) => _wrapSection(section, idx > 0)).join('');
 
@@ -1088,14 +1091,27 @@ function _buildStatHintSectionHtml(flags)
     `;
 }
 
-function _buildElevationSectionHtml(flags)
+function _buildMovementSectionHtml(flags)
 {
     const disableAutoTerrain = !!flags.disableAutoTerrainElevation;
+    const autoRotate = flags.autoRotate ?? 'default';
+    const opt = (val, label) => `<option value="${val}" ${autoRotate === val ? 'selected' : ''}>${label}</option>`;
     return `
         <div class="form-group">
             <label>Disable Auto-elevation from Terrain</label>
             <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
             <p class="notes">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
+        </div>
+        <div class="form-group">
+            <label>Rotate Toward Movement</label>
+            <div class="form-fields">
+                <select name="flags.${MODULE_ID}.autoRotate" data-dtype="String">
+                    ${opt('default', 'Default (use core setting)')}
+                    ${opt('on', 'On')}
+                    ${opt('off', 'Off')}
+                </select>
+            </div>
+            <p class="notes">Off keeps the facing you set by hand when dragging or nudging the token.</p>
         </div>
     `;
 }

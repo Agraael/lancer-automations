@@ -17,6 +17,7 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
 import { drawSightlines, clearSightlines } from "../../vision/sightlines.js";
+import { sightlineModeActive } from "../../movement/token-ruler.js";
 import { getActorMaxThreat, getWeaponProfiles_WithBonus, weaponPulseRange } from "../../tools/misc-tools.js";
 import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, weaponIgnoresLineOfSight } from "../../tools/weapon-bonus-utils.js";
 import { getWeapons } from "../deployables.js";
@@ -938,7 +939,11 @@ function setToolCursorKind(kind)
         return;
     _toolCursorKind = kind;
     const icon = document.createElement('i');
-    icon.className = kind === 'target' ? 'mdi mdi-target' : 'fa-solid fa-ruler';
+    if (kind === 'target')
+        icon.className = 'mdi mdi-target';
+    else
+        icon.className = kind === 'eye' ? 'fa-solid fa-eye' : 'fa-solid fa-ruler';
+    _toolCursorEl.classList.toggle('kind-ruler', kind !== 'target');
     _toolCursorEl.replaceChildren(icon);
 }
 
@@ -1139,7 +1144,7 @@ const _gLastClient = { x: 0, y: 0 };
 function desiredToolCursorIcon()
 {
     if (game.activeTool === 'ruler' && rulerCursorOn())
-        return 'ruler';
+        return sightlineModeActive() ? 'eye' : 'ruler';
     if (game.activeTool === 'target' && targetCursorOn())
         return 'target';
     return null;
@@ -1207,6 +1212,7 @@ export function initGlobalCtrlRuler()
     document.addEventListener('mousemove', onGlobalMove, true);
     window.addEventListener('blur', onGlobalCtrlBlur);
     Hooks.on('activateSceneControls', () => refreshGlobalRulerDecoration());
+    Hooks.on('lancer-automations.sightlineModeChanged', () => refreshGlobalRulerDecoration());
 }
 
 // controlToken/hoverToken fire per-token; coalesce a burst into a single refresh.
@@ -1537,6 +1543,7 @@ function injectStyles()
     style.textContent = `
         .la-mt-hide-cursor, .la-mt-hide-cursor * { cursor: none !important; }
         .la-mt-distance-cursor { position: fixed; pointer-events: none; z-index: 100000; transform: translate(-50%, -50%); color: #ffffff; font-size: 22px; line-height: 1; display: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.9)); }
+        .la-mt-distance-cursor.kind-ruler { font-size: 16px; }
         .la-mt-distance-cursor .la-mt-cursor-laser { width: 30px; height: 30px; display: block; }
         #la-measure-toolbar { --la-mt-cut: 10px; position: fixed; left: 50%; bottom: 10px; z-index: 70; isolation: isolate; display: flex; align-items: center; gap: 8px; padding: 7px 16px; background: transparent; font-family: var(--font-primary, "Signika", sans-serif); color: var(--la-ink, #e8e8e8); font-size: 13px; opacity: 0; transform-origin: 50% 100%; transform: translateX(-50%) translateY(24px) scale(var(--la-mt-scale, 1)); transition: opacity 200ms ease-out, transform 240ms cubic-bezier(0.22, 1, 0.36, 1); }
         #la-measure-toolbar::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--primary-color, #ff6400); clip-path: polygon(0 0, calc(100% - var(--la-mt-cut)) 0, 100% var(--la-mt-cut), 100% 100%, var(--la-mt-cut) 100%, 0 calc(100% - var(--la-mt-cut))); filter: drop-shadow(0 4px 14px rgba(0,0,0,0.55)); }

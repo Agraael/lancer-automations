@@ -122,7 +122,7 @@ export const TARGET_CAPABLE_TRIGGERS = new Set([
 export const SOURCE_MATCH_TRIGGERS = new Set([
     'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
     'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
-    'onEndActivation', 'onInitEndActivation',
+    'onEndActivation', 'onInitEndActivation', 'onPostActivation', 'onPostEndActivation',
     'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
 ]);
 
@@ -133,7 +133,7 @@ export const TRIGGER_GROUPS = [
     { label: "LA.triggerGroup.rolls", triggers: ["onRoll"] },
     { label: "LA.triggerGroup.attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
     { label: "LA.triggerGroup.tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
-    { label: "LA.triggerGroup.activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
+    { label: "LA.triggerGroup.activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onPostActivation", "onPostEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
     { label: "LA.triggerGroup.status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
     { label: "LA.triggerGroup.hpHeat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
     { label: "LA.triggerGroup.structureStress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
@@ -142,7 +142,7 @@ export const TRIGGER_GROUPS = [
 ];
 export const BUILT_IN_TRIGGERS = new Set(TRIGGER_GROUPS.flatMap(group => group.triggers));
 
-export const ACTIVATION_TRIGGERS = new Set(['onActivation', 'onInitActivation', 'onEndActivation', 'onInitEndActivation']);
+export const ACTIVATION_TRIGGERS = new Set(['onActivation', 'onInitActivation', 'onEndActivation', 'onInitEndActivation', 'onPostActivation', 'onPostEndActivation']);
 const ACTIVATION_TRIGGER_SELECTOR = [...ACTIVATION_TRIGGERS].map(trigger => `input[name="trigger.${trigger}"]`).join(', ');
 
 const sameTriggerSet = (left, right) => Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every(trigger => right.includes(trigger));
@@ -2194,6 +2194,8 @@ export class ReactionEditor extends FormApplication
             onActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, distanceToTrigger, canTriggerReaction}",
             onInitEndActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, endActivation, cancelAction(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onEndActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, distanceToTrigger, canTriggerReaction}",
+            onPostActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, results, distanceToTrigger, canTriggerReaction}",
+            onPostEndActivation: "{ triggeringToken, actionType, actionName, item, actionData, deployable, reactionJustConsumed, endActivation, extraData, flowState, results, distanceToTrigger, canTriggerReaction}",
             onPreHpChange: "{ triggeringToken, previousHP, newHP, delta, cancelHpChange(reasonText, title, allowConfirm, userIdControl), modifyHpChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onHpGain: "{ triggeringToken, hpChange, currentHP, maxHP, distanceToTrigger, canTriggerReaction}",
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger, canTriggerReaction}",

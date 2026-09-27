@@ -191,6 +191,41 @@ const ROLL_TYPES = {
     }
 };
 
+function rollSummaryHtml(def, state)
+{
+    const roll = def.getRoll(state);
+    const lines = [];
+    if (roll)
+        lines.push(`<code>${roll.formula}</code> = <b>${roll.total}</b>`);
+
+    let hasTargetLine = false;
+    for (const target of def.getTargets(state) ?? [])
+    {
+        if (typeof target?.hit !== 'boolean')
+            continue;
+        const name = target.token?.name ?? target.token?.document?.name;
+        if (!name)
+            continue;
+        const verdict = target.crit
+            ? localize('LA.reroll.crit')
+            : localize(target.hit ? 'LA.reroll.hit' : 'LA.reroll.miss');
+        const total = target.total ?? null;
+        lines.push(`${name}: <b>${verdict}</b>${total === null ? '' : ` (${total})`}`);
+        hasTargetLine = true;
+    }
+
+    if (!hasTargetLine)
+    {
+        const success = def.getSuccess(state);
+        if (success === true)
+            lines.push(`<b>${localize('LA.reroll.succeeded')}</b>`);
+        else if (success === false)
+            lines.push(`<b>${localize('LA.reroll.failed')}</b>`);
+    }
+
+    return lines.join('<br>') || null;
+}
+
 function buildPayload(rollType, def, state, rerollCount, markDirty)
 {
     const token = state.actor?.token ? state.actor.token.object : state.actor?.getActiveTokens?.()?.[0];
@@ -276,18 +311,8 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
         return name ? `${String(name).toUpperCase()} \u2014 ${fallback}` : fallback;
     };
 
-    const rollLine = () =>
-    {
-        const roll = def.getRoll(state);
-        if (!roll)
-            return null;
-        return `<code>${roll.formula}</code> = <b>${roll.total}</b>`;
-    };
     const joinReason = (reasonText) =>
-    {
-        const line = rollLine();
-        return [reasonText, line].filter(Boolean).join('<br>') || null;
-    };
+        [reasonText, rollSummaryHtml(def, state)].filter(Boolean).join('<br>') || null;
 
     const reroll = async (reasonText = null, subtype = 'retry', title = null, allowConfirm = true, userIdControl = null, opts = {}) =>
     {
@@ -335,6 +360,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
         rollType,
         roll,
         total: roll?.total ?? null,
+        rollSummary: rollSummaryHtml(def, state),
         success,
         targets,
         item: state.item ?? null,
@@ -421,8 +447,7 @@ async function applyBonusRerolls(state, rollType, def)
         const name = bonus.name || 'Reroll';
         const upperName = String(name).toUpperCase();
 
-        const currentRoll = def.getRoll(state);
-        const rollLineHtml = currentRoll ? `<code>${currentRoll.formula}</code> = <b>${currentRoll.total}</b>` : null;
+        const rollLineHtml = rollSummaryHtml(def, state);
         const offer = await api.startChoiceCard({
             title: localizeFormat('LA.dialogTitle.useReroll', { name: upperName }),
             description: rollLineHtml ?? undefined,

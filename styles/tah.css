@@ -94,7 +94,7 @@
     cursor: pointer;
 }
 
-.la-menu-popup-row + .la-menu-popup-row {
+.la-menu-popup-row+.la-menu-popup-row {
     border-top: 1px solid #22262b;
 }
 
@@ -105,6 +105,11 @@
 
 .la-menu-popup-danger {
     color: #bf8383;
+}
+
+.la-menu-popup-active {
+    color: #fff;
+    background: #2d3138;
 }
 
 .la-menu-popup-glyph {
@@ -312,6 +317,102 @@
     pointer-events: none;
 }
 
+/* Narrative roster rail */
+.la-hud-portrait-rail {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.la-hud-rail-slot {
+    position: relative;
+    line-height: 0;
+    flex: 0 0 auto;
+    transform-origin: bottom left;
+    transition: transform 0.18s ease, filter 0.18s ease, opacity 0.18s ease;
+}
+
+.la-hud-rail-slot .la-hud-portrait {
+    position: relative;
+    bottom: auto;
+    left: auto;
+}
+
+.la-hud-rail-slot:not(.is-active) {
+    cursor: pointer;
+    pointer-events: auto;
+    filter: grayscale(1) brightness(0.6);
+    opacity: 0.8;
+}
+
+.la-hud-rail-slot:not(.is-active):hover {
+    filter: grayscale(0.2) brightness(0.95);
+    opacity: 1;
+    transform: translateY(-4px);
+}
+
+.la-hud-rail-name {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1.6;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.la-hud-rail-slot.is-picked {
+    filter: none;
+    opacity: 0;
+    transform: translateY(-12px) scale(1.3);
+}
+
+.la-hud-portrait-rail.is-swapping .la-hud-rail-slot.is-active {
+    opacity: 0.2;
+    transform: scale(0.88);
+}
+
+.la-hud-rail-slot.la-hud-rail-arrive {
+    animation: la-hud-rail-arrive 260ms ease-out;
+}
+
+@keyframes la-hud-rail-arrive {
+    from {
+        transform: scale(0.55) translateY(10px);
+        filter: grayscale(1) brightness(0.6);
+        opacity: 0.4;
+    }
+
+    to {
+        transform: none;
+        filter: none;
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .la-hud-rail-slot,
+    .la-hud-rail-slot.la-hud-rail-arrive {
+        transition: none;
+        animation: none;
+    }
+}
+
 .la-hud-portrait img,
 .la-hud-portrait video {
     display: block;
@@ -491,6 +592,127 @@
     font-size: 0.8em;
     font-family: inherit;
     outline: none;
+}
+
+/* Action tape: one line under the combat bar, current turn only. */
+.la-action-tape {
+    display: flex;
+    align-items: stretch;
+    box-sizing: border-box;
+    height: 26px;
+    width: max-content;
+    min-width: 180px;
+    background: #111;
+    border-left: 3px solid var(--primary-color);
+}
+
+.la-action-tape.la-tape-past {
+    border-left-color: #555;
+}
+
+.la-tape-nav {
+    flex: 0 0 auto;
+    width: 15px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: #fff;
+    font-size: 0.75em;
+    line-height: 1;
+    opacity: 0.5;
+    cursor: pointer;
+}
+
+.la-tape-nav:hover:not(:disabled) {
+    opacity: 1;
+    color: var(--primary-color);
+    background: none;
+    box-shadow: none;
+}
+
+.la-tape-nav:disabled {
+    opacity: 0.12;
+    cursor: default;
+}
+
+.la-tape-round {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 4px 0 1px;
+    font-family: monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: #7b8189;
+}
+
+.la-action-tape.la-tape-past .la-tape-round {
+    color: #b06a6a;
+}
+
+.la-tape-strip {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 2px;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.la-tape-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.la-tape-empty {
+    font-size: 0.7em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #4a4a4a;
+}
+
+.la-tape-chip {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--la-tape-ink), #000 58%);
+    border-left: 2px solid var(--la-tape-ink);
+    border-radius: 0;
+    background: color-mix(in srgb, var(--la-tape-ink), #000 84%);
+    box-shadow: none;
+    color: var(--la-tape-ink);
+    cursor: pointer;
+}
+
+.la-tape-chip:hover {
+    background: var(--primary-color);
+    border-color: #fff;
+    color: #fff;
+    box-shadow: none;
+}
+
+/* mask-image is set inline per chip, so its url resolves against the page and not against this file. */
+.la-tape-ico {
+    display: block;
+    width: 15px;
+    height: 15px;
+    background-color: currentColor;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+.la-tape-ico-font {
+    font-size: 15px;
+    line-height: 1;
 }
 
 /* Combat toggle */
@@ -1203,6 +1425,23 @@ input.la-status-search {
     background: #6a2a2a;
 }
 
+/* Clock/burden segments (inputCell). Fill set inline. */
+.la-hud-pips {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.la-hud-pip {
+    width: 10px;
+    height: 10px;
+    border: 1px solid;
+    border-radius: 1px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 /* Toggle switch (inputCell). Bg set inline. */
 .la-toggle-switch {
     display: inline-block;
@@ -1295,7 +1534,8 @@ input.la-status-search {
 }
 
 .la-waypoint-label .la-badge-pathfind,
-.la-waypoint-label .la-badge-elevmode {
+.la-waypoint-label .la-badge-elevmode,
+.la-waypoint-label .la-badge-secret {
     position: absolute;
     left: calc(50% + 24px);
     top: 50%;
@@ -1310,13 +1550,43 @@ input.la-status-search {
     font-size: 10px;
 }
 
-.la-waypoint-label .la-badge-elevmode {
+.la-waypoint-label .la-badge-elevmode,
+.la-waypoint-label .la-badge-secret {
     left: auto;
     right: calc(50% + 24px);
 }
 
 .la-waypoint-label .la-badge-pathfind.off {
     opacity: 0.35;
+}
+
+.la-waypoint-label.la-measure .la-badge-disc {
+    gap: 1px;
+}
+
+.la-waypoint-label .la-units {
+    font-size: 9px;
+    font-weight: 600;
+    opacity: 0.6;
+}
+
+.la-waypoint-label .la-los {
+    letter-spacing: 0.06em;
+}
+
+.la-waypoint-label.los-clear .la-los,
+.la-waypoint-label.los-clear .la-los-icon {
+    color: #8fe0ab;
+}
+
+.la-waypoint-label.los-blocked .la-los,
+.la-waypoint-label.los-blocked .la-los-icon {
+    color: #e0736c;
+}
+
+.la-waypoint-label.los-peek .la-los,
+.la-waypoint-label.los-peek .la-los-icon {
+    color: #e6cf90;
 }
 
 .la-waypoint-label .la-img {

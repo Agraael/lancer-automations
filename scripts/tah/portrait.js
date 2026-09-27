@@ -207,14 +207,15 @@ function applyTrim(el, img, box, naturalRatio, height)
  * @param {any} token Placed token (null in narrative mode).
  * @param {any} actor Actor backing the HUD.
  * @param {(height: number) => void} [onMeasured] Called with 0 when the image fails to load and reserves no height.
+ * @param {number} [drawHeight] Height to draw at, defaulting to the portrait scale setting.
  * @returns {{ el: JQuery, height: number }|null} Element plus the vertical space it needs.
  */
-export function buildPortrait(token, actor, onMeasured)
+export function buildPortrait(token, actor, onMeasured, drawHeight)
 {
     const src = resolvePortraitSrc(token, actor);
     if (!src)
         return null;
-    const height = portraitHeight();
+    const height = drawHeight || portraitHeight();
     const trimOn = !!getModuleSetting('tah.portrait.trim');
     const knownRatio = _ratioCache.get(src) ?? DEFAULT_RATIO;
     const knownTrim = trimOn ? _trimCache.get(src) : null;
@@ -261,4 +262,61 @@ export function buildPortrait(token, actor, onMeasured)
     });
     el.append(img);
     return { el, height };
+}
+
+const RAIL_SMALL_RATIO = 0.55;
+const RAIL_SWAP_MS = 190;
+
+let _railArriving = false;
+
+export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
+{
+    const fullHeight = portraitHeight();
+    const smallHeight = Math.round(fullHeight * RAIL_SMALL_RATIO);
+    const rail = $('<div class="la-hud-portrait-rail"></div>');
+    const ordered = [...pilots].sort((first, second) =>
+        Number(second.uuid === activeUuid) - Number(first.uuid === activeUuid));
+
+    let tallest = 0;
+    for (const pilot of ordered)
+    {
+        const isActive = pilot.uuid === activeUuid;
+        const built = buildPortrait(null, pilot, isActive ? onMeasured : null, isActive ? fullHeight : smallHeight);
+        if (!built)
+            continue;
+        const slot = $('<div class="la-hud-rail-slot"></div>');
+        slot.append(built.el);
+        if (isActive)
+        {
+            slot.addClass('is-active');
+            if (_railArriving)
+                slot.addClass('la-hud-rail-arrive');
+        }
+        else
+        {
+            slot.attr({ 'data-uuid': pilot.uuid, title: pilot.name });
+            slot.append($('<span class="la-hud-rail-name"></span>').text(pilot.name));
+            slot.on('click', (event) =>
+            {
+                event.preventDefault();
+                event.stopPropagation();
+                if (rail.hasClass('is-swapping'))
+                    return;
+                rail.addClass('is-swapping');
+                slot.addClass('is-picked');
+                _railArriving = true;
+                const commit = () => onPick?.(pilot.uuid);
+                if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
+                    commit();
+                else
+                    window.setTimeout(commit, RAIL_SWAP_MS);
+            });
+        }
+        tallest = Math.max(tallest, built.height);
+        rail.append(slot);
+    }
+    _railArriving = false;
+    if (!tallest)
+        return null;
+    return { el: rail, height: tallest };
 }

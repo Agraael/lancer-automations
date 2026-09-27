@@ -15,6 +15,7 @@ import { handleTrigger } from "../activations/reactions-engine.js";
 import { ReactionManager } from "../activations/reaction-manager.js";
 import { executeStandingUp, executeTeleport, executeFall, boostMove } from "./movement-tools.js";
 import { getItemStatus } from "../tah/item-helpers.js";
+import { recordAction } from "../tah/action-tape.js";
 import { isActionLocked } from "../interactive/deployables.js";
 
 /**
@@ -49,6 +50,7 @@ export function hasExecutorGM()
     return !!game.users?.activeGM;
 }
 import { openAddReserveDialog } from "./pilot-reserves.js";
+import { openClocksDialog } from "./pilot-clocks.js";
 import {
     getWeaponProfiles_WithBonus, getItemTags_WithBonus,
     getMaxWeaponRanges_WithBonus, getActorMaxThreat,
@@ -57,6 +59,7 @@ import {
 } from "./weapon-bonus-utils.js";
 export { executeStandingUp, executeTeleport, executeFall, boostMove } from "./movement-tools.js";
 export { openAddReserveDialog } from "./pilot-reserves.js";
+export { openClocksDialog } from "./pilot-clocks.js";
 export { openItemBrowserDialog } from "./item-browser.js";
 export {
     getWeaponProfiles_WithBonus, getItemTags_WithBonus,
@@ -395,6 +398,11 @@ export function isItemAvailable(item, reactionPath)
     return true;
 }
 
+// Reaction spends in flight, so a second reaction evaluated before the update lands already sees it gone.
+const _reactionSpendPending = new Set();
+const RESERVE_TIMEOUT_MS = 10000;
+let _reserveHook = null;
+
 export function hasReactionAvailable(tokenOrActor)
 {
     const actor = tokenOrActor?.actor || tokenOrActor;
@@ -405,8 +413,45 @@ export function hasReactionAvailable(tokenOrActor)
     );
     if (!inCombat)
         return true;
+    if (actor?.uuid && _reactionSpendPending.has(actor.uuid))
+        return false;
     const reaction = actor?.system?.action_tracker?.reaction;
     return reaction !== undefined && Number(reaction) > 0;
+}
+
+export function reserveReaction(tokenOrActor)
+{
+    const actor = tokenOrActor?.actor || tokenOrActor;
+    if (!actor?.uuid)
+        return;
+    _reactionSpendPending.add(actor.uuid);
+    if (_reserveHook === null)
+    {
+        _reserveHook = Hooks.on('updateActor', (updated, changes) =>
+        {
+            if (foundry.utils.getProperty(changes, 'system.action_tracker.reaction') !== undefined)
+                _reactionSpendPending.delete(updated.uuid);
+        });
+    }
+    setTimeout(() => _reactionSpendPending.delete(actor.uuid), RESERVE_TIMEOUT_MS);
+}
+
+export async function consumeReaction(tokenOrActor)
+{
+    const actor = tokenOrActor?.actor || tokenOrActor;
+    if (!actor || !hasReactionAvailable(tokenOrActor))
+        return false;
+    _reactionSpendPending.add(actor.uuid);
+    try
+    {
+        const left = (actor.system.action_tracker.reaction ?? 1) - 1;
+        await actor.update({ 'system.action_tracker.reaction': left });
+    }
+    finally
+    {
+        _reactionSpendPending.delete(actor.uuid);
+    }
+    return true;
 }
 
 /**
@@ -1280,7 +1325,7 @@ export async function attackRollWith(weapon, targets = null, options = {})
     const { fxSourceToken = null, title = null } = /** @type {any} */ (options);
     return executeExtraActionCombat(actor, {
         name: title ?? weapon.name,
-        attack_type: getWeaponType(weapon) === 'Melee' ? 'Melee' : 'Ranged',
+        attack_type: weaponClass(weapon) === 'melee' ? 'Melee' : 'Ranged',
         ...weaponRollStats(weapon)
     }, weapon, { targets, fxSourceToken, fxItem: weapon });
 }
@@ -1365,7 +1410,13 @@ function _gateActor(owner)
 
 function _gateSubject(subject)
 {
-    return typeof subject === 'string' ? subject : (subject?.id ?? '_self');
+    return String(typeof subject === 'string' ? subject : (subject?.id ?? '_self')).replace(/\./g, '_');
+}
+
+// Dots in a flag key are path separators for expandObject, so a uuid-derived key would nest itself away.
+function _gateKey(key)
+{
+    return String(key).replace(/\./g, '_');
 }
 
 // Combatant id rather than turn index, Lancer turn order is not fixed.
@@ -1401,7 +1452,7 @@ export function checkGate(owner, key, subject = null)
         return true;
     const api = game.modules.get(MODULE_ID)?.api;
     const gates = api?.getActorFlags(actor, GATE_FLAG) || {};
-    return !_gateBlocked(gates[key]?.[_gateSubject(subject)]);
+    return !_gateBlocked(gates[_gateKey(key)]?.[_gateSubject(subject)]);
 }
 
 /**
@@ -1421,8 +1472,9 @@ export async function consumeGate(owner, key, options = {})
         return true;
     const api = game.modules.get(MODULE_ID)?.api;
     const gates = api.getActorFlags(actor, GATE_FLAG) || {};
+    const gateKey = _gateKey(key);
     const subjectId = _gateSubject(options.subject);
-    if (_gateBlocked(gates[key]?.[subjectId]))
+    if (_gateBlocked(gates[gateKey]?.[subjectId]))
         return false;
 
     const combat = game.combat;
@@ -1431,7 +1483,7 @@ export async function consumeGate(owner, key, options = {})
     const entry = options.turn
         ? { c: combat.id, t: _turnStamp() }
         : { c: combat.id, r: options.rounds === null ? null : combat.round + Math.max(1, options.rounds ?? 1) - 1 };
-    await api.addActorFlags(actor, { [GATE_FLAG]: { [key]: { [subjectId]: entry } } });
+    await api.addActorFlags(actor, { [GATE_FLAG]: { [gateKey]: { [subjectId]: entry } } });
     return true;
 }
 
@@ -1450,7 +1502,7 @@ export async function clearGate(owner, key, subject = null)
     const api = game.modules.get(MODULE_ID)?.api;
     // setFlag merges, so null the entries instead of deleting them
     const value = subject === null ? null : { [_gateSubject(subject)]: null };
-    await api.addActorFlags(actor, { [GATE_FLAG]: { [key]: value } });
+    await api.addActorFlags(actor, { [GATE_FLAG]: { [_gateKey(key)]: value } });
 }
 
 /**
@@ -1602,7 +1654,7 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
             targets: targetsOverride,
             tags: extraDisplayTags(weaponTags),
             damage: action.damage ?? []
-        });
+        }, { tapeRecorded: true });
     }
 
     // Bare attack needs a full acc_diff for tags (smart) to apply + show checked.
@@ -1636,7 +1688,7 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
         attack_results: [],
         hit_results: [],
         reroll_data: ''
-    });
+    }, { tapeRecorded: true });
 }
 
 /** @returns {Promise<void>} */
@@ -2061,10 +2113,37 @@ export function weaponBarrageable(weapon)
 }
 
 /**
+ * Post the action card listing the weapons an attack action fires.
+ * @param {Actor} actor
+ * @param {string} label   Header text, e.g. "SKIRMISH"
+ * @param {any[]} weapons  Weapon items, in firing order
+ * @returns {Promise<void>}
+ */
+async function printAttackActionCard(actor, label, weapons)
+{
+    if (!weapons.length)
+        return;
+    const rows = weapons.map(weapon => `
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;">
+            <img src="${weapon.img}" width="24" height="24" style="border:none;flex:0 0 auto;"/>
+            <span>${weapon.name}</span>
+        </div>`).join('');
+    await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="card clipped-bot" style="margin:0;">
+            <div class="lancer-header lancer-primary">// ${label} //</div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:4px;">${rows}</div>
+        </div>`
+    });
+}
+
+/**
  * Executes a Skirmish action: target validation, weapon selection, and attack/damage flow.
  * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
  * @param {any} [bypassMount=null] - Direct mount to use, skipping selection.
  * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
+ * @param {((weapon: any) => boolean)|null} [weaponFilter=null] - Keeps only the weapons it accepts.
+ * @param {{noFX?: boolean, asReaction?: boolean}} [options={}] - `asReaction` spends no quick action and leaves the tape to the reaction itself.
  * @returns {Promise<void>}
  */
 export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null, options = {})
@@ -2123,7 +2202,11 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             weapons = [chosenMount];
     }
 
-    await consumeAction(actor, 'quick');
+    if (!options.asReaction)
+        await consumeAction(actor, 'quick');
+    await printAttackActionCard(actor, 'SKIRMISH', weapons);
+    if (sourceToken && !options.asReaction)
+        await recordAction(sourceToken, { name: 'Skirmish', activation: 'Quick', icon: 'modules/lancer-automations/icons/skirmish.svg' });
 
     // Bonus damage: non-Aux is primary in X/Aux mounts; in Aux/Aux only the first weapon fired keeps bonus.
     const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
@@ -2200,8 +2283,11 @@ export async function executeFight(actorOrToken, bypassWeapon = null)
             ? chosenMount.slots.find(/** @type {any} */ slot => slot.weapon?.value)?.weapon?.value ?? null
             : chosenMount;
     }
-    if (weapon)
-        await beginWeaponAttackFlow(weapon);
+    if (!weapon)
+        return;
+    if (sourceToken)
+        await recordAction(sourceToken, { name: 'Fight', activation: 'Full', icon: 'modules/lancer-automations/icons/crossed-slashes.svg' });
+    await beginWeaponAttackFlow(weapon);
 }
 
 /**
@@ -2282,6 +2368,13 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         return;
 
     await consumeAction(actor, 'full');
+    await printAttackActionCard(actor, 'BARRAGE', choices.flatMap(mount => mount.slots
+        ? mount.slots
+            .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
+            .filter(Boolean)
+        : [mount]));
+    if (sourceToken)
+        await recordAction(sourceToken, { name: 'Barrage', activation: 'Full', icon: 'modules/lancer-automations/icons/barrage.svg' });
 
     // AND card when mount has multiple weapons
     // RAW: Aux weapons in a Barrage don't deal bonus damage; the Main/Heavy/SH does.
@@ -2414,6 +2507,24 @@ export function getWeaponType(item)
         || sys.profiles?.[sys.selected_profile_index ?? 0]?.type
         || sys.weapon_type
         || "";
+}
+
+/**
+ * Coarse weapon class: "melee", "nexus", "ranged", or "" when unknown.
+ * Substring match because NPC features fold the size in ("Heavy Melee", "Main Nexus").
+ * @param {Item} item
+ * @returns {string}
+ */
+export function weaponClass(item)
+{
+    const type = String(getWeaponType(item) || "").toLowerCase();
+    if (!type)
+        return "";
+    if (type.includes("melee"))
+        return "melee";
+    if (type.includes("nexus"))
+        return "nexus";
+    return "ranged";
 }
 
 /**
@@ -2618,6 +2729,7 @@ export const MiscAPI = {
     executeTeleport,
     boostMove,
     openAddReserveDialog,
+    openClocksDialog,
 };
 
 export function escapeAttr(value)

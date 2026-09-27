@@ -1,4 +1,4 @@
-import { effectStack, usageBadgeColor } from './flagged-effects.js';
+import { effectStack, instanceBadgeColor, isUsageEffect, usageBadgeColor } from './flagged-effects.js';
 
 // Stack counts on the combat tracker rows.
 
@@ -17,7 +17,6 @@ function _onRenderCombatTracker(_app, htmlOrEl)
     const root = _rootElement(htmlOrEl);
     if (!root)
         return;
-    const color = usageBadgeColor();
     for (const row of root.querySelectorAll('li.combatant'))
     {
         const actor = game.combat?.combatants.get(row.dataset.combatantId)?.actor;
@@ -40,7 +39,7 @@ function _onRenderCombatTracker(_app, htmlOrEl)
             wrap.append(icon);
             const badge = document.createElement('span');
             badge.className = 'la-effect-counter';
-            badge.style.color = color;
+            badge.style.color = isUsageEffect(effect) ? usageBadgeColor() : instanceBadgeColor();
             badge.textContent = String(count);
             wrap.append(badge);
         }

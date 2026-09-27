@@ -3,8 +3,8 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
 import { applyEffectsToTokens, effectStack } from '../bonuses/flagged-effects.js';
-import { removeGlobalBonus, getBonusIcon, isBonusRemovalPending } from '../bonuses/genericBonuses.js';
-import { getBonusConditionLines } from '../bonuses/bonus-condition.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, isBonusRemovalPending } from '../bonuses/genericBonuses.js';
+import { getBonusConditionLines, getBonusFrequencyLabel, hasLambdaGate } from '../bonuses/bonus-condition.js';
 import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
 import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
 
@@ -20,8 +20,12 @@ const PERM_BG = '#f0e0a0';
 const PERM_BORDER = '#a07020';
 const BONUS_BG = '#cbb6e8';
 const BONUS_BORDER = '#4a2f7a';
+const CONSTANT_BG = '#f2b47a';
+const CONSTANT_BORDER = '#8a4310';
 
 let _openToken = null;
+let _page = 1;
+let _pageCount = 1;
 let _refreshTimer = null;
 let _tip = null;
 let _tipTimer = null;
@@ -136,6 +140,28 @@ function collectEntries(actor)
     return entries;
 }
 
+/** Second page: constant bonuses, which never carry a token icon or an effect. */
+function constantEntries(actor)
+{
+    return /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || [])
+        .map((/** @type {any} */ bonus) => ({
+            kind: 'constant',
+            key: `constant:${bonus.id}`,
+            name: bonus.name ?? 'Bonus',
+            icon: bonus.icon || getBonusIcon(bonus),
+            bonus,
+            effects: [],
+            active: true,
+            permanent: false,
+        }))
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name));
+}
+
+function isBonusEntry(entry)
+{
+    return entry.kind === 'bonus' || entry.kind === 'constant';
+}
+
 async function applyStatus(tokens, entry)
 {
     if (entry.kind === 'custom')
@@ -197,7 +223,7 @@ async function stepStack(entry, delta)
 
 async function onLeftClick(tokens, entry)
 {
-    if (entry.kind === 'bonus')
+    if (isBonusEntry(entry))
         return;
     if (!entry.effects.length)
     {
@@ -214,10 +240,15 @@ async function onLeftClick(tokens, entry)
 
 async function onRightClick(tokens, entry)
 {
-    if (entry.kind === 'bonus')
+    if (isBonusEntry(entry))
     {
         for (const token of tokens)
-            await removeGlobalBonus(token.actor, entry.bonus.id);
+        {
+            if (entry.kind === 'constant')
+                await removeConstantBonus(token.actor, entry.bonus.id);
+            else
+                await removeGlobalBonus(token.actor, entry.bonus.id);
+        }
         return;
     }
     if (!entry.effects.length)
@@ -238,6 +269,8 @@ function iconHtml(icon)
 
 function styleFor(entry)
 {
+    if (entry.kind === 'constant')
+        return { bg: CONSTANT_BG, border: CONSTANT_BORDER };
     if (entry.kind === 'bonus')
         return { bg: BONUS_BG, border: BONUS_BORDER };
     if (!entry.active)
@@ -258,8 +291,15 @@ function hideTip()
 /** Same shape the canvas icon hover uses, so an effect reads the same in both places. */
 function tooltipData(entry, actor)
 {
-    if (entry.kind === 'bonus')
-        return { name: entry.name, bonus: bonusText(entry.bonus, actor), conditional: getBonusConditionLines(entry.bonus) };
+    if (isBonusEntry(entry))
+    {
+        return {
+            name: entry.name,
+            bonus: bonusText(entry.bonus, actor),
+            frequency: getBonusFrequencyLabel(entry.bonus),
+            conditional: hasLambdaGate(entry.bonus) ? getBonusConditionLines(entry.bonus) : []
+        };
+    }
     if (entry.effects.length)
         return effectTooltipData(actor, entry.effects[0]);
     // Starred but not applied: only the status config has anything to say.
@@ -328,23 +368,41 @@ function buildWheelItem(entry, tokens)
     };
 }
 
-function wheelItems(token)
+function wheelItems(token, page = 1)
 {
     const tokens = [token];
-    return collectEntries(token.actor).map(entry => buildWheelItem(entry, tokens));
+    const entries = page === 2 ? constantEntries(token.actor) : collectEntries(token.actor);
+    return entries.map(entry => buildWheelItem(entry, tokens));
+}
+
+function switchPage(page, token)
+{
+    const items = wheelItems(token, page);
+    if (!items.length)
+        return;
+    _page = page;
+    refreshRadialWheel(items, { page });
 }
 
 function rebuild()
 {
     if (!_openToken || !isRadialWheelOpen())
         return;
-    const items = wheelItems(_openToken);
-    if (!items.length)
+    const items = wheelItems(_openToken, _page);
+    const other = wheelItems(_openToken, _page === 2 ? 1 : 2);
+    if (!items.length && !other.length)
     {
         closeRadialWheel();
         return;
     }
-    refreshRadialWheel(items);
+    _pageCount = other.length ? 2 : 1;
+    if (!items.length)
+    {
+        _page = _page === 2 ? 1 : 2;
+        refreshRadialWheel(other, { page: _page, pageCount: _pageCount });
+        return;
+    }
+    refreshRadialWheel(items, { page: _page, pageCount: _pageCount });
 }
 
 export function toggleStatusWheel()
@@ -362,23 +420,29 @@ export function toggleStatusWheel()
     const token = canvas.tokens?.controlled?.[0] ?? null;
     if (!token?.actor)
         return;
-    const items = wheelItems(token);
-    if (!items.length)
+    const statusItems = wheelItems(token, 1);
+    const constantItems = wheelItems(token, 2);
+    if (!statusItems.length && !constantItems.length)
     {
         ui.notifications.info(localize('LA.notify.noActiveOrStarredStatusesStarSome'));
         return;
     }
+    _pageCount = constantItems.length ? 2 : 1;
+    _page = statusItems.length ? 1 : 2;
     _openToken = token;
     openRadialWheel({
         token,
         rootClass: 'lancer-status-wheel',
         showLabel: true,
+        pageCount: _pageCount,
+        page: _page,
+        onPageChange: (nextPage) => switchPage(nextPage, token),
         onClose: () =>
         {
             hideTip();
             _openToken = null;
         },
-        items,
+        items: _page === 2 ? constantItems : statusItems,
     });
 }
 
@@ -411,6 +475,8 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyG' }],
         onDown: () =>
         {
+            if (/** @type {any} */ (canvas.tokens)?._draggedToken)
+                return false;
             if (!canvas.tokens?.controlled?.length)
                 return false;
             toggleStatusWheel();

@@ -59,6 +59,7 @@ await api.removeExtraActions(target, filter?)      // string name, predicate, or
 | `damage`, `range` | `Array<{val,type}>` | Same shape as system actions. Consumed in combat mode |
 | `tags` | `Array<{lid,val}>` | Standard Lancer tags. Weapon tags (`tg_smart` etc.) coexist with consumable tags |
 | `icon` | `string` | TAH icon override (path or FontAwesome class) |
+| `ignoresLineOfSight` | `boolean` | Drops the sight check from the range pulse. Every range is sight bound without it, `Sensor` included |
 | `condition` | `(actor, action, item) => string\|boolean` | Runtime gate, see [Conditional actions](#conditional-actions) |
 | `_grant` | `ActionGrant` | Grantor stamp, see [Granted actions](#granted-actions). Set it through `opts.grant`, not by hand |
 | `recharge`, `charged` | `number`, `boolean` | Charge state for `tg_recharge` actions |

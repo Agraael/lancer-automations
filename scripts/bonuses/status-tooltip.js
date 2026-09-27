@@ -1,9 +1,9 @@
 // Shared status tooltip. The canvas icon hover and the status wheel render the same markup so an
 // effect reads identically wherever it is hovered.
 import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './genericBonuses.js';
-import { linkedBonusConditionLines } from './bonus-condition.js';
+import { linkedBonusConditionLines, linkedBonusFrequencyLabel, linkedBonusHasLambdaGate } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
-import { effectStack } from './flagged-effects.js';
+import { effectStack, isUsageEffect } from './flagged-effects.js';
 import { localize } from '../tools/string-utils.js';
 
 /**
@@ -12,6 +12,7 @@ import { localize } from '../tools/string-utils.js';
  * @property {number} [count]
  * @property {string} [duration]
  * @property {string} [bonus]
+ * @property {string} [frequency] - How often the bonus may apply, empty when unlimited.
  * @property {string[]} [conditional] - Gate lines of the linked bonus, non-empty means gated.
  * @property {string} [description] - Trusted HTML, comes from effect/status config.
  */
@@ -39,13 +40,16 @@ export function remainingTurns(effect)
     return bestTurnEntry(effect)?.turns ?? 0;
 }
 
-/** Same value the blue token badge draws: how many live effects share the name. */
+/** Same value the blue token badge draws: the stack total, or the instance count for charge carriers. */
 export function instanceCount(actor, effect)
 {
     const name = effect?.name;
     if (!actor || !name)
         return 0;
-    return [...actor.effects].filter(entry => !entry.disabled && entry.name === name).length;
+    const sameName = [...actor.effects].filter(entry => !entry.disabled && entry.name === name);
+    if (sameName.some(isUsageEffect))
+        return sameName.length;
+    return sameName.reduce((total, entry) => total + effectStack(entry), 0);
 }
 
 /** Shortest turn-based entry wins, otherwise the first entry decides the wording. */
@@ -147,7 +151,8 @@ export function effectTooltipData(actor, effect)
         count: instanceCount(actor, effect),
         duration: durationText(effect),
         bonus: linkedBonusText(actor, effect),
-        conditional: linkedBonusConditionLines(actor, effect),
+        frequency: linkedBonusFrequencyLabel(actor, effect),
+        conditional: linkedBonusHasLambdaGate(actor, effect) ? linkedBonusConditionLines(actor, effect) : [],
         description: descriptionHtml(effect)
     };
 }
@@ -167,6 +172,8 @@ export function showStatusTooltip(data)
         parts.push(`<div class="la-status-tooltip-duration">${data.duration}</div>`);
     if (data.bonus)
         parts.push(`<div class="la-status-tooltip-bonus">${data.bonus}</div>`);
+    if (data.frequency)
+        parts.push(`<div class="la-status-tooltip-cond"><i class="fas fa-rotate-left"></i> ${data.frequency}</div>`);
     if (data.conditional?.length)
         parts.push('<div class="la-status-tooltip-cond"><i class="fas fa-code-branch"></i> Conditional</div>');
     if (data.description)

@@ -18,11 +18,111 @@ const OWNER_ONLY_AURA_VISIBILITY = {
     nonOwnerVisibility: { default: false, hovered: false, controlled: false, dragging: false, targeted: false, turn: false }
 };
 
+const ZONE_GRAPHICS_BASE = {
+    useCustomRender: true,
+    lineType: 2,
+    lineWidth: 2,
+    lineOpacity: 0.5,
+    lineDashSize: 15,
+    lineGapSize: 10,
+    borderOpacity: 0.5,
+    fillType: 2,
+    fillSize: 0.5,
+    fillOpacity: 1,
+    fillTextureOffset: { x: 0, y: 0 },
+    fillTextureOffsetAnimation: { x: 15, y: 15 },
+    fillTextureCentered: true,
+    fillTextureScaleWithSize: true,
+    fillTextureSourceColor: false,
+    fillTextureRotation: 0,
+    fillTextureRotateWithTemplate: false,
+    aboveTokens: false
+};
+
+function zoneGraphics(overrides)
+{
+    return { ...ZONE_GRAPHICS_BASE, ...overrides };
+}
+
+const RIFT_ZONE_GRAPHICS = zoneGraphics({
+    lineType: 1,
+    lineColor: "#654321",
+    fillColor: "#8b4513",
+    fillOpacity: 0.35,
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Fire/ScorchedEarth_02_Black_800x800.webm",
+    fillTextureOffsetAnimation: null,
+    fillTextureScale: { x: 20, y: 10 },
+    fillTextureSourceColor: true,
+    fillTextureRotateWithTemplate: true
+});
+
+const SHARP_ZONE_GRAPHICS = zoneGraphics({
+    lineType: 1,
+    lineColor: "#8b4513",
+    fillColor: "#ffb866",
+    fillOpacity: 0.6,
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Ice/IceSpikesRadialLoop_01_Regular_White_1000x1000.webm",
+    fillTextureOffsetAnimation: null,
+    fillTextureScale: { x: 45, y: 45 }
+});
+
+const SLURRY_ZONE_GRAPHICS = zoneGraphics({
+    lineColor: "#ffa052",
+    fillColor: "#ff9f80",
+    fillOpacity: 0.85,
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Template/Circle/Aura/Aura003/Aura003Part01_Inward_Complete_005_White_1400x1400.webm",
+    fillTextureScale: { x: 30, y: 30 }
+});
+
+const SANDBLAST_ZONE_GRAPHICS = zoneGraphics({
+    lineColor: "#8b7355",
+    fillColor: "#fcb383",
+    fillOpacity: 0.5,
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Template/Circle/Aura/AuraLoop02_01_Regular_Yellow_500x500.webm",
+    fillTextureScale: { x: 75, y: 75 },
+    aboveTokens: true
+});
+
+const SCORCHED_ZONE_GRAPHICS = zoneGraphics({
+    lineColor: "#ed792c",
+    fillColor: "#ff6400",
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Fire/ScorchedEarth_02_Orange_800x800.webm",
+    fillTextureScale: { x: 25, y: 25 },
+    fillTextureSourceColor: true
+});
+
+const WAYPOINT_ZONE_GRAPHICS = zoneGraphics({
+    lineType: 1,
+    lineColor: "#ffb514",
+    fillColor: "#998333",
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Portals/Portal_Vortex_Orange_H_400x400.webm",
+    fillTextureScale: { x: 50, y: 50 }
+});
+
+const SEALANT_ZONE_GRAPHICS = zoneGraphics({
+    lineColor: "#ffffff",
+    lineOpacity: 0.55,
+    fillColor: "#fef1fc",
+    fillOpacity: 0.6,
+    fillTexture: "modules/jb2a_patreon/Library/Generic/Lava/Spout001/LavaSpoutLoop001_001_White_600x600.webm",
+    fillTextureScale: { x: 60, y: 60 }
+});
+
 /** @type {ReactionGroup} */
 const suppressArcherAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.addItemFlags(item, { hudRange: 10 });
+        }
+    }, {
         name: "Suppress",
         triggers: ["onActivation", "onEndActivation", "onDamage", "onStatusApplied", "onDestroyed"],
         triggerSelf: true,
@@ -180,6 +280,21 @@ const movingTargetSniperAutomation = {
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
         {
             const mover = triggerData.triggeringToken;
+            const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
+            if (!rifle)
+            {
+                ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
+                return;
+            }
+            if (rifle.system.loaded === false)
+            {
+                await api.setItemResource(rifle, true);
+                ChatMessage.create({
+                    content: `<div class="lancer-chat-message"><b>${reactorToken.name} - Moving Target</b><br>The Anti-materiel Rifle wasn't loaded. ${reactorToken.name} reloads.</div>`,
+                    speaker: ChatMessage.getSpeaker({ token: reactorToken.document })
+                });
+                return;
+            }
             let preConfirmResponderIds = [];
             const preConfirm = async () =>
             {
@@ -231,26 +346,7 @@ const movingTargetSniperAutomation = {
                 ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
                 return;
             }
-            const fire = await api.confirmCard({
-                title: "MOVING TARGET",
-                description: `<b>${mover?.name ?? 'Target'}</b> is pushing through your sights. Fire!`,
-                item,
-                originToken: reactorToken,
-                relatedToken: mover,
-                userIdControl: api.getTokenOwnerUserId(reactorToken),
-                confirmText: "Fire",
-                confirmIcon: "fas fa-crosshairs"
-            });
-            if (!fire)
-                return;
-            const attack = await api.attackWith(rifle, mover ? [mover] : null, { reloadIfEmpty: true });
-            if (attack.reloaded)
-            {
-                ChatMessage.create({
-                    content: `<div class="lancer-chat-message"><b>${reactorToken.name} - Moving Target</b><br>The Anti-materiel Rifle wasn't loaded. ${reactorToken.name} reloads.</div>`,
-                    speaker: ChatMessage.getSpeaker({ token: reactorToken })
-                });
-            }
+            await api.attackWith(rifle, mover ? [mover] : null);
         }
     }]
 };
@@ -342,7 +438,7 @@ const movingTargetArcherAutomation = {
                     extraFlags: { suppressSourceId: reactorToken.id }
                 });
             }
-            await api.executeSkirmish(reactorToken.actor, null, mover);
+            await api.executeSkirmish(reactorToken.actor, null, mover, null, { asReaction: true });
         }
     }]
 };
@@ -352,6 +448,16 @@ const sealantGunAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.addItemFlags(item, { hudRange: 5 });
+        }
+    }, {
         name: "Sealant Gun",
         triggers: ["onActivation"],
         triggerSelf: true,
@@ -406,7 +512,10 @@ const sealantGunAutomation = {
                 await api.placeZone(target, {
                     size: 1,
                     type: "Burst",
+                    fillColor: "#e83bd1",
+                    borderColor: "#000000",
                     difficultTerrain: { movementPenalty: 1, isFlatPenalty: true },
+                    tmacGraphics: SEALANT_ZONE_GRAPHICS,
                     title: "Sealant",
                     icon: "fas fa-sticky-note",
                     centerLabel: "Sealant"
@@ -423,6 +532,16 @@ const engineersMarkAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.addItemFlags(item, { hudRange: 10 });
+        }
+    }, {
         triggers: ["onActivation"],
         onlyOnSourceMatch: true,
         actionType: "Quick Action",
@@ -1034,6 +1153,17 @@ const sniperMarkAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [
+        {
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 25 });
+            }
+        },
         {
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
@@ -2149,6 +2279,16 @@ const smokeChargesAutomation = {
     category: "NPC (LaSossis)",
     itemType: "npc_feature",
     reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.addItemFlags(item, { hudRange: 5 });
+        }
+    }, {
         triggers: ["onActivation"],
         onlyOnSourceMatch: true,
         triggerSelf: true,
@@ -3141,6 +3281,445 @@ const witchPainTransferenceAutomation = {
 };
 
 const ROTARY_LAUNCHER_LID = "npc-rebake_npcf_rotary_grenade_launcher_bastion";
+/** @type {ReactionGroup} */
+const deathcounterAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [
+        {
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.ensureLinkedBonus({
+                    items: [item],
+                    bonusData: {
+                        id: `deathcounter-${item.id}`,
+                        name: "Deathcounter",
+                        type: 'immunity',
+                        subtype: 'damage',
+                        damageTypes: ['all'],
+                        frequency: 'round',
+                        condition: (state, actor, data, context) =>
+                        {
+                            if (!state?.item?.is_weapon?.())
+                                return false;
+                            const entry = (data?.targets ?? []).find(target => target?.target?.id === context?.ownerTokenId);
+                            return entry?.hit === true;
+                        }
+                    },
+                    addOptions: { duration: 'constant' }
+                });
+            }
+        },
+        {
+            triggers: ["onDamage"],
+            triggerSelf: false,
+            triggerOther: false,
+            triggerTarget: true,
+            outOfCombat: true,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                return (triggerData.flowState?.la_extraData?.burnedFrequency ?? []).includes(`deathcounter-${item.id}`);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                await triggerData.startRelatedFlow();
+            }
+        }
+    ]
+};
+
+const INTERDICTION_NAME = "Friendly Interdiction";
+const INTERDICTION_FLAG = 'interdictionSourceId';
+
+// Serialized onto the bonus, so it reads the chosen enemy off the bearer's own mark.
+function interdictionAppliesTo(target, state, reactorToken)
+{
+    const la = game.modules.get('lancer-automations')?.api;
+    if (!la || !target?.id)
+        return false;
+    return la.findEffectsOnToken(reactorToken, "Friendly Interdiction")
+        .some(mark => la.getLAFlag(mark, 'interdictionEnemyId') === target.id);
+}
+
+async function releaseInterdiction(bearerToken, bastionToken, la)
+{
+    if (!bearerToken?.actor)
+        return;
+    await la.removeGlobalBonus(bearerToken.actor, bonus => bonus.context?.ownerTokenId === bastionToken.id);
+}
+
+async function clearInterdiction(bastionToken, la)
+{
+    for (const bearer of la.findMarkedTokens(bastionToken, INTERDICTION_NAME, { flagKey: INTERDICTION_FLAG }))
+        await releaseInterdiction(bearer, bastionToken, la);
+}
+
+async function grantInterdiction(bearerToken, bastionToken, enemyToken, item, la)
+{
+    await la.addGlobalBonus(bearerToken.actor, {
+        id: `friendly-interdiction-${bastionToken.id}`,
+        name: INTERDICTION_NAME,
+        type: 'immunity',
+        subtype: 'resistance',
+        damageTypes: ['all'],
+        applyToCondition: interdictionAppliesTo,
+        context: { ownerTokenId: bastionToken.id }
+    }, {
+        duration: 'indefinite',
+        origin: bastionToken,
+        icon: whiteIcon(item.img),
+        effectFlags: { [INTERDICTION_FLAG]: bastionToken.id, interdictionEnemyId: enemyToken.id }
+    });
+}
+
+const INTERDICTION_LID = "npc-rebake_npcf_friendly_interdiction_bastion";
+
+/** @type {ReactionGroup} */
+const friendlyInterdictionAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [
+        {
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 1 });
+            }
+        },
+        {
+            triggers: ["onUpdate"],
+            triggerSelf: true,
+            triggerOther: true,
+            outOfCombat: true,
+            autoActivate: true,
+            activationType: "code",
+            activationMode: "instead",
+            evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                if (!api.isPositionChange(triggerData.change))
+                    return false;
+                const mover = triggerData.triggeringToken;
+                const marked = api.findMarkedTokens(reactorToken, INTERDICTION_NAME, { flagKey: INTERDICTION_FLAG });
+                if (mover?.id !== reactorToken.id && !marked.some(entry => entry.id === mover?.id))
+                    return false;
+                return marked.some(entry => entry.id !== reactorToken.id && api.getTokenDistance(reactorToken, entry) > 1);
+            },
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                const marked = api.findMarkedTokens(reactorToken, INTERDICTION_NAME, { flagKey: INTERDICTION_FLAG });
+                for (const ally of marked)
+                {
+                    if (ally.id === reactorToken.id || api.getTokenDistance(reactorToken, ally) <= 1)
+                        continue;
+                    await releaseInterdiction(ally, reactorToken, api);
+                }
+            }
+        },
+        {
+            triggers: ["onActivation"],
+            onlyOnSourceMatch: true,
+            actionType: "Protocol",
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            autoActivate: true,
+            awaitActivationCompletion: true,
+            activationType: "code",
+            activationMode: "instead",
+            activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+            {
+                const presetAllyId = triggerData.extraData?.interdictionAlly;
+                let ally = presetAllyId ? canvas.tokens.get(presetAllyId) ?? null : null;
+                if (!presetAllyId)
+                {
+                    const chosenAlly = await api.chooseToken(reactorToken, {
+                        count: 1,
+                        range: 1,
+                        includeSelf: false,
+                        disposition: 'friendly',
+                        allowEmptyConfirm: true,
+                        title: "FRIENDLY INTERDICTION",
+                        description: "Choose one adjacent allied character to protect, or confirm with none.",
+                        icon: "modules/lancer-automations/icons/brace.svg"
+                    });
+                    ally = chosenAlly?.[0] ?? null;
+                }
+
+                const chosenEnemy = await api.chooseToken(reactorToken, {
+                    count: 1,
+                    includeSelf: false,
+                    filter: (target) => api.hasLineOfSight(reactorToken, target),
+                    filterWarning: "No line of sight",
+                    title: "FRIENDLY INTERDICTION",
+                    description: "Choose the character to gain <b>Resistance</b> from.",
+                    icon: "modules/lancer-automations/icons/brace.svg"
+                });
+                const enemy = chosenEnemy?.[0];
+                if (!enemy)
+                    return;
+
+                await clearInterdiction(reactorToken, api);
+                await grantInterdiction(reactorToken, reactorToken, enemy, item, api);
+                if (ally)
+                    await grantInterdiction(ally, reactorToken, enemy, item, api);
+            }
+        }
+    ]
+};
+
+/** @type {ReactionGroup} */
+const fearlessDefenderAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onDamage"],
+        actionType: "Reaction",
+        frequency: "1/Round",
+        triggerSelf: false,
+        triggerOther: true,
+        outOfCombat: false,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        checkReaction: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const ally = triggerData.target;
+            if (!ally || ally.id === reactorToken.id)
+                return false;
+            if (api.hasStatus(reactorToken, 'immobilized', 'slowed', 'stunned'))
+                return false;
+            if (!(triggerData.damages ?? []).some(amount => Number(amount) > 0))
+                return false;
+            if (api.getTokenDistance(reactorToken, ally) > 5)
+                return false;
+            return api.isFriendly(reactorToken, ally);
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const ally = triggerData.target;
+            const entry = (triggerData.flowState?.data?.targets ?? [])
+                .find(candidate => candidate?.target?.id === ally.id);
+            const redirected = (entry?.damage ?? []).map(damage => ({
+                val: String(damage.amount ?? damage.val ?? 0),
+                type: damage.type
+            })).filter(damage => Number(damage.val) > 0);
+            if (!redirected.length)
+                return;
+
+            const summary = redirected.map(damage => `${damage.val} ${damage.type}`).join(' + ');
+            const ask = await api.askCard({
+                title: "FEARLESS DEFENDER",
+                description: `<b>${ally.name}</b> is taking ${summary}. Take it instead?`,
+                item,
+                originToken: ally,
+                relatedToken: reactorToken,
+                owner: reactorToken,
+                yesText: "Intercept",
+                yesIcon: "fas fa-shield-halved",
+                noText: "Stand down"
+            });
+            if (!ask.confirmed)
+                return;
+            await triggerData.startRelatedFlowToReactor(ask.responderIds[0]);
+
+            await api.moveTokenRuler(reactorToken, {
+                free: true,
+                title: "FEARLESS DEFENDER",
+                description: `Move <b>${reactorToken.name}</b> to a space adjacent to <b>${ally.name}</b>.`
+            });
+
+            for (const damage of entry.damage ?? [])
+            {
+                if (damage.amount !== undefined)
+                    damage.amount = 0;
+                if (damage.val !== undefined)
+                    damage.val = 0;
+            }
+
+            // Actor-sourced roll, so it carries no weapon and never reads as a hit on the Bastion.
+            await api.executeDamageRoll(triggerData.triggeringToken, [reactorToken], null, null,
+                `Fearless Defender - intercepted for ${ally.name}`, { damage: redirected });
+
+            const interdiction = api.findItemByLid(reactorToken.actor, INTERDICTION_LID);
+            if (interdiction)
+                await api.executeItemActivation(interdiction, {}, { interdictionAlly: ally.id });
+        }
+    }]
+};
+
+function nearThreatCovers(reactorToken, triggerData, api)
+{
+    const covered = new Set([reactorToken.id]);
+    for (const bearer of api.findMarkedTokens(reactorToken, INTERDICTION_NAME, { flagKey: INTERDICTION_FLAG }))
+        covered.add(bearer.id);
+    return (triggerData.hitTokens ?? []).some(target => covered.has(target?.id));
+}
+
+/** @type {ReactionGroup} */
+const nearThreatDenialAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onInitAttack", "onInitTechAttack"],
+        triggerSelf: false,
+        triggerOther: true,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        dispositionFilter: ['hostile'],
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            if ((triggerData.distanceToTrigger ?? Infinity) > 3)
+                return false;
+            return nearThreatCovers(reactorToken, triggerData, api);
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            await api.executeDamageRoll(
+                reactorToken, [triggerData.triggeringToken],
+                api.tierValue(reactorToken, [2, 3, 4]), 'Explosive',
+                "Near-Threat Denial System", { ap: true }
+            );
+        }
+    }]
+};
+
+function buildSiegeGuardianAuraCallback()
+{
+    return async (token, parent, aura, options) =>
+    {
+        if (options.isPreview || !api || !token?.actor || token.id === parent.id)
+            return;
+
+        if (!options.hasEntered)
+        {
+            await api.removeGlobalBonus(token.actor, bonus => bonus.context?.ownerTokenId === parent.id);
+            return;
+        }
+        if (!api.isFriendly(token, parent))
+            return;
+
+        await api.addGlobalBonus(token.actor, {
+            id: `siege-guardian-${parent.id}`,
+            name: 'Siege Guardian',
+            type: 'immunity',
+            subtype: 'resistance',
+            damageTypes: ['all'],
+            condition: (state) =>
+            {
+                const weapon = state?.item;
+                const profile = weapon?.currentProfile?.();
+                const ranges = weapon?.rangesFor?.(profile) ?? profile?.range ?? weapon?.system?.range ?? [];
+                return ranges.some(range => ['line', 'cone', 'burst', 'blast']
+                    .includes(String(range?.type ?? '').toLowerCase()));
+            },
+            context: { ownerTokenId: parent.id }
+        }, { duration: 'indefinite' });
+    };
+}
+
+/** @type {ReactionGroup} */
+const siegeGuardianAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: [],
+        triggerSelf: false,
+        triggerOther: false,
+        autoActivate: false,
+        activationType: "none",
+        onInit: async function (token, item, api)
+        {
+            await api.ensureAura(item, {
+                name: 'Siege Guardian',
+                radius: 1,
+                elevationAware: true,
+                macros: [{ function: buildSiegeGuardianAuraCallback() }]
+            });
+        }
+    }]
+};
+
+function closeProtectionCovers(reactorToken, targets, api)
+{
+    const bastionArmor = reactorToken.actor.system.armor;
+    return (targets ?? []).filter(target => target?.actor
+        && target.id !== reactorToken.id
+        && api.isFriendly(reactorToken, target)
+        && api.getTokenDistance(reactorToken, target) <= 1
+        && target.actor.system.armor < bastionArmor);
+}
+
+/** @type {ReactionGroup} */
+const closeProtectionAutomation = {
+    category: "NPC (LaSossis)",
+    itemType: "npc_feature",
+    reactions: [{
+        triggers: ["onPreDamage"],
+        triggerSelf: false,
+        triggerOther: true,
+        outOfCombat: true,
+        autoActivate: true,
+        awaitActivationCompletion: true,
+        activationType: "code",
+        activationMode: "instead",
+        evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            return closeProtectionCovers(reactorToken, triggerData.targets, api).length > 0;
+        },
+        activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
+        {
+            const bastionArmor = reactorToken.actor.system.armor;
+            for (const ally of closeProtectionCovers(reactorToken, triggerData.targets, api))
+            {
+                const ask = await api.askCard({
+                    title: "CLOSE PROTECTION",
+                    description: `<b>${ally.name}</b> is about to take damage. Use <b>${reactorToken.name}</b>'s Armor ${bastionArmor}?`,
+                    item,
+                    originToken: reactorToken,
+                    relatedToken: ally,
+                    owner: reactorToken,
+                    yesText: "Use its Armor",
+                    yesIcon: "fas fa-shield-halved",
+                    noText: "Keep own"
+                });
+                if (!ask.confirmed)
+                    continue;
+                await api.addGlobalBonus(ally.actor, {
+                    id: `close-protection-${reactorToken.id}`,
+                    name: "Close Protection",
+                    type: 'stat',
+                    stat: 'system.armor',
+                    statMode: 'replace',
+                    val: bastionArmor,
+                    uses: 1
+                }, {
+                    duration: 'indefinite',
+                    origin: reactorToken,
+                    icon: whiteIcon(item.img),
+                    consumption: { trigger: 'onHpLoss' }
+                });
+            }
+        }
+    }]
+};
+
 const ASSISTED_RELOAD_ACTION = "Assisted Reload";
 
 function assistedReloadCondition(allyActor, action)
@@ -3408,6 +3987,12 @@ api.registerUserHelper('restockDrone.healInfo', restockDroneHealInfo);
 api.registerDefaultItemReactions({
     "npc-rebake_npcf_rotary_grenade_launcher_bastion": rotaryGrenadeLauncherAutomation,
     "npc-rebake_npcf_heavy_assault_shield_bastion": heavyAssaultShieldAutomation,
+    [INTERDICTION_LID]: friendlyInterdictionAutomation,
+    "npc-rebake_npcf_fearless_defender_bastion": fearlessDefenderAutomation,
+    "npc-rebake_npcf_near_threat_denial_system_bastion": nearThreatDenialAutomation,
+    "npc-rebake_npcf_siege_guardian_bastion": siegeGuardianAutomation,
+    "npc-rebake_npcf_close_protection_veteran": closeProtectionAutomation,
+    "npc-rebake_npcf_deathcounter_bastion": deathcounterAutomation,
     "npc-rebake_npcf_tear_down_witch": witchTearDownAutomation,
     "npc-rebake_npcf_blind_witch": witchBlindAutomation,
     "npc-rebake_npcf_predatory_logic_witch": witchPredatoryLogicAutomation,
@@ -3600,6 +4185,16 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 1 });
+            }
+        }, {
             triggers: ["onActivation"],
             triggerSelf: true,
             triggerOther: false,
@@ -3722,6 +4317,16 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 5 });
+            }
+        }, {
             triggers: ["onActivation"],
             triggerSelf: true,
             triggerOther: false,
@@ -3756,7 +4361,7 @@ api.registerDefaultItemReactions({
             triggers: ["onAttack"],
             triggerSelf: true,
             triggerOther: false,
-            outOfCombat: false,
+            outOfCombat: true,
             actionType: "Free Action",
             frequency: "Unlimited",
             autoActivate: true,
@@ -3767,10 +4372,13 @@ api.registerDefaultItemReactions({
                 await api.placeZone(reactorToken, {
                     size: 0.5,
                     type: "Blast",
+                    fillColor: "#ff6400",
+                    borderColor: "#000000",
                     dangerous: {
                         damageType: "burn",
                         damageValue: 5
                     },
+                    tmacGraphics: SCORCHED_ZONE_GRAPHICS,
                     title: "SCORCHER MISSILE",
                     description: "Place a single hex dangerous zone.",
                     icon: "fas fa-fire",
@@ -3977,6 +4585,7 @@ api.registerDefaultItemReactions({
                     activationType: "none",
                     onInit: async function (token, item, api)
                     {
+                        await api.addItemFlags(item, { hudRange: 'sensors' });
                         await api.ensureAura(item, {
                             name: "Nano-Repair Cloud",
                             radius: 1,
@@ -4031,6 +4640,10 @@ api.registerDefaultItemReactions({
         itemType: "npc_feature",
         reactions: [
             {
+                onInit: async function (token, item, api)
+                {
+                    await api.addItemFlags(item, { hudRange: 5 });
+                },
                 triggers: ["onActivation"],
                 onlyOnSourceMatch: true,
                 triggerSelf: true,
@@ -4048,6 +4661,7 @@ api.registerDefaultItemReactions({
                         type: "Blast",
                         fillColor: "#7ec0ee",
                         borderColor: "#1e90ff",
+                        tmacGraphics: api.healCloudGraphics(),
                         title: "REMOTE CLOUD",
                         description: "Place a Blast 2 nanite cloud within Range 5.",
                         icon: "fas fa-cloud-meatball",
@@ -4075,6 +4689,10 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 'sensors' });
+            },
             triggers: ["onActivation"],
             triggerSelf: true,
             triggerOther: false,
@@ -4092,29 +4710,32 @@ api.registerDefaultItemReactions({
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 const targets = await api.chooseToken(reactorToken, {
+                    count: 2,
                     range: 'sensors',
                     title: "SQUAD LEADER",
-                    description: "Select an ally",
+                    description: "Select up to 2 allied characters within Sensors",
                     includeSelf: true,
                     disposition: 'friendly'
                 });
-                const target = targets?.[0];
-                if (!target)
+                if (!targets?.length)
                     return;
 
-                await api.addGlobalBonus(target.actor, {
-                    name: "Squad Leader",
-                    val: 1,
-                    type: "accuracy",
-                    rollTypes: ["attack"],
-                    uses: 1
-                }, {
-                    duration: "1 Round",
-                    origin: reactorToken,
-                    consumption: {
-                        trigger: "onHit"
-                    }
-                });
+                for (const target of targets)
+                {
+                    await api.addGlobalBonus(target.actor, {
+                        name: "Squad Leader",
+                        val: 1,
+                        type: "accuracy",
+                        rollTypes: ["attack"],
+                        uses: 1
+                    }, {
+                        duration: "1 Round",
+                        origin: reactorToken,
+                        consumption: {
+                            trigger: "onHit"
+                        }
+                    });
+                }
             }
         }, {
             triggers: ["onInitCheck", "onCheck"],
@@ -4265,7 +4886,7 @@ api.registerDefaultItemReactions({
                 const ally = triggerData.triggeringToken;
                 const ask = await api.askCard({
                     title: "VOICE OF AUTHORITY",
-                    description: `Let <b>${ally?.name ?? 'the ally'}</b> reroll?`,
+                    description: [`Let <b>${ally?.name ?? 'the ally'}</b> reroll?`, triggerData.rollSummary].filter(Boolean).join('<br>'),
                     item,
                     originToken: reactorToken,
                     relatedToken: ally,
@@ -4342,6 +4963,10 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 'sensors' });
+            },
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             triggerSelf: true,
@@ -4408,6 +5033,10 @@ api.registerDefaultItemReactions({
             awaitActivationCompletion: true,
             activationType: "code",
             activationMode: "instead",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 'sensors' });
+            },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 const chosen = await api.chooseToken(reactorToken, {
@@ -4997,7 +5626,10 @@ api.registerDefaultItemReactions({
                         y: hcToken.y + hcH / 2,
                         size: 1,
                         type: "Burst",
+                        fillColor: "#e83bd1",
+                        borderColor: "#000000",
                         difficultTerrain: { movementPenalty: 1, isFlatPenalty: true },
+                        tmacGraphics: SLURRY_ZONE_GRAPHICS,
                         title: "SLURRY CANNON",
                         centerLabel: "Slurry",
                         expires: { on: 'ownerTurnStart' }
@@ -5147,21 +5779,26 @@ api.registerDefaultItemReactions({
                 activationType: "none",
                 onInit: async function (token, item, api)
                 {
+                    const sensors = token.actor.system.sensor_range;
                     await api.addExtraActions(item, [
                         { name: "Print",
                             activation: "Quick Action",
                             recharge: 4,
                             charged: true,
+                            range: [{ val: 3, type: "Range" }],
                             detail: "Recharge 4+: Place up to 3 blocks of size 1 hard cover within Range 3, or one block of Size 2 cover." },
                         { name: "Rift",
                             activation: "Quick Action",
-                            detail: "Choose a Line 5 area in Range 5. At the start of its next turn the area collapses." },
+                            range: [{ val: 5, type: "Range" }, { val: 5, type: "Line" }],
+                            detail: "Choose a Line 5 area in Range 5. At the start of its next turn the area collapses. Objects and terrain in the area are destroyed. Characters must pass an Agility save or become Immobilized and gain soft cover until they pass a Hull save as a quick action." },
                         { name: "Sharpen",
                             activation: "Quick Action",
-                            detail: "A Blast 1 area in Sensors becomes difficult terrain until end of scene or next use." },
+                            range: [{ val: sensors, type: "Sensor" }, { val: 1, type: "Blast" }],
+                            detail: "A Blast 1 area in Sensors becomes difficult terrain until the end of the scene or this action is used again. Characters that fall Prone in the area take {3/5/7} Kinetic damage." },
                         { name: "Tremor",
                             activation: "Quick Action",
-                            detail: "All characters in a Blast 1 area in Sensors must pass a Hull save or be knocked Prone." }
+                            range: [{ val: sensors, type: "Sensor" }, { val: 1, type: "Blast" }],
+                            detail: "All characters in a Blast 1 area in Sensors must pass a Hull save or be knocked Prone. Objects and terrain in the area take 10 AP Kinetic damage." }
                     ]);
                 }
             },
@@ -5254,8 +5891,9 @@ api.registerDefaultItemReactions({
                         range: 5,
                         size: 5,
                         type: "Line",
-                        fillColor: "#8B4513",
+                        fillColor: "#8b4513",
                         borderColor: "#654321",
+                        tmacGraphics: RIFT_ZONE_GRAPHICS,
                         title: "RIFT",
                         centerLabel: "Rift"
                     });
@@ -5297,6 +5935,7 @@ api.registerDefaultItemReactions({
                         fillColor: "#A0522D",
                         borderColor: "#8B4513",
                         difficultTerrain: { movementPenalty: 1, isFlatPenalty: true },
+                        tmacGraphics: SHARP_ZONE_GRAPHICS,
                         title: "SHARPEN",
                         description: `Blast 1 difficult terrain. Prone characters take ${damage} Kinetic.`,
                         centerLabel: "Sharp"
@@ -5346,37 +5985,21 @@ api.registerDefaultItemReactions({
                 activationMode: "instead",
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
-                    const sensors = reactorToken.actor.system.sensor_range;
-                    const result = await api.placeZone(reactorToken, {
-                        range: sensors,
-                        size: 1,
-                        type: "Blast",
-                        fillColor: "#CD853F",
-                        borderColor: "#8B7355",
-                        title: "TREMOR",
-                        centerLabel: "Tremor"
+                    const isCharacter = (token) => token?.actor?.type !== 'deployable';
+                    const outcome = await api.openForceCheckCard({
+                        tokenA: reactorToken,
+                        skill: "HULL",
+                        range: [{ val: reactorToken.actor.system.sensor_range, type: "Range" }, { val: 1, type: "Blast" }],
+                        saveVs: reactorToken,
+                        filter: isCharacter
                     });
-                    if (!result?.[0]?.template)
-                        return;
-                    const templateDoc = result[0].template;
 
-                    const tmApi = game.modules.get('templatemacro')?.api;
-                    const containedIds = tmApi?.findContained?.(templateDoc) ?? [];
-                    const contained = containedIds.map(id => canvas.tokens.get(id)).filter(t => t?.actor);
-                    const characters = contained.filter(t => t.actor.type !== 'deployable');
-                    const deployables = contained.filter(t => t.actor.type === 'deployable');
-
-                    await api.executeSaveVsEffect(characters, {
-                        stat: "HULL",
-                        title: "Tremor - Hull Save",
-                        origin: reactorToken,
-                        cardTitle: "TREMOR - HULL SAVE",
-                        effects: ['prone'],
-                        note: "",
-                        duration: {}
-                    });
+                    const failed = (outcome?.results ?? []).filter(entry => !entry.passed).map(entry => entry.token);
+                    if (failed.length > 0)
+                        await api.applyEffectsToTokens({ tokens: failed, effectNames: ['prone'] });
 
                     // 10 AP Kinetic to all deployables in one roll
+                    const deployables = (outcome?.targets ?? []).filter(token => !isCharacter(token));
                     if (deployables.length > 0)
                     {
                         await api.executeDamageRoll(
@@ -5384,8 +6007,6 @@ api.registerDefaultItemReactions({
                             "Tremor - Objects & Terrain", { ap: true }
                         );
                     }
-
-                    await templateDoc.delete();
                 }
             },
             // R5: onTurnStart - Rift collapse
@@ -5457,6 +6078,7 @@ api.registerDefaultItemReactions({
                 activationType: "none",
                 onInit: async function (token, item, api)
                 {
+                    await api.addItemFlags(item, { hudRange: 1 });
                     const tags = item.system.tags ?? [];
                     const filtered = tags.filter(t => t.lid !== 'tg_quick_action');
                     if (filtered.length !== tags.length)
@@ -5585,6 +6207,16 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 3 });
+            }
+        }, {
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             triggerSelf: true,
@@ -5618,6 +6250,7 @@ api.registerDefaultItemReactions({
                     count: 1,
                     fillColor: "#00cc66",
                     borderColor: "#009944",
+                    tmacGraphics: WAYPOINT_ZONE_GRAPHICS,
                     title: "TERRAIN PRINTER - WAYPOINT 1",
                     description: "Place first waypoint within Range 3.",
                     centerLabel: "TP",
@@ -5637,6 +6270,7 @@ api.registerDefaultItemReactions({
                     count: 1,
                     fillColor: "#00cc66",
                     borderColor: "#009944",
+                    tmacGraphics: WAYPOINT_ZONE_GRAPHICS,
                     title: "TERRAIN PRINTER - WAYPOINT 2",
                     description: "Place second waypoint within Range 5 of the first.",
                     centerLabel: "TP",
@@ -5673,6 +6307,17 @@ api.registerDefaultItemReactions({
         itemType: "npc_feature",
         reactions: [
             {
+                triggers: [],
+                triggerSelf: false,
+                triggerOther: false,
+                autoActivate: false,
+                activationType: "none",
+                onInit: async function (token, item, api)
+                {
+                    await api.addItemFlags(item, { hudRange: 'sensors' });
+                }
+            },
+            {
                 triggers: ["onActivation"],
                 onlyOnSourceMatch: true,
                 triggerSelf: true,
@@ -5699,6 +6344,7 @@ api.registerDefaultItemReactions({
                         count: 1,
                         fillColor: "#c4a55a",
                         borderColor: "#8b7355",
+                        tmacGraphics: SANDBLAST_ZONE_GRAPHICS,
                         title: "SANDBLAST",
                         description: "Place a Blast 2 particulate zone within Sensors.",
                         icon: "fas fa-wind",
@@ -5722,6 +6368,10 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 'sensors' });
+            },
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             triggerSelf: true,
@@ -5825,6 +6475,10 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 'sensors' });
+            },
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             triggerSelf: true,
@@ -5975,6 +6629,16 @@ api.registerDefaultItemReactions({
         category: "NPC (LaSossis)",
         itemType: "npc_feature",
         reactions: [{
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                await api.addItemFlags(item, { hudRange: 20 });
+            }
+        }, {
             triggers: ["onActivation"],
             onlyOnSourceMatch: true,
             triggerSelf: true,

@@ -5,7 +5,7 @@ import { openUplinkPanel, closeUplinkPanel } from './panel.js';
 import { resolveLiveRoll, getCachedRanges, getCachedBonusDamage, statRollLabel } from './live-rolls.js';
 import { usesLineOfSight } from '../tah/hover.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
-import { accDiffTargetToken } from '../combat/grid-helpers.js';
+import { accDiffTargetToken, accDiffTargetInvisible } from '../combat/grid-helpers.js';
 
 const SNAPSHOTS_KEY = 'la-uplink-snapshots';
 const MAX_SNAPSHOTS = 12;
@@ -81,7 +81,11 @@ function cloneDamageHud(hud)
             paracausal: !!base.paracausal,
             halfDamage: !!base.halfDamage,
             damage: plainDamage(base.damage),
-            bonusDamage: plainDamage(base.bonusDamage)
+            bonusDamage: plainDamage(base.bonusDamage),
+            total: {
+                damage: plainDamage(base.total?.damage),
+                bonusDamage: plainDamage(base.total?.bonusDamage)
+            }
         } : null,
         targets: (hud.targets || []).map(target => ({
             targetUuid: target.targetUuid,
@@ -125,7 +129,6 @@ function cloneAccDiff(accDiff)
         } : null,
         targets: (accDiff.targets || []).map(target =>
         {
-            const invisibility = target.plugins?.invisibility;
             return {
                 targetUuid: target.targetUuid,
                 accuracy: Number(target.accuracy) || 0,
@@ -134,7 +137,7 @@ function cloneAccDiff(accDiff)
                 lockOn: !!target.usingLockOn,
                 prone: !!target.prone,
                 stunned: !!target.stunned,
-                invisible: !!(invisibility && typeof invisibility === 'object' ? invisibility.data : invisibility)
+                invisible: accDiffTargetInvisible(target)
             };
         })
     };

@@ -800,6 +800,7 @@ export function registerSettings()
             always: 'LA.settings.guardianBulwarkAuraMode.choices.always',
         },
         default: 'always',
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ refreshState: true }))
     });
     game.settings.register(MODULE_ID,'syncActorImgToToken', {
         scope: 'world',

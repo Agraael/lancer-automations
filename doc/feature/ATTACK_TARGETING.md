@@ -12,7 +12,7 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 **Combat & Movement → Targeting** holds **LA Attack Targeting** (**`enableAttackTargeting`**), **Auto-Start Target Picking** (**`autoStartTargetPicking`**) to open the picker the moment an attack starts with no target set, and **Clear Targets After Roll** (**`clearTargetsAfterRoll`**, off by default). **LA Damage Targeting** (**`enableDamageTargeting`**) puts the same picker on the damage HUD, hold Shift for multiple.
 
-**Combat & Movement → Advanced Measure** holds **Select Target cursor** (**`targetToolCursor`**) and **Measure cursor** (**`rulerToolCursor`**), which swap the cursor and play a sound while those tools are active.
+**Ruler & Measures → Advanced Measure** holds **Select Target cursor** (**`targetToolCursor`**) and **Measure cursor** (**`rulerToolCursor`**), which swap the cursor and play a sound while those tools are active.
 
 ---
 

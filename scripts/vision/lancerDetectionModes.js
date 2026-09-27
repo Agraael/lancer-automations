@@ -698,15 +698,15 @@ function _tokenLosPoints(token, aCenter, bCenter)
         return [center, { x: center.x - px * radius, y: center.y - py * radius }, { x: center.x + px * radius, y: center.y + py * radius }];
     }
     let verts;
-    if (canvas.grid.isHexagonal)
+    if (canvas.grid.type !== CONST.GRID_TYPES.GRIDLESS)
     {
         const pts = token.getShape().points;
-        // Document, not the placeable, to match the square branch below and stay put during animation.
-        const hexOriginX = token.document?.x ?? token.x;
-        const hexOriginY = token.document?.y ?? token.y;
+        // Document, not the placeable, so it stays put during animation.
+        const shapeOriginX = token.document?.x ?? token.x;
+        const shapeOriginY = token.document?.y ?? token.y;
         verts = [];
         for (let idx = 0; idx < pts.length; idx += 2)
-            verts.push({ x: Math.round(pts[idx] + hexOriginX), y: Math.round(pts[idx + 1] + hexOriginY) });
+            verts.push({ x: Math.round(pts[idx] + shapeOriginX), y: Math.round(pts[idx + 1] + shapeOriginY) });
     }
     else
     {
@@ -756,7 +756,7 @@ function _cellVerts(centers)
 }
 
 // A bare point gets its cell footprint's silhouette so it rays like a token of that size.
-function _pointLosPoints(point, aCenter, cellCenters = null)
+function _pointLosPoints(point, aCenter, bCenter, cellCenters = null)
 {
     if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
         return [point, point, point];
@@ -771,7 +771,7 @@ function _pointLosPoints(point, aCenter, cellCenters = null)
     }
     if (!verts?.length)
         return [point, point, point];
-    return _extremeLosPoints(point, verts, aCenter, point.x - aCenter.x, point.y - aCenter.y);
+    return _extremeLosPoints(point, verts, aCenter, bCenter.x - aCenter.x, bCenter.y - aCenter.y);
 }
 
 // Centre plus every silhouette vertex, for the dense LOS fallback.
@@ -790,14 +790,14 @@ function _tokenSamplePoints(token)
         }
         return points;
     }
-    if (canvas.grid.isHexagonal)
+    if (canvas.grid.type !== CONST.GRID_TYPES.GRIDLESS)
     {
         const pts = token.getShape().points;
-        // Document, not the placeable, to match the square branch below and stay put during animation.
-        const hexOriginX = token.document?.x ?? token.x;
-        const hexOriginY = token.document?.y ?? token.y;
+        // Document, not the placeable, so it stays put during animation.
+        const shapeOriginX = token.document?.x ?? token.x;
+        const shapeOriginY = token.document?.y ?? token.y;
         for (let idx = 0; idx < pts.length; idx += 2)
-            points.push({ x: Math.round(pts[idx] + hexOriginX), y: Math.round(pts[idx + 1] + hexOriginY) });
+            points.push({ x: Math.round(pts[idx] + shapeOriginX), y: Math.round(pts[idx + 1] + shapeOriginY) });
         return points;
     }
     const shape = token.getShape();
@@ -1110,31 +1110,33 @@ function _roundPoint(point)
 /**
  * Forward ray set for sightline rendering: the 3 primary rays with block points,
  * plus the dense-pass witness when no primary connects.
- * @param {Token} viewer
- * @param {Token|{x: number, y: number, h?: number}} target
+ * @param {Token|{x: number, y: number, h?: number, cells?: {x: number, y: number}[]}} viewer
+ * @param {Token|{x: number, y: number, h?: number, cells?: {x: number, y: number}[]}} target
  * @returns {{rays: {a: any, b: any, clear: boolean, blockPoint: any}[], witness: {a: any, b: any}|null, heightV: number, heightT: number}|null}
  */
 export function computeSightlineRays(viewer, target)
 {
-    if (!viewer?.document || !target)
+    if (!viewer || !target)
         return null;
+    const isTokenV = viewer instanceof foundry.canvas.placeables.Token;
     const isToken = target instanceof foundry.canvas.placeables.Token;
-    if (isToken && !target.document)
+    if ((isTokenV && !viewer.document) || (isToken && !target.document))
         return null;
     const edges = _collectSightEdges();
-    const heightV = getTokenVisionLOS(viewer);
+    const heightV = isTokenV ? getTokenVisionLOS(viewer) : (viewer.h ?? 0);
     const heightT = isToken ? getTokenVisionLOS(target) : (target.h ?? heightV);
-    const centerV = viewer.center;
+    const centerV = isTokenV ? viewer.center : { x: viewer.x, y: viewer.y };
     const centerT = isToken ? target.center : { x: target.x, y: target.y };
+    const viewerCells = (!isTokenV && Array.isArray(viewer.cells) && viewer.cells.length) ? viewer.cells : null;
     const cellCenters = (!isToken && Array.isArray(target.cells) && target.cells.length) ? target.cells : null;
-    const pointsV = _tokenLosPoints(viewer, centerV, centerT);
-    const pointsT = isToken ? _tokenLosPoints(target, centerV, centerT) : _pointLosPoints(centerT, centerV, cellCenters);
+    const pointsV = isTokenV ? _tokenLosPoints(viewer, centerV, centerT) : _pointLosPoints(centerV, centerV, centerT, viewerCells);
+    const pointsT = isToken ? _tokenLosPoints(target, centerV, centerT) : _pointLosPoints(centerT, centerV, centerT, cellCenters);
     const ctx = {
-        skipPrefixA: `la-block-los-${viewer.document.id}-`,
+        skipPrefixA: isTokenV ? `la-block-los-${viewer.document.id}-` : 'la-block-los-<none>-',
         skipPrefixB: isToken ? `la-block-los-${target.document.id}-` : 'la-block-los-<none>-',
         centerA: centerV,
         centerB: centerT,
-        radiusA: Math.max(viewer.w, viewer.h) / 2,
+        radiusA: isTokenV ? Math.max(viewer.w, viewer.h) / 2 : 0,
         radiusB: isToken ? Math.max(target.w, target.h) / 2 : 0,
         nearestBlock: true,
     };
@@ -1152,9 +1154,12 @@ export function computeSightlineRays(viewer, target)
     let witness = null;
     if (!rays.some(ray => ray.clear))
     {
-        const denseClear = isToken
+        const denseClear = (isTokenV && isToken)
             ? _denseLosClear(viewer, target, heightV, heightT, edges, ctx)
-            : _densePointsClear(_tokenSamplePoints(viewer), _pointSamplePoints(centerT, cellCenters), heightV, heightT, edges, ctx);
+            : _densePointsClear(
+                isTokenV ? _tokenSamplePoints(viewer) : _pointSamplePoints(centerV, viewerCells),
+                isToken ? _tokenSamplePoints(target) : _pointSamplePoints(centerT, cellCenters),
+                heightV, heightT, edges, ctx);
         if (denseClear && ctx.denseWitness)
             witness = { a: { ...ctx.denseWitness.from }, b: { ...ctx.denseWitness.to } };
     }
@@ -2612,8 +2617,8 @@ function _syncFootprint(entry, tokenMesh)
     const sinRot = Math.sin(rot);
     const posX = tokenMesh.position.x + cosRot * offsetX - sinRot * offsetY;
     const posY = tokenMesh.position.y + sinRot * offsetX + cosRot * offsetY;
-    const scaleX = mirrorX * meshWidth;
-    const scaleY = mirrorY * meshHeight;
+    const scaleX = mirrorX * meshWidth * 1.1;
+    const scaleY = mirrorY * meshHeight * 1.1;
     if (entry.posX === posX && entry.posY === posY && entry.rot === rot && entry.scaleX === scaleX && entry.scaleY === scaleY)
         return false;
     entry.posX = posX;

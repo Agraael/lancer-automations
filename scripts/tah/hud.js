@@ -10,6 +10,7 @@ import { executeInvade, openThrowMenu, clearMovementHistory, revertMovement, res
 import { pickupWeaponToken, openDeployableMenu, recallDeployable, getItemDeployables, getActorDeployables, deployDeployable, reloadOneWeapon, resolveDeployable, getDeployableInfo, getDeployableInfoSync, isActionLocked, endItemActivation, promptLinkOrUnlinkActor, consumeExtraAction, linkTierGate, gateActions, resolveGrant, resolveDeployRangeCount, isPrimaryActionHidden } from '../interactive/deployables.js';
 import { applyActionOverlays } from '../interactive/action-overlays.js';
 import { openExtrasDialog } from '../interactive/extras-dialog.js';
+import { openClocksDialog, resolveClockPilot, pilotHasBond, getCounters, setCounterValue, deleteCounter } from '../tools/pilot-clocks.js';
 import { getBoostOfferMode } from '../setup/settings-register.js';
 import { knockBackToken } from '../interactive/tools/moveTokenRuler.js';
 import { openHaseContestCard } from '../interactive/tools/haseContest.js';
@@ -22,6 +23,7 @@ import { isAutoConsumeDisabled, renderConsumeStatusHtml } from '../interactive/e
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
 import { favoriteKeys, favoriteWheel, setFavoriteWheel, favMarkHtml, openFavoritePopup } from './favorites.js';
+import { openCursorMenu } from './cursor-menu.js';
 import {
     isAdvancedMeasureActive,
     getAdvancedMeasureState,
@@ -34,8 +36,9 @@ import { getActorMaxReach_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { isLancerRulerActive } from '../movement/cost-rules.js';
 import { resurrect } from '../tools/wreck.js';
 import { buildStatsEl, resetStatsExpanded } from './stats-bar.js';
-import { buildPortrait } from './portrait.js';
+import { buildPortrait, buildPortraitRail } from './portrait.js';
 import { buildCombatBar } from './combat-bar.js';
+import { buildActionTape, noteRowIcon } from './action-tape.js';
 import { collectSearchResults, openSearchResults } from './search.js';
 import { showPopupAt, toggleDetailPopup, hasAutomation } from './hud-popups.js';
 import { StatusPanel } from './status-panel.js';
@@ -69,9 +72,11 @@ async function _toggleTokenInCombat(token)
 }
 
 
+const NARRATIVE_TYPES = ['pilot', 'npc'];
+
 const HUD_LEFT = 120;    // right of Foundry's left toolbar
 const HUD_TOP  = 115;   // below Foundry's top nav bar
-const PORTRAIT_TOP_RATIO = 1;
+const PORTRAIT_TOP_RATIO = 0.5;
 
 /** Screen-space bottom edge of the visible scene tab row, 0 when it is hidden. */
 function sceneNavBottom()
@@ -248,42 +253,137 @@ export class LancerHUD
         if (!uuid)
             return null;
         const actor = /** @type {any} */ (fromUuidSync(uuid));
-        if (!actor || actor.type !== 'pilot')
+        if (!actor || !NARRATIVE_TYPES.includes(actor.type))
             return null;
         return actor;
     }
 
+    _getNarrativeRoster()
+    {
+        const stored = getModuleSetting('tah.narrativeRosterUuids');
+        const uuids = Array.isArray(stored) && stored.length
+            ? stored
+            : [getModuleSetting('tah.narrativeLinkedActorUuid')].filter(Boolean);
+        const seen = new Set();
+        const pilots = [];
+        for (const uuid of uuids)
+        {
+            if (!uuid || seen.has(uuid))
+                continue;
+            seen.add(uuid);
+            const actor = /** @type {any} */ (fromUuidSync(uuid));
+            if (actor?.isOwner && NARRATIVE_TYPES.includes(actor.type))
+                pilots.push(actor);
+        }
+        return pilots;
+    }
+
+    async _setNarrativeActor(uuid)
+    {
+        await game.settings.set(MODULE_ID, 'tah.narrativeLinkedActorUuid', uuid ?? '');
+        if (this._narrativeMode)
+            this.bindNarrative();
+    }
+
+    async _openNarrativePilotMenu()
+    {
+        const roster = this._getNarrativeRoster();
+        if (!roster.length)
+            return this._openNarrativeLinkDialog();
+
+        const activeUuid = getModuleSetting('tah.narrativeLinkedActorUuid');
+        const rows = roster.map(pilot => ({
+            value: pilot.uuid,
+            label: pilot.name,
+            glyph: pilot.uuid === activeUuid ? '●' : '○',
+            cls: pilot.uuid === activeUuid ? 'la-menu-popup-active' : '',
+        }));
+        if (activeUuid)
+            rows.push({ value: '', label: localize('LA.tokenHud.label.unlink'), glyph: '✕', cls: 'la-menu-popup-danger' });
+        rows.push({ value: '__manage', label: localize('LA.tokenHud.label.manageRoster'), glyph: '⚙' });
+
+        const picked = await openCursorMenu({
+            head: localize('LA.tokenHud.label.linkedActor'),
+            rows,
+            onEnter: () => this._cancelCollapse?.(),
+            onLeave: () => this._scheduleCollapse?.(),
+        });
+        if (picked === null)
+            return;
+        if (picked === '__manage')
+            return this._openNarrativeLinkDialog();
+        if (picked !== activeUuid)
+            await this._setNarrativeActor(picked);
+    }
+
     async _openNarrativeLinkDialog()
     {
-        const pilots = (game.actors?.contents ?? []).filter(a => a.type === 'pilot' && a.isOwner);
+        const owned = (game.actors?.contents ?? []).filter(entry => entry.isOwner);
+        const pilots = owned.filter(entry => entry.type === 'pilot');
+        const npcs = owned.filter(entry => entry.type === 'npc');
         const current = getModuleSetting('tah.narrativeLinkedActorUuid');
         const currentActor = current ? /** @type {any} */ (fromUuidSync(current)) : null;
-        const subtitle = currentActor ? `Currently linked: ${currentActor.name}` : 'No pilot linked';
-        const tokenImg = (a) => a?.prototypeToken?.texture?.src || a?.img || 'icons/svg/mystery-man.svg';
-        const cards = pilots.map(p =>
+        const roster = this._getNarrativeRoster().map(entry => entry.uuid);
+        const subtitle = currentActor ? `Driving: ${currentActor.name}` : 'Nothing linked';
+        const tokenImg = (entry) => entry?.prototypeToken?.texture?.src || entry?.img || 'icons/svg/mystery-man.svg';
+        const cardHtml = (entry) =>
         {
-            const sel = p.uuid === current;
-            return `<div class="la-narrative-pilot-card${sel ? ' selected' : ''}" data-uuid="${p.uuid}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid ${sel ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${sel ? BG_HOVER : BG_DEFAULT};cursor:pointer;transition:background 0.1s, border-color 0.1s;">
-                <img src="${tokenImg(p)}" style="width:40px;height:40px;object-fit:cover;border:1px solid #999;border-radius:3px;background:#1a1a1a;flex-shrink:0;">
-                <span style="flex:1;font-weight:600;color:var(--la-ink);">${p.name}</span>
+            const sel = roster.includes(entry.uuid);
+            const active = entry.uuid === current;
+            return `<div class="la-narrative-pilot-card${sel ? ' selected' : ''}" data-uuid="${entry.uuid}" data-name="${entry.name.toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid ${sel ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${sel ? BG_HOVER : BG_DEFAULT};cursor:pointer;transition:background 0.1s, border-color 0.1s;">
+                <img src="${tokenImg(entry)}" style="width:40px;height:40px;object-fit:cover;border:1px solid #999;border-radius:3px;background:#1a1a1a;flex-shrink:0;">
+                <span style="flex:1;font-weight:600;color:var(--la-ink);">${entry.name}</span>
+                <span class="la-narrative-pilot-active" style="font-size:0.75em;letter-spacing:1px;color:var(--primary-color);${active ? '' : 'visibility:hidden;'}">DRIVING</span>
             </div>`;
-        }).join('');
+        };
+        const listHtml = (entries, emptyText) => entries.length
+            ? entries.map(cardHtml).join('')
+            : `<div style="font-size:0.85em;color:#888;font-style:italic;">${emptyText}</div>`;
+        const tabStyle = (on) => `flex:1;padding:4px 8px;font-weight:600;font-size:0.85em;letter-spacing:0.5px;text-transform:uppercase;border:1px solid ${on ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${on ? BG_ACTIVE : BG_DEFAULT};color:${on ? TEXT_ACTIVE : TEXT_DEFAULT};cursor:pointer;`;
+        const byUuid = new Map(owned.map(entry => [entry.uuid, entry]));
+        const chipHtml = (uuid) =>
+        {
+            const entry = byUuid.get(uuid);
+            if (!entry)
+                return '';
+            const active = uuid === current;
+            return `<div class="la-narrative-chip" data-uuid="${uuid}" title="Remove from roster" style="display:inline-flex;align-items:center;gap:5px;padding:2px 6px 2px 2px;border:1px solid ${active ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${active ? BG_HOVER : BG_DEFAULT};cursor:pointer;max-width:100%;">
+                <img src="${tokenImg(entry)}" style="width:22px;height:22px;object-fit:cover;border-radius:2px;background:#1a1a1a;flex-shrink:0;">
+                <span style="font-weight:600;font-size:0.82em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${entry.name}</span>
+                <i class="fas fa-times" style="font-size:0.75em;opacity:0.6;"></i>
+            </div>`;
+        };
+        const rosterEmpty = '<div style="font-size:0.85em;color:#888;font-style:italic;align-self:center;">Nothing linked yet. Pick from the lists below.</div>';
         const content = `
             <div class="lancer-dialog-base">
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">LINK NARRATIVE HUD</div>
+                    <div class="lancer-dialog-title">NARRATIVE HUD ROSTER</div>
                     <div class="lancer-dialog-subtitle">${subtitle}</div>
                 </div>
                 <div class="lancer-info-box">
                     <i class="fas fa-info-circle"></i>
-                    <span>Pick a pilot to drive the narrative HUD. Stats, attributes and categories reflect this pilot.</span>
+                    <span>Pick who the narrative HUD can drive. Swap between them from the link icon in the HUD name band.</span>
                 </div>
                 <div style="margin-top:12px;">
-                    <label style="display:block;font-size:0.85em;font-weight:600;margin-bottom:4px;">Pilot</label>
-                    <div class="la-narrative-pilot-list" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto;padding:2px;">
-                        ${cards || '<div style="font-size:0.85em;color:#888;font-style:italic;">No pilot found.</div>'}
+                    <label style="display:flex;align-items:center;justify-content:space-between;font-size:0.85em;font-weight:600;margin-bottom:4px;">
+                        <span>Linked</span>
+                        <span class="la-narrative-roster-count" style="color:var(--primary-color);">${roster.length}</span>
+                    </label>
+                    <div class="la-narrative-roster" style="display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px;height:62px;overflow-y:auto;padding:4px;margin-bottom:10px;border:1px solid #999;border-radius:3px;background:color-mix(in srgb, var(--la-plate), #000 4%);">
+                        ${roster.length ? roster.map(chipHtml).join('') : rosterEmpty}
                     </div>
-                    <input type="hidden" name="pilot-uuid" value="${current || ''}">
+                    <div style="display:flex;gap:4px;margin-bottom:6px;">
+                        <button type="button" class="la-narrative-tab" data-tab="pilot" style="${tabStyle(true)}">${localize('LA.tokenHud.label.pilots')} <span data-count>${pilots.length}</span></button>
+                        <button type="button" class="la-narrative-tab" data-tab="npc" style="${tabStyle(false)}">${localize('LA.tokenHud.label.npcs')} <span data-count>${npcs.length}</span></button>
+                    </div>
+                    <input type="text" class="la-narrative-search" placeholder="${localize('LA.common.searchByName')}" style="width:100%;margin-bottom:6px;">
+                    <div class="la-narrative-pilot-list" data-list="pilot" style="display:flex;flex-direction:column;gap:4px;height:280px;overflow-y:auto;padding:2px;">
+                        ${listHtml(pilots, 'No pilot found.')}
+                    </div>
+                    <div class="la-narrative-pilot-list" data-list="npc" style="display:none;flex-direction:column;gap:4px;height:280px;overflow-y:auto;padding:2px;">
+                        ${listHtml(npcs, 'No NPC found.')}
+                    </div>
+                    <input type="hidden" name="pilot-uuid" value="${roster.join(',')}">
                 </div>
             </div>
         `;
@@ -296,20 +396,20 @@ export class LancerHUD
                     label: localize('LA.tokenHud.label.link'),
                     callback: async (html) =>
                     {
-                        const uuid = String(/** @type {any} */ (html).find('[name="pilot-uuid"]').val() || '');
-                        await game.settings.set(MODULE_ID,'tah.narrativeLinkedActorUuid', uuid);
-                        if (this._narrativeMode)
-                            this.bindNarrative();
+                        const raw = String(/** @type {any} */ (html).find('[name="pilot-uuid"]').val() || '');
+                        const picked = raw ? raw.split(',').filter(Boolean) : [];
+                        await game.settings.set(MODULE_ID, 'tah.narrativeRosterUuids', picked);
+                        const active = picked.includes(current) ? current : (picked[0] ?? '');
+                        await this._setNarrativeActor(active);
                     },
                 },
                 unlink: {
                     icon: '<i class="fas fa-unlink"></i>',
-                    label: localize('LA.tokenHud.label.unlink'),
+                    label: localize('LA.tokenHud.label.unlinkAll'),
                     callback: async () =>
                     {
-                        await game.settings.set(MODULE_ID,'tah.narrativeLinkedActorUuid', '');
-                        if (this._narrativeMode)
-                            this.bindNarrative();
+                        await game.settings.set(MODULE_ID, 'tah.narrativeRosterUuids', []);
+                        await this._setNarrativeActor('');
                     },
                 },
                 cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
@@ -318,20 +418,77 @@ export class LancerHUD
             render: (html) =>
             {
                 const $html = /** @type {any} */ (html);
+
+                const setCard = (uuid, on) =>
+                {
+                    $html.find(`.la-narrative-pilot-card[data-uuid="${uuid}"]`).toggleClass('selected', on).css({
+                        background: on ? BG_HOVER : BG_DEFAULT,
+                        'border-color': on ? 'var(--primary-color)' : '#999',
+                    });
+                };
+                const syncRoster = () =>
+                {
+                    const picked = $html.find('.la-narrative-pilot-card.selected')
+                        .map((_index, el) => String($(el).attr('data-uuid') || '')).get();
+                    $html.find('[name="pilot-uuid"]').val(picked.join(','));
+                    $html.find('.la-narrative-roster-count').text(picked.length);
+                    $html.find('.la-narrative-roster').html(picked.length ? picked.map(chipHtml).join('') : rosterEmpty);
+                    $html.find('.la-narrative-chip').on('click', function ()
+                    {
+                        setCard(String($(this).attr('data-uuid') || ''), false);
+                        syncRoster();
+                    });
+                };
+
                 $html.find('.la-narrative-pilot-card').on('click', function ()
                 {
                     const $card = $(this);
-                    $html.find('.la-narrative-pilot-card').css({
-                        background: BG_DEFAULT, 'border-color': '#999',
-                    }).removeClass('selected');
-                    $card.css({
-                        background: BG_HOVER,
-                        'border-color': 'var(--primary-color)',
-                    }).addClass('selected');
-                    $html.find('[name="pilot-uuid"]').val(String($card.attr('data-uuid') || ''));
+                    setCard(String($card.attr('data-uuid') || ''), !$card.hasClass('selected'));
+                    syncRoster();
+                });
+                syncRoster();
+
+                const showTab = (tab) =>
+                {
+                    $html.find('.la-narrative-tab').each((_index, el) =>
+                    {
+                        const on = $(el).attr('data-tab') === tab;
+                        $(el).css({
+                            background: on ? BG_ACTIVE : BG_DEFAULT,
+                            color: on ? TEXT_ACTIVE : TEXT_DEFAULT,
+                            'border-color': on ? 'var(--primary-color)' : '#999',
+                        });
+                    });
+                    $html.find('.la-narrative-pilot-list').each((_index, el) =>
+                    {
+                        $(el).css('display', $(el).attr('data-list') === tab ? 'flex' : 'none');
+                    });
+                };
+                $html.find('.la-narrative-tab').on('click', function ()
+                {
+                    showTab(String($(this).attr('data-tab') || 'pilot'));
+                });
+
+                const search = $html.find('.la-narrative-search');
+                search.on('input', () =>
+                {
+                    const query = String(search.val() || '').trim().toLowerCase();
+                    $html.find('.la-narrative-pilot-list').each((_index, el) =>
+                    {
+                        const list = $(el);
+                        let shown = 0;
+                        list.find('.la-narrative-pilot-card').each((_cardIndex, cardEl) =>
+                        {
+                            const hit = !query || String($(cardEl).attr('data-name') || '').includes(query);
+                            $(cardEl).css('display', hit ? 'flex' : 'none');
+                            if (hit)
+                                shown++;
+                        });
+                        $html.find(`.la-narrative-tab[data-tab="${list.attr('data-list')}"] [data-count]`).text(shown);
+                    });
                 });
                 $html.closest('.app').find('.dialog-buttons').css({
-                    display: 'flex', 'flex-direction': 'row', gap: '6px',
+                    display: 'flex', 'flex-direction': 'row', 'align-items': 'center', flex: '0 0 auto', gap: '6px',
                 });
             },
         }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 480 }).render(true);
@@ -509,7 +666,28 @@ export class LancerHUD
         this.syncValueCells();
         this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
         if (!this._narrativeMode)
+        {
             this._updateCombatBar();
+            this._updateActionTape();
+        }
+    }
+
+    _updateActionTape()
+    {
+        if (!this._el)
+            return;
+        const existing = this._el.find('#la-action-tape');
+        const newTape = this._token ? buildActionTape(this._token) : null;
+        if (existing.length && newTape)
+            existing.replaceWith(newTape);
+        else if (existing.length)
+            existing.remove();
+        else if (newTape)
+        {
+            const anchor = this._el.find('#la-combat-bar');
+            if (anchor.length)
+                anchor.after(newTape);
+        }
     }
 
     _updateCombatBar()
@@ -609,9 +787,14 @@ export class LancerHUD
         if (this._narrativeMode)
         {
             const linked = !!actor;
-            const linkBtn = $(`<span class="la-combat-toggle${linked ? ' la-combat-toggle--in' : ''}" title="${linked ? 'Unlink / change pilot' : 'Link to pilot'}"><i class="fas fa-${linked ? 'link' : 'link-slash'}"></i></span>`);
+            const linkBtn = $(`<span class="la-combat-toggle${linked ? ' la-combat-toggle--in' : ''}" title="${linked ? 'Swap pilot (right-click to edit the roster)' : 'Link to pilot'}"><i class="fas fa-${linked ? 'link' : 'link-slash'}"></i></span>`);
             linkBtn.on('mouseenter', () => playUiSound('statusHover'));
-            linkBtn.on('click', () => this._openNarrativeLinkDialog());
+            linkBtn.on('click', () => this._openNarrativePilotMenu());
+            linkBtn.on('contextmenu', (event) =>
+            {
+                event.preventDefault();
+                this._openNarrativeLinkDialog();
+            });
             titleEl.find('.la-hud-token-name').before(linkBtn);
         }
         else
@@ -634,6 +817,7 @@ export class LancerHUD
                 combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
                 combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
                 this._updateCombatBar();
+                this._updateActionTape();
             });
             titleEl.find('.la-hud-token-name').before(combatToggle);
         }
@@ -674,6 +858,9 @@ export class LancerHUD
         this._favIcon = favIcon;
         this._searchIcon = searchIcon;
         this._searchBar = searchBar;
+        const actionTape = this._narrativeMode ? null : buildActionTape(this._token);
+        if (actionTape)
+            c1.prepend(actionTape);
         if (combatBar)
             c1.prepend(combatBar);
         c1.prepend(statsEl);
@@ -688,18 +875,23 @@ export class LancerHUD
         // A portrait offsets the HUD down by its own height so the art sits above.
         let defaultBase = HUD_TOP;
         let portraitOffset = 0;
-        const portrait = buildPortrait(
-            this._narrativeMode ? null : this._token,
-            actor,
-            (measured) =>
-            {
-                const next = Math.round(measured * uiScale);
-                const current = parseInt(this._el?.css('top') ?? '');
-                if (Number.isFinite(current))
-                    this._el.css('top', `${current - portraitOffset + next}px`);
-                portraitOffset = next;
-            },
-        );
+        const onPortraitMeasured = (measured) =>
+        {
+            const next = Math.round(measured * uiScale);
+            const current = parseInt(this._el?.css('top') ?? '');
+            if (Number.isFinite(current))
+                this._el.css('top', `${current - portraitOffset + next}px`);
+            portraitOffset = next;
+        };
+        const narrativeRoster = this._narrativeMode ? this._getNarrativeRoster() : [];
+        const portrait = narrativeRoster.length > 1
+            ? buildPortraitRail({
+                pilots: narrativeRoster,
+                activeUuid: getModuleSetting('tah.narrativeLinkedActorUuid'),
+                onMeasured: onPortraitMeasured,
+                onPick: (uuid) => this._setNarrativeActor(uuid),
+            })
+            : buildPortrait(this._narrativeMode ? null : this._token, actor, onPortraitMeasured);
         if (portrait)
         {
             titleEl.append(portrait.el);
@@ -1400,6 +1592,7 @@ export class LancerHUD
 
     _lockable(item, actionName, activation = null)
     {
+        noteRowIcon(actionName, item.icon);
         const origClick = item.onClick;
         const origBroadcast = item.broadcastFn;
         const info = getActionLockInfo(this._actor, actionName, activation);
@@ -1543,6 +1736,47 @@ export class LancerHUD
                         }
                     });
                 }
+                else if (item.subtype === 'pips')
+                {
+                    let cur = item.getValue();
+                    const fill = item.bad ? '#c33' : '#3a9e6e';
+                    let pipsHtml = '';
+                    for (let segment = 1; segment <= max; segment++)
+                        pipsHtml += `<span class="la-hud-pip" data-segment="${segment}"></span>`;
+                    cell = $(`<div class="la-hud-cell la-pip-cell">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${item.name}</span></span><span class="la-hud-pips">${pipsHtml}</span></div>`);
+                    // Restyle in place: replacing the nodes under the pointer re-fires the cell's mouseenter.
+                    const repaint = () => cell.find('.la-hud-pip').each((idx, pip) =>
+                    {
+                        const on = (idx + 1) <= cur;
+                        pip.style.borderColor = on ? fill : 'var(--la-edge, #777)';
+                        pip.style.background = on ? fill : 'transparent';
+                    });
+                    repaint();
+                    cell.on('click', '.la-hud-pip', (ev) =>
+                    {
+                        ev.stopPropagation();
+                        const segment = Number($(ev.currentTarget).data('segment'));
+                        const next = cur === segment ? segment - 1 : segment;
+                        if (next === cur)
+                            return;
+                        playUiSound('toggle');
+                        this._suppressRefreshDepth++;
+                        setTimeout(() => this._suppressRefreshDepth--, 300);
+                        cur = Math.min(max, Math.max(min, next));
+                        item.onValueChanged(cur);
+                        repaint();
+                    });
+                    cell.data('restingBg', BG_DEFAULT);
+                    cell.addClass('la-value-cell').data('laValueSync', () =>
+                    {
+                        const fresh = item.getValue();
+                        if (fresh !== cur)
+                        {
+                            cur = fresh;
+                            repaint();
+                        }
+                    });
+                }
                 else if (item.subtype === 'toggle')
                 {
                     let on = !!item.getValue();
@@ -1651,7 +1885,7 @@ export class LancerHUD
             }
             const rawChildren = item.getChildren ? item.getChildren() : null;
             const hasChildren = rawChildren !== null || !!item.isLogPanel || !!item.isGlossaryPanel || !!item.isBondPanel;
-            const childCount = hasChildren && rawChildren ? rawChildren.length : 0;
+            const childCount = item.childCount ?? (hasChildren && rawChildren ? rawChildren.length : 0);
             const row = this._makeRow(item.text ?? item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, childCount, item.sizeLevel ?? null);
             if (item.onBadgeClick)
             {
@@ -2020,8 +2254,9 @@ export class LancerHUD
         if (this._narrativeMode)
         {
             const linked = !!this._actor;
+            const isNarrativeNpc = this._actor?.type === 'npc';
             return [
-                ...(linked ? [this._catPilot()] : []),
+                ...(linked ? [isNarrativeNpc ? this._catNpcFrame() : this._catPilot()] : []),
                 ...(linked ? [this._catSkills()] : []),
                 ...(linked ? [this._catResources()] : []),
                 this._catNarrativeUtility(linked),
@@ -2265,7 +2500,7 @@ export class LancerHUD
             this._simpleItem('Search',   'modules/lancer-automations/icons/search.svg',      { name: 'Search',   activation: 'Quick'          }, 'As a pilot on foot, make a contested skill check, adding bonuses from triggers as normal. This can be used to reveal characters within RANGE 5. Once a HIDDEN character has been found using SEARCH, they immediately lose HIDDEN and can be located again by any character.'),
             ...(showAHIS ? [this._simpleItem('Interact', 'mdi mdi-gesture-tap',       { name: 'Interact', activation: 'Protocol/Quick' }, 'Manipulate an object in some way, such as pushing a button, knocking it over, or ripping out wires. You may only Interact 1/turn. If no hostile characters are adjacent to the object, you automatically succeed. Otherwise, make a contested skill check.')] : []),
             this._simpleItem('Prepare',  'mdi mdi-lightbulb-outline',  { name: 'Prepare',  activation: 'Quick'          }, 'Prepare any other Quick Action and specify a valid trigger in the form "When X then Y". Until the start of your next turn, when it is triggered, you can take this action as a Reaction. While holding a Prepared Action, you may not move or perform any other actions or Reactions.'),
-            { label: localize('LA.tokenHud.label.reload'), icon: 'mdi mdi-magazine-rifle', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: actionPopup({ name: 'Reload', activation: 'Quick', detail: 'Reload one Loading weapon.' }) },
+            { label: localize('LA.tokenHud.label.reload'), icon: 'mdi mdi-magazine-rifle', onClick: () => reloadOneWeapon(token), broadcastFn: (t) => reloadOneWeapon(t), onRightClick: actionPopup({ name: 'Reload', activation: 'Quick', detail: localize('LA.tokenHud.detail.reloadWeapon') }) },
         ];
         const basicFull = () => [
             this._simpleItem('Disengage', 'mdi mdi-run-fast', { name: 'Disengage', activation: 'Full' }, 'Until the end of your current turn, you ignore engagement and your movement does not provoke reactions.'),
@@ -2696,19 +2931,43 @@ export class LancerHUD
                 broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor)?.beginStatFlow?.(`system.${stat.key}`),
                 onRightClick: this._actionPopup({ name: stat.label, activation: 'Check', detail: `Roll 1d20 + ${stat.label.toUpperCase()} (${(actor.system[stat.key] >= 0 ? '+' : '') + actor.system[stat.key]}).` }),
             }));
+        // Generic untrained trigger (1d20+0), like alternative sheets' "Other Skill".
+        const otherSkillItem = {
+            label: localize('LA.tokenHud.label.otherSkill'),
+            badge: '+0',
+            badgeColor: '#777',
+            icon: 'systems/lancer/assets/icons/white/skill.svg',
+            hoverData: { actor, item: null, action: { name: 'Other Skill' }, category: 'Skills' },
+            onClick:     () => /** @type {any} */ (actor).beginStatFlow?.('system.other_skill', 'SKILL TRIGGER'),
+            onRightClick: (row) => this._showItemPopup({
+                cssClass: 'la-hud-popup la-hud-skill-popup',
+                dataKey: 'skill-name',
+                dataValue: 'Other Skill',
+                title: localize('LA.tokenHud.label.otherSkill'),
+                subtitle: localize('LA.tokenHud.detail.untrainedTrigger0'),
+                bodyHtml: `<div style="font-size:0.82em;color:#bbb;line-height:1.4;">${localize('LA.tokenHud.detail.otherSkillBody')}</div>`,
+                theme: 'system',
+                item: null,
+                row,
+            }),
+            broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor)?.beginStatFlow?.('system.other_skill', 'SKILL TRIGGER'),
+        };
+        if (isNpc)
+            statsItems.push(/** @type {any} */ (otherSkillItem));
+
         statsItems.push(/** @type {any} */ ({
             label: localize('LA.tokenHud.label.contest'),
             icon: 'mdi mdi-ab-testing',
             hoverData: { actor, item: null, action: { name: 'Contest' }, category: 'Skills' },
             onClick: () => openHaseContestCard({ tokenA: this._token }),
-            onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: 'Contested check between two tokens, each rolling its own stat. Higher total wins.' }),
+            onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: localize('LA.tokenHud.detail.contest') }),
         }));
         statsItems.push(/** @type {any} */ ({
             label: localize('LA.tokenHud.label.forceCheck'),
             icon: 'mdi mdi-alert-circle-check-outline',
             hoverData: { actor, item: null, action: { name: 'Force Check' }, category: 'Skills' },
             onClick: () => openForceCheckCard({ tokenA: this._token, saveVs: this._token }),
-            onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: 'Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.' }),
+            onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: localize('LA.tokenHud.detail.forceCheck') }),
         }));
 
         const skillItems = [];
@@ -2747,27 +3006,6 @@ export class LancerHUD
                     },
                 });
             }
-            // Generic untrained trigger (1d20+0), like alternative sheets' "Other Skill".
-            skillItems.push({
-                label: localize('LA.tokenHud.label.otherSkill'),
-                badge: '+0',
-                badgeColor: '#777',
-                icon: 'systems/lancer/assets/icons/white/skill.svg',
-                hoverData: { actor, item: null, action: { name: 'Other Skill' }, category: 'Skills' },
-                onClick:     () => /** @type {any} */ (actor).beginStatFlow?.('system.other_skill', 'SKILL TRIGGER'),
-                onRightClick: (row) => this._showItemPopup({
-                    cssClass: 'la-hud-popup la-hud-skill-popup',
-                    dataKey: 'skill-name',
-                    dataValue: 'Other Skill',
-                    title: localize('LA.tokenHud.label.otherSkill'),
-                    subtitle: localize('LA.tokenHud.detail.untrainedTrigger0'),
-                    bodyHtml: '<div style="font-size:0.82em;color:#bbb;line-height:1.4;">Roll a trigger you have no training in: 1d20 + 0. For improvised checks not covered by your pilot skills.</div>',
-                    theme: 'system',
-                    item: null,
-                    row,
-                }),
-                broadcastFn: (_t, a) => /** @type {any} */ (a)?.beginStatFlow?.('system.other_skill', 'SKILL TRIGGER'),
-            });
         }
 
         if (isNpc)
@@ -2789,6 +3027,7 @@ export class LancerHUD
             getItems: () => [
                 { label: localize('LA.tokenHud.label.skills'),   childColLabel: localize('LA.tokenHud.label.skills'),   icon: 'mdi mdi-tune-vertical', getChildren: () => statsItems },
                 ...(skillItems.length ? [{ label: localize('LA.tokenHud.label.triggers'), childColLabel: localize('LA.tokenHud.label.triggers'), icon: 'modules/lancer-automations/icons/skills.svg', getChildren: () => skillItems }] : []),
+                otherSkillItem,
             ],
         };
     }
@@ -2808,7 +3047,7 @@ export class LancerHUD
                     else
                         /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.');
                 },
-                onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: 'Apply statuses, custom effects and bonuses to tokens.' }),
+                onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: localize('LA.tokenHud.detail.effectManager') }),
             },
             { label: localize('LA.tokenHud.label.vote'),
                 icon: 'modules/lancer-automations/icons/vote.svg',
@@ -2820,19 +3059,22 @@ export class LancerHUD
                     else
                         /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.');
                 },
-                onRightClick: this._actionPopup({ name: 'Vote', activation: 'Tool', detail: 'Start a choice or vote card for the players.' }),
-            },
-            { label: localize('LA.tokenHud.label.contest'),
-                icon: 'mdi mdi-ab-testing',
-                onClick: () => openHaseContestCard(),
-                onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: 'Contested check between two tokens, each rolling its own stat. Higher total wins.' }),
-            },
-            { label: localize('LA.tokenHud.label.forceCheck'),
-                icon: 'mdi mdi-alert-circle-check-outline',
-                onClick: () => openForceCheckCard(),
-                onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: 'Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.' }),
+                onRightClick: this._actionPopup({ name: 'Vote', activation: 'Tool', detail: localize('LA.tokenHud.detail.vote') }),
             },
         ];
+        if (!linked)
+        {
+            items.push({ label: localize('LA.tokenHud.label.contest'),
+                icon: 'mdi mdi-ab-testing',
+                onClick: () => openHaseContestCard(),
+                onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: localize('LA.tokenHud.detail.contest') }),
+            });
+            items.push({ label: localize('LA.tokenHud.label.forceCheck'),
+                icon: 'mdi mdi-alert-circle-check-outline',
+                onClick: () => openForceCheckCard(),
+                onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: localize('LA.tokenHud.detail.forceCheck') }),
+            });
+        }
         items.push({ label: localize('LA.tokenHud.label.downtime'),
             icon: 'systems/lancer/assets/icons/white/downtime.svg',
             onClick: async () =>
@@ -2840,7 +3082,7 @@ export class LancerHUD
                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                 await api?.executeDowntime?.();
             },
-            onRightClick: this._actionPopup({ name: 'Downtime', activation: 'Tool', detail: 'Open the downtime activities dialog, with rolls and journal logging.' }),
+            onRightClick: this._actionPopup({ name: 'Downtime', activation: 'Tool', detail: localize('LA.tokenHud.detail.downtime') }),
         });
         if (linked && actor)
         {
@@ -2851,7 +3093,12 @@ export class LancerHUD
                     const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
                     api?.openAddReserveDialog?.(actor);
                 },
-                onRightClick: this._actionPopup({ name: 'Reserve', activation: 'Tool', detail: 'Add a reserve to the pilot.' }),
+                onRightClick: this._actionPopup({ name: 'Reserve', activation: 'Tool', detail: localize('LA.tokenHud.detail.reserve') }),
+            });
+            items.push({ label: localize('LA.tokenHud.label.clocksBurdens'),
+                icon: 'mdi mdi-clock-outline',
+                onClick: () => openClocksDialog(actor),
+                onRightClick: this._actionPopup({ name: 'Clocks & Burdens', activation: 'Tool', detail: localize('LA.tokenHud.detail.clocksBurdens') }),
             });
         }
         return {
@@ -2901,7 +3148,7 @@ export class LancerHUD
                         Hooks.callAll('lancer.postFlow.FullRepairFlow', flow, done !== false);
                     }
                 },
-                onRightClick: this._actionPopup({ name: 'Full Repair', activation: 'Tool', detail: 'Run a Full Repair on the selected unit(s).' }) },
+                onRightClick: this._actionPopup({ name: 'Full Repair', activation: 'Tool', detail: localize('LA.tokenHud.detail.fullRepair') }) },
             { label: localize('LA.tokenHud.label.linkToToken'),
                 icon: 'modules/lancer-automations/icons/pin.svg',
                 onClick: async () =>
@@ -2914,7 +3161,7 @@ export class LancerHUD
                     await setLAFlag(token.document,'ownerActorUuid', target.actor.uuid);
                     await setLAFlag(token.document,'ownerName', target.actor.name ?? '');
                 },
-                onRightClick: this._actionPopup({ name: 'Link to Token', activation: 'Tool', detail: 'Link this token to an owner token (deployable-style ownership).' }) },
+                onRightClick: this._actionPopup({ name: 'Link to Token', activation: 'Tool', detail: localize('LA.tokenHud.detail.linkToToken') }) },
             ...(isMechOrNpc ? [
                 {
                     label: localize('LA.tokenHud.label.structure'),
@@ -2924,7 +3171,7 @@ export class LancerHUD
                         await actor?.update({ 'system.hp.value': 0 });
                         /** @type {any} */ (actor)?.beginStructureFlow();
                     },
-                    onRightClick: this._actionPopup({ name: 'Structure', activation: 'Tool', detail: 'Drop HP to 0 and roll a structure check.' }),
+                    onRightClick: this._actionPopup({ name: 'Structure', activation: 'Tool', detail: localize('LA.tokenHud.detail.structure') }),
                 },
                 {
                     label: localize('LA.tokenHud.label.overheat'),
@@ -2935,19 +3182,19 @@ export class LancerHUD
                         await actor?.update({ 'system.heat.value': maxHeat });
                         /** @type {any} */ (actor)?.beginOverheatFlow();
                     },
-                    onRightClick: this._actionPopup({ name: 'Overheat', activation: 'Tool', detail: 'Fill the heat track and roll an overheat check.' }),
+                    onRightClick: this._actionPopup({ name: 'Overheat', activation: 'Tool', detail: localize('LA.tokenHud.detail.overheat') }),
                 },
-                { label: localize('LA.tokenHud.label.suicide'),          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }), onRightClick: this._actionPopup({ name: 'Suicide', activation: 'Tool', detail: 'Zero structure, stress and HP.' }) },
-                { label: localize('LA.tokenHud.label.reactorExplosion'), icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token), onRightClick: this._actionPopup({ name: 'Reactor Explosion', activation: 'Tool', detail: 'Detonate the reactor: blast damage around the token.' }) },
+                { label: localize('LA.tokenHud.label.suicide'),          icon: 'modules/lancer-automations/icons/suicide.svg',   onClick: () => actor?.update({ 'system.structure.value': 0, 'system.stress.value': 0, 'system.hp.value': 0 }), onRightClick: this._actionPopup({ name: 'Suicide', activation: 'Tool', detail: localize('LA.tokenHud.detail.suicide') }) },
+                { label: localize('LA.tokenHud.label.reactorExplosion'), icon: 'modules/lancer-automations/icons/mushroom-cloud.svg', onClick: () => executeReactorExplosion(token), onRightClick: this._actionPopup({ name: 'Reactor Explosion', activation: 'Tool', detail: localize('LA.tokenHud.detail.reactorExplosion') }) },
             ] : []),
             ...(getLAFlag(token.document,'isWreck') ? [
-                { label: localize('LA.tokenHud.label.resurrect'), icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token), onRightClick: this._actionPopup({ name: 'Resurrect', activation: 'Tool', detail: 'Restore this wreck to a live unit.' }) },
+                { label: localize('LA.tokenHud.label.resurrect'), icon: 'modules/lancer-automations/icons/angel-outfit.svg', onClick: () => resurrect(token), onRightClick: this._actionPopup({ name: 'Resurrect', activation: 'Tool', detail: localize('LA.tokenHud.detail.resurrect') }) },
             ] : []),
             ...(actor?.type === 'npc' ? [
-                { label: localize('LA.tokenHud.label.recharge'), icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor).beginRechargeFlow(), onRightClick: this._actionPopup({ name: 'Recharge', activation: 'Tool', detail: 'Roll the NPC recharge flow for uncharged systems.' }) },
-                { label: localize('LA.tokenHud.label.reloadWeapon'), icon: 'mdi mdi-magazine-rifle',       onClick: () => reloadOneWeapon(token), broadcastFn: (targetToken) => reloadOneWeapon(targetToken), onRightClick: this._actionPopup({ name: 'Reload Weapon', activation: 'Tool', detail: 'Reload one Loading weapon.' }) },
+                { label: localize('LA.tokenHud.label.recharge'), icon: 'modules/lancer-automations/icons/ammo-box.svg', onClick: () => /** @type {any} */ (actor).beginRechargeFlow(), broadcastFn: (_token, targetActor) => /** @type {any} */ (targetActor).beginRechargeFlow(), onRightClick: this._actionPopup({ name: 'Recharge', activation: 'Tool', detail: localize('LA.tokenHud.detail.recharge') }) },
+                { label: localize('LA.tokenHud.label.reloadWeapon'), icon: 'mdi mdi-magazine-rifle',       onClick: () => reloadOneWeapon(token), broadcastFn: (targetToken) => reloadOneWeapon(targetToken), onRightClick: this._actionPopup({ name: 'Reload Weapon', activation: 'Tool', detail: localize('LA.tokenHud.detail.reloadWeapon') }) },
             ] : []),
-            { label: localize('LA.tokenHud.label.generateScan'), icon: 'mdi mdi-qrcode-scan', onClick: () => executeGenerateScan(this._tokens?.length ? this._tokens : [token]), onRightClick: this._actionPopup({ name: 'Generate Scan', activation: 'Tool', detail: 'Create the scan journal for the selected token(s).' }) },
+            { label: localize('LA.tokenHud.label.generateScan'), icon: 'mdi mdi-qrcode-scan', onClick: () => executeGenerateScan(this._tokens?.length ? this._tokens : [token]), onRightClick: this._actionPopup({ name: 'Generate Scan', activation: 'Tool', detail: localize('LA.tokenHud.detail.generateScan') }) },
             { label: localize('LA.tokenHud.label.effectManager'),
                 icon: 'mdi mdi-cogs',
                 onClick: () =>
@@ -2958,9 +3205,9 @@ export class LancerHUD
                     else
                         /** @type {any} */ (ui.notifications).error('Lancer Automations API not found or outdated.');
                 },
-                onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: 'Apply statuses, custom effects and bonuses to tokens.' }) },
-            { label: localize('LA.tokenHud.label.reinforcement'), icon: 'modules/lancer-automations/icons/rally-the-troops.svg', onClick: () => delayedTokenAppearance(), onRightClick: this._actionPopup({ name: 'Reinforcement', activation: 'Tool', detail: 'Hide selected tokens and reveal them as reinforcements at a target round.' }) },
-            { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', icon: 'systems/lancer/assets/icons/white/status_hidden.svg', onClick: () => token.document.update({ hidden: !token.document.hidden }), onRightClick: this._actionPopup({ name: 'Hide / Reveal Token', activation: 'Tool', detail: 'Toggle this token\'s hidden state.' }) },
+                onRightClick: this._actionPopup({ name: 'Effect Manager', activation: 'Tool', detail: localize('LA.tokenHud.detail.effectManager') }) },
+            { label: localize('LA.tokenHud.label.reinforcement'), icon: 'modules/lancer-automations/icons/rally-the-troops.svg', onClick: () => delayedTokenAppearance(), onRightClick: this._actionPopup({ name: 'Reinforcement', activation: 'Tool', detail: localize('LA.tokenHud.detail.reinforcement') }) },
+            { label: token.document.hidden ? 'Reveal Token' : 'Hide Token', icon: 'systems/lancer/assets/icons/white/status_hidden.svg', onClick: () => token.document.update({ hidden: !token.document.hidden }), onRightClick: this._actionPopup({ name: 'Hide / Reveal Token', activation: 'Tool', detail: localize('LA.tokenHud.detail.hideRevealToken') }) },
         ];
 
         const capEnabled = getModuleSetting('enableMovementCapDetection')
@@ -3156,21 +3403,25 @@ export class LancerHUD
                                     api.openChoiceMenu(); else /** @type {any} */
                                     (ui.notifications).error('Lancer Automations API not found or outdated.');
                             },
-                            onRightClick: ap({ name: 'Vote', activation: 'Tool', detail: 'Start a choice or vote card for the players.' }) },
+                            onRightClick: ap({ name: 'Vote', activation: 'Tool', detail: localize('LA.tokenHud.detail.vote') }) },
                         { label: localize('LA.tokenHud.label.downtime'),
                             icon: 'systems/lancer/assets/icons/white/downtime.svg',
                             onClick: async () =>
                             {
                                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; await api?.executeDowntime?.();
                             },
-                            onRightClick: ap({ name: 'Downtime', activation: 'Tool', detail: 'Open the downtime activities dialog, with rolls and journal logging.' }) },
+                            onRightClick: ap({ name: 'Downtime', activation: 'Tool', detail: localize('LA.tokenHud.detail.downtime') }) },
                         { label: localize('LA.tokenHud.label.reserve'),
                             icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
                             onClick: () =>
                             {
                                 const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api; api?.openAddReserveDialog?.(token);
                             },
-                            onRightClick: ap({ name: 'Reserve', activation: 'Tool', detail: 'Add a reserve to the pilot.' }) },
+                            onRightClick: ap({ name: 'Reserve', activation: 'Tool', detail: localize('LA.tokenHud.detail.reserve') }) },
+                        { label: localize('LA.tokenHud.label.clocksBurdens'),
+                            icon: 'mdi mdi-clock-outline',
+                            onClick: () => openClocksDialog(token),
+                            onRightClick: ap({ name: 'Clocks & Burdens', activation: 'Tool', detail: localize('LA.tokenHud.detail.clocksBurdens') }) },
                         { label: localize('LA.tokenHud.label.rest'),
                             icon: 'modules/lancer-automations/icons/night-sleep.svg',
                             onClick: () =>
@@ -3641,17 +3892,107 @@ export class LancerHUD
                         onClick: () => armor && /** @type {any} */ (armor).sheet.render(true),
                         onRightClick: (/** @type {any} */ row) => this._showItemPopup({ cssClass: 'la-hud-popup la-hud-system-popup', dataKey: armor ? 'armor-id' : 'no-armor', dataValue: armor ? armor.id : actor.id, title: armor ? armor.name : 'No Armor', subtitle: 'Pilot Armor', bodyHtml: armorBody, theme: 'system', item: armor, row }),
                     },
-                    ...(() =>
-                    {
-                        const reserveRows = this._catReserves({ source: actor, excludeType: 'Mech' }).getItems().filter(/** @type {any} */ r => !r.isSectionLabel);
-                        if (!reserveRows.length)
-                            return [];
-                        return [{ isSectionLabel: true, label: localize('LA.tokenHud.label.reserves') }, ...reserveRows];
-                    })(),
+                    ...this._clockRows(actor),
+                    ...this._reserveRows(actor),
                     ...this._bondRows(actor),
                 ];
             },
         };
+    }
+
+    _reserveRows(/** @type {any} */ actor)
+    {
+        const listRows = () => this._catReserves({ source: actor, excludeType: 'Mech' }).getItems()
+            .filter(/** @type {any} */ row => !row.isSectionLabel);
+        const count = listRows().length;
+        if (!count)
+            return [];
+        const label = localize('LA.tokenHud.label.reserves');
+        return [{
+            label,
+            icon: 'systems/lancer/assets/icons/white/reserve_mech.svg',
+            childColLabel: label,
+            childCount: count,
+            getChildren: () => [...listRows(), {
+                label: localize('LA.tokenHud.label.add'),
+                icon: 'mdi mdi-plus',
+                keepOpen: true,
+                onClick: () =>
+                {
+                    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
+                    api?.openAddReserveDialog?.(actor);
+                },
+            }],
+        }];
+    }
+
+    _clockRows(/** @type {any} */ actor)
+    {
+        const pilot = resolveClockPilot(actor);
+        if (!pilot)
+            return [];
+        const hasBond = pilotHasBond(pilot);
+        const clocks = getCounters(pilot, 'clocks').length;
+        const burdens = hasBond ? getCounters(pilot, 'burdens').length : 0;
+        // The row names everything it holds; the child column names only its first group.
+        const firstKey = clocks || !burdens ? 'LA.tokenHud.label.clocks' : 'LA.tokenHud.label.burdens';
+        return [{
+            label: localize(clocks && burdens ? 'LA.tokenHud.label.clocksBurdens' : firstKey),
+            icon: 'mdi mdi-clock-outline',
+            childColLabel: localize(firstKey),
+            childCount: clocks + burdens,
+            getChildren: () => this._clockChildren(pilot, hasBond),
+        }];
+    }
+
+    _clockChildren(/** @type {any} */ pilot, /** @type {boolean} */ hasBond)
+    {
+        const rows = [];
+        // The column header already names the first group; only later groups need a label.
+        const addKind = (/** @type {string} */ kind, /** @type {boolean} */ bad, /** @type {string} */ sectionKey) =>
+        {
+            const counters = getCounters(pilot, kind);
+            if (!counters.length)
+                return;
+            if (rows.length)
+                rows.push({ isSectionLabel: true, label: localize(sectionKey) });
+            counters.forEach((/** @type {any} */ counter, /** @type {number} */ index) =>
+            {
+                rows.push({
+                    inputCell: true,
+                    subtype: 'pips',
+                    name: counter.name || localize('LA.clocks.unnamed'),
+                    min: counter.min ?? 0,
+                    max: counter.max ?? 6,
+                    bad,
+                    getValue: () => getCounters(pilot, kind)[index]?.value ?? 0,
+                    onValueChanged: (/** @type {number} */ newVal) => setCounterValue(pilot, kind, index, newVal),
+                    onRightClick: (/** @type {any} */ cell) => this._openRowActionsPopup(counter.name || localize('LA.clocks.unnamed'), localize(sectionKey), [{
+                        label: localize('LA.common.remove'),
+                        icon: 'fas fa-trash',
+                        danger: true,
+                        onClick: async () =>
+                        {
+                            const liveIndex = counter.lid ? getCounters(pilot, kind).findIndex((/** @type {any} */ entry) => entry.lid === counter.lid) : index;
+                            if (liveIndex < 0)
+                                return;
+                            await deleteCounter(pilot, kind, liveIndex);
+                            this.scheduleRefresh();
+                        },
+                    }], cell),
+                });
+            });
+        };
+        addKind('clocks', false, 'LA.tokenHud.label.clocks');
+        if (hasBond)
+            addKind('burdens', true, 'LA.tokenHud.label.burdens');
+        rows.push({
+            label: localize('LA.tokenHud.label.add'),
+            icon: 'mdi mdi-plus',
+            keepOpen: true,
+            onClick: () => openClocksDialog(pilot),
+        });
+        return rows;
     }
 
     _bondRows(/** @type {any} */ actor)
@@ -4684,7 +5025,8 @@ export class LancerHUD
             .filter(/** @type {any} */ entry =>
             {
                 const key = entry?.autoKey;
-                return !key || (!key.startsWith('talent:') && !key.startsWith('frame:'));
+                // bondXp is already the XP row in the BOND section of the Pilot column.
+                return !key || (!key.startsWith('talent:') && !key.startsWith('frame:') && key !== 'bondXp');
             });
         const out = [];
         for (const entry of raw)
@@ -4910,6 +5252,16 @@ export class LancerHUD
         return `<img class="${cls}" src="${img}" onerror="this.onerror=null;this.src='icons/svg/dice-target.svg';" style="width:${size}px;height:${size}px;filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
 
+    _macroScope()
+    {
+        const scope = {};
+        if (this._token)
+            scope.token = this._token;
+        if (this._actor)
+            scope.actor = this._actor;
+        return scope;
+    }
+
     _buildMacroItems()
     {
         const list = this._getMacroList();
@@ -4931,7 +5283,7 @@ export class LancerHUD
             }
             return {
                 label: labelOk,
-                onClick:      () => macro.execute(),
+                onClick:      () => macro.execute(this._macroScope()),
                 onRightClick: (row) => this._openMacroRowPopup(entry, macro, row),
             };
         });
@@ -5101,30 +5453,38 @@ export class LancerHUD
 
     _openMacroRowPopup(entry, macro, anchorRow)
     {
-        $('.la-hud-popup').remove();
-        const title = macro?.name ?? entry.name ?? 'Macro';
-        const subtitle = macro ? '' : 'Macro missing';
-        const baseStyle = 'padding:3px 8px;cursor:pointer;font-size:0.78em;display:flex;align-items:center;gap:5px;font-family:inherit;';
-        const buttons = [];
+        const actions = [];
         if (macro)
-            buttons.push(`<button class="la-tah-mr-sheet" style="${baseStyle}background:#2a2a2a;border:1px solid #444;color:#ddd;"><i class="fas fa-external-link-alt"></i>Open Sheet</button>`);
-        buttons.push(`<button class="la-tah-mr-remove" style="${baseStyle}background:#3a1818;border:1px solid #803333;color:#ffaaaa;"><i class="fas fa-trash"></i>Remove</button>`);
+            actions.push({ label: 'Open Sheet', icon: 'fas fa-external-link-alt', onClick: () => macro.sheet?.render(true) });
+        actions.push({
+            label: 'Remove',
+            icon: 'fas fa-trash',
+            danger: true,
+            onClick: () => this._saveMacroList(this._getMacroList().filter(listed => listed.macroId !== entry.macroId)),
+        });
+        this._openRowActionsPopup(macro?.name ?? entry.name ?? 'Macro', macro ? '' : 'Macro missing', actions, anchorRow);
+    }
+
+    _openRowActionsPopup(title, subtitle, actions, anchorRow)
+    {
+        $('.la-hud-popup').remove();
+        const baseStyle = 'padding:3px 8px;cursor:pointer;font-size:0.78em;display:flex;align-items:center;gap:5px;font-family:inherit;';
+        const buttons = actions.map((action, idx) =>
+        {
+            const colors = action.danger ? 'background:#3a1818;border:1px solid #803333;color:#ffaaaa;' : 'background:#2a2a2a;border:1px solid #444;color:#ddd;';
+            return `<button data-action-idx="${idx}" style="${baseStyle}${colors}"><i class="${action.icon}"></i>${action.label}</button>`;
+        });
         const bodyHtml = `<div style="display:flex;flex-direction:column;gap:4px;">${buttons.join('')}</div>`;
         const popup = laDetailPopup('la-hud-popup la-tah-row-popup', title, subtitle, bodyHtml, 'default');
         popup.css({ minWidth: 0, width: 'auto', maxWidth: 200 });
         popup.children().eq(0).css({ padding: '4px 8px' });
         popup.children().eq(0).find('div').first().css({ fontSize: '0.82em' });
         popup.children().eq(1).css({ padding: '4px 8px' });
-        popup.find('.la-tah-mr-sheet').on('click', () =>
+        popup.find('button[data-action-idx]').on('click', async (ev) =>
         {
-            macro?.sheet?.render(true);
+            const action = actions[Number($(ev.currentTarget).data('actionIdx'))];
             popup.remove();
-        });
-        popup.find('.la-tah-mr-remove').on('click', async () =>
-        {
-            const cur = this._getMacroList().filter(e => e.macroId !== entry.macroId);
-            popup.remove();
-            await this._saveMacroList(cur);
+            await action?.onClick();
         });
         this._showPopupAt(popup, anchorRow);
     }
@@ -6114,6 +6474,8 @@ export class LancerHUD
 
     _makeRow(label, hasArrow, icon = null, activation = null, badge = null, badgeColor = null, count = 0, sizeLevel = null)
     {
+        if (icon && typeof label === 'string' && !label.includes('<'))
+            noteRowIcon(label, icon);
         const mark = laHudSizeMark(sizeLevel);
         let iconHtml = icon ? laHudRenderIcon(icon, sizeLevel == null ? HUD_ICON_SIZE : HUD_WEAPON_ICON_SIZE) : '';
         if (mark)

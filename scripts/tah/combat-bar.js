@@ -9,7 +9,7 @@ import { localize } from '../tools/string-utils.js';
 const ACTION_DEFS = [
     { key: 'protocol', icon: 'cci cci-protocol',                        color: '#00e5e5', label: 'LA.action.protocol' },
     { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', color: '#4caf50', label: 'LA.action.move',     isMove: true },
-    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  color: '#ff9800', label: 'LA.action.full' },
+    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  color: '#e65100', label: 'LA.action.full' },
     { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  color: '#ff9800', label: 'LA.action.quick' },
     { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'LA.action.reaction' },
 ];

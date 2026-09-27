@@ -240,7 +240,7 @@ const veterancyVeteranAutomation = {
 
 ## 6. Moving Target
 
-**What it does.** When an enemy moves within 20 of the sniper, it can interrupt that movement and fire its Anti-materiel Rifle.
+**What it does.** When an enemy moves within 20 of the sniper, it can interrupt that movement and fire its Anti-materiel Rifle. An unloaded rifle reloads instead and nobody is interrupted.
 
 **Triggers:** `onPreMove`
 
@@ -268,6 +268,9 @@ const movingTargetSniperAutomation = {
         },
         activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api) {
             const mover = triggerData.triggeringToken;
+            const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
+            if (!rifle) return;
+            if (rifle.system?.loaded === false) { await api.setItemResource(rifle, true); return; }
             let responderIds = [];
             const preConfirm = async () => {
                 const ask = await api.askCard({
@@ -300,9 +303,7 @@ const movingTargetSniperAutomation = {
             const mover = canvas.tokens.get(data.moverTokenId) ?? null;
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle) return;
-            if (rifle.system?.loaded === false) { await api.reloadOneWeapon(reactorToken); return; }
-            if (mover) canvas.tokens.setTargets([mover.id]);
-            await api.beginWeaponAttackFlow(rifle, {});
+            await api.attackWith(rifle, mover ? [mover] : null);
         }
     }]
 };
@@ -312,6 +313,8 @@ const movingTargetSniperAutomation = {
 > The classic interrupt. `triggerOther: true` with `triggerSelf: false` means it reacts to others moving, not to itself. `onPreMove` fires before the move runs, so `cancelTriggeredMove` has to be called before the first `await`, which is exactly what happens here: everything async lives in `preConfirm` and `postChoice`, which run after the cancel has already stuck. Setting `awaitActivationCompletion` would change nothing on this trigger, see [Automation System](../AUTOMATION_SYSTEM.md#the-synchronous-rule).
 >
 > `preConfirm` asks the sniper's player whether to interrupt, and fires the rifle through `startRelatedFlowToReactor` if they say yes. `postChoice` covers the other branch: the mover's player overrode the interrupt (`chose === false`, the move goes through), and the sniper still gets its shot. That branch delegates through `sendMessageToReactor`, which is what puts `data.moverTokenId` on the `onMessage` handler below. Drop the send and `onMessage` never fires.
+>
+> The rifle is checked before any card goes out, so an unloaded sniper reloads and leaves the movement alone instead of interrupting it only to find there is nothing to fire. Note `setItemResource` rather than `reloadOneWeapon`: the latter asks which weapon to reload, which would be another prompt. Once the sniper's player has committed to the interrupt, the shot needs no second confirmation, so `onMessage` goes straight to `attackWith`.
 
 ---
 
@@ -478,6 +481,6 @@ These eight cover the core toolbox. Patterns they don't touch, with an example t
 - **Reply to a hit asynchronously** (`onMessage`) - *Lightning Reflexes*
 - **Sequencer VFX** in a reaction - *Volley - Rainmaker*
 - **Reroll auras** (`onRoll`) - *Nano-Repair Cloud*, *Voice of Authority*
-- **General (item-less) reactions** registered for everyone - *Guardian Aura* (built-in), *Fall Prone (Sniper's Mark)*, and *Break Free* in `scripts/combat/grapple.js`
+- **General (item-less) reactions** registered for everyone - *Overwatch* (built-in), *Fall Prone (Sniper's Mark)*, and *Break Free* in `scripts/combat/grapple.js`
 
 My personal set has many more. Browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.

@@ -485,7 +485,7 @@ export function getDefaultGeneralReactionRegistry()
                         const ranges = api.getMaxWeaponRanges_WithBonus(weapon);
                         return (ranges.Threat || 1) >= distance;
                     };
-                    await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter, { noFX: true });
+                    await api.executeSkirmish(reactorToken.actor, null, mover, weaponFilter, { noFX: true, asReaction: true });
                 }
             }]
         },
@@ -870,10 +870,11 @@ export function getDefaultGeneralReactionRegistry()
 
                     if (!validTargets || validTargets.length === 0)
                         return;
+                    const result = { targets: validTargets, effects: validTargets.map(target => api.findEffectOnToken(target, "bolster")) };
 
                     const weaponFx = game.modules.get("lancer-weapon-fx");
                     if (!weaponFx?.active || typeof Sequencer === 'undefined')
-                        return;
+                        return result;
 
                     await Sequencer.Preloader.preloadForClients([
                         "modules/lancer-weapon-fx/soundfx/TechPrepare.ogg",
@@ -908,6 +909,7 @@ export function getDefaultGeneralReactionRegistry()
                             .waitUntilFinished(-400);
                         sequence.play();
                     });
+                    return result;
                 }
             }, {
                 triggers: ["onInitCheck", "onCheck"],
@@ -1095,7 +1097,7 @@ export function getDefaultGeneralReactionRegistry()
                         action: { name: "Ram", activation: "Quick" },
                         effect: localize('LA.reaction.makeAMeleeAttackAgainstAn'),
                         tags: [{ lid: 'tg_knockback', val: 1 }]
-                    });
+                    }, { tapeRecorded: true });
                 }
             }, {
                 triggers: ["onHit"],
@@ -2207,159 +2209,6 @@ export function getDefaultGeneralReactionRegistry()
 
             await actionFX.queueActionFx(() => actionFX.playOverchargeNpcFX(reactorToken), reactorToken, 'overchargeNpc');
         }
-    };
-
-    function _guardianBulwarkAuraMode()
-    {
-        return getModuleSetting('guardianBulwarkAuraMode') || 'always';
-    }
-
-    const _guardianAuraPending = new Set();
-    builtInDefaults["Guardian Aura"] = {
-        category: "Automation",
-        comments: "Just for visual indication",
-        reactions: [
-            {
-                triggers: ["onStatusApplied"],
-                triggerSelf: true,
-                triggerOther: false,
-                autoActivate: true,
-                outOfCombat: true,
-                ...CODE_INSTEAD,
-                evaluate: function (triggerType, triggerData)
-                {
-                    return triggerData.statusId === 'guardian';
-                },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
-                {
-                    const mode = _guardianBulwarkAuraMode();
-                    if (mode === 'off')
-                        return;
-                    if (api.findAura(reactorToken, "LA_Guardian") || _guardianAuraPending.has(reactorToken.id))
-                        return;
-                    _guardianAuraPending.add(reactorToken.id);
-                    try
-                    {
-                        await api.createAura(reactorToken, api.scaleAuraStroke({
-                            name: "LA_Guardian",
-                            unified: false,
-                            radiusOffset: -3,
-                            innerRadius: "",
-                            radius: "0",
-                            lineWidth: 6,
-                            lineColor: "#757575",
-                            lineOpacity: 0.8,
-                            lineDashSize: 15,
-                            lineGapSize: 10,
-                            fillType: 0,
-                            lineDashOffsetAnimation: -5,
-                            onlyEnabledInCombat: mode === 'combat',
-                            nonOwnerVisibility: { default: true }
-                        }));
-                    }
-                    finally
-                    {
-                        _guardianAuraPending.delete(reactorToken.id);
-                    }
-                }
-            },
-            {
-                triggers: ["onStatusRemoved"],
-                triggerSelf: true,
-                triggerOther: false,
-                autoActivate: true,
-                outOfCombat: true,
-                ...CODE_INSTEAD,
-                evaluate: function (triggerType, triggerData)
-                {
-                    return triggerData.statusId === 'guardian';
-                },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
-                {
-                    _guardianAuraPending.delete(reactorToken.id);
-                    for (let i = 0; i < 10; i++)
-                    {
-                        await api.deleteAuras(reactorToken, { name: "LA_Guardian" });
-                        if (!api.findAura(reactorToken, "LA_Guardian"))
-                            break;
-                    }
-                }
-            }
-        ]
-    };
-
-    const _bulwarkAuraPending = new Set();
-    builtInDefaults["Bulwark Aura"] = {
-        category: "Automation",
-        comments: "Just for visual indication",
-        reactions: [
-            {
-                triggers: ["onStatusApplied"],
-                triggerSelf: true,
-                triggerOther: false,
-                autoActivate: true,
-                outOfCombat: true,
-                ...CODE_INSTEAD,
-                evaluate: function (triggerType, triggerData)
-                {
-                    return triggerData.statusId === 'bulwark';
-                },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
-                {
-                    const mode = _guardianBulwarkAuraMode();
-                    if (mode === 'off')
-                        return;
-                    if (api.findAura(reactorToken, "LA_Bulwark") || _bulwarkAuraPending.has(reactorToken.id))
-                        return;
-                    _bulwarkAuraPending.add(reactorToken.id);
-                    try
-                    {
-                        await api.createAura(reactorToken, api.scaleAuraStroke({
-                            name: "LA_Bulwark",
-                            unified: false,
-                            radiusOffset: -3,
-                            innerRadius: "",
-                            radius: "0",
-                            lineWidth: 6,
-                            lineColor: "#000000",
-                            lineOpacity: 0.8,
-                            lineDashSize: 15,
-                            lineGapSize: 10,
-                            fillType: 0,
-                            lineDashOffsetAnimation: -5,
-                            onlyEnabledInCombat: mode === 'combat',
-                            nonOwnerVisibility: { default: true }
-                        }));
-                    }
-                    finally
-                    {
-                        _bulwarkAuraPending.delete(reactorToken.id);
-                    }
-                }
-            },
-            {
-                triggers: ["onStatusRemoved"],
-                triggerSelf: true,
-                triggerOther: false,
-                autoActivate: true,
-                outOfCombat: true,
-                ...CODE_INSTEAD,
-                evaluate: function (triggerType, triggerData)
-                {
-                    return triggerData.statusId === 'bulwark';
-                },
-                activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
-                {
-                    _bulwarkAuraPending.delete(reactorToken.id);
-                    for (let i = 0; i < 10; i++)
-                    {
-                        await api.deleteAuras(reactorToken, { name: "LA_Bulwark" });
-                        if (!api.findAura(reactorToken, "LA_Bulwark"))
-                            break;
-                    }
-                }
-            }
-        ]
     };
 
     return { ...builtInDefaults, ...externalGeneralReactions };

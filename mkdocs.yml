@@ -11,6 +11,7 @@ use_directory_urls: false
 
 theme:
   name: material
+  custom_dir: overrides
   font:
     text: Roboto
     code: JetBrains Mono

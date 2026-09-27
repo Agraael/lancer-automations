@@ -5,6 +5,7 @@ import { MODULE_ID, BOOST_DETAIL } from "../tools/constants.js";
 import { isForceFreeMovement } from "./keybindings.js";
 import { parseAction } from "./movement-actions.js";
 import { consumeAction, executeSimpleActivation } from "../tools/misc-tools.js";
+import { recordAction } from "../tah/action-tape.js";
 import * as actionFX from "../fx/actionFX.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { cancelRulerDrag, startChoiceCard, getTokenOwnerUserId, drawMovementTrace } from "../interactive/index.js";
@@ -1113,7 +1114,10 @@ export async function handleTokenMove(document, change, options, userId)
         if (tokenDoc.isOwner && isLastSegment)
             tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
         if (isDrag && !isFreeMovement && !isTeleport && prevIntentional === 0)
+        {
             consumeAction(token, 'move');
+            recordAction(token, { name: 'Move', activation: 'Move', icon: 'mdi mdi-arrow-right-bold-hexagon-outline' });
+        }
         if (isForceMovement && !isFreeMovement && !options.isUndo)
             Hooks.callAll('lancer-automations.battelog.involuntaryMove', { token, distance: distanceMoved });
     }

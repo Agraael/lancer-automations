@@ -33,7 +33,7 @@ function deriveSaveDc(saveVsToken)
  * @param {object} [options]
  */
 export function openForceCheckCard({ tokenA = null, skill = null, range = null, saveVs = null, targets = null, sendToOwner = true,
-    accuracy = 0, difficulty = 0, flatModifier = 0 } = {})
+    filter = null, accuracy = 0, difficulty = 0, flatModifier = 0 } = {})
 {
     return _queueCard(() => new Promise((resolve) =>
     {
@@ -94,7 +94,8 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
 
         let cardEl;
         let targetHookId = null;
-        const rollerTargets = () => [...(game.user.targets ?? [])].filter(token => token.id !== state.saveVs?.id);
+        const rollerTargets = () => [...(game.user.targets ?? [])]
+            .filter(token => token.id !== state.saveVs?.id && (!filter || filter(token)));
         const successChanceFor = () => targetInfoAllowed()
             ? (token) => targetInfoAllowedFor(token?.actor)
                 ? haseSuccessChance(token?.actor, state.skill, state.saveVs ? deriveSaveDc(state.saveVs) : 10)
@@ -269,10 +270,12 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             const rollers = rollerTargets();
             if (!state.skill)
                 return;
+            // cleanup() drops every user target, so the picked set has to be captured first.
+            const picked = [...(game.user.targets ?? [])];
             if (!rollers.length)
             {
                 cleanup();
-                resolve({ completed: false, results: [] });
+                resolve({ completed: false, results: [], targets: picked });
                 return;
             }
             const runSkill = state.skill;
@@ -281,7 +284,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             cleanup();
             const result = await api?.executeForceCheck?.(runSkill, rollers,
                 { saveVs: runSaveVs, sendToOwner: runSendToOwner, accuracy, difficulty, flatModifier });
-            resolve(result ?? null);
+            resolve({ ...(result ?? { completed: false, results: [] }), targets: picked });
         });
 
         if (Array.isArray(targets))

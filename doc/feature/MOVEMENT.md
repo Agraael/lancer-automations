@@ -8,7 +8,7 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 ## Settings
 
-**Combat & Movement → Lancer Automations Ruler**. The path colors live in the **Colors** tab, under **Ruler Colors**.
+**Ruler & Measures → Lancer Automations Ruler**. The path colors live in the **Colors** tab, under **Ruler Colors**.
 
 <img src="../img/mv-settings.png" width="70%"/>
 

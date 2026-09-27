@@ -756,13 +756,23 @@ function contributorBadgeSummary(contributor)
     return `<span style="font-size: 0.85em; color: var(--la-ink-dim);">${parts.join(', ')}</span>`;
 }
 
-function contributorLikesHtml(contributor)
+function contributorStatsHtml(contributor)
 {
     if (!state.statsFetchedAt)
         return '';
     const paths = [...contributor.automations, ...contributor.packs, ...contributor.startups];
-    const likes = paths.reduce((sum, path) => sum + (state.stats.get(pathWorkshopId(path))?.likes || 0), 0);
-    return `<span class="la-ws-stats"><span class="la-ws-dl" title="${likes} like${likes === 1 ? '' : 's'}"><i class="fas fa-heart"></i> ${likes}</span></span>`;
+    let likes = 0;
+    let installs = 0;
+    for (const path of paths)
+    {
+        const row = state.stats.get(pathWorkshopId(path));
+        likes += row?.likes || 0;
+        installs += row?.installs || 0;
+    }
+    return `<span class="la-ws-stats">
+        <span class="la-ws-dl" title="${likes} like${likes === 1 ? '' : 's'}"><i class="fas fa-heart"></i> ${likes}</span>
+        <span class="la-ws-dl" title="${installs} import${installs === 1 ? '' : 's'}"><i class="fas fa-download"></i> ${installs}</span>
+    </span>`;
 }
 
 function contributorRows()
@@ -773,7 +783,7 @@ function contributorRows()
             <span class="col-type"><i class="fas fa-folder" title="Contributor" style="color: var(--primary-color);"></i></span>
             <span class="col-name"><strong>${esc(contributor.author)}</strong>
                 <span style="font-size: 0.85em; color: var(--la-ink-dim); margin-left: 6px;">${contributorSummary(contributor)}</span>
-                ${contributorLikesHtml(contributor)}
+                ${contributorStatsHtml(contributor)}
             </span>
             <span class="col-triggers">${contributorBadgeSummary(contributor)}</span>
             <span class="col-controls"><i class="fas fa-chevron-right"></i></span>

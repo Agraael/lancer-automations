@@ -140,7 +140,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                 const itemActivationResult = itemActivation();
                 const customActivationResult = executeCustomActivation();
                 if (itemActivationResult instanceof Promise || customActivationResult instanceof Promise)
-                    return Promise.all([itemActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]);
+                    return Promise.all([itemActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]).then(([, custom]) => custom);
             }
         }
     }
@@ -210,7 +210,7 @@ export function activateReaction(triggerType, triggerData, token, item, activati
                 const chatActivationResult = showChatActivation();
                 const customActivationResult = executeCustomActivation();
                 if (chatActivationResult instanceof Promise || customActivationResult instanceof Promise)
-                    return Promise.all([chatActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]);
+                    return Promise.all([chatActivationResult || Promise.resolve(), customActivationResult || Promise.resolve()]).then(([, custom]) => custom);
             }
         }
     }
@@ -459,6 +459,13 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 
     activeDetailPanel.find('.activate-btn').click(async () =>
     {
+        if (!hasReactionAvailable(token))
+        {
+            ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token.name }));
+            closeDetailPanel();
+            pruneExhaustedReactors();
+            return;
+        }
         let reaction = null;
         if (item)
         {
@@ -476,18 +483,49 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         closeDetailPanel();
         mainDialogEl.find('.lancer-reaction-item').removeClass('selected');
 
-        const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
-        if (reactionCount <= 0)
-        {
-            const tokenBox = mainDialogEl.find(`.lancer-list-item[data-token-id="${token.id}"]`);
-            tokenBox.addClass('reaction-exhausted');
-            tokenBox.find('img').css('filter', 'grayscale(100%)');
-        }
+        pruneExhaustedReactors();
     });
 }
 
 // Scene stand-ins are not on the canvas, so the popup keeps its own id-to-reactor lookup.
 const reactorsById = new Map();
+
+let _trackerHook = null;
+
+// The reaction is spent well after activateReaction resolves, so the dialog prunes on the tracker change itself.
+function pruneExhaustedReactors()
+{
+    const dialogEl = activeReactionDialog?.element;
+    if (!dialogEl?.length)
+        return;
+    for (const item of dialogEl.find('.lancer-list-item').toArray())
+    {
+        const reactor = reactorsById.get(item.dataset.tokenId);
+        if (reactor && !hasReactionAvailable(reactor.actor ?? reactor))
+            item.remove();
+    }
+    if (!dialogEl.find('.lancer-list-item').length)
+        activeReactionDialog.close();
+}
+
+function watchReactionTracker()
+{
+    if (_trackerHook !== null)
+        return;
+    _trackerHook = Hooks.on('updateActor', (_actor, changes) =>
+    {
+        if (foundry.utils.getProperty(changes, 'system.action_tracker.reaction') !== undefined)
+            pruneExhaustedReactors();
+    });
+}
+
+function unwatchReactionTracker()
+{
+    if (_trackerHook === null)
+        return;
+    Hooks.off('updateActor', _trackerHook);
+    _trackerHook = null;
+}
 
 function renderReactionDialog(popupData)
 {
@@ -634,6 +672,7 @@ function renderReactionDialog(popupData)
     if (activeReactionDialog)
         activeReactionDialog.close();
 
+    watchReactionTracker();
     activeReactionDialog = new Dialog({
         title: localizeFormat('LA.dialogTitle.activationOpportunity', { trigger: triggerDisplay }),
         content: html,
@@ -714,6 +753,7 @@ function renderReactionDialog(popupData)
         close: () =>
         {
             closeDetailPanel();
+            unwatchReactionTracker();
             activeReactionDialog = null;
             if (!_suppressCloseEmit)
             {

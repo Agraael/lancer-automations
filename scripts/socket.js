@@ -20,6 +20,7 @@ import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } f
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
 import { executeStatRoll, getItemLID, isExecutorGM } from './tools/misc-tools.js';
+import { MODULE_ID } from './tools/constants.js';
 import { openDowntimeSummary, showDowntimeJournalPopup } from './tools/downtime.js';
 import { playTerminalIntro } from './Battelog/intro-terminal.js';
 import { openBattleLogRecap } from './Battelog/recap.js';
@@ -647,6 +648,12 @@ const HANDLERS = {
                     if (combatant)
                         await /** @type {any} */ (combatant).modifyCurrentActivations(payload.delta);
                 }
+                else if (payload.method === 'writeActionTape')
+                {
+                    const combatant = combat.combatants.get(payload.combatantId);
+                    if (combatant)
+                        await combatant.setFlag(MODULE_ID, 'actionTape', payload.entries);
+                }
             }
         }
         catch (e)
@@ -718,6 +725,7 @@ const HANDLERS = {
         const fakeReaction = {
             reactionPath: payload.reactionPath,
             actionType: payload.actionType,
+            checkReaction: payload.checkReaction,
             effectDescription: payload.effectDescription,
         };
         _buildStartRelatedFlow(flowToken, flowItem, fakeReaction, payload.activationName, payload.extraData ?? {})()

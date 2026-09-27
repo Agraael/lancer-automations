@@ -8,7 +8,7 @@ import { applyDamageImmunities, getApplicableImmunityBonuses, getAttackImmunityB
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
-import { hasReactionAvailable, executeExtraActionCombat } from '../tools/misc-tools.js';
+import { consumeReaction, executeExtraActionCombat } from '../tools/misc-tools.js';
 import { broadcastFocus } from '../tools/auto-focus.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 import { getActionOverlay } from '../interactive/action-overlays.js';
@@ -16,6 +16,8 @@ import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
 import { noteActivation } from '../movement/move-tracking.js';
+import { recordAction } from '../tah/action-tape.js';
+import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { recordRollSnapshot } from '../uplink/snapshots.js';
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
@@ -72,6 +74,18 @@ export async function onAttackStep(state)
     recordRollSnapshot('attack', state);
 
     const actionData = attackActionData(state, weapon);
+
+    if (token && !state.la_extraData?.tapeRecorded)
+    {
+        const verb = state.la_extraData?.tapeAction ?? null;
+        await recordAction(token, {
+            name: verb?.name ?? actionData.title,
+            activation: verb?.activation ?? state.data?.action?.activation ?? 'Quick',
+            item: weapon,
+            type: 'attack',
+            icon: weapon ? weaponTypeIcon(weapon) : 'mdi mdi-target'
+        });
+    }
 
     await handleTrigger('onAttack', {
         triggeringToken: token,
@@ -252,6 +266,26 @@ export async function onPreDamageStep(state)
     });
 }
 
+function assertFlowTargets(tokens)
+{
+    const ids = tokens.filter(Boolean).map(token => token.id);
+    if (!ids.length)
+        return;
+    /** @type {any} */ (canvas.tokens).setTargets(ids);
+}
+
+export async function assertAttackTargetsStep(state)
+{
+    assertFlowTargets((state.data?.acc_diff?.targets ?? []).map(accDiffTargetToken));
+    return true;
+}
+
+export async function assertDamageTargetsStep(state)
+{
+    assertFlowTargets((state.data?.hit_results ?? []).map(hitResult => hitResult?.target));
+    return true;
+}
+
 export async function onDamageStep(state)
 {
     state = injectExtraDataUtility(state);
@@ -276,6 +310,7 @@ export async function onDamageStep(state)
         if (targetInfo.damage && targetToken.actor)
         {
             const immunities = getApplicableImmunityBonuses(targetToken.actor, 'damage', state, { ownerTokenId: targetToken.id, otherToken: token });
+            targetInfo.laImmunity = immunities.map(bonus => bonus.id).filter(Boolean);
             const preTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state, immunities);
             const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
@@ -423,6 +458,18 @@ export async function onTechAttackStep(state)
     recordRollSnapshot('tech', state);
 
     const actionData = techActionData(state, techItem);
+
+    if (token && !state.la_extraData?.tapeRecorded)
+    {
+        await recordAction(token, {
+            name: actionData.title,
+            activation: actionData.isInvade
+                ? 'Invade'
+                : (state.data?.action?.activation
+                    ?? (techItem?.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')),
+            item: techItem
+        });
+    }
 
     await handleTrigger('onTechAttack', {
         triggeringToken: token,
@@ -921,12 +968,10 @@ export async function onActivationStep(state)
     let reactionJustConsumed = false;
     if (actionType === 'Reaction' && token?.actor && getModuleSetting('consumeReaction'))
     {
-        if (hasReactionAvailable(token))
-        {
-            const updatedReactionCount = (token.actor.system.action_tracker.reaction ?? 1) - 1;
-            await token.actor.update({ 'system.action_tracker.reaction': updatedReactionCount });
+        if (state.la_extraData?.reactionConsumed)
             reactionJustConsumed = true;
-        }
+        else if (await consumeReaction(token))
+            reactionJustConsumed = true;
         else
             ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token.name }));
     }
@@ -936,7 +981,10 @@ export async function onActivationStep(state)
     if (token)
         noteActivation(token, actionName, isEndActivation);
 
-    await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', {
+    if (token && !isEndActivation)
+        await recordAction(token, { name: actionName, activation: actionType, item, deployable });
+
+    const payload = {
         triggeringToken: token,
         actionType: actionType,
         actionName: actionName,
@@ -947,7 +995,9 @@ export async function onActivationStep(state)
         endActivation: isEndActivation,
         extraData: state.la_extraData ?? {},
         flowState: state
-    });
+    };
+    const results = await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', payload);
+    await handleTrigger(isEndActivation ? 'onPostEndActivation' : 'onPostActivation', { ...payload, results });
 
     // Gated on the overlay flag, not action.laCombat, so extras don't double-roll; deployables keep their actions on the actor.
     const overlayActor = token?.actor ?? actor;

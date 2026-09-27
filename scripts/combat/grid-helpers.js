@@ -2,10 +2,30 @@
 import { getHexGroundElevation } from "./terrain-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 
+export function tokenAtPoint(x, y)
+{
+    return canvas.tokens?.placeables?.find(token =>
+    {
+        const bounds = token.bounds;
+        return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
+    }) ?? null;
+}
+
 // Lancer v3 changed acc_diff targets from `{target: Token}` to `{targetUuid: string}`.
 export function accDiffTargetToken(accDiffTarget)
 {
     return accDiffTarget?.targetUuid ? (fromUuidSync(accDiffTarget.targetUuid)?.object ?? null) : null;
+}
+
+// The system's invisibility plugin is tri-state: 0 defers to the token status, 1 forces on, -1 forces off.
+export function accDiffTargetInvisible(accDiffTarget, actor = null)
+{
+    const plugin = accDiffTarget?.plugins?.invisibility;
+    const data = Number(plugin && typeof plugin === 'object' ? plugin.data : plugin);
+    if (Number.isFinite(data) && data !== 0)
+        return data > 0;
+    const resolved = actor ?? accDiffTargetToken(accDiffTarget)?.actor;
+    return !!resolved?.statuses?.has?.('invisible');
 }
 
 /** Dimensions clamped to min 1 grid unit: sub-1-size tokens (e.g. 0.5-size mechs) still occupy a full cell. */

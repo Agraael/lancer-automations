@@ -31,6 +31,29 @@ export function smokeZoneGraphics()
     };
 }
 
+/** The "Nanite Cloud" preset fill pattern, also used by the cloud automations via `tmacGraphics`. */
+export function healCloudGraphics()
+{
+    return {
+        useCustomRender: true,
+        lineType: 2,
+        lineWidth: 3,
+        lineColor: '#66b5ff',
+        lineOpacity: 0.8,
+        fillType: 2,
+        fillColor: '#52abff',
+        fillOpacity: 1,
+        fillTexture: `modules/${_jb2aModule()}/Library/Generic/Healing/HealingAbility_02_Regular_BlueWhite_Loop_600x600.webm`,
+        fillTextureOffset: { x: 0, y: 0 },
+        fillTextureOffsetAnimation: null,
+        fillTextureScale: { x: 45, y: 45 },
+        fillTextureCentered: true,
+        fillTextureScaleWithSize: true,
+        fillTextureSourceColor: true,
+        aboveTokens: true
+    };
+}
+
 function _statusActions(statusId)
 {
     const action = (id, trigger, effectMode) => ({
@@ -75,6 +98,26 @@ function _presetEntries()
                 flatMovementPenalty: true,
                 elevationGated: true,
                 actions: _statusActions('cover_soft')
+            }
+        },
+        {
+            id: 'la-preset-heal-cloud',
+            name: 'Nanite Cloud',
+            icon: 'fa-cloud-meatball',
+            folder: '',
+            protected: false,
+            protectedKind: null,
+            graphicsState: {
+                ...healCloudGraphics(),
+                radiusOffset: 0,
+                lineDashSize: 15,
+                lineGapSize: 10,
+                lineDashOffsetAnimation: 0,
+                lineColorAnimation: null,
+                fillColorAnimation: null,
+                centerLabel: 'Cloud',
+                elevationGated: true,
+                actions: []
             }
         }
     ];

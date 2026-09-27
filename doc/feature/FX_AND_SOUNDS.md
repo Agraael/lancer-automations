@@ -53,7 +53,7 @@ Some statuses are applied straight from the actor's numbers: the danger-zone ove
 
 <img align="right" src="../img/fs-guardian.png" width="45%"/>
 
-A soft aura is drawn around tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off. Combat-only needs the GAA fork.
+Corner marks are drawn on the footprint of tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off.
 
 <br clear="right"/>
 

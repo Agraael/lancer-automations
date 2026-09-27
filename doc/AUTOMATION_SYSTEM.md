@@ -132,6 +132,8 @@ What the engine does for one trigger:
 
 10. **Manual activation.** When a recipient clicks **Activate** on a queued entry, *that* client runs `activateReaction()` for that single entry.
 
+11. **Post-activation sweep**, on `onActivation` and `onEndActivation` only. Once the awaited auto activations have finished, the engine fires `onPostActivation` / `onPostEndActivation` with the same payload plus `results`, what each reaction returned (see [`activationCode`](#activationcode)). Popup activations resolve later and are not in it.
+
 Filters and `evaluate` run for every reactor on the scene, every time a matching trigger fires. Keep them cheap.
 
 ### Custom triggers
@@ -284,7 +286,7 @@ The final filter. Return `true` to allow the activation, `false` to skip it.
 
 ### `activationCode`
 
-`activationCode(triggerType, triggerData, reactorToken, item, activationName, api) => Promise<void>`
+`activationCode(triggerType, triggerData, reactorToken, item, activationName, api) => Promise<any>`
 
 Your effect. May be async. Has full access to `api`. Runs on:
 
@@ -293,6 +295,23 @@ Your effect. May be async. Has full access to `api`. Runs on:
 - Whichever client clicks **Activate** in the popup (manual activations).
 
 See [section 8](#8-clients-and-sockets) for what that means for GM-only operations.
+
+**Return value.** Optional, and normally nothing. On `onActivation` and `onEndActivation`, whatever the code returns is collected into `results[activationName]` and handed to the next trigger, `onPostActivation` / `onPostEndActivation`. That is the handoff for one automation extending what another just did, without re-registering it: the first returns what it produced, the second reads it.
+
+Stock Bolster returns `{ targets, effects }`, the tokens it bolstered and the effects it placed on them. A talent that lengthens Bolster reads them back:
+
+```js
+triggers: ["onPostActivation"],
+triggerSelf: true,
+triggerOther: false,
+evaluate: (triggerType, triggerData) => triggerData.actionName === "Bolster",
+activationCode: async (triggerType, triggerData, reactorToken, item, activationName, api) => {
+    for (const effect of triggerData.results?.Bolster?.effects ?? [])
+        await api.setLAFlag(effect, 'duration', { label: 'indefinite' });
+}
+```
+
+Only awaited auto activations are collected. Reactions with `awaitActivationCompletion: false` and popup activations are not, they resolve too late.
 
 ### `onInit`
 

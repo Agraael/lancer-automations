@@ -175,6 +175,13 @@ Hooks.on('init', () =>
         type: String,
         default: '',
     });
+    game.settings.register(MODULE_ID, 'tah.narrativeRosterUuids', {
+        name: 'LA.settings.tah.narrativeRosterUuids.name',
+        scope: 'client',
+        config: false,
+        type: Array,
+        default: [],
+    });
     game.settings.register(MODULE_ID, 'tah.areaElevationAware', {
         scope: 'client',
         config: false,
@@ -260,7 +267,7 @@ Hooks.on('init', () =>
     game.settings.register(MODULE_ID, 'tah.showAidHandleInteractSqueeze', {
         name: 'LA.settings.tah.showAidHandleInteractSqueeze.name',
         hint: 'LA.settings.tah.showAidHandleInteractSqueeze.hint',
-        scope: 'client',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false,
@@ -586,6 +593,9 @@ Hooks.once('ready', () =>
         if (ev.shiftKey || ev.ctrlKey || ev.altKey || ev.metaKey || ev.repeat)
             return;
         if (!WASD_QE.has(ev.code))
+            return;
+        // Nothing selected means nothing to move: leave the keys to canvas panning.
+        if (!canvas.tokens?.controlled?.length)
             return;
         // Let Q/E through mid-drag (token or template preview) so elevation adjustments still work.
         if (ELEVATION_KEYS.has(ev.code) && (_activeTokenDrags > 0 || (canvas.templates?.preview?.children?.length ?? 0) > 0))
@@ -920,6 +930,15 @@ Hooks.on('forceUpdateTokenActionHud', () =>
         return;
     if (hud._token || hud._narrativeMode)
         hud.refresh();
+});
+
+// Tape-only repaint: the flag write lands on the combatant, and a full refresh would close the columns.
+Hooks.on('updateCombatant', (combatant) =>
+{
+    if (!enabled() || !hud?._token)
+        return;
+    if (combatant.tokenId === (hud._token.document?.id ?? hud._token.id))
+        hud._updateActionTape();
 });
 
 // Knob-only repaint: a full refresh would close/reopen the columns (and is suppressed mid-toggle anyway).

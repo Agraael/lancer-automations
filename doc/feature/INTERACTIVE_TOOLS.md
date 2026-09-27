@@ -8,7 +8,7 @@ Cards that ask players to choose or vote, and on-canvas tools to pick, place, an
 
 ## Settings
 
-The settings named on this page sit on three tabs. **Combat & Movement** holds the targeting and sharing toggles (Targeting section) and the measure-toolbar ones (Advanced Measure section). **Tokens & Display** holds the deployable and overlap-picker toggles. The **Colors** tab holds the palette, and it's per-client, so each player sets their own.
+The settings named on this page sit on four tabs. **Combat & Movement** holds the targeting and sharing toggles (Targeting section). **Ruler & Measures** holds the measure-toolbar ones (Advanced Measure section). **Tokens & Display** holds the deployable and overlap-picker toggles. The **Colors** tab holds the palette, and it's per-client, so each player sets their own.
 
 ---
 

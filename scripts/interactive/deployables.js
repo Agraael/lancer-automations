@@ -1602,7 +1602,7 @@ export function getItemActions(item, opts = {})
 
 /**
  * Extra action object: LancerAction shape plus an optional TAH icon field.
- * @typedef {LancerAction & { icon?: string, condition?: string|((actor: Actor|null, action: any, item: Item|null) => any), _grant?: ActionGrant }} ExtraAction
+ * @typedef {LancerAction & { icon?: string, condition?: string|((actor: Actor|null, action: any, item: Item|null) => any), ignoresLineOfSight?: boolean, _grant?: ActionGrant }} ExtraAction
  */
 
 /**

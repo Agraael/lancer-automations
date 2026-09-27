@@ -857,6 +857,36 @@ Fires when the end action from `setItemAsActivated` runs, in place of `onActivat
 
 </details>
 
+<details id="onPostActivation"><summary><b><code>onPostActivation</code></b> - after the <code>onActivation</code> sweep</summary>
+
+Fires once every `onActivation` reaction has run, with the same payload plus `results`: whatever each awaited reaction returned from `activationCode`, keyed by reaction name. A reaction that returns nothing is absent. Two reactors firing the same name give an array.
+
+Not in `results`: popup activations, which resolve later, and reactions with `awaitActivationCompletion: false`. This trigger only reads what happened, it cannot cancel or change the activation.
+
+```js
+{
+    triggeringToken: Token,
+    actionType: string,
+    actionName: string,
+    item: Item,
+    actionData: ActionData,
+    deployable: { actor: Actor, lid: string } | null,
+    reactionJustConsumed: boolean,
+    endActivation: false,
+    extraData: Record<string, any>,
+    flowState: FlowState,
+    results: Record<string, any>
+}
+```
+
+</details>
+
+<details id="onPostEndActivation"><summary><b><code>onPostEndActivation</code></b> - after the <code>onEndActivation</code> sweep</summary>
+
+Same as `onPostActivation` for the end action, with `endActivation: true`.
+
+</details>
+
 <details id="onUpdate"><summary><b><code>onUpdate</code></b> - token document update, after it settles (movement animation done, final ruler segment only)</summary>
 
 ```js
@@ -1025,8 +1055,8 @@ Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine on
 | Subtype | Checked by | Extra fields |
 |:--------|:-----------|:-------------|
 | `effect` | `checkEffectImmunities` | `effects: [names]` |
-| `damage` | `applyDamageImmunities` | `damageTypes: [types]` |
-| `resistance` | `checkDamageResistances` (halves) | `damageTypes: [types]` |
+| `damage` | `applyDamageImmunities` | `damageTypes: [types]`, `"all"` for every type |
+| `resistance` | `checkDamageResistances` (halves) | `damageTypes: [types]`, `"all"` for every type |
 | `crit` | `hasCritImmunity` | - |
 | `hit` | `hasHitImmunity` | - |
 | `miss` | `hasMissImmunity` | - |

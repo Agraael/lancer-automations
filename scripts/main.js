@@ -16,6 +16,7 @@ import "./movement/history.js";
 import "./movement/keybindings.js";
 import './filters/customFilters.js';
 import "./fx/token-ground-shadow.js";
+import "./fx/status-cues.js";
 import './setup/scene-dim-from-image.js';
 import { getModuleSetting } from './tools/settings-utils.js';
 import { MODULE_ID } from './tools/constants.js';
@@ -40,6 +41,7 @@ export { _isActiveMoveStackFor, _wipeMoveStack, _advanceMoveStack, _rulerMove };
 // Combat
 import { OverwatchAPI, getTokenDistance } from "./combat/overwatch.js";
 import { refreshActionLimits, registerActionLimitsHooks } from "./combat/action-limits.js";
+import { registerReactionRefreshHooks } from "./combat/reaction-refresh.js";
 import {
     getMovementPathHexes, drawDebugPath, accDiffTargetToken,
     snapTokenCenter, getOccupiedCenters, getHexCenter, pixelToOffset,
@@ -58,7 +60,7 @@ import { initTrigVisionSweep } from "./vision/trigVisionSweep.js";
 import { initSightlines } from "./vision/sightlines.js";
 import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
-import { smokeZoneGraphics, importTemplateMacroPresets } from "./setup/tmac-presets.js";
+import { smokeZoneGraphics, healCloudGraphics, importTemplateMacroPresets } from "./setup/tmac-presets.js";
 import { initVisionDisableOnSelect } from "./vision/vision-disable-on-select.js";
 import { initDragOriginSources } from "./vision/dragOriginSources.js";
 import { initDeltaStatusGuard } from "./vision/deltaStatusGuard.js";
@@ -105,6 +107,7 @@ import { initAutoStruct } from "./activations/auto-struct.js";
 import { initCombatBannerFit } from "./tools/combat-banner-fit.js";
 import {
     onAttackStep, hitImmunityStep, onHitMissStep, onPreDamageStep, onDamageStep,
+    assertAttackTargetsStep, assertDamageTargetsStep,
     onPreStructureStep, onStructureStep, onPreStressStep, onStressStep,
     onTechAttackStep, onTechHitMissStep, onCheckStep,
     stunnedAutoFailStep, onInitCheckStep, onInitAttackStep, onInitTechAttackStep,
@@ -362,6 +365,8 @@ function insertModuleFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:onHitMiss', onHitMissStep);
     flowSteps.set('lancer-automations:onPreDamage', onPreDamageStep);
     flowSteps.set('lancer-automations:onDamage', onDamageStep);
+    flowSteps.set('lancer-automations:assertAttackTargets', assertAttackTargetsStep);
+    flowSteps.set('lancer-automations:assertDamageTargets', assertDamageTargetsStep);
     flowSteps.set('lancer-automations:bonusDamageMutate', bonusDamageMutateStep);
     flowSteps.set('lancer-automations:onPreStructure', onPreStructureStep);
     flowSteps.set('lancer-automations:onStructure', onStructureStep);
@@ -459,6 +464,9 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:noBonusDmgInject');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:onPreDamage');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:assertDamageTargets');
+    for (const flowName of ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow'])
+        flows.get(flowName)?.insertStepBefore('showAttackHUD', 'lancer-automations:assertAttackTargets');
 
     wrapStatRollFlatModifier(flowSteps);
     // knockback-only flows have no damage dice; keep rollReliable from aborting them
@@ -572,6 +580,7 @@ Hooks.on('init', () =>
     initSightlines(); // B1 sightline rays + attack-card hover takeover from THT
     initBlindedVision(); // Blinded status clamps the token's sight to one space
     registerActionLimitsHooks();
+    registerReactionRefreshHooks();
     initVisionDisableOnSelect();
     initDragOriginSources();
     initDeltaStatusGuard();
@@ -1234,6 +1243,7 @@ Hooks.on('ready', async () =>
         laTokenHeight,
         laTokenGameplayHeight,
         smokeZoneGraphics,
+        healCloudGraphics,
         importTemplateMacroPresets,
         increaseMovementCap,
         recordBoostCast,
@@ -1757,8 +1767,12 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
                 ? ''
                 : `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="${icon} i--xs"></i></span>`;
 
+            // The flow already judged condition and frequency, and the gate is spent by now, so never recompute here.
+            const targetResult = app.flags?.lancer?.damageData?.targetDamageResults?.find(entry => entry.target === uuid);
+            const asJudged = (bonuses, ids) => Array.isArray(ids) ? bonuses.filter(bonus => ids.includes(bonus.id)) : bonuses;
+
             const immuneTypes = new Set();
-            getImmunityBonuses(actor, "damage").forEach(bonus =>
+            asJudged(getImmunityBonuses(actor, "damage"), targetResult?.laImmunity).forEach(bonus =>
             {
                 bonus.damageTypes?.forEach(damageType => immuneTypes.add(damageType.toLowerCase()));
             });
@@ -1779,7 +1793,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
                 if (actor.system?.resistances?.[type])
                     resistTypes.add(type);
             }
-            getImmunityBonuses(actor, "resistance").forEach(bonus =>
+            asJudged(getImmunityBonuses(actor, "resistance"), targetResult?.laResistance).forEach(bonus =>
             {
                 bonus.damageTypes?.forEach(damageType => resistTypes.add(damageType.toLowerCase()));
             });

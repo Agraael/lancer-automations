@@ -305,9 +305,20 @@
       "theRequester": "The requester",
       "voteTieBody": "<p>There is a tie between: {names}.</p><p>Pick the winner or cancel.</p>"
     },
+    "clocks": {
+      "noBond": "Burdens need a bond.",
+      "none": "No clocks yet.",
+      "tab": {
+        "burdens": "Burdens",
+        "clocks": "Clocks"
+      },
+      "title": "Clocks &amp; Burdens",
+      "unnamed": "Unnamed"
+    },
     "common": {
       "acknowledge": "ACKNOWLEDGE",
       "actor": "Actor",
+      "add": "Add",
       "cancel": "Cancel",
       "close": "Close",
       "confirm": "Confirm",
@@ -458,6 +469,7 @@
       "chooseInvade": "Choose Invade",
       "clearTahFavorites": "Clear TAH Favorites",
       "clearTahMacros": "Clear TAH Macros",
+      "clocksFor": "Clocks & Burdens — {name}",
       "createFolder": "Create Folder",
       "customPaintJob": "CUSTOM PAINT JOB",
       "damagePrevented": "DAMAGE PREVENTED",
@@ -680,6 +692,8 @@
         "onInitEndActivation": "On Init End Activation",
         "onMiss": "On Miss",
         "onMove": "On Move",
+        "onPostActivation": "On Post Activation",
+        "onPostEndActivation": "On Post End Activation",
         "onPreDamage": "On Pre Damage",
         "onPreMove": "On Pre Move",
         "onPreStatusApplied": "On Pre Status Applied",
@@ -791,6 +805,10 @@
       "swapElevationMode": {
         "hint": "Swap Ground (feet on a surface) and Hold (keep altitude) for this session. Walkers default to Ground, flyers to Hold.",
         "name": "Swap Elevation Mode"
+      },
+      "sightlineRuler": {
+        "hint": "Switch the Measure Distance ruler between distance and line of sight. Needs Lancer Line of Sight on.",
+        "name": "Sightline Ruler"
       },
       "togglePathfinding": {
         "hint": "Toggle drag pathfinding for this session. Needs Pathfind Drag Movement on.",
@@ -1829,10 +1847,27 @@
       "npcsArrived": "{count} NEW NPC{plural} HAS ARRIVED",
       "selectWhichNpcs": "Select which NPCs will appear:"
     },
+    "ruler": {
+      "los": {
+        "blocked": "BLOCKED",
+        "clear": "CLEAR",
+        "peek": "PEEK"
+      }
+    },
+    "tape": {
+      "noActions": "no actions",
+      "nextTurn": "Next turn",
+      "previousTurn": "Previous turn"
+    },
     "reroll": {
       "alt": "Alt ({value})",
+      "crit": "CRIT",
+      "failed": "Failed",
+      "hit": "HIT",
       "keep": "Keep",
+      "miss": "MISS",
       "original": "Original ({value})",
+      "succeeded": "Success",
       "use": "Use - ({subtype})"
     },
     "reserves": {
@@ -2610,6 +2645,9 @@
         "narrativeLinkedActorUuid": {
           "name": "Narrative Linked Actor"
         },
+        "narrativeRosterUuids": {
+          "name": "Narrative Pilot Roster"
+        },
         "preventWasdMovement": {
           "hint": "Stop bare W/A/S/D/Q/E from moving the token.",
           "name": "Block WASD / QE Movement"
@@ -3043,8 +3081,8 @@
         "label": "Get the Deployables LCP"
       },
       "guardianBulwarkAuraMode": {
-        "hint": "Only in Combat requires the GAA Fork.",
-        "label": "Guardian / Bulwark Aura"
+        "hint": "Corner marks on the footprint of bulwarked and guardian tokens.",
+        "label": "Guardian / Bulwark Cue"
       },
       "haseChanceLabels": {
         "hint": "Live success % over the roller during stat rolls, saves, and contests.",
@@ -3069,6 +3107,10 @@
       },
       "lancerSensorUseModeRange": {
         "label": "Sensor: Use Mode Range"
+      },
+      "measureRulerSnapToCenter": {
+        "hint": "Snap the Measure Distance ruler to space centers.",
+        "label": "Snap Measure Ruler to Centers"
       },
       "navGroup": {
         "canvas": {
@@ -3777,6 +3819,9 @@
         },
         "performance": {
           "label": "Performance"
+        },
+        "ruler": {
+          "label": "Ruler & Measures"
         },
         "sounds": {
           "label": "Sounds"
@@ -4499,9 +4544,29 @@
       },
       "confirmFullRepair": "<p>Fully repair these {count} units?</p><p style=\"opacity:0.75;\">{names}</p>",
       "detail": {
+        "clocksBurdens": "Create and track pilot clocks. Burdens need a bond.",
+        "contest": "Contested check between two tokens, each rolling its own stat. Higher total wins.",
+        "downtime": "Open the downtime activities dialog, with rolls and journal logging.",
+        "effectManager": "Apply statuses, custom effects and bonuses to tokens.",
+        "forceCheck": "Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.",
+        "fullRepair": "Run a Full Repair on the selected unit(s).",
+        "generateScan": "Create the scan journal for the selected token(s).",
+        "hideRevealToken": "Toggle this token's hidden state.",
+        "linkToToken": "Link this token to an owner token (deployable-style ownership).",
+        "otherSkillBody": "Roll a trigger you have no training in: 1d20 + 0. For improvised checks not covered by your Skills or Triggers.",
+        "overheat": "Fill the heat track and roll an overheat check.",
+        "reactorExplosion": "Detonate the reactor: blast damage around the token.",
+        "recharge": "Roll the NPC recharge flow for uncharged systems.",
+        "reinforcement": "Hide selected tokens and reveal them as reinforcements at a target round.",
+        "reloadWeapon": "Reload one Loading weapon.",
+        "reserve": "Add a reserve to the pilot.",
+        "resurrect": "Restore this wreck to a live unit.",
+        "structure": "Drop HP to 0 and roll a structure check.",
+        "suicide": "Zero structure, stress and HP.",
         "template": "Template",
         "triggerBonus": "Trigger · +{bonus}",
-        "untrainedTrigger0": "Untrained Trigger · +0"
+        "untrainedTrigger0": "Untrained Trigger · +0",
+        "vote": "Start a choice or vote card for the players."
       },
       "extraConfig": "Extra Config",
       "label": {
@@ -4521,8 +4586,11 @@
         "basicTech": "Basic Tech",
         "bolster": "Bolster",
         "bond": "BOND",
+        "burdens": "BURDENS",
         "charge": "CHARGE",
         "class": "Class",
+        "clocks": "CLOCKS",
+        "clocksBurdens": "Clocks & Burdens",
         "contest": "Contest",
         "coreBonus": "Core Bonus",
         "corePower": "Core Power",
@@ -4558,20 +4626,24 @@
         "link": "Link",
         "linkToToken": "Link to Token",
         "linkUnlinkActor": "Link/Unlink Actor",
+        "linkedActor": "Linked Actor",
         "lockOn": "Lock On",
         "locked": "Locked",
         "log": "Log",
         "macros": "Macros",
+        "manageRoster": "Manage roster…",
         "measures": "Measures",
         "misc": "Misc",
         "mount": "{type} Mount",
         "movement": "Movement",
-        "otherSkill": "Other Skill",
+        "npcs": "NPCs",
+        "otherSkill": "Other Roll",
         "overcharge": "Overcharge",
         "overheat": "Overheat",
         "passive": "PASSIVE",
         "pickupWeapon": "Pickup Weapon",
         "pilot": "Pilot",
+        "pilots": "Pilots",
         "powers": "Powers",
         "protocols": "Protocols",
         "quick": "Quick",
@@ -4615,6 +4687,7 @@
         "triggers": "Triggers",
         "unknown": "Unknown",
         "unlink": "Unlink",
+        "unlinkAll": "Unlink All",
         "unlockPower": "Unlock power",
         "utility": "Utility",
         "vote": "Vote",
@@ -4854,11 +4927,10 @@
       "defaultGlobalSetting": "Default (use global setting)",
       "pickFolderTip": "Pick a folder: a random file is used on each death",
       "resurrect": "Resurrect",
-      "sectionDetection": "Detection",
-      "sectionElevation": "Elevation",
+      "sectionAwareness": "Awareness",
+      "sectionMovement": "Movement",
       "sectionPortrait": "Portrait",
       "sectionScan": "Scan",
-      "sectionStatHint": "Stat Hint",
       "sectionWreck": "Wreck",
       "unlinkScanDocument": "Unlink Scan Document",
       "unlinkScanPrompt": "Remove the scan flag from {count} journal(s) linked to {name}? The journals are not deleted."

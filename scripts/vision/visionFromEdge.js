@@ -451,7 +451,12 @@ function _restDelay(token)
     return fps > 0 ? Math.max(REST_DELAY_MIN_MS, (1000 / fps) * 1.5) : REST_DELAY_MIN_MS;
 }
 
-function _isMovementAnimating(token)
+/**
+ * Whether this token is mid movement animation.
+ * @param {any} token
+ * @returns {boolean} true while the token's movement animation context is live
+ */
+export function _isMovementAnimating(token)
 {
     return token.animationContexts?.has(token.movementAnimationName) === true;
 }

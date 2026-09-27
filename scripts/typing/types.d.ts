@@ -427,6 +427,13 @@ interface TriggerDataOnEndActivation extends TriggerDataOnActivation { }
 
 interface TriggerDataOnInitEndActivation extends TriggerDataOnInitActivation { }
 
+/** Fired after the `onActivation` sweep. `results` holds what each awaited reaction returned, keyed by reaction name. */
+interface TriggerDataOnPostActivation extends TriggerDataOnActivation {
+    results: Record<string, any>;
+}
+
+interface TriggerDataOnPostEndActivation extends TriggerDataOnPostActivation { }
+
 interface TriggerDataOnStatusApplied extends TriggerDataBase {
     triggeringToken: Token;
     statusId: string;
@@ -578,6 +585,7 @@ type TriggerData =
     | TriggerDataOnInitCheck
     | TriggerDataOnActivation
     | TriggerDataOnInitActivation
+    | TriggerDataOnPostActivation
     | TriggerDataOnStatusApplied
     | TriggerDataOnStatusRemoved
     | TriggerDataOnPreStatusApplied
@@ -607,6 +615,7 @@ type TriggerType =
     | "onCheck"
     | "onActivation" | "onInitActivation"
     | "onEndActivation" | "onInitEndActivation"
+    | "onPostActivation" | "onPostEndActivation"
     | "onInitAttack" | "onInitTechAttack"
     | "onInitCheck"
     | "onStatusApplied" | "onStatusRemoved"
@@ -763,6 +772,19 @@ interface LancerAutomationsAPI {
         soft?: boolean;
         includeHidden?: boolean;
         includeSelf?: boolean;
+        selection?: Token[] | null;
+        preSelected?: Token[];
+        allowEmptyConfirm?: boolean;
+        autoConfirm?: boolean;
+        pattern?: "token" | "blast" | "burst" | "cone" | "line";
+        areaRange?: number | null;
+        areaCount?: number;
+        size?: number;
+        elevationAware?: boolean | null;
+        autoElevation?: boolean | null;
+        propagation?: boolean | null;
+        los?: boolean | null;
+        urgent?: boolean;
         title?: string;
         description?: string;
         icon?: string;
@@ -808,6 +830,7 @@ interface LancerAutomationsAPI {
         title?: string;
         noCard?: boolean;
     }): Promise<any>;
+    moveTokenRuler(tokenOrTokens: Token | Token[], options?: { range?: number; free?: boolean; action?: string; title?: string; description?: string; icon?: string; headerClass?: string; cost?: number; urgent?: boolean; planOnly?: boolean }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
     knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
     applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any, options?: { asVoluntary?: boolean }): Promise<void>;  // scripts/interactive/canvas-helpers.js
     startChoiceCard: typeof import("../interactive/network.js").startChoiceCard;
@@ -1075,7 +1098,7 @@ interface LancerAutomationsAPI {
     executeTeleport: typeof import("../tools/movement-tools.js").executeTeleport;
     executeContestedCheck(input1: any, stat1: string, input2: any, stat2: string, options?: { title?: string; sendToOwner?: boolean }): Promise<{ winner: any; loser: any;[key: string]: any }>;  // scripts/tools/misc-tools.js
     executeForceCheck(skill: string, targets?: Token[] | null, options?: { saveVs?: any; sendToOwner?: boolean; title?: string }): Promise<{ completed: boolean; results: any[] }>;  // scripts/tools/misc-tools.js
-    openForceCheckCard(preset?: { tokenA?: Token | null; skill?: string | null; range?: number | Array<{ type: string; val: number }> | null; saveVs?: any; targets?: Token[] | null; sendToOwner?: boolean }): Promise<any>;  // scripts/interactive/tools/forceCheck.js
+    openForceCheckCard(preset?: { tokenA?: Token | null; skill?: string | null; range?: number | Array<{ type: string; val: number }> | null; saveVs?: any; targets?: Token[] | null; sendToOwner?: boolean; filter?: ((token: Token) => boolean) | null }): Promise<{ completed: boolean; results: any[]; targets: Token[] } | null>;  // scripts/interactive/tools/forceCheck.js
     executeGenericBonusMenu: typeof import("../bonuses/genericBonuses.js").executeGenericBonusMenu;
     executeDowntime(): Promise<void>;  // scripts/tools/downtime.js
 

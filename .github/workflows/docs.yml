@@ -6,6 +6,7 @@ on:
     paths:
       - README.md
       - doc/**
+      - overrides/**
       - mkdocs.yml
       - .github/workflows/docs.yml
       - .github/scripts/docs_prep.py

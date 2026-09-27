@@ -9,11 +9,16 @@ import { isHexUnderTerrain } from '../combat/terrain-utils.js';
 import { snapElevationForDisplay } from './tactical-distance.js';
 import { ISO_SETTINGS, isIsoPerspectiveFeatureEnabled, getIsoProvider } from '../setup/iso-settings.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from '../tah/sound.js';
+import { drawSightlines, clearSightlines } from '../vision/sightlines.js';
+import { tokenAtPoint } from '../combat/grid-helpers.js';
+import { localize } from '../tools/string-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const PER_STEP_RENDER = 'rulerPerStepRender';
+const MEASURE_SNAP_CENTER = 'measureRulerSnapToCenter';
 const LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-waypoint-label.hbs`;
+const MEASURE_LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-measure-label.hbs`;
 // Path hexes running under an overhang fade, so the terrain above still reads
 const UNDER_TERRAIN_ALPHA = 0.35;
 const HATCH_SRC = `modules/${MODULE_ID}/assets/hatching.png`;
@@ -1284,12 +1289,147 @@ function _measureTerrainElevDisabled()
         || !!getModuleSetting('disableAutoTerrainElevation');
 }
 
+const LOS_KEY = 'ruler-los';
+const EMPTY_SPACE_HEIGHT = 1;
+
+let _sightlineMode = false;
+let _sightlineVerdict = null;
+
+export function sightlineModeActive()
+{
+    return _sightlineMode;
+}
+
+function toggleSightlineMode()
+{
+    _sightlineMode = !_sightlineMode;
+    _sightlineVerdict = null;
+    clearSightlines(LOS_KEY);
+    const ruler = canvas.controls?.ruler;
+    ruler?._refreshSightlines?.();
+    Hooks.callAll('lancer-automations.sightlineModeChanged', _sightlineMode);
+    ruler?.refresh();
+}
+
+function _sightlineRef(point)
+{
+    const token = tokenAtPoint(point.x, point.y);
+    if (token)
+        return token;
+    const center = canvas.grid.getCenterPoint(point);
+    const ground = _thtGroundAt(center);
+    return {
+        x: center.x,
+        y: center.y,
+        h: ground + (point.elevation || 0) + EMPTY_SPACE_HEIGHT,
+        cells: [center]
+    };
+}
+
+function _sightlineVerdictFor(result)
+{
+    if (!result)
+        return null;
+    if (result.rays.some(ray => ray.clear))
+        return 'clear';
+    return result.witness ? 'peek' : 'blocked';
+}
+
+// Recasts the core measure-label context into the token-ruler badge shape.
+function _measureBadgeContext(ctx, waypoint)
+{
+    const isLast = !waypoint.next;
+    // The arrow carries the direction, so the row shows how far this step climbed or dropped, never the absolute height.
+    const step = Number(ctx.elevation?.step ?? 0) || 0;
+    const elevIcon = step > 0 ? 'fa-solid fa-arrow-up' : step < 0 ? 'fa-solid fa-arrow-down' : '';
+    const delta = ctx.distance?.delta ?? '';
+    const total = ctx.distance?.total ?? '';
+    const horizontal = ctx.distance?.flatHidden === false ? ctx.distance.flat : '';
+    const los = isLast ? _sightlineVerdict : null;
+    const deltaDistance = los ? '' : delta;
+    // Core lifts every label 16px; the endpoint needs it because the cursor sits there, the rest read better centred.
+    const position = isLast
+        ? ctx.position
+        : { x: ctx.position.x, y: ctx.position.y + (16 * ctx.uiScale) };
+    return {
+        ...ctx,
+        cssClass: [isLast ? 'last' : '', ctx.secret ? 'secret' : '', los ? `los-${los}` : ''].filter(Boolean).join(' '),
+        position,
+        iconClass: _sightlineMode ? 'fa-solid fa-eye' : (ctx.action?.icon ?? 'fa-solid fa-ruler'),
+        totalDistance: total,
+        horizontal,
+        deltaDistance,
+        los,
+        losIcon: los === 'blocked' ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye',
+        losLabel: los ? localize(`LA.ruler.los.${los}`) : '',
+        elevIcon,
+        elevAbs: Math.abs(step),
+        showSecondLine: !!(deltaDistance || horizontal !== '' || elevIcon)
+    };
+}
+
 class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
 {
+    static get WAYPOINT_LABEL_TEMPLATE()
+    {
+        if (!settingOn())
+            return foundry.canvas.interaction.Ruler.WAYPOINT_LABEL_TEMPLATE;
+        return MEASURE_LABEL_TEMPLATE;
+    }
+
+    static getSnappedPoint(point)
+    {
+        if (!getModuleSetting(MEASURE_SNAP_CENTER))
+            return super.getSnappedPoint(point);
+        return canvas.grid.getSnappedPoint({ x: point.x, y: point.y }, { mode: globalThis.CONST.GRID_SNAPPING_MODES.CENTER, resolution: 1 });
+    }
+
     _onDragStart(event)
     {
         super._onDragStart(event);
         this._laLastCell = undefined;
+    }
+
+    _onPathChange()
+    {
+        this._laLegs = null;
+        this._refreshSightlines();
+        super._onPathChange();
+    }
+
+    _refreshSightlines()
+    {
+        if (!this.user?.isSelf)
+            return;
+        _sightlineVerdict = null;
+        if (!_sightlineMode || !this.active || !getModuleSetting('lancerLos'))
+        {
+            clearSightlines(LOS_KEY);
+            return;
+        }
+        const path = this.path;
+        const from = path?.[0];
+        const to = path?.at?.(-1);
+        if (!from || from === to)
+        {
+            clearSightlines(LOS_KEY);
+            return;
+        }
+        const viewer = _sightlineRef(from);
+        const target = _sightlineRef(to);
+        if (viewer === target)
+        {
+            clearSightlines(LOS_KEY);
+            return;
+        }
+        const [result] = drawSightlines(LOS_KEY, viewer, [target]);
+        _sightlineVerdict = _sightlineVerdictFor(result);
+    }
+
+    destroy()
+    {
+        clearSightlines(LOS_KEY);
+        return super.destroy();
     }
 
     _onMouseMove(event)
@@ -1329,11 +1469,68 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
 
     _getWaypointLabelContext(waypoint, state)
     {
+        const ctx = this._coreLabelContext(waypoint, state);
+        if (!ctx || !settingOn())
+            return ctx;
+        return _measureBadgeContext(ctx, waypoint);
+    }
+
+    _measureLegs()
+    {
+        const path = this.path ?? [];
+        if (path.length < 2)
+        {
+            this._laLegs = null;
+            return null;
+        }
+        const ignoreGround = _measureTerrainElevDisabled();
+        const full = path.map(point => ({
+            x: point.x,
+            y: point.y,
+            elevation: (ignoreGround ? 0 : _thtGroundAt(point)) + (point.elevation || 0)
+        }));
+        const flat = path.map(point => ({ x: point.x, y: point.y, elevation: 0 }));
+        this._laLegs = {
+            length: path.length,
+            total: canvas.grid.measurePath(full).waypoints.map(entry => entry.distance),
+            flat: canvas.grid.measurePath(flat).waypoints.map(entry => entry.distance)
+        };
+        return this._laLegs;
+    }
+
+    _legsFor(waypoint)
+    {
+        let legs = this._laLegs;
+        if (!legs || legs.length !== (this.path?.length ?? 0))
+            legs = this._measureLegs();
+        if (!legs)
+            return null;
+        const total = legs.total[waypoint.index];
+        const flat = legs.flat[waypoint.index];
+        if (!Number.isFinite(total) || !Number.isFinite(flat))
+            return null;
+        return { total, flat, back: total - (legs.total[waypoint.index - 1] ?? total) };
+    }
+
+    _coreLabelContext(waypoint, state)
+    {
         const ctx = super._getWaypointLabelContext(waypoint, state);
         if (ctx?.position)
             ctx.position = _isoProjectLabelPos(ctx.position);
         if (!settingOn())
             return ctx;
+        const legs = ctx?.distance ? this._legsFor(waypoint) : null;
+        if (legs)
+        {
+            const total = round(legs.total);
+            const flat = round(legs.flat);
+            ctx.distance.total = total.toLocaleString(game.i18n.lang);
+            ctx.distance.flat = flat.toLocaleString(game.i18n.lang);
+            ctx.distance.flatHidden = total === flat;
+            const back = round(legs.back);
+            if (waypoint.index >= 2 && back)
+                ctx.distance.delta = back > 0 ? `+${back}` : `${back}`;
+        }
         if (!ctx?.elevation || !waypoint.previous)
             return ctx;
         const groundHere = _measureTerrainElevDisabled() ? 0 : _thtGroundAt(waypoint);
@@ -1342,6 +1539,7 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
         const prev = groundPrev + (waypoint.previous.elevation || 0);
         const delta = here - prev;
         ctx.elevation.total = here;
+        ctx.elevation.step = delta;
         ctx.elevation.hidden = here === 0 && delta === 0;
         if (delta > 0)
         {
@@ -1368,6 +1566,28 @@ Hooks.once('init', () =>
         config: false,
         type: Boolean,
         default: false
+    });
+    game.settings.register(MODULE_ID, MEASURE_SNAP_CENTER, {
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+    game.keybindings.register(MODULE_ID, 'sightlineRuler', {
+        name: 'LA.keybindings.sightlineRuler.name',
+        hint: 'LA.keybindings.sightlineRuler.hint',
+        editable: [{ key: 'Tab' }],
+        onDown: () =>
+        {
+            if (game.activeTool !== 'ruler')
+                return false;
+            if (!getModuleSetting('lancerLos'))
+                return false;
+            toggleSightlineMode();
+            return true;
+        },
+        repeat: false,
+        precedence: globalThis.CONST.KEYBINDING_PRECEDENCE.PRIORITY
     });
 });
 

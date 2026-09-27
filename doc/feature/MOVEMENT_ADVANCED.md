@@ -8,8 +8,8 @@ Where the settings on this page live:
 |:--|:--|:--|
 | **Movement Cap Detection** | `enableMovementCapDetection` | Combat & Movement → Movement & Boost |
 | **Boost & Move Offer** | `enableBoostOffer` | Combat & Movement → Movement & Boost |
-| **Pathfind Drag Movement** | `pathfindDragMovement` | Combat & Movement → Lancer Automations Ruler |
-| **Split Movement at Trigger Boundaries** | `splitMovementAtTriggerBoundaries` | Combat & Movement → Lancer Automations Ruler |
+| **Pathfind Drag Movement** | `pathfindDragMovement` | Ruler & Measures → Lancer Automations Ruler |
+| **Split Movement at Trigger Boundaries** | `splitMovementAtTriggerBoundaries` | Ruler & Measures → Lancer Automations Ruler |
 | **Debug: Path Hex Calculation** | `debugPathHexCalculation` | Debug → Debug Toggles |
 | **Debug: Movement** | `debugMovement` | no UI row, console only |
 

@@ -547,6 +547,8 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onActivation', label: 'LA.effectManager.trigger.onActivation' },
     { value: 'onInitEndActivation', label: 'LA.effectManager.trigger.onInitEndActivation' },
     { value: 'onEndActivation', label: 'LA.effectManager.trigger.onEndActivation' },
+    { value: 'onPostActivation', label: 'LA.effectManager.trigger.onPostActivation' },
+    { value: 'onPostEndActivation', label: 'LA.effectManager.trigger.onPostEndActivation' },
     { value: 'onDeploy', label: 'LA.effectManager.trigger.onDeploy' },
     { value: 'onCheck', label: 'LA.effectManager.trigger.onCheck' },
     { value: 'onHeatGain', label: 'LA.effectManager.trigger.onHeatGain' },
@@ -645,6 +647,8 @@ const CONSUMPTION_FILTER_MAP = {
     onActivation: ['cfilter-actionName'],
     onInitEndActivation: ['cfilter-actionName'],
     onEndActivation: ['cfilter-actionName'],
+    onPostActivation: ['cfilter-actionName'],
+    onPostEndActivation: ['cfilter-actionName'],
     onDeploy: ['cfilter-itemLid', 'cfilter-itemId'],
     onCheck: ['cfilter-check', 'cfilter-role'],
     onPreStatusApplied: ['cfilter-statusId'],
@@ -1098,6 +1102,7 @@ export async function executeEffectManager(options = {})
         }).join('');
 
     const damageTypes = [
+        { name: 'All', icon: 'modules/lancer-automations/icons/resist_all.svg' },
         { name: 'Kinetic', icon: 'systems/lancer/assets/icons/white/damage_kinetic.svg' },
         { name: 'Energy', icon: 'systems/lancer/assets/icons/white/damage_energy.svg' },
         { name: 'Explosive', icon: 'systems/lancer/assets/icons/white/damage_explosive.svg' },
@@ -1406,6 +1411,15 @@ export async function executeEffectManager(options = {})
                     <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
                     <label id="bonus-consume-usage-row" style="display:none; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;" data-tooltip="${localize('LA.effectManager.tip.consumeOnUsage')}">
                         <input type="checkbox" id="bonus-consumeOnUsage" checked> Consume on usage
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;">
+                        Limit:
+                        <select id="bonus-frequency" style="flex:0 0 auto; width:auto; min-width:90px;">
+                            <option value="">None</option>
+                            <option value="round">1/round</option>
+                            <option value="turn">1/turn</option>
+                            <option value="combat">1/combat</option>
+                        </select>
                     </label>
                 </div>
             </div>
@@ -3439,6 +3453,9 @@ export async function executeEffectManager(options = {})
 
                 if (supportsConsumeOnUsage(type, bonusData.subtype ?? null))
                     bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
+                const frequency = String(html.find('#bonus-frequency').val() || '');
+                if (frequency)
+                    bonusData.frequency = frequency;
                 return { bonusData, addOptions, duration };
             };
 
@@ -3496,6 +3513,7 @@ export async function executeEffectManager(options = {})
                     lastUsageUiType = uiType;
                     html.find('#bonus-consumeOnUsage').prop('checked', uiType !== 'immunity');
                     html.find('#bonus-uses').val('');
+                    html.find('#bonus-frequency').val('');
                 }
                 $row.css('display', show ? 'inline-flex' : 'none');
                 ensureUsesForConsumption();
@@ -3560,7 +3578,12 @@ export async function executeEffectManager(options = {})
 
             html.find('.bonus-immunity-damage-option').on('click', function()
             {
-                $(this).toggleClass('selected');
+                const $option = $(this);
+                $option.toggleClass('selected');
+                if ($option.data('type') === 'All')
+                    html.find('.bonus-immunity-damage-option').not($option).removeClass('selected');
+                else if ($option.hasClass('selected'))
+                    html.find('.bonus-immunity-damage-option[data-type="All"]').removeClass('selected');
             });
 
             html.find('.bonus-immunity-effect-option').on('click', function()

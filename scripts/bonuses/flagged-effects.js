@@ -2081,12 +2081,14 @@ function _drawStackBadges(token)
     );
     const stackByName = new Map();
     const countByName = new Map();
+    const usageByName = new Map();
     for (const effect of temporaryEffects)
     {
         if (!effect.name || !managedNames.has(effect.name))
             continue;
         stackByName.set(effect.name, (stackByName.get(effect.name) ?? 0) + effectStack(effect));
         countByName.set(effect.name, (countByName.get(effect.name) ?? 0) + 1);
+        usageByName.set(effect.name, (usageByName.get(effect.name) ?? false) || isUsageEffect(effect));
     }
 
     const effectsOffsetX = token.effects?.x ?? 0;
@@ -2104,6 +2106,7 @@ function _drawStackBadges(token)
             drawnNames.add(effect.name);
         const instances = managed ? countByName.get(effect.name) : 1;
         const uses = managed ? stackByName.get(effect.name) : effectStack(effect);
+        const usage = managed ? usageByName.get(effect.name) : isUsageEffect(effect);
         if (instances <= 1 && uses <= 1)
             continue;
         const entry = {
@@ -2112,14 +2115,23 @@ function _drawStackBadges(token)
             width: sprite.width,
             height: sprite.height
         };
-        _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, instances, uses);
+        _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, instances, uses, usage);
     }
 }
+
+export function isUsageEffect(effect)
+{
+    const flags = getLAFlags(effect);
+    return !!(flags?.consumption?.trigger || flags?.linkedBonusId);
+}
+
+// Icon height that maps to a 12px badge; badges ride the real icon height from there.
+const BADGE_REFERENCE_ICON = 20;
 
 function _badgeFontSize(sizeRatio)
 {
     const scale = Number(getModuleSetting('statusBadgeFontScale')) || 1;
-    return Math.max(9, Math.round(12 * sizeRatio * scale));
+    return Math.max(4, Math.round(12 * sizeRatio * scale));
 }
 
 function _badgeColor(key, fallback)
@@ -2187,7 +2199,7 @@ function _badgeText(text, fill, sizeRatio, scale = 1)
 {
     const style = new PIXI.TextStyle({
         fontFamily: 'Signika, sans-serif',
-        fontSize: Math.max(6, Math.round(_badgeFontSize(sizeRatio) * scale)),
+        fontSize: Math.max(4, Math.round(_badgeFontSize(sizeRatio) * scale)),
         fill,
         stroke: '#000000',
         strokeThickness: Math.max(1, Math.round(2 * sizeRatio * scale)),
@@ -2199,17 +2211,28 @@ function _badgeText(text, fill, sizeRatio, scale = 1)
 }
 
 /**
- * Instance count at the bottom-right with the usage in small beside it. A single instance shows
- * only its usage, taking the corner at full size.
+ * Status stacks take the corner alone, in the counter colour. Charge carriers show their instance
+ * count there instead, with the remaining uses in small beside it in the usage colour.
  */
-function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses)
+function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses, usage)
 {
     const counters = _ensureCounters(token);
-    const sizeRatio = entry.height / 20;
+    const sizeRatio = entry.height / BADGE_REFERENCE_ICON;
     const left = entry.posX + offsetX;
     const cornerX = left + entry.width * 1.3;
     const cornerY = entry.posY + offsetY + entry.height * 1.3;
     const showUses = uses > instances;
+    if (!usage)
+    {
+        if (uses <= 1)
+            return;
+        const stackBadge = _badgeText(String(uses), instanceBadgeColor(), sizeRatio);
+        stackBadge.anchor.set(1, 1);
+        stackBadge.position.set(cornerX, cornerY);
+        stackBadge._laStack = true;
+        counters.addChild(stackBadge);
+        return;
+    }
     if (instances > 1)
     {
         const instanceBadge = _badgeText(String(instances), instanceBadgeColor(), sizeRatio);
@@ -2276,7 +2299,7 @@ function _drawDurationBadges(token)
             continue;
 
         const counters = _ensureCounters(token);
-        const sizeRatio = sprite.height / 20;
+        const sizeRatio = sprite.height / BADGE_REFERENCE_ICON;
         const left = sprite.x - (sprite.anchor?.x ?? 0) * sprite.width;
         const top = sprite.y - (sprite.anchor?.y ?? 0) * sprite.height;
         const text = _badgeText(String(Math.min(...candidates)), _badgeColor('statusDurationColor', '#ffd700'), sizeRatio);

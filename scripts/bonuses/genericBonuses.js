@@ -4,7 +4,7 @@ import { getLAFlag, setLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { executeEffectManager } from "./effectManager.js";
 import { stringToAsyncFunction } from "../activations/reaction-manager.js";
-import { getWeaponType } from "../tools/misc-tools.js";
+import { weaponClass, checkGate, consumeGate } from "../tools/misc-tools.js";
 import { playBonusAddedFX } from "../fx/actionFX.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
 import { linkTierGate } from "../interactive/deployables.js";
@@ -602,7 +602,7 @@ function createGenericBonusStep(flowType)
                 if (mod.subtype === 'invisible' && t.plugins?.invisibility)
                     t.plugins.invisibility.data = 1;
                 else if (mod.subtype === 'no_invisible' && t.plugins?.invisibility)
-                    t.plugins.invisibility.data = 0;
+                    t.plugins.invisibility.data = -1;
                 else if (mod.subtype === 'no_cover')
                     t.cover = 0;
                 else if (mod.subtype === 'soft_cover')
@@ -629,7 +629,7 @@ function createGenericBonusStep(flowType)
                         if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility)
                             targetEntry.plugins.invisibility.data = 1;
                         else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility)
-                            targetEntry.plugins.invisibility.data = 0;
+                            targetEntry.plugins.invisibility.data = -1;
                         else if (modifier.subtype === 'no_cover')
                             targetEntry.cover = 0;
                         else if (modifier.subtype === 'soft_cover')
@@ -976,9 +976,7 @@ function createGenericBonusStep(flowType)
                             else
                             {
                                 const originalKey = `${accDiffTargetToken(targetEntry)?.id}::${modifier.subtype}`;
-                                if (modifier.subtype === 'invisible' && targetEntry.plugins?.invisibility)
-                                    targetEntry.plugins.invisibility.data = 0;
-                                else if (modifier.subtype === 'no_invisible' && targetEntry.plugins?.invisibility)
+                                if ((modifier.subtype === 'invisible' || modifier.subtype === 'no_invisible') && targetEntry.plugins?.invisibility)
                                     targetEntry.plugins.invisibility.data = originals.get(originalKey) ?? 0;
                                 else if (['no_cover', 'soft_cover', 'hard_cover'].includes(modifier.subtype))
                                     targetEntry.cover = originals.get(originalKey) ?? 0;
@@ -1563,16 +1561,9 @@ function getFlowTags(flowType, state)
 
     const addWeaponClassTags = () =>
     {
-        const weaponType = getWeaponType(state.item);
-        if (weaponType)
-        {
-            if (weaponType === "Melee")
-                tags.add("melee");
-            else if (weaponType === "Nexus")
-                tags.add("nexus");
-            else
-                tags.add("ranged");
-        }
+        const weaponClassTag = weaponClass(state.item);
+        if (weaponClassTag)
+            tags.add(weaponClassTag);
         if (state.item?.system?.type === "Tech")
             tags.add("tech");
     };
@@ -1623,6 +1614,9 @@ export function isBonusApplicable(bonus, flowTags, state)
         if (!hasMatch)
             return false;
     }
+
+    if (!bonusFrequencyFree(bonus, state))
+        return false;
 
     if (bonus.condition)
     {
@@ -2842,10 +2836,36 @@ export const genericAccuracyStepStatRoll = createGenericBonusStep("stat_roll");
 export const genericBonusStepDamage = createGenericBonusStep("damage");
 
 /** @returns {Promise<string|undefined>} bonus ID, or undefined if no actor */
+const EFFECT_FLAG_RESERVED = new Set([
+    'linkedBonusId', 'stack', 'consumption', 'statDirect', 'changes', 'refresh',
+    'targetID', 'effect', 'duration', 'note', 'originID', 'appliedRound', 'appliedStack', 'durationEntries'
+]);
+
+function _effectFlagsFrom(options)
+{
+    const flags = options?.effectFlags;
+    if (!flags || typeof flags !== 'object')
+        return {};
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [key, value] of Object.entries(flags))
+    {
+        if (EFFECT_FLAG_RESERVED.has(key))
+        {
+            console.warn(`lancer-automations | addGlobalBonus: effectFlags key '${key}' is reserved, skipped.`);
+            continue;
+        }
+        out[key] = value;
+    }
+    return out;
+}
+
 export async function addGlobalBonus(actor, bonusData, options = {})
 {
     if (!actor)
         return;
+    if (options.effectFlags && bonusData.id && (getLAFlag(actor,"global_bonuses") || []).some(existing => existing.id === bonusData.id))
+        await removeGlobalBonus(actor, bonusData.id);
     const bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
 
     if (!bonusData.id)
@@ -2900,15 +2920,11 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             // A filtered resistance is decided per attack, so it must not be baked on permanently.
             if (bonusData.type === 'immunity' && bonusData.subtype === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData))
             {
-                for (const rt of bonusData.damageTypes)
-                {
-                    const lcType = rt.toLowerCase().trim();
-                    if (lcType)
-                        changes.push({ key: `system.resistances.${lcType}`, mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" });
-                }
+                for (const lcType of expandDamageTypes(bonusData.damageTypes))
+                    changes.push({ key: `system.resistances.${lcType}`, mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" });
             }
 
-            const laFlags = { linkedBonusId: bonusData.id };
+            const laFlags = /** @type {any} */ ({ linkedBonusId: bonusData.id, ..._effectFlagsFrom(options) });
             if (statDirect)
                 laFlags.statDirect = statDirect;
             if (options.consumption?.trigger)
@@ -2970,7 +2986,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
 
             const icon = getBonusIconImage(bonusData, options.icon);
 
-            const extraOptions = { linkedBonusId: bonusData.id };
+            const extraOptions = /** @type {any} */ ({ linkedBonusId: bonusData.id, ..._effectFlagsFrom(options) });
 
             // Stack = uses count (statuscounter.value is the single counter)
             if (bonusData.uses)
@@ -3019,18 +3035,13 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             {
                 if (!extraOptions.changes)
                     extraOptions.changes = [];
-                const resTypes = bonusData.damageTypes;
-                for (const rt of resTypes)
+                for (const lcType of expandDamageTypes(bonusData.damageTypes))
                 {
-                    const lcType = rt.toLowerCase().trim();
-                    if (lcType)
-                    {
-                        extraOptions.changes.push({
-                            key: `system.resistances.${lcType}`,
-                            mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE,
-                            value: "true"
-                        });
-                    }
+                    extraOptions.changes.push({
+                        key: `system.resistances.${lcType}`,
+                        mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE,
+                        value: "true"
+                    });
                 }
             }
 
@@ -3385,7 +3396,7 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
                 continue;
             if (!linkTierGate(template.bonusData, actor, sourceKey === 'sourceItemUuid' ? sourceDoc : null))
                 continue;
-            const markers = { [sourceKey]: sourceDoc.uuid, sourceTemplateId: template.id };
+            const markers = { [sourceKey]: sourceDoc.uuid, sourceTemplateId: template.id, sourceBonusId: template.bonusData?.id };
             if (isConstant)
             {
                 const existing = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
@@ -3567,19 +3578,25 @@ export async function consumeImmunityUse(actor, subtype, state = null, { damageT
     if (!actor)
         return false;
     const wanted = damageTypes?.map(type => String(type).toLowerCase());
-    const candidates = (bonuses ?? getImmunityBonuses(actor, subtype, state))
-        .filter(bonus => bonus.consumeOnUsage === true)
-        .filter(bonus => !wanted || !bonus.damageTypes || bonus.damageTypes.some(type =>
-        {
-            const lower = String(type).toLowerCase();
-            return lower === 'all' || lower === 'variable' || wanted.includes(lower);
-        }));
-    for (const bonus of candidates)
+    const matchesType = (bonus) => !wanted || !bonus.damageTypes || bonus.damageTypes.some(type =>
+    {
+        const lower = String(type).toLowerCase();
+        return lower === 'all' || lower === 'variable' || wanted.includes(lower);
+    });
+
+    const pool = (bonuses ?? getImmunityBonuses(actor, subtype, state)).filter(matchesType);
+    let spent = false;
+    for (const bonus of pool)
+    {
+        if (await burnBonusFrequency(bonus, state))
+            spent = true;
+    }
+    for (const bonus of pool.filter(bonus => bonus.consumeOnUsage === true))
     {
         if (await consumeBonusUse(actor, bonus, { removeWhenNoUses: true }))
             return true;
     }
-    return false;
+    return spent;
 }
 
 // Post-roll pass: burn "consume on usage" bonuses that actually applied in this flow.
@@ -3596,7 +3613,7 @@ export async function burnBonusUsageForFlow(state)
         // Immunities burn where they are consulted, not on the bearer's own roll.
         if (candidate.type === 'immunity')
             continue;
-        if (typeof candidate.uses !== 'number')
+        if (typeof candidate.uses !== 'number' && !candidate.frequency)
             continue;
         if ([...usage.burned].some(id => candidate.id === id || String(candidate.id).startsWith(`${id}_sub_`)))
             continue;
@@ -3625,6 +3642,7 @@ export async function burnBonusUsageForFlow(state)
             used = usage.dmgEnabled.get(candidate.id) !== false;
         if (!used)
             continue;
+        await burnBonusFrequency(candidate, state);
         const storedId = await consumeBonusUse(actor, candidate, { removeWhenNoUses: candidate.consumeOnUsage === true });
         if (storedId)
             usage.burned.add(storedId);
@@ -3878,6 +3896,68 @@ export function executeGenericBonusMenu(actor = null)
 
 const IMMUNITY_SUBTYPES = new Set(['effect', 'damage', 'resistance', 'crit', 'hit', 'miss', 'elevation', 'terrain', 'obstacle', 'provoke']);
 
+const BONUS_FREQUENCY_GATES = { round: { rounds: 1 }, turn: { turn: true }, combat: { rounds: null } };
+
+function bonusGateOwner(bonus, state)
+{
+    const tokenId = bonus?.context?.ownerTokenId;
+    if (tokenId)
+        return canvas.tokens?.get(tokenId) ?? null;
+    return state?.actor ?? null;
+}
+
+/** False when the bonus has a frequency and its gate is already taken. */
+export function bonusFrequencyFree(bonus, state = null)
+{
+    if (!bonus?.frequency || !BONUS_FREQUENCY_GATES[bonus.frequency])
+        return true;
+    const owner = bonusGateOwner(bonus, state);
+    return !owner || checkGate(owner, `bonus:${bonus.id}`);
+}
+
+/** Take the bonus's frequency gate, recording it on the flow so reactions can see it fired. */
+export async function burnBonusFrequency(bonus, state = null)
+{
+    const options = BONUS_FREQUENCY_GATES[bonus?.frequency];
+    if (!options)
+        return false;
+    const owner = bonusGateOwner(bonus, state);
+    if (!owner)
+        return false;
+    const taken = await consumeGate(owner, `bonus:${bonus.id}`, options);
+    if (taken && state)
+    {
+        state.la_extraData = state.la_extraData || {};
+        const ids = [bonus.id, bonus.sourceBonusId].filter(Boolean);
+        state.la_extraData.burnedFrequency = [...new Set([...(state.la_extraData.burnedFrequency ?? []), ...ids])];
+    }
+    return taken;
+}
+
+const DAMAGE_TYPE_WILDCARDS = new Set(['all', 'variable']);
+const CONCRETE_DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat'];
+
+/** Lower-cased damage types a bonus covers, wildcards expanded. */
+function expandDamageTypes(damageTypes)
+{
+    const out = new Set();
+    for (const entry of damageTypes ?? [])
+    {
+        const lower = String(entry).toLowerCase().trim();
+        if (!lower)
+            continue;
+        if (!DAMAGE_TYPE_WILDCARDS.has(lower))
+        {
+            out.add(lower);
+            continue;
+        }
+        CONCRETE_DAMAGE_TYPES.forEach(type => out.add(type));
+        if (getModuleSetting('enableInfectionDamageIntegration'))
+            out.add('infection');
+    }
+    return [...out];
+}
+
 /**
  * @param {any} actor Actor, Token or TokenDocument
  * @param {string|null} [subtype] omit for every immunity bonus
@@ -3928,8 +4008,8 @@ export function getApplicableImmunityBonuses(actor, subtype, state = null, { flo
     const tags = getFlowTags(flowType, state);
     const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
     // No other party means nothing for applyToCondition to judge, so the immunity stands.
-    return bonuses.filter(bonus =>
-        isBonusApplicable(withOwnerContext(bonus, ownerTokenId), tags, state)
+    return bonuses.map(bonus => withOwnerContext(bonus, ownerTokenId)).filter(bonus =>
+        isBonusApplicable(bonus, tags, state)
         && (!otherToken || runApplyToCondition(bonus, otherToken, state, ownerToken)));
 }
 
@@ -4218,15 +4298,12 @@ export function applyDamageImmunities(actor, damages, state = null, bonuses = nu
         return damages;
 
     const immuneTypes = new Set();
-    for (const b of damageImmunities)
-    {
-        if (b.damageTypes)
-            b.damageTypes.forEach(t => immuneTypes.add(t.toLowerCase()));
-    }
+    for (const immunity of damageImmunities)
+        expandDamageTypes(immunity.damageTypes).forEach(type => immuneTypes.add(type));
 
     return damages.map(dmg =>
     {
-        if (immuneTypes.has(dmg.type.toLowerCase()))
+        if (immuneTypes.has(String(dmg.type).toLowerCase()))
         {
             const cloned = { ...dmg };
             if (cloned.val !== undefined)

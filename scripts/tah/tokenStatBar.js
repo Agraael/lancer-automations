@@ -116,6 +116,7 @@ const BAR_DEFS = [
 
 
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { floatTokenText } from "../tools/float-text.js";
 import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 
@@ -1662,6 +1663,23 @@ function _makeSceneTokenStore(actor, tokenDoc)
     };
 }
 
+function _clockSnapshot(actor)
+{
+    const state = actor?.system?.bond_state;
+    if (!state)
+        return null;
+    const snap = {};
+    for (const kind of ['clocks', 'burdens'])
+    {
+        for (const counter of state[kind] ?? [])
+        {
+            if (counter?.lid)
+                snap[counter.lid] = { name: counter.name ?? '', value: counter.value ?? 0, burden: kind === 'burdens' };
+        }
+    }
+    return snap;
+}
+
 function snapshotValues(actor, tokenDoc = null)
 {
     const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
@@ -1679,6 +1697,7 @@ function snapshotValues(actor, tokenDoc = null)
         stress: actor.system?.stress?.value ?? 0,
         pilotStress: actor.system?.bond_state?.stress?.value ?? 0,
         bondXp: actor.system?.bond_state?.xp?.value ?? 0,
+        clocks: _clockSnapshot(actor),
         overshield: actor.system?.overshield?.value ?? 0,
         burn: actor.system?.burn ?? 0,
         infection: actor.system?.infection ?? 0,
@@ -2266,6 +2285,7 @@ function _ensureSyncTicker(token)
         else
             entry.wrapper.position.set(active.position.x, active.position.y);
         const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
+        let nameGrowth = 1;
         if (minZoom > 0 && !iso)
         {
             const zoom = canvas.stage?.scale?.x || 1;
@@ -2273,6 +2293,7 @@ function _ensureSyncTicker(token)
             const effW = Math.max(entry.tokenW, entry.width);
             const kx = Math.max(1, (REF_GRID_SIZE * minZoom) / (effW * zoom));
             const ky = Math.max(1, (REF_ROW_HEIGHT * minZoom) / (entry.rowHeight * zoom));
+            nameGrowth = ky;
             entry.wrapper.scale.set(kx, ky);
             entry.hub.position.set(
                 (entry.tokenW / kx - entry.width) / 2,
@@ -2304,8 +2325,12 @@ function _ensureSyncTicker(token)
         const nameplate = token.nameplate;
         if (nameplate?.visible && !iso)
         {
+            const bars = shouldShowBars(token);
+            const uiScale = canvas.dimensions?.uiScale ?? 1;
+            const growth = bars ? nameGrowth : 1;
+            nameplate.scale.set(uiScale * growth, uiScale * growth);
             nameplate.position.x = token.w / 2;
-            nameplate.position.y = shouldShowBars(token)
+            nameplate.position.y = bars
                 ? token.h + 10 + (entry.totalHeight ?? 0) * (entry.wrapper.scale.y - 1)
                 : token.h + 2;
         }
@@ -3618,6 +3643,22 @@ export function initTokenStatBar()
                         jitter: 0.25,
                     });
                 }
+            }
+            // Clock and burden segments float by name, since the bar has no track for them.
+            if (prev.clocks && next.clocks)
+            {
+                let clockChanged = false;
+                for (const [lid, entry] of Object.entries(next.clocks))
+                {
+                    const before = prev.clocks[lid];
+                    if (!before || before.value === entry.value)
+                        continue;
+                    const delta = entry.value - before.value;
+                    floatTokenText(tok, `${entry.name || '?'} ${delta > 0 ? '+' : ''}${delta}`, entry.burden ? 0xc33333 : 0x3a9e6e);
+                    clockChanged = true;
+                }
+                if (clockChanged)
+                    playStatsSound('generic_stat');
             }
             // Reaction: only flash on spent, not turn reset.
             if (prev.reaction === true && next.reaction === false)

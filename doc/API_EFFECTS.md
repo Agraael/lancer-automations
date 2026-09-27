@@ -476,6 +476,7 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Charges. Written to the linked effect's counter, the same one `consumeEffectCharge` reads |
 | <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). An immunity charge burns where that immunity is consulted, never on the bearer's own roll, so resistance burns at damage-apply time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
+| <kbd>frequency</kbd> | `"round" \| "turn" \| "combat"` | Applies once per round / turn / combat, then stops until the window passes. Gated with the [gate API](API_FLAGS.md#consumeGate) under the key `bonus:<id>`, burned where the bonus is actually consulted. Out of combat gates never block, so the bonus always applies |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
 | <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. On an `immunity`, `actor` is the other party and the owner is `context.ownerTokenId`. |
 | <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty`, `target_modifier` and every filtered `immunity`. `reactorToken` is the owner, `target` the Token rolled against. On an immunity `target` is the other party instead, and `entry` is `null`. Skipped, not failed, when there is no other party. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
@@ -493,7 +494,7 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | One of the [immunity subtypes](API_REFERENCE.md#immunity-subtypes) |
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
-| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`) |
+| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`). `"all"` covers every type, and `"variable"` is treated the same way. Infection is included only while its integration setting is on |
 
 `"provoke"` acts like permanent DISENGAGE. No extra fields required.
 

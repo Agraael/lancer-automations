@@ -349,7 +349,7 @@ export function getWeaponReachRange(item, actor)
 // Pulse reach: base (Range/Threat) + AoE shape it can drop. `ranges` is a { type: maxVal } map.
 export function weaponPulseRange(ranges)
 {
-    const base = Math.max(0, ranges.Range ?? 0, ranges.Threat ?? 0);
+    const base = Math.max(0, ranges.Range ?? 0, ranges.Threat ?? 0, ranges.Sensor ?? 0);
     const shape = Math.max(0, ranges.Blast ?? 0, ranges.Cone ?? 0, ranges.Line ?? 0, ranges.Burst ?? 0);
     return base + shape;
 }

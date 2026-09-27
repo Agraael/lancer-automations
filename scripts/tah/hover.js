@@ -52,6 +52,21 @@ function getSensorRange(actor)
     return actor.system?.sensor_range ?? 10;
 }
 
+/**
+ * Preview range declared by an automation that has no range data on the item itself.
+ * @param {any} item
+ * @param {any} actor
+ * @returns {number|null}
+ */
+function resolveHudRange(item, actor)
+{
+    const flag = getLAFlag(item, 'hudRange');
+    if (flag === 'sensors')
+        return getSensorRange(actor);
+    const value = Number(flag);
+    return value > 0 ? Math.max(1, value) : null;
+}
+
 // Fixed range-1 melee/utility actions; no card range preview for these.
 export const FIXED_MELEE_ACTIONS = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pick up weapon', 'pickup weapon']);
 
@@ -110,7 +125,7 @@ export function getRangeGlowForAction(category, actionName, item)
         return RANGE_GLOW.threat;
     if (category === 'Deployables')
         return RANGE_GLOW.deploy;
-    if (category === 'Tech')
+    if (category === 'Tech' || getLAFlag(item, 'hudRange') === 'sensors')
         return RANGE_GLOW.sensor;
     if (FIXED_MELEE_ACTIONS.has(name) || name === 'thrown' || name === 'throw')
         return RANGE_GLOW.weapon;
@@ -150,6 +165,8 @@ export function getPreviewLosInfo(category, action, actor, item, profile)
         const { max, freeMax } = getActorReachBands_WithBonus(item ?? actor);
         return { los: max > freeMax, freeRange: freeMax };
     }
+    if (action?.ignoresLineOfSight)
+        return { los: false, freeRange: 0 };
     return { los: usesLineOfSight(category, item, profile), freeRange: 0 };
 }
 
@@ -196,6 +213,9 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
     }
     if (profile?.range?.length)
         return pulseRangeOf(profile.range);
+    const hudRange = resolveHudRange(item, actor);
+    if (hudRange != null)
+        return hudRange;
     // A weapon's nested action (real activation, not the attack rows) never inherits the weapon's reach.
     const nestedWeaponAction = !!action?.activation && isWeaponItem(item);
     if (item && !nestedWeaponAction)

@@ -351,3 +351,12 @@ Hooks.on('updateToken', async function(document, change, options, userId)
         await animPromise;
     await handleTrigger("onUpdate", { triggeringToken: token, document, change, options });
 });
+
+Hooks.on('preMoveToken', (document, move) =>
+{
+    const mode = getLAFlag(document, 'autoRotate', 'default');
+    if (mode === 'on')
+        move.autoRotate = true;
+    else if (mode === 'off')
+        move.autoRotate = false;
+});

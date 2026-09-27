@@ -150,8 +150,10 @@ const COMBAT_MOVEMENT_FIELDS = [
 
     { type: 'section', label: 'LA.settingsMenus.section.turnsActions.label', collapsible: true, collapsed: true },
     { key: 'enablePerRoundTurnTags', type: 'boolean' },
+];
 
-    { type: 'section', label: 'LA.settingsMenus.section.lancerAutomationsRuler.label', collapsible: true, collapsed: true },
+const RULER_MEASURE_FIELDS = [
+    { type: 'section', label: 'LA.settingsMenus.section.lancerAutomationsRuler.label', collapsible: true },
     { key: 'enableBuiltinSpeedProvider', type: 'boolean', label: 'LA.settingsMenus.enableBuiltinSpeedProvider.label', hint: 'LA.settingsMenus.enableBuiltinSpeedProvider.hint' },
     { key: 'rulerPerStepRender', type: 'boolean', label: 'LA.settingsMenus.rulerPerStepRender.label', hint: 'LA.settingsMenus.rulerPerStepRender.hint' , requires: 'enableBuiltinSpeedProvider' },
     { key: 'enableClimbWaypoints', type: 'boolean', label: 'LA.settingsMenus.enableClimbWaypoints.label', hint: 'LA.settingsMenus.enableClimbWaypoints.hint' , requires: 'enableBuiltinSpeedProvider' },
@@ -159,6 +161,9 @@ const COMBAT_MOVEMENT_FIELDS = [
     { key: 'splitMovementAtSpeedTiers', type: 'boolean', label: 'LA.settingsMenus.splitMovementAtSpeedTiers.label', hint: 'LA.settingsMenus.splitMovementAtSpeedTiers.hint' },
     { key: 'pathfindDragMovement', type: 'boolean', label: 'LA.settingsMenus.pathfindDragMovement.label', hint: 'LA.settingsMenus.pathfindDragMovement.hint', requires: ['enableBuiltinSpeedProvider', 'rulerPerStepRender'], requiresAll: true },
     { key: 'enableObstructionStepOver', type: 'boolean', label: 'LA.settingsMenus.enableObstructionStepOver.label', hint: 'LA.settingsMenus.enableObstructionStepOver.hint', requires: 'enableBuiltinSpeedProvider' },
+    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'LA.settingsMenus.disableAutoTerrainElevation.label', hint: 'LA.settingsMenus.disableAutoTerrainElevation.hint' },
+    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'LA.settingsMenus.disableAutoElevationOnMeasure.label', hint: 'LA.settingsMenus.disableAutoElevationOnMeasure.hint' , requires: 'enableBuiltinSpeedProvider' },
+    { key: 'measureRulerSnapToCenter', type: 'boolean', label: 'LA.settingsMenus.measureRulerSnapToCenter.label', hint: 'LA.settingsMenus.measureRulerSnapToCenter.hint' },
     { type: 'section', label: 'LA.settingsMenus.section.noStepOver.label', hint: 'LA.settingsMenus.section.noStepOver.hint', collapsible: false, subsection: true },
     { type: 'compactBooleans',
         items: [
@@ -168,8 +173,6 @@ const COMBAT_MOVEMENT_FIELDS = [
             { key: 'obstructionBlocksSpecialist', label: 'LA.settingsMenus.obstructionBlocksSpecialist.label' }
         ]
     },
-    { key: 'disableAutoTerrainElevation', type: 'boolean', label: 'LA.settingsMenus.disableAutoTerrainElevation.label', hint: 'LA.settingsMenus.disableAutoTerrainElevation.hint' },
-    { key: 'disableAutoElevationOnMeasure', type: 'boolean', label: 'LA.settingsMenus.disableAutoElevationOnMeasure.label', hint: 'LA.settingsMenus.disableAutoElevationOnMeasure.hint' , requires: 'enableBuiltinSpeedProvider' },
 
     { type: 'section', label: 'LA.settingsMenus.section.tacticalDistanceLabels.label', collapsible: true, collapsed: true },
     { key: 'enableTacticalDistance', type: 'select', label: 'LA.settingsMenus.enableTacticalDistance.label', hint: 'LA.settingsMenus.enableTacticalDistance.hint' },
@@ -315,10 +318,6 @@ const TOKENS_DISPLAY_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.tokenDisplay.label' },
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'showDeployableLines', type: 'boolean' },
-    { type: 'section', label: 'LA.settingsMenus.section.groundShadow.label', hint: 'LA.settingsMenus.section.groundShadow.hint', subsection: true },
-    { key: 'tokenGroundShadow', type: 'boolean' },
-    { key: 'tokenGroundShadowThrow', type: 'slider', requires: 'tokenGroundShadow' },
-    { key: 'tokenGroundShadowOpacity', type: 'slider', requires: 'tokenGroundShadow' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
     { type: 'button',
@@ -335,6 +334,10 @@ const TOKENS_DISPLAY_FIELDS = [
             ui.notifications?.info(localizeFormat('LA.notify.floatingNumbers', { state: localize(!before ? 'LA.common.on' : 'LA.common.off') }));
         },
     },
+    { type: 'section', label: 'LA.settingsMenus.section.groundShadow.label', hint: 'LA.settingsMenus.section.groundShadow.hint', subsection: true },
+    { key: 'tokenGroundShadow', type: 'boolean' },
+    { key: 'tokenGroundShadowThrow', type: 'slider', requires: 'tokenGroundShadow' },
+    { key: 'tokenGroundShadowOpacity', type: 'slider', requires: 'tokenGroundShadow' },
 
     { type: 'section', label: 'LA.settingsMenus.section.autoFocus.label', collapsible: true, collapsed: true },
     { key: 'autoFocusDuration', type: 'slider', min: 200, max: 3000, step: 100 },
@@ -441,6 +444,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatHintUnknownLabel', type: 'string', label: 'LA.settingsMenus.tokenStatHintUnknownLabel.label', hint: 'LA.settingsMenus.tokenStatHintUnknownLabel.hint' },
     { key: 'tokenStatHintHideClassWhenUnknown', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintHideClassWhenUnknown.label', hint: 'LA.settingsMenus.tokenStatHintHideClassWhenUnknown.hint' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintHideCurrentOnScan', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintHideCurrentOnScan.label', hint: 'LA.settingsMenus.tokenStatHintHideCurrentOnScan.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintShowHase', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintShowHase.label', hint: 'LA.settingsMenus.tokenStatHintShowHase.hint', requires: 'tokenStatHintEnabled' },
     { type: 'section', label: 'LA.settingsMenus.section.alsoHideCurrentValuesFrom.label', hint: 'LA.settingsMenus.section.alsoHideCurrentValuesFrom.hint', collapsible: false, subsection: true },
     { type: 'compactBooleans',
         items: [
@@ -448,7 +452,6 @@ const TOKENS_DISPLAY_FIELDS = [
             { key: 'tokenStatHintHideCurrentFromPlayers', label: 'LA.settingsMenus.tokenStatHintHideCurrentFromPlayers.label', hint: 'LA.settingsMenus.tokenStatHintHideCurrentFromPlayers.hint', requires: ['tokenStatHintEnabled', 'tokenStatHintHideCurrentOnScan'], requiresAll: true },
         ]
     },
-    { key: 'tokenStatHintShowHase', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintShowHase.label', hint: 'LA.settingsMenus.tokenStatHintShowHase.hint', requires: 'tokenStatHintEnabled' },
 ];
 
 const TAH_FIELDS = [
@@ -1161,6 +1164,7 @@ const TAB_DEFS = [
     // Gameplay & rules
     { id: 'activations', label: 'LA.settingsMenus.tab.activations.label', icon: 'fas fa-bolt', fields: ACTIVATIONS_FIELDS },
     { id: 'combat', label: 'LA.settingsMenus.tab.combat.label', icon: 'fas fa-running', fields: COMBAT_MOVEMENT_FIELDS },
+    { id: 'ruler', label: 'LA.settingsMenus.tab.ruler.label', icon: 'fas fa-ruler', fields: RULER_MEASURE_FIELDS },
     { id: 'statuses', label: 'LA.settingsMenus.tab.statuses.label', icon: 'fas fa-tags', fields: STATUSES_FIELDS },
     { id: 'experimental', label: 'LA.settingsMenus.tab.experimental.label', icon: 'fas fa-eye', fields: VISION_FIELDS },
     { id: 'wrecks', label: 'LA.settingsMenus.tab.wrecks.label', icon: 'fas fa-skull-crossbones', fields: WRECKS_FIELDS },
@@ -1203,7 +1207,7 @@ const TAB_DEFS = [
 ];
 
 const NAV_GROUPS = [
-    { label: 'LA.settingsMenus.navGroup.core.label', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'statuses'] },
+    { label: 'LA.settingsMenus.navGroup.core.label', icon: 'fas fa-crosshairs', tabs: ['activations', 'combat', 'ruler', 'statuses'] },
     { label: 'LA.settingsMenus.navGroup.canvas.label', icon: 'fas fa-map', tabs: ['experimental', 'tokens', 'wrecks', 'iso', 'mapModules', 'performance'] },
     { label: 'LA.settingsMenus.navGroup.interface.label', icon: 'fas fa-window-maximize', tabs: ['tah', 'control', 'colors', 'sounds'] },
     { label: 'LA.settingsMenus.navGroup.extras.label', icon: 'fas fa-star', tabs: ['battelog', 'tools'] },
