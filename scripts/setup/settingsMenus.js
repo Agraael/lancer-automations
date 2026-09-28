@@ -533,6 +533,7 @@ const TAH_FIELDS = [
                 return;
             await setLAFlag(game.user,'tahFavorites', []);
             await setLAFlag(game.user,'tahFavorites2', []);
+            await setLAFlag(game.user,'tahFavorites3', []);
             Hooks.callAll('forceUpdateTokenActionHud');
             ui.notifications.info(localize('LA.notify.tahFavoritesCleared'));
         } },

@@ -2,7 +2,7 @@ import { openCursorMenu } from './cursor-menu.js';
 
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
-const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2'];
+const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2', 'tahFavorites3'];
 
 export const WHEEL_COUNT = WHEEL_FLAGS.length;
 
@@ -29,7 +29,12 @@ export function favoriteWheel(key)
 
 export function hasSecondWheel()
 {
-    return favoriteKeys(2).length > 0;
+    for (let wheel = 2; wheel <= WHEEL_COUNT; wheel++)
+    {
+        if (favoriteKeys(wheel).length > 0)
+            return true;
+    }
+    return false;
 }
 
 /**
@@ -54,7 +59,7 @@ export async function setFavoriteWheel(key, wheel)
     return wheel;
 }
 
-// The digit only shows once a second wheel is in use: with one wheel it says nothing.
+// The digit only shows once a wheel past the first is in use: with one wheel it says nothing.
 export function favMarkHtml(wheel)
 {
     if (!wheel)
@@ -65,7 +70,7 @@ export function favMarkHtml(wheel)
 
 /**
  * Wheel picker at the cursor. Never offers the wheel the item already sits on, and
- * only offers Remove when there is something to remove, so it is always two rows.
+ * only offers Remove when there is something to remove, so it is always WHEEL_COUNT rows.
  * @param {number} x
  * @param {number} y
  * @param {number} currentWheel

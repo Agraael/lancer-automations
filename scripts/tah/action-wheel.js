@@ -5,6 +5,7 @@ import { laHudRenderIcon, laHudStripeStyle } from './item-helpers.js';
 import { onHudRowHover, deactivateRangePreview } from './hover.js';
 import { playUiSound } from './sound.js';
 import { lastCursor } from './cursor-menu.js';
+import { WHEEL_COUNT } from './favorites.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 
@@ -97,8 +98,13 @@ function wheelItems(page, token)
 
 function switchPage(page, token)
 {
-    const items = wheelItems(page, token);
-    if (!items.length)
+    let items = wheelItems(page, token);
+    for (let step = 1; !items.length && step < _pageCount; step++)
+    {
+        page = page % _pageCount + 1;
+        items = wheelItems(page, token);
+    }
+    if (!items.length || page === _page)
         return;
     _page = page;
     playUiSound('toggle');
@@ -127,15 +133,19 @@ export async function toggleActionWheel()
     }
     else if (!hud.getFavorites())
         await hud.bindNarrative();
-    const firstPage = hud.getFavorites(1) ?? [];
-    const secondPage = hud.getFavorites(2) ?? [];
-    if (!firstPage.length && !secondPage.length)
+    const filledPages = [];
+    for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
+    {
+        if ((hud.getFavorites(wheel) ?? []).length)
+            filledPages.push(wheel);
+    }
+    if (!filledPages.length)
     {
         ui.notifications.info(localize('LA.notify.noFavoriteActionsYetMarkActionsWith'));
         return;
     }
-    _pageCount = secondPage.length ? 2 : 1;
-    _page = firstPage.length ? 1 : 2;
+    _pageCount = filledPages.at(-1);
+    _page = filledPages[0];
     _openToken = token;
     openRadialWheel({
         token,

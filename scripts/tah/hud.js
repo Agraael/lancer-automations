@@ -22,7 +22,7 @@ import { laHudRenderIcon, laHudSizeMark, laHudStripeStyle, weaponSizeLevel, weap
 import { isAutoConsumeDisabled, renderConsumeStatusHtml } from '../interactive/extra-config.js';
 import * as altFlags from '../integrations/alt-sheets-flags.js';
 import { onHudRowHover, deactivateRangePreview, cleanupDetachedRangePreviews } from './hover.js';
-import { favoriteKeys, favoriteWheel, setFavoriteWheel, favMarkHtml, openFavoritePopup } from './favorites.js';
+import { favoriteKeys, favoriteWheel, setFavoriteWheel, favMarkHtml, openFavoritePopup, WHEEL_COUNT } from './favorites.js';
 import { openCursorMenu } from './cursor-menu.js';
 import {
     isAdvancedMeasureActive,
@@ -3100,6 +3100,18 @@ export class LancerHUD
                 onClick: () => openClocksDialog(actor),
                 onRightClick: this._actionPopup({ name: 'Clocks & Burdens', activation: 'Tool', detail: localize('LA.tokenHud.detail.clocksBurdens') }),
             });
+            if (actor.type === 'pilot')
+            {
+                items.push({ label: localize('LA.tokenHud.label.rest'),
+                    icon: 'modules/lancer-automations/icons/night-sleep.svg',
+                    onClick: () =>
+                    {
+                        const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
+                        api?.executeRest?.({ actor });
+                    },
+                    onRightClick: this._actionPopup({ name: 'Rest', activation: 'Tool', detail: 'Open the rest dialog: spend repairs, clear heat and conditions.' }),
+                });
+            }
         }
         return {
             label: localize('LA.tokenHud.label.utility'),
@@ -6521,7 +6533,7 @@ export class LancerHUD
 
     _collectFavorites(wheel = 0)
     {
-        const favs = wheel ? favoriteKeys(wheel) : [...favoriteKeys(1), ...favoriteKeys(2)];
+        const favs = wheel ? favoriteKeys(wheel) : Array.from({ length: WHEEL_COUNT }, (_, index) => favoriteKeys(index + 1)).flat();
         if (!favs.length)
             return [];
         const favSet = new Set(favs);
