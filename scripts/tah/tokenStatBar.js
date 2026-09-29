@@ -19,7 +19,7 @@ import * as altFlags from '../integrations/alt-sheets-flags.js';
 import {
     MODULE_ID,
     SETTING_ENABLED, SETTING_DEFAULT_HIDDEN, SETTING_DEFAULT_COMBAT_ONLY, SETTING_DEFAULT_ROW_HEIGHT,
-    SETTING_VIS_OUT_OF_COMBAT, SETTING_VIS_IN_COMBAT, SETTING_EFFECT_ICON_SCALE, SETTING_MIN_ZOOM_SCALE,
+    SETTING_VIS_OUT_OF_COMBAT, SETTING_VIS_IN_COMBAT, SETTING_EFFECT_ICON_SCALE, SETTING_MIN_ZOOM_SCALE, SETTING_ELEVATION_BADGE_SCALE,
     SETTING_DEFAULT_PILOT_STRESS, SETTING_SHOW_VALUES, SETTING_AUTO_INJECT_TALENTS, SETTING_AUTO_INJECT_BOND_XP,
     SETTING_AUTO_INJECT_TALENT_COLOR, SETTING_AUTO_INJECT_TALENT_WIDTH, SETTING_AUTO_INJECT_TALENT_FEEDBACK,
     SETTING_AUTO_INJECT_CUSTOM_FLAGS,
@@ -2934,6 +2934,42 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
 
 // Elevation badge: directional indicator, top-right of token
 
+function _elevationBadgeGrowth()
+{
+    const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
+    if (minZoom <= 0)
+        return 1;
+    const zoom = canvas.stage?.scale?.x || 1;
+    const gridPx = canvas.dimensions?.size ?? REF_GRID_SIZE;
+    return Math.max(1, (REF_GRID_SIZE * minZoom) / (gridPx * zoom));
+}
+
+function _placeElevationBadge(token, badge, iso)
+{
+    const growth = _elevationBadgeGrowth();
+    const cellW = badge._laCellW * growth;
+    const cellH = badge._laCellH * growth;
+    const refSize = badge._laRefSize;
+    badge._laGrowth = growth;
+    if (iso && token.mesh)
+    {
+        const isoScale = 0.76;
+        badge.scale.set(isoScale * growth, growth / isoScale);
+        const cosTheta = Math.cos(iso.reverseRotation);
+        const sinTheta = Math.sin(iso.reverseRotation);
+        const localX = token.w / 2 - refSize + cellW / 2;
+        const localY = -token.h / 2 + refSize - cellH / 2;
+        const offsetX = (cosTheta * isoScale * localX) + (-sinTheta * (1 / isoScale) * localY);
+        const offsetY = (sinTheta * isoScale * localX) + (cosTheta * (1 / isoScale) * localY);
+        const worldX = token.mesh.position.x + offsetX;
+        const worldY = token.mesh.position.y + offsetY;
+        badge.position.set(worldX - token.position.x, worldY - token.position.y);
+        return;
+    }
+    badge.scale.set(growth);
+    badge.position.set(token.w - refSize, refSize - cellH - (badge._laPositive ? badge._laArrowH * growth : 0));
+}
+
 function drawElevationBadge(token)
 {
     if (token.tooltip)
@@ -2970,21 +3006,7 @@ function drawElevationBadge(token)
 
     if (prev && cachedElev === elevation && cachedIsoState === isoActive)
     {
-        if (isoActive)
-        {
-            const cellW = prev._laCellW;
-            const cellH = prev._laCellH;
-            const cosTheta = Math.cos(iso.reverseRotation);
-            const sinTheta = Math.sin(iso.reverseRotation);
-            const isoScale = 0.76;
-            const localX = token.w / 2 - cellW / 2;
-            const localY = -token.h / 2 + cellH / 2;
-            const offsetX = (cosTheta * isoScale * localX) + (-sinTheta * (1 / isoScale) * localY);
-            const offsetY = (sinTheta * isoScale * localX) + (cosTheta * (1 / isoScale) * localY);
-            const worldX = token.mesh.position.x + offsetX;
-            const worldY = token.mesh.position.y + offsetY;
-            prev.position.set(worldX - token.position.x, worldY - token.position.y);
-        }
+        _placeElevationBadge(token, prev, isoActive ? iso : null);
         return;
     }
 
@@ -3000,7 +3022,9 @@ function drawElevationBadge(token)
 
     // Sized to match effect icons (_shrinkEffectIcons).
     const gridPx = canvas.dimensions?.size ?? 100;
-    const iconSize = Math.max(8, Math.round(gridPx * 0.1));
+    const baseScale = Number(getWorldSetting(SETTING_ELEVATION_BADGE_SCALE, 1)) || 1;
+    const refSize = Math.max(8, Math.round(gridPx * 0.1));
+    const iconSize = Math.round(refSize * baseScale);
     const cellH = iconSize;
     const cellW = iconSize;
     let arrowH = Math.max(3, Math.round(cellH * 0.5));
@@ -3069,33 +3093,16 @@ function drawElevationBadge(token)
     txt.position.set(halfW, bodyCenterY);
     badge.addChild(txt);
 
-    badge._laCellW = cellW;
-    badge._laCellH = cellH;
+    Object.assign(badge, { _laCellW: cellW, _laCellH: cellH, _laArrowH: arrowH, _laPositive: isPositive, _laRefSize: refSize });
 
-    const badgeY = isPositive ? -arrowH : 0;
     if (isoActive)
     {
         badge.pivot.set(cellW / 2, cellH / 2);
         badge.rotation = iso.reverseRotation;
         badge.skew.set(iso.reverseSkewX, iso.reverseSkewY);
-        const isoScale = 0.76;
-        badge.scale.set(isoScale, 1 / isoScale);
-        const cosTheta = Math.cos(iso.reverseRotation);
-        const sinTheta = Math.sin(iso.reverseRotation);
-        const localX = token.w / 2 - cellW / 2;
-        const localY = -token.h / 2 + cellH / 2;
-        const offsetX = (cosTheta * isoScale * localX) + (-sinTheta * (1 / isoScale) * localY);
-        const offsetY = (sinTheta * isoScale * localX) + (cosTheta * (1 / isoScale) * localY);
-        const worldX = token.mesh.position.x + offsetX;
-        const worldY = token.mesh.position.y + offsetY;
-        badge.position.set(worldX - token.position.x, worldY - token.position.y);
-        token.addChild(badge);
     }
-    else
-    {
-        badge.position.set(token.w - cellW, badgeY);
-        token.addChild(badge);
-    }
+    _placeElevationBadge(token, badge, isoActive ? iso : null);
+    token.addChild(badge);
 
     token._laBadge = badge;
     token._laBadgeElev = elevation;
@@ -3350,6 +3357,23 @@ export function registerTokenStatBarSettings()
         type: Number,
         default: 1,
         range: { min: 0, max: 4, step: 0.1 },
+    });
+    game.settings.register(MODULE_ID, SETTING_ELEVATION_BADGE_SCALE, {
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0.5, max: 3, step: 0.05 },
+        onChange: () =>
+        {
+            for (const token of /** @type {any[]} */ (canvas?.tokens?.placeables ?? []))
+            {
+                if (!token._laBadge)
+                    continue;
+                token._laBadgeElev = undefined;
+                drawElevationBadge(token);
+            }
+        },
     });
     game.settings.register(MODULE_ID, SETTING_AUTO_INJECT_TALENTS, {
         scope: 'world',
@@ -3849,6 +3873,18 @@ export function initTokenStatBar()
             token.hitArea = token.shape;
     };
     Hooks.on('refreshToken', refreshLancerToken);
+
+    Hooks.on('canvasPan', () =>
+    {
+        const growth = _elevationBadgeGrowth();
+        for (const token of /** @type {any[]} */ (canvas.tokens?.placeables ?? []))
+        {
+            const badge = token._laBadge;
+            if (!badge || badge.destroyed || badge._laGrowth === growth)
+                continue;
+            _placeElevationBadge(token, badge, token._laBadgeIso ? _getIsoState(token) : null);
+        }
+    });
 
     // Alt-key peek.
     window.addEventListener('keydown', (ev) =>

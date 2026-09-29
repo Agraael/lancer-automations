@@ -92,7 +92,7 @@ For one-off effects you can skip the API: place a template by hand and attach th
 
 **knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage.
 
-**placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Shift+click** waypoints for multi-leg paths.
+**placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Ctrl+click** waypoints for multi-leg paths.
 
 <br clear="right"/>
 

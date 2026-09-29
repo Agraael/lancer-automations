@@ -150,13 +150,13 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <img align="right" src="../img/hud-favorites.png" width="35%"/>
 
-**Favorites** - Ctrl+right-click an item to pick its wheel. The star tab on the HUD's edge gathers your favorites in one place, and Shift+X opens or closes that column.
+**Favorites** - Ctrl+right-click an item to pick its wheel (1 to 3). The star tab on the HUD's edge gathers your favorites in one place, and Shift+X opens or closes that column.
 
 <br clear="right"/>
 
 <img align="right" src="../vid/hud-action-wheel.gif" width="35%"/>
 
-**Action Wheel** - press **F** on a selected token to get your favorites as a wheel around it. Click to use, right-click for details, hover for the range preview. **Tab** switches to the second wheel.
+**Action Wheel** - press **F** on a selected token to get your favorites as a wheel around it. Click to use, right-click for details, hover for the range preview. **Tab** cycles through the wheels that have favorites.
 
 <br clear="right"/>
 

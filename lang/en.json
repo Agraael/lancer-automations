@@ -1325,7 +1325,7 @@
           "combat": "In combat",
           "off": "No"
         },
-        "explain": "Marks Guardian and Bulwark tokens with an aura. \"In combat\" needs the GAA fork.",
+        "explain": "Marks Guardian and Bulwark tokens with an aura.",
         "label": "Show a Guardian / Bulwark aura on those tokens?"
       },
       "half-size-tokens": {
@@ -3609,6 +3609,10 @@
       },
       "statBarEffectIconScale": {
         "label": "Effect Icon Scale"
+      },
+      "statBarElevationBadgeScale": {
+        "hint": "Size of the elevation badge. 1 = effect icon size.",
+        "label": "Elevation Badge Scale"
       },
       "statBarMinZoomScale": {
         "hint": "Below this zoom level the bar keeps a constant screen size. 0 = disabled.",

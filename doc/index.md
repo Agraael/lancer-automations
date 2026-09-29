@@ -113,8 +113,8 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | [TemplateMacro](https://github.com/Agraael/templatemacro) | Required for zone placement tools (effect zone, dangerous zone, difficult terrain) |
 | [Status Icon Counter](https://foundryvtt.com/packages/statuscounter) | Shows stack counts on effect icons |
 | [Token Factions](https://github.com/p4535992/foundryvtt-token-factions) ([my fork](https://github.com/Agraael/foundryvtt-token-factions)) | Original module for token border coloring by disposition. My fork adds an advanced multi-team disposition matrix, for more than two sides |
-| [Grid-Aware Auras](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) (or [my fork](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras)) | Required for the `createAura` and `deleteAuras` API functions |
-| [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) (or [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools)) | 3D terrain height painting and line-of-sight calculation |
+| [Grid-Aware Auras (my fork)](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras), or the [original](https://github.com/Wibble199/FoundryVTT-Grid-Aware-Auras) | `createAura` and `deleteAuras` API functions. The fork tracks the original, works without LA, and adds features some LA automations need |
+| [Terrain Height Tools (my fork)](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools), or the [original](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools) | 3D terrain height painting and line of sight. The fork tracks the original, works without LA, and adds terrain triggers, terrain shading, and LA-only line of sight walls |
 | [Lancer Weapon FX](https://github.com/BoltsJ/lancer-weapon-fx) | Visual/audio effects on attacks and built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) |
 | [Wall Height](https://foundryvtt.com/packages/wall-height) | Required for elevation-aware Token Blocks Line of Sight (Bulwark / per-token blocker): walls inherit the token's height, letting same-height observers peek over. Without it, blocking is purely 2D. |
 | [Force Client Settings](https://gitlab.com/kimitsu_desu/force-client-settings) | Push client-scoped settings to all your players, so your whole table shares one config. |
@@ -384,8 +384,10 @@ A few features need or improve with these optional modules. Install details are 
 
 | Feature | Needs |
 |---------|-------|
-| Custom auras (`createAura` and `deleteAuras` API) | Grid-Aware Auras (or my fork) |
-| Difficult terrain on wrecks, 3D terrain height and line of sight | Terrain Height Tools (or my fork) |
+| Custom auras (`createAura` and `deleteAuras` API) | Grid-Aware Auras (my fork or the original) |
+| Aura difficult terrain in the ruler | Grid-Aware Auras (my fork) |
+| Difficult terrain on wrecks, 3D terrain height and line of sight | Terrain Height Tools (my fork or the original) |
+| LA-only line of sight walls, terrain drop shading and contours | Terrain Height Tools (my fork) |
 | Elevation-aware token-blocks-line-of-sight (peek over same-height tokens) | Wall Height |
 | Built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) | Lancer Weapon FX |
 | Multi-team disposition matrix in activation filters | Token Factions (my fork) |

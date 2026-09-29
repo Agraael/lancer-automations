@@ -526,7 +526,7 @@ await api.placeToken({ actor: turretActor, origin: casterToken, range: 2 });
 </details>
 
 <details id="moveToken">
-<summary><b><code>moveToken</code></b> <sup>async</sup> → <code>TokenDocument | null</code></summary>
+<summary><b><code>moveToken</code></b> <sup>async</sup> → <code>TokenDocument | TokenDocument[] | null</code></summary>
 
 <br>
 
@@ -534,11 +534,11 @@ await api.placeToken({ actor: turretActor, origin: casterToken, range: 2 });
 await api.moveToken(token, options)
 ```
 
-Without `destination`, opens the drag-ruler picker: Ctrl+click waypoints, right-click removes, Confirm commits. Accepts a token array.
+Moves the token straight to `destination`, no picker. Without `destination`, opens `moveTokenRuler` with the same options, and `teleport` becomes the `blink` action. Token arrays only work without `destination`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>token</kbd> | `Token` | *required* | The token to move |
+| <kbd>token</kbd> | `Token \| Token[]` | *required* | The token(s) to move |
 | **inside `options`** | | | |
 | <kbd>destination</kbd> | `{x: number, y: number}` | `null` | Center point (world coords), snapped to the grid. If omitted, interactive picker. |
 | <kbd>teleport</kbd> | `boolean` | `false` | Move as the `blink` action (teleport animation, recorded as teleport) |
@@ -583,7 +583,7 @@ await api.moveToken(token, { teleport: true, range: 5 });
 await api.moveTokenRuler(tokenOrTokens, options)
 ```
 
-The drag-ruler picker itself: hover previews the path with pathfinding, Ctrl+click adds a waypoint, right-click removes the last one, click picks the destination, only Confirm commits. This is what `moveToken` opens when called without a `destination`, and what `knockBackToken` and `boostMove` drive. With several tokens, each is planned in turn (card row click switches) and Confirm commits every planned move. The range pulse shows cost-aware reachable cells, re-anchored on the last waypoint.
+Interactive drag-ruler with pathfinding: Ctrl+click adds a waypoint, right-click removes the last one, Confirm commits. Several tokens are planned in turn and committed together. Used by `moveToken` without `destination`, `knockBackToken` and `boostMove`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|

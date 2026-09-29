@@ -375,6 +375,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.display.label', subsection: true },
     { key: 'statBarShowValues', type: 'boolean', label: 'LA.settingsMenus.statBarShowValues.label', hint: 'LA.settingsMenus.statBarShowValues.hint' , requires: 'tokenStatBar' },
     { key: 'statBarMinZoomScale', type: 'slider', label: 'LA.settingsMenus.statBarMinZoomScale.label', min: 0, max: 4, step: 0.1, hint: 'LA.settingsMenus.statBarMinZoomScale.hint' , requires: 'tokenStatBar' },
+    { key: 'statBarElevationBadgeScale', type: 'slider', label: 'LA.settingsMenus.statBarElevationBadgeScale.label', min: 0.5, max: 3, step: 0.05, hint: 'LA.settingsMenus.statBarElevationBadgeScale.hint' , requires: 'tokenStatBar' },
 
     { type: 'section', label: 'LA.settingsMenus.section.perTokenDefaults.label', subsection: true },
     { key: 'statBarDefaultHidden', type: 'boolean', label: 'LA.settingsMenus.statBarDefaultHidden.label' , requires: 'tokenStatBar' },
