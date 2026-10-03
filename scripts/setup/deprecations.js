@@ -62,8 +62,37 @@ const endActivationCheck = {
     }
 };
 
+const INVOLUNTARY_TRIGGERS = ['onPreInvoluntaryMove', 'onInvoluntaryMove'];
+const LEGACY_INVOLUNTARY_FIELDS = /triggerData\s*\.\s*(token|destination|distance)\b|triggerData\s*\[\s*['"](token|destination|distance)['"]|\b(token|destination|distance)\b[^{}]*\}\s*=\s*triggerData/;
+
+const involuntaryMoveCheck = {
+    id: 'involuntaryMove',
+    message: 'onPreInvoluntaryMove / onInvoluntaryMove now carry the onPreMove / onMove data: triggeringToken is the moved '
+        + 'token, sourceToken is the pusher, and token, destination and distance are gone. Update these activations:',
+    scan()
+    {
+        const hits = [];
+        for (const { label, reaction } of savedReactions())
+        {
+            const triggers = Array.isArray(reaction?.triggers) ? reaction.triggers : [];
+            if (triggers.some(trigger => INVOLUNTARY_TRIGGERS.includes(trigger))
+                && Object.values(reaction).some(value => typeof value === 'string' && LEGACY_INVOLUNTARY_FIELDS.test(value)))
+                hits.push(label);
+        }
+
+        for (const script of ReactionManager.getStartupScripts())
+        {
+            const code = typeof script?.code === 'string' ? script.code : '';
+            if (code.includes('InvoluntaryMove') && LEGACY_INVOLUNTARY_FIELDS.test(code))
+                hits.push(`startup script ${script?.name || 'unnamed'}`);
+        }
+
+        return hits;
+    }
+};
+
 /** @type {DeprecationCheck[]} */
-const CHECKS = [endActivationCheck];
+const CHECKS = [endActivationCheck, involuntaryMoveCheck];
 
 /**
  * Run every deprecation check and report the results. GM only, the fixes are world-level.

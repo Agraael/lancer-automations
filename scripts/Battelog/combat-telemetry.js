@@ -107,12 +107,13 @@
  */
 
 /**
- * A weapon or system on the combatant is destroyed during the fight.
+ * A weapon or system on the combatant is destroyed, or starts cascading, during the fight.
  * @typedef {Object} GearLostEvent
  * @property {'gear-lost'} type
  * @property {number} round
  * @property {string} tokenId
  * @property {'weapon'|'system'} kind
+ * @property {'destroyed'|'cascading'} [state] absent on logs written before cascading was tracked
  * @property {string} name                    display label
  */
 

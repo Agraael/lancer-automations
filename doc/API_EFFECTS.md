@@ -265,7 +265,7 @@ const others = api.findEffectsOnToken(token, 'Overshield', { excludeId: effect.i
 api.findEffectFrom(token, effectName, sourceToken)
 ```
 
-The `originID` variant: the effect on `token` that `sourceToken` applied, matched on the `origin` stamp left by `addGlobalBonus` / `applyEffectsToTokens`. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
+The `originID` variant: matches the duration origin stamp, `overrideTurnOriginId` for `applyEffectsToTokens`, `origin` for `addGlobalBonus`, the bearer itself by default. It finds an effect by applier only when that applier was passed as the origin. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
 
 The name match here is exact. The loose house name rules do not apply.
 
@@ -273,7 +273,7 @@ The name match here is exact. The loose house name rules do not apply.
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token carrying the effect |
 | <kbd>effectName</kbd> | `string` | Exact effect name |
-| <kbd>sourceToken</kbd> | `Token` | The token that applied it |
+| <kbd>sourceToken</kbd> | `Token` | The token stamped as duration origin |
 
 ```js
 const eff = api.findEffectFrom(target, 'Lock On', reactorToken);
@@ -557,8 +557,9 @@ await api.addConstantBonus(actor, {
 
 | Property | Type | Description |
 |:---------|:-----|:------------|
-| <kbd>tagName</kbd> | `string` | Name of the custom tag (e.g. `"Inaccurate"`) |
-| <kbd>tagMode</kbd> | `string` | `"add"` or `"override"` |
+| <kbd>tagId</kbd> | `string` | Tag LID to add, override or remove (e.g. `"tg_inaccurate"`) |
+| <kbd>tagName</kbd> | `string` | Display name, used only when the tag is added new |
+| <kbd>tagMode</kbd> | `string` | `"add"` adds `val` to the tag's value, `"override"` sets it |
 | <kbd>removeTag</kbd> | `boolean` | If true, negates the tag instead of adding it |
 
 </details>
@@ -581,7 +582,9 @@ await api.addConstantBonus(actor, {
 | <kbd>subtype</kbd> | `string` | `"retry"` (default), `"highest"`, `"lowest"`, or `"choose"`. See resolution table below. |
 | <kbd>rollTypes</kbd> | `Array<string>` | `"attackRoll"`, `"techAttackRoll"`, `"damageRoll"`, `"skillRoll"`, `"structureRoll"`, `"stressRoll"`. Empty = all. |
 
-Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep leaves the charge).
+Offered via a choice card before `onRoll` fires. Consumed only on **Use** (Keep leaves the charge). `frequency` burns on Use as well.
+
+Filters honoured: `itemLids`, `itemId`, `condition`, `frequency`. `itemLids` / `itemId` match the rolling item, so they never pass on skill, structure or stress rolls. `applyTo`, `applyToTargetter` and `applyToCondition` are ignored.
 
 | Subtype | Resolution after the alt roll runs |
 |:--------|:-----------------------------------|
@@ -713,7 +716,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
 | <kbd>duration</kbd> | `Object` | `{}` (permanent) | `{ label, turns?, rounds? }` |
 
-`extraOptions` keys are stored on the source and copied to every effect that comes from it. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
+`extraOptions` keys are stored on the source template, where `ensureLinkedEffect` matches on them. They are not copied to the effects it creates, except `changes`. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
 
 `ensureLinkedEffect` is `linkEffectToItem` that skips effects the item already carries as a template (match = effect name + every `extraOptions` flag). The onInit way to link: no hand-written guard needed.
 

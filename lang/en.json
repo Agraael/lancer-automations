@@ -446,8 +446,8 @@
     },
     "dialogTitle": {
       "activateImmunity": "ACTIVATE IMMUNITY?",
-      "activationManager": "Activation Manager",
-      "activationManagerHelp": "Activation Manager Help",
+      "activationManager": "Automation Manager",
+      "activationManagerHelp": "Automation Manager Help",
       "activationOpportunity": "Activation Opportunity: {trigger}",
       "addDeployableActor": "Add Deployable Actor",
       "addMacro": "Add Macro",
@@ -685,6 +685,7 @@
         "onEndActivation": "On End Activation",
         "onEnterCombat": "On Enter Combat",
         "onExitCombat": "On Exit Combat",
+        "onFullRepair": "On Full Repair",
         "onHeatGain": "On Heat",
         "onHit": "On Hit",
         "onHpLoss": "On HP Loss",
@@ -769,7 +770,7 @@
         "name": "Toggle Card Targeting"
       },
       "debugMovement": {
-        "hint": "While held, the next move is recorded by Foundry but skips LA automation hooks (no onMove trigger, no history append, no engagement update).",
+        "hint": "While held, the next move skips automation, history and animation.",
         "name": "Debug Movement (hold)"
       },
       "freeMovement": {
@@ -816,6 +817,10 @@
       }
     },
     "dragFeedback": {
+      "debugOff": "Debug move off",
+      "debugOn": "Debug move",
+      "freeOff": "Free move off",
+      "freeOn": "Free move",
       "ground": "Ground",
       "hold": "Hold",
       "pathfindOff": "Pathfinding off",
@@ -823,11 +828,15 @@
     },
     "lancerModif": {
       "ammoName": "Ammo Name",
+      "cascading": "CASCADING",
+      "cascadingTitle": "Cascading",
       "content": {
         "forEveryWorldActorSetActor": "<p>For every world actor, set <b>actor.img</b> and <b>actor.name</b> to the prototype token image and name.</p><p>Continue?</p>",
         "setWallHeightTokenheightOnEvery": "<p>Set <b>wall-height.tokenHeight</b> on every world actor (prototype) and every placed token across all scenes.</p><p>Continue?</p>",
         "thisWillFixKnownDataIssues": "<p>This will fix known data issues on all compendium and actor-owned items.</p><p>Continue?</p>"
-      }
+      },
+      "markCascading": "Mark Cascading",
+      "markNotCascading": "Mark Not Cascading"
     },
     "main": {
       "immunityPrompt": "<b>{name}</b> affected by <b>{status}</b>.<hr>Immunity from: <i>{sources}</i>. Activate?",
@@ -974,7 +983,7 @@
       "hasNotRecharged": "{name} has not recharged! (Recharge {recharge}+)",
       "iconIsRequiredToSaveAStatus": "Icon is required to save a status.",
       "ignoredDangerousTerrain": "{name} ignored dangerous terrain.",
-      "immovableMovedAnyway": "{name} is IMMOVABLE and is being moved anyway.",
+      "immovableBlocked": "{name} is IMMOVABLE and cannot be moved.",
       "immuneMissAndHit": "{name} is immune to miss and hit - these effects cancel each other",
       "immuneToCrits": "{name} is immune to Critical Hits!",
       "immuneToGrapple": "{name} is immune to grapple — grapple has no effect.",
@@ -1683,27 +1692,42 @@
       "youCountAsHavingResistanceTo": "You count as having RESISTANCE to all damage, burn, and heat from the triggering attack, and until the end of your next turn, all other attacks against you are made at +1 difficulty. Due to the stress of bracing, you cannot take reactions until the end of your next turn and on that turn, you can only take one quick action – you cannot OVERCHARGE, move normally, take full actions, or take free actions."
     },
     "reactionConfig": {
-      "activationManager": "Activation Manager",
+      "activationManager": "Automation Manager",
       "activations": "Activations",
       "addActivation": "Add Activation",
       "addScript": "Add Script",
       "allTriggers": "All Triggers",
+      "conflictBothFire": "Both fire",
+      "conflictFromCustom": "Custom",
+      "conflictFromDefault": "Default",
+      "conflictKeyAction": "Action",
+      "conflictKeyLid": "LID",
+      "conflictKeyName": "Name",
+      "conflictNoteAction": "All of these run when {action} is used.",
+      "conflictNoteSame": "All of these run on the same trigger.",
+      "conflicts": "Conflicts",
+      "conflictsSummary": "{conflicts} conflicts · {edited} edited defaults",
       "controls": "Controls",
       "createFolder": "Create Folder",
       "defaultActivationsFromTheRegistryClick": "Default activations from the registry. Click copy to create an editable override.",
       "defaults": "Defaults",
       "dragItemsOntoFolderHeadersTo": "Drag items onto folder headers to organize.",
+      "edit": "Edit",
       "edited": "EDITED",
+      "editedDefaults": "Edited defaults",
+      "editedDefaultsHint": "Defaults you replaced with your own version.",
       "exportPack": "Export Pack",
       "importPack": "Import Pack",
       "loadingTheWorkshop": "Loading the workshop...",
       "manageDefaultAndCustomActivationsFor": "Manage default and custom activations for checking triggers.",
       "nameDescription": "Name / Description",
       "nameLid": "Name / LID",
+      "noConflicts": "No conflicts.",
       "noCustomActivationsDefined": "No custom activations defined.",
       "noStartupScriptsDefined": "No startup scripts defined.",
       "onReady": "On Ready",
       "scriptsNote": "Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable helpers, then access them in activations via <code>api.getUserHelper(name)</code>.",
+      "showInList": "Show in list",
       "startup": "Startup",
       "triggers": "Triggers",
       "type": "Type",
@@ -2738,7 +2762,7 @@
         "name": "Ground shadow throw"
       },
       "tourMenu": {
-        "hint": "Guided walkthrough of the configuration window or the Activation Manager.",
+        "hint": "Guided walkthrough of the configuration window or the Automation Manager.",
         "label": "Start Tour",
         "name": "Configuration Tour"
       },
@@ -3253,7 +3277,7 @@
           "label": "Action FX audio"
         },
         "activationManager": {
-          "label": "Activation Manager"
+          "label": "Automation Manager"
         },
         "actorPrototypeTokenSync": {
           "label": "Actor / Prototype Token sync"
@@ -4768,7 +4792,7 @@
         "pulseARangeAroundTheShape": "Pulse a range around the shape: a manual radius, threat, sensor, max reach, or a weapon's range. <b>T</b> cycles sources, re-clicking the active one turns it off. A movement-reach toggle is here too.",
         "quickAddAManualTokenStat": "Quick-add a manual token stat bar to track anything you like.",
         "quickFullReactionProtocolMovePips": "Quick / Full / Reaction / Protocol / Move pips. Click to spend, right-click to restore; on your turn the spent slot becomes End Turn. It mirrors Lancer\\'s own action tracker, so you can disable that one in the Lancer system settings.",
-        "reOpenActivationManager": "Re-open this any time from the <b>Activation Manager</b> button in the Game Settings sidebar, under the LANCER section.",
+        "reOpenActivationManager": "Re-open this any time from the <b>Automation Manager</b> button in the Game Settings sidebar, under the LANCER section.",
         "reOpenThisAnyTimeFrom": "Re-open this any time from the <b>Lancer Automations</b> button in the Game Settings sidebar, under the LANCER section.",
         "reRunTheSetupWizardOr": "Re-run the <b>Setup Wizard</b>, or launch any tour: Token Action HUD, ruler &amp; movement, advanced measure, effect manager, automation. They can run long - start one now or come back whenever.",
         "registeringEveryPossibleStatusFromNpc": "Registering every possible status from NPC stuff is tedious and noisy on the status list. This tab lets you create temporary statuses on the fly. With my <b>temporary-custom-statuses</b> module some can be saved and reused.",
@@ -4808,7 +4832,7 @@
       "step": {
         "actionTracker": "Action Tracker",
         "actionWheel": "Action Wheel",
-        "activationManager": "Activation Manager",
+        "activationManager": "Automation Manager",
         "activations": "Activations",
         "addExtra": "Add Extra",
         "advancedMeasure": "Advanced Measure",
@@ -4848,7 +4872,7 @@
         "keyboardNavigation": "Keyboard Navigation",
         "lAMenu": "L.A Menu",
         "lancerAutomations": "Lancer Automations",
-        "lancerAutomationsActivationManager": "Lancer Automations: Activation Manager",
+        "lancerAutomationsActivationManager": "Lancer Automations: Automation Manager",
         "lancerAutomationsAddExtra": "Lancer Automations: Add Extra",
         "lancerAutomationsAdvancedMeasure": "Lancer Automations: Advanced Measure",
         "lancerAutomationsConfiguration": "Lancer Automations: Configuration",
@@ -4899,7 +4923,7 @@
       "theAdvancedMeasureToolShapesRanges": "The Advanced Measure tool: shapes, ranges, markers, and shortcuts.",
       "theGameplayToolsInsideTheToken": "The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, downtime, reserve, vote.",
       "theMovementWheelMovementTypesAnd": "The movement wheel, movement types, and the free/debug keys.",
-      "walksThroughTheActivationManagerDialog": "Walks through the Activation Manager dialog (custom activations, defaults, startup scripts).",
+      "walksThroughTheActivationManagerDialog": "Walks through the Automation Manager dialog (custom activations, defaults, startup scripts).",
       "walksThroughTheEffectManagerDialog": "Walks through the Effect Manager dialog (standard, custom, bonus, manage).",
       "walksThroughTheTokenActionHud": "Walks through the Token Action HUD on a controlled token."
     },

@@ -112,6 +112,8 @@ Subtype lists per type are in [`addGlobalBonus`](../API_EFFECTS.md#addGlobalBonu
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
 
 Immunity bonuses take these filters too, and the dialog shows a different set per subtype. Damage, resistance, crit, hit and miss get Roll Type, Items (LID) and both code fields. Effect and provoke get the code fields only. Terrain, obstacle and elevation get none. The roles are reversed: `reactorToken` is you, `target` is the other party.
+
+Reroll bonuses get Items (LID), Item ID, Condition and the Limit dropdown. Tokens, Targetter and Apply-to Condition are hidden for them, a reroll has no per-target side.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
 
 ---

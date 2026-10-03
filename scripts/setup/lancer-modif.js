@@ -64,6 +64,23 @@ async function setItemDisabled(item, disabled)
     return item.update({ 'system.disabled': disabled });
 }
 
+const CASCADEABLE_TYPES = new Set(['mech_weapon', 'mech_system', 'weapon_mod']);
+
+export function isItemCascading(item)
+{
+    return !!item?.system?.cascading;
+}
+
+export function canMarkCascading(item)
+{
+    return item?.documentName === 'Item' && CASCADEABLE_TYPES.has(item.type) && (!!item.isAI?.() || isItemCascading(item));
+}
+
+export async function setItemCascading(item, cascading)
+{
+    return item.update({ 'system.cascading': cascading });
+}
+
 // 1. Flow step: block disabled items
 
 async function checkItemDisabled(state)
@@ -184,8 +201,8 @@ function _resolveItem(el)
     }
 }
 
-/** Extend tippy context menus with "Mark Disabled / Not Disabled" for disableable items. */
-function _injectDisabledContextMenu(jHtml)
+/** Extend tippy context menus with the Disabled and Cascading toggles. */
+function _injectItemStateContextMenu(jHtml)
 {
     jHtml.find('.lancer-context-menu').each(function ()
     {
@@ -194,7 +211,9 @@ function _injectDisabledContextMenu(jHtml)
             return;
 
         const item = _resolveItem(this);
-        if (!item || !isDisableable(item))
+        const canDisable = isDisableable(item);
+        const canCascade = canMarkCascading(item);
+        if (!item || (!canDisable && !canCascade))
             return;
 
         // Wrap onShow to inject our entry each time the menu opens
@@ -212,26 +231,49 @@ function _injectDisabledContextMenu(jHtml)
                     return;
 
                 // Remove stale injection from previous render
-                content.querySelectorAll('.la-disabled-entry').forEach(el => el.remove());
+                content.querySelectorAll('.la-disabled-entry, .la-cascading-entry').forEach(el => el.remove());
 
-                const disabled = isItemDisabled(item);
-                const label = disabled ? 'Mark Not Disabled' : 'Mark Disabled';
-                const icon = disabled ? '<i class="mdi mdi-power"></i>' : '<i class="mdi mdi-power-off"></i>';
-
-                const entry = document.createElement('div');
-                entry.className = 'lancer-context-item la-disabled-entry';
-                entry.innerHTML = `${icon}${label}`;
-                entry.addEventListener('click', () =>
+                const entries = [];
+                if (canDisable)
                 {
-                    setItemDisabled(item, !disabled);
-                    instance.hide();
-                });
+                    const disabled = isItemDisabled(item);
+                    const label = disabled ? 'Mark Not Disabled' : 'Mark Disabled';
+                    const icon = disabled ? '<i class="mdi mdi-power"></i>' : '<i class="mdi mdi-power-off"></i>';
+
+                    const entry = document.createElement('div');
+                    entry.className = 'lancer-context-item la-disabled-entry';
+                    entry.innerHTML = `${icon}${label}`;
+                    entry.addEventListener('click', () =>
+                    {
+                        setItemDisabled(item, !disabled);
+                        instance.hide();
+                    });
+                    entries.push(entry);
+                }
+                if (canCascade)
+                {
+                    const cascading = isItemCascading(item);
+                    const label = localize(cascading ? 'LA.lancerModif.markNotCascading' : 'LA.lancerModif.markCascading');
+                    const entry = document.createElement('div');
+                    entry.className = 'lancer-context-item la-cascading-entry';
+                    entry.innerHTML = `<i class="la-cascading-icon"></i>${label}`;
+                    entry.addEventListener('click', () =>
+                    {
+                        setItemCascading(item, !cascading);
+                        instance.hide();
+                    });
+                    entries.push(entry);
+                }
                 // Insert after Edit entry
-                const firstEntry = content.querySelector('.lancer-context-item');
-                if (firstEntry?.nextSibling)
-                    content.insertBefore(entry, firstEntry.nextSibling);
-                else
-                    content.appendChild(entry);
+                let anchor = content.querySelector('.lancer-context-item');
+                for (const entry of entries)
+                {
+                    if (anchor?.nextSibling)
+                        content.insertBefore(entry, anchor.nextSibling);
+                    else
+                        content.appendChild(entry);
+                    anchor = entry;
+                }
             }, 0);
         };
     });
@@ -241,7 +283,7 @@ function _injectDisabledContextMenu(jHtml)
 
 export function onRenderActorSheet(app, html, _data)
 {
-    const jHtml = html instanceof $ ? html : $(html);
+    const jHtml = /** @type {JQuery} */ (html instanceof $ ? html : $(html));
     const actor = app.actor ?? app.document;
     if (!actor)
         return;
@@ -311,7 +353,60 @@ export function onRenderActorSheet(app, html, _data)
         $(this).find('.la-range, .la-damage').addClass('la-text-repcap');
     });
 
-    _injectDisabledContextMenu(jHtml);
+    // Cascading items (base sheet): the destroyed look in purple, name glitching
+    jHtml.find('.set[data-uuid]').each((_index, setEl) =>
+    {
+        const uuid = setEl.dataset.uuid;
+        if (!uuid)
+            return;
+        let item;
+        try
+        {
+            item = fromUuidSync(uuid);
+        }
+        catch
+        {
+            return;
+        }
+        if (!isItemCascading(item) || item.system?.destroyed)
+            return;
+
+        const $header = $(setEl).find('.lancer-header').first();
+        $header.addClass('la-cascading');
+        $header.find('> span').first().addClass('horus--subtle');
+        $header.find('> i, > .lancer-hit-icon > i').first().attr('class', 'la-cascading-icon');
+    });
+
+    // Cascading items (alt sheet): "CASCADING" subtitle like "DESTROYED", in purple
+    jHtml.find('[data-uuid][data-accept-types]').each((_index, cardEl) =>
+    {
+        const uuid = cardEl.dataset.uuid;
+        if (!uuid)
+            return;
+        let item;
+        try
+        {
+            item = fromUuidSync(uuid);
+        }
+        catch
+        {
+            return;
+        }
+        if (!isItemCascading(item) || item.system?.destroyed)
+            return;
+
+        const $card = $(cardEl);
+        $card.find('.la-top__span').first().removeClass('la-text-header la-text-repcap -strikethrough').addClass('la-text-cascading horus--subtle');
+        $card.find('.la-summary button i').first().removeClass('la-text-repcap').addClass('la-text-cascading');
+
+        const $subtitle = $card.find('.la-summary .la-terminaltext span').first();
+        if ($subtitle.length)
+            $subtitle.text(localize('LA.lancerModif.cascading'));
+        $card.find('.la-summary .la-terminaltext').first().removeClass('la-text-header la-prmy-header la-text-warning').addClass('la-text-cascading');
+        $card.find('.la-range, .la-damage').removeClass('la-text-repcap').addClass('la-text-cascading');
+    });
+
+    _injectItemStateContextMenu(jHtml);
     _injectAmmoDisplay(jHtml, actor);
     _injectAmmoDisplayAltSheet(jHtml, actor);
     _injectPilotStressBar(jHtml, actor);
@@ -800,6 +895,34 @@ export function injectDisabledCSS()
         }
         .lancer-header.la-disabled:hover {
             opacity: 0.7;
+        }
+        .lancer-header.la-cascading {
+            background-color: var(--weapon-color);
+        }
+        .lancer-header.la-cascading span {
+            color: #c084fc;
+        }
+        .lancer-header.la-cascading .cci,
+        .lancer-header.la-cascading .mdi,
+        .lancer-header.la-cascading .la-cascading-icon {
+            color: #a855f7;
+            margin-bottom: -2px;
+        }
+        .la-cascading-icon {
+            display: inline-block;
+            width: 1.2em;
+            height: 1em;
+            vertical-align: -0.125em;
+            background-color: currentColor;
+            -webkit-mask: url("modules/${MODULE_ID}/icons/eye-of-ra.svg") center / auto 132% no-repeat;
+            mask: url("modules/${MODULE_ID}/icons/eye-of-ra.svg") center / auto 132% no-repeat;
+        }
+        .lancer-header.la-cascading .la-cascading-icon {
+            width: 30px;
+            height: 26px;
+        }
+        .la-text-cascading {
+            color: #b46bff !important;
         }
         .la-disabled-context-menu {
             z-index: 10000;
@@ -1669,7 +1792,7 @@ export async function syncAllActorImgs()
     ui.notifications.info(localizeFormat('LA.notify.syncedPortraits', { images: imgUpdated, imagePlural: imgUpdated === 1 ? '' : 's', names: nameUpdated, namePlural: nameUpdated === 1 ? '' : 's', skipped }));
 }
 
-// Full Repair: silently drop item activations and action locks, then re-run onInit and refresh engagement.
+// Full Repair: silently drop item activations and action locks, re-run onInit, refresh engagement, then fire onFullRepair.
 Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
 {
     if (!success)
@@ -1716,4 +1839,6 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
         });
     }
     await api.updateAllEngagements?.();
+    if (token)
+        await api.handleTrigger('onFullRepair', { triggeringToken: token });
 });

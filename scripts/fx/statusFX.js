@@ -386,25 +386,26 @@ const overshieldEffect = [
 
 const cascadingEffect = [
     {
-        filterType: "pixel",
-        filterId: "cascading1",
-        sizeX: 1,
-        sizeY: 1,
-        animated: {
-            sizeX: { active: true, animType: "halfCosOscillation", loopDuration: 1500, val1: 1, val2: 3 },
-            sizeY: { active: true, animType: "halfCosOscillation", loopDuration: 1500, val1: 1, val2: 3 }
-        }
-    },
-    {
-        filterType: "bevel",
-        filterId: "cascading2",
-        rotation: 0,
-        thickness: 5,
-        lightColor: 0xFF0000,
-        lightAlpha: 0.8,
-        shadowColor: 0x00FF00,
-        shadowAlpha: 0.5,
-        animated: { rotation: { active: true, clockWise: true, loopDuration: 1600, animType: "syncRotation" } }
+        filterType: "sliceTear",
+        filterId: "CascadingTear",
+        tickRate: 15,
+        burstRate: 1.2,
+        burstChance: 0.05,
+        bands: 22,
+        tear: 0.12,
+        tearChance: 0.3,
+        split: 0.015,
+        splitWobble: 0.3,
+        splitSpeed: 0.4,
+        splitSway: 0.35,
+        blockGrid: 19,
+        blockChance: 0.04,
+        scan: 0.25,
+        glitchA: 0x9422b4,
+        glitchB: 0x9bff3a,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
     }
 ];
 
@@ -1271,7 +1272,7 @@ const EFFECT_MAP = [
     { name: 'Danger Zone', key: 'dangerZone', preset: dangerZoneEffect, filterIds: ['DangerZoneVent'], staleFilterIds: ['DangerZoneGlow', 'DangerZoneBloom'] },
     { name: 'Burn',        key: 'burn',       preset: burnEffect,       filterIds: ['BurnGlow'] },
     { name: 'Overshield',  key: 'overshield', preset: overshieldEffect, filterIds: ['OverShieldShell'], staleFilterIds: ['OverShieldGlow'] },
-    { name: 'Cascading',   key: 'cascading',  preset: cascadingEffect,  filterIds: ['cascading1', 'cascading2'] },
+    { name: 'Cascading',   key: 'cascading',  preset: cascadingEffect,  filterIds: ['CascadingTear'], staleFilterIds: ['cascading1', 'cascading2'] },
     { name: 'Invisible',   key: 'invisible',  preset: invisibleEffect,  filterIds: ['invisible'] },
     { name: 'Hidden',      key: 'hidden',     preset: hiddenEffect,     filterIds: ['hidden'] },
     { name: 'Brace',       key: 'brace',      preset: braceEffect,      filterIds: ['brace'] },
@@ -1460,7 +1461,7 @@ function blockQoLEffects()
 
 // Our filters have no TMFX Anime puppet, so TMFX would push a fresh instance on every flag write.
 // A fake puppet in the anime map satisfies the dedupe (TMFX drops it with the filter). Every LA filter type must be listed here.
-const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture', 'chromaRot', 'openSeams', 'trackingGhost', 'seamBeat', 'doubleShell', 'ventColumn', 'guidingLight', 'ablativeCrust', 'noDrift', 'shatterSeams', 'thermalSplit', 'slicePlane', 'overflowWrap', 'errorCorrection', 'coldSoak', 'ricochetLip', 'convectionChurn']);
+const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture', 'chromaRot', 'openSeams', 'trackingGhost', 'seamBeat', 'doubleShell', 'ventColumn', 'guidingLight', 'ablativeCrust', 'noDrift', 'shatterSeams', 'thermalSplit', 'slicePlane', 'overflowWrap', 'errorCorrection', 'coldSoak', 'ricochetLip', 'convectionChurn', 'sliceTear']);
 function _ensureFakePuppetsForCustomFilters(token)
 {
     const tokenMagic = /** @type {any} */ (globalThis).TokenMagic;

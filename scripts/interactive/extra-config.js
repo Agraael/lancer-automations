@@ -4,6 +4,7 @@
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
 
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 const FLAG_KEY = 'extraConfig';
 
 export const CANONICAL_TYPES = ['uses', 'loading', 'charged', 'perTurn', 'perRound', 'perScene', 'reserveUsed'];
@@ -188,9 +189,15 @@ export async function setConsumeOn(item, type, mode)
         throw new Error(`setConsumeOn: bad args '${type}' / '${mode}'`);
     const consumeOn = { ...(getExtraConfig(item)?.consumeOn ?? {}) };
     if (mode === 'auto')
-        delete consumeOn[type];
-    else
-        consumeOn[type] = mode;
+    {
+        if (type in consumeOn)
+        {
+            delete consumeOn[type];
+            await item.update({ [`flags.${MODULE_ID}.${FLAG_KEY}.consumeOn.-=${type}`]: null });
+        }
+        return consumeOn;
+    }
+    consumeOn[type] = mode;
     await configureItemExtraConfig(item, { consumeOn });
     return consumeOn;
 }
@@ -228,19 +235,19 @@ async function _applyResourceDelta(item, type, delta)
         case 'perTurn':
         {
             const cur = Number(item.system?.uses_per_turn?.value) || 0;
-            await item.update({ 'system.uses_per_turn.value': _clampAt(cur + delta, Infinity) });
+            await item.update({ 'system.uses_per_turn.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_turn?.value) || 0;
         }
         case 'perRound':
         {
             const cur = Number(item.system?.uses_per_round?.value) || 0;
-            await item.update({ 'system.uses_per_round.value': _clampAt(cur + delta, Infinity) });
+            await item.update({ 'system.uses_per_round.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_round?.value) || 0;
         }
         case 'perScene':
         {
             const cur = Number(item.system?.uses_per_scene?.value) || 0;
-            await item.update({ 'system.uses_per_scene.value': _clampAt(cur + delta, Infinity) });
+            await item.update({ 'system.uses_per_scene.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_scene?.value) || 0;
         }
         case 'reserveUsed':

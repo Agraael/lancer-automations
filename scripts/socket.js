@@ -622,7 +622,8 @@ const HANDLERS = {
     {
         if (!isExecutorGM())
             return;
-        const actor = game.actors.get(payload.actorId);
+        const tokenDoc = payload.tokenUuid ? await fromUuid(payload.tokenUuid) : null;
+        const actor = tokenDoc?.actor ?? game.actors.get(payload.actorId);
         if (actor)
             await actor.update(payload.data);
         emitAck('updateActorSystemAck', payload.requestId);
@@ -702,7 +703,7 @@ const HANDLERS = {
         const msgToken = canvas.tokens.get(payload.reactorTokenId);
         if (!msgToken)
             return emitAck('onMessageDone', payload.requestId, { returnData: null });
-        checkOnMessageReactions(msgToken, payload.itemLid ?? null, payload.reactionPath ?? null, payload.activationName ?? null, payload.triggerType, payload.data ?? {})
+        checkOnMessageReactions(msgToken, payload.itemLid ?? null, payload.reactionPath ?? null, payload.activationName ?? null, payload.triggerType, deserializeTriggerData(payload.data) ?? {})
             .then((returnData) => emitAck('onMessageDone', payload.requestId, { returnData: returnData ?? null }))
             .catch((error) =>
             {

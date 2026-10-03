@@ -1033,19 +1033,25 @@ function _gearLost(actor, events = [])
 {
     const weapons = [];
     const systems = [];
-    // Real-usage source: the actor's destroyed items.
+    const cascading = [];
+    // Real-usage source: the actor's destroyed and cascading items.
     if (actor?.items)
     {
         for (const item of actor.items)
         {
-            const destroyed = item.system?.destroyed === true || item.system?.cascading === true;
-            if (!destroyed)
-                continue;
             const itemType = item.type;
-            if (itemType === 'mech_weapon' || itemType === 'pilot_weapon' || itemType === 'npc_weapon')
-                weapons.push(String(item.name).toUpperCase());
-            else if (itemType === 'mech_system' || itemType === 'pilot_gear' || itemType === 'npc_system')
-                systems.push(String(item.name).toUpperCase());
+            const isWeapon = itemType === 'mech_weapon' || itemType === 'pilot_weapon' || itemType === 'npc_weapon';
+            const isSystem = itemType === 'mech_system' || itemType === 'pilot_gear' || itemType === 'npc_system';
+            const name = String(item.name).toUpperCase();
+            if (item.system?.destroyed === true)
+            {
+                if (isWeapon)
+                    weapons.push(name);
+                else if (isSystem)
+                    systems.push(name);
+            }
+            else if (item.system?.cascading === true && (isWeapon || isSystem || itemType === 'weapon_mod'))
+                cascading.push(name);
         }
     }
     // Mock source: gear-lost events on the combatant log.
@@ -1054,10 +1060,16 @@ function _gearLost(actor, events = [])
         if (ev.type !== 'gear-lost')
             continue;
         const name = String(ev.name ?? '').toUpperCase();
+        if (ev.state === 'cascading')
+        {
+            if (!cascading.includes(name))
+                cascading.push(name);
+            continue;
+        }
         if (ev.kind === 'weapon' && !weapons.includes(name))
             weapons.push(name);
         if (ev.kind === 'system' && !systems.includes(name))
             systems.push(name);
     }
-    return { weapons, systems };
+    return { weapons, systems, cascading };
 }

@@ -1208,6 +1208,28 @@ export function getDefaultGeneralReactionRegistry()
                 }
             }]
         },
+        "Immovable": {
+            category: "General",
+            comments: "Cancel involuntary movement on IMMOVABLE tokens",
+            triggers: ["onPreInvoluntaryMove"],
+            triggerDescription: "When a character would be moved involuntarily",
+            effectDescription: "IMMOVABLE characters cannot be moved.",
+            isReaction: false,
+            checkReaction: false,
+            autoActivate: true,
+            triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
+            evaluate: function (triggerType, triggerData, reactorToken)
+            {
+                return triggerData.triggeringToken?.id === reactorToken.id && !!reactorToken.actor?.statuses?.has('immovable');
+            },
+            ...CODE_INSTEAD,
+            activationCode: function (triggerType, triggerData, reactorToken)
+            {
+                triggerData.cancelTriggeredMove(localizeFormat('LA.notify.immovableBlocked', { name: reactorToken.name }));
+            }
+        },
         "Engagement": {
             category: "General",
             comments: "Update Engagement Status",

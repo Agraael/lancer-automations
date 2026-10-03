@@ -55,7 +55,7 @@ await api.removeExtraActions(target, filter?)      // string name, predicate, or
 | `activation` | `string` | Required. `"Quick"` / `"Full"` / `"Protocol"` / `"Reaction"` / `"Free"` / `"Quick Tech"` / `"Full Tech"` / `"Invade"` |
 | `detail` | `string` | HTML effect text |
 | `lid`, `cost`, `heat_cost`, `frequency`, `init`, `trigger`, `terse` | various | Standard `LancerAction` fields |
-| `tech_attack` | `boolean` | Routes click through `beginTechAttackFlow` |
+| `tech_attack` | `boolean` | Tech icon only. For a tech roll use `laCombat: 'attack'` with a Quick Tech, Full Tech or Invade activation |
 | `damage`, `range` | `Array<{val,type}>` | Same shape as system actions. Consumed in combat mode |
 | `tags` | `Array<{lid,val}>` | Standard Lancer tags. Weapon tags (`tg_smart` etc.) coexist with consumable tags |
 | `icon` | `string` | TAH icon override (path or FontAwesome class) |

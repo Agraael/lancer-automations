@@ -6,6 +6,7 @@ import { getLAFlag } from '../tools/flag-utils.js';
 import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
 import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
+import { MODULE_ID } from '../tools/constants.js';
 
 function _themeNameHtml()
 {
@@ -889,6 +890,7 @@ function _gearLostHtml(gear)
     const gearObj = gear && typeof gear === 'object' ? gear : {};
     const weapons = Array.isArray(gearObj.weapons) ? gearObj.weapons : (Array.isArray(gear) ? gear : []);
     const systems = Array.isArray(gearObj.systems) ? gearObj.systems : [];
+    const cascading = Array.isArray(gearObj.cascading) ? gearObj.cascading : [];
     const count = weapons.length + systems.length;
     const hasLost = count > 0;
     const groupHtml = (title, iconSvg, items) => items.length === 0 ? '' : `
@@ -913,6 +915,16 @@ function _gearLostHtml(gear)
                 </div>
             ` : ''}
         </div>
+        ${cascading.length ? `
+            <div class="battelog-pcol-gearlost battelog-pcol-gearlost--cascading has-lost" data-count="${cascading.length}">
+                <i class="la-cascading-icon"></i>
+                <span class="battelog-pcol-gearlost-label">AI CASCADING</span>
+                <span class="battelog-pcol-gearlost-count">${cascading.length}</span>
+                <div class="battelog-pcol-gearlost-tip">
+                    ${groupHtml('Cascading', `modules/${MODULE_ID}/icons/eye-of-ra.svg`, cascading)}
+                </div>
+            </div>
+        ` : ''}
     `;
 }
 

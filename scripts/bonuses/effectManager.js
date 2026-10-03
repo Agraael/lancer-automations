@@ -136,6 +136,9 @@ const IMMUNITY_FILTER_FIELDS = {
     hit:    { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
     miss:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
 };
+const BONUS_FILTER_FIELDS = {
+    reroll: { itemLids: true, itemId: true, condition: true },
+};
 
 /** Renders a code field row: preview badge + Edit/Clear buttons; code stored in a hidden input. */
 function codeFieldRow(id, label, placeholder)
@@ -558,6 +561,7 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onRoundStart', label: 'LA.effectManager.trigger.onRoundStart' },
     { value: 'onEnterCombat', label: 'LA.effectManager.trigger.onEnterCombat' },
     { value: 'onExitCombat', label: 'LA.effectManager.trigger.onExitCombat' },
+    { value: 'onFullRepair', label: 'LA.effectManager.trigger.onFullRepair' },
     { value: 'onPreStatusApplied', label: 'LA.effectManager.trigger.onPreStatusApplied' },
     { value: 'onPreStatusRemoved', label: 'LA.effectManager.trigger.onPreStatusRemoved' },
     { value: 'onStatusApplied', label: 'LA.effectManager.trigger.onStatusApplied' },
@@ -3394,6 +3398,11 @@ export async function executeEffectManager(options = {})
                 }
                 else if (type === 'reroll')
                 {
+                    for (const field of ['itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
+                    {
+                        if (!BONUS_FILTER_FIELDS.reroll[field])
+                            delete bonusData[field];
+                    }
                     const list = $('#bonus-reroll-rollTypes input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
                     if (list.length > 0)
                         bonusData.rollTypes = list;
@@ -3525,20 +3534,20 @@ export async function executeEffectManager(options = {})
                 const isImmunity = uiType === 'immunity';
                 const fields = isImmunity
                     ? (IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')] ?? {})
-                    : {};
-                const showItems = isImmunity
+                    : (BONUS_FILTER_FIELDS[uiType] ?? null);
+                const showItems = fields
                     ? Object.keys(fields).length > 0
                     : ['roll', 'damage', 'tag', 'range', 'target_modifier'].includes(uiType);
                 html.find('#bonus-items-row').toggle(showItems);
                 if (!showItems)
                     return;
-                html.find('#row-bonus-rollTypes-roll').toggle(isImmunity ? fields.rollTypes === 'roll' : uiType === 'roll');
-                html.find('#row-bonus-rollTypes-damage').toggle(isImmunity ? fields.rollTypes === 'damage' : uiType === 'damage');
-                html.find('#row-bonus-itemLids').toggle(!isImmunity || !!fields.itemLids);
-                html.find('#row-bonus-itemId').toggle(!isImmunity || !!fields.itemId);
-                html.find('#row-bonus-tokens').toggle(!isImmunity || !!fields.applyTo);
-                html.find('#bonus-condition-badge').closest('.form-group').toggle(!isImmunity || !!fields.condition);
-                html.find('#bonus-applyToCondition-badge').closest('.form-group').toggle(!isImmunity || !!fields.applyToCondition);
+                html.find('#row-bonus-rollTypes-roll').toggle(fields ? fields.rollTypes === 'roll' : uiType === 'roll');
+                html.find('#row-bonus-rollTypes-damage').toggle(fields ? fields.rollTypes === 'damage' : uiType === 'damage');
+                html.find('#row-bonus-itemLids').toggle(!fields || !!fields.itemLids);
+                html.find('#row-bonus-itemId').toggle(!fields || !!fields.itemId);
+                html.find('#row-bonus-tokens').toggle(!fields || !!fields.applyTo);
+                html.find('#bonus-condition-badge').closest('.form-group').toggle(!fields || !!fields.condition);
+                html.find('#bonus-applyToCondition-badge').closest('.form-group').toggle(!fields || !!fields.applyToCondition);
                 html.find('#bonus-condition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.conditionImmunity' : 'LA.effectManager.tip.conditionRoll'));
                 html.find('#bonus-applyToCondition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.applyToConditionImmunity' : 'LA.effectManager.tip.applyToConditionRoll'));
             };

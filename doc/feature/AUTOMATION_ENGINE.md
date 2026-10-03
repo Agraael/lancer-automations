@@ -47,9 +47,9 @@ You can't edit a built-in directly. Three ways around it:
 |------|----|
 | Turn it off | The **enable toggle**. Saved, so updates don't undo it. |
 | Change it | **Edit** it. Your version is saved over the default. |
-| Make a variant | **Copy to Custom** (copy icon on the row, Defaults tab only). Makes an editable copy and opens it. The original stays. |
+| Make a variant | **Copy to Custom** (copy icon on the row, Defaults tab only). Opens the built-in in the editor. Saving writes an override under the same name that replaces the built-in until you delete it. For a separate variant, rename a general activation before saving. |
 
-To replace a built-in: copy it, edit the copy, disable the original.
+To replace a built-in: Copy to Custom, edit, save. The enable toggle then acts on your override.
 
 All of this is saved in your world, not the module, so updates never overwrite it. **Export / Import** moves it to another world.
 

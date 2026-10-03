@@ -2814,16 +2814,19 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
 
     const allLids = [];
     let totalCount = 0;
+    let hasCountOverride = false;
 
     // First range wins, counts sum. Per-deployable extra opts are the next fallback.
     let rangeOpt = null;
-    for (let i = 0; i < deployablesArray.length; i++)
+    for (let lidIdx = 0; lidIdx < deployablesArray.length; lidIdx++)
     {
-        const lid = deployablesArray[i];
-        const idxOpts = deployableOptions[i] || {};
+        const lid = deployablesArray[lidIdx];
+        const idxOpts = deployableOptions[lidIdx] || {};
         const extraOpts = getExtraDeployableOpts(item, lid) || {};
-        const depCount = idxOpts.count ?? extraOpts.count ?? 1;
-        totalCount += depCount;
+        const depCount = idxOpts.count ?? extraOpts.count;
+        if (depCount !== undefined)
+            hasCountOverride = true;
+        totalCount += depCount ?? 1;
         const effectiveRange = idxOpts.range !== undefined ? idxOpts.range : extraOpts.range;
         if (effectiveRange !== undefined && rangeOpt === null)
             rangeOpt = effectiveRange;
@@ -2836,6 +2839,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
         systemItem: item,
         consumeUse: hasUses,
         range: rangeOpt,
+        count: hasCountOverride ? totalCount : undefined,
         title: item.name,
         description: ""
     });
@@ -3392,6 +3396,10 @@ export function pickItem(items, options = {})
             choices: choices,
             icon: options.icon || "fas fa-box",
             relatedToken: options.relatedToken ?? null
+        }).then(result =>
+        {
+            if (!result)
+                resolve(null);
         });
     });
 }

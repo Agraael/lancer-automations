@@ -7,7 +7,6 @@ import {
     getInRangeOffsets, isPositionInRange, neighborKeys
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
-import { localizeFormat } from "../tools/string-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID, LOS_TARGET_ABOVE } from "../tools/constants.js";
 import { hasLineOfSight, makeSkimRayCaster, getEyeWallSegments, makeEyeSolidTester, lancerSightEdgeRecords, makeCellRayCaster } from "../vision/lancerDetectionModes.js";
@@ -2847,31 +2846,31 @@ export function cancelRulerDrag(token, _moveInfo = null)
  * Apply pre-resolved knockback moves.
  * Used by knockBackToken (after the destination picker resolves) and the socket handler.
  * @param {Array<{tokenId: string, updateData: {x: number, y: number, elevation?: number, waypoints?: Array<object>}}>} moveList - Per-token resolved destinations.
- * @param {Token|null} triggeringToken - Token that caused the knockback. Required for `triggerSelf` reactions; warns when null.
- * @param {number} distance - Max knockback distance in grid units (used by the `onInvoluntaryMove` trigger).
+ * @param {Token|null} triggeringToken - Token that caused the knockback, passed as `sourceToken` to the involuntary move triggers.
+ * @param {number} distance - Max knockback distance in grid units.
  * @param {string} [actionName=""] - Name of the action that produced the knockback.
  * @param {Item} [item=null] - Source item, if any.
  * @param {Object} [options]
- * @param {boolean} [options.asVoluntary=false] - If true, skip the `onInvoluntaryMove` trigger and the
- *   `action: 'forced'` move flag (treat the displacement as a voluntary move).
+ * @param {boolean} [options.asVoluntary=false] - If true, skip the `action: 'forced'` move flag, so no
+ *   involuntary move trigger fires (treat the displacement as a voluntary move).
  * @param {boolean} [options.setElevation=false] - If true (and Terrain Height Tools is active), snap each
  *   token to the max solid-terrain height under its destination footprint. Off by default.
  * @returns {Promise<void>}
  */
 export async function applyKnockbackMoves(moveList, triggeringToken, distance, actionName = "", item = null, options = {})
 {
-    if (!triggeringToken)
-        console.warn("lancer-automations | applyKnockbackMoves called without a triggeringToken. Reactions using triggerSelf will not work correctly.");
-
     const asVoluntary = !!options.asVoluntary;
     const setElevation = !!options.setElevation;
-    const api = game.modules.get(MODULE_ID).api;
 
     const extraOpts = {
         ignoreMovementCap: true,
         _skipBoostOffer: true,
         useRuler: true,
-        constrainOptions: { ignoreWalls: true, ignoreCost: true }
+        constrainOptions: { ignoreWalls: true, ignoreCost: true },
+        lancerInvoluntarySourceId: triggeringToken?.id ?? null,
+        lancerInvoluntaryActionName: actionName,
+        lancerInvoluntaryItemUuid: item?.uuid ?? null,
+        ...(asVoluntary ? { isDrag: true, lancerFreeMovement: true } : {})
     };
 
     const terrainAPI = globalThis.terrainHeightTools;
@@ -2882,31 +2881,6 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         const token = canvas.tokens.get(tokenId);
         if (!token)
             continue;
-
-        if (!asVoluntary)
-        {
-            let cancelled = false;
-            const cancel = (reason) =>
-            {
-                cancelled = true;
-                if (reason)
-                    ui.notifications.info(reason);
-            };
-            await api.handleTrigger('onInvoluntaryMove', {
-                triggeringToken,
-                token,
-                distance,
-                actionName,
-                item,
-                destination: { x: updateData.x, y: updateData.y },
-                cancel
-            });
-            if (cancelled)
-                continue;
-        }
-
-        if (token.actor?.statuses?.has?.('immovable'))
-            ui.notifications.warn(localizeFormat('LA.notify.immovableMovedAnyway', { name: token.name }));
 
         const dest = { x: updateData.x, y: updateData.y };
         if (!asVoluntary)

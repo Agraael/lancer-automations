@@ -88,6 +88,14 @@ export function floatDragFeedback(text)
     }
 }
 
+function holdKeyFeedback(labelKey)
+{
+    if (!canvas?.tokens?.preview?.children?.length)
+        return;
+    playUiSound('toggle');
+    floatDragFeedback(localize(labelKey));
+}
+
 function refreshActiveDragPreviews({ replan = false } = {})
 {
     for (const token of canvas.tokens?.placeables ?? [])
@@ -129,11 +137,11 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyV' }],
         onDown: () =>
         {
-            _forceFree = true; refreshActiveDragPreviews(); return true;
+            _forceFree = true; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOn'); return true;
         },
         onUp:   () =>
         {
-            _forceFree = false; refreshActiveDragPreviews(); return true;
+            _forceFree = false; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOff'); return true;
         },
         repeat: false,
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
@@ -145,11 +153,11 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyB' }],
         onDown: () =>
         {
-            _forceDebug = true; refreshActiveDragPreviews(); return true;
+            _forceDebug = true; refreshActiveDragPreviews({ replan: true }); holdKeyFeedback('LA.dragFeedback.debugOn'); return true;
         },
         onUp:   () =>
         {
-            _forceDebug = false; refreshActiveDragPreviews(); return true;
+            _forceDebug = false; refreshActiveDragPreviews({ replan: true }); holdKeyFeedback('LA.dragFeedback.debugOff'); return true;
         },
         repeat: false,
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY

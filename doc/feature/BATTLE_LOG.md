@@ -24,11 +24,21 @@ When a combat ends, the GM gets a card first. Pick the outcome, **SUCCESS**, **P
 
 ## A word on accuracy
 
-The log relies entirely on Foundry's encounter system: the combat, its rounds, and its turns. A token outside the encounter is not tracked, and skipping rounds or turns throws off the per-round stats and the telemetry charts.
+It is not magic. The log relies entirely on Foundry's encounter system: the combat, its rounds, and its turns. For it to see anything you need to:
+
+- put every token in the encounter, players included
+- start the combat
+- advance rounds and turns as you play
+
+A token outside the encounter is not tracked, and skipping rounds or turns throws off the per-round stats and the telemetry charts.
 
 Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item the moment it hits the chat. That is what it reads as "used."
 
 Past that it tracks kills, assists, accuracy, damage, movement, and saves, per token, so every grunt in a squad gets its own line. An assist is a hit or damage you landed on an enemy someone else finished off: the last blow is the kill and everyone else who hurt it gets the assist.
+
+Anything done by hand is invisible to it. HP edited on the sheet has no source, so nobody gets credit for that damage. A mech only counts as destroyed when it loses its last structure or stress through the roll, or gets deleted at 0. Toggling a destroyed status yourself does nothing.
+
+To see what was actually recorded, hit **Telemetry debug** in the Battle Log tab. It lists every tracked token, puts a skull on the destroyed ones, and shows the event feed round by round.
 
 ---
 

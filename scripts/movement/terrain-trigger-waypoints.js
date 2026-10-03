@@ -3,7 +3,7 @@
 import { getSpeedRanges } from '../combat/speed-provider.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { computeMovementRoute } from './reachability.js';
-import { pathfindDragEnabled } from './keybindings.js';
+import { pathfindDragEnabled, isForceDebugMovement } from './keybindings.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
@@ -178,6 +178,8 @@ let _patchDetected = false;
 
 function _injectSilents(doc, context, { triggerOn = true, tierOn = false } = {})
 {
+    if (isForceDebugMovement())
+        return;
     if (!Array.isArray(context?.foundPath) || context.foundPath.length < 2)
         return;
     if (context.foundPath.some(/** @type {any} */ (wp) => wp?._laSilent))

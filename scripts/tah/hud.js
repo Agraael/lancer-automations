@@ -1514,11 +1514,11 @@ export class LancerHUD
 
     // Item-building helpers
 
-    /** Returns a status-kind marker for destroyed/unavailable items. The renderer maps it to a striped style. */
+    /** Returns a status-kind marker for destroyed/cascading/unavailable items. The renderer maps it to a striped style. */
     _statusColors(/** @type {any} */ status)
     {
         return {
-            statusKind: status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null,
+            statusKind: status.destroyed ? 'destroyed' : status.cascading ? 'cascading' : status.unavailable ? 'unavailable' : null,
         };
     }
 
@@ -1537,9 +1537,14 @@ export class LancerHUD
         const { label, icon = null, action = null, category, badge, badgeColor, statusKind, hoverExtra, ...rest } = opts;
         const status = getItemStatus(item, action ?? undefined);
         const base = label ?? item?.name;
+        let rowLabel = base;
+        if (status.destroyed)
+            rowLabel = this._destroyedLabel(base);
+        else if (status.cascading)
+            rowLabel = this._cascadingLabel(base);
         return {
             ...rest,
-            label: status.destroyed ? this._destroyedLabel(base) : base,
+            label: rowLabel,
             icon,
             badge: badge !== undefined ? badge : (status.badge ?? null),
             badgeColor: badgeColor !== undefined ? badgeColor : (status.badgeColor ?? null),
@@ -6040,6 +6045,11 @@ export class LancerHUD
     _destroyedLabel(name)
     {
         return `<s class="horus--subtle" style="opacity:0.7;color:#e50000;">${name}</s>`;
+    }
+
+    _cascadingLabel(name)
+    {
+        return `<span class="horus--subtle" style="color:#c084fc;">${name}</span>`;
     }
 
     /** Build the invade popup body + subtitle and open it. */

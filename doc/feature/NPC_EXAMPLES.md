@@ -63,6 +63,7 @@ const npcInsulatedBonus = {
     reactions: [{
         triggers: ["onActivation"],
         triggerSelf: true,
+        triggerOther: false,
         actionType: "Quick Action",
         onlyOnSourceMatch: true,
         autoActivate: true,
@@ -83,7 +84,7 @@ const npcInsulatedBonus = {
 <img src="../img/npc-smoke-zone.png" width="53%"/>
 
 > [!TIP]
-> The simplest active automation: `onActivation` + `onlyOnSourceMatch` + `autoActivate`, then one call to `placeZone`. `onlyOnSourceMatch` is what keeps it firing for this feature only and not for every action the NPC takes. The `statusEffects` array applies those effects to any token inside the zone automatically.
+> The simplest active automation: `onActivation` + `onlyOnSourceMatch` + `autoActivate`, then one call to `placeZone`. `onlyOnSourceMatch` scopes it to this feature, `triggerOther: false` scopes it to the acting token (unlinked copies of one NPC share item ids, so without it every copy on the scene fires). The `statusEffects` array applies those effects to any token inside the zone automatically.
 >
 > There is no `usesPerRound` field on a reaction config, the engine never reads one. To limit a feature per round, either put a `tg_round` tag on the item and leave `checkUsage` on, or open `activationCode` with `if (!await api.consumeOncePerRound(reactorToken, 'my_key')) return;`. It has to go in `activationCode`, not `evaluate`, because `evaluate` must stay synchronous.
 
@@ -105,6 +106,7 @@ const veterancyVeteranAutomation = {
     reactions: [{
         triggers: ["onEnterCombat"],
         triggerSelf: true,
+        triggerOther: false,
         autoActivate: true,
         activationType: "code",
         activationMode: "instead",
@@ -133,6 +135,7 @@ const veterancyVeteranAutomation = {
     }, {
         triggers: ["onExitCombat"],
         triggerSelf: true,
+        triggerOther: false,
         autoActivate: true,
         activationType: "code",
         activationMode: "instead",
@@ -162,6 +165,7 @@ const veterancyVeteranAutomation = {
     reactions: [{
         triggers: ["onActivation"],
         triggerSelf: true,
+        triggerOther: false,
         actionType: "Quick Action",
         onlyOnSourceMatch: true,
         autoActivate: true,
@@ -216,6 +220,7 @@ const veterancyVeteranAutomation = {
     reactions: [{
         triggers: ["onActivation"],
         triggerSelf: true,
+        triggerOther: false,
         actionType: "Quick Action",
         onlyOnSourceMatch: true,
         autoActivate: true,
@@ -286,7 +291,7 @@ const movingTargetSniperAutomation = {
             };
             const postChoice = async (chose) => {
                 if (chose || !responderIds.length) return;
-                await triggerData.sendMessageToReactor({ moverTokenId: mover.id }, responderIds[0], {
+                await triggerData.sendMessageToReactor({ mover }, responderIds[0], {
                     wait: true,
                     waitTitle: "MOVING TARGET",
                     waitDescription: `Waiting for ${reactorToken.name}'s player to fire...`,
@@ -300,7 +305,7 @@ const movingTargetSniperAutomation = {
             );
         },
         onMessage: async function (triggerType, data, reactorToken, item, activationName, api) {
-            const mover = canvas.tokens.get(data.moverTokenId) ?? null;
+            const mover = data.mover ?? null;
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle) return;
             await api.attackWith(rifle, mover ? [mover] : null);
@@ -312,7 +317,7 @@ const movingTargetSniperAutomation = {
 > [!TIP]
 > The classic interrupt. `triggerOther: true` with `triggerSelf: false` means it reacts to others moving, not to itself. `onPreMove` fires before the move runs, so `cancelTriggeredMove` has to be called before the first `await`, which is exactly what happens here: everything async lives in `preConfirm` and `postChoice`, which run after the cancel has already stuck. Setting `awaitActivationCompletion` would change nothing on this trigger, see [Automation System](../AUTOMATION_SYSTEM.md#the-synchronous-rule).
 >
-> `preConfirm` asks the sniper's player whether to interrupt, and fires the rifle through `startRelatedFlowToReactor` if they say yes. `postChoice` covers the other branch: the mover's player overrode the interrupt (`chose === false`, the move goes through), and the sniper still gets its shot. That branch delegates through `sendMessageToReactor`, which is what puts `data.moverTokenId` on the `onMessage` handler below. Drop the send and `onMessage` never fires.
+> `preConfirm` asks the sniper's player whether to interrupt, and fires the rifle through `startRelatedFlowToReactor` if they say yes. `postChoice` covers the other branch: the mover's player overrode the interrupt (`chose === false`, the move goes through), and the sniper still gets its shot. That branch delegates through `sendMessageToReactor`, which is what puts `data.mover` on the `onMessage` handler below, as a live Token on the sniper player's client. Drop the send and `onMessage` never fires.
 >
 > The rifle is checked before any card goes out, so an unloaded sniper reloads and leaves the movement alone instead of interrupting it only to find there is nothing to fire. Note `setItemResource` rather than `reloadOneWeapon`: the latter asks which weapon to reload, which would be another prompt. Once the sniper's player has committed to the interrupt, the shot needs no second confirmation, so `onMessage` goes straight to `attackWith`.
 
@@ -331,6 +336,7 @@ const restockDroneSupportAutomation = {
     reactions: [{
         triggers: ["onDeploy"],
         triggerSelf: true,
+        triggerOther: false,
         onlyOnSourceMatch: true,
         outOfCombat: true,
         autoActivate: true,
@@ -346,6 +352,7 @@ const restockDroneSupportAutomation = {
                 shape: { type: "cylinder", radius: 1 },
                 macros: [{
                     mode: "ENTER",
+                    scope: { healAmount },
                     function: async (token, parent, aura, options) => {
                         const lancerApi = game.modules.get('lancer-automations')?.api;
                         if (!lancerApi || !options.hasEntered) return;
@@ -412,6 +419,7 @@ function buildDefenseNetAutomation(radius, isRebake = false) {
             actionType: "Full Action",
             onlyOnSourceMatch: true,
             triggerSelf: true,
+            triggerOther: false,
             autoActivate: true,
             outOfCombat: true,
             activationType: "code",
@@ -435,6 +443,8 @@ function buildDefenseNetAutomation(radius, isRebake = false) {
         {
             triggers: ["onStatusApplied"],
             triggerSelf: true,
+            triggerOther: false,
+            outOfCombat: true,
             autoActivate: true,
             activationType: "code",
             activationMode: "instead",

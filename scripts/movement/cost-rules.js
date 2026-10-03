@@ -603,7 +603,7 @@ function applyGridlessCost(tokenDoc, inputWaypoints, result)
         let climbMalus = noClimbMalus ? 0 : Math.max(0, vertical - sceneDistance);
 
         const { base: segBase, free: segFree } = parseAction(toWp.action);
-        const forcedSeg = segBase === 'forced';
+        const forcedSeg = segBase === 'forced' || segBase === 'displace';
         const jumpingSeg = segBase === 'jump' || (segBase == null && dragType === 'jump');
         let segCost = horizontal + vertical + penaltyCost + climbMalus;
         let segVertical = vertical;
@@ -1022,7 +1022,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
         else
             segCost = horizontalCost + verticalCost + terrainCost + malus;
 
-        const forcedSeg = segAction === 'forced';
+        const forcedSeg = segAction === 'forced' || segAction === 'displace';
         if (forcedSeg || segFree || freeMode)
         {
             segCost = 0;

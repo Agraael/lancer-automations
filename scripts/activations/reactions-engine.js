@@ -20,7 +20,7 @@ let cachedFlatGeneralReactions = null;
 const cachedNonActionReactionsByTrigger = new Map();
 /** @type {Map<string, Array>} triggerType to general reactions with sceneReactor on, evaluated once as the scene */
 const cachedSceneReactionsByTrigger = new Map();
-const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart']);
+const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart', 'onFullRepair']);
 // Custom triggers are fired on purpose by their caller, who owns the combat gating.
 const firesRegardlessOfCombat = triggerType => COMBAT_INHERENT_TRIGGERS.has(triggerType) || !BUILT_IN_TRIGGERS.has(triggerType);
 const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "weapon_mod", "npc_feature", "pilot_gear", "talent", "bond"]);
@@ -352,13 +352,15 @@ export async function checkOnMessageReactions(token, itemLid, reactionPath, acti
                 continue;
             try
             {
+                let result;
                 if (typeof reaction.onMessage === 'function')
-                    await reaction.onMessage(triggerType, data, token, null, activationName, api);
+                    result = await reaction.onMessage(triggerType, data, token, null, activationName, api);
                 else if (typeof reaction.onMessage === 'string' && reaction.onMessage.trim())
                 {
                     const fn = stringToAsyncFunction(reaction.onMessage, ["triggerType", "data", "reactorToken", "item", "activationName", "api"], `${name}/onMessage`);
-                    await fn(triggerType, data, token, null, activationName, api);
+                    result = await fn(triggerType, data, token, null, activationName, api);
                 }
+                return result;
             }
             catch (error)
             {
@@ -597,10 +599,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
         {
             const ownerIds = getTokenOwnerUserId(token);
             if (ownerIds.includes(game.user.id))
-            {
-                await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
-                return;
-            }
+                return await checkOnMessageReactions(token, itemLid, reactionPath, activationName, triggerType, data);
             targetUserId = ownerIds.at(0) ?? null;
             console.warn(`lancer-automations | sendMessageToReactor: no userId provided, falling back to token owner "${targetUserId}" for ${token.name}.`);
         }
@@ -609,7 +608,7 @@ function _buildSendMessageToReactor(token, item, reactionPath, activationName, t
         const requestId = wait ? `omsg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` : null;
         game.socket.emit('module.lancer-automations', {
             action: 'onMessage',
-            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, triggerType, data, requestId }
+            payload: { userId: targetUserId, reactorTokenId: token.id, itemLid, reactionPath, activationName, triggerType, data: serializeTriggerData(data), requestId }
         });
         if (wait && requestId)
         {
@@ -750,7 +749,7 @@ function _buildStartRelatedFlowToReactor(token, item, reaction, activationName)
 
 // Cancellable: autoActivate fires sequentially, the first cancel triggers a redo with _cancelledBy set.
 const CANCELLABLE_TRIGGERS = new Set([
-    'onPreMove', 'onPreStructure', 'onPreStress',
+    'onPreMove', 'onPreInvoluntaryMove', 'onPreStructure', 'onPreStress',
     'onPreStatusApplied', 'onPreStatusRemoved',
     'onPreHpChange', 'onPreHeatChange',
 ]);
@@ -798,14 +797,11 @@ async function checkReactions(triggerType, data)
 
     const flatGeneralReactions = getFlatGeneralReactions();
 
-    let actionBasedReaction = null;
-    if (data.actionName)
-    {
-        const found = flatGeneralReactions.find(([name, reaction]) =>
-            name === data.actionName && reaction.onlyOnSourceMatch && reaction.triggers?.includes(triggerType));
-        if (found)
-            actionBasedReaction = { name: found[0], reaction: found[1] };
-    }
+    const actionBasedReactions = data.actionName
+        ? flatGeneralReactions.filter(([name, reaction]) =>
+            name === data.actionName && reaction.onlyOnSourceMatch && reaction.triggers?.includes(triggerType)
+            && reaction.enabled !== false && onViewedScene(reaction))
+        : [];
 
     if (!cachedNonActionReactionsByTrigger.has(triggerType))
     {
@@ -818,7 +814,7 @@ async function checkReactions(triggerType, data)
             if (reaction.enabled === false)
                 continue;
             const sceneMode = sceneReactorMode(reaction);
-            // onlyOnSourceMatch entries reach the scene pass through actionBasedReaction.
+            // onlyOnSourceMatch entries reach the scene pass through actionBasedReactions.
             if (sceneMode !== 'off' && !reaction.onlyOnSourceMatch)
                 sceneFiltered.push([reactionName, reaction]);
             if (reaction.onlyOnSourceMatch || sceneMode === 'only')
@@ -829,9 +825,6 @@ async function checkReactions(triggerType, data)
         cachedSceneReactionsByTrigger.set(triggerType, sceneFiltered);
     }
     const nonActionBasedReactions = cachedNonActionReactionsByTrigger.get(triggerType);
-
-    const hasValidActionBasedReaction = actionBasedReaction &&
-        actionBasedReaction.reaction.enabled !== false && onViewedScene(actionBasedReaction.reaction);
 
     const triggeringTokenHidden = !!data.triggeringToken?.document?.hidden;
 
@@ -850,8 +843,7 @@ async function checkReactions(triggerType, data)
     if (game.user.isGM && canvas.scene)
     {
         sceneCandidates.push(...cachedSceneReactionsByTrigger.get(triggerType).filter(([, reaction]) => onViewedScene(reaction)));
-        if (hasValidActionBasedReaction && sceneReactorMode(actionBasedReaction.reaction) !== 'off')
-            sceneCandidates.push([actionBasedReaction.name, actionBasedReaction.reaction]);
+        sceneCandidates.push(...actionBasedReactions.filter(([, reaction]) => sceneReactorMode(reaction) !== 'off'));
     }
     const sceneReactor = sceneCandidates.length > 0 ? makeSceneReactor(canvas.scene) : null;
     for (const [reactionName, reaction] of sceneCandidates)
@@ -1251,10 +1243,10 @@ async function checkReactions(triggerType, data)
             }
         }
 
-        if (hasValidActionBasedReaction && sceneReactorMode(actionBasedReaction.reaction) !== 'only')
+        for (const [reactionName, reaction] of actionBasedReactions)
         {
-            const reactionName = actionBasedReaction.name;
-            const reaction = actionBasedReaction.reaction;
+            if (sceneReactorMode(reaction) === 'only')
+                continue;
             const enrichedData = evaluateGeneralReaction(reactionName, reaction, triggerType, data, token, isSelf, isTarget, isInCombat);
             if (enrichedData)
             {

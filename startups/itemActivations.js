@@ -318,7 +318,7 @@ const movingTargetSniperAutomation = {
             {
                 if (!chose && preConfirmResponderIds.length > 0)
                 {
-                    await (/** @type {any} */(triggerData.sendMessageToReactor))({ moverTokenId: mover.id }, preConfirmResponderIds[0], {
+                    await triggerData.sendMessageToReactor({ mover }, preConfirmResponderIds[0], {
                         wait: true,
                         waitTitle: "MOVING TARGET",
                         waitDescription: `Waiting for <b>${reactorToken.name}</b>'s player to fire…`,
@@ -339,7 +339,7 @@ const movingTargetSniperAutomation = {
         },
         onMessage: async function (triggerType, data, reactorToken, item, activationName, api)
         {
-            const mover = canvas.tokens.get(data.moverTokenId) ?? null;
+            const mover = data.mover ?? null;
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle)
             {
@@ -2581,7 +2581,7 @@ const squadStrengthInNumbersAutomation = {
             }
         },
         {
-            triggers: ["onInvoluntaryMove"],
+            triggers: ["onPreInvoluntaryMove"],
             triggerSelf: true,
             triggerOther: false,
             autoActivate: true,
@@ -2592,11 +2592,11 @@ const squadStrengthInNumbersAutomation = {
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken)
             {
-                return triggerData.token?.id === reactorToken.id;
+                return triggerData.triggeringToken?.id === reactorToken.id;
             },
             activationCode: function (triggerType, triggerData, reactorToken)
             {
-                triggerData.cancel(`${reactorToken.name} is immune to Knockback.`);
+                triggerData.cancelTriggeredMove(`${reactorToken.name} is immune to Knockback.`);
             }
         },
         {
@@ -2715,7 +2715,7 @@ const heavyFrameAutomation = {
     itemType: "npc_feature",
     reactions: [
         {
-            triggers: ["onInvoluntaryMove"],
+            triggers: ["onPreInvoluntaryMove"],
             triggerSelf: true,
             triggerOther: false,
             autoActivate: true,
@@ -2726,15 +2726,15 @@ const heavyFrameAutomation = {
             activationMode: "instead",
             evaluate: function (triggerType, triggerData, reactorToken)
             {
-                if (triggerData.token?.id !== reactorToken.id)
+                if (triggerData.triggeringToken?.id !== reactorToken.id)
                     return false;
-                const moverSize = triggerData.triggeringToken?.actor?.system?.size;
+                const moverSize = triggerData.sourceToken?.actor?.system?.size;
                 const ownSize = reactorToken.actor?.system?.size;
                 return Number.isFinite(moverSize) && Number.isFinite(ownSize) && moverSize < ownSize;
             },
             activationCode: function (triggerType, triggerData, reactorToken)
             {
-                triggerData.cancel(`${reactorToken.name} has Heavy Frame and cannot be moved by a smaller actor.`);
+                triggerData.cancelTriggeredMove(`${reactorToken.name} has Heavy Frame and cannot be moved by a smaller actor.`);
             }
         },
         {
@@ -5418,13 +5418,13 @@ api.registerDefaultItemReactions({
                     return;
 
                 const targetOwnerId = api.getTokenOwnerUserId(reactorToken)?.[0];
-                const result = /** @type {any} */(await (/** @type {any} */(triggerData.sendMessageToReactor))({}, targetOwnerId, {
+                const result = await triggerData.sendMessageToReactor({}, targetOwnerId, {
                     wait: true,
                     waitTitle: "LIGHTNING REFLEXES",
                     waitDescription: `Waiting for <b>${reactorToken.name}</b>'s player to roll…`,
                     waitItem: item,
                     waitOriginToken: reactorToken,
-                }));
+                });
                 if (result?.hitImmune)
                 {
                     api.injectBonusToFlowState(triggerData.flowState, {
@@ -6771,6 +6771,42 @@ api.registerDefaultItemReactions({
                     },
                     addOptions: { duration: 'constant' }
                 });
+            }
+        }]
+    },
+
+    "t_leader": {
+        category: "PILOT (LaSossis)",
+        itemType: "talent",
+        reactions: [{
+            name: "Leadership Dice",
+            triggers: [],
+            triggerSelf: false,
+            triggerOther: false,
+            outOfCombat: true,
+            autoActivate: false,
+            activationType: "none",
+            onInit: async function (token, item, api)
+            {
+                const rank = Math.min(3, Math.max(1, item.system.curr_rank ?? 1));
+                const max = [3, 5, 6][rank - 1];
+                const ranks = item.system.ranks ?? [];
+                for (let rankIdx = 0; rankIdx < ranks.length; rankIdx++)
+                {
+                    const counters = ranks[rankIdx]?.counters ?? [];
+                    const cidx = counters.findIndex(counter => counter.lid === "ctr_leader");
+                    if (cidx < 0)
+                        continue;
+                    const counter = counters[cidx];
+                    const value = Math.min(counter.value ?? 0, max);
+                    if (counter.max === max && counter.value === value)
+                        return;
+                    await item.update({
+                        [`system.ranks.${rankIdx}.counters.${cidx}.max`]: max,
+                        [`system.ranks.${rankIdx}.counters.${cidx}.value`]: value
+                    });
+                    return;
+                }
             }
         }]
     }

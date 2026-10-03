@@ -509,7 +509,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                         const state = getGrappleState(reactorToken);
                         if (!state.grapplerIds?.length && !state.grappledIds?.length)
                             return false;
-                        return triggerData.token?.id === reactorToken.id;
+                        return triggerData.triggeringToken?.id === reactorToken.id;
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {

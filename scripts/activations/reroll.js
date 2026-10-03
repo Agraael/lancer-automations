@@ -2,6 +2,7 @@
 
 import { MODULE_ID } from '../tools/constants.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { isBonusApplicable, burnBonusFrequency } from '../bonuses/genericBonuses.js';
 
 const _clone = (value) => (typeof foundry?.utils?.deepClone === 'function' ? foundry.utils.deepClone(value) : JSON.parse(JSON.stringify(value ?? null)));
 const _snapshotAttackLike = (state) => ({
@@ -431,7 +432,8 @@ async function applyBonusRerolls(state, rollType, def)
         ...globals.map(bonus => ({ bonus, source: 'global' })),
         ...constants.map(bonus => ({ bonus, source: 'constant' }))
     ].filter(({ bonus }) => bonus.type === 'reroll'
-        && (!bonus.rollTypes || bonus.rollTypes.length === 0 || bonus.rollTypes.includes(rollType)));
+        && (!bonus.rollTypes || bonus.rollTypes.length === 0 || bonus.rollTypes.includes(rollType))
+        && isBonusApplicable({ ...bonus, rollTypes: null }, new Set(['all']), state));
 
     candidates.sort((left, right) =>
         _SUBTYPE_PRIORITY[_normalizeSubtype(left.bonus.subtype)] - _SUBTYPE_PRIORITY[_normalizeSubtype(right.bonus.subtype)]);
@@ -489,6 +491,7 @@ async function applyBonusRerolls(state, rollType, def)
 
     for (const { bonus } of consumed)
     {
+        await burnBonusFrequency(bonus, state);
         if (!bonus.id || bonus.consumeOnUsage === false)
             continue;
         await api.consumeBonusUse?.(actor, bonus, { removeWhenNoUses: true });

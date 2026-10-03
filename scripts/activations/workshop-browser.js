@@ -372,7 +372,7 @@ async function importAutomationPayload(json, workshopId)
         if (!placed)
         {
             if (!items[lid])
-                items[lid] = { itemType: 'any', reactions: [] };
+                items[lid] = ReactionManager.newSavedItemEntry(lid);
             items[lid].reactions.push(newReaction);
         }
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, items);
@@ -418,7 +418,7 @@ async function importPackEntry(entry)
             }
         }
         if (!items[entry.key])
-            items[entry.key] = { itemType: entry.group?.itemType || 'any', reactions: [] };
+            items[entry.key] = ReactionManager.newSavedItemEntry(entry.key, entry.group?.itemType || 'any');
         for (const reaction of (entry.group?.reactions || []))
             items[entry.key].reactions.push({ ...reaction, workshopId: entry.workshopId });
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, items);

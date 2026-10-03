@@ -68,9 +68,9 @@ function resolveActionScope(item, action, subKey = null)
 
 /**
  * Availability status of a Lancer item or standalone action object, for HUD badge display.
- * Checks loading, recharge, limited uses, disabled, and destroyed.
+ * Checks loading, recharge, limited uses, disabled, destroyed, and cascading.
  * @param {Item|object} itemOrAction
- * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, destroyed: boolean }}
+ * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, destroyed: boolean, cascading: boolean }}
  */
 export function getItemStatus(itemOrAction, extraAction = null, { subKey = null } = {})
 {
@@ -80,6 +80,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
 
     let unavailable = !!(sys.disabled);
     const destroyed = !!(sys.destroyed);
+    const cascading = !!(sys.cascading);
     const parts = [];
     let badgeColor = '#3a9e6e'; // green = ready
 
@@ -183,7 +184,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         pushUses(extraAction.uses);
 
     const badge = parts.length ? parts.join(' ') : null;
-    return { labelPrefix: '', badge, badgeColor, unavailable, destroyed };
+    return { labelPrefix: '', badge, badgeColor, unavailable, destroyed, cascading };
 }
 
 export function isWhiteIcon(icon)
@@ -216,7 +217,7 @@ export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
     return `<i class="${icon} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
 }
 
-/** Stripe palette for blocked / destroyed / unavailable rows. */
+/** Stripe palette for blocked / destroyed / cascading / unavailable rows. */
 export function laHudStripeStyle(item)
 {
     if (item.stripeStyle)
@@ -247,6 +248,16 @@ export function laHudStripeStyle(item)
             border: '#a04444',
             color: '#e0b0b0',
             hoverColor: '#f0c8c8'
+        };
+    }
+    if (item.statusKind === 'cascading')
+    {
+        return {
+            bg: 'repeating-linear-gradient(45deg, #3f2259 0 6px, #331b49 6px 12px)',
+            hoverBg: 'repeating-linear-gradient(45deg, #573078 0 6px, #482866 6px 12px)',
+            border: '#8b4fd6',
+            color: '#dcc4f5',
+            hoverColor: '#ecdcff'
         };
     }
     if (item.statusKind === 'unavailable')
@@ -391,7 +402,7 @@ export function laHudItemChildren(item, opts = {})
                 icon: getActivationIcon(action),
                 badge: status.badge,
                 badgeColor: status.badgeColor,
-                statusKind: status.destroyed ? 'destroyed' : status.unavailable ? 'unavailable' : null,
+                statusKind: status.destroyed ? 'destroyed' : status.cascading ? 'cascading' : status.unavailable ? 'unavailable' : null,
                 onClick: onActivate ? () => onActivate(action, source) : null,
             };
             entry.onRightClick = actionPopup ? actionPopup(action, source) : (row) =>

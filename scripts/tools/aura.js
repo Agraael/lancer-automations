@@ -307,30 +307,40 @@ export class LAAuras
     }
 
     /**
-     * Toggle an aura's enabled state on an actor by name.
-     * @param {Actor|Token|TokenDocument} actorOrToken
+     * Toggle an aura's enabled state on a token or item by name.
+     * @param {Actor|Token|TokenDocument|Item} actorOrToken
      * @param {string} auraName
      * @param {boolean} [on] - true=enable, false=disable. Flip current state if omitted.
      * @returns {Promise<boolean|null>} new enabled state, or null if the aura wasn't found.
      */
     static async toggleAura(actorOrToken, auraName, on)
     {
-        const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
-        const auras = actor?.getFlag('grid-aware-auras', 'auras');
-        if (!auras)
+        const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
+        if (!gridAwareAuras?.updateAuras)
             return null;
-        const entry = Object.entries(auras).find(([, candidateAura]) => /** @type {any} */ (candidateAura).name === auraName);
-        if (!entry)
+        let owner = null;
+        let aura = null;
+        if (actorOrToken instanceof Item)
+        {
+            owner = actorOrToken;
+            aura = LAAuras.findAura(actorOrToken, auraName);
+        }
+        else
+        {
+            const token = LAAuras._auraToken(actorOrToken);
+            const entry = token && gridAwareAuras.getTokenAuras
+                ? gridAwareAuras.getTokenAuras(token).find(candidate => candidate.aura?.name === auraName)
+                : null;
+            owner = entry?.owner ?? null;
+            aura = entry?.aura ?? null;
+        }
+        if (!owner || !aura)
             return null;
-        const [key, aura] = entry;
-        const currentEnabled = !!(/** @type {any} */ (aura).enabled);
+        const currentEnabled = !!aura.enabled;
         const next = typeof on === 'boolean' ? on : !currentEnabled;
         if (next === currentEnabled)
             return currentEnabled;
-        await actor.setFlag('grid-aware-auras', 'auras', {
-            ...auras,
-            [key]: { ...(/** @type {any} */ (aura)), enabled: next }
-        });
+        await _queueAuraWrite(owner, () => gridAwareAuras.updateAuras(owner, { id: aura.id }, { enabled: next }));
         return next;
     }
 }

@@ -162,6 +162,27 @@ Snapshot a token's position and compare it later ("has it moved since?"). `token
 
 </details>
 
+<details id="getToken">
+<summary><b><code>getToken</code></b> → <code>Token | null</code></summary>
+
+<br>
+
+```js
+api.getToken(idOrUuid)
+```
+
+The placed Token for a token id or a token UUID (`Scene.<id>.Token.<id>`). Only tokens on the viewed scene resolve, anything else returns `null`.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>idOrUuid</kbd> | `string` | Token id or token UUID |
+
+```js
+const target = api.getToken(data.targetId);
+```
+
+</details>
+
 ---
 
 ## Grid Coordinate Helpers

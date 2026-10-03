@@ -123,12 +123,13 @@ Trailing params behave as on `CancelFunction` for `modifyHpChange`, `modifyHeatC
 
 | `actionData` field | Type |
 |:------|:-----|
-| <kbd>type</kbd> | `string` (`"action"` / `"attack"` / `"tech"`) |
+| <kbd>type</kbd> | `string` (`"action"` / `"attack"` for a basic attack / `"weapon"` / `"tech"` / `"damage"`) |
 | <kbd>title</kbd> | `string` |
-| <kbd>action</kbd> | `{ name: string, activation: string }` on `"action"`, `{ name: string }` on `"attack"` / `"tech"` |
+| <kbd>action</kbd> | `{ name: string, activation: string }` on `"action"`, `{ name: string }` on the others |
 | <kbd>detail</kbd> | `string` |
 | <kbd>tags</kbd> | `Array<{ lid: string, val?: string }>` |
-| <kbd>attack_type</kbd> | `string` - `"attack"` only |
+| <kbd>attack_type</kbd> | `string` - `"attack"` / `"weapon"` / `"damage"` only |
+| <kbd>isInvade</kbd> | `boolean` - `"tech"` only |
 | <kbd>deployable</kbd> | `{ actor: Actor, lid: string } \| null` - `"action"` only |
 | <kbd>flowState</kbd> | `FlowState` |
 
@@ -165,7 +166,7 @@ Every trigger passes a data object. All objects receive `distanceToTrigger` and 
 
 </details>
 
-<details id="onAttack"><summary><b><code>onAttack</code></b> - attack roll made</summary>
+<details id="onAttack"><summary><b><code>onAttack</code></b> - attack HUD confirmed, before the roll</summary>
 
 ```js
 {
@@ -239,7 +240,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details id="onDamage"><summary><b><code>onDamage</code></b> - damage applied</summary>
+<details id="onDamage"><summary><b><code>onDamage</code></b> - damage rolled, per target, before the card prints (HP unchanged, see `onHpLoss`)</summary>
 
 ```js
 {
@@ -282,7 +283,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details id="onTechAttack"><summary><b><code>onTechAttack</code></b> - tech roll made</summary>
+<details id="onTechAttack"><summary><b><code>onTechAttack</code></b> - tech HUD confirmed, before the roll</summary>
 
 ```js
 {
@@ -469,7 +470,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 #### Status Effect Triggers
 
-<details id="onPreStatusApplied"><summary><b><code>onPreStatusApplied</code></b> - before a status is applied (non-async evaluate only)</summary>
+<details id="onPreStatusApplied"><summary><b><code>onPreStatusApplied</code></b> - before a status is applied</summary>
 
 ```js
 {
@@ -482,7 +483,7 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
-<details id="onPreStatusRemoved"><summary><b><code>onPreStatusRemoved</code></b> - before a status is removed (non-async evaluate only)</summary>
+<details id="onPreStatusRemoved"><summary><b><code>onPreStatusRemoved</code></b> - before a status is removed</summary>
 
 ```js
 {
@@ -601,6 +602,16 @@ Fires for `attackRoll`, `techAttackRoll`, `damageRoll`, `skillRoll`, `structureR
 <details id="onDestroyed"><summary><b><code>onDestroyed</code></b> - token delete when <code>structure.value &lt;= 0 || stress.value &lt;= 0</code></summary>
 
 `triggeringToken` may be a fallback `{ document, id, name, actor }` object if the canvas token is already gone.
+
+```js
+{ triggeringToken: Token }
+```
+
+</details>
+
+<details id="onFullRepair"><summary><b><code>onFullRepair</code></b> - after a successful Full Repair</summary>
+
+Fires once per repaired actor, after its onInit activations re-run. Ignores `outOfCombat`. Skipped when the actor has no token on the scene.
 
 ```js
 { triggeringToken: Token }
@@ -773,7 +784,7 @@ Fires before the token leaves `canvas.tokens`, and not at all if it is already g
 
 </details>
 
-<details id="onInitActivation"><summary><b><code>onInitActivation</code></b> - before item/action activates, before resource use (non-async evaluate only)</summary>
+<details id="onInitActivation"><summary><b><code>onInitActivation</code></b> - before item/action activates, before resource use</summary>
 
 ```js
 {
@@ -816,7 +827,7 @@ Ending an activation fires `onEndActivation` instead, never this trigger.
 
 </details>
 
-<details id="onInitEndActivation"><summary><b><code>onInitEndActivation</code></b> - before an activation is ended (non-async evaluate only)</summary>
+<details id="onInitEndActivation"><summary><b><code>onInitEndActivation</code></b> - before an activation is ended</summary>
 
 Fires when the end action from `setItemAsActivated` runs, in place of `onInitActivation`. `cancelAction` only suppresses the end card, the item is already marked inactive by then.
 
@@ -899,7 +910,7 @@ Same as `onPostActivation` for the end action, with `endActivation: true`.
 }
 ```
 
-Fires for any token update, so gate on `change`. For movement that means `x`, `y` or `elevation` present. The hook waits for `movementAnimationPromise` and skips non-final ruler segments, so `distanceToTrigger` is the settled end-of-move distance. Engagement runs on this trigger.
+Fires only when `x`, `y` or `elevation` changes. The hook waits for `movementAnimationPromise` and skips non-final ruler segments, so `distanceToTrigger` is the settled end-of-move distance. Engagement runs on this trigger.
 
 </details>
 
@@ -930,7 +941,7 @@ Shared params: `triggerType: TriggerType`, `triggerData: TriggerData`, `reactorT
 
 | Callback | Signature | Returns |
 |:---------|:----------|:--------|
-| `evaluate` | `(triggerType, triggerData, reactorToken, item, activationName, api)` | `boolean` - must be **synchronous** on cancellable triggers |
+| `evaluate` | `(triggerType, triggerData, reactorToken, item, activationName, api)` | `boolean` - always **synchronous**, a Promise counts as false |
 | `activationCode` | `(triggerType, triggerData, reactorToken, item, activationName, api)` | `Promise<void>` |
 | `onInit` | `(token: Token, item: Item, api: LancerAutomationsAPI)` | `Promise<void>` - runs when a token carrying the item is created |
 | `onMessage` | `(triggerType, data: any, reactorToken, item, activationName, api)` | `Promise<void>` - runs on the client targeted by `sendMessageToReactor` |
@@ -974,7 +985,7 @@ The charge count is not part of the config, it sits beside it: `extraOptions.sta
 | <kbd>role</kbd> | `"source" \| "target"` | either | How the origin must be involved: caused the trigger, or was one of its targets |
 | <kbd>grouped</kbd> | `boolean` | `false` | Share one counter across all effects in this call (auto-fills `groupId`) |
 | <kbd>groupId</kbd> | `string` | auto | Shared counter id across calls |
-| <kbd>evaluate</kbd> | `(triggerType: TriggerType, data: TriggerData, token: Token, effect: ActiveEffect) => boolean` | `null` | Extra gate |
+| <kbd>evaluate</kbd> | `string` | `null` | Extra gate, the source of a `(triggerType, triggerData, effectBearerToken, effect) => boolean` function. Saved in the effect's flags, so a real function is dropped |
 | <kbd>itemLid</kbd> | `string` | - | Only consume for this item source. Comma-separated for several LIDs |
 | <kbd>itemId</kbd> | `string` | - | Only consume for this exact item document id |
 | <kbd>actionName</kbd> | `string` | - | Only consume for this action name, e.g. `"Boost"` |
@@ -1010,7 +1021,7 @@ await api.addGlobalBonus(target.actor, { name: "Squad Leader", val: 1, type: "ac
 consumption: {
     trigger: "onCheck",
     checkType: "AGI Check",
-    evaluate: (triggerType, data, token, effect) => data.success === false
+    evaluate: "(triggerType, data, token, effect) => data.success === false"
 }
 ```
 
@@ -1026,7 +1037,7 @@ await api.addGlobalBonus(actor, { name: "Leadership (Damage)", type: "damage", d
     { consumption: { trigger: "onDamage", groupId } });
 ```
 
-`addGlobalBonus` copies only the trigger filters. It drops `originId`, `role`, `grouped` and `statusId`, silently. Without `originId` the engine falls back to the bearer token at trigger time, so each bearer consumes on its own. When the bearer can also be a target of the trigger, gate with `evaluate`, e.g. `(t, data, bearer) => data.triggeringToken?.id === bearer.id`.
+`addGlobalBonus` copies only the trigger filters. It drops `originId`, `role`, `grouped` and `statusId`, silently. Without `originId` the engine falls back to the bearer token at trigger time, so each bearer consumes on its own. When the bearer can also be a target of the trigger, gate with `evaluate`, e.g. `"(t, data, bearer) => data.triggeringToken?.id === bearer.id"`.
 
 ### Reaction economy
 
@@ -1101,11 +1112,11 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | <kbd>requireCanProvoke</kbd> | `boolean` | `false` | Skip unless the trigger source can provoke the reactor (engagement, provoke immunity). Used by Overwatch |
 | <kbd>checkUsage</kbd> | `boolean` | `false` | Item entries only. Skip when the item is unloaded, uncharged, out of uses, or past its `tg_turn` / `tg_round` limit |
 | <kbd>isReaction</kbd> | `boolean` | `false` | Marks the entry as a reaction in the manager UI |
-| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd`, `onRoundStart` and custom triggers, which always fire |
+| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd`, `onRoundStart`, `onFullRepair` and custom triggers, which always fire |
 | <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
 | <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
 | <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print`. Also gates availability: `ranks[N]` needs the talent at rank N+1, `profiles[N]` needs that weapon profile selected |
-| <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Must be synchronous on cancellable triggers |
+| <kbd>evaluate</kbd> | `ActivationCallback \| string` | - | Gate. Always synchronous, a Promise counts as false |
 | <kbd>activationType</kbd> | `"code" \| "macro" \| "flow" \| "none"` | `"flow"` | What runs |
 | <kbd>activationMode</kbd> | `"instead" \| "after"` | item: `"instead"`, general: `"after"` | `after` also fires the reaction's own flow/card. Macro/code only |
 | <kbd>sceneReactor</kbd> | `"off" \| "add" \| "only"` | `"off"` | General only. Evaluate once as the active scene on the GM client. `add` keeps the per-token passes, `only` replaces them |

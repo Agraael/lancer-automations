@@ -81,7 +81,7 @@ Press **Z** to swap them for the session. The badge on the last waypoint shows w
 
 A token moves with a **movement type**: walk, fly, jump, crawl (only while prone), forced, teleport, or ignore-elevation (skips auto-elevation). Gaining a **flying** or **hover** status switches the token to fly automatically, and back to walk when it's removed.
 
-Press **M** for the **movement wheel**: outside a drag it opens a radial picker. During a drag it cycles the active type without moving the token.
+Press **M** outside a drag for the **movement wheel**, a radial picker. During a drag, Foundry's own **Tab** cycles the active type without moving the token (Shift+Tab goes backwards).
 
 <br clear="right"/>
 
@@ -95,7 +95,8 @@ V, B, M, X and Z are rebindable under **Configure Controls → Lancer Automation
 |-----|--------------|
 | **V** (hold) | **Free movement** - the next move doesn't spend the movement cap and ignores terrain penalties. |
 | **B** (hold) | **Debug movement** - the next move is recorded by Foundry but skips automation (no `onMove`, no history, no engagement update). |
-| **M** | **Movement wheel** - open the picker, or cycle the type mid-drag. |
+| **M** | **Movement wheel** - open the picker (outside a drag). |
+| **Tab** | Cycle the movement type mid-drag. Foundry core key, rebind it under **Core**. |
 | **X** | **Toggle Pathfinding** - flips drag pathfinding on or off for this session. Needs Pathfind Drag Movement on. |
 | **Z** | **Swap Elevation Mode** - swaps Ground and Hold for this session. |
 | **E / Q** | During a drag, raise / lower elevation by one. |

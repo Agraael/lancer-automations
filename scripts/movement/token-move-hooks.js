@@ -5,7 +5,7 @@ import { getLAFlag } from "../tools/flag-utils.js";
 import { getOriginalMovePath, trimPathToPosition } from "./path-replay.js";
 import {
     _moveHasForcedAction, _moveHasTeleportAction, _computeMoveData, _rulerMove,
-    _handleMovementCapExceeded, handleTokenMove,
+    _handleMovementCapExceeded, handleTokenMove, _involuntaryMoveData,
     _isActiveMoveStackFor, _wipeMoveStack, _moveHistoryCache, isPositionChange
 } from "./move-tracking.js";
 import { getMovementPathHexes, drawDebugPath } from "../combat/grid-helpers.js";
@@ -16,21 +16,31 @@ import { handleTrigger } from "../activations/reactions-engine.js";
 // Carry our flags across core's checkpoint continuation segments.
 const _replayOptionCache = new Map();
 const _REPLAY_OPTION_KEYS = ['isDrag', 'ignoreMovementCap', '_skipBoostOffer', '_cancelledBy',
-    'IgnorePreMove', 'IgnoreOnMove', 'isModified', 'teleport', 'lancerFreeMovement'];
+    'IgnorePreMove', 'IgnoreOnMove', 'isModified', 'teleport', 'lancerFreeMovement',
+    'lancerInvoluntarySourceId', 'lancerInvoluntaryActionName', 'lancerInvoluntaryItemUuid'];
+const _debugMoveChains = new Set();
 
 Hooks.on('preUpdateToken', (document, change, options, userId) =>
 {
-    // [V] held or option set -> bypass everything (history, triggers)
-    if (options.lancerDebugMovement || isForceDebugMovement())
+    const moveOp = options._movement?.[document.id];
+    const chainRoot = options._movementArguments?.chain?.[0];
+
+    // [B] held, option set or a debug chain continuing -> bypass everything (history, triggers)
+    if (options.lancerDebugMovement || isForceDebugMovement() || (chainRoot && _debugMoveChains.has(chainRoot)))
     {
         options.lancerDebugMovement = true;
         if (isPositionChange(change))
             options.animate = false;
+        if (moveOp?.recorded)
+            delete change._movementHistory;
+        const debugRoot = chainRoot ?? moveOp?.id;
+        if (debugRoot && moveOp?.pending?.waypoints?.length)
+            _debugMoveChains.add(debugRoot);
+        else if (debugRoot)
+            _debugMoveChains.delete(debugRoot);
         return true;
     }
 
-    const moveOp = options._movement?.[document.id];
-    const chainRoot = options._movementArguments?.chain?.[0];
     if (chainRoot && _replayOptionCache.has(chainRoot))
         Object.assign(options, _replayOptionCache.get(chainRoot));
     else if (moveOp?.pending?.waypoints?.length && moveOp.id)
@@ -62,7 +72,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
 
     if (options.IgnorePreMove)
     {
-        if (isDrag)
+        if (isDrag || isForceMovement)
         {
             const token = canvas.tokens.get(document.id);
             handleTokenMove(token, change, options, userId);
@@ -80,7 +90,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
     if (options.isUndo)
         return;
 
-    if (isDrag)
+    if (isDrag || isForceMovement)
     {
         let cancelUpdate = false;
         const token = canvas.tokens.get(document.id);
@@ -261,11 +271,12 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             }
         };
 
-        _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost: moveCost, moveIsFreeMovement, triggerData, intentPath: originalPathWaypoints, intentEndPos });
+        if (isDrag)
+            _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost: moveCost, moveIsFreeMovement, triggerData, intentPath: originalPathWaypoints, intentEndPos });
 
         // no await: sync reactors flip cancelUpdate before the next line reads it
         if (!cancelUpdate)
-            handleTrigger('onPreMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy });
+            handleTrigger(isDrag ? 'onPreMove' : 'onPreInvoluntaryMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy, ...(isDrag ? {} : _involuntaryMoveData(options)) });
 
         if (cancelUpdate)
         {
@@ -296,7 +307,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
     }
     else
     {
-        // unintentional move (knockback etc.): log it so the ruler trail shows white
+        // code move with no drag and no forced action: log it so the ruler trail shows white
         const token = canvas.tokens.get(document.id);
         if (token)
             handleTokenMove(token, change, options, userId);

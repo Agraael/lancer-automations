@@ -572,8 +572,8 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
 
 /**
  * Knockback with the drag-ruler picker. Plans every token like moveTokenRuler, then commits
- * through applyKnockbackMoves (GM) or the moveTokens socket (player): onInvoluntaryMove
- * trigger, immovable warning, forced action, battlelog source.
+ * through applyKnockbackMoves (GM) or the moveTokens socket (player): forced action (fires
+ * the involuntary move triggers), battlelog source.
  * @param {Token|Token[]} tokens
  * @param {number} distance Knockback distance in grid units (-1 = unlimited)
  * @param {Object} [options]

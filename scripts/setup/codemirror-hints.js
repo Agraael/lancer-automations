@@ -25,7 +25,8 @@ const TRIGGER_MANIFEST = [
     { name: 'sendMessageToReactor', args: '(data, userId, opts)', returns: 'Promise<any>', summary: "Call this activation's onMessage on another client." },
     { name: 'debugActivation', args: '(label)', returns: 'void', summary: 'Console-dump the reactor, trigger and payload.' },
 
-    { name: 'cancel', args: '(reason)', returns: 'Promise<void>', summary: 'onInvoluntaryMove takes a reason; the onPreMove one takes none.' },
+    { name: 'cancel', args: '()', returns: 'void', summary: 'Blocks the move with no card (onPreMove, onPreInvoluntaryMove).' },
+    { name: 'sourceToken', returns: 'Token | null', summary: 'Token that caused the involuntary move, null if none.' },
     { name: 'cancelAttack', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
     { name: 'cancelTechAttack', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
     { name: 'cancelCheck', args: '(reason, title, allowConfirm, userIdControl, preConfirm, postChoice, opts)', returns: 'Promise<void>', doc: 'CancelFunction' },
@@ -129,7 +130,8 @@ const COMMON_TRIGGER_FIELDS = new Set([
 const TRIGGER_FIELDS_BY_TRIGGER = {
     onPreMove:           ['distanceToMove', 'elevationToMove', 'startPos', 'endPos', 'isDrag', 'moveInfo', 'cancel', 'cancelTriggeredMove', 'changeTriggeredMove'],
     onMove:              ['distanceMoved', 'elevationMoved', 'startPos', 'endPos', 'isDrag', 'moveInfo'],
-    onInvoluntaryMove:   ['token', 'distance', 'actionName', 'item', 'destination', 'cancel'],
+    onPreInvoluntaryMove: ['distanceToMove', 'elevationToMove', 'startPos', 'endPos', 'isDrag', 'moveInfo', 'sourceToken', 'actionName', 'item', 'cancel', 'cancelTriggeredMove', 'changeTriggeredMove'],
+    onInvoluntaryMove:   ['distanceMoved', 'elevationMoved', 'startPos', 'endPos', 'isDrag', 'moveInfo', 'sourceToken', 'actionName', 'item'],
     onAttack:            ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
     onInitAttack:        ['weapon', 'targets', 'hitTokens', 'actionName', 'tags', 'actionData', 'cancelAttack', 'flowState'],
     onHit:               ['weapon', 'targets', 'hitTokens', 'attackType', 'actionName', 'tags', 'actionData', 'flowState'],
@@ -168,6 +170,7 @@ const TRIGGER_FIELDS_BY_TRIGGER = {
     onRoundStart:        ['combat', 'round'],
     onEnterCombat:       [],
     onExitCombat:        [],
+    onFullRepair:        [],
     onDestroyed:         [],
     onTokenCreated:      [],
     onTokenRemoved:      [],

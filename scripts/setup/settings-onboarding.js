@@ -471,10 +471,10 @@ const GROUPS = [
                 togglesFor: (value) =>
                 {
                     if (value === 'v2')
-                        return [{ name: 'Overwatch', index: 0, enabled: false }, { name: 'Overwatch', index: 1, enabled: true }];
+                        return [{ name: 'Overwatch', index: 0, enabled: false }, { name: 'Overwatch', index: 1, enabled: true }, { name: 'Overwatch', index: 2, enabled: true }];
                     if (value === 'v1')
-                        return [{ name: 'Overwatch', index: 0, enabled: true }, { name: 'Overwatch', index: 1, enabled: false }];
-                    return [{ name: 'Overwatch', index: 0, enabled: false }, { name: 'Overwatch', index: 1, enabled: false }];
+                        return [{ name: 'Overwatch', index: 0, enabled: true }, { name: 'Overwatch', index: 1, enabled: false }, { name: 'Overwatch', index: 2, enabled: false }];
+                    return [{ name: 'Overwatch', index: 0, enabled: false }, { name: 'Overwatch', index: 1, enabled: false }, { name: 'Overwatch', index: 2, enabled: false }];
                 },
             },
             {

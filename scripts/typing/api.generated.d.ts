@@ -93,6 +93,7 @@ interface LancerAutomationsAPI {
     getMoveDataList: typeof import("../movement/move-tracking.js").getMoveDataList;
     getMovementBands: typeof import("../movement/move-tracking.js").getMovementBands;
     getRelativeDisposition: typeof import("../combat/overwatch.js").getRelativeDisposition;
+    getToken: typeof import("../tools/misc-tools.js").getToken;
     getTokenFlags: typeof import("../interactive/deployables.js").getTokenFlags;
     getTokenPosition: typeof import("../tools/misc-tools.js").getTokenPosition;
     getTokensInRange: typeof import("../combat/overwatch.js").getTokensInRange;

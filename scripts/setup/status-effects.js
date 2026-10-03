@@ -95,7 +95,6 @@ Hooks.on('lancer.statusesReady', () =>
             { id: "burn", name: "Burn", img: "icons/svg/fire.svg" },
             { id: "overshield", name: "Overshield", img: "modules/lancer-automations/icons/overshield.svg" },
             { id: "engaged", name: "Engaged", img: "systems/lancer/assets/icons/white/status_engaged.svg" },
-            { id: "cascading", name: "Cascading", img: "icons/svg/paralysis.svg" },
             { id: "bolster", name: "Bolster", img: "systems/lancer/assets/icons/white/accuracy.svg" },
             { id: "mia", name: "M.I.A.", img: "modules/lancer-automations/icons/mia_lg.svg" }
         ];
@@ -105,6 +104,12 @@ Hooks.on('lancer.statusesReady', () =>
                 CONFIG.statusEffects.push(eff);
         }
     }
+
+    const cascading = CONFIG.statusEffects.find(status => status.id === 'cascading');
+    if (cascading)
+        cascading.img = "modules/lancer-automations/icons/eye-of-ra.svg";
+    else
+        CONFIG.statusEffects.push(/** @type {any} */ ({ id: "cascading", name: "Cascading", img: "modules/lancer-automations/icons/eye-of-ra.svg" }));
 
     // stripped (Dead Rings LCP): no armor
     const stripped = CONFIG.statusEffects.find(effect => effect.id === 'DeadRings_statuses_stripped');

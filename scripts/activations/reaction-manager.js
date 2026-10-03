@@ -8,6 +8,7 @@ import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { openApiRefPopup } from "./api-reference-popup.js";
 import { openDeployablePicker, openDocumentPicker } from "../interactive/deployables.js";
+import { findActivationConflicts, collectEditedDefaults, bindConflictDrawer, closeConflictDrawer } from "./activation-conflicts.js";
 
 const scriptCache = new Map();
 
@@ -65,7 +66,7 @@ export function stringToFunction(str, args = [], reaction = null, sourceName = n
         const blockingKeywords = ['injectBonusToNextRoll', 'changeTriggeredMove', 'cancelTriggeredMove', 'cancelChange', 'cancelAction', 'cancelAttack', 'cancelTechAttack', 'cancelCheck', 'cancelStructure', 'cancelStress', 'cancelStructureOutcome', 'cancelStressOutcome', 'cancelHpChange', 'cancelHeatChange', 'modifyRoll', 'modifyHpChange', 'modifyHeatChange'];
         const foundKeywords = blockingKeywords.filter(keyword => trimmed.includes(keyword));
 
-        const sensitiveTriggers = new Set(['onPreMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onInitEndActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
+        const sensitiveTriggers = new Set(['onPreMove', 'onPreInvoluntaryMove', 'onInitAttack', 'onInitCheck', 'onInitActivation', 'onInitEndActivation', 'onPreStatusApplied', 'onPreStatusRemoved']);
         const foundTriggers = reaction?.triggers?.filter(trigger => sensitiveTriggers.has(trigger)) || [];
 
         const isForceSync = reaction?.awaitActivationCompletion;
@@ -115,7 +116,7 @@ export function stringToAsyncFunction(str, args = [], name = "lancer-automations
 export const TARGET_CAPABLE_TRIGGERS = new Set([
     'onInitAttack', 'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
     'onInitTechAttack', 'onTechAttack', 'onTechHit', 'onTechMiss',
-    'onRoll', 'onCheck', 'onInitCheck', 'onInvoluntaryMove'
+    'onRoll', 'onCheck', 'onInitCheck'
 ]);
 
 // Triggers that report a source, the only ones Only On Source Match can key on.
@@ -123,20 +124,20 @@ export const SOURCE_MATCH_TRIGGERS = new Set([
     'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
     'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
     'onEndActivation', 'onInitEndActivation', 'onPostActivation', 'onPostEndActivation',
-    'onInitAttack', 'onInitTechAttack', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
+    'onInitAttack', 'onInitTechAttack', 'onPreInvoluntaryMove', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
 ]);
 
 // Editor picker groups, also the complete built-in list: any other trigger name is a custom trigger.
 export const TRIGGER_GROUPS = [
     { label: "LA.triggerGroup.combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
-    { label: "LA.triggerGroup.movement", triggers: ["onPreMove", "onMove", "onInvoluntaryMove"] },
+    { label: "LA.triggerGroup.movement", triggers: ["onPreMove", "onMove", "onPreInvoluntaryMove", "onInvoluntaryMove"] },
     { label: "LA.triggerGroup.rolls", triggers: ["onRoll"] },
     { label: "LA.triggerGroup.attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
     { label: "LA.triggerGroup.tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
     { label: "LA.triggerGroup.activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onPostActivation", "onPostEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
     { label: "LA.triggerGroup.status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
     { label: "LA.triggerGroup.hpHeat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },
-    { label: "LA.triggerGroup.structureStress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed"] },
+    { label: "LA.triggerGroup.structureStress", triggers: ["onPreStructure", "onStructure", "onPreStress", "onStress", "onDestroyed", "onFullRepair"] },
     { label: "LA.triggerGroup.token", triggers: ["onTokenCreated", "onTokenRemoved", "onTokenVisibility"] },
     { label: "LA.triggerGroup.other", triggers: ["onUpdate"] }
 ];
@@ -337,6 +338,12 @@ export class ReactionManager
     {
         const all = ReactionManager.getAllReactions();
         return all[lid];
+    }
+
+    static newSavedItemEntry(lid, itemType = "any")
+    {
+        const defaultReactions = getDefaultItemReactionRegistry()[lid]?.reactions ?? [];
+        return { itemType, reactions: defaultReactions.map(defaultReaction => ({ enabled: defaultReaction.enabled !== false })) };
     }
 
     static getGeneralReactions()
@@ -659,7 +666,7 @@ export class ReactionConfig extends FormApplication
     {
         if (!game.user?.isGM)
         {
-            ui.notifications?.warn?.('The Activation Manager is GM-only.');
+            ui.notifications?.warn?.('The Automation Manager is GM-only.');
             return this;
         }
         return super.render(force, options);
@@ -1156,6 +1163,21 @@ export class ReactionConfig extends FormApplication
             ...userScripts
         ];
 
+        this._conflictReport = {
+            conflicts: findActivationConflicts({
+                items: ReactionManager.getAllReactions(),
+                generals: ReactionManager.getGeneralReactions(),
+                userItemSettings,
+                userGeneralSettings,
+                defaultItemRegistry,
+                defaultGeneralRegistry,
+                itemMap,
+                resolveActionName,
+                activationTriggers: ACTIVATION_TRIGGERS
+            }),
+            edited: collectEditedDefaults(defaultList)
+        };
+
         return {
             allReactions: allReactions,
             unfiledReactions: unfiledReactions,
@@ -1163,7 +1185,8 @@ export class ReactionConfig extends FormApplication
             defaultReactions: defaultList,
             defaultFolders: defaultFolders,
             allTriggers: allTriggers,
-            startupScripts: startupScripts
+            startupScripts: startupScripts,
+            conflictCount: this._conflictReport.conflicts.length
         };
     }
 
@@ -1176,6 +1199,7 @@ export class ReactionConfig extends FormApplication
         html.find('.copy-default').click(this._onCopyDefault.bind(this));
         html.find('.reaction-enabled').change(this._onToggleEnabled.bind(this));
         html.find('.help-btn').click(this._onHelp.bind(this));
+        bindConflictDrawer(this, html);
         html.find('.item-find-btn').click(async () =>
         {
             const result = await openItemBrowserDialog();
@@ -1720,8 +1744,14 @@ export class ReactionConfig extends FormApplication
             if (entry)
             {
                 const reactions = entry.reactions;
+                const defaultReaction = getDefaultItemReactionRegistry()[lid]?.reactions?.[index];
                 if (Number.isFinite(index) && Array.isArray(reactions) && reactions.length > 1 && index >= 0 && index < reactions.length)
-                    reactions.splice(index, 1);
+                {
+                    if (defaultReaction)
+                        reactions[index] = { enabled: defaultReaction.enabled !== false };
+                    else
+                        reactions.splice(index, 1);
+                }
                 else
                     delete userReactions[lid];
                 await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, userReactions);
@@ -1765,7 +1795,7 @@ export class ReactionConfig extends FormApplication
             if (!src)
                 return;
             const reaction = foundry.utils.deepClone(src);
-            new ReactionEditor({ isGeneral: false, lid, reaction }).render(true);
+            new ReactionEditor({ isGeneral: false, lid, reaction, reactionIndex }).render(true);
         }
     }
 
@@ -1897,6 +1927,7 @@ export class ReactionConfig extends FormApplication
 
     async close(options = {})
     {
+        closeConflictDrawer(this);
         if (this._needsReload)
         {
             const reload = await Dialog.confirm({
@@ -2201,12 +2232,14 @@ export class ReactionEditor extends FormApplication
             onHpLoss: "{ triggeringToken, hpLost, currentHP, distanceToTrigger, canTriggerReaction}",
             onPreHeatChange: "{ triggeringToken, previousHeat, newHeat, delta, cancelHeatChange(reasonText, title, allowConfirm, userIdControl), modifyHeatChange(newValue, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
             onHeatLoss: "{ triggeringToken, heatCleared, currentHeat, distanceToTrigger, canTriggerReaction}",
-            onInvoluntaryMove: "{ triggeringToken, token, distance, actionName, item, destination: {x,y}, cancel(reason), distanceToTrigger, canTriggerReaction}",
+            onPreInvoluntaryMove: "{ triggeringToken, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, isUndo, isModified, pathHexes }, sourceToken, actionName, item, cancel(), cancelTriggeredMove(reasonText, allowConfirm, userIdControl, preConfirm, postChoice), changeTriggeredMove(position, extraData, reasonText, allowConfirm, userIdControl, preConfirm, postChoice), distanceToTrigger, canTriggerReaction}",
+            onInvoluntaryMove: "{ triggeringToken, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo: { isInvoluntary, isTeleport, pathHexes, isFreeMovement, movementCost, isModified, extraData }, sourceToken, actionName, item, distanceToTrigger, canTriggerReaction}",
             onRoll: "{ triggeringToken, rollType: 'attackRoll'|'techAttackRoll'|'damageRoll'|'skillRoll'|'structureRoll'|'stressRoll', roll, total, success, targets, item, isReroll, rerollCount, hitTokens, reroll(reasonText, subtype, title, allowConfirm, userIdControl), changeRoll(newTotal, reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onDeploy: "{ triggeringToken, item, deployedTokens, deployType, distanceToTrigger, canTriggerReaction}",
             onUpdate: "{ triggeringToken, document, change, options, distanceToTrigger, canTriggerReaction}",
             onEnterCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
-            onExitCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}"
+            onExitCombat: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
+            onFullRepair: "{ triggeringToken, distanceToTrigger, canTriggerReaction}"
         };
 
         const result = {
@@ -3758,9 +3791,9 @@ export class ReactionEditor extends FormApplication
             let userReactions = getModuleSetting(ReactionManager.SETTING_REACTIONS);
 
             if (!userReactions[lid])
-                userReactions[lid] = { itemType: "any", reactions: [] };
+                userReactions[lid] = ReactionManager.newSavedItemEntry(lid);
 
-            let index = formData.reactionIndex;
+            let index = String(lid) === String(this.object.lid ?? '') ? formData.reactionIndex : '';
             if ((index === undefined || index === null || index === "") && newReaction.workshopId)
             {
                 const existing = userReactions[lid].reactions.findIndex(entry => entry?.workshopId === newReaction.workshopId);

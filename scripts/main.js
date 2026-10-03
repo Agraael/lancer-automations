@@ -201,6 +201,7 @@ import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import { LA_INLINE_ATTACK_FX, playDefaultThrowFX, _flowResolveActivationLabel, _flowSourceToken } from "./fx/actionFX.js";
 import * as actionFX from "./fx/actionFX.js";
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
+import { initDestroyedMeshGuard } from "./fx/destroyedMeshGuard.js";
 
 // Tools
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
@@ -584,6 +585,7 @@ Hooks.on('init', () =>
     initVisionDisableOnSelect();
     initDragOriginSources();
     initDeltaStatusGuard();
+    initDestroyedMeshGuard();
     injectDisabledSchemaField();
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField();

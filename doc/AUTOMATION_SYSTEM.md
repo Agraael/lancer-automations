@@ -244,7 +244,7 @@ Filters short-circuit, in this order (rows 6 and 7 apply to item activations onl
 | # | Filter | Behavior |
 |---|---|---|
 | 1 | `onlyOnSourceMatch` | Matches the triggering item LID, deployable LID, or actor UUID against the registered key. Meaning per kind in [section 3](#3-item-vs-general-activations). |
-| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`) or is a [custom trigger](#custom-triggers). |
+| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`), is `onFullRepair`, or is a [custom trigger](#custom-triggers). |
 | 3 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. **`triggerOther` defaults to `true`**: it only skips when you set it to exactly `false`. |
 | 4 | `checkReaction` | Skip the reaction when the reactor has no reaction left this round. Runs only when the field is set `true`. Spending is separate: the world setting `consumeReaction`. |
 | 5 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |
@@ -463,7 +463,7 @@ triggerData.startRelatedFlowToReactor(userId, { chargeSpent: 2 });
 
 `opts`: `{ wait, waitTitle, waitDescription, waitItem, waitOriginToken, waitRelatedToken }`. `wait:true` awaits remote completion. The `wait*` fields fill the local "waiting" card. `extraData` must be JSON-serializable. See the [True Grit example](#example-true-grit).
 
-**`sendMessageToReactor(data, userId = null, opts = {})`** <sup>async</sup> → `any` - RPC to the reactor's `onMessage` (same `opts`). With `wait:true`, returns its result. Delegation primitive for GM-only work.
+**`sendMessageToReactor(data, userId = null, opts = {})`** <sup>async</sup> → `any` - RPC to the reactor's `onMessage` (same `opts`). With `wait:true`, returns its result. Delegation primitive for GM-only work. Token, TokenDocument and Actor values in `data` are sent by id and arrive as live documents, resolved on the receiving client's viewed scene. Items are not converted, send their id or LID. Everything else must be JSON-serializable, and so must the returned value.
 
 **`debugActivation(label?)`** - logs `triggerType`, `triggerData`, `reactorToken`, `item`, `activationName` to the console and returns the same as an object. Also on the api as `api.debugActivation(triggerType, triggerData, reactorToken, item, activationName, label?)`. Debug mode and breakpoints: [Automation Engine - Debugging an automation](feature/AUTOMATION_ENGINE.md#debugging-an-automation).
 

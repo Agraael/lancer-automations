@@ -548,12 +548,22 @@ export async function setItemResource(item, value, counterIndex = 0)
 
     if (item.type === 'talent')
     {
-        const counters = item.system?.counters ?? [];
-        const counter = counters[counterIndex];
-        if (!counter)
+        const ranks = item.system?.ranks ?? [];
+        const unlocked = Math.min(ranks.length, item.system?.curr_rank ?? ranks.length);
+        let remaining = counterIndex;
+        for (let rankIdx = 0; rankIdx < unlocked; rankIdx++)
+        {
+            const counters = ranks[rankIdx]?.counters ?? [];
+            if (remaining >= counters.length)
+            {
+                remaining -= counters.length;
+                continue;
+            }
+            const counter = counters[remaining];
+            const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(value))));
+            await item.update({ [`system.ranks.${rankIdx}.counters.${remaining}.value`]: clamped });
             return;
-        const clamped = Math.max(counter.min ?? 0, Math.min(counter.max ?? Infinity, Math.round(Number(value))));
-        await item.update({ [`system.counters.${counterIndex}.value`]: clamped });
+        }
         return;
     }
 
@@ -576,6 +586,13 @@ export async function setItemResource(item, value, counterIndex = 0)
         return;
     }
 
+    const isRecharge = (item.system?.tags ?? []).some(tag => tag.lid === 'tg_recharge');
+    if (item.system?.charged !== undefined && isRecharge)
+    {
+        await item.update({ "system.charged": Boolean(value) });
+        return;
+    }
+
     if (item.system?.loaded !== undefined)
     {
         await item.update({ "system.loaded": Boolean(value) });
@@ -594,18 +611,34 @@ export async function setItemResource(item, value, counterIndex = 0)
  */
 export async function addItemTag(item, tagData)
 {
-    if (!item || !tagData?.id)
+    const lid = tagData?.lid ?? tagData?.id;
+    if (!item || !lid)
         return item;
 
+    const tag = { ...tagData, lid };
+    if (item.type === 'mech_weapon')
+    {
+        const profiles = globalThis.foundry.utils.deepClone(item._source.system.profiles ?? []);
+        const profile = profiles[item.system?.selected_profile_index ?? 0];
+        if (!profile)
+            return item;
+        profile.tags = _withTag(profile.tags, tag);
+        return item.update(/** @type {any} */ ({ system: { profiles } }));
+    }
+
     const currentTags = globalThis.foundry.utils.deepClone(item.system?.tags || []);
+    return item.update(/** @type {any} */ ({ system: { tags: _withTag(currentTags, tag) } }));
+}
 
-    const existingIndex = currentTags.findIndex(tag => tag.id === tagData.id);
+function _withTag(tags, tag)
+{
+    const list = Array.isArray(tags) ? tags : [];
+    const existingIndex = list.findIndex(existing => (existing.lid ?? existing.id) === tag.lid);
     if (existingIndex >= 0)
-        currentTags[existingIndex] = tagData;
+        list[existingIndex] = tag;
     else
-        currentTags.push(tagData);
-
-    return item.update(/** @type {any} */ ({ system: { tags: currentTags } }));
+        list.push(tag);
+    return list;
 }
 
 /** @returns {Promise<any>} The updated item */
@@ -614,8 +647,21 @@ export async function removeItemTag(item, tagId)
     if (!item || !tagId)
         return item;
 
+    if (item.type === 'mech_weapon')
+    {
+        const profiles = globalThis.foundry.utils.deepClone(item._source.system.profiles ?? []);
+        const profile = profiles[item.system?.selected_profile_index ?? 0];
+        const before = profile?.tags?.length ?? 0;
+        if (!profile || !before)
+            return item;
+        profile.tags = profile.tags.filter(tag => (tag.lid ?? tag.id) !== tagId);
+        if (profile.tags.length === before)
+            return item;
+        return item.update(/** @type {any} */ ({ system: { profiles } }));
+    }
+
     const currentTags = item.system?.tags || [];
-    const newTags = currentTags.filter(tag => tag.id !== tagId);
+    const newTags = currentTags.filter(tag => (tag.lid ?? tag.id) !== tagId);
 
     if (newTags.length !== currentTags.length)
         return item.update(/** @type {any} */ ({ system: { tags: newTags } }));
@@ -771,11 +817,12 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     if (!completed)
         return { completed: false };
     const total = flow.state.data?.result?.roll?.total ?? null;
+    const finalTargetVal = flow.state.la_extraData?.targetVal ?? targetVal;
     return {
         completed: true,
         total,
         roll: flow.state.data?.result?.roll ?? null,
-        passed: total !== null ? (targetVal !== undefined ? total >= targetVal : false) : false
+        passed: total !== null && typeof finalTargetVal === 'number' ? total >= finalTargetVal : false
     };
 }
 
@@ -2079,7 +2126,7 @@ export async function updateTokenSystem(token, data)
     {
         game.socket.emit('module.lancer-automations', {
             action: 'updateActorSystem',
-            payload: { actorId: token.actor.id, data }
+            payload: { actorId: token.actor.id, tokenUuid: token.document?.uuid ?? null, data }
         });
     }
 }
@@ -2362,7 +2409,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     };
 
     const choices = bypassMount
-        ? [bypassMount]
+        ? (Array.isArray(bypassMount) ? bypassMount : [bypassMount])
         : await choseMount(actor, 2, weaponBarrageable, null, "BARRAGE", barrageValidator);
     if (!choices || choices.length === 0)
         return;
@@ -2478,6 +2525,19 @@ export function getTokenPosition(tokenLike)
 {
     const doc = tokenLike?.document ?? tokenLike;
     return { x: doc?.x ?? 0, y: doc?.y ?? 0, elevation: doc?.elevation ?? 0 };
+}
+
+export function getToken(idOrUuid)
+{
+    if (typeof idOrUuid !== 'string' || !idOrUuid)
+        return null;
+    const token = canvas.tokens?.get(idOrUuid);
+    if (token)
+        return token;
+    if (!idOrUuid.includes('.'))
+        return null;
+    const doc = fromUuidSync(idOrUuid);
+    return doc?.documentName === 'Token' ? doc.object ?? null : null;
 }
 
 /**
@@ -2675,6 +2735,7 @@ export const MiscAPI = {
     hitWith,
     damageWith,
     getTokenPosition,
+    getToken,
     samePosition,
     getTier,
     tierValue,

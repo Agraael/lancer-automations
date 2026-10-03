@@ -162,6 +162,7 @@ async function _onUpdateItem(item, change)
         round: combat.round ?? 0,
         tokenId,
         kind,
+        state: change.system.destroyed === true ? 'destroyed' : 'cascading',
         name: String(item.name ?? '').toUpperCase(),
     });
 }

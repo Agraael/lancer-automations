@@ -6,6 +6,8 @@ import { ReactionManager } from '../activations/reaction-manager.js';
 import { playUiSound } from './sound.js';
 import { bindConsumeStatusToggles } from '../interactive/extra-config.js';
 import { appendItemPips } from './item-helpers.js';
+import { canMarkCascading, isItemCascading, setItemCascading } from '../setup/lancer-modif.js';
+import { localize } from '../tools/string-utils.js';
 
 const LA_DIRECT_AUTOMATED = new Set([
     'skirmish', 'barrage', 'fight', 'stabilize', 'boot up', 'shut down',
@@ -154,6 +156,8 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
     {
         if (item?.system?.destroyed)
             return `<p class="la-popup-state-banner" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(90,34,34,0.35);border-left:3px solid #a04444;font-size:0.85em;color:#e0b0b0;"><strong>Destroyed</strong></p>`;
+        if (isItemCascading(item))
+            return `<p class="la-popup-state-banner" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(88,40,120,0.35);border-left:3px solid #a855f7;font-size:0.85em;color:#dcc4f5;"><strong class="horus--subtle">${localize('LA.lancerModif.cascadingTitle')}</strong></p>`;
         if (item?.system?.disabled)
             return `<p class="la-popup-state-banner" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(90,68,34,0.3);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Disabled</strong></p>`;
         return '';
@@ -190,6 +194,22 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
                 refreshStateBanner();
             });
             headerBtns.push(disableBtn);
+        }
+        if (canMarkCascading(item))
+        {
+            const cascadeTitle = (/** @type {boolean} */ cascading) => localize(cascading ? 'LA.lancerModif.markNotCascading' : 'LA.lancerModif.markCascading');
+            const isCascading = isItemCascading(item);
+            const cascadeBtn = $(`<span class="la-popup-cascade" style="cursor:pointer;font-size:0.85em;color:${isCascading ? '#a855f7' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${cascadeTitle(isCascading)}"><i class="la-cascading-icon"></i></span>`);
+            cascadeBtn.on('click', async () =>
+            {
+                playUiSound('toggle');
+                const nextCascading = !isItemCascading(item);
+                await setItemCascading(item, nextCascading);
+                cascadeBtn.css('color', nextCascading ? '#a855f7' : '#666');
+                cascadeBtn.attr('title', cascadeTitle(nextCascading));
+                refreshStateBanner();
+            });
+            headerBtns.push(cascadeBtn);
         }
         if ('destroyed' in item.system)
         {

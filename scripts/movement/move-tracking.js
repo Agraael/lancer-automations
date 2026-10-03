@@ -1122,13 +1122,13 @@ export async function handleTokenMove(document, change, options, userId)
             Hooks.callAll('lancer-automations.battelog.involuntaryMove', { token, distance: distanceMoved });
     }
 
-    if (!isDrag || options.IgnoreOnMove)
+    if (!(isDrag || isForceMovement) || options.IgnoreOnMove)
         return;
 
     moveInfo.isFreeMovement = isFreeMovement;
     moveInfo.movementCost = movementCost;
     let moveLeg = null;
-    if (inCombat && !isFreeMovement)
+    if (isDrag && inCombat && !isFreeMovement)
     {
         const spentBefore = prevIntentional;
         const spentAfter = prevIntentional + (movementCost ?? distanceMoved);
@@ -1144,9 +1144,18 @@ export async function handleTokenMove(document, change, options, userId)
             spentAfter
         };
     }
-    await handleTrigger('onMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo, moveLeg });
+    await handleTrigger(isDrag ? 'onMove' : 'onInvoluntaryMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo, moveLeg, ...(isDrag ? {} : _involuntaryMoveData(options)) });
 
     const pendingWaypointCount = options._movement?.[token.id]?.pending?.waypoints?.length ?? 0;
-    if (pendingWaypointCount === 0)
+    if (isDrag && pendingWaypointCount === 0)
         _advanceMoveStack('awaitMove', token.id, false);
+}
+
+export function _involuntaryMoveData(options)
+{
+    return {
+        sourceToken: options.lancerInvoluntarySourceId ? canvas.tokens.get(options.lancerInvoluntarySourceId) ?? null : null,
+        actionName: options.lancerInvoluntaryActionName ?? '',
+        item: options.lancerInvoluntaryItemUuid ? fromUuidSync(options.lancerInvoluntaryItemUuid) : null
+    };
 }

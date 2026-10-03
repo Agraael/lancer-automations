@@ -81,6 +81,8 @@ Hooks.on('lancer-automations.ready', (api) => {
     api.registerDefaultGeneralReactions({
         "Custom Reaction": {
             triggers: ["onDamage"],
+            activationType: "code",
+            activationMode: "instead",
             evaluate: (triggerType, data, reactor, item, name, api) => data.target?.id === reactor.id,
             activationCode: async (triggerType, data, reactor, item, name, api) => {
                 // ... logic
@@ -160,7 +162,7 @@ onInit: async function (token, item, api) {
             name: "Perceptive",
             type: "accuracy",
             val: 1,
-            rollTypes: ["stat_roll"],
+            rollTypes: ["check"],
             condition: (state) => state?.la_extraData?.sourceAction === "Search"
         },
         addOptions: { duration: 'constant' }
@@ -348,13 +350,13 @@ Deletes the owner's auras and their function callbacks.
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>owner</kbd> | `Token\|TokenDocument\|Item` | *required* | The document that owns the auras |
-| <kbd>filter</kbd> | `string\|Object` | *required* | String ID, name, or Object filter |
+| <kbd>filter</kbd> | `{ name?: string\|RegExp, id?: string\|RegExp }` | *required* | Match by name or id. A bare string sets neither, so it deletes every aura |
 | <kbd>options</kbd> | `Object` | see below | Internal Grid-Aware Auras delete options |
 
 A non-Item owner defaults to `{ includeItems: true }`, so the sweep also removes auras owned by that actor's items. An Item owner defaults to `{}`. Anything you pass overrides the default.
 
 ```js
-await api.deleteAuras(token, 'Suppression');
+await api.deleteAuras(token, { name: 'Suppression' });
 ```
 
 </details>

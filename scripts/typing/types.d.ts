@@ -105,7 +105,7 @@ interface TriggerDataBase {
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
-    /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. data must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). `wait: true` awaits the remote handler and resolves with whatever it returned. */
+    /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. Token, TokenDocument and Actor values in data are sent by id and resolved on the receiver, the rest must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). `wait: true` awaits the remote handler and resolves with whatever it returned. */
     sendMessageToReactor(data: any, userId?: string | null, options?: { wait?: boolean; waitTitle?: string | null; waitDescription?: string | null; waitItem?: Item | null; waitOriginToken?: Token | null; waitRelatedToken?: Token | null }): Promise<any>;
     /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console and returns a summary. */
     debugActivation(label?: string): any;
@@ -228,16 +228,16 @@ interface TriggerDataOnPreMove extends TriggerDataBase {
     changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
 }
 
-interface TriggerDataOnInvoluntaryMove extends TriggerDataBase {
-    triggeringToken: Token;
-    token: Token;
-    distance: number;
+interface TriggerDataOnPreInvoluntaryMove extends TriggerDataOnPreMove {
+    sourceToken: Token | null;
     actionName: string;
     item: any;
-    destination: { x: number; y: number };
-    cancel: (reason?: string) => void;
-    distanceToTrigger: number | null;
-    canTriggerReaction?: boolean;
+}
+
+interface TriggerDataOnInvoluntaryMove extends TriggerDataOnMove {
+    sourceToken: Token | null;
+    actionName: string;
+    item: any;
 }
 
 interface TriggerDataOnDamage extends TriggerDataBase {
@@ -567,10 +567,12 @@ interface TriggerDataOnTurnStart extends TriggerDataBase { triggeringToken: Toke
 interface TriggerDataOnTurnEnd extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 interface TriggerDataOnEnterCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 interface TriggerDataOnExitCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnFullRepair extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 
 type TriggerData =
     | TriggerDataOnMove
     | TriggerDataOnPreMove
+    | TriggerDataOnPreInvoluntaryMove
     | TriggerDataOnInvoluntaryMove
     | TriggerDataOnDamage
     | TriggerDataOnAttack
@@ -602,11 +604,12 @@ type TriggerData =
     | TriggerDataOnTurnStart
     | TriggerDataOnTurnEnd
     | TriggerDataOnEnterCombat
-    | TriggerDataOnExitCombat;
+    | TriggerDataOnExitCombat
+    | TriggerDataOnFullRepair;
 
 type TriggerType =
     | "onMove" | "onPreMove"
-    | "onInvoluntaryMove"
+    | "onPreInvoluntaryMove" | "onInvoluntaryMove"
     | "onPreDamage"
     | "onDamage"
     | "onHit" | "onMiss"
@@ -629,6 +632,7 @@ type TriggerType =
     | "onTurnStart" | "onTurnEnd"
     | "onRoundStart"
     | "onEnterCombat" | "onExitCombat"
+    | "onFullRepair"
     | "onUpdate";
 
 /** Any non built-in name fired through `dispatchCustomTrigger`. */

@@ -109,7 +109,8 @@ export async function revertLastMovement(tokenLike)
 
     const lastMovementId = history.at(-1).movementId;
     const startIdx = history.findIndex(waypoint => waypoint.movementId === lastMovementId);
-    const priorIdx = Math.max(startIdx - 1, 0);
+    const startsAtOwnOrigin = !!history[startIdx].checkpoint && startIdx < history.length - 1;
+    const priorIdx = startsAtOwnOrigin ? startIdx : Math.max(startIdx - 1, 0);
     const prior = history[priorIdx];
 
     const trimmedHistory = history.slice(0, startIdx).map(waypoint => ({

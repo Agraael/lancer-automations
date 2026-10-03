@@ -52,6 +52,30 @@ const MIGRATIONS = [
         },
     },
     {
+        id: 'involuntaryMoveSplit_v1',
+        async run()
+        {
+            for (const key of ['customReactions', 'generalReactions'])
+            {
+                const saved = foundry.utils.deepClone(getModuleSetting(key) || {});
+                let changed = false;
+                for (const entry of Object.values(saved))
+                {
+                    for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
+                    {
+                        if (!Array.isArray(reaction?.triggers) || !reaction.triggers.includes('onInvoluntaryMove'))
+                            continue;
+                        reaction.triggers = reaction.triggers.map(trigger => (trigger === 'onInvoluntaryMove' ? 'onPreInvoluntaryMove' : trigger));
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    await game.settings.set(MODULE_ID, key, saved);
+            }
+            Hooks.callAll('lancer-automations.clearCaches');
+        },
+    },
+    {
         id: 'tah.scopeMigration_clientToWorld_v1',
         run()
         {

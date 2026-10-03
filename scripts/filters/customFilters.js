@@ -25,6 +25,7 @@ import { FilterErrorCorrection } from './effects/errorCorrection.js';
 import { FilterColdSoak } from './effects/coldSoak.js';
 import { FilterRicochetLip } from './effects/ricochetLip.js';
 import { FilterConvectionChurn } from './effects/convectionChurn.js';
+import { FilterSliceTear } from './effects/sliceTear.js';
 
 export {
     FilterFracture,
@@ -45,7 +46,8 @@ export {
     FilterErrorCorrection,
     FilterColdSoak,
     FilterRicochetLip,
-    FilterConvectionChurn
+    FilterConvectionChurn,
+    FilterSliceTear
 };
 
 let FilterType = null;
@@ -92,6 +94,7 @@ Hooks.once('init', async () =>
     FilterType.coldSoak = FilterColdSoak;
     FilterType.ricochetLip = FilterRicochetLip;
     FilterType.convectionChurn = FilterConvectionChurn;
+    FilterType.sliceTear = FilterSliceTear;
     console.log('lancer-automations | Registered custom filters on source FilterType');
 
     // 2) Bundle-internal patch: scan bundle module exports for the FilterType by shape (stock keys).
@@ -158,6 +161,7 @@ Hooks.once('init', async () =>
             bundleFT.coldSoak = FilterColdSoak;
             bundleFT.ricochetLip = FilterRicochetLip;
             bundleFT.convectionChurn = FilterConvectionChurn;
+            bundleFT.sliceTear = FilterSliceTear;
             console.log('lancer-automations | Registered custom filters on bundle FilterType');
         }
     }

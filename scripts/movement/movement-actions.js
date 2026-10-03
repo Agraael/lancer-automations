@@ -106,6 +106,7 @@ Hooks.once('init', () =>
     {
         actions.forced.teleport = false;
         actions.forced.measure = true;
+        actions.forced.canSelect = () => true;
     }
 
     if (actions.teleport)

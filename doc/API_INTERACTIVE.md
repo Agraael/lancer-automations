@@ -50,7 +50,7 @@ const selected = await api.chooseToken(ownerToken, {
 | **inside `options`** | | | |
 | <kbd>range</kbd> | `number\|"sensors"` | `null` | Max range for advisory highlight. `"sensors"` = caster's sensor range |
 | <kbd>count</kbd> | `number` | `1` | Targets to pick (-1 for unlimited) |
-| <kbd>disposition</kbd> | `"friendly"\|"hostile"` | `null` | Keep only tokens with that disposition toward the caster (composes with `filter`) |
+| <kbd>disposition</kbd> | `"friendly"\|"hostile"` | `null` | Same as `filter` on the token's disposition toward the caster: advisory under `soft` (the default), a hard exclusion with `soft: false` |
 | <kbd>filter</kbd> | `(token: Token) => boolean` | `null` | Excludes tokens when returning false |
 | <kbd>filterWarning</kbd> | `string` | `null` | Warning text shown under a selected token when it fails `filter` in soft mode |
 | <kbd>soft</kbd> | `boolean` | `true` | Range and filter are advisory: invalid tokens can still be clicked. Cursor hover goes orange, the target's card entry gets an amber warning banner listing why. Set `false` to hard-block invalid selections. |
@@ -280,7 +280,7 @@ GM dialog that configures and broadcasts a choice card or vote to the active use
 </details>
 
 <details id="startVoteCard">
-<summary><b><code>startVoteCard</code></b> <sup>async</sup> → <code>true | null</code></summary>
+<summary><b><code>startVoteCard</code></b> <sup>async</sup> → <code>{ choiceIdx, responderIds } | null</code></summary>
 
 <br>
 
@@ -288,7 +288,7 @@ GM dialog that configures and broadcasts a choice card or vote to the active use
 const done = await api.startVoteCard(options)
 ```
 
-Every listed voter gets a card and casts one choice. Only the caller sees the tally and can confirm to close the vote. Resolves `true` on confirm, `null` if dismissed.
+Every listed voter gets a card and casts one choice. Only the caller sees the tally and can confirm to close the vote. Resolves `{ choiceIdx, responderIds }` on confirm (the winning index and the users who voted), `null` if dismissed.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -417,7 +417,7 @@ Each hook entry supports two formats:
 | Format | Description |
 |:-------|:------------|
 | `{ command: string, asGM: boolean }` | JS code stored in template flags (persists across reloads) |
-| `{ function: Function, asGM: boolean }` | JS function in runtime registry (lost on reload) |
+| `{ function: Function, asGM: boolean }` | Saved as source, so it must be a self-contained `function` expression, not an arrow. The placing client runs it in memory, other clients and reloads run the saved body with `context` as `this` |
 
 Both formats **stack**.
 
@@ -439,7 +439,7 @@ api.placeZone(token, {
     size: 2,
     hooks: {
         entered: {
-            function: (template, scene, token, context) => {
+            function: function (template, scene, token) {
                 const api = game.modules.get('lancer-automations').api;
                 api.applyEffectsToTokens({ tokens: [token], effectNames: ["impaired"] });
             },

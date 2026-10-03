@@ -4285,6 +4285,25 @@
     display: inline;
 }
 
+.battelog-pcol-gearlost--cascading.has-lost>i,
+.battelog-pcol-gearlost--cascading .battelog-pcol-gearlost-group-title {
+    color: #b46bff;
+}
+
+.battelog-pcol-gearlost--cascading.has-lost .battelog-pcol-gearlost-count {
+    color: #b46bff;
+    border-bottom-color: #b46bff;
+}
+
+.battelog-pcol-gearlost--cascading .battelog-pcol-gearlost-tip {
+    border-color: #b46bff;
+}
+
+.battelog-pcol-gearlost--cascading .battelog-pcol-gearlost-tip::after {
+    border-right-color: #b46bff;
+    border-bottom-color: #b46bff;
+}
+
 .battelog-pcol-survival {
     padding: 9px 10px;
     display: flex;

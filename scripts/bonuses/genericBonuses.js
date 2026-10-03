@@ -2883,7 +2883,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
 
     await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
 
-    options.duration = options.duration || { label: 'indefinite', turns: null, rounds: null };
+    options.duration = options.duration || 'indefinite';
     if (options.duration)
     {
         const token = options.forcePrototype
