@@ -2,6 +2,19 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-10-03-lancer-4-3-12",
+            "date": "2026-10-03",
+            "title": "Lancer Automations 4.3.12",
+            "body": [
+                "<p>Small update this week, I've been busy with my own games.</p>",
+                "<p>A <b>Conflicts</b> tool in the Automation Manager. New <b>onPreInvoluntaryMove</b> and <b>onFullRepair</b> triggers. <b>IMMOVABLE</b> blocks forced movement. A batch of activation fixes. Template Macro updated too.</p>",
+                "<p>Patreon <b>request forms</b> are open, I read them all.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/171328802",
+            "linkLabel": "Lancer Automations 4.3.12 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-09-27-lancer-4-3-8",
             "date": "2026-09-27",
             "title": "Lancer Automations 4.3.8",
