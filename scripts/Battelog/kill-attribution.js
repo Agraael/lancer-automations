@@ -23,11 +23,11 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound)
     const victimSide = sideOf.get(victimTokenId) ?? 'enemy';
     const contributions = [];
     const undoes = [];
-    const add = (id, round, seq) =>
+    const add = (id, round, seq, pilot = false) =>
     {
         if (!id || id === victimTokenId || (sideOf.get(id) ?? 'player') === victimSide)
             return;
-        contributions.push({ id, round, seq: seq ?? 0 });
+        contributions.push({ id, round, seq: seq ?? 0, pilot });
     };
     for (const log of allLogs)
     {
@@ -36,7 +36,7 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound)
             if (ev.round > cutoffRound)
                 continue;
             if (ev.type === 'damage' && ev.targetId === victimTokenId)
-                add(ev.byId, ev.round, ev.seq);
+                add(ev.byId, ev.round, ev.seq, !!ev.pilotTokenId);
             else if (ev.type === 'damage-undo' && ev.targetId === victimTokenId && ev.byId !== victimTokenId)
                 undoes.push({ id: ev.byId, round: ev.round });
             else if (ev.type === 'attack' && ev.byId !== victimTokenId)
@@ -44,7 +44,7 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound)
                 for (const target of ev.targets ?? [])
                 {
                     if (target.targetId === victimTokenId && target.hit)
-                        add(ev.byId, ev.round, ev.seq);
+                        add(ev.byId, ev.round, ev.seq, !!ev.pilotTokenId);
                 }
             }
             else if (ev.type === 'action' && ev.category === 'save' && ev.byId === victimTokenId && ev.forcedBy)
@@ -58,10 +58,17 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound)
             contributions.splice(idx, 1);
     }
     if (contributions.length === 0)
-        return { killerId: null, killerTeam: 'unknown', assistIds: [] };
+        return { killerId: null, killerTeam: 'unknown', assistIds: [], killerIsPilot: false, pilotAssistIds: [] };
 
     contributions.sort((lhs, rhs) => lhs.round - rhs.round || lhs.seq - rhs.seq);
     const killerId = contributions.at(-1).id;
     const assistIds = [...new Set(contributions.map(entry => entry.id))].filter(id => id !== killerId);
-    return { killerId, killerTeam: teamOf.get(killerId) ?? 'unknown', assistIds };
+    const lastPilot = new Map(contributions.map(entry => [entry.id, entry.pilot]));
+    return {
+        killerId,
+        killerTeam: teamOf.get(killerId) ?? 'unknown',
+        assistIds,
+        killerIsPilot: contributions.at(-1).pilot,
+        pilotAssistIds: assistIds.filter(id => lastPilot.get(id)),
+    };
 }

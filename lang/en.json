@@ -294,6 +294,31 @@
       "selectTargets": "SELECT TARGETS",
       "vote": "VOTE"
     },
+    "carousel": {
+      "addEvent": {
+        "duration": "Duration (rounds)",
+        "error": "An event needs a name and an image.",
+        "hidden": "Hidden",
+        "img": "Image",
+        "name": "Name",
+        "title": "Add Event"
+      },
+      "empty": "No combatants",
+      "event": {
+        "expired": "Event {name} has expired.",
+        "roundsLeft": "Rounds left: {rounds}"
+      },
+      "lane": {
+        "events": "Events"
+      },
+      "reaction": {
+        "available": "Reaction available",
+        "used": "Reaction used"
+      },
+      "side": {
+        "player": "Player"
+      }
+    },
     "choiceCard": {
       "confirmCancelCard": "<p>Are you sure you want to cancel the <b>{title}</b> choice card for all recipients?</p>",
       "confirmCancelVote": "<p>Are you sure you want to cancel the <b>{title}</b> vote?</p>",
@@ -415,6 +440,13 @@
       "patreon": "Patreon",
       "play": "Play",
       "save": "Save"
+    },
+    "deployableArt": {
+      "applied": "Default art applied to {count} deployable actor(s).",
+      "applyPrompt": "Apply the default deployable art to existing deployable actors that still use a default image? Custom images are kept.",
+      "applyTitle": "Default Deployable Art",
+      "reverted": "Default icons restored on {count} deployable actor(s).",
+      "revertPrompt": "Restore the default icons on deployable actors that still use the default deployable art? Custom images are kept."
     },
     "deployables": {
       "chooseSystemToRechargeTitle": "CHOOSE SYSTEM TO RECHARGE",
@@ -1805,6 +1837,8 @@
       "pathNote": "Path within <code>system</code> to the action data. Leave empty to use the item itself. (system)",
       "preconditions": "Preconditions",
       "reactAsTarget": "React as Target",
+      "reactToEnvironment": "React to Environment",
+      "reactToEnvironmentHint": "Also fires when the roll comes from the Environment actor (hazards, terrain). Off by default: the source has no token or actor.",
       "reactToOthers": "React to Others",
       "reactToSelf": "React to Self",
       "recursionWarning": "With an activation trigger (<code>onActivation</code>, <code>onInitActivation</code>, <code>onEndActivation</code>, <code>onInitEndActivation</code>) and this setting, re-activating the same item would loop. Lancer Automations will skip the item re-activation (console warning). Prefer",
@@ -1832,17 +1866,25 @@
       "selectPackFile": "Select pack JSON file"
     },
     "recap": {
+      "allPilots": "All Pilots",
       "dispo": {
         "friendly": "FRIENDLY",
         "hostile": "HOSTILE",
         "neutral": "NEUTRAL",
         "secret": "SECRET"
       },
+      "effectiveHp": "EFFECTIVE HP",
       "metric": {
-        "dmg": "DAMAGE TOTAL PER ROUND",
-        "heat": "HEAT TOTAL PER ROUND",
-        "hp": "HP TOTAL PER ROUND",
-        "kills": "KILL/ASSIST TOTAL PER ROUND"
+        "dmg": "DAMAGE",
+        "heat": "HEAT",
+        "hp": "HP",
+        "kills": "KILLS"
+      },
+      "metricTitle": {
+        "dmg": "DAMAGE DEALT · RUNNING TOTAL · PER ROUND",
+        "heat": "HEAT + STRESS LOAD · PER ROUND",
+        "hp": "HP + STRUCTURE REMAINING · PER ROUND",
+        "kills": "KILLS + ASSISTS · RUNNING TOTAL · PER ROUND"
       },
       "panel": {
         "accuracy": "Accuracy",
@@ -1854,6 +1896,7 @@
         "damageDealt": "Damage Dealt",
         "damageTaken": "Damage Taken",
         "destroyedBy": "DESTROYED BY",
+        "equipmentDestroyed": "Equipment Destroyed",
         "movement": "Movement",
         "repairs": "Repairs",
         "weaponsUsed": "Weapons Used"
@@ -2057,7 +2100,7 @@
         "name": "Auto Apply Damage"
       },
       "autoDamageRoll": {
-        "hint": "Open the Damage HUD automatically after an attack.",
+        "hint": "Open the Damage HUD automatically after an attack, unless it missed and has no Reliable damage.",
         "name": "Auto Damage Roll"
       },
       "autoFocusActivation": {
@@ -2104,9 +2147,29 @@
         "hint": "Tokens with the Bulwark status block line of sight.",
         "name": "Bulwark blocks line of sight"
       },
+      "carouselDeckSlide": {
+        "hint": "Deck slide time on hover, 0 is instant.",
+        "name": "Deck Slide (ms)"
+      },
+      "carouselLength": {
+        "hint": "Share of the top bar the carousel may use.",
+        "name": "Carousel Length (%)"
+      },
+      "carouselMaxOverlap": {
+        "hint": "Card overlap before scrolling, 0 always scrolls.",
+        "name": "Deck Max Overlap (%)"
+      },
+      "carouselPortraitSize": {
+        "hint": "Size of the card art on this client.",
+        "name": "Portrait Size (px)"
+      },
       "clearTargetsAfterRoll": {
         "hint": "Drop targets once an attack or damage roll resolves.",
         "name": "Clear Targets After Roll"
+      },
+      "combatCarousel": {
+        "hint": "Combatants in team lanes at the top of the screen.",
+        "name": "Enable Combat Carousel"
       },
       "consentMenu": {
         "hint": "Change your role or opt out at any time.",
@@ -2163,6 +2226,14 @@
       "debugPathHexCalculation": {
         "hint": "Draw temporary circles on the map highlighting the calculated path hex steps.",
         "name": "Debug: Path Hex Calculation"
+      },
+      "defaultDeployableArt": {
+        "hint": "Swaps default drone, mine, turret and hard cover icons for the module's token art, never custom images.",
+        "name": "Default Deployable Art"
+      },
+      "deployableArtScale": {
+        "hint": "Token art scale given to deployables that receive the default art.",
+        "name": "Default Deployable Art Scale"
       },
       "disableHumanDeathSound": {
         "hint": "Mute wreck sounds for human/pilot/squad deaths.",
@@ -2408,8 +2479,8 @@
         "hint": "Use the per-token detection-mode range instead of the actor sensor range.",
         "name": "Lancer Sensors: use detection-mode range"
       },
-      "lancerSilhFilterTest": {
-        "name": "TEST: filter-based awareness silhouette (filterArea bypass)"
+      "lancerSilhLegacyOverlay": {
+        "name": "Use the old overlay awareness silhouette"
       },
       "lancerVisionAutoAdd": {
         "hint": "Add Lancer Sensors and Battlefield Awareness to newly placed tokens.",
@@ -3313,6 +3384,9 @@
         "blinded": {
           "label": "Blinded"
         },
+        "combatCarousel": {
+          "label": "Combat Carousel"
+        },
         "coreShortcuts": {
           "hint": "Foundry's own performance options, shown here so you don't have to leave this window.",
           "label": "Foundry core"
@@ -3638,6 +3712,10 @@
         "hint": "Size of the elevation badge. 1 = effect icon size.",
         "label": "Elevation Badge Scale"
       },
+      "statBarFlashFollowsVisibility": {
+        "hint": "Value changes only flash the bar for viewers the visibility settings allow.",
+        "label": "Change Flash Follows Visibility"
+      },
       "statBarMinZoomScale": {
         "hint": "Below this zoom level the bar keeps a constant screen size. 0 = disabled.",
         "label": "Minimum Bar Zoom Scale"
@@ -3814,6 +3892,10 @@
       "syncAllTokenHeights": {
         "hint": "Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.",
         "label": "Apply Token Heights to All Actors"
+      },
+      "syncTemplateActors": {
+        "hint": "Reset the module's template actors to their defaults. Placed tokens are not changed.",
+        "label": "Reset Template Actors"
       },
       "tab": {
         "activations": {
@@ -4358,8 +4440,12 @@
         "label": "Header Label (NPC)"
       },
       "tokenStatHintScale": {
-        "hint": "Size of the popup, independent of token size and zoom.",
+        "hint": "Size of the popup.",
         "label": "Popup Scale"
+      },
+      "tokenStatHintScaleWithZoom": {
+        "hint": "Popup follows canvas zoom, sized for a 100px grid at 100% zoom.",
+        "label": "Scale With Zoom"
       },
       "tokenStatHintShowForControlled": {
         "hint": "Show the popup for the token you control.",
@@ -4576,6 +4662,9 @@
         "contest": "Contested check between two tokens, each rolling its own stat. Higher total wins.",
         "downtime": "Open the downtime activities dialog, with rolls and journal logging.",
         "effectManager": "Apply statuses, custom effects and bonuses to tokens.",
+        "environmentAttack": "Roll a basic attack from the Environment against your target(s).",
+        "environmentDamage": "Roll damage from the Environment on your target(s).",
+        "environmentTech": "Roll a tech attack from the Environment against your target(s).",
         "forceCheck": "Send a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.",
         "fullRepair": "Run a Full Repair on the selected unit(s).",
         "generateScan": "Create the scan journal for the selected token(s).",
@@ -4631,6 +4720,7 @@
         "effectManager": "Effect Manager",
         "empty": "Empty",
         "engineering": "Engineering",
+        "environment": "World",
         "fall": "Fall",
         "fight": "Fight",
         "forceCheck": "Force Check",
@@ -4706,6 +4796,7 @@
         "systems": "Systems",
         "talents": "Talents",
         "tech": "Tech",
+        "techAttack": "Tech Attack",
         "teleport": "Teleport",
         "templates": "Templates",
         "throwWeapon": "Throw Weapon",

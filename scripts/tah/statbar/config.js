@@ -8,6 +8,7 @@ export const SETTING_DEFAULT_COMBAT_ONLY = 'statBarDefaultCombatOnly';
 export const SETTING_DEFAULT_ROW_HEIGHT = 'statBarDefaultRowHeight';
 export const SETTING_VIS_OUT_OF_COMBAT = 'statBarVisibilityOutOfCombat';
 export const SETTING_VIS_IN_COMBAT = 'statBarVisibilityInCombat';
+export const SETTING_FLASH_FOLLOWS_VIS = 'statBarFlashFollowsVisibility';
 export const SETTING_EFFECT_ICON_SCALE = 'statBarEffectIconScale';
 export const SETTING_MIN_ZOOM_SCALE = 'statBarMinZoomScale';
 export const SETTING_ELEVATION_BADGE_SCALE = 'statBarElevationBadgeScale';

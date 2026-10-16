@@ -195,6 +195,7 @@ import { injectInfectionSchemaField, injectInfectionDamageType, injectInfectionC
 import { registerTokenStatBarSettings, initTokenStatBar, ExtraBarsAPI, reinjectAutoBarsForActor } from "./tah/tokenStatBar.js";
 import { initConsumeFeedback } from "./tah/consume-feedback.js";
 import { registerTokenStatHintSettings, initTokenStatHint } from "./tah/tokenStatHint.js";
+import { registerCarouselSettings, initCarousel } from "./carousel/carousel.js";
 
 // FX
 import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
@@ -213,6 +214,7 @@ import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
 import { FlagsAPI, getLAFlag, getLAFlags } from "./tools/flag-utils.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
+import { isTemplateActor, TemplateActorsAPI } from "./tools/template-actors.js";
 import { initAutoFocus, registerCardFocusFlags } from "./tools/auto-focus.js";
 import { dedupeWorldSettings } from "./setup/settings-dedupe.js";
 
@@ -570,6 +572,7 @@ Hooks.on('init', () =>
     registerTourBootstrap();
     registerTokenStatBarSettings(); // Custom token stat bar (standalone setting)
     registerTokenStatHintSettings(); // Hover stat-hint popup
+    registerCarouselSettings();
     registerIsoSettings(); // Isometric-perspective compat toggles
     registerFlowStatePersistence();
     registerCardFocusFlags();
@@ -766,6 +769,21 @@ Hooks.once('ready', async () =>
         catch (e)
         {
             console.warn('lancer-automations | Could not wrap Hooks.callAll for renderCombatDock fix:', e);
+        }
+
+        try
+        {
+            libWrapper.register(MODULE_ID, 'CONFIG.Combat.documentClass.prototype._manageTurnEvents', function (wrapped, ...args)
+            {
+                const result = wrapped(...args);
+                if (this.previous)
+                    this.previous = { ...this.previous };
+                return result;
+            }, 'WRAPPER');
+        }
+        catch (e)
+        {
+            console.warn('lancer-automations | Could not wrap Combat._manageTurnEvents:', e);
         }
 
         // floor the TokenHUD at one grid cell so sub-1x1 tokens don't cram the buttons
@@ -1219,6 +1237,7 @@ Hooks.on('ready', async () =>
         ...DowntimeAPI,
         ...ScanAPI,
         ...FlagsAPI,
+        ...TemplateActorsAPI,
         ...RestAPI,
         ...AurasAPI,
         ...ItemDisabledAPI,
@@ -1311,6 +1330,7 @@ Hooks.on('ready', async () =>
     initStatusFX();
     initTokenStatBar();
     initTokenStatHint();
+    initCarousel();
     initConsumeFeedback();
     initAutoDamage();
     initAutoStruct();
@@ -2330,8 +2350,8 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
 {
     if (userId !== game.userId)
         return;
-    const baseName = tokenDoc?.baseActor?.name ?? tokenDoc?.actor?.name ?? '';
-    if (!TEMPLATE_NO_PROVOKE_NAMES.has(baseName))
+    const baseActor = tokenDoc?.baseActor ?? tokenDoc?.actor;
+    if (!isTemplateActor(baseActor) && !TEMPLATE_NO_PROVOKE_NAMES.has(baseActor?.name ?? ''))
         return;
     const actor = tokenDoc.actor;
     const api = game.modules.get(MODULE_ID)?.api;

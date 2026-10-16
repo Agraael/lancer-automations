@@ -9,6 +9,15 @@ import { localize, localizeFormat } from '../tools/string-utils.js';
 
 const CODE_INSTEAD = { activationType: "code", activationMode: "instead" };
 
+async function joinMechCombat(pilotTokenDoc, mechToken)
+{
+    const combatant = mechToken?.combatant;
+    const combat = combatant?.combat ?? combatant?.parent;
+    if (!pilotTokenDoc || !combat || pilotTokenDoc.inCombat)
+        return;
+    await pilotTokenDoc.toggleCombatant({ active: true, combat });
+}
+
 const externalItemReactions = {};
 const externalGeneralReactions = {};
 
@@ -1555,6 +1564,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!placed || placed.length === 0)
                     return;
 
+                await joinMechCombat(placed[0], reactorToken);
                 await actionFX.queueActionFx(() => actionFX.playEjectFX(reactorToken, placed[0]), reactorToken, 'eject');
 
                 await api.applyEffectsToTokens({
@@ -1929,7 +1939,10 @@ export function getDefaultGeneralReactionRegistry()
                     description: localizeFormat('LA.reaction.dismountPlace', { pilot: pilotActor.name, mech: mechActor.name })
                 });
                 if (placed && placed.length > 0)
+                {
+                    await joinMechCombat(placed[0], reactorToken);
                     await actionFX.queueActionFx(() => actionFX.playDismountFX(reactorToken), reactorToken, 'dismount');
+                }
             }
         },
         "Scan": {
@@ -2070,7 +2083,7 @@ export function getDefaultGeneralReactionRegistry()
                 if (!pilotActor)
                     return;
 
-                await api.placeToken({
+                const placed = await api.placeToken({
                     actor: pilotActor,
                     origin: reactorToken,
                     range: 1,
@@ -2079,6 +2092,7 @@ export function getDefaultGeneralReactionRegistry()
                     description: localizeFormat('LA.reaction.dismountPrompt', { pilot: pilotActor.name, mech: reactorToken.name }),
                     icon: "cci cci-pilot"
                 });
+                await joinMechCombat(placed?.[0], reactorToken);
             }
         }
     };

@@ -5,6 +5,7 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { localizeFormat } from '../tools/string-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
+import { isFriendly } from '../combat/overwatch.js';
 
 // Action FX sequences; every one no-ops unless Sequencer and lancer-weapon-fx are active and Action FX is enabled.
 
@@ -1488,7 +1489,8 @@ export async function playBoostFX(token)
         .file('jb2a.zoning.directional.once.redyellow.line200.01')
         .scaleToObject(1.5)
         .filter('Glow', { color: 0x00CED1 })
-        .atLocation(token);
+        .atLocation(token)
+        .aboveLighting();
     await _appendActionBadge(seq, token, 'modules/lancer-automations/FX/svg/Boost.svg').play();
 }
 
@@ -2343,32 +2345,12 @@ export async function playDamageImpactFX(type, target, amount = null)
     seq.play();
 }
 
-function _isFriendlyTo(origin, target)
-{
-    const tokenFactions = game.modules.get('token-factions');
-    if (tokenFactions?.active && typeof tokenFactions.api?.getDisposition === 'function')
-    {
-        try
-        {
-            return tokenFactions.api.getDisposition(origin, target) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-        }
-        catch
-        { /* fall through */ }
-    }
-    const originDisp = origin?.document?.disposition ?? 0;
-    const targetDisp = target?.document?.disposition ?? 0;
-    const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-    const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-    const isBad = (d) => d === HOSTILE || d === SECRET;
-    return isBad(originDisp) === isBad(targetDisp);
-}
-
 export async function playBonusAddedFX(token, origin = null)
 {
     if (!_canPlay() || !token)
         return;
     const arrow = origin
-        ? (_isFriendlyTo(origin, token)
+        ? (isFriendly(origin, token)
             ? 'jb2a.zoning.directional.once.bluegreen.line400.03'
             : 'jb2a.zoning.directional.once.redyellow.line400.03')
         : null;
@@ -2399,7 +2381,7 @@ export async function playStatusAddedFX(token, origin = null)
     if (!_canPlay() || !token)
         return;
     const arrow = origin
-        ? (_isFriendlyTo(origin, token)
+        ? (isFriendly(origin, token)
             ? 'jb2a.zoning.directional.once.bluegreen.line400.03'
             : 'jb2a.zoning.directional.once.redyellow.line400.03')
         : null;

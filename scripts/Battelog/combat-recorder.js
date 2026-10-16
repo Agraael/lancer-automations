@@ -3,7 +3,7 @@
 // Foundry combat lifecycle wiring for Battle Log telemetry.
 // Only the GM writes; each hook is a no-op for player clients.
 
-import { battleLogEnabled } from './battelog-utils.js';
+import { battleLogEnabled, findPilotMechEntry } from './battelog-utils.js';
 import {
     initTelemetry,
     ensureCombatantTracked,
@@ -11,6 +11,7 @@ import {
     reclassifyCombat,
     mutateTelemetry,
     forgetCombat,
+    findEntry,
 } from './telemetry-store.js';
 import { reconcileCombatant, forgetCombatState } from './state-capture.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
@@ -29,6 +30,19 @@ function _tickInto(telemetry, combat, round)
 // about to die; setFlag mid-delete is racy, so we ticket in-memory instead and
 // hand it off via consumeCombatTelemetry() to whoever opens the GM card.
 const snapshotByCombatId = new Map();
+
+function _linkPilotToken(telemetry, combatant)
+{
+    const mechEntry = combatant?.tokenId ? findPilotMechEntry(combatant.actor) : null;
+    const entry = mechEntry ? findEntry(telemetry, mechEntry.tokenId) : null;
+    if (!entry)
+        return false;
+    entry.pilotTokenIds ??= [];
+    if (entry.pilotTokenIds.includes(combatant.tokenId))
+        return false;
+    entry.pilotTokenIds.push(combatant.tokenId);
+    return true;
+}
 
 /** Pop the snapshot for the given combat id. Returns null if none. */
 export function consumeCombatTelemetry(combatId)
@@ -61,7 +75,10 @@ export function registerCombatRecorder()
             if (!telemetry)
                 return null;
             for (const combatant of combat.combatants ?? [])
+            {
                 reconcileCombatant(telemetry, combatant, 0);
+                _linkPilotToken(telemetry, combatant);
+            }
             return telemetry;
         });
     });
@@ -74,6 +91,7 @@ export function registerCombatRecorder()
         if (!combat)
             return;
         await ensureCombatantTracked(combat, combatant);
+        await mutateTelemetry(combat, telemetry => (telemetry && _linkPilotToken(telemetry, combatant) ? telemetry : null));
     });
 
     // Tick at every turn and round advance.

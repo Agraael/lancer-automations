@@ -8,6 +8,7 @@ import {
     isTokenVisible,
 } from '../utils/lancer-token.js';
 import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
+import { REF_GRID_SIZE } from './statbar/config.js';
 import { getTokenDispositionInfo } from '../tools/misc-tools.js';
 import { isActorScannedForUser, isActorAllyOfUser } from '../tools/scan-lookup.js';
 
@@ -16,6 +17,7 @@ import { getLAFlag } from '../tools/flag-utils.js';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
 const SETTING_DELAY_MS = 'tokenStatHintDelayMs';
 const SETTING_SCALE = 'tokenStatHintScale';
+const SETTING_SCALE_WITH_ZOOM = 'tokenStatHintScaleWithZoom';
 const SETTING_SHOW_CONTROLLED = 'tokenStatHintShowForControlled';
 const SETTING_COMBAT_ONLY = 'tokenStatHintCombatOnly';
 const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
@@ -47,6 +49,7 @@ const SLIDE_OFFSET = 28;
 const SCAN_MEMO_MS = 1000;
 
 const SCANNED_MEMO = new Map();
+const SCAN_SETTING_KEYS = new Set(['revealStatsWithoutScan', 'scanRevealPlayers', 'scanRevealAllies'].map(key => `${MODULE_ID}.${key}`));
 
 let _popupEl = null;
 let _animEl = null;
@@ -72,10 +75,15 @@ function getDelayMs()
     const raw = Number(getModuleSetting(SETTING_DELAY_MS));
     return Number.isFinite(raw) && raw >= 0 ? raw : 500;
 }
-function getUserScale()
+function getHintScale()
 {
     const raw = Number(getModuleSetting(SETTING_SCALE));
-    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+    const userScale = Number.isFinite(raw) && raw > 0 ? raw : 1;
+    if (!getModuleSetting(SETTING_SCALE_WITH_ZOOM))
+        return userScale;
+    const zoom = canvas?.stage?.scale?.x || 1;
+    const gridPx = canvas?.dimensions?.size ?? REF_GRID_SIZE;
+    return userScale * zoom * gridPx / REF_GRID_SIZE;
 }
 function showForControlled()
 {
@@ -368,23 +376,40 @@ function getActorSubtitleText(actor)
     return '';
 }
 
+function displayName(tokenDoc, actor = tokenDoc?.actor)
+{
+    return tokenDoc?.name || actor?.name || 'UNKNOWN';
+}
+
+// SCAN-tied mode reveals nothing about NPC/deployable until scanned.
+function unknownName(tokenDoc, actor = tokenDoc?.actor)
+{
+    const ownSide = actor?.type === 'pilot' || actor?.type === 'mech';
+    if (!ownSide && getLabelMode() === LABEL_SCAN)
+        return getUnknownLabel(tokenDoc);
+    return displayName(tokenDoc, actor);
+}
+
+export function getTokenNameView(tokenDoc, actor = tokenDoc?.actor)
+{
+    if (isActorRevealedToUser(actor))
+        return { text: displayName(tokenDoc, actor), unknown: false };
+    return { text: unknownName(tokenDoc, actor), unknown: true };
+}
+
 function buildHeaderHtml(token, mode, titleSuffixHtml = '')
 {
     const actor = token.actor;
     const tokenDoc = token?.document ?? token;
     const isNpc = actor?.type === 'npc';
-    const isOwnSide = actor?.type === 'pilot' || actor?.type === 'mech';
-    const labelMode = getLabelMode();
     const isUnknown = (mode === 'unknown-stable' || mode === 'unknown-damaged');
 
-    let label = token.document?.name || actor?.name || 'UNKNOWN';
+    let label = displayName(token.document, actor);
     let tierBadge = '';
 
     if (isUnknown)
     {
-        // SCAN-tied mode reveals nothing about NPC/deployable until scanned.
-        if (!isOwnSide && labelMode === LABEL_SCAN)
-            label = getUnknownLabel(tokenDoc);
+        label = unknownName(tokenDoc);
         let unknownTier = '';
         if (!hideClassWhenUnknown(tokenDoc))
         {
@@ -1127,7 +1152,7 @@ function computePlaceRight(token, popupScreenW)
         return true;
     const rect = tokenScreenRect(token);
     const bounds = usableScreenBounds();
-    const gap = ANCHOR_GAP * getUserScale();
+    const gap = ANCHOR_GAP * getHintScale();
     const rightSpace = bounds.right - rect.right;
     const leftSpace = rect.left - bounds.left;
     const rightAcceptable = rightSpace >= (popupScreenW / 2 + gap);
@@ -1146,24 +1171,24 @@ function applyPosition(token)
     const rect = tokenScreenRect(token);
     const anchorX = _placeRight ? rect.right : rect.left;
     const anchorY = rect.cy;
-    const userScale = getUserScale();
+    const hintScale = getHintScale();
     const popupW = _popupEl.offsetWidth || 0;
     const popupH = _popupEl.offsetHeight || 0;
     if (_placeRight)
     {
-        _popupEl.style.left = `${anchorX + ANCHOR_GAP * userScale}px`;
-        _popupEl.style.top = `${anchorY - (popupH * userScale) / 2}px`;
+        _popupEl.style.left = `${anchorX + ANCHOR_GAP * hintScale}px`;
+        _popupEl.style.top = `${anchorY - popupH / 2}px`;
         _popupEl.style.setProperty('--la-hint-origin', '0% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${SLIDE_OFFSET}px`);
     }
     else
     {
-        _popupEl.style.left = `${anchorX - ANCHOR_GAP * userScale - popupW * userScale}px`;
-        _popupEl.style.top = `${anchorY - (popupH * userScale) / 2}px`;
+        _popupEl.style.left = `${anchorX - ANCHOR_GAP * hintScale - popupW}px`;
+        _popupEl.style.top = `${anchorY - popupH / 2}px`;
         _popupEl.style.setProperty('--la-hint-origin', '100% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${-SLIDE_OFFSET}px`);
     }
-    _popupEl.style.setProperty('--la-hint-scale', String(userScale));
+    _popupEl.style.setProperty('--la-hint-scale', String(hintScale));
 }
 
 function clearDelay()
@@ -1280,7 +1305,7 @@ function showFor(token)
     _currentToken = token;
 
     const popW = _popupEl.offsetWidth || 200;
-    _placeRight = computePlaceRight(token, popW * getUserScale());
+    _placeRight = computePlaceRight(token, popW * getHintScale());
     applyPosition(token);
 
     _state = 'in';
@@ -1403,7 +1428,7 @@ function rebuildIfVisible(actor)
         _animEl.classList.add('la-show');
     }
     const popW = _popupEl.offsetWidth || 200;
-    _placeRight = computePlaceRight(token, popW * getUserScale());
+    _placeRight = computePlaceRight(token, popW * getHintScale());
     applyPosition(token);
 }
 
@@ -1428,6 +1453,17 @@ export function registerTokenStatHintSettings()
         type: Number,
         default: 1,
         range: { min: 0.5, max: 2, step: 0.05 },
+        onChange: () =>
+        {
+            if (_currentToken)
+                applyPosition(_currentToken);
+        },
+    });
+    game.settings.register(MODULE_ID, SETTING_SCALE_WITH_ZOOM, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
         onChange: () =>
         {
             if (_currentToken)
@@ -1544,7 +1580,7 @@ export function initTokenStatHint()
             if (!_popupEl || !_currentToken)
                 return;
             const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getUserScale());
+            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
             applyPosition(_currentToken);
         });
         Hooks.on('collapseSidebar', () =>
@@ -1552,7 +1588,7 @@ export function initTokenStatHint()
             if (!_popupEl || !_currentToken)
                 return;
             const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getUserScale());
+            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
             applyPosition(_currentToken);
         });
         Hooks.on('renderSidebar', () =>
@@ -1560,7 +1596,7 @@ export function initTokenStatHint()
             if (!_popupEl || !_currentToken)
                 return;
             const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getUserScale());
+            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
             applyPosition(_currentToken);
         });
     }
@@ -1574,9 +1610,15 @@ export function initTokenStatHint()
                 return;
             rebuildIfVisible(actor);
         });
-        Hooks.on('updateJournalEntry', () =>
+        for (const hook of /** @type {const} */ (['createJournalEntry', 'updateJournalEntry', 'deleteJournalEntry']))
+            Hooks.on(hook, () => SCANNED_MEMO.clear());
+        for (const hook of /** @type {const} */ (['createSetting', 'updateSetting', 'deleteSetting']))
         {
-            SCANNED_MEMO.clear();
-        });
+            Hooks.on(hook, setting =>
+            {
+                if (SCAN_SETTING_KEYS.has(setting.key))
+                    SCANNED_MEMO.clear();
+            });
+        }
     }
 }

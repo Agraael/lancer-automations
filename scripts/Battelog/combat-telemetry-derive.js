@@ -7,30 +7,39 @@ import { AWARDS } from './awards.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { attributeKill } from './kill-attribution.js';
 import { localize } from '../tools/string-utils.js';
+import { tfGetTeam, tfGetTeams } from '../tools/token-factions-utils.js';
+import { getRelativeDisposition } from '../combat/overwatch.js';
+import { isPlayerOwned } from './telemetry-store.js';
 
 const ACCENT_PALETTE = [
-    '#7bd3ff', '#ffaa00', '#a577ff', '#6be08a', '#ff7bb9',
-    '#4dd0e1', '#ffb84d', '#dc72ff', '#ffe066', '#ff6b6b',
+    '#7bd3ff', '#a577ff', '#6be08a', '#ff7bb9', '#4dd0e1',
+    '#9ccc65', '#90a4ae', '#f48fb1', '#b39ddb', '#80cbc4',
 ];
 const FALLBACK_IMG = 'icons/svg/mystery-man.svg';
 const TOP_ACTION_EXCLUDE = new Set(['SKIRMISH', 'BARRAGE', 'FIGHT']);
 
 /**
- * @param {import('./combat-telemetry.js').CombatTelemetry} telemetry
+ * @param {import('./combat-telemetry.js').CombatTelemetry} recorded
  * @param {{outcome?: 'VICTORY'|'DEFEAT'|'PARTIAL', mvpId?: string|null}} [opts]
  */
-export function deriveDisplayBattle(telemetry, { outcome = 'VICTORY', mvpId = null } = {})
+export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = null } = {})
 {
+    const telemetry = _teamBuckets(recorded);
     const turnAxis = _buildTurnAxis(telemetry);
-    const players = telemetry.players.map((log, idx) => _derivePlayer(log, idx, telemetry, turnAxis));
+    const players = telemetry.players.map((log, idx) =>
+    {
+        const player = _derivePlayer(log, idx, telemetry, turnAxis);
+        return _actor(log.actorId)?.type === 'pilot' ? _pilotOnlyPlayer(player, log, telemetry, turnAxis) : player;
+    });
 
     // Counterparty sets for per-card DMG DEALT/TAKEN filtering.
     const idsFrom = (logs) => new Set((logs ?? []).map(log => log.tokenId));
     const playerIds     = idsFrom(telemetry.players);
     const hostileIds    = idsFrom(telemetry.hostiles);
     const friendlyIds   = idsFrom(telemetry.friendlies);
-    const hostileCounterparty  = new Set([...playerIds, ...friendlyIds]);
-    const friendlyCounterparty = hostileIds;
+    const pilotIdsFrom = logs => (logs ?? []).flatMap(log => [..._pilotTokenIds(log)]);
+    const hostileCounterparty  = new Set([...playerIds, ...friendlyIds, ...pilotIdsFrom(telemetry.players), ...pilotIdsFrom(telemetry.friendlies)]);
+    const friendlyCounterparty = new Set([...hostileIds, ...pilotIdsFrom(telemetry.hostiles)]);
     const hostiles    = (telemetry.hostiles   ?? []).map((log, idx) => _deriveNonSquad(log, idx, telemetry, 'hostile',  hostileCounterparty));
     const friendlies  = (telemetry.friendlies ?? []).map((log, idx) => _deriveNonSquad(log, idx, telemetry, 'friendly', friendlyCounterparty));
     const neutrals    = (telemetry.neutrals   ?? []).map((log, idx) => _deriveNonSquad(log, idx, telemetry, 'neutral',  null));
@@ -42,11 +51,15 @@ export function deriveDisplayBattle(telemetry, { outcome = 'VICTORY', mvpId = nu
         h.killedBy = attribution.killerId;
         h.killedByTeam = attribution.killerTeam;
         h.assistedBy = attribution.assistIds;
+        h.killedByPilot = attribution.killerIsPilot;
+        h.pilotAssistedBy = attribution.pilotAssistIds;
     }
     for (const p of players)
     {
         p.killedList   = hostiles.filter(h => h.killedBy === p.tokenId).map(h => h.name);
         p.assistedList = hostiles.filter(h => (h.assistedBy ?? []).includes(p.tokenId)).map(h => h.name);
+        p.pilotKilledList   = hostiles.filter(hostile => hostile.killedBy === p.tokenId && hostile.killedByPilot).map(hostile => hostile.name);
+        p.pilotAssistedList = hostiles.filter(hostile => (hostile.pilotAssistedBy ?? []).includes(p.tokenId)).map(hostile => hostile.name);
         p.kills   = p.killedList.length;
         p.assists = p.assistedList.length;
         for (const h of hostiles)
@@ -288,12 +301,12 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const startHp     = startTick ? Math.max(0, _asNum(startTick.hp, hpMax) + (startStruct - 1) * hpMax) : effectiveHpMax;
     const startHeat   = startTick ? _asNum(startTick.heat, 0) + (stressMax - startStress) * heatMax : 0;
 
-    // Split damage: physical = everything except HEAT (infection is excluded from the display cell).
-    const heatDmgDealt      = breakdown.dmgOut.types.find(type => type.k === 'HEAT')?.v ?? 0;
+    // Split damage: INFECTION counts as heat, like BURN counts as physical.
+    const heatDmgDealt      = breakdown.dmgOut.types.filter(type => type.k === 'HEAT' || type.k === 'INFECTION').reduce((n, type) => n + type.v, 0);
     const physicalDmgDealt  = breakdown.dmgOut.types
         .filter(type => type.k !== 'HEAT' && type.k !== 'INFECTION')
         .reduce((n, type) => n + type.v, 0);
-    const heatDmgTaken      = breakdown.dmgIn.types.find(type => type.k === 'HEAT')?.v ?? 0;
+    const heatDmgTaken      = breakdown.dmgIn.types.filter(type => type.k === 'HEAT' || type.k === 'INFECTION').reduce((n, type) => n + type.v, 0);
     const physicalDmgTaken  = breakdown.dmgIn.types
         .filter(type => type.k !== 'HEAT' && type.k !== 'INFECTION')
         .reduce((n, type) => n + type.v, 0);
@@ -345,7 +358,7 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         shots,
         hits,
         accuracy,
-        moves: events.reduce((n, ev) => n + (ev.type === 'move' && !ev.knockback ? (ev.distance ?? 0) : 0), 0),
+        moves: events.reduce((n, ev) => n + (ev.type === 'move' && !ev.knockback && ev.byId === log.tokenId ? (ev.distance ?? 0) : 0), 0),
         maxActionsInTurn,
         reactionsUsed,
         scans,
@@ -375,6 +388,155 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         assistLineTurns: new Array(turnAxis.length).fill(0),
         killAssistLineTurns: new Array(turnAxis.length).fill(0),
         gearLost: _gearLost(actor, events),
+        bd: breakdown,
+        pilotSide: _derivePilotSide(log, telemetry, sys.pilot?.value),
+    };
+}
+
+function _pilotOnlyPlayer(player, log, telemetry, turnAxis)
+{
+    const side = _derivePilotSide(log, telemetry, _actor(log.actorId), true);
+    if (!side)
+        return player;
+    const hpLine = _tickLine(log.events, 'hp', telemetry.roundCount, side.hpMax);
+    return {
+        ...player,
+        pilotOnly: true,
+        pilot: side.name,
+        callsign: side.callsign,
+        mechName: side.callsign,
+        frame: 'PILOT',
+        ll: side.ll,
+        img: side.img,
+        hpMax: side.hpMax,
+        hpEnd: side.hpEnd,
+        structMax: 0,
+        structEnd: 0,
+        stressMax: 0,
+        stressEnd: 0,
+        heatMax: 0,
+        heatEnd: 0,
+        heatPeak: 0,
+        effectiveHpMax: side.hpMax,
+        effectiveHpEnd: side.hpEnd,
+        startHp: side.hpMax,
+        startHeat: 0,
+        heatCapacityMax: 0,
+        heatConsumedEnd: 0,
+        repairs: 0,
+        repairsMax: 0,
+        corePower: false,
+        physicalDmgTaken: side.physicalDmgTaken ?? 0,
+        heatDmgTaken: 0,
+        dmgTaken: side.dmgTaken ?? 0,
+        survivorScore: 0,
+        redlineRounds: 0,
+        heatCooled: 0,
+        hpRestored: 0,
+        line: hpLine,
+        heatLine: hpLine.map(() => 0),
+        lineTurns: turnAxis.length ? _tickLineTurns(log.events, 'hp', turnAxis, side.hpMax) : [],
+        heatLineTurns: new Array(turnAxis.length).fill(0),
+        gearLost: { weapons: [], systems: [], cascading: [] },
+        pilotSide: side,
+    };
+}
+
+function _pilotTokenIds(log)
+{
+    const ids = new Set(log.pilotTokenIds ?? []);
+    for (const ev of log.events ?? [])
+    {
+        if (ev.pilotTokenId)
+            ids.add(ev.pilotTokenId);
+    }
+    return ids;
+}
+
+function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
+{
+    if (pilotActor?.type !== 'pilot')
+        return null;
+    const sys = /** @type {any} */ (pilotActor.system ?? {});
+    const tokenIds = _pilotTokenIds(log);
+    if (ownLog)
+        tokenIds.add(log.tokenId);
+    const defeated = CONFIG.specialStatusEffects?.DEFEATED ?? 'downandout';
+    const side = {
+        name: String(pilotActor.name ?? 'PILOT').toUpperCase(),
+        callsign: String(sys.callsign || pilotActor.name || 'PILOT').toUpperCase(),
+        img: pilotActor.img ?? FALLBACK_IMG,
+        ll: _asNum(sys.level, 0),
+        hpEnd: _asNum(sys.hp?.value, 0),
+        hpMax: _asNum(sys.hp?.max, 0),
+        actorId: pilotActor.id,
+        killed: !!pilotActor.statuses?.has(defeated),
+        tokenIds: [...tokenIds],
+        fielded: tokenIds.size > 0,
+    };
+    if (!side.fielded)
+        return side;
+
+    const key = `pilot:${log.tokenId}`;
+    const rekey = (ev) =>
+    {
+        const own = tokenIds.has(ev.pilotTokenId) || tokenIds.has(ev.byId);
+        const targeted = tokenIds.has(ev.targetId) || (ev.targets ?? []).some(target => tokenIds.has(target.targetId));
+        if (!own && !targeted)
+            return ev;
+        return {
+            ...ev,
+            byId: own ? key : ev.byId,
+            targetId: tokenIds.has(ev.targetId) ? key : ev.targetId,
+            targets: ev.targets?.map(target => (tokenIds.has(target.targetId) ? { ...target, targetId: key } : target)),
+        };
+    };
+    const rekeyLogs = logs => (logs ?? []).map(other => ({ ...other, events: other.events.map(rekey) }));
+    const view = {
+        ...telemetry,
+        players: rekeyLogs(telemetry.players),
+        hostiles: rekeyLogs(telemetry.hostiles),
+        friendlies: rekeyLogs(telemetry.friendlies),
+        neutrals: rekeyLogs(telemetry.neutrals),
+        secrets: rekeyLogs(telemetry.secrets),
+    };
+    const events = log.events.map(rekey);
+    const breakdown = _buildBreakdown(events, view, key);
+    const heatIn = breakdown.dmgIn.types.find(type => type.k === 'HEAT');
+    if (heatIn)
+    {
+        const energyIn = breakdown.dmgIn.types.find(type => type.k === 'ENERGY');
+        if (energyIn)
+            energyIn.v += heatIn.v;
+        else
+            breakdown.dmgIn.types.push({ k: 'ENERGY', v: heatIn.v });
+        breakdown.dmgIn.types = breakdown.dmgIn.types.filter(type => type.k !== 'HEAT');
+    }
+    const sumTypes = (types, keep) => types.filter(keep).reduce((total, type) => total + type.v, 0);
+    const gritRolls = events.filter(ev => ev.type === 'action' && ev.byId === key && /GRIT/i.test(ev.name ?? ''));
+    const gritPasses = gritRolls.filter(ev => ev.success).length;
+    return {
+        ...side,
+        dmgDealt: sumTypes(breakdown.dmgOut.types, () => true),
+        dmgTaken: sumTypes(breakdown.dmgIn.types, () => true),
+        physicalDmgDealt: sumTypes(breakdown.dmgOut.types, type => type.k !== 'HEAT' && type.k !== 'INFECTION'),
+        heatDmgDealt: sumTypes(breakdown.dmgOut.types, type => type.k === 'HEAT' || type.k === 'INFECTION'),
+        physicalDmgTaken: sumTypes(breakdown.dmgIn.types, type => type.k !== 'INFECTION'),
+        heatDmgTaken: 0,
+        attacks: breakdown.weapons.reduce((total, weapon) => total + weapon.n, 0),
+        techAtk: breakdown.techActs.reduce((total, tech) => total + tech.n, 0),
+        skills: breakdown.skills.reduce((total, skill) => total + skill.n, 0),
+        moves: events.reduce((total, ev) => total + (ev.type === 'move' && !ev.knockback && ev.byId === key ? (ev.distance ?? 0) : 0), 0),
+        favWeapon: String(_attackNameCounts(
+            events,
+            ev => ev.type === 'attack' && ev.byId === key && ev.category === 'weapon' && !ev.basic && ev.targets?.some(target => target.hit),
+            ev => ev.weaponName,
+        ).top ?? '-').toUpperCase(),
+        topAction: String(_actionCounts(
+            events,
+            ev => ev.type === 'action' && ev.byId === key && ev.success && !TOP_ACTION_EXCLUDE.has(ev.name) && !!ev.activation,
+        ).top ?? '-').toUpperCase(),
+        grit: { attempts: gritRolls.length, passes: gritPasses, rate: gritRolls.length ? Math.round(gritPasses / gritRolls.length * 100) : null },
         bd: breakdown,
     };
 }
@@ -790,20 +952,26 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         .map(i => String(i.name ?? '').toUpperCase());
     const tier = _asNum(sys.tier, 1);
     const size = _asNum(sys.size, 1);
-    const actorType = actor?.type === 'mech' ? 'mech' : 'npc';
-    const frameName = actorType === 'mech'
-        ? String(sys.loadout?.frame?.value?.name ?? sys.frame?.name ?? 'UNKNOWN FRAME').toUpperCase()
-        : null;
-    const ll = actorType === 'mech'
-        ? _asNum(sys.pilot?.value?.system?.level ?? sys.pilot?.level, 0)
-        : null;
+    const actorType = actor?.type === 'mech' || actor?.type === 'pilot' ? actor.type : 'npc';
+    let frameName = null;
+    let ll = null;
+    if (actorType === 'mech')
+    {
+        frameName = String(sys.loadout?.frame?.value?.name ?? sys.frame?.name ?? 'UNKNOWN FRAME').toUpperCase();
+        ll = _asNum(sys.pilot?.value?.system?.level ?? sys.pilot?.level, 0);
+    }
+    else if (actorType === 'pilot')
+    {
+        frameName = 'PILOT';
+        ll = _asNum(sys.level, 0);
+    }
     const destroyedEv = events.find(ev => ev.type === 'destroyed');
     const killed = !!destroyedEv;
     const addToBucket = (bucket, type, amount) =>
     {
-        if (type === 'heat')
+        if (type === 'heat' || type === 'infection')
             bucket.heat += amount;
-        else if (type !== 'infection')
+        else
             bucket.physical += amount;
     };
     const matches = (id) => !counterpartyIds || counterpartyIds.has(id);
@@ -851,6 +1019,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         tokenId: log.tokenId,
         actorId: log.actorId,
         side,
+        team: _teamOf(_tokenDocOf(log.tokenId) ?? actor),
         name: String(log.name ?? actor?.name ?? side.toUpperCase()).toUpperCase(),
         cls:  String(cls).toUpperCase(),
         img:  actor?.img ?? FALLBACK_IMG,
@@ -870,6 +1039,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         heatDmgDealt:     dealtBucket.heat,
         physicalDmgTaken: takenBucket.physical,
         heatDmgTaken:     takenBucket.heat,
+        pilotSide: actorType === 'mech' ? _derivePilotSide(log, telemetry, sys.pilot?.value) : null,
         // Filled in by attribution pass (hostiles only).
         killedBy: null,
         assistedBy: [],
@@ -880,7 +1050,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
 function _attributeKill(victim, telemetry)
 {
     if (!victim.killed || victim.round == null)
-        return { killerId: null, killerTeam: null, assistIds: [] };
+        return { killerId: null, killerTeam: null, assistIds: [], killerIsPilot: false, pilotAssistIds: [] };
     return attributeKill(telemetry, victim.tokenId, victim.round);
 }
 
@@ -1010,6 +1180,53 @@ function _buildAwards(players, mvpId)
 function _actor(actorId)
 {
     return actorId ? game.actors?.get(actorId) : null;
+}
+
+function _tokenDocOf(tokenId)
+{
+    return tokenId ? game.scenes?.find(scene => scene.tokens.has(tokenId))?.tokens.get(tokenId) ?? null : null;
+}
+
+function _teamOf(doc)
+{
+    const teamId = tfGetTeam(doc);
+    const teams = tfGetTeams();
+    const order = teamId ? teams.findIndex(team => team.id === teamId) : -1;
+    return order < 0 ? null : { id: teamId, name: teams[order].name ?? '', color: teams[order].color || null, order };
+}
+
+function _teamBuckets(telemetry)
+{
+    const players = telemetry.players ?? [];
+    const isMech = log => _actor(log.actorId)?.type === 'mech';
+    const holder = players.find(log => isMech(log) && isPlayerOwned(_actor(log.actorId)))
+        ?? players.find(isMech)
+        ?? (telemetry.friendlies ?? []).find(isMech)
+        ?? players[0];
+    const holderDoc = holder ? _tokenDocOf(holder.tokenId) ?? _actor(holder.actorId) : null;
+    const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
+    const bucketOf = { [HOSTILE]: 'hostiles', [SECRET]: 'secrets', [FRIENDLY]: 'friendlies', [NEUTRAL]: 'neutrals' };
+    const buckets = { hostiles: [], friendlies: [], neutrals: [], secrets: [] };
+    const teamBucket = new Map();
+    for (const recordedBucket of Object.keys(buckets))
+    {
+        for (const log of telemetry[recordedBucket] ?? [])
+        {
+            const doc = _tokenDocOf(log.tokenId) ?? _actor(log.actorId);
+            const team = _teamOf(doc);
+            if (!team)
+            {
+                buckets[recordedBucket].push(log);
+                continue;
+            }
+            if (!teamBucket.has(team.id))
+                teamBucket.set(team.id, (holderDoc ? bucketOf[getRelativeDisposition(holderDoc, doc)] : null) ?? recordedBucket);
+            const bucket = teamBucket.get(team.id);
+            const side = bucket === 'hostiles' || bucket === 'secrets' ? 'enemy' : 'player';
+            buckets[bucket].push(log.side === side ? log : { ...log, side });
+        }
+    }
+    return { ...telemetry, ...buckets };
 }
 
 function _asNum(v, fallback)

@@ -49,9 +49,11 @@ The settings hold the **world defaults**. Each token can override them from **To
 
 The visibility mode says who *may* see the bars. On top of that, the bar hub is only drawn when the token is controlled, hovered, targeted by you, or while Alt is held.
 
+When a value changes, the bar flashes into view for every viewer, whatever the visibility mode. Turn on **Change Flash Follows Visibility** to flash it only for viewers the mode allows.
+
 **Minimum Bar Zoom Scale** keeps the bars a constant screen size below a given zoom level.
 
-Hold **Alt** to peek: while held, the bars show on every visible token regardless of its visibility mode.
+Hold **Alt** to peek: while held, the bars show on every visible token whose visibility mode lets you see them.
 
 <br clear="right"/>
 
@@ -139,6 +141,7 @@ With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid
 | **Display Pilot Stress Bar** | Bond stress on pilot tokens and sheets. When Annoying's sheet already shows one, it is recolored instead. |
 | **Visibility: Out of Combat** | Who sees stat bars outside combat: All, Owners only, Owners + scanned, or None. |
 | **Visibility: In Combat** | Who sees stat bars during combat, same four choices. |
+| **Change Flash Follows Visibility** | Value changes only flash the bar for viewers the visibility settings allow. |
 | **Auto-Injected Bar Color** | Default color for auto-injected bars that do not set their own. |
 | **Auto-Injected Bar Width (%)** | Default width % for auto-injected bars, each on its own line. |
 | **Auto-Injected Bar Audio/Text Feedback** | Default audio + floating text on value changes for auto-injected bars. |

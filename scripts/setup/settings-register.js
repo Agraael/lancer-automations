@@ -2,6 +2,7 @@
 
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
+import { onDeployableArtToggled } from '../tools/deployable-art.js';
 
 // Boolean view of a setting, for callers that want a guaranteed true/false.
 export function getSettingEnabled(key)
@@ -952,6 +953,32 @@ export function registerSettings()
         config: false,
         type: Boolean,
         default: true
+    });
+
+    game.settings.register(MODULE_ID,'defaultDeployableArt', {
+        name: 'LA.settings.defaultDeployableArt.name',
+        hint: 'LA.settings.defaultDeployableArt.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+        onChange: (value, _options, userId) => onDeployableArtToggled(value, userId)
+    });
+
+    game.settings.register(MODULE_ID,'deployableArtScale', {
+        name: 'LA.settings.deployableArtScale.name',
+        hint: 'LA.settings.deployableArtScale.hint',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 1.5
+    });
+
+    game.settings.register(MODULE_ID,'deployableArtPools', {
+        scope: 'world',
+        config: false,
+        type: Object,
+        default: {}
     });
 
     game.settings.register(MODULE_ID,'count3DDistance', {

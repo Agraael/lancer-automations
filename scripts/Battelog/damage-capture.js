@@ -5,6 +5,8 @@ import {
     findActiveCombatForToken as _findActiveCombatForToken,
     findTelemetryCombatForToken as _findTelemetryCombatForToken,
     resolveEntryTokenId,
+    resolveCreditTokenId,
+    pilotTokenOf,
 } from "./battelog-utils.js";
 import { isExecutorGM } from '../tools/misc-tools.js';
 
@@ -14,12 +16,12 @@ function _attackerTokenId(msg)
 {
     const speakerToken = msg?.speaker?.token;
     if (speakerToken)
-        return speakerToken;
+        return resolveCreditTokenId(speakerToken);
     const actorId = msg?.speaker?.actor;
     if (!actorId)
         return null;
     const actor = game.actors?.get(actorId);
-    return resolveEntryTokenId(actor) ?? actor?.getActiveTokens?.()?.[0]?.id ?? null;
+    return resolveCreditTokenId(resolveEntryTokenId(actor) ?? actor?.getActiveTokens?.()?.[0]?.id ?? null, actor);
 }
 
 /** Token id from a UUID (TokenDocument uuid, or Actor uuid as fallback). */
@@ -72,8 +74,11 @@ async function _onDamageApplyClick(ev)
     const targetActor = targetDoc?.actor;
     if (!targetActor)
         return;
+    const attackerTokenId = _attackerTokenId(msg);
+    const speakerToken = msg?.speaker?.token ?? null;
     /** @type {any} */ (targetActor).__laPendingDamageSrc = {
-        attackerTokenId: _attackerTokenId(msg),
+        attackerTokenId,
+        pilotTokenId: speakerToken && speakerToken !== attackerTokenId ? pilotTokenOf(speakerToken) : null,
         damages,
         preOvershield: Number(targetActor.system?.overshield?.value ?? 0),
     };
@@ -120,6 +125,8 @@ function _emitDamageEvent(targetActor, hpLanded)
         overshieldAbsorbed,
         armorAbsorbed,
     };
+    if (stash?.pilotTokenId)
+        event.pilotTokenId = stash.pilotTokenId;
     const entryId = attackerId ?? targetTokenId;
     if (isExecutorGM())
         appendEvent(combat, entryId, event);

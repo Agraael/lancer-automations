@@ -15,6 +15,7 @@ import { getBoostOfferMode } from '../setup/settings-register.js';
 import { knockBackToken } from '../interactive/tools/moveTokenRuler.js';
 import { openHaseContestCard } from '../interactive/tools/haseContest.js';
 import { openForceCheckCard } from '../interactive/tools/forceCheck.js';
+import { getEnvironmentActor } from '../tools/template-actors.js';
 import { eventMatchesKeybind } from '../interactive/keybindings.js';
 import { delayedTokenAppearance } from '../combat/reinforcement.js';
 import { isActionDisabledByStatus, getActionLockInfo, getStatusLockedFields, getFieldLockingStatuses, lockEntryLabel } from '../combat/action-limits.js';
@@ -49,6 +50,7 @@ import { playUiSound } from './sound.js';
 import { executeGenerateScan } from '../tools/scan.js';
 import { _resolveExtraBarValues, updateExtraBarValue } from './tokenStatBar.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { inkOn } from '../tools/color-utils.js';
 
 async function _toggleTokenInCombat(token)
 {
@@ -926,10 +928,7 @@ export class LancerHUD
         // Disposition / team stripe. Appended last to sit at the far right edge.
         if (_dispColor && _dispLabel)
         {
-            const _r = parseInt(_dispColor.slice(1, 3), 16) || 0;
-            const _g = parseInt(_dispColor.slice(3, 5), 16) || 0;
-            const _b = parseInt(_dispColor.slice(5, 7), 16) || 0;
-            const _textColor = (_r * 0.299 + _g * 0.587 + _b * 0.114) > 150 ? '#111' : '#fff';
+            const _textColor = inkOn(_dispColor);
             const dispDetail = $(`<div class="la-disp-detail" style="background:${_dispColor};"><span class="la-disp-detail__label" style="color:${_textColor};">${_dispLabel.toUpperCase()}</span></div>`);
             const dispToggle = $(`<div class="la-disp-toggle" style="background:${_dispColor};"><span class="la-disp-toggle__chevron" style="color:${_textColor};">▶</span></div>`);
             titleEl.append(dispToggle);
@@ -2261,6 +2260,7 @@ export class LancerHUD
             const linked = !!this._actor;
             const isNarrativeNpc = this._actor?.type === 'npc';
             return [
+                this._catNarrativeEnvironment(),
                 ...(linked ? [isNarrativeNpc ? this._catNpcFrame() : this._catPilot()] : []),
                 ...(linked ? [this._catSkills()] : []),
                 ...(linked ? [this._catResources()] : []),
@@ -3037,6 +3037,49 @@ export class LancerHUD
         };
     }
 
+    _catNarrativeEnvironment()
+    {
+        const fromEnvironment = (run) => async () =>
+        {
+            const environment = await getEnvironmentActor();
+            if (environment)
+                run(environment);
+        };
+        const items = [
+            { label: localize('LA.tokenHud.label.basicAttack'),
+                icon: 'mdi mdi-target',
+                onClick: fromEnvironment(environment => executeBasicAttack(environment)),
+                onRightClick: this._actionPopup({ name: 'Basic Attack', activation: 'Tool', detail: localize('LA.tokenHud.detail.environmentAttack') }),
+            },
+            { label: localize('LA.tokenHud.label.damage'),
+                icon: 'mdi mdi-flare',
+                onClick: fromEnvironment(environment => executeDamageRoll(environment, [...(game.user?.targets ?? [])], '0', 'Kinetic')),
+                onRightClick: this._actionPopup({ name: 'Damage', activation: 'Tool', detail: localize('LA.tokenHud.detail.environmentDamage') }),
+            },
+            { label: localize('LA.tokenHud.label.techAttack'),
+                icon: ICON_TECH_QUICK,
+                onClick: fromEnvironment(environment => executeTechAttack(environment, { title: 'Tech Attack', grit: environment.system?.tech_attack, attack_type: 'Tech' })),
+                onRightClick: this._actionPopup({ name: 'Tech Attack', activation: 'Tool', tech_attack: true, detail: localize('LA.tokenHud.detail.environmentTech') }),
+            },
+            { label: localize('LA.tokenHud.label.contest'),
+                icon: 'mdi mdi-ab-testing',
+                onClick: () => openHaseContestCard(),
+                onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: localize('LA.tokenHud.detail.contest') }),
+            },
+            { label: localize('LA.tokenHud.label.forceCheck'),
+                icon: 'mdi mdi-alert-circle-check-outline',
+                onClick: () => openForceCheckCard(),
+                onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: localize('LA.tokenHud.detail.forceCheck') }),
+            },
+        ];
+        return {
+            label: localize('LA.tokenHud.label.environment'),
+            colLabel: localize('LA.tokenHud.label.environment'),
+            icon: 'modules/lancer-automations/icons/world.svg',
+            getItems: () => items,
+        };
+    }
+
     _catNarrativeUtility(linked)
     {
         const actor = this._actor;
@@ -3067,19 +3110,6 @@ export class LancerHUD
                 onRightClick: this._actionPopup({ name: 'Vote', activation: 'Tool', detail: localize('LA.tokenHud.detail.vote') }),
             },
         ];
-        if (!linked)
-        {
-            items.push({ label: localize('LA.tokenHud.label.contest'),
-                icon: 'mdi mdi-ab-testing',
-                onClick: () => openHaseContestCard(),
-                onRightClick: this._actionPopup({ name: 'Contest', activation: 'Tool', detail: localize('LA.tokenHud.detail.contest') }),
-            });
-            items.push({ label: localize('LA.tokenHud.label.forceCheck'),
-                icon: 'mdi mdi-alert-circle-check-outline',
-                onClick: () => openForceCheckCard(),
-                onRightClick: this._actionPopup({ name: 'Force Check', activation: 'Tool', detail: localize('LA.tokenHud.detail.forceCheck') }),
-            });
-        }
         items.push({ label: localize('LA.tokenHud.label.downtime'),
             icon: 'systems/lancer/assets/icons/white/downtime.svg',
             onClick: async () =>
@@ -4914,7 +4944,7 @@ export class LancerHUD
                 badge: freq?.badge ?? null,
                 badgeColor: freq?.badgeColor ?? null,
                 icon: this._rankIcon(i + 1),
-                onClick: () => executeItemActivation(talent, { path: `ranks.${i}` }),
+                onClick: () => executeItemActivation(talent, { path: `ranks.${i}` }, { sourceTokenId: this._token?.id }),
                 childColLabel: rankLabel,
                 getChildren: (actions.length || counters.length) ? () => this._talentRankActionItems(talent.system.ranks[i], talent, i) : undefined,
                 onRightClick: (row) =>
@@ -4960,7 +4990,7 @@ export class LancerHUD
                     }
                     else
                     {
-                        executeItemActivation(talent, { path: `ranks.${rankIdx}.actions.${actionIdx}` });
+                        executeItemActivation(talent, { path: `ranks.${rankIdx}.actions.${actionIdx}` }, { sourceTokenId: this._token?.id });
                     }
                 },
                 onRightClick: this._actionPopup(action, talent, null, { subKey: rankSubKey(rankIdx) }),
@@ -5927,7 +5957,7 @@ export class LancerHUD
                         {
                             const ri = rankIdx ?? 0;
                             const ai = (si.system?.ranks?.[ri]?.actions ?? []).findIndex(/** @type {any} */ candidate => candidate.name === action.name);
-                            executeItemActivation(si, { path: `ranks.${ri}.actions.${Math.max(ai, 0)}` });
+                            executeItemActivation(si, { path: `ranks.${ri}.actions.${Math.max(ai, 0)}` }, { sourceTokenId: this._token?.id });
                         }
                     }
                     else

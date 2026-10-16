@@ -19,7 +19,7 @@ import * as altFlags from '../integrations/alt-sheets-flags.js';
 import {
     MODULE_ID,
     SETTING_ENABLED, SETTING_DEFAULT_HIDDEN, SETTING_DEFAULT_COMBAT_ONLY, SETTING_DEFAULT_ROW_HEIGHT,
-    SETTING_VIS_OUT_OF_COMBAT, SETTING_VIS_IN_COMBAT, SETTING_EFFECT_ICON_SCALE, SETTING_MIN_ZOOM_SCALE, SETTING_ELEVATION_BADGE_SCALE,
+    SETTING_VIS_OUT_OF_COMBAT, SETTING_VIS_IN_COMBAT, SETTING_FLASH_FOLLOWS_VIS, SETTING_EFFECT_ICON_SCALE, SETTING_MIN_ZOOM_SCALE, SETTING_ELEVATION_BADGE_SCALE,
     SETTING_DEFAULT_PILOT_STRESS, SETTING_SHOW_VALUES, SETTING_AUTO_INJECT_TALENTS, SETTING_AUTO_INJECT_BOND_XP,
     SETTING_AUTO_INJECT_TALENT_COLOR, SETTING_AUTO_INJECT_TALENT_WIDTH, SETTING_AUTO_INJECT_TALENT_FEEDBACK,
     SETTING_AUTO_INJECT_CUSTOM_FLAGS,
@@ -215,20 +215,8 @@ function resolveVisibilityMode(tokenDoc, inCombat)
     return getWorldSetting(settingKey, VIS_ALL);
 }
 
-function shouldShowBars(token)
+function passesVisibilityMode(token, inCombat)
 {
-    if (!token)
-        return false;
-    if (statBarDisabled(token.document))
-        return false;
-    if (statBarHidden(token.document))
-        return false;
-    const inCombat = isTokenInCombat(token);
-    if (statBarCombatOnly(token.document) && !inCombat)
-        return false;
-    // Flash override beats every mode.
-    if (_flashingTokens.has(token.id))
-        return true;
     const mode = resolveVisibilityMode(token.document, inCombat);
     if (mode === VIS_NONE)
         return !!token.controlled;
@@ -236,7 +224,38 @@ function shouldShowBars(token)
         return false;
     if (mode === VIS_SCANNED && !_scanRevealedToUser(token.actor))
         return false;
-    if (token.controlled || token.hover)
+    return true;
+}
+
+export function isStatBarActive()
+{
+    return !!originalDrawBars && !!isEnabled();
+}
+
+export function statBarAccess(token)
+{
+    if (!token)
+        return null;
+    if (statBarDisabled(token.document))
+        return null;
+    if (statBarHidden(token.document))
+        return null;
+    const inCombat = isTokenInCombat(token);
+    if (statBarCombatOnly(token.document) && !inCombat)
+        return null;
+    if (passesVisibilityMode(token, inCombat))
+        return 'full';
+    // Flash override beats every mode, unless the flash follows visibility.
+    if (_flashingTokens.has(token.id) && !getModuleSetting(SETTING_FLASH_FOLLOWS_VIS))
+        return 'flash';
+    return null;
+}
+
+function shouldShowBars(token)
+{
+    if (!statBarAccess(token))
+        return false;
+    if (_flashingTokens.has(token.id) || token.controlled || token.hover)
         return true;
     if (token.targeted?.has(game.user))
         return true;
@@ -289,6 +308,82 @@ function getVisibleBars(actor, tokenDoc = null)
             return false;
         return true;
     });
+}
+
+function _hubRows(actor, tokenDoc)
+{
+    const visibleIds = new Set(getVisibleBars(actor, tokenDoc).map(def => def.id));
+    const find = id => BAR_DEFS.find(def => def.id === id);
+    const rows = [];
+    if (hasMechStats(actor))
+    {
+        if (visibleIds.has('structure') || visibleIds.has('hp'))
+            rows.push([find('structure'), find('hp')]);
+        // Stress pairs with heat; drop both if heat is hidden to avoid an orphan row.
+        if (visibleIds.has('heat'))
+            rows.push([find('stress'), find('heat')]);
+    }
+    else
+    {
+        // Pilots/deployables: HP only; heat shown only if infection pushed it non-zero.
+        if (visibleIds.has('hp'))
+            rows.push([null, find('hp')]);
+        if (visibleIds.has('pilotStress'))
+            rows.push([null, find('pilotStress')]);
+        else if (visibleIds.has('heat'))
+            rows.push([null, find('heat')]);
+    }
+    return { visibleIds, rows };
+}
+
+function _pipSlotCount(actor)
+{
+    return Math.min(4, Math.max(actor.system?.structure?.max ?? 0, actor.system?.stress?.max ?? 0, 1));
+}
+
+function _armorTicks(actor)
+{
+    if (!game.user?.isGM && !actor.isOwner)
+        return 0;
+    return Math.max(0, Math.min(8, actor.system?.armor ?? 0));
+}
+
+function _hubExtraLines(actor, tokenDoc)
+{
+    const extras = (getLAFlag(tokenDoc, FLAG_EXTRAS) ?? []).filter(/** @type {any} */ extra => _resolveExtraBarValues(actor, extra).ownerOk);
+    return _groupExtrasIntoLines(extras).map(line => line.entries.map(({ entry, width }) =>
+    {
+        const { value, max } = _resolveExtraBarValues(actor, entry);
+        const stops = entry?.color?.stops?.length ? entry.color.stops : ['#888888'];
+        return { entry, width, value, max, segments: Math.max(1, Math.round(max)), color: stops[0] };
+    }));
+}
+
+export function getStatHubModel(token)
+{
+    const actor = token?.actor;
+    const tokenDoc = token?.document;
+    if (!actor || !tokenDoc)
+        return null;
+    const { visibleIds, rows } = _hubRows(actor, tokenDoc);
+    const read = def => def && visibleIds.has(def.id) ? { id: def.id, color: hex(def.color), ...def.getValue(actor) } : null;
+    return {
+        pipSlots: hasMechStats(actor) ? _pipSlotCount(actor) : 0,
+        rows: rows.map(([pips, bar]) => ({ pips: read(pips), bar: read(bar) })),
+        overshield: visibleIds.has('hp') ? Math.max(0, actor.system?.overshield?.value ?? 0) : 0,
+        burn: visibleIds.has('hp') && visibleIds.has('burn') ? actor.system?.burn ?? 0 : 0,
+        infection: visibleIds.has('heat') && visibleIds.has('infection') ? actor.system?.infection ?? 0 : 0,
+        danger: visibleIds.has('heat') && (actor.system?.heat?.max ?? 0) > 0,
+        armor: visibleIds.has('hp') ? _armorTicks(actor) : 0,
+        extras: _hubExtraLines(actor, tokenDoc).map(line => line.map(item => ({
+            id: item.entry.id,
+            width: item.width,
+            value: item.value,
+            max: item.entry?.segmented ? item.segments : item.max,
+            segmented: !!item.entry?.segmented,
+            color: item.color,
+        }))),
+    };
 }
 
 // Effective max: bar grows if value or overshield exceeds nominal max.
@@ -2385,8 +2480,9 @@ function drawStatHub()
 
     token.bars.removeChildren();
 
-    // Preserve flash children before destroying the old hub.
+    // Preserve flash children and alpha before destroying the old hub.
     const oldEntry = _overlayHubs.get(token.id);
+    const prevAlpha = oldEntry?.wrapper?.alpha;
     const savedFlashes = [];
     if (oldEntry?.hub)
     {
@@ -2414,30 +2510,10 @@ function drawStatHub()
     if (!overlay)
         return;
 
-    const visibleIds = new Set(getVisibleBars(actor, token.document).map(def => def.id));
+    const { visibleIds, rows } = _hubRows(actor, token.document);
     const find = id => BAR_DEFS.find(def => def.id === id);
     const mechStats = hasMechStats(actor);
     const reactionEnabled = hasReaction(actor);
-
-    const rows = [];
-    if (mechStats)
-    {
-        if (visibleIds.has('structure') || visibleIds.has('hp'))
-            rows.push([find('structure'), find('hp')]);
-        // Stress pairs with heat; drop both if heat is hidden to avoid an orphan row.
-        if (visibleIds.has('heat'))
-            rows.push([find('stress'), find('heat')]);
-    }
-    else
-    {
-        // Pilots/deployables: HP only; heat shown only if infection pushed it non-zero.
-        if (visibleIds.has('hp'))
-            rows.push([null, find('hp')]);
-        if (visibleIds.has('pilotStress'))
-            rows.push([null, find('pilotStress')]);
-        else if (visibleIds.has('heat'))
-            rows.push([null, find('heat')]);
-    }
 
     if (rows.length === 0)
     {
@@ -2474,15 +2550,12 @@ function drawStatHub()
         const baseColW = Math.floor(usableW * 0.32);
         const innerGap = chromeScale;
         const pipSlotW = (baseColW - 2 * chromeScale - innerGap * 3) / 4;
-        const structMax = actor.system?.structure?.max ?? 0;
-        const stressMax = actor.system?.stress?.max ?? 0;
-        const pipCount = Math.min(4, Math.max(structMax, stressMax, 1));
+        const pipCount = _pipSlotCount(actor);
         pipColW = Math.ceil(pipCount * pipSlotW + innerGap * (pipCount - 1) + 2 * chromeScale);
     }
 
     // Armor ticks: right of HP bar, GM/owners only.
-    const canSeeArmor = game.user?.isGM || actor.isOwner;
-    const armorVal = canSeeArmor ? Math.max(0, Math.min(8, actor.system?.armor ?? 0)) : 0;
+    const armorVal = _armorTicks(actor);
     const armorTickW = chromeScale * 2;
     const armorTickGap = chromeScale;
     const armorW = armorVal > 0
@@ -2720,9 +2793,7 @@ function drawStatHub()
     }
 
     // Extra bars (user-defined via Resources tab): drawn live post-bake so value redraws don't invalidate the baked chrome.
-    const extras = getLAFlag(token.document, FLAG_EXTRAS) ?? [];
-    const visibleExtras = extras.filter(/** @type {any} */ extra => _resolveExtraBarValues(actor, extra).ownerOk);
-    const extraLines = _groupExtrasIntoLines(visibleExtras);
+    const extraLines = _hubExtraLines(actor, token.document);
     const extrasGeom = [];
     const extrasSeparator = extraLines.length > 0 && rows.length > 0
         ? Math.max(1, Math.round(chromeScale))
@@ -2741,20 +2812,17 @@ function drawStatHub()
             const lineY = extrasStartY + li * (rowHeight + lineGap);
             let runningX = 0;
             const entryGeoms = [];
-            for (let ei = 0; ei < line.entries.length; ei++)
+            for (let ei = 0; ei < line.length; ei++)
             {
-                const { entry, width } = line.entries[ei];
+                const { entry, width, value, max, segments, color } = line[ei];
                 const slot = Math.floor(usableW * (width / 100));
-                const entryWidth = Math.max(2, slot - (ei < line.entries.length - 1 ? interGap : 0));
-                const { value, max } = _resolveExtraBarValues(actor, entry);
-                const stops = entry?.color?.stops?.length ? entry.color.stops : ['#888888'];
-                const segCount = Math.max(1, Math.round(max));
+                const entryWidth = Math.max(2, slot - (ei < line.length - 1 ? interGap : 0));
                 if (entry?.segmented)
                 {
                     drawSegment(
                         extraGfx, runningX, lineY, entryWidth, rowHeight,
-                        { color: _parseHex(stops[0]), pips: true, pipsLTR: true },
-                        { value, max: segCount },
+                        { color: _parseHex(color), pips: true, pipsLTR: true },
+                        { value, max: segments },
                         chromeScale
                     );
                 }
@@ -2762,7 +2830,7 @@ function drawStatHub()
                 {
                     drawSegment(
                         extraGfx, runningX, lineY, entryWidth, rowHeight,
-                        { color: _parseHex(stops[0]), softMax: 1 },
+                        { color: _parseHex(color), softMax: 1 },
                         { value, max },
                         chromeScale
                     );
@@ -2772,9 +2840,9 @@ function drawStatHub()
                     x: runningX,
                     w: entryWidth,
                     segmented: !!entry.segmented,
-                    segments: segCount,
+                    segments,
                     max,
-                    primaryColor: _parseHex(stops[0]),
+                    primaryColor: _parseHex(color),
                 });
                 runningX += slot;
             }
@@ -2812,12 +2880,14 @@ function drawStatHub()
     const _hubEntry = _overlayHubs.get(token.id);
     if (_hubEntry)
         _hubEntry.totalHeight = totalHeight;
-    // Zero alpha only on first draw so redraws don't flicker.
+    // Zero alpha only on first draw, redraws keep the old alpha so they don't flicker.
     if (wrapper.alpha === undefined || token._laFirstDraw !== false)
     {
         wrapper.alpha = 0;
         token._laFirstDraw = false;
     }
+    else if (prevAlpha !== undefined)
+        wrapper.alpha = prevAlpha;
 
     // HP / Heat value labels.
     const hpLabelX = (armorVal > 0 && visibleIds.has('hp'))
@@ -2946,15 +3016,17 @@ function _elevationBadgeGrowth()
 
 function _placeElevationBadge(token, badge, iso)
 {
+    const gridScale = (canvas.dimensions?.size ?? REF_GRID_SIZE) / REF_GRID_SIZE;
     const growth = _elevationBadgeGrowth();
-    const cellW = badge._laCellW * growth;
-    const cellH = badge._laCellH * growth;
-    const refSize = badge._laRefSize;
+    const badgeScale = gridScale * growth;
+    const cellW = badge._laCellW * badgeScale;
+    const cellH = badge._laCellH * badgeScale;
+    const refSize = badge._laRefSize * gridScale;
     badge._laGrowth = growth;
     if (iso && token.mesh)
     {
         const isoScale = 0.76;
-        badge.scale.set(isoScale * growth, growth / isoScale);
+        badge.scale.set(isoScale * badgeScale, badgeScale / isoScale);
         const cosTheta = Math.cos(iso.reverseRotation);
         const sinTheta = Math.sin(iso.reverseRotation);
         const localX = token.w / 2 - refSize + cellW / 2;
@@ -2966,8 +3038,8 @@ function _placeElevationBadge(token, badge, iso)
         badge.position.set(worldX - token.position.x, worldY - token.position.y);
         return;
     }
-    badge.scale.set(growth);
-    badge.position.set(token.w - refSize, refSize - cellH - (badge._laPositive ? badge._laArrowH * growth : 0));
+    badge.scale.set(badgeScale);
+    badge.position.set(token.w - refSize, refSize - cellH - (badge._laPositive ? badge._laArrowH * badgeScale : 0));
 }
 
 function drawElevationBadge(token)
@@ -3021,9 +3093,8 @@ function drawElevationBadge(token)
     const label = Math.abs(elevation).toString();
 
     // Sized to match effect icons (_shrinkEffectIcons).
-    const gridPx = canvas.dimensions?.size ?? 100;
     const baseScale = Number(getWorldSetting(SETTING_ELEVATION_BADGE_SCALE, 1)) || 1;
-    const refSize = Math.max(8, Math.round(gridPx * 0.1));
+    const refSize = Math.round(REF_GRID_SIZE * 0.1);
     const iconSize = Math.round(refSize * baseScale);
     const cellH = iconSize;
     const cellW = iconSize;
@@ -3340,6 +3411,9 @@ export function registerTokenStatBarSettings()
     game.settings.register(MODULE_ID, SETTING_VIS_IN_COMBAT, {
         scope: 'world', config: false, type: String, default: VIS_ALL,
     });
+    game.settings.register(MODULE_ID, SETTING_FLASH_FOLLOWS_VIS, {
+        scope: 'world', config: false, type: Boolean, default: false,
+    });
     game.settings.register(MODULE_ID, SETTING_EFFECT_ICON_SCALE, {
         name: 'LA.settings.statBarEffectIconScale.name',
         hint: 'LA.settings.statBarEffectIconScale.hint',
@@ -3499,12 +3573,15 @@ function scheduleFlashFade(tok)
     if (statBarDisabled(tok?.document))
         return;
     _flashingTokens.add(tok.id);
+    Hooks.callAll('lancer-automations.statBarFlash', tok.id, true);
     const fadeTarget = _getFadeTarget(tok);
-    if (fadeTarget)
+    const revealed = !getModuleSetting(SETTING_FLASH_FOLLOWS_VIS) || passesVisibilityMode(tok, isTokenInCombat(tok));
+    if (fadeTarget && revealed)
         fadeTarget.alpha = 1;
     setTimeout(() =>
     {
         _flashingTokens.delete(tok.id);
+        Hooks.callAll('lancer-automations.statBarFlash', tok.id, false);
         if (tok?.destroyed)
             return;
         if (!shouldShowBars(tok))

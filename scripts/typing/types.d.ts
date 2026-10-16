@@ -93,6 +93,7 @@ interface TriggerDataBase {
     triggeringToken?: Token;
     distanceToTrigger?: number | null;
     canTriggerReaction?: boolean;
+    isEnvironment?: boolean;
     /** Normalized target tokens: unwraps `targets` entries ({ target }/{ token } wrappers or raw tokens) and single `target`/`token`/`checkAgainstToken`, actor-bearing only. */
     hitTokens?: Token[];
     /** True when the reactor token is one of the event's targets (per-reactor). */
@@ -1158,6 +1159,7 @@ interface ReactionConfig {
     triggerOther?: boolean;
     /** Fires when the reactor is one of the event's targets, even with triggerOther off. Target-capable triggers only. */
     triggerTarget?: boolean;
+    triggerEnvironment?: boolean;
     outOfCombat?: boolean;
     isReaction?: boolean;
     checkReaction?: boolean;

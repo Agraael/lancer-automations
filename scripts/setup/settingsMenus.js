@@ -2,6 +2,7 @@
 
 import { ReactionReset } from '../activations/reaction-reset.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { tfGetTeams } from '../tools/token-factions-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
 import { setLAFlag } from '../tools/flag-utils.js';
 import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
@@ -14,6 +15,7 @@ import { getFCCData, getFCCModeKey, toggleFCCForce } from './fcc.js';
 import { runSettingsOnboarding } from './settings-onboarding.js';
 import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 import { importTemplateMacroPresets } from './tmac-presets.js';
+import { syncTemplateActors } from '../tools/template-actors.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { STATUS_FX_KEYS } from '../fx/statusFX.js';
@@ -135,6 +137,13 @@ const COMBAT_MOVEMENT_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.rollUplink.label', collapsible: true, collapsed: true },
     { key: 'uplinkEnabled', type: 'boolean' },
     { key: 'uplinkAutoOpen', type: 'boolean', requires: 'uplinkEnabled' },
+
+    { type: 'section', label: 'LA.settingsMenus.section.combatCarousel.label', collapsible: true, collapsed: true },
+    { key: 'combatCarousel', type: 'boolean' },
+    { key: 'carouselPortraitSize', type: 'slider', requires: 'combatCarousel' },
+    { key: 'carouselLength', type: 'slider', requires: 'combatCarousel' },
+    { key: 'carouselMaxOverlap', type: 'slider', requires: 'combatCarousel' },
+    { key: 'carouselDeckSlide', type: 'slider', requires: 'combatCarousel' },
 
     { type: 'section', label: 'LA.settingsMenus.section.movementBoost.label', collapsible: true, collapsed: true },
     { key: 'enableMovementCapDetection', type: 'boolean' },
@@ -286,10 +295,7 @@ const WRECKS_FIELDS = [
                 { value: 'same', label: 'LA.settingsMenus.choice.same.label', selected: cur === 'same' },
                 { value: 'neutral', label: 'LA.settingsMenus.choice.neutral.label', selected: cur === 'neutral' },
             ];
-            const teams = game.settings.settings.has('token-factions.team-setup')
-                ? (game.settings.get('token-factions', 'team-setup') || [])
-                : [];
-            for (const team of teams)
+            for (const team of tfGetTeams())
                 choices.push({ value: team.id, label: team.name, selected: team.id === cur });
             return choices;
         },
@@ -317,6 +323,8 @@ function _statBarVisChoices(key)
 const TOKENS_DISPLAY_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.tokenDisplay.label' },
     { key: 'linkManualDeploy', type: 'boolean' },
+    { key: 'defaultDeployableArt', type: 'boolean' },
+    { key: 'deployableArtScale', type: 'number', min: 0.5, max: 3, step: 0.1, requires: 'defaultDeployableArt' },
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
@@ -386,6 +394,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.visibility.label', subsection: true },
     { key: 'statBarVisibilityOutOfCombat', type: 'select', label: 'LA.settingsMenus.statBarVisibilityOutOfCombat.label', getChoices: () => _statBarVisChoices('statBarVisibilityOutOfCombat') , requires: 'tokenStatBar' },
     { key: 'statBarVisibilityInCombat',   type: 'select', label: 'LA.settingsMenus.statBarVisibilityInCombat.label',   getChoices: () => _statBarVisChoices('statBarVisibilityInCombat') , requires: 'tokenStatBar' },
+    { key: 'statBarFlashFollowsVisibility', type: 'boolean', label: 'LA.settingsMenus.statBarFlashFollowsVisibility.label', hint: 'LA.settingsMenus.statBarFlashFollowsVisibility.hint' , requires: 'tokenStatBar' },
 
     { type: 'section', label: 'LA.settingsMenus.section.autoInjectedBars.label', subsection: true },
     { key: 'statBarAutoInjectTalents', type: 'boolean', label: 'LA.settingsMenus.statBarAutoInjectTalents.label', hint: 'LA.settingsMenus.statBarAutoInjectTalents.hint' , requires: 'tokenStatBar' },
@@ -431,6 +440,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'tokenStatHintEnabled', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintEnabled.label', hint: 'LA.settingsMenus.tokenStatHintEnabled.hint' },
     { key: 'tokenStatHintDelayMs', type: 'slider', label: 'LA.settingsMenus.tokenStatHintDelayMs.label', min: 0, max: 2000, step: 50, hint: 'LA.settingsMenus.tokenStatHintDelayMs.hint' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintScale', type: 'slider', label: 'LA.settingsMenus.tokenStatHintScale.label', min: 0.5, max: 2, step: 0.05, hint: 'LA.settingsMenus.tokenStatHintScale.hint' , requires: 'tokenStatHintEnabled' },
+    { key: 'tokenStatHintScaleWithZoom', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintScaleWithZoom.label', hint: 'LA.settingsMenus.tokenStatHintScaleWithZoom.hint', requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintShowForControlled', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintShowForControlled.label', hint: 'LA.settingsMenus.tokenStatHintShowForControlled.hint' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintCombatOnly', type: 'boolean', label: 'LA.settingsMenus.tokenStatHintCombatOnly.label', hint: 'LA.settingsMenus.tokenStatHintCombatOnly.hint' , requires: 'tokenStatHintEnabled' },
     { key: 'tokenStatHintLabelMode',
@@ -661,6 +671,13 @@ const DEBUG_FIELDS = [
     { key: 'debugForceJb2aFree', type: 'boolean' },
     { key: 'debugAutomation', type: 'boolean' },
     { key: 'iso.debugSelectionOverlay', type: 'boolean' },
+    { type: 'button',
+        key: 'syncTemplateActors',
+        label: 'LA.settingsMenus.syncTemplateActors.label',
+        icon: 'fas fa-rotate',
+        hint: 'LA.settingsMenus.syncTemplateActors.hint',
+        onClick: () => syncTemplateActors({ force: true }),
+    },
 ];
 
 const VISION_FIELDS = [

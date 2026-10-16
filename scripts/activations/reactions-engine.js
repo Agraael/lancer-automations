@@ -7,9 +7,10 @@ import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { consumeEffectCharge, runInOnInitTriggerContext } from "../bonuses/flagged-effects.js";
 import { deferResistanceEffectConsumption } from "../bonuses/genericBonuses.js";
-import { getTokenDistance } from "../combat/overwatch.js";
+import { getTokenDistance, getRelativeDisposition } from "../combat/overwatch.js";
 import { getItemLID, isItemAvailable, hasReactionAvailable, consumeReaction, reserveReaction, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
+import { isEnvironmentActor } from "../tools/template-actors.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
 let reactionDebounceTimer = null;
@@ -59,13 +60,7 @@ function checkDispositionFilter(reactorToken, triggeringToken, dispositionFilter
     if (!triggeringToken)
         return true;
 
-    const tokenFactions = game.modules.get("token-factions")?.api;
-    let disposition;
-
-    if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
-        disposition = tokenFactions.getDisposition(reactorToken, triggeringToken);
-    else
-        disposition = triggeringToken.document.disposition;
+    const disposition = getRelativeDisposition(reactorToken, triggeringToken);
 
     const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
     const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
@@ -399,6 +394,11 @@ function evaluateGeneralReaction(reactionName, reaction, triggerType, data, toke
         }
     }
     dbgAuto('candidate:', token.name, reactionName, '(general)', { triggers: reaction.triggers });
+    if (data.isEnvironment && !reaction.triggerEnvironment)
+    {
+        dbgAuto('skip:', token.name, reactionName, 'environment source', { setting: 'triggerEnvironment', value: false });
+        return null;
+    }
     if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
     {
         dbgAuto('skip:', token.name, reactionName, 'out of combat', { setting: 'outOfCombat', value: reaction.outOfCombat });
@@ -545,6 +545,11 @@ function evaluateSceneReaction(reactionName, reaction, triggerType, data, sceneR
         }
     }
     dbgAuto('candidate:', sceneName, reactionName, '(scene)', { triggers: reaction.triggers });
+    if (data.isEnvironment && !reaction.triggerEnvironment)
+    {
+        dbgAuto('skip:', sceneName, reactionName, 'environment source', { setting: 'triggerEnvironment', value: false });
+        return null;
+    }
     const isInCombat = !!game.combat?.started;
     if (!isInCombat && !reaction.outOfCombat && !firesRegardlessOfCombat(triggerType))
     {
@@ -908,7 +913,7 @@ async function checkReactions(triggerType, data)
             continue;
         const isInCombat = token.inCombat && !!game.combat?.started;
 
-        const sourceToken = data.triggeringToken;
+        const sourceToken = data.isEnvironment ? null : data.triggeringToken;
         const distanceToTrigger = sourceToken ? getTokenDistance(token, sourceToken) : null;
         const provokeReasons = [];
         const canTriggerReaction = api.canProvokeReaction(sourceToken, token, provokeReasons);
@@ -936,6 +941,12 @@ async function checkReactions(triggerType, data)
                 }
 
                 dbgAuto('candidate:', token.name, item.name, lid, { triggers: reaction.triggers, reactionPath: reaction.reactionPath || null });
+
+                if (data.isEnvironment && !reaction.triggerEnvironment)
+                {
+                    dbgAuto('skip:', token.name, item.name, 'environment source', { setting: 'triggerEnvironment', value: false });
+                    continue;
+                }
 
                 if (reaction.onlyOnSourceMatch)
                 {
@@ -1649,6 +1660,11 @@ const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', '
 
 export async function handleTrigger(triggerType, data)
 {
+    if (isEnvironmentActor(data?.flowState?.actor) && canvas.scene)
+    {
+        data.triggeringToken = makeSceneReactor(canvas.scene);
+        data.isEnvironment = true;
+    }
     dbgAuto('handleTrigger', triggerType, {
         triggeringToken: data?.triggeringToken?.name,
         statusId: data?.statusId,

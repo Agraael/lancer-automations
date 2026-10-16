@@ -1667,22 +1667,6 @@ export function initStatusFX()
             autoStatusCascading(item.parent);
     });
 
-    // Core Power Active: remove on combat end / combatant removed.
-    // (Activation registration is at module load time; see bottom of file.)
-    Hooks.on('preDeleteCombatant', (combatant) =>
-    {
-        if (combatant.actor)
-            autoStatusCorePowerOff(combatant.actor);
-    });
-    Hooks.on('preDeleteCombat', (combat) =>
-    {
-        for (const combatant of combat.combatants ?? [])
-        {
-            if (combatant.actor)
-                autoStatusCorePowerOff(combatant.actor);
-        }
-    });
-
     Hooks.on('canvasReady', () => setTimeout(_reapplyCustomFiltersAfterLoad, 300));
     if (canvas?.ready)
         setTimeout(_reapplyCustomFiltersAfterLoad, 300);
@@ -1700,4 +1684,19 @@ Hooks.once('lancer.registerFlows', (steps, flows) =>
         return true;
     });
     flows.get('CoreActiveFlow')?.insertStepAfter('consumeCorePower', 'addCorePowerSE');
+});
+
+Hooks.on('preDeleteCombatant', (combatant) =>
+{
+    if (combatant.actor)
+        autoStatusCorePowerOff(combatant.actor);
+});
+
+Hooks.on('preDeleteCombat', (combat) =>
+{
+    for (const combatant of combat.combatants ?? [])
+    {
+        if (combatant.actor)
+            autoStatusCorePowerOff(combatant.actor);
+    }
 });

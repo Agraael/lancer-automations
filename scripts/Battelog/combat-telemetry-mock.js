@@ -446,8 +446,9 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
         .filter(a => !excludedNpcClasses.has(npcClassName(a)));
     // Full Lancer pools (4 structure, 4 stress). Players won't die in the sim; one is forced destroyed post-sim.
     // Fabricated token ids mirror real per-token entries; clones get numbered names.
+    let tokenSerial = 0;
     const mockEntry = (actor, index, count) => ({
-        tokenId: actor.id + '-t' + index,
+        tokenId: actor.id + '-t' + tokenSerial++,
         actorId: actor.id,
         name: count > 1 ? `${actor.name} ${index + 1}` : actor.name,
         events: [],
@@ -463,6 +464,12 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
         for (let copy = 0; copy < count; copy++)
             hostiles.push({ ...mockEntry(typeActor, copy, count), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 1) });
     }
+    const spareMechs = mechs.filter(actor => !players.some(player => player.actorId === actor.id));
+    const enemyMechs = pickRandom(spareMechs, spareMechs.length)
+        .sort((left, right) => Number(!!right.system?.pilot?.value) - Number(!!left.system?.pilot?.value))
+        .slice(0, small ? 1 : 2);
+    for (const mechActor of enemyMechs)
+        hostiles.push({ ...mockEntry(mechActor, 0, 1), __state: freshState(mechActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 2) });
     // Ancillary sides so the recap can preview friendlies / neutrals / secrets.
     const friendlies = [];
     if (npcs.length > 0)

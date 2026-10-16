@@ -21,6 +21,7 @@ import { performGMInputScan, performSystemScan, showSystemScanDialog } from './t
 import { preLoadImageForAll } from './tools/wreck.js';
 import { executeStatRoll, getItemLID, isExecutorGM } from './tools/misc-tools.js';
 import { MODULE_ID } from './tools/constants.js';
+import { setLAFlag } from './tools/flag-utils.js';
 import { openDowntimeSummary, showDowntimeJournalPopup } from './tools/downtime.js';
 import { playTerminalIntro } from './Battelog/intro-terminal.js';
 import { openBattleLogRecap } from './Battelog/recap.js';
@@ -653,7 +654,7 @@ const HANDLERS = {
                 {
                     const combatant = combat.combatants.get(payload.combatantId);
                     if (combatant)
-                        await combatant.setFlag(MODULE_ID, 'actionTape', payload.entries);
+                        await setLAFlag(combatant, 'actionTape', payload.entries);
                 }
             }
         }

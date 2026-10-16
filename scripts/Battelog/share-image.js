@@ -10,6 +10,7 @@ const FONT_SOURCES = [
     { family: 'Signika', weight: 600, path: 'fonts/signika/signika-semibold.woff2' },
     { family: 'Signika', weight: 700, path: 'fonts/signika/signika-bold.woff2' },
     { family: 'compcon', weight: 400, path: 'systems/lancer/fonts/compcon/compcon.ttf', format: 'truetype' },
+    { family: 'LA Orbitron', weight: 700, path: 'systems/lancer/fonts/orbitron/Orbitron-VariableFont_wght.ttf', format: 'truetype' },
     { family: 'Material Design Icons', weight: 400, path: 'https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.woff2' },
 ];
 
@@ -200,7 +201,7 @@ function _posterCss()
         .la-share-poster .battelog-focus-detail{pointer-events:none;}
         .la-share-foot{margin:16px 20px 0;padding:9px 0 14px;
             border-top:1px solid color-mix(in srgb,var(--la-ink),transparent 88%);
-            font-family:'Space Mono','Consolas',monospace;font-size:8px;letter-spacing:1.5px;opacity:0.5;
+            font-family:var(--bl-mono);font-size:8px;letter-spacing:1.5px;opacity:0.5;
             text-transform:uppercase;}
     `;
 }
@@ -355,7 +356,11 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
             copy.querySelectorAll('.stagger').forEach(node => node.classList.remove('stagger'));
             // baking pairs live/clone nodes by index, so it runs before any removal
             _bakeIcons(source, copy);
-            copy.querySelectorAll('.battelog-pcol-medals-nav').forEach(node => node.remove());
+            copy.querySelectorAll('.battelog-pcol-medals-nav, .battelog-pcol-expand').forEach(node => node.remove());
+            const hiddenFace = copy.classList.contains('is-flipped') ? '.battelog-pcol-face.is-front' : '.battelog-pcol-face.is-back';
+            copy.querySelectorAll(hiddenFace).forEach(node => node.remove());
+            copy.querySelectorAll('.battelog-pcol-face').forEach(node => node.classList.add('is-solo'));
+            copy.classList.remove('is-flipped');
             return copy;
         };
 

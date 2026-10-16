@@ -1,0 +1,922 @@
+#la-carousel {
+    --lac-size: 84px;
+    --lac-length: 100%;
+    --lac-slide: 50ms;
+    --lac-flash-hold: 250ms;
+    --lac-flash-shrink: 1300ms;
+    --lac-signal: var(--la-signal, var(--secondary-color, #cf7b2a));
+    --lac-cue: color-mix(in srgb, var(--primary-color, #991e2a), #fff 25%);
+    --lac-mono: var(--la-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+    --lac-cut: 7px;
+    --lac-line-w: 1px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+    margin-top: 10px;
+    pointer-events: none;
+    color: #efefef;
+}
+
+body.crlngn-ui.crlngn-scene-nav #la-carousel {
+    margin-top: max(10px, var(--scene-nav-offset, 0px));
+}
+
+#la-carousel .lac-buttons {
+    --control-size: calc(var(--lac-size) * 0.38);
+    pointer-events: all;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: calc(var(--lac-size) * 0.057);
+    padding: calc(var(--lac-size) * 0.19) 0;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+
+#la-carousel .lac-buttons button.ui-control {
+    font-size: calc(var(--lac-size) * 0.19);
+}
+
+#la-carousel .lac-buttons:empty {
+    display: none;
+}
+
+#la-carousel:hover .lac-buttons {
+    opacity: 1;
+}
+
+#la-carousel .lac-main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: var(--lac-length);
+}
+
+#la-carousel .lac-strip {
+    position: relative;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 2px 6px;
+}
+
+#la-carousel .lac-strip.is-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: 7px;
+    pointer-events: all;
+    scrollbar-width: none;
+}
+
+#la-carousel .lac-strip::-webkit-scrollbar {
+    display: none;
+}
+
+#la-carousel .lac-empty {
+    position: relative;
+    isolation: isolate;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--lac-size) * 0.08);
+    width: calc(var(--lac-size) * 1.25);
+    height: calc(var(--lac-size) * 1.25);
+    margin: 2px 6px;
+    pointer-events: all;
+    background: #4a4a4a;
+    color: #8a8a8a;
+    font: 600 max(8px, calc(var(--lac-size) * 0.11)) / 1.2 var(--lac-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    clip-path: polygon(0 0, calc(100% - var(--lac-cut)) 0, 100% var(--lac-cut), 100% 100%, var(--lac-cut) 100%, 0 calc(100% - var(--lac-cut)));
+}
+
+#la-carousel .lac-empty::before {
+    content: "";
+    position: absolute;
+    inset: var(--lac-line-w);
+    z-index: -1;
+    background: #1c1c1c;
+    clip-path: polygon(0 0, calc(100% - var(--lac-cut)) 0, 100% var(--lac-cut), 100% 100%, var(--lac-cut) 100%, 0 calc(100% - var(--lac-cut)));
+}
+
+#la-carousel .lac-empty i {
+    font-size: calc(var(--lac-size) * 0.28);
+    color: #5a5a5a;
+}
+
+#la-carousel.is-empty .lac-empty {
+    display: flex;
+}
+
+#la-carousel .lac-edge {
+    --lac-nudge: 4px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 110;
+    width: calc(var(--lac-size) * 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: all;
+    cursor: pointer;
+    color: color-mix(in srgb, var(--lac-cue), #fff 30%);
+    font-size: calc(var(--lac-size) * 0.3);
+    text-shadow: 0 0 3px var(--lac-cue), 0 0 9px var(--lac-cue), 0 0 16px var(--lac-cue);
+}
+
+#la-carousel .lac-edge.left {
+    --lac-nudge: -4px;
+    left: 0;
+    background: linear-gradient(90deg, rgba(14, 14, 16, 0.92), transparent);
+}
+
+#la-carousel .lac-edge.right {
+    right: 0;
+    background: linear-gradient(270deg, rgba(14, 14, 16, 0.92), transparent);
+}
+
+#la-carousel .lac-strip.fade-l ~ .lac-edge.left,
+#la-carousel .lac-strip.fade-r ~ .lac-edge.right {
+    display: flex;
+}
+
+#la-carousel .lac-edge i {
+    animation: lac-edge 1.6s ease-in-out infinite;
+}
+
+@keyframes lac-edge {
+    0%, 100% { opacity: 0.65; transform: none; }
+    50% { opacity: 1; transform: translateX(var(--lac-nudge)); }
+}
+
+#la-carousel .lac-strip.fade-l {
+    mask-image: linear-gradient(90deg, transparent, #000 36px);
+}
+
+#la-carousel .lac-strip.fade-r {
+    mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+}
+
+#la-carousel .lac-strip.fade-l.fade-r {
+    mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+}
+
+#la-carousel .lac-lane {
+    --team: #888888;
+    --team-ink: oklch(from var(--team) max(l, 0.65) c h);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#la-carousel .lac-head {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: all;
+    background: #1a1a1a;
+    color: #fff;
+    border-left: 3px solid var(--team);
+    padding: 4px 10px 4px 8px;
+    font-family: var(--lac-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+#la-carousel .lac-head-name {
+    font-weight: 600;
+    color: var(--team-ink);
+}
+
+#la-carousel .lac-head-acts {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 11px;
+    line-height: 1;
+}
+
+#la-carousel .lac-head-acts .cci {
+    color: var(--team-ink);
+}
+
+#la-carousel .lac-head-acts .cci.is-used {
+    color: #555;
+    opacity: 0.45;
+}
+
+#la-carousel .lac-cards {
+    display: flex;
+    align-items: flex-start;
+}
+
+#la-carousel .lac-slot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: calc(var(--lac-size) * 1.25);
+    pointer-events: all;
+    z-index: calc(60 - max(var(--j, 0) - var(--peak, 0), var(--peak, 0) - var(--j, 0)));
+    clip-path: inset(-8px);
+    transition: width 0.2s ease-in-out, transform 0.15s ease-out, clip-path var(--lac-slide) ease-out;
+}
+
+#la-carousel .lac-slot + .lac-slot {
+    margin-left: calc(8px - var(--ov, 0px));
+}
+
+#la-carousel .lac-slot.is-active {
+    width: calc(var(--lac-size) * 1.45);
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot:is(.win-l, .win-r) > .lac-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    width: 10px;
+    pointer-events: none;
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.win-l > .lac-card::after {
+    right: calc(var(--ov, 0px) - 8px);
+    background: linear-gradient(270deg, rgba(0, 0, 0, 0.7), transparent);
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.win-r > .lac-card::after {
+    left: calc(var(--ov, 0px) - 8px);
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.7), transparent);
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.win-l {
+    clip-path: inset(-8px max(0px, calc(var(--ov, 0px) - 8px - var(--lac-cut) - 2px)) -8px -8px);
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.win-r {
+    clip-path: inset(-8px -8px -8px max(0px, calc(var(--ov, 0px) - 8px - var(--lac-cut) - 2px)));
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.is-active.win-l {
+    clip-path: polygon(-8px -8px, calc(100% + 8px) -8px, calc(100% + 8px) calc(var(--lac-size) * 1.25), calc(100% - var(--ov, 0px) + 8px) calc(var(--lac-size) * 1.25), calc(100% - var(--ov, 0px) + 8px) calc(100% + 8px), -8px calc(100% + 8px));
+}
+
+#la-carousel .lac-strip.is-overlap .lac-slot.is-active.win-r {
+    clip-path: polygon(-8px -8px, calc(100% + 8px) -8px, calc(100% + 8px) calc(100% + 8px), calc(var(--ov, 0px) - 8px) calc(100% + 8px), calc(var(--ov, 0px) - 8px) calc(var(--lac-size) * 1.25), -8px calc(var(--lac-size) * 1.25));
+}
+
+#la-carousel .lac-slot.is-active:not(.win-l):not(.win-r) {
+    transition: width 0.2s ease-in-out, transform 0.15s ease-out, clip-path var(--lac-slide) ease-out, z-index 0s linear var(--lac-slide);
+}
+
+#la-carousel .lac-strip.no-win-anim .lac-slot,
+#la-carousel .lac-strip.no-win-anim .lac-slot.is-active:not(.win-l):not(.win-r) {
+    transition: none;
+}
+
+#la-carousel .lac-slot.is-spent > .lac-card,
+#la-carousel .lac-slot.is-hidden > .lac-card {
+    filter: brightness(0.5) saturate(0.6);
+}
+
+#la-carousel .lac-slot.is-spent > .lac-bar > *,
+#la-carousel .lac-slot.is-hidden > .lac-bar > * {
+    opacity: 0.55;
+}
+
+#la-carousel .lac-slot:hover {
+    z-index: 100;
+    transform: translateY(-6px) scale(1.04);
+}
+
+#la-carousel .lac-card {
+    --lac-line: color-mix(in srgb, var(--team), transparent 45%);
+    --lac-fill: #1c1c1c;
+    position: relative;
+    isolation: isolate;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--lac-line);
+    clip-path: polygon(0 0, calc(100% - var(--lac-cut)) 0, 100% var(--lac-cut), 100% 100%, var(--lac-cut) 100%, 0 calc(100% - var(--lac-cut)));
+    transition: background-color 0.1s ease-in-out;
+}
+
+#la-carousel .lac-card::before {
+    content: "";
+    position: absolute;
+    inset: var(--lac-line-w);
+    z-index: -1;
+    background: var(--lac-fill);
+    clip-path: polygon(0 0, calc(100% - var(--lac-cut)) 0, 100% var(--lac-cut), 100% 100%, var(--lac-cut) 100%, 0 calc(100% - var(--lac-cut)));
+}
+
+#la-carousel .lac-card.is-active {
+    --lac-line: var(--lac-signal);
+}
+
+#la-carousel .lac-slot:hover > .lac-card:not(.is-active),
+#la-carousel .lac-slot.is-hovered > .lac-card:not(.is-active) {
+    --lac-line: hsla(0, 0%, 100%, 0.616);
+}
+
+#la-carousel .lac-art {
+    position: relative;
+    margin: var(--lac-line-w);
+    aspect-ratio: 1 / 1;
+    background-size: cover;
+    background-position: top;
+    overflow: hidden;
+    clip-path: polygon(0 0, calc(100% - var(--lac-cut)) 0, 100% var(--lac-cut), 100% 100%, var(--lac-cut) 100%, 0 calc(100% - var(--lac-cut)));
+}
+
+#la-carousel .lac-card.is-defeated .lac-art {
+    filter: grayscale(1);
+}
+
+#la-carousel .lac-pips {
+    position: absolute;
+    top: 4px;
+    left: calc(var(--lac-cut) - 1px);
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    font-size: max(11px, calc(var(--lac-size) * 0.21));
+    filter: drop-shadow(0 0 2px #000);
+}
+
+#la-carousel .lac-acts {
+    display: flex;
+    gap: 4px;
+}
+
+#la-carousel .lac-acts.is-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), 1em);
+    gap: 3px 4px;
+}
+
+#la-carousel .lac-act.is-used {
+    opacity: 0.45;
+}
+
+#la-carousel .lac-act.is-click {
+    cursor: pointer;
+    transition: filter 0.1s;
+}
+
+#la-carousel .lac-act.is-click:hover,
+#la-carousel .lac-act.is-click:focus-visible {
+    filter: brightness(1.6) drop-shadow(0 0 3px currentColor);
+    outline: none;
+}
+
+#la-carousel .lac-react {
+    margin-left: 2px;
+}
+
+#la-carousel .lac-react.is-up {
+    color: #be51ed;
+}
+
+#la-carousel .lac-react.is-spent {
+    color: #777;
+    opacity: 0.5;
+}
+
+#la-carousel .lac-rounds {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font: 600 max(9px, calc(var(--lac-size) * 0.14)) / 1 var(--lac-mono);
+    color: #fff;
+}
+
+#la-carousel .lac-btns {
+    position: absolute;
+    top: 3px;
+    right: calc(var(--lac-cut) - 1px);
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: calc(var(--lac-size) * 0.15);
+    color: #fff;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    filter: drop-shadow(0 0 2px #000);
+}
+
+#la-carousel .lac-slot:hover .lac-btns,
+#la-carousel .lac-slot.is-hovered .lac-btns {
+    opacity: 0.7;
+}
+
+#la-carousel .lac-btns i {
+    cursor: pointer;
+}
+
+#la-carousel .lac-btns i:hover {
+    filter: drop-shadow(0 0 3px #fff);
+}
+
+#la-carousel .lac-shade {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0 5px 4px;
+    pointer-events: none;
+}
+
+#la-carousel .lac-name {
+    margin: 0 -5px;
+    padding: 3px 6px;
+    background: #111;
+    color: #fff;
+    font-family: var(--lac-mono);
+    font-size: max(8px, calc(var(--lac-size) * 0.12));
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+}
+
+#la-carousel .lac-shade > .lac-name:last-child {
+    margin-bottom: -4px;
+}
+
+#la-carousel .lac-slot:hover .lac-name,
+#la-carousel .lac-slot.is-hovered .lac-name {
+    opacity: 1;
+}
+
+#la-carousel .lac-name-clip {
+    display: block;
+    overflow: hidden;
+    margin: 0 -5px;
+}
+
+#la-carousel .lac-name-text {
+    display: inline-block;
+    padding: 0 5px;
+}
+
+#la-carousel .lac-name.is-pan .lac-name-clip {
+    mask-image: linear-gradient(90deg, transparent, #000 5px, #000 calc(100% - 5px), transparent);
+}
+
+#la-carousel .lac-slot:hover .lac-name.is-pan .lac-name-text,
+#la-carousel .lac-slot.is-hovered .lac-name.is-pan .lac-name-text {
+    animation: lac-pan var(--pan-t, 4s) ease-in-out infinite alternate;
+}
+
+@keyframes lac-pan {
+    0%, 18% { margin-left: 0; }
+    82%, 100% { margin-left: var(--pan, 0px); }
+}
+
+#la-carousel .lac-unknown {
+    color: #e50000;
+    opacity: 0.85;
+    text-decoration: none;
+}
+
+#la-carousel .lac-status {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: calc(var(--lac-size) * 0.16);
+    pointer-events: all;
+}
+
+#la-carousel .lac-st {
+    position: relative;
+    flex: 0 0 auto;
+    width: calc(var(--lac-size) * 0.16);
+    aspect-ratio: 1;
+    background: #101214;
+    border: 1px solid #3a3f44;
+    border-radius: 10%;
+    transition: transform 0.12s ease-out;
+}
+
+#la-carousel .lac-st img {
+    position: absolute;
+    inset: 8%;
+    width: 84%;
+    height: 84%;
+    border: none;
+    object-fit: contain;
+}
+
+#la-carousel .lac-st:hover {
+    z-index: 1;
+    transform: scale(1.3);
+}
+
+#la-carousel .lac-st-n {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    padding: 0 2px;
+    background: #000;
+    font: 600 8px / 1.2 var(--lac-mono);
+}
+
+#la-carousel .lac-st-n small {
+    margin-left: 1px;
+    font-size: 6px;
+}
+
+#la-carousel .lac-st-more {
+    display: grid;
+    place-items: center;
+    color: #ddd;
+    font: 600 calc(var(--lac-size) * 0.1) / 1 var(--lac-mono);
+}
+
+#la-carousel .lac-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding-top: 1px;
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}
+
+#la-carousel .lac-slot.is-active > .lac-bar,
+#la-carousel .lac-slot:hover > .lac-bar,
+#la-carousel .lac-slot.is-hovered > .lac-bar,
+#la-carousel .lac-slot.is-controlled > .lac-bar,
+#la-carousel .lac-slot.is-targeted > .lac-bar,
+#la-carousel .lac-slot.bar-peek > .lac-bar,
+#la-carousel.alt-peek .lac-slot.alt-ok > .lac-bar {
+    opacity: 1;
+}
+
+#la-carousel .lac-slot:not(.bar-peek) > .lac-bar.flash-only,
+#la-carousel .lac-slot:not(.bar-peek) .lac-react.flash-only {
+    display: none;
+}
+
+#la-carousel .lac-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+#la-carousel .lac-dots {
+    display: flex;
+    gap: 2px;
+    flex: 0 0 calc(var(--pipcols, 4) * 6px);
+}
+
+#la-carousel .lac-dots i,
+#la-carousel .lac-segs i {
+    position: relative;
+    flex: 0 1 4px;
+    height: 4px;
+    background: #333;
+}
+
+#la-carousel .lac-segs {
+    display: flex;
+    gap: 1px;
+    min-width: 0;
+}
+
+#la-carousel .lac-segs i {
+    flex: 1 1 0;
+}
+
+#la-carousel .lac-line {
+    position: relative;
+    flex: 1;
+    height: 4px;
+    overflow: hidden;
+    background: rgba(34, 34, 34, 0.9);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+#la-carousel .lac-line.lac-heat {
+    height: 3px;
+}
+
+#la-carousel .lac-extras {
+    gap: 2px;
+}
+
+#la-carousel .lac-extras > .lac-line,
+#la-carousel .lac-extras > .lac-segs {
+    flex-grow: 0;
+    flex-shrink: 1;
+}
+
+#la-carousel .lac-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+}
+
+#la-carousel .lac-os {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    border-right: 1px solid #000;
+    opacity: 0.75;
+    background: linear-gradient(90deg, #2244ee, #1133ee, #2244ee);
+    background-size: 200% 100%;
+    animation: lac-os 2.2s linear infinite;
+}
+
+#la-carousel .lac-burn,
+#la-carousel .lac-inf {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    animation: lac-pulse 0.9s ease-in-out infinite;
+}
+
+#la-carousel .lac-burn {
+    background: #cc1a1a;
+    border-left: 1px solid #000;
+}
+
+#la-carousel .lac-inf {
+    background: #1a8844;
+    border-right: 1px solid #000;
+}
+
+#la-carousel .lac-danger {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: rgba(136, 34, 34, 0.8);
+}
+
+#la-carousel .lac-armor {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 1px;
+    height: 6px;
+    padding: 1px;
+    box-sizing: border-box;
+    background: rgba(17, 17, 17, 0.9);
+}
+
+#la-carousel .lac-armor i {
+    display: block;
+    width: 2px;
+    height: 100%;
+    background: #c8c8c8;
+}
+
+@keyframes lac-pulse {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+}
+
+@keyframes lac-os {
+    from { background-position: 0 0; }
+    to { background-position: 200% 0; }
+}
+
+#la-carousel .lac-flash {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: #fff;
+    pointer-events: none;
+    animation: lac-flash var(--lac-flash-shrink) cubic-bezier(0.215, 0.61, 0.355, 1) var(--lac-flash-hold) forwards;
+}
+
+@keyframes lac-flash {
+    to { transform: scaleX(0); }
+}
+
+#la-carousel .lac-dots i.fx-flash::after,
+#la-carousel .lac-segs i.fx-flash::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    animation: lac-fade-out var(--lac-flash-shrink) cubic-bezier(0.215, 0.61, 0.355, 1) var(--lac-flash-hold) forwards;
+}
+
+@keyframes lac-fade-out {
+    to { opacity: 0; }
+}
+
+#la-carousel .lac-react.fx-spend {
+    animation: lac-bolt-spend 0.9s ease-out;
+}
+
+@keyframes lac-bolt-spend {
+    0% { color: #fff; opacity: 1; transform: scale(1.6); }
+    100% { transform: scale(1); }
+}
+
+#la-carousel .lac-react.fx-refresh {
+    animation: lac-bolt-up 0.7s ease-out;
+}
+
+@keyframes lac-bolt-up {
+    0% { transform: scale(0.3); opacity: 0; }
+    60% { transform: scale(1.35); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+#la-carousel .lac-head-acts .cci.fx-burn {
+    animation: lac-burn 0.9s ease-out;
+}
+
+@keyframes lac-burn {
+    0% { color: #fff; opacity: 1; transform: scale(1.8); }
+    100% { transform: scale(1); }
+}
+
+#la-carousel .lac-slot.is-active::before {
+    --lac-bracket: color-mix(in srgb, var(--lac-signal), #fff 30%);
+    content: "";
+    position: absolute;
+    inset: -5px;
+    pointer-events: none;
+    background:
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) top left / 11px 2px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) top left / 2px 11px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) top right / 11px 2px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) top right / 2px 11px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) bottom left / 11px 2px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) bottom left / 2px 11px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) bottom right / 11px 2px no-repeat,
+        linear-gradient(var(--lac-bracket), var(--lac-bracket)) bottom right / 2px 11px no-repeat;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--lac-signal), transparent 35%));
+    animation: lac-lock 2s ease-in-out infinite;
+}
+
+@keyframes lac-lock {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.03); opacity: 0.55; }
+}
+
+#la-carousel .lac-slot.is-active.fx-activate::before {
+    animation: lac-acquire 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both, lac-lock 2s ease-in-out 0.45s infinite;
+}
+
+@keyframes lac-acquire {
+    from { transform: scale(1.14); opacity: 0; }
+    55% { opacity: 1; }
+    to { transform: none; opacity: 1; }
+}
+
+#la-carousel .lac-slot.fx-activate > .lac-card {
+    animation: lac-settle 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes lac-settle {
+    from { transform: translateY(-5px); }
+}
+
+#la-carousel .lac-slot.is-active .lac-art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.22) 0 1px, transparent 1px 3px);
+    opacity: 0.5;
+}
+
+#la-carousel .lac-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 40%;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--lac-signal), transparent 88%) 55%, color-mix(in srgb, var(--lac-signal), transparent 50%) 92%, rgba(255, 255, 255, 0.75) 97%, transparent);
+    transform: translateY(-100%);
+    animation: lac-scan 2.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+@keyframes lac-scan {
+    70%, 100% { transform: translateY(250%); }
+}
+
+#la-carousel .lac-head.fx-sweep::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 45%;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.22) 42%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.22) 58%, transparent);
+    transform: translateX(-110%) skewX(-18deg);
+    animation: lac-sheen 0.7s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+
+@keyframes lac-sheen {
+    to { transform: translateX(260%) skewX(-18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #la-carousel .lac-slot.is-active::before,
+    #la-carousel .lac-slot.is-active.fx-activate::before,
+    #la-carousel .lac-slot.fx-activate > .lac-card,
+    #la-carousel .lac-scan,
+    #la-carousel .lac-os,
+    #la-carousel .lac-burn,
+    #la-carousel .lac-inf,
+    #la-carousel .lac-react.fx-spend,
+    #la-carousel .lac-react.fx-refresh,
+    #la-carousel .lac-head-acts .cci.fx-burn,
+    #la-carousel .lac-head.fx-sweep::after,
+    #la-carousel .lac-edge i,
+    #la-carousel .horus--subtle {
+        animation: none;
+    }
+
+    #la-carousel .lac-slot,
+    #la-carousel .lac-slot.is-active:not(.win-l):not(.win-r),
+    #la-carousel .lac-card,
+    #la-carousel .lac-btns,
+    #la-carousel .lac-st,
+    #la-carousel .lac-name,
+    #la-carousel .lac-bar {
+        transition: none;
+    }
+
+    #la-carousel .lac-flash,
+    #la-carousel .lac-dots i.fx-flash::after,
+    #la-carousel .lac-segs i.fx-flash::after {
+        display: none;
+    }
+
+    #la-carousel .lac-name-text,
+    #la-carousel .lac-slot:hover .lac-name.is-pan .lac-name-text,
+    #la-carousel .lac-slot.is-hovered .lac-name.is-pan .lac-name-text {
+        display: inline;
+        animation: none;
+    }
+
+    #la-carousel .lac-name-clip {
+        text-overflow: ellipsis;
+    }
+
+    #la-carousel .lac-name.is-pan .lac-name-clip {
+        mask-image: none;
+    }
+}
+
+.lac-add-event .lac-recent-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.lac-add-event .lac-recent {
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 0 5px #000;
+    cursor: pointer;
+}
+
+.lac-add-event .lac-recent:hover {
+    filter: brightness(1.2);
+}

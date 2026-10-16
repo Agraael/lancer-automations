@@ -392,7 +392,17 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
         includeElevation = !!getModuleSetting('count3DDistance');
     }
     let planarDist;
-    if (!isHexGrid())
+    if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
+    {
+        const doc1 = token1.document ?? token1;
+        const doc2 = token2.document ?? token2;
+        const center1 = doc1.getCenterPoint(overridePos1 ? { x: overridePos1.x, y: overridePos1.y } : {});
+        const center2 = doc2.getCenterPoint();
+        const reach = (doc) => Math.max(0, (Math.max(doc.width, doc.height) - 1) / 2);
+        const centerDist = measureGridDistance(center1, center2) / canvas.scene.grid.distance;
+        planarDist = Math.max(0, Math.round(centerDist - reach(doc1) - reach(doc2)));
+    }
+    else if (!isHexGrid())
     {
         const centers1 = getOccupiedCenters(token1, overridePos1);
         const centers2 = getOccupiedCenters(token2);

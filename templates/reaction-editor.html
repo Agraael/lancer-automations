@@ -187,6 +187,10 @@
                         <input type="checkbox" name="triggerTarget" {{#if triggerTarget}}checked{{/if}}>
                         <span>{{localize "LA.reactionEditor.reactAsTarget"}}</span>
                     </label>
+                    <label class="checkbox" title="{{localize "LA.reactionEditor.reactToEnvironmentHint"}}">
+                        <input type="checkbox" name="triggerEnvironment" {{#if triggerEnvironment}}checked{{/if}}>
+                        <span>{{localize "LA.reactionEditor.reactToEnvironment"}}</span>
+                    </label>
                     <label class="checkbox" title="Allow tokens not in combat to react">
                         <input type="checkbox" name="outOfCombat" {{#if outOfCombat}}checked{{/if}}>
                         <span>{{localize "LA.reactionEditor.outOfCombat"}}</span>

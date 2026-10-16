@@ -296,22 +296,25 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
         {
             slot.attr({ 'data-uuid': pilot.uuid, title: pilot.name });
             slot.append($('<span class="la-hud-rail-name"></span>').text(pilot.name));
-            slot.on('click', (event) =>
+        }
+        slot.on('click', (event) =>
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            if (rail.hasClass('is-swapping'))
+                return;
+            rail.addClass('is-swapping');
+            if (!isActive)
             {
-                event.preventDefault();
-                event.stopPropagation();
-                if (rail.hasClass('is-swapping'))
-                    return;
-                rail.addClass('is-swapping');
                 slot.addClass('is-picked');
                 _railArriving = true;
-                const commit = () => onPick?.(pilot.uuid);
-                if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
-                    commit();
-                else
-                    window.setTimeout(commit, RAIL_SWAP_MS);
-            });
-        }
+            }
+            const commit = () => onPick?.(isActive ? '' : pilot.uuid);
+            if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
+                commit();
+            else
+                window.setTimeout(commit, RAIL_SWAP_MS);
+        });
         tallest = Math.max(tallest, built.height);
         rail.append(slot);
     }

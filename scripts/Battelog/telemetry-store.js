@@ -88,7 +88,7 @@ function combatantDisposition(combatant)
  * Any non-GM ownership at OWNER (3) level.
  * @param {any} actor
  */
-function isPlayerOwned(actor)
+export function isPlayerOwned(actor)
 {
     const ownership = actor?.ownership ?? {};
     for (const [userId, level] of Object.entries(ownership))
@@ -117,7 +117,9 @@ function isPlayerOwned(actor)
 export function classifyCombatant(combatant, squadRefToken = null)
 {
     const actor = combatant?.actor;
-    if (!actor || (actor.type !== 'mech' && actor.type !== 'npc'))
+    if (!actor || (actor.type !== 'mech' && actor.type !== 'npc' && actor.type !== 'pilot'))
+        return 'exclude';
+    if (actor.type === 'pilot' && _pilotMechInFight(combatant))
         return 'exclude';
     if (_isSquad(combatant))
         return 'players';
@@ -152,14 +154,28 @@ function _combatantToken(combatant)
     return combatant?.token?.object ?? canvas.tokens?.get(combatant?.tokenId ?? combatant?.token?.id) ?? null;
 }
 
+function _pilotMechInFight(combatant)
+{
+    const pilot = combatant?.actor;
+    const combat = combatant?.combat ?? combatant?.parent;
+    if (pilot?.type !== 'pilot' || !combat)
+        return false;
+    const activeId = pilot.system?.active_mech?.value?.id ?? null;
+    const isLinked = mech => mech?.type === 'mech' && (mech.system?.pilot?.value?.id === pilot.id || mech.id === activeId);
+    if ([...(combat.combatants ?? [])].some(other => isLinked(other.actor)))
+        return true;
+    const telemetry = getTelemetry(combat);
+    return BUCKETS.some(bucket => (telemetry?.[bucket] ?? []).some(entry => isLinked(game.actors?.get(entry.actorId))));
+}
+
 function _isSquad(combatant)
 {
     const actor = combatant?.actor;
-    if (actor?.type !== 'mech')
+    if (actor?.type !== 'mech' && actor?.type !== 'pilot')
         return false;
     if (isPlayerOwned(actor))
         return true;
-    return friendlyMechAsSquad() && combatantDisposition(combatant) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+    return actor.type === 'mech' && friendlyMechAsSquad() && combatantDisposition(combatant) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
 // Squad reference token: a player-owned mech, else a friendly mech (GM-only play).

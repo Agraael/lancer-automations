@@ -17,6 +17,15 @@ import { localize, localizeFormat } from '../tools/string-utils.js';
 // Bridges multi-segment moves where preUpdateToken fires per-segment.
 export const _moveHistoryCache = new Map();
 
+Hooks.on('updateToken', (document, change, _options, userId) =>
+{
+    if (userId === game.user.id)
+        return;
+    const flags = change.flags?.['lancer-automations'];
+    if (flags && ('moveHistory' in flags || '-=moveHistory' in flags))
+        _moveHistoryCache.delete(document.id);
+});
+
 // Per-mover action stack for chained move/activation sequences. New push wipes the previous one.
 /**
  * @typedef {Object} MoveStackFrame

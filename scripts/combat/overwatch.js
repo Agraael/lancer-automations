@@ -21,53 +21,40 @@ function getDispositionData(tokenA, tokenB)
 {
     const tokenFactions = game.modules.get("token-factions")?.api;
     if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
-        return { factionDisposition: tokenFactions.getDisposition(tokenA, tokenB) };
+        return tokenFactions.getDisposition(tokenA, tokenB);
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
     const dispA = tokenA.document.disposition;
     const dispB = tokenB.document.disposition;
-    return {
-        isAHostile: dispA === HOSTILE || dispA === SECRET,
-        isBHostile: dispB === HOSTILE || dispB === SECRET,
-        isAFriendly: dispA === FRIENDLY || dispA === NEUTRAL,
-        isBFriendly: dispB === FRIENDLY || dispB === NEUTRAL
-    };
+    if (dispA !== HOSTILE && dispA !== SECRET)
+        return dispB;
+    if (dispB === FRIENDLY)
+        return HOSTILE;
+    if (dispB === HOSTILE || dispB === SECRET)
+        return FRIENDLY;
+    return NEUTRAL;
 }
 
 /** @returns {boolean} */
 export function isFriendly(token1, token2)
 {
-    const disposition = getDispositionData(token1, token2);
-    if (disposition.factionDisposition !== undefined)
-        return disposition.factionDisposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-    return (disposition.isAFriendly && disposition.isBFriendly) || (disposition.isAHostile && disposition.isBHostile);
+    return getDispositionData(token1, token2) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
 /** @returns {boolean} */
 export function isHostile(reactor, mover)
 {
     const disposition = getDispositionData(reactor, mover);
-    if (disposition.factionDisposition !== undefined)
-    {
-        const factionDisposition = disposition.factionDisposition;
-        return factionDisposition === CONST.TOKEN_DISPOSITIONS.HOSTILE || factionDisposition === CONST.TOKEN_DISPOSITIONS.SECRET;
-    }
-    return (disposition.isAFriendly && disposition.isBHostile) || (disposition.isAHostile && disposition.isBFriendly);
+    return disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE || disposition === CONST.TOKEN_DISPOSITIONS.SECRET;
 }
 
-/** Returns `other`'s token disposition; only uses token-factions when advanced-teams mode is on (the only mode that resolves the full team matrix).
+/** Returns `other`'s disposition as seen by `viewer`: token-factions when present, else the same mirror rule on token dispositions.
  * @returns {number|null} a CONST.TOKEN_DISPOSITIONS value, or null if unknown
  */
 export function getRelativeDisposition(viewer, other)
 {
-    const tokenFactions = game.modules.get("token-factions")?.api;
-    const advancedTeams = tokenFactions && game.settings.get("token-factions", "color-from") === "advanced-factions";
-    if (advancedTeams && typeof tokenFactions.getDisposition === 'function' && viewer && other)
-    {
-        const disp = tokenFactions.getDisposition(viewer, other);
-        if (disp !== undefined && disp !== null)
-            return disp;
-    }
-    return other?.document?.disposition ?? null;
+    if (!viewer || !other)
+        return other?.document?.disposition ?? null;
+    return getDispositionData(viewer, other) ?? null;
 }
 
 /** @returns {boolean} */
@@ -129,32 +116,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         if (!hasReactionAvailable(t))
             return false;
 
-        const tokenFactions = game.modules.get("token-factions")?.api;
-        if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
-        {
-            const disposition = tokenFactions.getDisposition(t, movedToken);
-            const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-            const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-            if (disposition !== HOSTILE && disposition !== SECRET)
-                return false;
-        }
-        else
-        {
-            const HOSTILE = CONST.TOKEN_DISPOSITIONS.HOSTILE;
-            const SECRET = CONST.TOKEN_DISPOSITIONS.SECRET;
-            const FRIENDLY = CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-            const NEUTRAL = CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-
-            const isTargetHostile = movedToken.document.disposition === HOSTILE || movedToken.document.disposition === SECRET;
-            const isReactorHostile = t.document.disposition === HOSTILE || t.document.disposition === SECRET;
-
-            const isTargetFriendly = movedToken.document.disposition === FRIENDLY || movedToken.document.disposition === NEUTRAL;
-            const isReactorFriendly = t.document.disposition === FRIENDLY || t.document.disposition === NEUTRAL;
-
-            if (!((isReactorFriendly && isTargetHostile) || (isReactorHostile && isTargetFriendly)))
-                return false;
-        }
-        return true;
+        return isHostile(t, movedToken);
     });
 
     const triggeredReactors = [];
@@ -538,7 +500,7 @@ export function canEngage(token1, token2)
     if (!token1.actor || !token2.actor)
         return false;
 
-    if (!isHostile(token1, token2))
+    if (!isHostile(token1, token2) && !isHostile(token2, token1))
         return false;
 
     // Deployables cannot engage or be engaged

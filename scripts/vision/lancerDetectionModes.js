@@ -13,7 +13,7 @@ const SETTING_AUTO_ADD = 'lancerVisionAutoAdd';
 const SETTING_LOS = 'lancerLos';
 const SETTING_LOS_HEIGHT_RULE = 'lancerLosHeightRule';
 const SETTING_LOS_DEBUG = 'lancerLosDebug';
-const SETTING_SILH_FILTER_TEST = 'lancerSilhFilterTest';
+const SETTING_SILH_LEGACY_OVERLAY = 'lancerSilhLegacyOverlay';
 const SETTING_DIM_DEFER_MOVING = 'occlusionDimDeferMoving';
 const SETTING_SENSOR_COMBAT_ONLY = 'lancerSensorCombatOnly';
 const SETTING_AWARENESS_COMBAT_ONLY = 'lancerAwarenessCombatOnly';
@@ -1491,7 +1491,16 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
 {
     apply(filterManager, input, output, clear, currentState)
     {
-        super.apply(filterManager, input, output, clear, currentState);
+        if (!this.uniforms.simpleMode)
+        {
+            super.apply(filterManager, input, output, clear, currentState);
+            return;
+        }
+        const thickness = this.thickness * canvas.stage.scale.x;
+        this.uniforms.time = canvas.app.ticker.lastTime;
+        this.uniforms.thickness[0] = thickness / input._frame.width;
+        this.uniforms.thickness[1] = thickness / input._frame.height;
+        filterManager.applyFilter(this, input, output, clear);
     }
 
     static createFragmentShader()
@@ -1507,6 +1516,7 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
         uniform float alphaThreshold;
         uniform float time;
         uniform float styleMode;
+        uniform float simpleMode;
 
         ${this.CONSTANTS}
 
@@ -1524,6 +1534,19 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
                 maxAlpha = max(maxAlpha, curColor.a);
             }
             float resultAlpha = max(maxAlpha, texAlpha);
+
+            if ( simpleMode > 0.5 ) {
+                vec2 toCenter = vFilterCoord - vec2(0.5);
+                float pixelAngle = atan(toCenter.y, toCenter.x);
+                float rotA = mod(time * 0.0015, TWOPI) - 3.14159;
+                float rotB = mod(time * 0.0015 + 3.14159, TWOPI) - 3.14159;
+                float dA = abs(pixelAngle - rotA); dA = min(dA, TWOPI - dA);
+                float dB = abs(pixelAngle - rotB); dB = min(dB, TWOPI - dB);
+                float rot = max(pow(smoothstep(1.2, 0.0, dA), 2.0), pow(smoothstep(1.2, 0.0, dB), 2.0));
+                vec3 ring = outlineColor.rgb * (1.0 - texAlpha) * (0.35 + 0.85 * rot);
+                gl_FragColor = vec4(ring * resultAlpha, (1.0 - texAlpha) * resultAlpha);
+                return;
+            }
 
             float scanY = mod(time * 0.0008, 1.0);
             float lineDist = abs(vFilterCoord.y - scanY);
@@ -1680,7 +1703,7 @@ class DetectionModeLancerAwareness extends foundry.canvas.perception.DetectionMo
     {
         if (this._detectionFilter)
             return this._detectionFilter;
-        const filter = SilhouetteOutlineFilter.create({ outlineColor: [1, 0.85, 0.15, 1], styleMode: _awarenessStyleMode() });
+        const filter = SilhouetteOutlineFilter.create({ outlineColor: [1, 0.85, 0.15, 1], styleMode: _awarenessStyleMode(), simpleMode: 0 });
         filter.thickness = 1.25;
         this._detectionFilter = filter;
         return this._detectionFilter;
@@ -1871,9 +1894,9 @@ function _registerVisionSettings()
         if (canvas?.perception)
             canvas.perception.update({ refreshVision: true });
     };
-    game.settings.register(MODULE_ID, SETTING_SILH_FILTER_TEST, {
-        name: 'LA.settings.lancerSilhFilterTest.name',
-        scope: 'client',
+    game.settings.register(MODULE_ID, SETTING_SILH_LEGACY_OVERLAY, {
+        name: 'LA.settings.lancerSilhLegacyOverlay.name',
+        scope: 'world',
         config: false,
         type: Boolean,
         default: false,
@@ -2248,7 +2271,7 @@ function _patchRenderDetectionFilter()
     const frameRect = new PIXI.Rectangle();
     const chainFilters = [];
     // fresh bounds (not the cached getBounds(true)), mesh filters kept so displacement FX carry over
-    const renderWithMeshFilters = (token, renderer) =>
+    const renderWithMeshFilters = (token, renderer, filter = token.detectionFilter) =>
     {
         const mesh = token.mesh;
         if (!mesh)
@@ -2264,7 +2287,7 @@ function _patchRenderDetectionFilter()
             if (filter?.constructor?.name === 'FilterTransform')
                 chainFilters.push(filter);
         }
-        chainFilters.push(token.detectionFilter);
+        chainFilters.push(filter);
         mesh.filterArea = frameRect;
         mesh.filters = chainFilters;
         mesh.tint = 0xFFFFFF;
@@ -2288,8 +2311,8 @@ function _patchRenderDetectionFilter()
         const filterName = this.detectionFilter?.constructor?.name;
         if (filterName === 'SilhouetteOutlineFilter')
         {
-            if (getModuleSetting(SETTING_SILH_FILTER_TEST))
-                renderWithMeshFilters(this, renderer);
+            if (!getModuleSetting(SETTING_SILH_LEGACY_OVERLAY))
+                renderWithMeshFilters(this, renderer, getLAFlag(this.document, 'awarenessMode') === 'simple' ? _getSimpleSilhouetteFilter() : this.detectionFilter);
             return;
         }
         if (filterName === 'ScanlineOutlineFilter')
@@ -2434,12 +2457,23 @@ function _syncOverlayTransform(mesh, token, simple)
 const _OVERLAY_COLOR = [1, 0.85, 0.15, 1];
 const _OVERLAY_COLOR_SIMPLE = [1.0, 0.55, 0.15, 1.0];
 
+let _simpleSilhouetteFilter = null;
+function _getSimpleSilhouetteFilter()
+{
+    if (_simpleSilhouetteFilter)
+        return _simpleSilhouetteFilter;
+    const filter = SilhouetteOutlineFilter.create({ outlineColor: _OVERLAY_COLOR_SIMPLE, styleMode: 0, simpleMode: 1 });
+    filter.thickness = 1.25;
+    _simpleSilhouetteFilter = filter;
+    return _simpleSilhouetteFilter;
+}
+
 function _getOverlayConfig(token)
 {
     const filterName = token.detectionFilter?.constructor?.name;
     if (filterName !== 'SilhouetteOutlineFilter')
         return null;
-    if (getModuleSetting(SETTING_SILH_FILTER_TEST))
+    if (!getModuleSetting(SETTING_SILH_LEGACY_OVERLAY))
         return null;
     const mode = getLAFlag(token.document,'awarenessMode') ?? 'default';
     if (mode === 'ignore' || mode === 'visible')

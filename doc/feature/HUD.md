@@ -235,3 +235,18 @@ With **`tah.narrativeMode`** on, the HUD still shows when no token is selected, 
 | **Portrait Scale** | Size of the portrait. |
 | **Weapon Range Preview** | Show weapon range on the map when hovering items in the HUD. Works standalone, no extra module needed. |
 | **Aid / Handle / Interact / Squeeze Actions** | Show these actions in the Actions category. They come from PPG (Prototype Pattern Group). |
+
+---
+
+## Combat Carousel
+
+<img src="../img/hud-carousel.png" width="100%"/>
+
+Combatants as cards in team lanes at the top of the screen. Turn it on with **Enable Combat Carousel** (`combatCarousel`) in the **Combat & Movement** tab.
+
+- Lanes use the teams from [my Token Factions fork](https://github.com/Agraael/foundryvtt-token-factions), otherwise dispositions.
+- Card bars follow the canvas [visibility rules](./TOKEN_DISPLAY.md#visibility-and-defaults).
+- Controls work like Carousel Combat Tracker. Double-click a card to activate it, or to end the turn on the acting card.
+- **Add Event** (GM) adds a timed entry that expires after its duration in rounds.
+
+Per-player options: **Portrait Size**, **Carousel Length**, **Deck Max Overlap** (overlap before the strip scrolls) and **Deck Slide**.

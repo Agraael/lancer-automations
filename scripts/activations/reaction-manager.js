@@ -2259,6 +2259,7 @@ export class ReactionEditor extends FormApplication
             triggerSelf: reaction.triggerSelf === true,
             triggerOther: reaction.triggerOther !== false,
             triggerTarget: reaction.triggerTarget === true,
+            triggerEnvironment: reaction.triggerEnvironment === true,
             outOfCombat: reaction.outOfCombat === true,
             autoActivate: reaction.autoActivate || false,
             awaitActivationCompletion: reaction.awaitActivationCompletion ?? (reaction.autoActivate ?? false),
@@ -2366,6 +2367,7 @@ export class ReactionEditor extends FormApplication
                     triggerSelf: html.find('input[name="triggerSelf"]').prop('checked'),
                     triggerOther: html.find('input[name="triggerOther"]').prop('checked'),
                     triggerTarget: html.find('input[name="triggerTarget"]').prop('checked'),
+                    triggerEnvironment: html.find('input[name="triggerEnvironment"]').prop('checked'),
                     outOfCombat: html.find('input[name="outOfCombat"]').prop('checked'),
                     onlyOnSourceMatch: html.find('input[name="onlyOnSourceMatch"]').filter(':checked').length > 0,
                     sceneReactor: String(html.find('select[name="sceneReactor"]').val() || existingReaction.sceneReactor || "off"),
@@ -3709,6 +3711,7 @@ export class ReactionEditor extends FormApplication
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 triggerTarget: formData.triggerTarget === true,
+                triggerEnvironment: formData.triggerEnvironment === true,
                 outOfCombat: formData.outOfCombat === true,
                 dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };
@@ -3781,6 +3784,7 @@ export class ReactionEditor extends FormApplication
                 triggerSelf: formData.triggerSelf === true,
                 triggerOther: formData.triggerOther === true,
                 triggerTarget: formData.triggerTarget === true,
+                triggerEnvironment: formData.triggerEnvironment === true,
                 outOfCombat: formData.outOfCombat === true,
                 dispositionFilter: dispositionFilter.length > 0 ? dispositionFilter : null
             };

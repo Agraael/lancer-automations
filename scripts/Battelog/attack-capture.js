@@ -1,7 +1,7 @@
 /* global game, Hooks, console */
 
 import { appendEvent } from './telemetry-store.js';
-import { findActiveCombatForToken as _findActiveCombatForToken } from "./battelog-utils.js";
+import { findActiveCombatForToken as _findActiveCombatForToken, findTelemetryCombatForToken, resolveCreditTokenId, pilotTokenOf } from "./battelog-utils.js";
 import { isExecutorGM } from '../tools/misc-tools.js';
 
 const TRACKED = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss']);
@@ -19,10 +19,13 @@ function _onTrigger(triggerType, data)
 {
     if (!TRACKED.has(triggerType))
         return;
-    const attackerId = data?.triggeringToken?.id ?? null;
+    const rawId = data?.triggeringToken?.id ?? null;
+    const attackerId = resolveCreditTokenId(rawId);
     if (!attackerId)
         return;
-    const combat = _findActiveCombatForToken(attackerId);
+    const pilotTokenId = attackerId !== rawId ? pilotTokenOf(rawId) : null;
+    const combat = _findActiveCombatForToken(attackerId)
+        ?? (pilotTokenId ? findTelemetryCombatForToken(attackerId) : null);
     if (!combat)
         return;
 
@@ -64,6 +67,8 @@ function _onTrigger(triggerType, data)
     };
     if (basic)
         event.basic = true;
+    if (pilotTokenId)
+        event.pilotTokenId = pilotTokenId;
 
     if (isExecutorGM())
         appendEvent(combat, attackerId, event);

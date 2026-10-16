@@ -146,11 +146,11 @@ export function injectExtraDataUtility(state)
     return state;
 }
 
-/** Fakes a lancerItem on invades that lack one (e.g. Fragment Signal) so isTech() returns true and the HUD gets tech styling. */
+/** Fakes a lancerItem on tech attacks that lack one (e.g. Fragment Signal, Basic Tech) so isTech() returns true and the HUD gets tech styling. */
 export async function forceTechHUDStep(state, _options)
 {
     const data = state?.data;
-    if (data?.invade && data.acc_diff && !data.acc_diff.lancerItem)
+    if (data?.acc_diff && !data.acc_diff.lancerItem)
     {
         data.acc_diff.lancerItem = {
             is_mech_weapon: () => false,

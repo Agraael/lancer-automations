@@ -88,12 +88,12 @@ Hooks.on('refreshToken', (token) =>
     const width = token.w, height = token.h;
     const animGround = _thtGroundAt({ x: doc.x + width / 2, y: doc.y + height / 2 });
     const elev = doc.elevation ?? 0;
-    const isMoving = !!movement && (
+    const isMoving = !!movement && token.animationContexts.has(token.movementAnimationName) && (
         movement.origin.x !== movement.destination.x
         || movement.origin.y !== movement.destination.y
         || (movement.origin.elevation ?? 0) !== (movement.destination.elevation ?? 0)
     );
-    let target;
+    let target = 0;
     let _dbgStartGround, _dbgDestGround, _dbgInterpolatedTerrain, _dbgDElev, _dbgLerpT, _dbgElevClimbed, _dbgClimbing;
     if (isMoving)
     {
@@ -113,10 +113,9 @@ Hooks.on('refreshToken', (token) =>
         }
         _dbgInterpolatedTerrain = interpolatedTerrain;
         _dbgElevClimbed = elev - (movement.origin.elevation ?? 0);
-        target = animGround - elev;
+        if ((movement.origin.elevation ?? 0) === startGround && (movement.destination.elevation ?? 0) === destGround)
+            target = animGround - elev;
     }
-    else
-        target = animGround - elev;
 
     if (globalThis._laIsoDebugOn)
     {

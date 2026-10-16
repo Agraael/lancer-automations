@@ -1,5 +1,5 @@
 import { appendEvent } from './telemetry-store.js';
-import { findActiveCombatForToken, findTelemetryCombatForToken } from './battelog-utils.js';
+import { findActiveCombatForToken, findTelemetryCombatForToken, resolveCreditTokenId, pilotTokenOf } from './battelog-utils.js';
 import { getIntentionalMoveData } from '../movement/move-tracking.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 
@@ -9,6 +9,11 @@ const _knockbackSource = new Map();
 function _round1(value)
 {
     return Math.round((Number(value) || 0) * 10) / 10;
+}
+
+function _bodyEntryId(tokenId)
+{
+    return pilotTokenOf(tokenId) ? resolveCreditTokenId(tokenId) : tokenId;
 }
 
 // At turn end the ending token's move history is still intact (it clears at its
@@ -28,13 +33,13 @@ function _onTurnEnd(combat, prior)
     const moved = _round1(getIntentionalMoveData(tokenId)?.moved);
     if (moved <= 0)
         return;
-    appendEvent(telemetryCombat, tokenId, { type: 'move', round: telemetryCombat.round ?? 0, byId: tokenId, distance: moved, knockback: false });
+    appendEvent(telemetryCombat, _bodyEntryId(tokenId), { type: 'move', round: telemetryCombat.round ?? 0, byId: tokenId, distance: moved, knockback: false });
 }
 
 function _onKnockbackSource(data)
 {
     if (data?.tokenId && data?.sourceId)
-        _knockbackSource.set(data.tokenId, data.sourceId);
+        _knockbackSource.set(data.tokenId, resolveCreditTokenId(data.sourceId));
 }
 
 function _onInvoluntaryMove(data)
@@ -56,10 +61,11 @@ function _onInvoluntaryMove(data)
     const event = { type: 'move', round: telemetryCombat.round ?? 0, byId: tokenId, distance, knockback: true };
     if (sourceId)
         event.sourceId = sourceId;
+    const entryId = _bodyEntryId(tokenId);
     if (isExecutorGM())
-        appendEvent(telemetryCombat, tokenId, event);
+        appendEvent(telemetryCombat, entryId, event);
     else
-        game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: telemetryCombat.id, entryId: tokenId, event } });
+        game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: telemetryCombat.id, entryId, event } });
 }
 
 export function registerMoveCapture()

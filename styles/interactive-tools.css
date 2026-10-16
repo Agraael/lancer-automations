@@ -1829,6 +1829,10 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     box-sizing: border-box;
 }
 
+#accdiff-hud .mini-weapon-profile:not(:has(.cci)) {
+    display: none;
+}
+
 /* First-render fallback: Lancer's own .lancer-hud rule lives in a CSS @layer that may not
    apply on the very first render. These rules sit outside any @layer so the card always has
    a proper background even before Lancer's styling fully cascades. */

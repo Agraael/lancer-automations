@@ -6,12 +6,15 @@ import {
 
 import { startChoiceCard } from "./network.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { tfGetTeam } from "../tools/token-factions-utils.js";
 import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { setActorFlag, unsetActorFlag, setItemFlag, unsetItemFlag, setTokenFlag, unsetTokenFlag } from "../socket.js";
 import { playActionFxByActivation, playDeployableFX, playReloadFX } from "../fx/actionFX.js";
 import { stripDeployOwner } from "./detail-renderers.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { getOrCreateTemplateActor } from "../tools/template-actors.js";
+import { deployableArtEnabled } from "../tools/deployable-art.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
@@ -43,46 +46,12 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         at = null
     } = options;
 
-    const templateName = "Template Throw";
-    let templateActor = game.actors.contents.find((/** @type {any} */ actor) =>
-        actor.name === templateName && actor.type === 'deployable'
-    );
+    const templateActor = await getOrCreateTemplateActor('throw');
 
     if (!templateActor)
     {
-        const LancerActor = game.lancer?.LancerActor || Actor;
-        templateActor = await LancerActor.create({
-            name: templateName,
-            type: 'deployable',
-            img: 'systems/lancer/assets/icons/white/melee.svg',
-            system: {
-                hp: { value: 5, max: 5, min: 0 },
-                evasion: 5,
-                edef: 5,
-                armor: 0,
-                size: 0.5,
-                activations: 0
-            },
-            folder: null,
-            ownership: { default: 0 },
-            prototypeToken: {
-                name: templateName,
-                img: 'systems/lancer/assets/icons/white/melee.svg',
-                width: 1,
-                height: 1,
-                displayName: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
-                displayBars: CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
-                disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
-                bar1: { attribute: 'hp' },
-                flags: { [MODULE_ID]: { awarenessMode: 'simple' } }
-            }
-        });
-
-        if (!templateActor)
-        {
-            ui.notifications.error(localize('LA.notify.failedToCreateTemplateThrowActor'));
-            return null;
-        }
+        ui.notifications.error(localize('LA.notify.failedToCreateTemplateThrowActor'));
+        return null;
     }
 
     let ownerName = /** @type {string} */ (ownerActor.name || "");
@@ -158,45 +127,12 @@ export async function spawnHardCover(originToken, options = {})
         description = ""
     } = options;
 
-    const templateName = "Template Hard Cover";
-    const iconPath = "modules/lancer-automations/icons/black/stone-pile.svg";
-
-    let templateActor = game.actors.contents.find((/** @type {any} */ actor) =>
-        actor.name === templateName && actor.type === 'deployable'
-    );
+    const templateActor = await getOrCreateTemplateActor('hardCover');
 
     if (!templateActor)
     {
-        const LancerActor = /** @type {any} */ (game.lancer?.LancerActor || Actor);
-        templateActor = await LancerActor.create({
-            name: templateName,
-            type: 'deployable',
-            img: iconPath,
-            system: {
-                hp: { value: 10, max: 10, min: 0 },
-                stats: { hp: 10, evasion: 5, edef: 5, armor: 0, size: 1, speed: 0, save: 10, heatcap: 0 },
-                activations: 0
-            },
-            folder: null,
-            ownership: { default: 0 },
-            prototypeToken: {
-                name: templateName,
-                img: iconPath,
-                width: 1,
-                height: 1,
-                displayName: CONST.TOKEN_DISPLAY_MODES.HOVER,
-                displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
-                disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
-                bar1: { attribute: 'hp' },
-                flags: { [MODULE_ID]: { awarenessMode: 'simple' } }
-            }
-        });
-
-        if (!templateActor)
-        {
-            ui.notifications.error(localize('LA.notify.failedToCreateTemplateHardCoverActor'));
-            return null;
-        }
+        ui.notifications.error(localize('LA.notify.failedToCreateTemplateHardCoverActor'));
+        return null;
     }
 
     // Ensure stats.hp is correct: Lancer derives hp.max from stats.hp, not hp.max directly
@@ -629,6 +565,8 @@ export async function getDeployableInfo(lid, ownerActor = null)
 
 function _applyDeployableTypeImage(actorData)
 {
+    if (deployableArtEnabled())
+        return;
     const type = String(actorData?.system?.type ?? '');
     const typeImg = /mine/i.test(type) ? 'systems/lancer/assets/icons/mine.svg'
         : /drone/i.test(type) ? 'systems/lancer/assets/icons/drone.svg'
@@ -699,7 +637,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
     const disposition = dispositionOpt ?? ownerActor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
     let team = teamOpt;
     if (team === null || team === undefined)
-        team = game.modules.get('token-factions')?.active ? ownerActor.getFlag('token-factions', 'team') : null;
+        team = tfGetTeam(ownerActor.token ?? ownerActor);
     team = team ?? null;
 
     const originToken = at || ownerActor.getActiveTokens()?.[0] || null;
@@ -3226,7 +3164,7 @@ export async function openDeployableMenu(actor)
 
                 actorData.prototypeToken = actorData.prototypeToken || {};
                 actorData.prototypeToken.disposition = actor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
-                const actorTeam = game.modules.get('token-factions')?.active ? actor.getFlag('token-factions', 'team') : null;
+                const actorTeam = tfGetTeam(actor.token ?? actor);
                 if (actorTeam !== null)
                 {
                     actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};

@@ -1,6 +1,7 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { MODULE_ID } from "./constants.js";
 import { localize, localizeFormat } from "./string-utils.js";
+import { tfGetTeam, tfGetTeams } from "./token-factions-utils.js";
 import { getLAFlag } from "./flag-utils.js";
 import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
 import { choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
@@ -130,17 +131,12 @@ export function getTokenDispositionInfo(token)
             }
             if (factionColor)
                 color = factionColor;
-            if (game.settings.get('token-factions', 'color-from') === 'advanced-factions')
+            const teamId = tfGetTeam(token);
+            if (teamId)
             {
-                const teamId = token.document.getFlag?.('token-factions', 'team')
-                    || token.actor?.prototypeToken?.flags?.['token-factions']?.team;
-                if (teamId)
-                {
-                    const teams = game.settings.get('token-factions', 'team-setup') || [];
-                    const team = teams.find(/** @type {any} */ candidateTeam => candidateTeam.id === teamId);
-                    if (team)
-                        label = team.name;
-                }
+                const team = tfGetTeams().find(/** @type {any} */ candidateTeam => candidateTeam.id === teamId);
+                if (team)
+                    label = team.name;
             }
         }
     }

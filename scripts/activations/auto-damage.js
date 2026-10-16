@@ -1,8 +1,31 @@
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getLAFlags } from '../tools/flag-utils.js';
+import { flattenBonuses, getGlobalBonuses, getConstantBonuses } from '../bonuses/genericBonuses.js';
+
+const RELIABLE_LID = 'tg_reliable';
 
 const pendingRoll = new Set();
 const rollOnRender = new Set();
 const pendingApply = new Set();
+
+function isFullMiss(attackData)
+{
+    const targets = attackData.targets ?? [];
+    return targets.length > 0 && targets.every(target => !target.hit && !target.crit);
+}
+
+function hasReliableDamage(message, attackData)
+{
+    const item = attackData.attackerItemUuid ? /** @type {any} */ (fromUuidSync(attackData.attackerItemUuid)) : null;
+    if (item?.isReliable?.())
+        return true;
+    const injectedTags = getLAFlags(message)?.flowState?.injectedTags ?? [];
+    if (injectedTags.some(tag => (tag.lid ?? tag.id) === RELIABLE_LID))
+        return true;
+    const actor = attackData.attackerUuid ? /** @type {any} */ (fromUuidSync(attackData.attackerUuid)) : null;
+    const bonuses = flattenBonuses([...getGlobalBonuses(actor), ...getConstantBonuses(actor)]);
+    return bonuses.some(bonus => bonus.type === 'tag' && bonus.tagId === RELIABLE_LID && !bonus.removeTag);
+}
 
 function shouldAutoRoll(message)
 {
@@ -10,7 +33,10 @@ function shouldAutoRoll(message)
         return false;
     if (message.author?.id !== game.user.id)
         return false;
-    return !!message.flags?.lancer?.attackData;
+    const attackData = message.flags?.lancer?.attackData;
+    if (!attackData)
+        return false;
+    return !isFullMiss(attackData) || hasReliableDamage(message, attackData);
 }
 
 function shouldWatchApply(message)

@@ -12,6 +12,7 @@ import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from '../tah/s
 import { drawSightlines, clearSightlines } from '../vision/sightlines.js';
 import { tokenAtPoint } from '../combat/grid-helpers.js';
 import { localize } from '../tools/string-utils.js';
+import { laTokenHeight } from '../tools/token-height.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
@@ -1290,7 +1291,7 @@ function _measureTerrainElevDisabled()
 }
 
 const LOS_KEY = 'ruler-los';
-const EMPTY_SPACE_HEIGHT = 1;
+const EMPTY_SPACE_HEIGHT = laTokenHeight(/** @type {any} */ ({ height: 1 }));
 
 let _sightlineMode = false;
 let _sightlineVerdict = null;

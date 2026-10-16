@@ -154,7 +154,7 @@ function sensorRange(actor)
 
 function isTechAttack(state)
 {
-    const lancerItem = state?.data?.lancerItem;
+    const lancerItem = state?.data?.lancerItem ?? state?.data?.acc_diff?.lancerItem;
     if (lancerItem)
     {
         const isWeapon = (lancerItem.is_mech_weapon?.() || lancerItem.is_pilot_weapon?.()

@@ -491,7 +491,7 @@ const sealantGunAutomation = {
                 await api.updateTokenSystem(target, { 'system.burn': 0 });
                 await api.applyEffectsToTokens({
                     tokens: [target],
-                    effectNames: ["slowed"],
+                    effectNames: ["slow"],
                     note: "Sealant Gun (Allied)",
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
@@ -504,7 +504,7 @@ const sealantGunAutomation = {
                     title: "Sealant Gun Save",
                     origin: reactorToken,
                     sendToOwner: false,
-                    effects: ["slowed"],
+                    effects: ["slow"],
                     note: "Sealant Gun (Hostile)",
                     duration: { label: 'end', turns: 1, rounds: 0 }
                 });
@@ -714,7 +714,7 @@ const restockDroneSupportAutomation = {
                         const lancerApi = api;
                         if (!lancerApi || !options.hasEntered)
                             return;
-                        if (!lancerApi.isFriendly(token, parent))
+                        if (!lancerApi.isFriendly(parent, token))
                             return;
 
                         const { healAmount, isRebake } = lancerApi.helpers.restockDrone.healInfo(parent);
@@ -946,7 +946,7 @@ function buildRingOfFireTurnStartCallback()
         const la = api;
         if (!la || !token?.actor || !parent?.actor)
             return;
-        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(token, parent))
+        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(parent, token))
             return;
         await la.helpers.ringOfFire.apply(token, parent, la);
     };
@@ -973,7 +973,7 @@ function buildDefenseNetAuraCallback()
                 { type: 'immunity', subtype: 'crit', applyToTargetter: true, condition: defNetCondition }
             ];
 
-            if (api.isFriendly(token, reactorToken))
+            if (api.isFriendly(reactorToken, token))
                 subBonuses.push({ type: 'immunity', subtype: 'effect', effects: ['impaired', 'slow'] });
 
             await api.addGlobalBonus(token.actor, {
@@ -995,7 +995,7 @@ function buildDefenseNetAuraCallback()
         else
             await la.removeGlobalBonus(token.actor, b => b.context?.ownerTokenId === parent.id);
 
-        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(token, parent))
+        if (!la.helpers.ringOfFire.has(parent, la) || !la.isHostile(parent, token))
             return;
 
         if (options.hasEntered)
@@ -3024,7 +3024,7 @@ const WITCH_TEAR_DOWN_FLAG = "tearDownWitchId";
 const WITCH_PETRIFY_EFFECT = "Petrify";
 const WITCH_PETRIFY_FLAG = "petrifyWitchId";
 const WITCH_PAIN_TRANSFERENCE_LID = "npc-rebake_npcf_pain_transference_witch";
-const WITCH_PETRIFY_CHAIN = ['slowed', 'immobilized', 'stunned'];
+const WITCH_PETRIFY_CHAIN = ['slow', 'immobilized', 'stunned'];
 
 function witchTechTargets(triggerData)
 {
@@ -3342,11 +3342,11 @@ const INTERDICTION_FLAG = 'interdictionSourceId';
 // Serialized onto the bonus, so it reads the chosen enemy off the bearer's own mark.
 function interdictionAppliesTo(target, state, reactorToken)
 {
-    const la = game.modules.get('lancer-automations')?.api;
-    if (!la || !target?.id)
+    const api = game.modules.get('lancer-automations')?.api;
+    if (!api || !target?.id)
         return false;
-    return la.findEffectsOnToken(reactorToken, "Friendly Interdiction")
-        .some(mark => la.getLAFlag(mark, 'interdictionEnemyId') === target.id);
+    return api.findEffectsOnToken(reactorToken, "Friendly Interdiction")
+        .some(mark => api.getLAFlag(mark, 'interdictionEnemyId') === target.id);
 }
 
 async function releaseInterdiction(bearerToken, bastionToken, la)
@@ -3500,7 +3500,7 @@ const fearlessDefenderAutomation = {
             const ally = triggerData.target;
             if (!ally || ally.id === reactorToken.id)
                 return false;
-            if (api.hasStatus(reactorToken, 'immobilized', 'slowed', 'stunned'))
+            if (api.hasStatus(reactorToken, 'immobilized', 'slow', 'stunned'))
                 return false;
             if (!(triggerData.damages ?? []).some(amount => Number(amount) > 0))
                 return false;
@@ -3612,7 +3612,7 @@ function buildSiegeGuardianAuraCallback()
             await api.removeGlobalBonus(token.actor, bonus => bonus.context?.ownerTokenId === parent.id);
             return;
         }
-        if (!api.isFriendly(token, parent))
+        if (!api.isFriendly(parent, token))
             return;
 
         await api.addGlobalBonus(token.actor, {
@@ -3744,7 +3744,7 @@ function buildAssistedReloadAuraCallback()
         const la = api;
         if (!la || !token?.actor || !parent?.actor || token.id === parent.id)
             return;
-        if (!la.isFriendly(token, parent))
+        if (!la.isFriendly(parent, token))
             return;
         const weapon = la.findItemByLid(parent.actor, la.helpers.rotary.launcherLid);
         if (!weapon)

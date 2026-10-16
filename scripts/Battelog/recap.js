@@ -7,6 +7,7 @@ import { getScanJournalsForActor } from '../tools/scan-lookup.js';
 import { exportSquadPoster, exportPlayerPoster } from './share-image.js';
 import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
+import { inkOn } from '../tools/color-utils.js';
 
 function _themeNameHtml()
 {
@@ -42,6 +43,7 @@ const TIP_HOVER_SELECTOR = [
     '.battelog-pcol-medal',
     '.battelog-pcol-gearlost.has-lost',
     '.battelog-hcard-scan-btn.has-tip',
+    '.battelog-hcard-scan-state.has-tip',
     '.battelog-hcard-marker.has-tip',
     '.battelog-hcard-killers.has-tip',
     '.battelog-pcol-frame-name.has-tip',
@@ -88,7 +90,8 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
         : nonMvpAwards;
     const squadTabHtml = _squadTabHtml(sorted, mvpId, effectiveAwards);
     const encounterTabHtml = _encounterTabHtml(encounter, sorted);
-    const telemetryTabHtml = _telemetryTabHtml(battle);
+    const telemetryBattle = { ...battle, players: sorted };
+    const telemetryTabHtml = _telemetryTabHtml(telemetryBattle);
 
     const content = `
         <div class="battelog-recap-head">
@@ -151,36 +154,18 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
         {
             const $root = html instanceof $ ? html : $(html);
 
-            // Medal counts differ per card; level every award block to the tallest so the stats below line up.
-            const equalizeMedalBlocks = () =>
+            const markMedalOverflow = () =>
             {
                 const grid = $root[0]?.querySelector('.battelog-recap-squad-grid');
                 if (!grid)
                     return;
-                const blocks = grid.querySelectorAll('.battelog-pcol-medals');
-                if (!blocks.length)
-                    return;
-                let maxHeight = 0;
-                blocks.forEach((block) =>
-                {
-                    block.style.minHeight = '';
-                    if (block.offsetHeight > maxHeight)
-                        maxHeight = block.offsetHeight;
-                });
-                if (maxHeight > 0)
-                {
-                    blocks.forEach((block) =>
-                    {
-                        block.style.minHeight = `${maxHeight}px`;
-                    });
-                }
-                blocks.forEach((block) =>
+                grid.querySelectorAll('.battelog-pcol-medals').forEach((block) =>
                 {
                     block.parentElement?.classList.toggle('has-overflow', block.scrollHeight > block.clientHeight + 1);
                 });
             };
-            globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(equalizeMedalBlocks));
-            globalThis.setTimeout(equalizeMedalBlocks, 500);
+            globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(markMedalOverflow));
+            globalThis.setTimeout(markMedalOverflow, 500);
 
             globalThis.requestAnimationFrame(() =>
             {
@@ -201,7 +186,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const medals = /** @type {HTMLElement} */ (this).closest('.battelog-pcol-medals-wrap')?.querySelector('.battelog-pcol-medals');
                 if (medals)
-                    medals.scrollBy({ top: Number(/** @type {HTMLElement} */ (this).dataset.dir || 1) * 48, behavior: 'smooth' });
+                    medals.scrollBy({ top: Number(/** @type {HTMLElement} */ (this).dataset.dir || 1) * 44, behavior: 'smooth' });
             });
 
             $root.on('click', '.battelog-recap-share', function (ev)
@@ -254,7 +239,8 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 }
                 stopBootLoop();
                 $root.find('.battelog-recap-tab-panel.is-booting').removeClass('is-booting');
-                $panel.addClass('is-booting');
+                if (($panel[0]?.scrollHeight ?? 0) <= ($panel[0]?.clientHeight ?? 0))
+                    $panel.addClass('is-booting');
                 // recycled each boot; the fill-mode would pin transform/box-shadow forever
                 $panel.find('.stagger-done').removeClass('stagger-done').addClass('stagger');
                 // The last delay drives the end, not the count: hidden siblings never animate.
@@ -325,8 +311,8 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             });
             // Focused mech view: stat strip on top, panels in three labeled category columns.
             const PANEL_GROUPS = [
-                { label: localize('LA.recap.panelGroup.offense'), titles: new Set(['confirmed kills', 'assisted kills', 'attacks & tech', 'accuracy', 'weapons used']) },
-                { label: localize('LA.recap.panelGroup.defense'), titles: new Set(['damage dealt', 'damage taken', 'attacks avoided', 'h.a.s.e']) },
+                { label: localize('LA.recap.panelGroup.offense'), titles: new Set(['confirmed kills', 'assisted kills', 'damage dealt', 'attacks & tech', 'accuracy', 'weapons used']) },
+                { label: localize('LA.recap.panelGroup.defense'), titles: new Set(['damage taken', 'attacks avoided', 'h.a.s.e', 'grit', 'equipment destroyed']) },
                 { label: localize('LA.recap.panelGroup.operations'), titles: new Set(['actions used', 'movement', 'repairs', 'awards']) },
             ];
             const buildFocusDetail = (card) =>
@@ -337,19 +323,27 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 wideRow.className = 'battelog-focus-wide';
                 const grouped = PANEL_GROUPS.map(() => []);
                 const linkByKey = new Map();
-                card.querySelectorAll('.has-tip, .battelog-pcol-medals').forEach((anchor) =>
+                const attacksPanelTitle = localize('LA.recap.panel.attacksAndTech').toLowerCase();
+                let attacksPanelLink = '';
+                const face = card.querySelector(card.classList.contains('is-flipped') ? '.battelog-pcol-face.is-back' : '.battelog-pcol-face.is-front') ?? card;
+                face.querySelectorAll('.has-tip, .battelog-pcol-medals, .battelog-pcol-gearlost').forEach((anchor) =>
                 {
+                    if (attacksPanelLink && anchor.classList.contains('battelog-pcol-fav'))
+                    {
+                        anchor.setAttribute('data-tip-link', attacksPanelLink);
+                        return;
+                    }
                     // __scanTip: the stat tip lives in <body> once it has been hovered
                     const tip = /** @type {any} */ (anchor).__scanTip
                         ?? (anchor.classList.contains('battelog-pcol-medals')
-                            ? card.querySelector('.battelog-awards-tip')
+                            ? face.querySelector('.battelog-awards-tip')
                             : anchor.querySelector('.battelog-tip-panel'));
                     if (!(tip instanceof HTMLElement))
                         return;
                     const key = (tip.textContent ?? '').replaceAll(/\s+/g, ' ').trim();
                     if (!key)
                         return;
-                    // duplicates (fav weapon / top action) just link to the first copy
+                    // duplicates (top action) just link to the first copy
                     if (linkByKey.has(key))
                     {
                         anchor.setAttribute('data-tip-link', String(linkByKey.get(key)));
@@ -370,6 +364,8 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                         return;
                     }
                     const title = (panelClone.querySelector('.battelog-tip-title')?.textContent ?? '').trim().toLowerCase();
+                    if (title === attacksPanelTitle)
+                        attacksPanelLink = String(panelIndex);
                     const groupIndex = PANEL_GROUPS.findIndex(group => group.titles.has(title));
                     grouped[groupIndex >= 0 ? groupIndex : PANEL_GROUPS.length - 1].push(panelClone);
                 });
@@ -379,16 +375,16 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 colsWrap.className = 'battelog-focus-cols';
                 PANEL_GROUPS.forEach((group, groupIndex) =>
                 {
-                    if (!grouped[groupIndex].length)
-                        return;
                     const colEl = document.createElement('div');
                     colEl.className = 'battelog-focus-col';
+                    colsWrap.appendChild(colEl);
+                    if (!grouped[groupIndex].length)
+                        return;
                     const head = document.createElement('div');
                     head.className = 'battelog-focus-colhead';
                     head.textContent = group.label;
                     colEl.appendChild(head);
                     grouped[groupIndex].forEach(panel => colEl.appendChild(panel));
-                    colsWrap.appendChild(colEl);
                 });
                 detail.appendChild(colsWrap);
                 // stagger follows the final placement, not the order panels were discovered in
@@ -429,8 +425,66 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 }
                 grid.classList.add('is-focus');
                 card.classList.add('is-focus-target');
+                const crumb = $root[0].querySelector('.battelog-focus-crumb');
+                if (crumb)
+                    crumb.textContent = `› ${(card.querySelector('.battelog-pcol-ribbon-text')?.textContent ?? '').split('·')[0].trim()}`;
                 buildFocusDetail(card);
                 suppressBooting($panel);
+            });
+            $root.on('click', '.battelog-focus-back', () =>
+            {
+                playUiSound('battleLogClick');
+                if (closeFocus())
+                    suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]'));
+            });
+            const onFocusEscape = (ev) =>
+            {
+                if (ev.key !== 'Escape' || !$root[0].querySelector('.battelog-recap-tab-panel.is-active .battelog-recap-squad-grid.is-focus'))
+                    return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                closeFocus();
+                suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]'));
+            };
+            document.addEventListener('keydown', onFocusEscape, true);
+            const flipHolds = new WeakMap();
+            const holdScrollbars = (el) =>
+            {
+                for (const container of [el.closest('.battelog-recap-squad-scroll'), el.closest('.battelog-hostiles-grid'), el.closest('.battelog-recap-tab-panel')])
+                {
+                    if (!container || (!container.classList.contains('is-flipping') && container.scrollHeight > container.clientHeight))
+                        continue;
+                    container.classList.add('is-flipping');
+                    clearTimeout(flipHolds.get(container));
+                    flipHolds.set(container, setTimeout(() => container.classList.remove('is-flipping'), 650));
+                }
+            };
+            $root.on('click', '.battelog-pcol [data-flip]', function (ev)
+            {
+                ev.stopPropagation();
+                const card = /** @type {HTMLElement} */ (this).closest('.battelog-pcol');
+                if (!card)
+                    return;
+                holdScrollbars(card);
+                card.classList.toggle('is-flipped');
+                playUiSound('battleLogHover');
+                if (!card.classList.contains('is-focus-target'))
+                    return;
+                card.querySelectorAll('[data-tip-link]').forEach(anchor => anchor.removeAttribute('data-tip-link'));
+                card.parentElement?.querySelector('.battelog-focus-detail')?.remove();
+                buildFocusDetail(card);
+                suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]'));
+                card.classList.replace('stagger', 'stagger-done');
+            });
+            $root.on('click', '.battelog-hcard [data-flip]', function (ev)
+            {
+                ev.stopPropagation();
+                const hcard = /** @type {HTMLElement} */ (this).closest('.battelog-hcard');
+                if (!hcard)
+                    return;
+                holdScrollbars(hcard);
+                hcard.classList.toggle('is-flipped');
+                playUiSound('battleLogHover');
             });
             $root.on('mouseleave', '.hover-hold', function ()
             {
@@ -478,7 +532,8 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const chartSize = chartEl && chartEl.clientHeight > 40
                     ? { w: chartEl.clientWidth, h: chartEl.clientHeight }
                     : null;
-                $tel.html(_telemetryInnerHtml(battle, view, highlight, showTotal, chartSize));
+                $tel.html(_telemetryInnerHtml(telemetryBattle, view, highlight, showTotal, chartSize));
+                $root.find('.battelog-recap-tab-panel[data-tab-panel="telemetry"] > .battelog-recap-section-title').replaceWith(_telemetrySectionHtml(battle, view));
             };
             // Fire the displayList loop for the chart draw-in on metric / legend change.
             let chartDrawLoop = null;
@@ -507,7 +562,6 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 }, durationMs);
             };
 
-            const staggerSoundMs = (count) => Math.min(3000, Math.max(280, (count - 1) * 25 + 100));
             $root.on('click', '.battelog-encounter-filter-btn', function ()
             {
                 const btn = /** @type {HTMLElement} */ (this);
@@ -519,8 +573,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     return;
                 $enc.attr('data-dispo', next);
                 $enc.html(_encounterInnerHtml(encounter, sorted, next));
-                const nCards = encounter.filter(entry => (entry.side ?? 'hostile') === next).length;
-                playChartDrawSound(staggerSoundMs(nCards));
+                suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="encounter"]'));
             });
             $root.on('click', '.battelog-telemetry-metric', function ()
             {
@@ -612,7 +665,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             $root.on('mouseenter', TIP_HOVER_SELECTOR, function ()
             {
                 const el = /** @type {HTMLElement} */ (this);
-                const variant = el.matches('.battelog-hcard-scan-btn.has-tip, .battelog-pcol-frame-name.has-tip')
+                const variant = el.matches('.battelog-hcard-scan-btn.has-tip, .battelog-hcard-scan-state.has-tip, .battelog-pcol-frame-name.has-tip')
                     ? 'details'
                     : 'battleLogHover';
                 // the focused view has no tooltip reveal, so no sound delay
@@ -641,7 +694,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
 
             // Scan tip lives in <body>; tab panel overflow clips it and a Foundry dialog transform breaks position:fixed.
             const scanTips = new Set();
-            $root.on('mouseenter', '.battelog-hcard-scan-btn.has-tip, .battelog-pcol-frame-name.has-tip', function ()
+            $root.on('mouseenter', '.battelog-hcard-scan-btn.has-tip, .battelog-hcard-scan-state.has-tip, .battelog-pcol-frame-name.has-tip', function ()
             {
                 const btn = /** @type {any} */ (this);
                 // the focused view already shows the stat panel flat
@@ -674,7 +727,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 tip.classList.toggle('is-left', placeLeft);
                 tip.classList.add('is-visible');
             });
-            $root.on('mouseleave', '.battelog-hcard-scan-btn.has-tip, .battelog-pcol-frame-name.has-tip', function ()
+            $root.on('mouseleave', '.battelog-hcard-scan-btn.has-tip, .battelog-hcard-scan-state.has-tip, .battelog-pcol-frame-name.has-tip', function ()
             {
                 const btn = /** @type {any} */ (this);
                 const tip = /** @type {HTMLElement | null} */ (btn.__scanTip ?? null);
@@ -788,6 +841,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     tip.remove();
                 scanTips.clear();
                 stopBootLoop();
+                document.removeEventListener('keydown', onFocusEscape, true);
                 return origCloseWithTips(...args);
             };
 
@@ -850,8 +904,8 @@ function _outcomeStamp(outcome)
 {
     const tone = outcome === 'VICTORY' ? 'win' : outcome === 'DEFEAT' ? 'lose' : 'partial';
     const word = tone === 'win' ? 'SUCCESS' : tone === 'lose' ? 'FAILURE' : 'PARTIAL';
-    const lead = tone === 'win' ? '★' : tone === 'lose' ? '✕' : '◇';
-    return `<div class="battelog-outcome-stamp ${tone}">${lead} ${word} ${lead}</div>`;
+    const icon = tone === 'win' ? 'fa-trophy' : tone === 'lose' ? 'fa-skull' : 'fa-scale-balanced';
+    return `<div class="battelog-outcome-stamp ${tone}"><i class="fas ${icon}"></i> ${word}</div>`;
 }
 
 function _sortPlayers(players, mvpId)
@@ -908,6 +962,7 @@ function _gearLostHtml(gear)
             <i class="fas fa-triangle-exclamation"></i>
             <span class="battelog-pcol-gearlost-label">EQUIPMENT DESTROYED</span>
             <span class="battelog-pcol-gearlost-count">${count}</span>
+            ${_tipPanelHtml({ title: localize('LA.recap.panel.equipmentDestroyed'), rows: [...weapons, ...systems].map(item => ({ k: item, v: '' })), extraClass: 'battelog-gear-tip' })}
             ${hasLost ? `
                 <div class="battelog-pcol-gearlost-tip">
                     ${groupHtml('Destroyed Weapons', 'systems/lancer/assets/icons/weapon.svg', weapons)}
@@ -927,6 +982,8 @@ function _gearLostHtml(gear)
         ` : ''}
     `;
 }
+
+const _EXPAND_GLYPH = '<span class="battelog-pcol-expand"><i class="fas fa-up-right-and-down-left-from-center"></i><i class="fas fa-down-left-and-up-right-to-center"></i></span>';
 
 const _DMG_ICON = {
     KINETIC:   'systems/lancer/assets/icons/damage_kinetic.svg',
@@ -997,11 +1054,13 @@ function _haseRows(hase)
 {
     const attempts = hase?.attempts ?? { hull: 0, agi: 0, sys: 0, eng: 0 };
     const total = hase?.total ?? { attempts: 0, rate: null };
-    const row = (label, rate, count, icon) => ({
+    if (!(total.attempts > 0))
+        return [];
+    const row = (label, rate, count, icon) => (count > 0 ? {
         k: `${label} ×${count}`,
-        v: count > 0 && rate != null ? rate + '%' : '-',
+        v: rate != null ? rate + '%' : '-',
         kIcon: `modules/lancer-automations/icons/stats/${icon}`,
-    });
+    } : null);
     return [
         row('HULL',        hase?.H, attempts.hull, 'hull.svg'),
         row('AGILITY',     hase?.A, attempts.agi,  'agi.svg'),
@@ -1009,10 +1068,10 @@ function _haseRows(hase)
         row('ENGINEERING', hase?.E, attempts.eng,  'eng.svg'),
         {
             k: `TOTAL ×${total.attempts}`,
-            v: total.attempts > 0 && total.rate != null ? total.rate + '%' : '-',
+            v: total.rate != null ? total.rate + '%' : '-',
             sep: true,
         },
-    ];
+    ].filter(Boolean);
 }
 
 function _dodgedEfficiencyRows(section)
@@ -1027,10 +1086,10 @@ function _dodgedEfficiencyRows(section)
     const edefVal  = edefRolled    > 0 ? Math.round(edef   / edefRolled    * 100) + '%' : '-';
     const totalVal = totalRolled   > 0 ? Math.round(totalAvoided / totalRolled * 100) + '%' : '-';
     return [
-        { k: `EVASION ×${evasionRolled}`, v: evaVal,   kIcon: 'modules/lancer-automations/icons/stats/evasion.svg' },
-        { k: `E-DEFENSE ×${edefRolled}`,  v: edefVal,  tone: 'var(--la-tech)', kColor: 'var(--la-tech)', kIcon: 'modules/lancer-automations/icons/stats/edef.svg' },
+        { k: `EVASION ×${evasionRolled}`, v: evaVal,   kIcon: 'modules/lancer-automations/icons/stats/evasion.svg', n: evasionRolled },
+        { k: `E-DEFENSE ×${edefRolled}`,  v: edefVal,  tone: 'var(--la-tech)', kColor: 'var(--la-tech)', kIcon: 'modules/lancer-automations/icons/stats/edef.svg', n: edefRolled },
         { k: `TOTAL ×${totalRolled}`,     v: totalVal, sep: true },
-    ];
+    ].filter(row => row.n !== 0);
 }
 
 function _killListRows(list)
@@ -1045,6 +1104,26 @@ function _killListRows(list)
         counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return [...counts.entries()].map(([name, count]) => ({ k: name, v: '×' + count }));
+}
+
+const _PILOT_ICON = 'systems/lancer/assets/icons/pilot.svg';
+
+function _splitKillRows(list, pilotList)
+{
+    const pilotLeft = [...(pilotList ?? [])];
+    const mechList = [];
+    for (const name of list ?? [])
+    {
+        const at = pilotLeft.indexOf(name);
+        if (at >= 0)
+            pilotLeft.splice(at, 1);
+        else
+            mechList.push(name);
+    }
+    return [
+        ..._killListRows(mechList),
+        ..._killListRows(pilotList).map(row => ({ ...row, kIcon: _PILOT_ICON })),
+    ];
 }
 
 // Flat token-bar palette from scripts/tah/tokenStatBar.js BAR_DEFS.
@@ -1068,17 +1147,13 @@ function _bestIds(players)
 {
     const top = (fn) =>
     {
-        let bestPlayer = null;
-        let bestVal = -Infinity;
-        for (const player of players)
-        {
-            const score = fn(player);
-            if (score > bestVal)
-            {
-                bestVal = score; bestPlayer = player;
-            }
-        }
-        return bestPlayer?.id ?? null;
+        if (players.length < 2)
+            return new Set();
+        const scores = players.map(fn);
+        const bestVal = Math.max(...scores);
+        if (!(bestVal > 0))
+            return new Set();
+        return new Set(players.filter((player, idx) => scores[idx] === bestVal).map(player => player.id));
     };
     return {
         dmgDealt: top(player => player.dmgDealt ?? 0),
@@ -1088,7 +1163,11 @@ function _bestIds(players)
         kills:    top(player => player.kills ?? 0),
         assists:  top(player => player.assists ?? 0),
         accuracy: top(player => _accAvg(player)),
-        dodged:   top(player => player.bd?.dmgIn?.dodged ?? 0),
+        evasion:  top((player) =>
+        {
+            const rolled = player.bd?.dmgIn?.evasionRolledAgainst ?? 0;
+            return rolled >= 3 ? Math.round((player.bd?.dmgIn?.evaded ?? 0) / rolled * 100) : -1;
+        }),
         hase:     top(player => player.bd?.acc?.hase ?? 0),
     };
 }
@@ -1097,6 +1176,34 @@ const _CROWN = '<i class="fas fa-crown battelog-pcol-crown" title="Squad best"><
 function _crown(on)
 {
     return on ? _CROWN : '';
+}
+
+function _sampleHtml(count)
+{
+    return count > 0 ? `<span class="n">×${count}</span>` : '';
+}
+
+function _nullHtml(value)
+{
+    return value === '-' ? '<span class="null">-</span>' : value;
+}
+
+function _pairCellHtml({ crown = '', left, right, tip })
+{
+    return `
+        <div class="battelog-pcol-stat-cell has-tip is-cols">
+            ${crown}
+            <div class="battelog-pcol-stat-col">
+                <div class="battelog-pcol-stat-value">${left.value}</div>
+                <div class="battelog-pcol-stat-label">${left.label}</div>
+            </div>
+            <span class="battelog-pcol-stat-coldiv"></span>
+            <div class="battelog-pcol-stat-col">
+                <div class="battelog-pcol-stat-value">${right.value}</div>
+                <div class="battelog-pcol-stat-label">${right.label}</div>
+            </div>
+            ${tip}
+        </div>`;
 }
 
 function _tipPanelHtml({ title, rows, align = 'left', extraClass = '' })
@@ -1152,8 +1259,10 @@ function _squadTabHtml(players, mvpId, allAwards)
     return `
         <div class="battelog-recap-section-title">
             <i class="fas fa-users"></i> Squad Debrief
+            <span class="battelog-focus-crumb"></span>
             <span class="battelog-recap-section-rule"></span>
             <span class="battelog-recap-section-note">${count} PILOT${count === 1 ? '' : 'S'}</span>
+            <button type="button" class="battelog-focus-back"><i class="fas fa-chevron-left"></i> ${localize('LA.recap.allPilots')}</button>
         </div>
         <div class="battelog-recap-squad-scroll">
             <div class="${gridClass}" ${gridStyle}>
@@ -1171,7 +1280,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
     const accent = player.accent ?? (isMvp ? '#ffaa00' : dead ? '#c62828' : '#7bd3ff');
 
     const img = _resolveImg(player);
-    const pilot = player.pilot ?? '';
+    const pilot = player.pilotSide?.callsign ?? player.pilot ?? '';
     const mechName = player.mechName ?? player.callsign ?? '';
     const frame = player.frame ?? '';
     const statTip = _playerStatTipHtml(player);
@@ -1238,28 +1347,13 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                 ? '<i class="fas fa-skull"></i>'
                 : '';
 
-    return `
-        <div class="battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} ${dead ? 'is-dead' : ''}" style="--accent:${accent}; --i:${rank};">
+    const pilotSide = player.pilotSide ?? null;
+    const pilotLine = pilotSide?.killed ? 'PILOT KILLED' : `PILOT ${pilotSide?.hpEnd ?? 0}/${pilotSide?.hpMax ?? 0} HP`;
+    const flipBtnHtml = pilotSide
+        ? `<button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>${pilotLine} <i class="fas fa-rotate"></i></button>`
+        : '';
 
-            <div class="battelog-pcol-ribbon">
-                <span class="battelog-pcol-ribbon-icon">${ribbonIcon}</span>
-                <span class="battelog-pcol-ribbon-text">${_escape(pilot)}${_escape(ribbonSuffix)}</span>
-            </div>
-
-            <div class="battelog-pcol-portrait">
-                <img class="battelog-pcol-portrait-img" src="${_escape(img)}" alt="" onerror="this.style.display='none'"/>
-                ${dead ? '<div class="battelog-pcol-portrait-tape"><span class="tape a"></span><span class="tape b"></span></div>' : ''}
-                <div class="battelog-pcol-portrait-frame">${_escape(mechName)}</div>
-            </div>
-
-            <div class="battelog-pcol-name">
-                <div class="battelog-pcol-name-row">
-                    <div class="battelog-pcol-callsign"><span class="battelog-pcol-frame-name ${statTip ? 'has-tip' : ''}">${_escape(frame)}${statTip}</span></div>
-                    <span class="battelog-pcol-ll" title="License Level ${ll}">
-                        <span class="battelog-pcol-ll-lbl">LL</span>
-                        <span class="battelog-pcol-ll-num">${ll}</span>
-                    </span>
-                </div>
+    const medalsWrapHtml = `
                 <div class="battelog-pcol-medals-wrap">
                     <div class="battelog-pcol-medals">
                         ${medalsHtml}
@@ -1279,25 +1373,53 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                             </div>`).join('')}
                         </div>
                     </div>` : ''}
-                </div>
-            </div>
+                </div>`;
 
+    const killsHtml = `
             <div class="battelog-pcol-kills">
                 <div class="battelog-pcol-kills-block has-tip">
+                    ${_crown(best.kills?.has(player.id))}
                     <span class="battelog-pcol-kills-icon battelog-icon-mask battelog-icon-destroyed"></span>
                     <span class="battelog-pcol-kills-num">${kills}</span>
                     <div>
                         <div class="battelog-pcol-kills-label"><span class="confirmed">CONFIRMED</span></div>
-                        <div class="battelog-pcol-kills-label">KILLS${_crown(best.kills === player.id)}</div>
+                        <div class="battelog-pcol-kills-label">KILLS</div>
                     </div>
-                    ${_tipPanelHtml({ title: localize('LA.recap.panel.confirmedKills'), rows: _killListRows(player.killedList) })}
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.confirmedKills'), rows: _splitKillRows(player.killedList, player.pilotKilledList) })}
                 </div>
                 <div class="battelog-pcol-assists-block has-tip">
+                    ${_crown(best.assists?.has(player.id))}
                     <span class="battelog-pcol-assists-num">${assists}</span>
-                    <span class="battelog-pcol-assists-label">ASSISTS${_crown(best.assists === player.id)}</span>
-                    ${_tipPanelHtml({ title: localize('LA.recap.panel.assistedKills'), align: 'right', rows: _killListRows(player.assistedList) })}
+                    <span class="battelog-pcol-assists-label">ASSISTS</span>
+                    ${_tipPanelHtml({ title: localize('LA.recap.panel.assistedKills'), align: 'right', rows: _splitKillRows(player.assistedList, player.pilotAssistedList) })}
                 </div>
+            </div>`;
+
+    const frontHtml = `
+            <div class="battelog-pcol-ribbon">
+                <span class="battelog-pcol-ribbon-icon">${ribbonIcon}</span>
+                <span class="battelog-pcol-ribbon-text">${_escape(pilot)}${_escape(ribbonSuffix)}</span>
             </div>
+
+            <div class="battelog-pcol-portrait">
+                <img class="battelog-pcol-portrait-img" src="${_escape(img)}" alt="" onerror="this.style.display='none'"/>
+                ${dead ? '<div class="battelog-pcol-portrait-tape"><span class="tape a"></span><span class="tape b"></span></div>' : ''}
+                <div class="battelog-pcol-portrait-frame">${_escape(mechName)}</div>
+                ${flipBtnHtml}
+            </div>
+
+            <div class="battelog-pcol-name">
+                <div class="battelog-pcol-name-row">
+                    <div class="battelog-pcol-callsign"><span class="battelog-pcol-frame-name ${statTip ? 'has-tip' : ''}">${_escape(frame)}${statTip}</span></div>
+                    <span class="battelog-pcol-ll" title="License Level ${ll}">
+                        <span class="battelog-pcol-ll-lbl">LL</span>
+                        <span class="battelog-pcol-ll-num">${ll}</span>
+                    </span>
+                </div>
+                ${medalsWrapHtml}
+            </div>
+
+            ${killsHtml}
 
             <div class="battelog-pcol-activity">
                 <div class="battelog-pcol-activity-cell has-tip">
@@ -1331,8 +1453,8 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     ${_tipPanelHtml({
                         title: localize('LA.recap.panel.repairs'),
                         rows: [
-                            { k: 'HP RESTORED', v: `+${player.hpRestored ?? 0}`, kIcon: 'modules/lancer-automations/icons/stats/hp.svg' },
-                            { k: 'HEAT COOLED', v: `-${player.heatCooled ?? 0}`, tone: 'var(--la-heat)', kIcon: 'modules/lancer-automations/icons/stats/heat.svg', kColor: 'var(--la-heat)' },
+                            { k: 'HP RESTORED', v: player.hpRestored ? `+${player.hpRestored}` : '0', kIcon: 'modules/lancer-automations/icons/stats/hp.svg' },
+                            { k: 'HEAT COOLED', v: player.heatCooled ? `-${player.heatCooled}` : '0', tone: player.heatCooled ? 'var(--la-heat)' : undefined, kIcon: 'modules/lancer-automations/icons/stats/heat.svg', kColor: 'var(--la-heat)' },
                         ],
                     })}
                 </div>
@@ -1347,8 +1469,9 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
 
             <div class="battelog-pcol-stats">
                 <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value"><span class="phys">${player.physicalDmgDealt ?? 0}</span><span class="sep">/</span><span class="heat">${player.heatDmgDealt ?? 0}</span>${_crown(best.dmgDealt === player.id)}</div>
-                    <div class="battelog-pcol-stat-label"><i class="fas fa-burst"></i> DMG DEALT</div>
+                    ${_crown(best.dmgDealt?.has(player.id))}
+                    <div class="battelog-pcol-stat-value">${dmgDealt}<span class="heat-sub">${player.heatDmgDealt ?? 0} HEAT</span></div>
+                    <div class="battelog-pcol-stat-label"><i class="fas fa-burst"></i> DEALT</div>
                     ${_tipPanelHtml({
                         title: localize('LA.recap.panel.damageDealt'),
                         rows: [
@@ -1359,8 +1482,9 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     })}
                 </div>
                 <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value"><span class="phys">${player.physicalDmgTaken ?? 0}</span><span class="sep">/</span><span class="heat">${player.heatDmgTaken ?? 0}</span>${_crown(best.dmgTaken === player.id)}</div>
-                    <div class="battelog-pcol-stat-label"><i class="fas fa-heart-crack"></i> DMG TAKEN</div>
+                    ${_crown(best.dmgTaken?.has(player.id))}
+                    <div class="battelog-pcol-stat-value">${dmgTaken}<span class="heat-sub">${player.heatDmgTaken ?? 0} HEAT</span></div>
+                    <div class="battelog-pcol-stat-label"><i class="fas fa-heart-crack"></i> TAKEN</div>
                     ${_tipPanelHtml({
                         title: localize('LA.recap.panel.damageTaken'),
                         align: 'right',
@@ -1371,43 +1495,47 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                         ],
                     })}
                 </div>
-                <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value">${attacks}<span class="sep">/</span><span class="tech">${techAtk}</span>${_crown(best.techAtk === player.id && techAtk > 0)}</div>
-                    <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-weapon"></span> ATK <span class="tech"><span class="battelog-icon-mask battelog-icon-tech-quick"></span> TECH</span></div>
-                    ${_tipPanelHtml({
+                ${_pairCellHtml({
+                    crown: _crown(best.techAtk?.has(player.id)),
+                    left: { value: attacks, label: '<span class="battelog-icon-mask battelog-icon-weapon"></span> ATK' },
+                    right: { value: `<span class="tech">${techAtk}</span>`, label: '<span class="tech"><span class="battelog-icon-mask battelog-icon-tech-quick"></span> TECH</span>' },
+                    tip: _tipPanelHtml({
                         title: localize('LA.recap.panel.attacksAndTech'),
                         rows: [
                             ...(battleData.weapons  ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })),
                             ...(battleData.techActs ?? []).map(techAct => ({ k: techAct.k, v: '×' + techAct.n, tone: 'var(--la-tech)', dot: 'var(--la-tech)' })),
                             { k: 'TOTAL', v: '×' + (attacks + techAtk), sep: true },
                         ],
-                    })}
-                </div>
-                <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value"><span class="eva">${_evaPct(battleData)}</span><span class="sep">/</span><span class="edef">${_edefPct(battleData)}</span>${_crown(best.dodged === player.id)}</div>
-                    <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-evasion"></span> EVA <span class="edef"><span class="battelog-icon-mask battelog-icon-edef"></span> E-DEF</span></div>
-                    ${_tipPanelHtml({
+                    }),
+                })}
+                ${_pairCellHtml({
+                    crown: _crown(best.evasion?.has(player.id)),
+                    left: { value: `<span class="eva">${_nullHtml(_evaPct(battleData))}</span>${_sampleHtml(battleData.dmgIn?.evasionRolledAgainst ?? 0)}`, label: '<span class="battelog-icon-mask battelog-icon-evasion"></span> EVA' },
+                    right: { value: `<span class="edef">${_nullHtml(_edefPct(battleData))}</span>${_sampleHtml(battleData.dmgIn?.edefRolledAgainst ?? 0)}`, label: '<span class="edef"><span class="battelog-icon-mask battelog-icon-edef"></span> E-DEF</span>' },
+                    tip: _tipPanelHtml({
                         title: localize('LA.recap.panel.attacksAvoided'),
                         align: 'right',
                         rows: _dodgedEfficiencyRows(battleData),
-                    })}
-                </div>
+                    }),
+                })}
                 <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value">${accuracy}%${_crown(best.accuracy === player.id)}</div>
+                    ${_crown(best.accuracy?.has(player.id))}
+                    <div class="battelog-pcol-stat-value">${accuracy}%${_sampleHtml(battleData.acc?.totalShots ?? 0)}</div>
                     <div class="battelog-pcol-stat-label"><i class="fas fa-crosshairs"></i> ACCURACY</div>
                     ${_tipPanelHtml({
                         title: localize('LA.recap.panel.accuracy'),
                         rows: [
-                            { k: `RANGED ×${battleData.acc?.rangedShots ?? 0}`, v: battleData.acc?.ranged != null ? battleData.acc.ranged + '%' : '-' },
-                            { k: `MELEE ×${battleData.acc?.meleeShots ?? 0}`,   v: battleData.acc?.melee  != null ? battleData.acc.melee  + '%' : '-' },
-                            { k: `TECH ×${battleData.acc?.techShots ?? 0}`,     v: battleData.acc?.tech   != null ? battleData.acc.tech   + '%' : '-', tone: battleData.acc?.tech != null ? 'var(--la-tech)' : undefined },
+                            { k: `RANGED ×${battleData.acc?.rangedShots ?? 0}`, v: battleData.acc?.ranged != null ? battleData.acc.ranged + '%' : '-', n: battleData.acc?.rangedShots ?? 0 },
+                            { k: `MELEE ×${battleData.acc?.meleeShots ?? 0}`,   v: battleData.acc?.melee  != null ? battleData.acc.melee  + '%' : '-', n: battleData.acc?.meleeShots ?? 0 },
+                            { k: `TECH ×${battleData.acc?.techShots ?? 0}`,     v: battleData.acc?.tech   != null ? battleData.acc.tech   + '%' : '-', tone: battleData.acc?.tech != null ? 'var(--la-tech)' : undefined, n: battleData.acc?.techShots ?? 0 },
                             { k: `TOTAL ×${battleData.acc?.totalShots ?? 0}`,   v: battleData.acc?.total  != null ? battleData.acc.total  + '%' : '-', sep: true },
                             { k: 'CRITICAL HITS', v: String(battleData.acc?.crits ?? 0) },
-                        ],
+                        ].filter(row => row.n !== 0),
                     })}
                 </div>
                 <div class="battelog-pcol-stat-cell has-tip">
-                    <div class="battelog-pcol-stat-value">${haseAcc}${_crown(best.hase === player.id)}</div>
+                    ${_crown(best.hase?.has(player.id))}
+                    <div class="battelog-pcol-stat-value">${_nullHtml(haseAcc)}${_sampleHtml(battleData.hase?.total?.attempts ?? 0)}</div>
                     <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-save"></span> H.A.S.E</div>
                     ${_tipPanelHtml({
                         title: 'H.A.S.E',
@@ -1461,9 +1589,144 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                     ${_tipPanelHtml({ title: localize('LA.recap.panel.actionsUsed'), rows: (battleData.skills ?? []).map(action => ({ k: action.k, v: '×' + action.n })) })}
                 </div>
             </div>
-
+    `;
+    const cardClass = `battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} ${dead ? 'is-dead' : ''}`;
+    const cardStyle = `--accent:${accent}; --i:${rank};`;
+    if (player.pilotOnly)
+    {
+        const soloClass = `battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} ${pilotSide?.killed ? 'is-dead' : ''}`;
+        return `<div class="${soloClass}" style="${cardStyle}">${_pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, true)}${_EXPAND_GLYPH}</div>`;
+    }
+    if (!pilotSide)
+        return `<div class="${cardClass}" style="${cardStyle}">${frontHtml}${_EXPAND_GLYPH}</div>`;
+    return `
+        <div class="battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} has-pilot" style="${cardStyle}">
+            <div class="battelog-pcol-faces">
+                <div class="battelog-pcol-face is-front ${dead ? 'is-dead' : ''}">${frontHtml}${_EXPAND_GLYPH}</div>
+                <div class="battelog-pcol-face is-back ${pilotSide.killed ? 'is-dead' : ''}">${_pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp)}${_EXPAND_GLYPH}</div>
+            </div>
         </div>
     `;
+}
+
+function _pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, solo = false)
+{
+    const side = player.pilotSide;
+    const killed = !!side.killed;
+    const flipBack = solo
+        ? ''
+        : `<button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>MECH <i class="fas fa-rotate"></i></button>`;
+    let ribbonSuffix = '';
+    if (isMvp && killed)
+        ribbonSuffix = ' · MVP · KILLED';
+    else if (isMvp)
+        ribbonSuffix = ' · MVP';
+    else if (killed)
+        ribbonSuffix = ' · KILLED';
+    const ribbonIcon = `${isMvp ? '<i class="fas fa-star"></i>' : ''}${killed ? '<i class="fas fa-skull"></i>' : ''}`;
+    const statTip = _playerStatTipHtml({ actorId: side.actorId });
+    const head = `
+        <div class="battelog-pcol-ribbon">
+            <span class="battelog-pcol-ribbon-icon">${ribbonIcon}</span>
+            <span class="battelog-pcol-ribbon-text">${_escape(side.callsign)}${ribbonSuffix}</span>
+        </div>
+        <div class="battelog-pcol-portrait">
+            <img class="battelog-pcol-portrait-img" src="${_escape(side.img)}" alt="" onerror="this.style.display='none'"/>
+            ${killed ? '<div class="battelog-pcol-portrait-tape"><span class="tape a"></span><span class="tape b"></span></div>' : ''}
+            <div class="battelog-pcol-portrait-frame">${_escape(side.name)}</div>
+            ${flipBack}
+        </div>
+        <div class="battelog-pcol-name">
+            <div class="battelog-pcol-name-row">
+                <div class="battelog-pcol-callsign"><span class="battelog-pcol-frame-name ${statTip ? 'has-tip' : ''}">PILOT${statTip}</span></div>
+                <span class="battelog-pcol-ll" title="License Level ${side.ll}">
+                    <span class="battelog-pcol-ll-lbl">LL</span>
+                    <span class="battelog-pcol-ll-num">${side.ll}</span>
+                </span>
+            </div>
+            ${medalsWrapHtml}
+        </div>
+        ${killsHtml}
+    `;
+    const battleData = side.bd ?? {};
+    const hpPct = Math.max(0, Math.min(100, Math.round((side.hpEnd / Math.max(1, side.hpMax)) * 100)));
+    const grit = side.grit ?? { attempts: 0, rate: null };
+    return head + `
+        <div class="battelog-pcol-activity" style="grid-template-columns:repeat(2, 1fr);">
+            <div class="battelog-pcol-activity-cell has-tip">
+                <div class="battelog-pcol-activity-top">
+                    <span class="battelog-pcol-activity-icon"><span class="battelog-icon-mask battelog-icon-activation"></span></span>
+                    <span class="battelog-pcol-activity-value">${side.skills ?? 0}</span>
+                </div>
+                <span class="battelog-pcol-activity-label">ACTIONS</span>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.actionsUsed'), rows: (battleData.skills ?? []).map(skill => ({ k: skill.k, v: '×' + skill.n })) })}
+            </div>
+            <div class="battelog-pcol-activity-cell has-tip">
+                <div class="battelog-pcol-activity-top">
+                    <span class="battelog-pcol-activity-icon"><i class="fas fa-shoe-prints"></i></span>
+                    <span class="battelog-pcol-activity-value">${side.moves ?? 0}</span>
+                </div>
+                <span class="battelog-pcol-activity-label">MOVES</span>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.movement'), rows: _movementRows(battleData) })}
+            </div>
+        </div>
+        <div class="battelog-pcol-stats">
+            <div class="battelog-pcol-stat-cell has-tip">
+                <div class="battelog-pcol-stat-value">${side.dmgDealt ?? 0}<span class="heat-sub">${side.heatDmgDealt ?? 0} HEAT</span></div>
+                <div class="battelog-pcol-stat-label"><i class="fas fa-burst"></i> DEALT</div>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.damageDealt'), rows: [..._damageTypeRows(battleData.dmgOut), ..._mitigatedRows(battleData.dmgOut), { k: 'TOTAL', v: String(side.dmgDealt ?? 0), sep: true }] })}
+            </div>
+            <div class="battelog-pcol-stat-cell has-tip">
+                <div class="battelog-pcol-stat-value">${side.dmgTaken ?? 0}<span class="heat-sub">${side.heatDmgTaken ?? 0} HEAT</span></div>
+                <div class="battelog-pcol-stat-label"><i class="fas fa-heart-crack"></i> TAKEN</div>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.damageTaken'), align: 'right', rows: [..._damageTypeRows(battleData.dmgIn), ..._mitigatedRows(battleData.dmgIn), { k: 'TOTAL', v: String(side.dmgTaken ?? 0), sep: true }] })}
+            </div>
+            ${_pairCellHtml({
+                left: { value: side.attacks ?? 0, label: '<span class="battelog-icon-mask battelog-icon-weapon"></span> ATK' },
+                right: { value: `<span class="tech">${side.techAtk ?? 0}</span>`, label: '<span class="tech"><span class="battelog-icon-mask battelog-icon-tech-quick"></span> TECH</span>' },
+                tip: _tipPanelHtml({ title: localize('LA.recap.panel.attacksAndTech'), rows: [...(battleData.weapons ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })), ...(battleData.techActs ?? []).map(techAct => ({ k: techAct.k, v: '×' + techAct.n, tone: 'var(--la-tech)', dot: 'var(--la-tech)' })), { k: 'TOTAL', v: '×' + ((side.attacks ?? 0) + (side.techAtk ?? 0)), sep: true }] }),
+            })}
+            ${_pairCellHtml({
+                left: { value: `<span class="eva">${_nullHtml(_evaPct(battleData))}</span>${_sampleHtml(battleData.dmgIn?.evasionRolledAgainst ?? 0)}`, label: '<span class="battelog-icon-mask battelog-icon-evasion"></span> EVA' },
+                right: { value: `<span class="edef">${_nullHtml(_edefPct(battleData))}</span>${_sampleHtml(battleData.dmgIn?.edefRolledAgainst ?? 0)}`, label: '<span class="edef"><span class="battelog-icon-mask battelog-icon-edef"></span> E-DEF</span>' },
+                tip: _tipPanelHtml({ title: localize('LA.recap.panel.attacksAvoided'), align: 'right', rows: _dodgedEfficiencyRows(battleData) }),
+            })}
+            <div class="battelog-pcol-stat-cell has-tip">
+                <div class="battelog-pcol-stat-value">${_nullHtml(battleData.acc?.totalShots ? _accAvg(side) + '%' : '-')}${_sampleHtml(battleData.acc?.totalShots ?? 0)}</div>
+                <div class="battelog-pcol-stat-label"><i class="fas fa-crosshairs"></i> ACCURACY</div>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.accuracy'), rows: [{ k: `TOTAL ×${battleData.acc?.totalShots ?? 0}`, v: battleData.acc?.total != null ? battleData.acc.total + '%' : '-' }, { k: 'CRITICAL HITS', v: String(battleData.acc?.crits ?? 0) }] })}
+            </div>
+            <div class="battelog-pcol-stat-cell has-tip">
+                <div class="battelog-pcol-stat-value">${_nullHtml(grit.rate == null ? '-' : grit.rate + '%')}${_sampleHtml(grit.attempts ?? 0)}</div>
+                <div class="battelog-pcol-stat-label"><span class="battelog-icon-mask battelog-icon-save"></span> GRIT</div>
+                ${_tipPanelHtml({ title: 'GRIT', align: 'right', rows: [{ k: `SAVES ×${grit.attempts}`, v: grit.rate == null ? '-' : grit.rate + '%' }] })}
+            </div>
+        </div>
+        <div class="battelog-pcol-survival">
+            <div class="battelog-pcol-survival-row">
+                <div class="battelog-pcol-meter">
+                    <div class="battelog-pcol-meter-header">
+                        <span class="battelog-pcol-meter-label">HP</span>
+                        <span class="battelog-pcol-meter-value">${side.hpEnd}/${side.hpMax}</span>
+                    </div>
+                    <div class="battelog-pcol-meter-track"><div class="battelog-pcol-meter-fill" style="width:${hpPct}%;background:${_BAR_HP};"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="battelog-pcol-footer-strip">
+            <div class="battelog-pcol-fav has-tip">
+                <span class="battelog-icon-mask battelog-icon-weapon"></span>
+                <span class="battelog-pcol-fs-label">FAV WPN</span>
+                <span class="battelog-pcol-fs-value">${_escape(side.favWeapon ?? '-')}</span>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.weaponsUsed'), rows: (battleData.weapons ?? []).map(weapon => ({ k: weapon.k, v: '×' + weapon.n })) })}
+            </div>
+            <div class="battelog-pcol-topact has-tip">
+                <span class="battelog-icon-mask battelog-icon-activation"></span>
+                <span class="battelog-pcol-fs-label">TOP ACT</span>
+                <span class="battelog-pcol-fs-value">${_escape(side.topAction ?? '-')}</span>
+                ${_tipPanelHtml({ title: localize('LA.recap.panel.actionsUsed'), rows: (battleData.skills ?? []).map(skill => ({ k: skill.k, v: '×' + skill.n })) })}
+            </div>
+        </div>`;
 }
 
 function _groupHostiles(entries)
@@ -1472,13 +1735,15 @@ function _groupHostiles(entries)
     const groups = [];
     for (const entry of entries)
     {
+        const hasLicense = entry.actorType === 'mech' || entry.actorType === 'pilot';
         const key = [
             entry.side ?? 'hostile',
             entry.actorType ?? 'npc',
-            entry.actorType === 'mech' ? (entry.frameName ?? '') : entry.cls,
-            entry.actorType === 'mech' ? (entry.ll ?? 0) : entry.tier,
+            hasLicense ? (entry.frameName ?? '') : entry.cls,
+            hasLicense ? (entry.ll ?? 0) : entry.tier,
             (entry.templates ?? []).join(','),
             entry.scanned !== false,
+            entry.actorId ?? '',
         ].join('|');
         let group = map.get(key);
         if (!group)
@@ -1526,10 +1791,10 @@ function _isActorForceScanned(actorId)
 function _tierTone(tier)
 {
     if (tier >= 3)
-        return 'danger';
+        return 't3';
     if (tier === 2)
-        return 'amber';
-    return 'neutral';
+        return 't2';
+    return 't1';
 }
 
 function _hostileScanTipHtml(group)
@@ -1575,7 +1840,7 @@ const _KILLER_TEAM_COLOR = {
     unknown: '#888',
 };
 
-function _hostileKillersTipHtml(instances, players)
+function _hostileKillersHtml(instances, players)
 {
     const playerByTokenId = (id) => players.find(player => player.tokenId === id);
     const tally = new Map();
@@ -1598,7 +1863,7 @@ function _hostileKillersTipHtml(instances, players)
             const player = playerByTokenId(key.slice(7));
             if (player)
             {
-                mechRows.push({ k: player.callsign, v: `×${count}`, dot: player.accent });
+                mechRows.push({ k: player.callsign, v: `×${count}`, n: count, dot: player.accent });
                 continue;
             }
         }
@@ -1606,13 +1871,19 @@ function _hostileKillersTipHtml(instances, players)
         teamRows.push({
             k: _KILLER_TEAM_LABEL[team] ?? _KILLER_TEAM_LABEL.unknown,
             v: `×${count}`,
+            n: count,
             dot: _KILLER_TEAM_COLOR[team] ?? _KILLER_TEAM_COLOR.unknown,
             sep: false,
         });
     }
     if (mechRows.length && teamRows.length)
         teamRows[0].sep = true;
-    return _tipPanelHtml({ title: localize('LA.recap.panel.destroyedBy'), rows: [...mechRows, ...teamRows], extraClass: 'battelog-hcard-killers-tip' });
+    const rows = [...mechRows, ...teamRows];
+    const top = rows.reduce((best, row) => (row.n > best.n ? row : best), rows[0]);
+    const topHtml = top
+        ? `<span class="battelog-hcard-killers-top"><span class="battelog-tip-dot" style="background:${top.dot};"></span>${_escape(top.k)}</span>${rows.length > 1 ? `<span class="battelog-hcard-killers-more">+${rows.length - 1}</span>` : ''}`
+        : '';
+    return topHtml + _tipPanelHtml({ title: localize('LA.recap.panel.destroyedBy'), rows, extraClass: 'battelog-hcard-killers-tip' });
 }
 
 function _hcardBadgeTipHtml(title, body)
@@ -1662,11 +1933,16 @@ function _hostileCardHtml(group, idx, players, badge = null)
     const size = group.size ?? 1;
     const img = group.img ?? '';
     const templates = group.templates ?? [];
-    const isMech = group.actorType === 'mech';
+    const isMech = group.actorType === 'mech' || group.actorType === 'pilot';
+    const pilotSide = count === 1 ? (instances[0].pilotSide ?? null) : null;
+    const flipTag = pilotSide ? '<button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>PILOT <i class="fas fa-rotate"></i></button>' : '';
 
     const tagsHtml = isMech
         ? `
-            <span class="battelog-hcard-tag tier ${tierTone}">LL ${_escape(group.ll ?? 0)}</span>
+            <span class="battelog-pcol-ll">
+                <span class="battelog-pcol-ll-lbl">LL</span>
+                <span class="battelog-pcol-ll-num">${_escape(group.ll ?? 0)}</span>
+            </span>
             <span class="battelog-hcard-tag frame">${_escape(group.frameName ?? 'UNKNOWN')}</span>
         `
         : `
@@ -1682,9 +1958,9 @@ function _hostileCardHtml(group, idx, players, badge = null)
     ` : `
         <div class="battelog-hcard-killers has-tip">
             <span class="battelog-hcard-killers-label">
-                <span class="battelog-hcard-killers-icon battelog-icon-mask battelog-icon-destroyed"></span> DESTROYED BY
+                <span class="battelog-hcard-killers-icon battelog-icon-mask battelog-icon-destroyed"></span> ${_escape(localize('LA.recap.panel.destroyedBy'))}
             </span>
-            ${_hostileKillersTipHtml(instances, players)}
+            ${_hostileKillersHtml(instances, players)}
         </div>
     `;
 
@@ -1695,7 +1971,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
             ${scanTipHtml}
         </button>
     ` : scanned ? `
-        <span class="battelog-hcard-scan-btn ${scanTipHtml ? 'has-tip' : ''}">
+        <span class="battelog-hcard-scan-state ${scanTipHtml ? 'has-tip' : ''}">
             <i class="fas fa-satellite-dish"></i> SCANNED
             ${scanTipHtml}
         </span>
@@ -1708,17 +1984,18 @@ function _hostileCardHtml(group, idx, players, badge = null)
     const badgeHtml = isNemesis
         ? `<div class="battelog-hcard-marker nem has-tip"><i class="fas fa-skull-crossbones"></i> NEMESIS${_hcardBadgeTipHtml('NEMESIS', 'Single NPC that dealt the most damage across the fight.')}</div>`
         : isDanger
-            ? `<div class="battelog-hcard-marker top has-tip"><i class="fas fa-triangle-exclamation"></i> TOP THREAT${_hcardBadgeTipHtml('TOP THREAT', 'Group with the highest combined damage.')}</div>`
+            ? `<div class="battelog-hcard-marker top has-tip"><i class="fas fa-triangle-exclamation"></i> TOP THREAT${_hcardBadgeTipHtml('TOP THREAT', 'Highest combined damage, Nemesis excluded.')}</div>`
             : '';
-    const metaHtml = isMech
-        ? `<span class="battelog-hcard-meta">LL <b>${_escape(group.ll ?? 0)}</b> · SIZE <b>${_escape(size)}</b></span>`
-        : `<span class="battelog-hcard-meta">SIZE <b>${_escape(size)}</b></span>`;
-    return `
-        <div class="battelog-hcard stagger is-side-${_escape(group.side ?? 'hostile')} ${allKilled ? 'is-killed' : 'is-active'} ${scanned ? '' : 'is-unscanned'} ${isDanger ? 'is-danger' : ''} ${isNemesis ? 'is-nemesis' : ''}" style="--i:${idx};">
+    const metaHtml = `<span class="battelog-hcard-meta">SIZE <b>${_escape(size)}</b></span>`;
+    const cardClass = `battelog-hcard stagger is-side-${_escape(group.side ?? 'hostile')} ${allKilled ? 'is-killed' : 'is-active'} ${scanned ? '' : 'is-unscanned'} ${isDanger ? 'is-danger' : ''} ${isNemesis ? 'is-nemesis' : ''} ${group.team?.color ? 'on-team' : ''}`;
+    const cardStyle = `--i:${idx};${group.team?.color ? ` --team:${_escape(group.team.color)};` : ''}`;
+    const frontHtml = `
             ${badgeHtml}
             <div class="battelog-hcard-portrait">
+                ${flipTag}
                 <img class="battelog-hcard-portrait-img" src="${_escape(img)}" alt="" onerror="this.style.display='none'"/>
-                ${_hostileCountBadgeHtml(count, killedCount)}
+                ${allKilled ? '<div class="battelog-pcol-portrait-tape"><span class="tape a"></span></div>' : ''}
+                ${count > 1 ? _hostileCountBadgeHtml(count, killedCount) : ''}
             </div>
             <div class="battelog-hcard-main">
                 <div class="battelog-hcard-nameline">
@@ -1728,7 +2005,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
                 </div>
                 <div class="battelog-hcard-tags">${tagsHtml}</div>
                 <div class="battelog-hcard-status">${statusHtml}</div>
-                <div class="battelog-hcard-action">${actionHtml}</div>
+                ${actionHtml ? `<div class="battelog-hcard-action">${actionHtml}</div>` : ''}
             </div>
             <div class="battelog-hcard-dmg">
                 <div class="battelog-hcard-dmg-cell dealt" title="Physical / Heat · Total ${totalDealt}">
@@ -1748,42 +2025,134 @@ function _hostileCardHtml(group, idx, players, badge = null)
                     <span class="battelog-hcard-dmg-lbl">DMG TAKEN</span>
                 </div>
             </div>
+    `;
+    if (!pilotSide)
+        return `<div class="${cardClass}" style="${cardStyle}">${frontHtml}</div>`;
+    return `
+        <div class="${cardClass} has-pilot" style="${cardStyle}">
+            <div class="battelog-hcard-faces">
+                <div class="battelog-hcard-face is-front">${frontHtml}</div>
+                <div class="battelog-hcard-face is-back">${_hostilePilotFaceHtml(pilotSide, scanned)}</div>
+            </div>
         </div>
     `;
 }
 
+function _hostilePilotFaceHtml(side, scanned)
+{
+    const statusHtml = side.killed
+        ? '<div class="battelog-hcard-killers"><span class="battelog-hcard-killers-label"><span class="battelog-hcard-killers-icon battelog-icon-mask battelog-icon-destroyed"></span> KILLED</span></div>'
+        : '<div class="battelog-hcard-notkilled"><i class="fas fa-person-running"></i> NOT DESTROYED</div>';
+    const dmgHtml = `
+            <div class="battelog-hcard-dmg">
+                <div class="battelog-hcard-dmg-cell dealt">
+                    <span class="battelog-hcard-dmg-val">
+                        <i class="fas fa-burst" title="Physical"></i><span class="phys">${side.physicalDmgDealt ?? 0}</span>
+                        <span class="sep">/</span>
+                        <i class="fas fa-thermometer-half heat" title="Heat"></i><span class="heat">${side.heatDmgDealt ?? 0}</span>
+                    </span>
+                    <span class="battelog-hcard-dmg-lbl">DMG DEALT</span>
+                </div>
+                <div class="battelog-hcard-dmg-cell taken">
+                    <span class="battelog-hcard-dmg-val">
+                        <i class="fas fa-burst" title="Physical"></i><span class="phys">${side.physicalDmgTaken ?? 0}</span>
+                        <span class="sep">/</span>
+                        <i class="fas fa-thermometer-half heat" title="Heat"></i><span class="heat">${side.heatDmgTaken ?? 0}</span>
+                    </span>
+                    <span class="battelog-hcard-dmg-lbl">DMG TAKEN</span>
+                </div>
+            </div>`;
+    return `
+            <div class="battelog-hcard-portrait">
+                <img class="battelog-hcard-portrait-img" src="${_escape(side.img)}" alt="" onerror="this.style.display='none'"/>
+                <button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>MECH <i class="fas fa-rotate"></i></button>
+            </div>
+            <div class="battelog-hcard-main">
+                <div class="battelog-hcard-nameline">
+                    <span class="battelog-hcard-name">${_escape(scanned ? side.name : 'UNIDENTIFIED')}</span>
+                    <span class="battelog-hcard-meta">SIZE <b>0.5</b></span>
+                </div>
+                <div class="battelog-hcard-tags">
+                    <span class="battelog-pcol-ll">
+                        <span class="battelog-pcol-ll-lbl">LL</span>
+                        <span class="battelog-pcol-ll-num">${_escape(side.ll)}</span>
+                    </span>
+                    <span class="battelog-hcard-tag frame">PILOT</span>
+                </div>
+                <div class="battelog-hcard-status">${statusHtml}</div>
+            </div>
+            ${dmgHtml}
+    `;
+}
+
 const DISPO_MAP = {
-    hostile:  { label: 'LA.recap.dispo.hostile',  icon: 'fa-skull-crossbones',   color: 'var(--la-danger, #c8353d)' },
-    friendly: { label: 'LA.recap.dispo.friendly', icon: 'fa-shield-halved',      color: '#3aa955' },
-    neutral:  { label: 'LA.recap.dispo.neutral',  icon: 'fa-circle-half-stroke', color: '#d09024' },
+    hostile:  { label: 'LA.recap.dispo.hostile',  icon: 'fa-skull-crossbones',   color: '#c62828' },
+    friendly: { label: 'LA.recap.dispo.friendly', icon: 'fa-shield-halved',      color: '#2c7f40' },
+    neutral:  { label: 'LA.recap.dispo.neutral',  icon: 'fa-circle-half-stroke', color: '#9c6c1b' },
     secret:   { label: 'LA.recap.dispo.secret',   icon: 'fa-user-secret',        color: '#6b45a8' },
 };
 
 function _encounterTabHtml(encounter, players)
 {
+    const initial = _encounterFilters(encounter)[0].key;
     return `
-        <div class="battelog-encounter" data-dispo="hostile">
-            ${_encounterInnerHtml(encounter, players, 'hostile')}
+        <div class="battelog-encounter" data-dispo="${_escape(initial)}">
+            ${_encounterInnerHtml(encounter, players, initial)}
         </div>
     `;
 }
 
-function _encounterFilterHtml(counts, activeDispo)
+function _encounterFilters(encounter)
 {
-    const btns = Object.entries(DISPO_MAP).map(([key, dispoConfig]) =>
+    const filters = [];
+    for (const [side, dispoConfig] of Object.entries(DISPO_MAP))
     {
-        const count = counts[key] ?? 0;
-        const disabled = count === 0;
-        const active = key === activeDispo;
-        return `
+        const entries = encounter.filter(entry => (entry.side ?? 'hostile') === side);
+        const teams = new Map();
+        for (const entry of entries)
+        {
+            if (entry.team && !teams.has(entry.team.id))
+                teams.set(entry.team.id, entry.team);
+        }
+        for (const team of [...teams.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)))
+        {
+            filters.push({
+                key: `${side}:${team.id}`,
+                side,
+                teamId: team.id,
+                label: team.name,
+                color: team.color || dispoConfig.color,
+                count: entries.filter(entry => entry.team?.id === team.id).length,
+            });
+        }
+        filters.push({
+            key: side,
+            side,
+            teamId: null,
+            label: localize(dispoConfig.label),
+            color: dispoConfig.color,
+            count: entries.filter(entry => !entry.team).length,
+        });
+    }
+    return encounter.some(entry => entry.team) ? filters.filter(filter => filter.count > 0) : filters;
+}
+
+function _encounterFilterHtml(filters, activeKey)
+{
+    const teamMode = filters.some(filter => filter.teamId);
+    const btns = filters.map((filter, idx) =>
+    {
+        const sep = teamMode && idx > 0 && filters[idx - 1].side !== filter.side ? '<span class="battelog-encounter-filter-sep"></span>' : '';
+        return `${sep}
             <button type="button"
-                class="battelog-encounter-filter-btn ${active ? 'is-active' : ''}"
-                data-dispo="${key}"
-                ${disabled ? 'disabled' : ''}
-                style="--dispo:${dispoConfig.color};">
-                <i class="fas ${dispoConfig.icon}"></i>
-                <span class="battelog-encounter-filter-lbl">${localize(dispoConfig.label)}</span>
-                <span class="battelog-encounter-filter-count">${count}</span>
+                class="battelog-encounter-filter-btn ${filter.key === activeKey ? 'is-active' : ''}"
+                data-dispo="${_escape(filter.key)}"
+                ${filter.teamId ? `data-team="${_escape(filter.teamId)}"` : ''}
+                ${filter.count === 0 ? 'disabled' : ''}
+                style="--dispo:${_escape(filter.color)}; --dispo-ink:${inkOn(filter.color)};">
+                <i class="fas ${DISPO_MAP[filter.side].icon}"></i>
+                <span class="battelog-encounter-filter-lbl">${_escape(filter.label)}</span>
+                <span class="battelog-encounter-filter-count">${filter.count}</span>
             </button>
         `;
     }).join('');
@@ -1792,14 +2161,10 @@ function _encounterFilterHtml(counts, activeDispo)
 
 function _encounterInnerHtml(encounter, players, dispo)
 {
-    const counts = encounter.reduce((acc, entry) =>
-    {
-        const side = entry.side ?? 'hostile';
-        acc[side] = (acc[side] ?? 0) + 1;
-        return acc;
-    }, {});
-    const filtered = encounter.filter(entry => (entry.side ?? 'hostile') === dispo);
-    const isHostileView = dispo === 'hostile';
+    const filters = _encounterFilters(encounter);
+    const activeFilter = filters.find(filter => filter.key === dispo) ?? filters[0];
+    const filtered = encounter.filter(entry => (entry.side ?? 'hostile') === activeFilter.side && (entry.team?.id ?? null) === activeFilter.teamId);
+    const isHostileView = activeFilter.side === 'hostile';
 
     // dmgDealt/dmgTaken are already filtered by counterparty in derive, per the side rules.
     const total       = filtered.length;
@@ -1819,9 +2184,8 @@ function _encounterInnerHtml(encounter, players, dispo)
     if (isHostileView)
     {
         let nemesisInstance = null;
-        let nemesisParent = null;
         let nemesisMax = 0;
-        for (const group of groups)
+        for (const group of _groupHostiles(encounter.filter(entry => (entry.side ?? 'hostile') === 'hostile')))
         {
             for (const inst of group.instances ?? [])
             {
@@ -1830,19 +2194,19 @@ function _encounterInnerHtml(encounter, players, dispo)
                 {
                     nemesisMax = dmg;
                     nemesisInstance = inst;
-                    nemesisParent = group;
                 }
             }
         }
-        if (nemesisInstance)
+        const nemesisParent = nemesisInstance ? groups.find(group => (group.instances ?? []).includes(nemesisInstance)) : null;
+        if (nemesisParent)
         {
             nemesisGroup = { ...nemesisParent, instances: [nemesisInstance] };
             nemesisParent.instances = nemesisParent.instances.filter(instance => instance !== nemesisInstance);
         }
-        let dangerMax = -1;
+        let dangerMax = 0;
         for (const group of groups)
         {
-            if ((group.instances?.length ?? 0) === 0)
+            if ((group.instances?.length ?? 0) < 2)
                 continue;
             const gTotal = (group.instances ?? []).reduce((sum, inst) => sum + (inst.dmgDealt ?? 0), 0);
             if (gTotal > dangerMax)
@@ -1882,10 +2246,15 @@ function _encounterInnerHtml(encounter, players, dispo)
         .map((group, idx) => _hostileCardHtml(group, idx, players, badgeFor(group)))
         .join('');
 
-    const dispoConfig = DISPO_MAP[dispo] ?? DISPO_MAP.hostile;
+    const dispoConfig = DISPO_MAP[activeFilter.side] ?? DISPO_MAP.hostile;
 
     return `
-        ${_encounterFilterHtml(counts, dispo)}
+        <div class="battelog-recap-section-title">
+            <i class="fas ${dispoConfig.icon}"></i> Encounter · Contact Log
+            <span class="battelog-recap-section-rule"></span>
+            <span class="battelog-recap-section-note">${totalTypes} TYPE${totalTypes === 1 ? '' : 'S'} · ${total} UNIT${total === 1 ? '' : 'S'}</span>
+        </div>
+        ${_encounterFilterHtml(filters, activeFilter.key)}
         <div class="battelog-hostiles-kpi">
             <div class="battelog-hostiles-kpi-cell danger">
                 <i class="battelog-hostiles-kpi-icon fas fa-skull-crossbones"></i>
@@ -1908,24 +2277,19 @@ function _encounterInnerHtml(encounter, players, dispo)
                 <span class="battelog-hostiles-kpi-lbl">DAMAGE TAKEN</span>
             </div>
         </div>
-        <div class="battelog-recap-section-title">
-            <i class="fas ${dispoConfig.icon}"></i> Contact Log
-            <span class="battelog-recap-section-rule"></span>
-            <span class="battelog-recap-section-note">${orderedGroups.length} CONTACT TYPE${orderedGroups.length === 1 ? '' : 'S'} · ${total} TOTAL</span>
-        </div>
         ${orderedGroups.length === 0
             ? '<div class="battelog-encounter-empty">No contacts match this filter.</div>'
             : `<div class="battelog-hostiles-grid">${cardsHtml}</div>`}
     `;
 }
 
-const TELEMETRY_CHART = { w: 660, h: 300, pl: 42, pr: 18, pt: 18, pb: 30 };
+const TELEMETRY_CHART = { w: 660, h: 300, pl: 42, pr: 150, pt: 18, pb: 30 };
 
 const TELEMETRY_METRICS = [
-    { key: 'hp',    field: 'line',     turnField: 'lineTurns',     label: 'LA.recap.metric.hp',    icon: 'fa-heart-pulse', startField: 'startHp' },
-    { key: 'heat',  field: 'heatLine', turnField: 'heatLineTurns', label: 'LA.recap.metric.heat',  icon: 'fa-thermometer-half', startField: 'startHeat' },
-    { key: 'dmg',   field: 'dmgLine',  turnField: 'dmgLineTurns',  label: 'LA.recap.metric.dmg',   icon: 'fa-burst',  cumulative: true },
-    { key: 'kills', field: 'killAssistLine', turnField: 'killAssistLineTurns', label: 'LA.recap.metric.kills', icon: 'fa-skull', cumulative: true },
+    { key: 'hp',    field: 'line',     turnField: 'lineTurns',     label: 'LA.recap.metric.hp',    title: 'LA.recap.metricTitle.hp',    icon: 'fa-heart-pulse', startField: 'startHp' },
+    { key: 'heat',  field: 'heatLine', turnField: 'heatLineTurns', label: 'LA.recap.metric.heat',  title: 'LA.recap.metricTitle.heat',  icon: 'fa-thermometer-half', startField: 'startHeat' },
+    { key: 'dmg',   field: 'dmgLine',  turnField: 'dmgLineTurns',  label: 'LA.recap.metric.dmg',   title: 'LA.recap.metricTitle.dmg',   icon: 'fa-burst',  cumulative: true },
+    { key: 'kills', field: 'killAssistLine', turnField: 'killAssistLineTurns', label: 'LA.recap.metric.kills', title: 'LA.recap.metricTitle.kills', icon: 'fa-skull', cumulative: true },
 ];
 
 // Turn-resolution mode: each turn is a chart column instead of each round. Dense fights fall back to rounds.
@@ -1955,15 +2319,52 @@ function _telemetryCum(roundValues)
     return roundValues.map(value => (sum += value));
 }
 
-function _telemetryNiceTicks(max)
+function _telemetryScale(rawMin, rawMax)
 {
-    const step = max <= 4 ? 1 : max <= 12 ? 3 : max <= 24 ? 6 : max <= 40 ? 10 : max <= 120 ? 30 : 60;
+    const rough = Math.max(rawMax * 1.1, 1) / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rough)));
+    const step = Math.max(1, [1, 2, 2.5, 5, 10].map(factor => factor * magnitude).find(candidate => candidate >= rough) ?? 10 * magnitude);
+    const yMax = Math.ceil(rawMax * 1.1 / step) * step;
+    const truncated = rawMin > yMax * 0.35;
+    const yMin = truncated ? Math.floor(rawMin * 0.9 / step) * step : 0;
     const ticks = [];
-    for (let v = 0; v <= max; v += step)
-        ticks.push(v);
-    if (ticks.at(-1) !== max)
-        ticks.push(max);
-    return ticks;
+    for (let tick = yMin; tick <= yMax + 1e-9; tick += step)
+        ticks.push(Math.round(tick * 100) / 100);
+    return { yMin, yMax, ticks, truncated };
+}
+
+function _telemetryInk(color)
+{
+    if (!/^#[0-9a-f]{6}$/i.test(String(color)))
+        return color;
+    const toLinear = (offset) =>
+    {
+        const unit = parseInt(String(color).slice(offset, offset + 2), 16) / 255;
+        return unit <= 0.04045 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
+    };
+    const red = toLinear(1);
+    const green = toLinear(3);
+    const blue = toLinear(5);
+    const coneL = Math.cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue);
+    const coneM = Math.cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue);
+    const coneS = Math.cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue);
+    const lightness = Math.min(0.56, 0.2104542553 * coneL + 0.7936177850 * coneM - 0.0040720468 * coneS);
+    const okA = 1.9779984951 * coneL - 2.4285922050 * coneM + 0.4505937099 * coneS;
+    const okB = 0.0259040371 * coneL + 0.7827717662 * coneM - 0.8086757660 * coneS;
+    const outL = Math.pow(lightness + 0.3963377774 * okA + 0.2158037573 * okB, 3);
+    const outM = Math.pow(lightness - 0.1055613458 * okA - 0.0638541728 * okB, 3);
+    const outS = Math.pow(lightness - 0.0894841775 * okA - 1.2914855480 * okB, 3);
+    const toHex = (linear) =>
+    {
+        const clamped = Math.max(0, Math.min(1, linear));
+        const gamma = clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
+        return Math.round(255 * gamma).toString(16).padStart(2, '0');
+    };
+    return '#' + [
+        4.0767416621 * outL - 3.3077115913 * outM + 0.2309699292 * outS,
+        -1.2684380046 * outL + 2.6097574011 * outM - 0.3413193965 * outS,
+        -0.0041960863 * outL - 0.7034186147 * outM + 1.7076147010 * outS,
+    ].map(toHex).join('');
 }
 
 function _telemetryHoverSvg(payload, svg)
@@ -1992,20 +2393,31 @@ function _telemetryHoverSvg(payload, svg)
         return `
             <rect x="${tx + 9}" y="${ry}" width="7" height="7" rx="1" fill="${it.color}"/>
             <text x="${tx + 21}" y="${ry + 7}" fill="#fff" font-family="var(--font-primary, Signika, sans-serif)" font-size="9" font-weight="700" letter-spacing="0.3px" text-transform="uppercase">${_escape(String(it.label))}</text>
-            <text x="${tx + tw - 9}" y="${ry + 7}" text-anchor="end" fill="${it.color}" font-family="'Space Mono', monospace" font-size="10" font-weight="700">${_escape(String(it.value))}</text>
+            <text x="${tx + tw - 9}" y="${ry + 7}" text-anchor="end" fill="${it.color}" font-family="var(--bl-mono)" font-size="10" font-weight="700">${_escape(String(it.value))}</text>
         `;
     }).join('');
     return `
         <circle cx="${payload.x}" cy="${payload.y}" r="5" fill="${payload.color}" stroke="#fdfdfd" stroke-width="2" pointer-events="none"/>
         <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="3" fill="rgba(13,13,13,0.98)" stroke="#666" stroke-width="1" pointer-events="none"/>
-        <text x="${tx + 9}" y="${ty + 12}" fill="color-mix(in srgb, #fff 55%, transparent)" font-family="'Space Mono', monospace" font-size="8" font-weight="700" letter-spacing="1px" pointer-events="none">ROUND ${_escape(String(payload.round))}</text>
+        <text x="${tx + 9}" y="${ty + 12}" fill="color-mix(in srgb, #fff 55%, transparent)" font-family="var(--bl-mono)" font-size="8" font-weight="700" letter-spacing="1px" pointer-events="none">ROUND ${_escape(String(payload.round))}</text>
         ${rows}
     `;
+}
+
+function _telemetrySectionHtml(battle, view)
+{
+    const count = (battle.players ?? []).length;
+    return `<div class="battelog-recap-section-title">
+            <i class="fas fa-chart-line"></i> Telemetry · ${_escape(localize(_telemetryMetric(view).label))}
+            <span class="battelog-recap-section-rule"></span>
+            <span class="battelog-recap-section-note">PER ROUND · ${count} PILOT${count === 1 ? '' : 'S'}</span>
+        </div>`;
 }
 
 function _telemetryTabHtml(battle)
 {
     return `
+        ${_telemetrySectionHtml(battle, 'hp')}
         <div class="battelog-telemetry" data-view="hp" data-highlight="" data-total="0">
             ${_telemetryInnerHtml(battle, 'hp', null, false)}
         </div>
@@ -2030,7 +2442,7 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
         <div class="battelog-telemetry-metrics">${metricButtons}</div>
         <div class="battelog-telemetry-panel">
             <div class="battelog-telemetry-panel-head">
-                <span class="battelog-telemetry-panel-title"><i class="fas fa-chart-line"></i> ${_escape(localize(metric.label))}</span>
+                <span class="battelog-telemetry-panel-title"><i class="fas fa-chart-line"></i> ${_escape(localize(metric.title))}</span>
                 <span class="battelog-telemetry-panel-note">${_escape(noteText)}</span>
             </div>
             <div class="battelog-telemetry-chart">${_telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize)}</div>
@@ -2045,7 +2457,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     const players = battle.players ?? [];
     const { pl, pr, pt, pb } = TELEMETRY_CHART;
 
-    const roundCount = Math.max(5, rawRounds.length);
+    const roundCount = rawRounds.length;
     const turnAxis = _telemetryTurnAxis(battle);
     const turnMode = !!turnAxis && players.length > 0
         && players.every(player => (player[metric.turnField]?.length ?? 0) === turnAxis.length);
@@ -2066,6 +2478,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     const w = measuredW > 0 ? measuredW : TELEMETRY_CHART.w;
     const h = measuredH > 40 ? measuredH : TELEMETRY_CHART.h;
     const innerW = w - pl - pr;
+    const gridRight = w - 6;
     const innerH = h - pt - pb;
     const cumulative = !!metric.cumulative;
 
@@ -2097,35 +2510,24 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     };
     const series = showTotal ? [...playerSeries, totalSeries] : playerSeries;
     const visible = highlight ? series.filter(ser => ser.key === highlight) : series;
-    // 15% headroom so the peak never touches the top edge.
     const rawMax = Math.max(1, ...visible.flatMap(entry => entry.data));
-    const yMax = Math.max(rawMax + 1, Math.ceil(rawMax * 1.15));
 
     // A floor far above zero (flat HP graphs) truncates the axis: 0 stays visible below a break marker.
     const rawMin = Math.min(...visible.flatMap(entry => entry.data));
-    const truncated = rawMin > yMax * 0.35;
+    const { yMin, yMax, ticks, truncated } = _telemetryScale(rawMin, rawMax);
     const breakZone = truncated ? 18 : 0;
     const plotH = innerH - breakZone;
-    const yMin = truncated ? Math.max(0, Math.floor((rawMin * 0.9) / 10) * 10) : 0;
     const baseY = pt + plotH;
 
     const xOf = idx => pl + (columnCount === 1 ? innerW / 2 : (idx / (columnCount - 1)) * innerW);
     const yOf = value => pt + plotH - ((value - yMin) / (yMax - yMin)) * plotH;
-    let ticks = _telemetryNiceTicks(yMax).filter(tick => tick >= yMin);
-    if (truncated)
-    {
-        if (ticks.length < 3)
-            ticks = [yMin, Math.round((yMin + yMax) / 2), yMax];
-        else if (!ticks.includes(yMin))
-            ticks.unshift(yMin);
-    }
 
     const gridY = ticks.map(tick => `
-        <line x1="${pl}" x2="${w - pr}" y1="${yOf(tick)}" y2="${yOf(tick)}" class="battelog-telemetry-grid" ${tick === yMin && !truncated ? '' : 'stroke-dasharray="2 3"'} />
+        <line x1="${pl}" x2="${gridRight}" y1="${yOf(tick)}" y2="${yOf(tick)}" class="battelog-telemetry-grid" ${tick === yMin && !truncated ? '' : 'stroke-dasharray="2 3"'} />
         <text x="${pl - 7}" y="${yOf(tick) + 3}" text-anchor="end" class="battelog-telemetry-axis-text">${tick}</text>
     `).join('');
     const axisBreak = truncated ? `
-        <line x1="${pl}" x2="${w - pr}" y1="${pt + innerH}" y2="${pt + innerH}" class="battelog-telemetry-grid" />
+        <line x1="${pl}" x2="${gridRight}" y1="${pt + innerH}" y2="${pt + innerH}" class="battelog-telemetry-grid" />
         <text x="${pl - 7}" y="${pt + innerH + 3}" text-anchor="end" class="battelog-telemetry-axis-text">0</text>
         <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 12}" y2="${baseY + 6}" class="battelog-telemetry-grid" stroke-width="1.3" />
         <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 15}" y2="${baseY + 9}" class="battelog-telemetry-grid" stroke-width="1.3" />` : '';
@@ -2134,6 +2536,8 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         ${col.label ? `<text x="${xOf(colIdx)}" y="${h - 10}" text-anchor="middle" class="battelog-telemetry-tick-text">${col.label}</text>` : ''}
     `).join('');
 
+    const lightPlate = !document.documentElement.classList.contains('la-dark');
+    const inkOf = color => lightPlate ? _telemetryInk(color) : color;
     const jitterFor = (seriesIdx) => highlight ? 0 : (seriesIdx - (series.length - 1) / 2) * 1.7;
 
     // Monotone cubic (Fritsch-Carlson): smooth curve that never overshoots the data points.
@@ -2180,6 +2584,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         const jitter = jitterFor(seriesIdx);
         const points = ser.data.map((value, idx) => [xOf(idx), yOf(value) + jitter]);
         const strokeWidth = (ser.thick ? 3.4 : 2.2) + (emph ? 1.2 : 0);
+        const lineColor = ser.dashed ? ser.color : inkOf(ser.color);
         const lineD = smoothPathD(points);
         // Area fill ends at the last real data point, not the axis end, so short battles don't smear right.
         const lastX = ser.data.length > 0 ? xOf(ser.data.length - 1) : pl;
@@ -2197,16 +2602,45 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
             const minor = !columns[colIdx]?.label;
             const radius = ser.thick ? (minor ? 2.1 : 3.5) : (minor ? 1.6 : 2.8);
             const dotStroke = ser.thick ? (minor ? 1.4 : 2.4) : (minor ? 1 : 1.8);
-            return `<circle cx="${point[0]}" cy="${point[1]}" r="${radius}" class="battelog-telemetry-dot" stroke="${ser.color}" stroke-width="${dotStroke}" pointer-events="none" style="animation-delay:${delay}s" />`;
+            return `<circle cx="${point[0]}" cy="${point[1]}" r="${radius}" class="battelog-telemetry-dot" stroke="${lineColor}" stroke-width="${dotStroke}" pointer-events="none" style="animation-delay:${delay}s" />`;
         }).join('');
         return `
             <g style="opacity:${groupOpacity};">
                 ${areaPoly}
-                <path class="${ser.dashed ? 'battelog-telemetry-line-dashed' : 'battelog-telemetry-line'}" d="${lineD}" pathLength="1" fill="none" stroke="${ser.color}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" pointer-events="none" ${ser.dashed ? 'stroke-dasharray="7 4"' : ''}/>
+                <path class="${ser.dashed ? 'battelog-telemetry-line-dashed' : 'battelog-telemetry-line'}" d="${lineD}" ${ser.dashed ? '' : 'pathLength="1"'} fill="none" stroke="${lineColor}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" pointer-events="none" ${ser.dashed ? 'stroke-dasharray="7 4"' : ''}/>
                 ${dots}
             </g>
         `;
     }).join('');
+
+    const endLabels = series.map((ser, seriesIdx) =>
+    {
+        const lastIdx = ser.data.length - 1;
+        const lastY = yOf(ser.data[lastIdx]) + jitterFor(seriesIdx);
+        return {
+            x: xOf(lastIdx),
+            anchorY: lastY,
+            y: lastY,
+            text: `${ser.label} ${ser.data[lastIdx]}`,
+            color: ser.dashed ? 'var(--la-ink)' : inkOf(ser.color),
+            dim: !!highlight && ser.key !== highlight,
+        };
+    }).sort((first, second) => first.y - second.y);
+    for (let labelIdx = 1; labelIdx < endLabels.length; labelIdx++)
+    {
+        if (endLabels[labelIdx].y - endLabels[labelIdx - 1].y < 13)
+            endLabels[labelIdx].y = endLabels[labelIdx - 1].y + 13;
+    }
+    let labelFloor = h - 6;
+    for (let labelIdx = endLabels.length - 1; labelIdx >= 0; labelIdx--)
+    {
+        endLabels[labelIdx].y = Math.min(endLabels[labelIdx].y, labelFloor);
+        labelFloor = endLabels[labelIdx].y - 13;
+    }
+    const endLabelSvg = endLabels.map(label => `
+        <polyline points="${label.x + 4},${label.anchorY} ${label.x + 12},${label.anchorY} ${label.x + 22},${label.y}" fill="none" stroke="${label.color}" stroke-width="1.4" stroke-dasharray="2 2" opacity="${label.dim ? 0.25 : 0.8}" pointer-events="none"/>
+        <text x="${label.x + 26}" y="${label.y + 4}" class="battelog-telemetry-endlabel" fill="${label.color}" opacity="${label.dim ? 0.25 : 1}" pointer-events="none">${_escape(label.text)}</text>
+    `).join('');
 
     const hitCircles = series.flatMap((ser, seriesIdx) =>
     {
@@ -2219,8 +2653,8 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
                 .filter(entry => entry.data[i] === value)
                 .map(entry => ({
                     label: entry.label,
-                    value: entry.splitA ? `${entry.splitA[i] ?? 0} / ${entry.splitB[i] ?? 0}` : entry.data[i],
-                    color: entry.color,
+                    value: entry.splitA ? `${entry.splitA[i] ?? 0}K · ${entry.splitB[i] ?? 0}A = ${entry.data[i]}` : entry.data[i],
+                    color: entry.dashed ? '#f2f2f2' : entry.color,
                 }));
             const payload = encodeURIComponent(JSON.stringify({ round: columns[i]?.tip ?? String(i), items: bucket, x: xOf(i), y: yOf(value) + jitter, color: ser.color }));
             return `<circle class="battelog-telemetry-hit" cx="${xOf(i)}" cy="${yOf(value) + jitter}" r="11" fill="transparent" data-hover="${payload}"/>`;
@@ -2229,11 +2663,13 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
 
     return `
         <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="display:block; width:100%; height:100%;" data-chart-w="${w}" data-chart-h="${h}" data-chart-pl="${pl}" data-chart-pr="${pr}" data-chart-pt="${pt}">
-            <defs><clipPath id="battelog-telemetry-clip"><rect x="${pl}" y="${pt - 3}" width="${innerW}" height="${innerH + 6}"/></clipPath></defs>
+            <defs><clipPath id="battelog-telemetry-clip"><rect x="${pl - 6}" y="${pt - 3}" width="${innerW + 12}" height="${innerH + 6}"/></clipPath></defs>
             ${gridY}
+            ${metric.key === 'hp' ? `<text x="${pl}" y="${pt - 6}" class="battelog-telemetry-axis-text">${_escape(localize('LA.recap.effectiveHp'))}</text>` : ''}
             ${axisBreak}
             ${gridX}
             <g clip-path="url(#battelog-telemetry-clip)">${seriesSvg}</g>
+            ${endLabelSvg}
             <g class="battelog-telemetry-hits">${hitCircles}</g>
             <g class="battelog-telemetry-hover"></g>
         </svg>
@@ -2252,14 +2688,16 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
     {
         const roundValues = player[metric.field] ?? [];
         let sub;
-        if (isHp)
-            sub = `${player.effectiveHpEnd ?? 0} / ${player.effectiveHpMax ?? 0}`;
+        if (isHp && player.pilotOnly)
+            sub = `${player.hpEnd ?? 0}/${player.hpMax ?? 0}`;
+        else if (isHp)
+            sub = `S${player.structEnd ?? 0} · ${player.hpEnd ?? 0}/${player.hpMax ?? 0}`;
         else if (isHeat)
-            sub = `${player.heatConsumedEnd ?? 0} / ${player.heatCapacityMax ?? 0}`;
+            sub = `ST${player.stressEnd ?? 0} · ${player.heatEnd ?? 0}/${player.heatMax ?? 0}`;
         else if (isKills)
-            sub = `${player.kills ?? 0} / ${player.assists ?? 0}`;
+            sub = `${player.kills ?? 0}K · ${player.assists ?? 0}A`;
         else
-            sub = String(roundValues.reduce((a, b) => a + b, 0));
+            sub = `${roundValues.reduce((a, b) => a + b, 0)} DMG`;
         const active = highlight === player.id;
         const dim = highlight && !active;
         return `
@@ -2275,27 +2713,19 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
 
     let totalLabel;
     if (isHp)
-    {
-        const end = players.reduce((total, player) => total + (player.effectiveHpEnd ?? 0), 0);
-        const max = players.reduce((total, player) => total + (player.effectiveHpMax ?? 0), 0);
-        totalLabel = `${end} / ${max}`;
-    }
+        totalLabel = String(players.reduce((total, player) => total + (player.effectiveHpEnd ?? 0), 0));
     else if (isHeat)
-    {
-        const end = players.reduce((total, player) => total + (player.heatConsumedEnd ?? 0), 0);
-        const max = players.reduce((total, player) => total + (player.heatCapacityMax ?? 0), 0);
-        totalLabel = `${end} / ${max}`;
-    }
+        totalLabel = String(players.reduce((total, player) => total + (player.heatConsumedEnd ?? 0), 0));
     else if (isKills)
     {
         const totalKills = players.reduce((total, player) => total + (player.kills ?? 0), 0);
         const totalAssists = players.reduce((total, player) => total + (player.assists ?? 0), 0);
-        totalLabel = `${totalKills} / ${totalAssists}`;
+        totalLabel = `${totalKills}K · ${totalAssists}A`;
     }
     else
     {
         const totalRaw = rounds.map((_, i) => players.reduce((sum, player) => sum + (player[metric.field]?.[i] ?? 0), 0));
-        totalLabel = String(totalRaw.reduce((a, b) => a + b, 0));
+        totalLabel = `${totalRaw.reduce((a, b) => a + b, 0)} DMG`;
     }
     const totalSub = showTotal ? totalLabel : `OFF · ${totalLabel}`;
     const totalBtn = `

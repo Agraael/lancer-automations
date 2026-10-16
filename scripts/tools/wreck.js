@@ -2,8 +2,10 @@
 
 import { MODULE_ID } from './constants.js';
 import { getModuleSetting } from './settings-utils.js';
+import { tfGetTeams } from './token-factions-utils.js';
 import { laTokenGameplayHeight, laTokenHeight } from './token-height.js';
 import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
+import { getOrCreateTemplateActor } from './template-actors.js';
 import { escapeHtml as _escapeText, localize, localizeFormat } from './string-utils.js';
 import { FLAG_PORTRAIT_MODE, FLAG_PORTRAIT_IMG, FLAG_PORTRAIT_MECH_PILOT, PORTRAIT_MODES, PORTRAIT_PILOT } from '../tah/portrait.js';
 
@@ -426,24 +428,7 @@ async function spawnDifficultTerrain(token)
 
 async function getOrCreateWreckActor()
 {
-    const WRECK_NAME = 'Template Wreck';
-    let actor = game.actors.find(candidateActor => candidateActor.name === WRECK_NAME && candidateActor.type === 'deployable');
-    if (actor)
-        return actor;
-    actor = await Actor.create({
-        name: WRECK_NAME,
-        type: 'deployable',
-        img: `modules/${MODULE_ID}/icons/tombstone.svg`,
-        prototypeToken: {
-            actorLink: false,
-            displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
-            displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
-            texture: { src: `modules/${MODULE_ID}/icons/tombstone.svg` },
-            flags: { [MODULE_ID]: { awarenessMode: 'simple' } },
-        },
-    });
-    log('Created Template Wreck actor');
-    return actor;
+    return getOrCreateTemplateActor('wreck');
 }
 
 // Preload
@@ -522,10 +507,7 @@ function resolveWreckFaction(token)
     if (choice === 'neutral')
         return { disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL, factionsFlag: null };
 
-    const teams = game.settings.settings.has('token-factions.team-setup')
-        ? (game.settings.get('token-factions', 'team-setup') || [])
-        : [];
-    const target = teams.find(team => team.id === choice);
+    const target = tfGetTeams().find(team => team.id === choice);
     if (target)
     {
         const disposition = (target.gmDisposition !== undefined && target.gmDisposition !== null)

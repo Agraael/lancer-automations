@@ -355,6 +355,16 @@
     transform: translateY(-4px);
 }
 
+.la-hud-rail-slot.is-active {
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.la-hud-rail-slot.is-active:hover {
+    filter: grayscale(0.6) brightness(0.75);
+    transform: translateY(3px);
+}
+
 .la-hud-rail-name {
     position: absolute;
     left: 0;

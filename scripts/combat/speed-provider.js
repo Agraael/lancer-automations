@@ -116,22 +116,3 @@ Hooks.on('updateCombat', (combat, change) =>
     const conditionIds = Array.from(token.actor?.statuses ?? []);
     setLAFlag(combatant,'speedProvider.turn-status', conditionIds);
 });
-
-Hooks.on('preDeleteCombatant', (combatant) =>
-{
-    if (!isEnabled() || conflictModuleActive())
-        return;
-    if (combatant.actor?.statuses?.has('core_power_active'))
-        combatant.actor.toggleStatusEffect('core_power_active', { active: false });
-});
-
-Hooks.on('preDeleteCombat', (combat) =>
-{
-    if (!isEnabled() || conflictModuleActive())
-        return;
-    for (const combatant of combat.combatants ?? [])
-    {
-        if (combatant.actor?.statuses?.has('core_power_active'))
-            combatant.actor.toggleStatusEffect('core_power_active', { active: false });
-    }
-});

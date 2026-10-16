@@ -2075,38 +2075,13 @@ function _drawStackBadges(token)
             spriteMap.set(temporaryEffects[zIdx].id, child);
     }
 
-    // Names managed by lancer-automations collapse, so their stacks sum across every effect sharing the name.
-    const managedNames = new Set(
-        temporaryEffects.filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name)
-    );
-    const stackByName = new Map();
-    const countByName = new Map();
-    const usageByName = new Map();
-    for (const effect of temporaryEffects)
-    {
-        if (!effect.name || !managedNames.has(effect.name))
-            continue;
-        stackByName.set(effect.name, (stackByName.get(effect.name) ?? 0) + effectStack(effect));
-        countByName.set(effect.name, (countByName.get(effect.name) ?? 0) + 1);
-        usageByName.set(effect.name, (usageByName.get(effect.name) ?? false) || isUsageEffect(effect));
-    }
-
     const effectsOffsetX = token.effects?.x ?? 0;
     const effectsOffsetY = token.effects?.y ?? 0;
-    const drawnNames = new Set();
-    for (const effect of temporaryEffects)
+    for (const { effect, instances, uses, usage } of statusIconEntries(token.actor))
     {
         const sprite = spriteMap.get(effect.id);
         if (!sprite)
             continue;
-        const managed = !!effect.name && managedNames.has(effect.name);
-        if (managed && drawnNames.has(effect.name))
-            continue;
-        if (managed)
-            drawnNames.add(effect.name);
-        const instances = managed ? countByName.get(effect.name) : 1;
-        const uses = managed ? stackByName.get(effect.name) : effectStack(effect);
-        const usage = managed ? usageByName.get(effect.name) : isUsageEffect(effect);
         if (instances <= 1 && uses <= 1)
             continue;
         const entry = {
@@ -2117,6 +2092,35 @@ function _drawStackBadges(token)
         };
         _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, instances, uses, usage);
     }
+}
+
+export function statusIconEntries(actor)
+{
+    const temporaryEffects = actor?.temporaryEffects ?? [];
+    // Names managed by lancer-automations collapse, so their stacks sum across every effect sharing the name.
+    const managedNames = new Set(
+        temporaryEffects.filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name)
+    );
+    const entries = [];
+    const byName = new Map();
+    for (const effect of temporaryEffects)
+    {
+        const managed = !!effect.name && managedNames.has(effect.name);
+        let entry = managed ? byName.get(effect.name) : null;
+        if (!entry)
+        {
+            entry = { effect: null, instances: 0, uses: 0, usage: false };
+            entries.push(entry);
+            if (managed)
+                byName.set(effect.name, entry);
+        }
+        entry.instances += 1;
+        entry.uses += effectStack(effect);
+        entry.usage ||= isUsageEffect(effect);
+        if (!entry.effect && effect.img)
+            entry.effect = effect;
+    }
+    return entries.filter(entry => entry.effect);
 }
 
 export function isUsageEffect(effect)
@@ -2217,46 +2221,35 @@ function _badgeText(text, fill, sizeRatio, scale = 1)
 function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses, usage)
 {
     const counters = _ensureCounters(token);
+    const badge = statusBadge({ instances, uses, usage });
+    if (!badge)
+        return;
     const sizeRatio = entry.height / BADGE_REFERENCE_ICON;
     const left = entry.posX + offsetX;
     const cornerX = left + entry.width * 1.3;
     const cornerY = entry.posY + offsetY + entry.height * 1.3;
-    const showUses = uses > instances;
-    if (!usage)
-    {
-        if (uses <= 1)
-            return;
-        const stackBadge = _badgeText(String(uses), instanceBadgeColor(), sizeRatio);
-        stackBadge.anchor.set(1, 1);
-        stackBadge.position.set(cornerX, cornerY);
-        stackBadge._laStack = true;
-        counters.addChild(stackBadge);
+    const countBadge = _badgeText(String(badge.count), badge.color, sizeRatio);
+    countBadge.anchor.set(1, 1);
+    countBadge.position.set(cornerX, cornerY);
+    countBadge._laStack = true;
+    counters.addChild(countBadge);
+    if (badge.uses === null)
         return;
-    }
-    if (instances > 1)
-    {
-        const instanceBadge = _badgeText(String(instances), instanceBadgeColor(), sizeRatio);
-        instanceBadge.anchor.set(1, 1);
-        instanceBadge.position.set(cornerX, cornerY);
-        instanceBadge._laStack = true;
-        counters.addChild(instanceBadge);
-        if (!showUses)
-            return;
-        const usesBadge = _badgeText(String(uses), usageBadgeColor(), sizeRatio, 0.6);
-        usesBadge.anchor.set(0, 1);
-        // text boxes carry half their stroke on each side, so the boxes overlap to keep the glyphs close
-        usesBadge.position.set(cornerX - 1.5 * sizeRatio, cornerY);
-        usesBadge._laStack = true;
-        counters.addChild(usesBadge);
-        return;
-    }
-    if (!showUses)
-        return;
-    const usesBadge = _badgeText(String(uses), usageBadgeColor(), sizeRatio);
-    usesBadge.anchor.set(1, 1);
-    usesBadge.position.set(cornerX, cornerY);
+    const usesBadge = _badgeText(String(badge.uses), badge.usesColor, sizeRatio, 0.6);
+    usesBadge.anchor.set(0, 1);
+    // text boxes carry half their stroke on each side, so the boxes overlap to keep the glyphs close
+    usesBadge.position.set(cornerX - 1.5 * sizeRatio, cornerY);
     usesBadge._laStack = true;
     counters.addChild(usesBadge);
+}
+
+export function statusBadge({ instances, uses, usage })
+{
+    if (!usage)
+        return uses > 1 ? { count: uses, color: instanceBadgeColor(), uses: null, usesColor: null } : null;
+    if (instances > 1)
+        return { count: instances, color: instanceBadgeColor(), uses: uses > instances ? uses : null, usesColor: usageBadgeColor() };
+    return uses > instances ? { count: uses, color: usageBadgeColor(), uses: null, usesColor: null } : null;
 }
 
 /**

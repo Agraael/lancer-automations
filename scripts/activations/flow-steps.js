@@ -882,7 +882,8 @@ export async function onActivationStep(state)
 {
     state = injectExtraDataUtility(state);
     const actor = state.actor;
-    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const token = canvas.tokens.get(state.la_extraData?.sourceTokenId)
+        ?? (actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0]);
     let item = state.item;
 
     // SimpleActivationFlow carries no item, addExtraActions stamps _sourceItemId so extras can resolve theirs.
@@ -1070,7 +1071,8 @@ export async function onInitActivationStep(state)
 {
     state = injectExtraDataUtility(state);
     const actor = state.actor;
-    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const token = canvas.tokens.get(state.la_extraData?.sourceTokenId)
+        ?? (actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0]);
     let item = state.item;
     if (!state.data)
         state.data = {};

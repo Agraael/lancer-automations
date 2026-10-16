@@ -3,6 +3,7 @@ import { getLAFlag, setLAFlag, unsetLAFlag } from "../tools/flag-utils.js";
 import { getImmunityBonuses, consumeImmunityUse } from "../bonuses/genericBonuses.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/network.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { getEnvironmentActor } from "../tools/template-actors.js";
 
 /**
  * Get all grid cells occupied by a token.
@@ -199,7 +200,8 @@ async function _runDangerousZone(token, damageType, damageValue)
         const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
         if (!DamageRollFlow)
             return;
-        const damageFlow = new DamageRollFlow(actor.uuid, {
+        const source = await getEnvironmentActor() ?? actor;
+        const damageFlow = new DamageRollFlow(source.uuid, {
             title: "Dangerous Terrain",
             damage: [{ val: String(damageValue), type: damageTypeLabels[String(damageType).toLowerCase()] || "Kinetic" }],
             tags: [],

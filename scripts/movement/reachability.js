@@ -184,7 +184,7 @@ export function computeMovementReach(token, budget, { action = 'walk', origin = 
                 continue;
             const otherSize = Number(other.actor?.system?.size ?? 1) || 1;
             const otherIntangible = !!other.actor?.statuses?.has('intangible');
-            const hostileWall = !moverPhasing && otherSize >= moverSize && isHostile(other, token) && otherIntangible === moverIntangible;
+            const hostileWall = !moverPhasing && otherSize >= moverSize && isHostile(token, other) && otherIntangible === moverIntangible;
             for (const off of getOccupiedOffsets(other))
             {
                 occupiedCells.add(`${off.col},${off.row}`);
@@ -382,7 +382,7 @@ export function computeMovementRoute(token, origin, destination, { action = 'wal
                 continue;
             const otherSize = Number(other.actor?.system?.size ?? 1) || 1;
             const otherIntangible = !!other.actor?.statuses?.has('intangible');
-            if (!(otherSize >= moverSize && isHostile(other, token) && otherIntangible === moverIntangible))
+            if (!(otherSize >= moverSize && isHostile(token, other) && otherIntangible === moverIntangible))
                 continue;
             for (const off of getOccupiedOffsets(other))
                 blockCells.add(`${off.row},${off.col}`);

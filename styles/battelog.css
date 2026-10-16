@@ -1,5 +1,17 @@
 /* Overrides on top of lancer-style-library. */
 
+@font-face {
+    font-family: 'LA Orbitron';
+    src: url('../../../systems/lancer/fonts/orbitron/Orbitron-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400 900;
+    font-style: normal;
+}
+
+:root {
+    --bl-mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'Menlo', monospace;
+    --bl-display: 'LA Orbitron', 'Orbitron', 'Signika', sans-serif;
+}
+
 
 .battelog-dialog .lancer-section-title {
     text-transform: uppercase;
@@ -285,7 +297,7 @@
     inset: 0;
     z-index: 100000;
     color: #d7ddda;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -304,7 +316,7 @@
     flex-direction: column;
     gap: 18px;
     pointer-events: none;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
 }
 
 .battelog-intro-preamble-inner {
@@ -330,7 +342,7 @@
 }
 
 .battelog-intro-preamble-title {
-    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
+    font-family: var(--bl-display);
     font-weight: 700;
     letter-spacing: 4px;
     font-size: clamp(13px, 1.9vw, 19px);
@@ -343,7 +355,7 @@
 }
 
 .battelog-intro-preamble-sub {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: clamp(9px, 1.2vw, 12px);
     letter-spacing: 3px;
     color: #d0d3ce;
@@ -859,7 +871,7 @@
 }
 
 .battelog-intro-final-word {
-    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
+    font-family: var(--bl-display);
     font-weight: 700;
     text-transform: uppercase;
     font-size: clamp(52px, 10vw, 128px);
@@ -1060,7 +1072,7 @@
     width: 100%;
     min-height: 84px;
     resize: vertical;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 14px;
     line-height: 1.5;
     color: #d7ddda;
@@ -1097,7 +1109,7 @@
 }
 
 .battelog-intro-send {
-    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
+    font-family: var(--bl-display);
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 3px;
@@ -1123,7 +1135,7 @@
 }
 
 .battelog-intro-decline {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 11px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
@@ -1249,7 +1261,7 @@
     z-index: 3;
     overflow: hidden;
     color: #7f8a84;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 10px;
     letter-spacing: 1px;
 }
@@ -1502,12 +1514,22 @@
     --la-panel-ink: #1a1a1a;
     --la-amber: #ffaa00;
     --la-tech: color-mix(in srgb, #3b82f6, var(--la-ink) 32%);
-    --la-danger: #e53935;
+    --la-danger: var(--bl-loss);
     --la-success: #2e7d32;
     --la-heat: #d35400;
     --la-info: #1e88e5;
     --la-warning-deep: #b35900;
     --la-line-ghost: color-mix(in srgb, var(--la-ink), transparent 72%);
+    --bl-label: color-mix(in srgb, var(--la-ink), var(--la-plate) 35%);
+    --bl-line-strong: color-mix(in srgb, var(--la-ink), transparent 72%);
+    --bl-loss: #c62828;
+    --bl-loss-ink: #a31515;
+    --bl-ok-ink: #1b5e20;
+}
+
+:root.la-dark .battelog-recap-dialog {
+    --bl-loss-ink: #ff9999;
+    --bl-ok-ink: #81c784;
 }
 
 /* Kill Foundry's default padding, cap height to viewport, and set up a flex
@@ -1535,7 +1557,7 @@
 
     45% {
         opacity: 1;
-        box-shadow: 0 0 16px color-mix(in srgb, var(--la-primary) 60%, transparent);
+        box-shadow: 0 0 16px color-mix(in srgb, var(--pcol-top-color, var(--hcard-accent, var(--la-primary))) 60%, transparent);
     }
 
     100% {
@@ -1575,7 +1597,7 @@
 .battelog-recap-head .battelog-recap-kicker {
     color: var(--la-accent);
     opacity: 1;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     letter-spacing: 1.5px;
     display: inline-block;
     position: relative;
@@ -1664,10 +1686,11 @@
 }
 
 .battelog-recap-title {
-    font-size: 28px;
+    font-family: var(--bl-display);
+    font-size: 24px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.08em;
     line-height: 1;
     margin-bottom: 8px;
 }
@@ -1678,7 +1701,7 @@
     gap: 6px;
     font-size: 11px;
     opacity: 0.7;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
 }
 
 .battelog-recap-meta-dot {
@@ -1715,22 +1738,25 @@
     outline: none !important;
 }
 
-/* Tabs sit on the same dark chrome as the head; active = red bg + amber underline. */
+/* Tabs sit on the same dark chrome as the head. */
 .battelog-recap-dialog .battelog-recap-tabbar {
     display: flex;
     align-items: flex-end;
-    gap: 4px;
-    padding: 0 20px;
+    gap: 2px;
+    padding: 6px 20px 0;
     background: var(--la-panel-ink, #1a1a1a) !important;
-    border-bottom: 1px solid var(--la-primary);
 }
 
 .battelog-recap-tab {
     position: relative;
-    padding: 9px 16px !important;
+    flex: 0 0 auto;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 12px 18px 10px !important;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    font-size: 11px !important;
+    letter-spacing: 0.1em;
+    font-size: 12px !important;
+    line-height: 1 !important;
     font-weight: 700 !important;
     background: transparent !important;
     border: none !important;
@@ -1762,21 +1788,19 @@
     outline: none !important;
 }
 
-.battelog-recap-tab.on {
-    color: #fff !important;
-    background: var(--la-primary) !important;
-    border-bottom-color: var(--la-amber) !important;
+.battelog-recap-tab.on,
+.battelog-recap-tab.on:hover,
+.battelog-recap-tab.on:focus {
+    color: var(--la-ink) !important;
+    background: var(--la-plate) !important;
+    border-top: 3px solid var(--la-primary) !important;
+    border-bottom-color: transparent !important;
+    box-shadow: none !important;
 }
 
 .battelog-recap-tab.on i {
     opacity: 1;
-}
-
-/* Selected tab: amber underline reinforces on hover; keep the red background flat. */
-.battelog-recap-tab.on:hover,
-.battelog-recap-tab.on:focus {
-    background: var(--la-primary) !important;
-    box-shadow: inset 0 -3px 0 var(--la-amber) !important;
+    color: var(--la-primary);
 }
 
 .battelog-recap-tab.disabled {
@@ -1858,17 +1882,18 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-right: 6px;
-    margin-right: -6px;
+    padding: 12px 18px 14px 12px;
+    margin: -12px -18px 0 -12px;
 }
 
 .battelog-recap-foot {
     display: flex;
     align-items: center;
-    padding: 12px 20px;
-    background: #0d0d0f;
+    gap: 6px;
+    padding: 8px 20px;
+    background: var(--la-black);
     color: rgba(255, 255, 255, 0.78);
-    border-top: 1px solid rgba(0, 0, 0, 0.35);
+    border-top: 1px solid color-mix(in srgb, var(--la-primary) 40%, transparent);
     font-size: 10px;
     letter-spacing: 1px;
     text-transform: uppercase;
@@ -1879,60 +1904,54 @@
     opacity: 0.6;
 }
 
-.battelog-recap-dismiss {
+.battelog-recap-foot button {
+    --ft-line: rgba(255, 255, 255, 0.35);
+    --ft-fill: var(--la-black, #0d0d0f);
+    position: relative;
+    isolation: isolate;
     flex: 0 0 auto !important;
     width: auto !important;
-    padding: 8px 16px !important;
-    background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.35) !important;
-    border-radius: 3px !important;
-    cursor: pointer;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.88) !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    transition: all 0.15s ease;
-}
-
-.battelog-recap-dismiss:hover,
-.battelog-recap-dismiss:focus {
-    border-color: #fff !important;
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.06) !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
-
-.battelog-recap-share {
-    flex: 0 0 auto !important;
-    width: 34px !important;
-    height: 34px !important;
-    padding: 0 !important;
-    margin-right: 8px !important;
-    background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.35) !important;
-    border-radius: 3px !important;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.88) !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    transition: all 0.15s ease;
+    min-width: 32px;
+    height: 32px !important;
+    margin: 0 !important;
+    padding: 0 12px !important;
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
-}
-
-.battelog-recap-share:hover,
-.battelog-recap-share:focus {
-    border-color: #fff !important;
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.06) !important;
+    gap: 7px;
+    font-size: 11px !important;
+    letter-spacing: 0.1em;
+    line-height: 1 !important;
+    background: var(--ft-line) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.88) !important;
     text-shadow: none !important;
     box-shadow: none !important;
     outline: none !important;
+    transition: all 0.15s ease;
+}
+
+.battelog-recap-foot button::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    background: var(--ft-fill);
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+}
+
+.battelog-recap-foot button:hover,
+.battelog-recap-foot button:focus {
+    --ft-line: #fff;
+    --ft-fill: color-mix(in srgb, #fff 6%, var(--la-black, #0d0d0f));
+    color: #fff !important;
+}
+
+.battelog-recap-dismiss {
+    font-weight: 700;
 }
 
 .battelog-recap-share.is-busy {
@@ -2008,39 +2027,12 @@
     }
 }
 
-.battelog-recap-theme-mute {
-    flex: 0 0 auto !important;
-    width: 34px !important;
-    height: 34px !important;
-    padding: 0 !important;
-    margin-right: 8px !important;
-    background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.35) !important;
-    border-radius: 3px !important;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.88) !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    transition: all 0.15s ease;
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-}
-
-.battelog-recap-theme-mute:hover,
-.battelog-recap-theme-mute:focus {
-    border-color: #fff !important;
-    color: #fff !important;
-    background: rgba(255, 255, 255, 0.06) !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
-
-.battelog-recap-theme-mute.is-muted {
+.battelog-recap-foot .battelog-recap-theme-mute.is-muted {
     color: rgba(255, 255, 255, 0.5) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.battelog-recap-foot .battelog-recap-theme-mute.is-muted:not(:hover):not(:focus) {
+    --ft-line: rgba(255, 255, 255, 0.25);
 }
 
 .battelog-recap-section-title {
@@ -2051,7 +2043,7 @@
     letter-spacing: 1.5px;
     font-size: 11px;
     font-weight: 700;
-    opacity: 0.75;
+    color: var(--bl-label);
     margin-bottom: 10px;
 }
 
@@ -2062,9 +2054,9 @@
 }
 
 .battelog-recap-section-note {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-size: 9px;
-    opacity: 0.55;
+    font-family: var(--bl-mono);
+    font-size: 10px;
+    color: var(--la-ink-dim);
 }
 
 
@@ -2074,11 +2066,12 @@
     display: inline-block;
     border: 3px solid;
     padding: 4px 14px;
-    border-radius: 3px;
+    border-radius: 0;
     text-transform: uppercase;
-    letter-spacing: 2px;
+    letter-spacing: 0.12em;
     font-weight: 700;
-    font-size: 22px;
+    font-size: 18px;
+    font-family: var(--bl-display);
     transform: rotate(-6deg);
     white-space: nowrap;
 }
@@ -2114,23 +2107,26 @@
 
 .battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.scroll),
 .battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.is-focus) {
-    overflow-x: auto;
     padding-top: 10px;
     margin-top: -10px;
     padding-bottom: 8px;
+}
+
+.battelog-recap-squad-scroll:has(.battelog-recap-squad-grid.scroll:not(.is-focus)) {
+    overflow-x: auto;
 }
 
 .battelog-recap-squad-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 10px;
-    align-items: start;
+    align-items: stretch;
 }
 
 /* Placeholder for missing pilots when the squad is fewer than 4. */
 .battelog-pcol-empty {
     border: 1px dashed color-mix(in srgb, var(--la-ink), transparent 65%);
-    border-radius: 3px;
+    border-radius: 0;
     min-height: 260px;
     display: flex;
     flex-direction: column;
@@ -2234,7 +2230,8 @@
 }
 
 .battelog-hostiles-kpi-val {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 22px;
     line-height: 1;
@@ -2250,12 +2247,12 @@
 }
 
 .battelog-hostiles-kpi-lbl {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
     font-size: 10px;
-    letter-spacing: 2px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--la-ink-dim);
-    font-weight: 700;
+    color: var(--bl-label);
+    font-weight: 600;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2294,13 +2291,15 @@
 /* Card layout: portrait | main | damage. */
 .battelog-hcard {
     --hcard-accent: color-mix(in srgb, var(--la-ink), transparent 72%);
+    --hcard-edge: color-mix(in srgb, var(--la-ink), transparent 72%);
     display: flex;
     align-items: stretch;
     background: color-mix(in srgb, var(--la-plate), var(--la-ink) 7%);
     border: 1px solid color-mix(in srgb, var(--la-ink), transparent 72%);
     border-left: 3px solid var(--la-primary);
-    border-radius: 3px;
+    border-radius: 0;
     position: relative;
+    clip-path: polygon(-16px -16px, calc(100% - 28px) -16px, calc(100% + 16px) 28px, calc(100% + 16px) calc(100% + 16px), -16px calc(100% + 16px));
 }
 
 .battelog-hcard::before {
@@ -2311,10 +2310,10 @@
     width: 12px;
     height: 12px;
     background: linear-gradient(45deg,
-            transparent calc(50% - 0.7px),
-            var(--hcard-accent) calc(50% - 0.7px),
-            var(--hcard-accent) calc(50% + 0.7px),
-            var(--la-plate) calc(50% + 0.7px));
+            transparent calc(50% - 1px),
+            var(--hcard-edge) calc(50% - 1px),
+            var(--hcard-edge) calc(50% + 1px),
+            transparent calc(50% + 1px));
     pointer-events: none;
     z-index: 6;
 }
@@ -2346,6 +2345,63 @@
     overflow: hidden;
 }
 
+.battelog-hcard-face>.battelog-hcard-portrait {
+    border-top-left-radius: 2px;
+    border-bottom-left-radius: 2px;
+    overflow: hidden;
+}
+
+.battelog-hcard-face>.battelog-hcard-dmg {
+    border-top-right-radius: 2px;
+    border-bottom-right-radius: 2px;
+    overflow: hidden;
+}
+
+.battelog-hcard.has-pilot {
+    perspective: 1400px;
+}
+
+.battelog-hcard-faces {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(.2, .8, .2, 1);
+}
+
+.battelog-hcard.is-flipped .battelog-hcard-faces {
+    transform: rotateY(180deg);
+}
+
+.battelog-hcard-face {
+    grid-area: 1 / 1;
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.battelog-hcard-face.is-back {
+    transform: rotateY(180deg);
+}
+
+.battelog-hcard.is-flipped .battelog-hcard-face.is-front,
+.battelog-hcard.has-pilot:not(.is-flipped) .battelog-hcard-face.is-back {
+    pointer-events: none;
+}
+
+.battelog-hcard button.battelog-pcol-flip-btn.battelog-pcol-portrait-mfr {
+    bottom: 26px;
+    z-index: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .battelog-hcard-faces {
+        transition: none;
+    }
+}
+
 .battelog-hcard.is-active,
 .battelog-hcard.is-unscanned {
     border-left-color: rgba(0, 0, 0, 0.35);
@@ -2363,13 +2419,26 @@
     border-left-color: #6b45a8;
 }
 
+.battelog-hcard.is-side-hostile.is-active:not(.is-nemesis):not(.is-danger) {
+    border-left-color: var(--bl-loss);
+}
+
+.battelog-hcard.is-side-hostile.is-killed:not(.is-nemesis):not(.is-danger) {
+    border-left-color: var(--bl-line-strong);
+}
+
+.battelog-hcard.is-killed:not(.has-pilot) .battelog-hcard-portrait-img,
+.battelog-hcard.is-killed .battelog-hcard-face.is-front .battelog-hcard-portrait-img {
+    filter: grayscale(0.85) brightness(0.7);
+}
+
 .battelog-encounter-filter {
     display: flex;
     gap: 3px;
     padding: 3px;
     background: rgba(0, 0, 0, 0.03);
     border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 4px;
+    border-radius: 0;
     margin-bottom: 12px;
     width: fit-content;
 }
@@ -2380,12 +2449,12 @@
     align-items: center;
     gap: 6px;
     padding: 6px 11px;
-    border-radius: 3px;
+    border-radius: 0;
     cursor: pointer;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-weight: 700;
+    font-family: var(--font-primary);
+    font-weight: 600;
     font-size: 9px;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--la-ink-dim);
     transition: background 0.18s ease, color 0.18s ease;
@@ -2402,11 +2471,11 @@
 
 .battelog-encounter-filter-btn.is-active {
     background: var(--dispo, var(--la-primary));
-    color: #fff;
+    color: var(--dispo-ink, #fff);
 }
 
 .battelog-encounter-filter-btn.is-active i {
-    color: #fff;
+    color: var(--dispo-ink, #fff);
 }
 
 .battelog-encounter-filter-btn[disabled] {
@@ -2414,8 +2483,23 @@
     cursor: not-allowed;
 }
 
+.battelog-encounter-filter-btn[data-team]:not(.is-active) i {
+    color: var(--dispo);
+}
+
+.battelog-encounter-filter-sep {
+    flex: 0 0 1px;
+    align-self: stretch;
+    margin: 3px 4px;
+    background: color-mix(in srgb, var(--la-ink), transparent 60%);
+}
+
+.battelog-hcard.on-team:not(.is-danger):not(.is-nemesis) {
+    border-left-color: var(--team) !important;
+}
+
 .battelog-encounter-filter-count {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 9px;
     opacity: 0.85;
 }
@@ -2423,15 +2507,16 @@
 .battelog-encounter-empty {
     padding: 26px 0;
     text-align: center;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 11px;
     color: var(--la-ink-dim);
     border: 1px dashed color-mix(in srgb, var(--la-ink), transparent 86%);
-    border-radius: 3px;
+    border-radius: 0;
 }
 
 .battelog-hcard.is-danger {
     --hcard-accent: var(--la-danger);
+    --hcard-edge: color-mix(in srgb, var(--la-danger) 55%, transparent);
     position: relative;
     border-color: color-mix(in srgb, var(--la-danger) 55%, transparent);
     border-left: 3px solid var(--la-danger);
@@ -2442,6 +2527,7 @@
 
 .battelog-hcard.is-nemesis {
     --hcard-accent: #8b2a8b;
+    --hcard-edge: color-mix(in srgb, #8b2a8b 55%, transparent);
     position: relative;
     border-color: color-mix(in srgb, #8b2a8b 55%, transparent);
     border-left: 3px solid #8b2a8b;
@@ -2462,9 +2548,9 @@
     padding: 3px 8px;
     color: #fff;
     border-radius: 2px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
     box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
@@ -2477,11 +2563,11 @@
 }
 
 .battelog-hcard-marker.top {
-    background: var(--la-danger);
+    background: #c62828;
 }
 
 .battelog-hcard-marker i {
-    font-size: 8px;
+    font-size: 9px;
 }
 
 .battelog-hcard-marker.has-tip {
@@ -2553,7 +2639,7 @@
     padding: 1px 6px;
     color: #fff;
     border-radius: 2px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.5px;
@@ -2563,12 +2649,12 @@
 
 .battelog-hcard-badge-alive {
     left: 5px;
-    background: #3aa955;
+    background: #2c7f40;
 }
 
 .battelog-hcard-badge-dead {
     right: 5px;
-    background: var(--la-danger, #c8353d);
+    background: #c62828;
 }
 
 .battelog-hcard-badge-alive i {
@@ -2597,50 +2683,52 @@
 
 .battelog-hcard-nameline {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 7px;
     min-width: 0;
     padding-bottom: 6px;
     border-bottom: 2px solid var(--la-primary);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .battelog-hcard-name {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1.8px;
-    font-size: 13px;
+    letter-spacing: 0.03em;
+    font-size: 15px;
     line-height: 1;
     color: var(--la-ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 0;
 }
 
 .battelog-hcard.is-unscanned .battelog-hcard-name {
-    color: var(--la-ink-dim);
+    color: var(--bl-label);
 }
 
 .battelog-hcard-count {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
-    font-size: 14px;
+    font-size: 11px;
     letter-spacing: 1px;
     color: var(--la-accent);
     flex: 0 0 auto;
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--la-accent) 14%, transparent);
 }
 
 .battelog-hcard-meta {
     margin-left: auto;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 9px;
     letter-spacing: 1.4px;
     text-transform: uppercase;
-    color: var(--la-ink-dim);
+    color: var(--bl-label);
     flex: 0 0 auto;
 }
 
@@ -2657,36 +2745,41 @@
     flex-wrap: wrap;
 }
 
+.battelog-hcard .battelog-pcol-ll {
+    font-size: 11px;
+    padding: 1px 5px;
+}
+
 .battelog-hcard-tag {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     padding: 2px 7px;
     border-radius: 2px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-weight: 700;
+    font-family: var(--font-primary);
+    font-weight: 600;
     font-size: 9px;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     border: 1px solid transparent;
 }
 
-.battelog-hcard-tag.tier.danger {
+.battelog-hcard-tag.tier.t3 {
     background: var(--la-primary);
     color: #fff;
+    border-color: var(--la-primary);
+}
+
+.battelog-hcard-tag.tier.t2 {
+    background: color-mix(in srgb, var(--la-primary) 22%, var(--la-plate));
+    color: var(--la-ink);
     border-color: var(--la-accent);
 }
 
-.battelog-hcard-tag.tier.amber {
-    background: var(--la-amber);
-    color: #111;
-    border-color: var(--la-amber);
-}
-
-.battelog-hcard-tag.tier.neutral {
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    border-color: rgba(0, 0, 0, 0.55);
+.battelog-hcard-tag.tier.t1 {
+    background: transparent;
+    color: var(--la-accent);
+    border-color: var(--la-accent);
 }
 
 .battelog-hcard-tag.tier.unknown {
@@ -2703,14 +2796,14 @@
 
 .battelog-hcard-tag.template {
     background: transparent;
-    color: color-mix(in srgb, #8b2a8b, var(--la-ink) 32%);
-    border-color: color-mix(in srgb, #8b2a8b, var(--la-ink) 32%);
+    color: var(--la-ink);
+    border: 1px dashed color-mix(in srgb, var(--la-ink), transparent 50%);
 }
 
 .battelog-hcard-tag.frame {
     background: transparent;
-    color: #a5651a;
-    border-color: #a5651a;
+    color: var(--la-ink);
+    border-color: var(--bl-line-strong);
 }
 
 .battelog-hcard-tag.no-scan {
@@ -2724,7 +2817,7 @@
 }
 
 .battelog-hcard-redact {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 9px;
     color: var(--la-ink-dim);
     letter-spacing: 0.3px;
@@ -2755,12 +2848,12 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-size: 8px;
-    letter-spacing: 1px;
-    color: var(--la-ink-dim);
+    font-family: var(--font-primary);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--bl-label);
     text-transform: uppercase;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .battelog-hcard-killers-icon {
@@ -2782,6 +2875,23 @@
     color: var(--la-accent);
 }
 
+.battelog-hcard-killers-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--la-ink);
+}
+
+.battelog-hcard-killers-more {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--bl-label);
+}
+
 .battelog-tip-panel.battelog-hcard-killers-tip {
     z-index: 40;
     opacity: 0;
@@ -2800,19 +2910,19 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
     font-size: 9px;
-    color: var(--la-ink-dim);
-    letter-spacing: 1px;
+    color: var(--bl-label);
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .battelog-hcard-notkilled i {
     font-size: 10px;
 }
 
-/* Action button / no-scan chip pinned bottom. */
+/* Action button pinned bottom. */
 .battelog-hcard-action {
     margin-top: auto;
 }
@@ -2821,7 +2931,11 @@
     display: inline-flex !important;
     align-items: center;
     gap: 6px;
-    padding: 5px 10px !important;
+    height: 24px !important;
+    min-height: 0 !important;
+    box-sizing: border-box;
+    padding: 0 10px !important;
+    line-height: 1 !important;
     background: color-mix(in srgb, var(--la-primary) 8%, transparent) !important;
     border: 1px solid color-mix(in srgb, var(--la-primary) 30%, transparent) !important;
     border-radius: 2px !important;
@@ -2856,7 +2970,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 10px;
+    height: 24px;
+    box-sizing: border-box;
+    padding: 0 10px;
     background: color-mix(in srgb, var(--la-ink), transparent 97%);
     border: 1px dashed color-mix(in srgb, var(--la-ink), transparent 70%);
     border-radius: 2px;
@@ -2869,6 +2985,24 @@
 
 .battelog-hcard-noscan-chip i {
     font-size: 10px;
+}
+
+.battelog-hcard-scan-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    box-sizing: border-box;
+    padding: 0 9px;
+    font-family: var(--bl-mono);
+    font-weight: 700;
+    font-size: 10px;
+    line-height: normal;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--la-ink);
+    border: 1px solid var(--bl-line-strong);
+    cursor: default;
 }
 
 /* Right damage stack. */
@@ -2895,7 +3029,8 @@
 }
 
 .battelog-hcard-dmg-val {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 14px;
     line-height: 1;
@@ -2911,13 +3046,13 @@
 }
 
 .battelog-hcard.is-unscanned .battelog-hcard-dmg-val {
-    color: var(--la-ink-dim);
+    color: var(--bl-label);
 }
 
 .battelog-hcard-dmg-lbl {
-    font-size: 8px;
+    font-size: 9px;
     letter-spacing: 1px;
-    color: var(--la-ink-dim);
+    color: var(--bl-label);
     text-transform: uppercase;
     margin-top: 3px;
     text-align: center;
@@ -2926,13 +3061,10 @@
 
 .battelog-pcol {
     --pcol-top-color: var(--accent, #7bd3ff);
+    --pcol-ring: color-mix(in srgb, var(--la-ink), transparent 86%);
     /* min-width 0 lets long ribbon names ellipsize instead of widening the column */
     min-width: 0;
-    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 7%);
-    border: 1px solid color-mix(in srgb, var(--la-ink), transparent 86%);
-    border-top: 3px solid var(--pcol-top-color);
-    border-radius: 3px;
-    /* overflow visible so hover tooltips can escape upward; children handle their own rounding. */
+    /* overflow visible so hover tooltips can escape upward. */
     overflow: visible;
     display: flex;
     flex-direction: column;
@@ -2940,34 +3072,35 @@
     transition: all 0.2s ease;
 }
 
-.battelog-pcol::before {
-    content: '';
-    position: absolute;
-    top: -3px;
-    right: -1px;
-    width: 14px;
-    height: 14px;
-    background: linear-gradient(45deg,
-            transparent calc(50% - 1.5px),
-            var(--pcol-top-color) calc(50% - 1.5px),
-            var(--pcol-top-color) calc(50% + 1.5px),
-            var(--la-plate) calc(50% + 1.5px));
-    pointer-events: none;
-    z-index: 20;
+.battelog-pcol:not(.has-pilot),
+.battelog-pcol.has-pilot .battelog-pcol-face {
+    isolation: isolate;
+    padding: 3px 1px 1px;
 }
 
-.battelog-pcol::after {
+.battelog-pcol::before,
+.battelog-pcol.has-pilot .battelog-pcol-face::before {
     content: '';
     position: absolute;
-    bottom: 4px;
-    right: 8px;
-    width: 8px;
-    height: 8px;
-    border: 1px solid color-mix(in srgb, var(--la-ink), transparent 65%);
-    border-left: 0;
-    border-top: 0;
+    inset: 0;
+    background:
+        linear-gradient(45deg, transparent calc(50% - 1px), var(--pcol-top-color) 0) top right / 16px 16px no-repeat,
+        linear-gradient(var(--pcol-top-color) 0 0) top / 100% 3px no-repeat,
+        var(--pcol-ring);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
     pointer-events: none;
-    z-index: 5;
+    z-index: -1;
+}
+
+.battelog-pcol::after,
+.battelog-pcol.has-pilot .battelog-pcol-face::after {
+    content: '';
+    position: absolute;
+    inset: 3px 1px 1px;
+    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 7%);
+    clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
+    pointer-events: none;
+    z-index: -1;
 }
 
 /* Lift the whole column above its siblings while any tooltip inside it is showing. */
@@ -2977,31 +3110,128 @@
     z-index: 100;
 }
 
-.battelog-pcol>.battelog-pcol-ribbon {
-    border-top-left-radius: 3px;
-    border-top-right-radius: 3px;
+.battelog-pcol.has-pilot {
+    perspective: 1400px;
 }
 
-.battelog-pcol>.battelog-pcol-footer-strip {
-    border-bottom-left-radius: 3px;
-    border-bottom-right-radius: 3px;
+.battelog-recap-tab-panel.is-flipping,
+.battelog-recap-squad-scroll.is-flipping:has(.battelog-recap-squad-grid.scroll:not(.is-focus)),
+.battelog-hostiles-grid.is-flipping {
+    overflow-y: hidden !important;
+}
+
+.battelog-pcol-faces {
+    flex: 1 1 auto;
+    display: grid;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(.2, .8, .2, 1);
+}
+
+.battelog-pcol.is-flipped .battelog-pcol-faces {
+    transform: rotateY(180deg);
+}
+
+.battelog-pcol-face {
+    grid-area: 1 / 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.battelog-pcol-face.is-back {
+    transform: rotateY(180deg);
+}
+
+.battelog-pcol-face.is-solo {
+    transform: none;
+}
+
+.battelog-pcol.has-pilot::before,
+.battelog-pcol.has-pilot::after {
+    display: none;
+}
+
+.battelog-pcol.has-pilot .battelog-pcol-face {
+    position: relative;
+}
+
+.battelog-pcol.has-pilot .battelog-pcol-face.is-dead {
+    --pcol-top-color: #c62828;
+    --pcol-ring: var(--pcol-top-color);
+}
+
+.battelog-pcol-face.is-dead .battelog-pcol-ribbon {
+    background: #c62828;
+    color: #fff;
+}
+
+.battelog-pcol.is-mvp .battelog-pcol-face.is-dead .battelog-pcol-ribbon {
+    background: repeating-linear-gradient(135deg, #ffaa00 0 12px, #c62828 12px 24px);
+    color: #fff;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.7);
+}
+
+.battelog-pcol.is-mvp .battelog-pcol-face.is-dead .battelog-pcol-ribbon i {
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.7);
+}
+
+.battelog-pcol.is-flipped .battelog-pcol-face.is-front,
+.battelog-pcol.has-pilot:not(.is-flipped) .battelog-pcol-face.is-back {
+    pointer-events: none;
+}
+
+button.battelog-pcol-flip-btn.battelog-pcol-portrait-mfr {
+    all: unset;
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    z-index: 2;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+button.battelog-pcol-flip-btn.battelog-pcol-portrait-mfr:hover,
+button.battelog-pcol-flip-btn.battelog-pcol-portrait-mfr:focus-visible {
+    color: #fff;
+    border-color: var(--la-amber);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .battelog-pcol-faces {
+        transition: none;
+    }
 }
 
 .battelog-pcol.is-mvp {
     --pcol-top-color: #ffaa00;
-    border-color: #ffaa00;
-    box-shadow: 0 0 16px rgba(255, 170, 0, 0.28);
-    /* Same height as every other column; emphasis comes from color + glow. */
+    --pcol-ring: var(--pcol-top-color);
+    /* Same height as every other column; emphasis comes from color. */
 }
 
 .battelog-pcol.is-dead {
     --pcol-top-color: #c62828;
-    border-color: #c62828;
-    box-shadow: 0 0 14px rgba(198, 40, 40, 0.24);
+    --pcol-ring: var(--pcol-top-color);
 }
 
 .battelog-pcol-ribbon {
     padding: 5px 9px;
+    clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%);
     background: #111;
     color: #fff;
     font-size: 10px;
@@ -3061,13 +3291,6 @@
 .battelog-pcol.is-dead .battelog-pcol-ribbon {
     background: #c62828;
     color: #fff;
-}
-
-.battelog-pcol.is-mvp.is-dead {
-    border-color: #ffaa00;
-    box-shadow:
-        0 0 14px rgba(255, 170, 0, 0.28),
-        0 0 14px rgba(198, 40, 40, 0.24);
 }
 
 .battelog-pcol.is-mvp.is-dead .battelog-pcol-ribbon {
@@ -3161,6 +3384,33 @@
     transform: rotate(-18deg);
 }
 
+.battelog-hcard .battelog-pcol-portrait-tape .tape.a {
+    top: calc(50% - 4px);
+    height: 8px;
+    background: repeating-linear-gradient(-45deg,
+            color-mix(in srgb, #c62828 40%, transparent) 0 6px,
+            color-mix(in srgb, #7a1420 40%, transparent) 6px 12px);
+}
+
+.battelog-pcol-expand {
+    position: absolute;
+    right: 7px;
+    bottom: 5px;
+    z-index: 6;
+    font-size: 10px;
+    color: var(--bl-label);
+    pointer-events: none;
+}
+
+.battelog-pcol-expand>i:last-child,
+.battelog-pcol.is-focus-target .battelog-pcol-expand>i:first-child {
+    display: none;
+}
+
+.battelog-pcol.is-focus-target .battelog-pcol-expand>i:last-child {
+    display: inline-block;
+}
+
 /* Focused mech view: one card + its tooltips laid out flat beside it. */
 .battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-pcol {
     cursor: pointer;
@@ -3180,6 +3430,8 @@
 }
 
 .battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target {
+    position: sticky;
+    top: 0;
     width: 260px;
     flex: 0 0 260px;
 }
@@ -3198,18 +3450,25 @@
 }
 
 .battelog-focus-cols {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 230px);
     gap: 8px;
-    align-items: flex-start;
+    align-items: start;
 }
 
 /* Parked on the card; only the flattened copy is shown. */
-.battelog-awards-tip {
+.battelog-awards-tip,
+.battelog-gear-tip {
     display: none;
 }
 
-.battelog-focus-detail .battelog-awards-tip {
+.battelog-focus-detail .battelog-awards-tip,
+.battelog-focus-detail .battelog-gear-tip {
     display: block;
+}
+
+.battelog-tip-panel.battelog-gear-tip {
+    --tip-border: var(--bl-loss);
 }
 
 .battelog-focus-col {
@@ -3221,11 +3480,12 @@
 }
 
 .battelog-focus-colhead {
-    font-size: 9px;
-    letter-spacing: 2.5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--la-ink), transparent 45%);
-    border-bottom: 1px solid color-mix(in srgb, var(--la-ink), transparent 78%);
+    color: var(--bl-label);
+    border-bottom: 2px solid var(--la-primary);
     padding-bottom: 3px;
     margin-bottom: 2px;
 }
@@ -3260,11 +3520,49 @@
     width: max-content !important;
 }
 
+.battelog-focus-crumb {
+    display: none;
+    color: var(--la-ink);
+}
+
+.battelog-focus-back {
+    all: unset;
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid var(--bl-line-strong);
+    font-family: var(--bl-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--la-ink);
+    cursor: pointer;
+}
+
+.battelog-recap-tab-panel:has(.battelog-recap-squad-grid.is-focus) .battelog-recap-section-note {
+    display: none;
+}
+
+.battelog-recap-tab-panel:has(.battelog-recap-squad-grid.is-focus) .battelog-focus-crumb {
+    display: block;
+}
+
+.battelog-recap-tab-panel:has(.battelog-recap-squad-grid.is-focus) .battelog-focus-back {
+    display: inline-flex;
+}
+
+.battelog-recap-tab-panel:has(.battelog-recap-squad-grid.is-focus) :is(.battelog-recap-section-rule, .battelog-focus-back) {
+    order: 1;
+}
+
 /* hover-hold defers the lift for a card already sitting under the cursor. */
 .battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-recap-squad-grid:not(.is-focus) .battelog-pcol:hover:not(.hover-hold),
 .battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target:hover:not(.hover-hold) {
     transform: translateY(-3px);
-    box-shadow: 0 5px 16px color-mix(in srgb, var(--la-primary) 40%, transparent);
 }
 
 .battelog-pcol-portrait-frame {
@@ -3336,13 +3634,13 @@
     border-radius: 2px;
     background: var(--la-panel-ink);
     color: #fff;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     letter-spacing: 0.5px;
 }
 
 .battelog-pcol-ll-lbl {
-    font-size: 8px;
+    font-size: 9px;
     color: color-mix(in srgb, #fff 55%, transparent);
 }
 
@@ -3369,8 +3667,7 @@
     align-content: flex-start;
     align-items: flex-start;
     gap: 4px;
-    min-height: 22px;
-    max-height: 46px;
+    height: 40px;
     overflow: hidden;
 }
 
@@ -3401,6 +3698,7 @@
 
 .battelog-pcol-medal {
     position: relative;
+    height: 18px;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -3513,7 +3811,7 @@
     background-clip: border-box;
     color: #fff;
     border: 1px solid var(--tip-border);
-    border-radius: 3px;
+    border-radius: 0;
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
     padding: 9px 11px;
     pointer-events: none;
@@ -3560,12 +3858,12 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-    color: var(--la-accent);
+    color: color-mix(in srgb, var(--la-primary), #fff 40%);
     margin-bottom: 5px;
 }
 
@@ -3581,7 +3879,7 @@
 }
 
 .battelog-pcol-medal-tip-stat {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 10px;
     font-weight: 700;
     color: var(--la-amber);
@@ -3595,6 +3893,21 @@
     color: var(--la-amber);
     margin-left: 4px;
     vertical-align: middle;
+}
+
+.battelog-pcol-stat-cell > .battelog-pcol-crown {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    margin: 0;
+}
+
+.battelog-pcol-kills-block > .battelog-pcol-crown,
+.battelog-pcol-assists-block > .battelog-pcol-crown {
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    margin: 0;
 }
 
 .battelog-pcol-tipmark {
@@ -3698,6 +4011,14 @@
     display: none;
 }
 
+.battelog-tip-panel,
+.battelog-pcol-medal-tip,
+.battelog-pcol-gearlost-tip,
+.battelog-recap-head,
+.battelog-telemetry-panel-head {
+    --la-tech: color-mix(in srgb, #3b82f6, #fff 32%);
+}
+
 /* Shared TipPanel styling (StatBox + SkillCell). */
 .battelog-tip-panel {
     --tip-border: var(--la-primary);
@@ -3721,7 +4042,7 @@
     background-clip: border-box;
     color: #fff;
     border: 1px solid var(--tip-border);
-    border-radius: 3px;
+    border-radius: 0;
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
     padding: 9px 11px;
     text-transform: none;
@@ -3775,7 +4096,7 @@
 }
 
 .battelog-tip-title {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 1px;
@@ -3790,7 +4111,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
     font-size: 11px;
 }
 
@@ -3812,6 +4133,7 @@
     align-items: center;
     gap: 5px;
     color: color-mix(in srgb, #fff 78%, transparent);
+    font-weight: 500;
 }
 
 .battelog-tip-k i {
@@ -3820,7 +4142,9 @@
 
 .battelog-tip-v {
     color: #fff;
+    font-family: var(--bl-mono);
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
 
@@ -3849,7 +4173,7 @@
 }
 
 .battelog-tip-none {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 11px;
     color: color-mix(in srgb, #fff 45%, transparent);
 }
@@ -3857,18 +4181,8 @@
 .battelog-pcol-kills {
     display: flex;
     align-items: stretch;
-    /* Inverted banner: #111 on a light plate (original), flips to a light banner on dark. */
-    background: color-mix(in srgb, var(--la-ink), #fff 7%);
-    color: var(--la-plate);
-}
-
-:root.la-dark .battelog-pcol-kills {
-    background: color-mix(in srgb, var(--la-ink), var(--la-plate) 40%);
-}
-
-:root.la-dark .battelog-pcol-kills .confirmed,
-:root.la-dark .battelog-pcol-kills .battelog-pcol-crown {
-    color: var(--la-warning-deep);
+    background: #121212;
+    color: #e7e7e7;
 }
 
 .battelog-pcol-kills-block {
@@ -3892,7 +4206,8 @@
 }
 
 .battelog-pcol-kills-num {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 26px;
     line-height: 1;
@@ -3903,7 +4218,7 @@
     letter-spacing: 1px;
     font-weight: 700;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--la-plate), transparent 45%);
+    color: rgba(255, 255, 255, 0.55);
 }
 
 .battelog-pcol-kills-label .confirmed {
@@ -3915,15 +4230,16 @@
     align-items: center;
     gap: 6px;
     padding: 9px 11px;
-    border-left: 1px solid color-mix(in srgb, var(--la-plate), transparent 88%);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .battelog-pcol-assists-num {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 20px;
     line-height: 1;
-    color: color-mix(in srgb, var(--la-plate), transparent 12%);
+    color: rgba(255, 255, 255, 0.88);
 }
 
 .battelog-pcol-assists-label {
@@ -3931,7 +4247,7 @@
     letter-spacing: 1px;
     font-weight: 700;
     text-transform: uppercase;
-    color: color-mix(in srgb, var(--la-plate), transparent 45%);
+    color: rgba(255, 255, 255, 0.55);
 }
 
 .battelog-pcol-activity {
@@ -3942,7 +4258,7 @@
 }
 
 .battelog-pcol-activity-cell {
-    background: color-mix(in srgb, var(--la-plate), #000 10%);
+    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 11%);
     padding: 6px 6px 5px;
     display: flex;
     flex-direction: column;
@@ -3964,28 +4280,33 @@
 }
 
 .battelog-pcol-activity-value {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
-    font-size: 15px;
+    font-size: 13px;
     line-height: 1;
 }
 
 .battelog-pcol-activity-value.danger {
-    color: #c62828;
+    color: var(--bl-loss-ink);
 }
 
 .battelog-pcol-activity-value.success {
-    color: #2e7d32;
+    color: var(--bl-ok-ink);
 }
 
 .battelog-pcol-activity-value.used {
-    color: #ffaa00;
+    color: #111;
+    background: var(--la-amber);
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 12px;
 }
 
 .battelog-pcol-activity-label {
     font-size: 9px;
     letter-spacing: 0.4px;
-    opacity: 0.6;
+    color: var(--bl-label);
     text-transform: uppercase;
 }
 
@@ -3996,22 +4317,68 @@
     background: color-mix(in srgb, var(--la-ink), transparent 92%);
 }
 
+.battelog-pcol-stats > .battelog-pcol-stat-cell:nth-child(-n+2) .battelog-pcol-stat-value {
+    font-size: 18px;
+}
+
 .battelog-pcol-stat-cell {
     background: var(--la-plate);
     padding: 7px 9px;
 }
 
+.battelog-pcol-stat-cell.is-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+    column-gap: 5px;
+    align-items: start;
+}
+
+.battelog-pcol-stat-col {
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.battelog-pcol-stat-coldiv {
+    align-self: stretch;
+    background: currentColor;
+    opacity: 0.2;
+}
+
+.battelog-pcol-stat-cell.is-cols .battelog-pcol-stat-label {
+    letter-spacing: 0.5px;
+}
+
+.battelog-pcol-stat-cell.is-cols .battelog-pcol-stat-label :is(i, svg, .battelog-icon-mask) {
+    margin-right: 3px;
+}
+
 .battelog-pcol-stat-value {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-weight: 700;
     font-size: 15px;
     line-height: 1;
+}
+
+.battelog-pcol-stat-value .heat-sub {
+    font-size: 11px;
+    margin-left: 6px;
+    color: var(--la-heat);
+    font-weight: 700;
 }
 
 .battelog-pcol-stat-value .sep {
     color: var(--la-ink-dim);
     margin: 0 3px;
     font-weight: 400;
+}
+
+.battelog-pcol-stat-value .n {
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--la-ink-dim);
+    margin-left: 2px;
 }
 
 .battelog-pcol-stat-value .tech,
@@ -4022,6 +4389,11 @@
 .battelog-pcol-stat-value .heat,
 .battelog-hcard-dmg-val .heat {
     color: var(--la-heat);
+}
+
+.battelog-pcol-stat-value .null {
+    color: var(--la-ink-dim);
+    font-weight: 400;
 }
 
 .battelog-hcard-dmg-val .sep {
@@ -4044,7 +4416,7 @@
 .battelog-pcol-stat-label {
     font-size: 10px;
     letter-spacing: 1px;
-    opacity: 0.65;
+    color: var(--bl-label);
     text-transform: uppercase;
     margin-top: 3px;
 }
@@ -4176,18 +4548,18 @@
 
 .battelog-pcol-gearlost-label {
     flex: 1;
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.5px;
-    opacity: 0.55;
+    color: var(--bl-label);
     text-transform: uppercase;
 }
 
 .battelog-pcol-gearlost-count {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 14px;
     line-height: 1;
-    color: var(--la-success);
+    color: var(--bl-label);
 }
 
 .battelog-pcol-gearlost.has-lost .battelog-pcol-gearlost-count {
@@ -4205,7 +4577,7 @@
     background: var(--la-panel-ink);
     color: #fff;
     border: 1px solid var(--la-danger);
-    border-radius: 3px;
+    border-radius: 0;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
     padding: 8px 10px;
     pointer-events: none;
@@ -4241,7 +4613,7 @@
 .battelog-pcol-gearlost-group-title {
     display: flex;
     align-items: center;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 9px;
     letter-spacing: 1.5px;
@@ -4276,7 +4648,7 @@
 }
 
 .battelog-pcol-gearlost-tip-list li {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 10px;
     color: color-mix(in srgb, #fff 88%, transparent);
 }
@@ -4335,11 +4707,12 @@
 
 .battelog-pcol-meter-label {
     font-weight: 700;
-    opacity: 0.7;
+    color: var(--bl-label);
 }
 
 .battelog-pcol-meter-value {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     opacity: 0.85;
 }
 
@@ -4449,9 +4822,9 @@
 }
 
 .battelog-pcol-pips-label {
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.5px;
-    opacity: 0.55;
+    color: var(--bl-label);
     text-transform: uppercase;
 }
 
@@ -4461,7 +4834,7 @@
     display: flex;
     flex-direction: column;
     gap: 7px;
-    background: rgba(0, 0, 0, 0.03);
+    background: color-mix(in srgb, var(--la-plate), var(--la-ink) 11%);
 }
 
 .battelog-pcol-fav,
@@ -4488,13 +4861,13 @@
 .battelog-pcol-fs-label {
     font-size: 9px;
     letter-spacing: 1px;
-    opacity: 0.55;
+    color: var(--bl-label);
     text-transform: uppercase;
     flex: 0 0 auto;
 }
 
 .battelog-pcol-fs-value {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
@@ -4578,10 +4951,10 @@
 }
 
 .battelog-telemetry-metric-label {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
     font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--la-ink-dim);
     transition: color 0.18s ease;
@@ -4661,7 +5034,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
@@ -4670,13 +5043,14 @@
 }
 
 .battelog-telemetry-panel-title i {
-    color: var(--la-accent);
+    color: color-mix(in srgb, var(--la-primary), #fff 40%);
 }
 
 .battelog-telemetry-panel-note {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--font-primary);
+    font-weight: 600;
     font-size: 9px;
-    letter-spacing: 1.5px;
+    letter-spacing: 0.08em;
     color: rgba(255, 255, 255, 0.55);
     text-transform: uppercase;
 }
@@ -4705,14 +5079,15 @@
 }
 
 .battelog-telemetry-axis-text {
-    fill: var(--la-ink-dim);
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
-    font-size: 10px;
+    fill: var(--bl-label);
+    font-family: var(--bl-mono);
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .battelog-telemetry-tick-text {
-    fill: var(--la-ink-dim);
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    fill: var(--bl-label);
+    font-family: var(--bl-mono);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 1px;
@@ -4720,6 +5095,12 @@
 
 .battelog-telemetry-dot {
     fill: var(--la-plate);
+}
+
+.battelog-telemetry-endlabel {
+    font-family: var(--bl-mono);
+    font-size: 10px;
+    font-weight: 700;
 }
 
 /* Chart draw-in: polyline strokes left→right (pathLength=1 normalises the dash math
@@ -4873,7 +5254,7 @@
 }
 
 .battelog-telemetry-legend-label {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.3px;
@@ -4889,14 +5270,16 @@
 }
 
 .battelog-telemetry-legend-sub {
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 9px;
     margin-top: 2px;
     color: var(--la-ink-dim);
 }
 
 .battelog-telemetry-legend-item .battelog-telemetry-legend-sub {
-    color: color-mix(in srgb, var(--accent, var(--la-primary)) 85%, #000);
+    color: var(--la-ink);
+    font-size: 10px;
     font-weight: 700;
 }
 
@@ -4928,7 +5311,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
+    font-family: var(--bl-mono);
     font-size: 11px;
 }
 
