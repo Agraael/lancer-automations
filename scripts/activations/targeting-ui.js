@@ -100,6 +100,9 @@ async function resolveWeaponRange(state, useThreat = false)
     if (isTechAttack(state))
         return { val: sensorRange(state.actor), type: 'Sensors', canSwitch: false };
     const item = state.data?.lancerItem ?? state.item;
+    const targeting = state.la_extraData?.laTargeting;
+    if (!item && targeting?.rangeType)
+        return { val: Number(targeting.range) || 0, type: targeting.rangeType, canSwitch: false };
     const thrown = !!state.data?.acc_diff?.weapon?.thrown;
     const throwDist = throwDistance(item);
     if (thrown && throwDist > 0)

@@ -2365,9 +2365,6 @@ export async function executeImprovisedAttack(actorOrToken)
         ui.notifications.error("lancer-automations | improvised attack requires a token.");
         return;
     }
-    const chosen = await chooseToken(sourceToken, { count: 1, range: 1 });
-    if (!chosen?.length)
-        return;
     Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'IMPROVISED ATTACK', actionType: 'Full' });
     await consumeAction(actor, 'full');
     await recordAction(sourceToken, { name: 'Improvised Attack', activation: 'Full', icon: 'mdi mdi-hexagon-slice-6' });
@@ -2375,9 +2372,8 @@ export async function executeImprovisedAttack(actorOrToken)
         title: 'Improvised Attack',
         attack_type: 'Melee',
         action: { name: 'Improvised Attack', activation: 'Full' },
-        damage: [{ val: '1d6', type: 'Kinetic' }],
-        targets: chosen,
-    }, { tapeRecorded: true });
+        damage: [{ val: actor.type === 'npc' ? String(tierValue(actor, [3, 4, 6])) : '1d6', type: 'Kinetic' }],
+    }, { tapeRecorded: true, laTargeting: { pattern: 'target', size: 1, range: 1, rangeType: 'Threat' } });
 }
 
 /**
