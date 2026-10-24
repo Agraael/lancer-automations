@@ -6,6 +6,15 @@ const WHEEL_FLAGS = ['tahFavorites', 'tahFavorites2', 'tahFavorites3'];
 
 export const WHEEL_COUNT = WHEEL_FLAGS.length;
 
+let _pendingWrites = Promise.resolve();
+
+function queueWrite(task)
+{
+    const run = _pendingWrites.then(task);
+    _pendingWrites = run.catch(() => null);
+    return run;
+}
+
 export function favoriteKeys(wheel)
 {
     return getLAFlag(game.user,WHEEL_FLAGS[wheel - 1]) || [];
@@ -47,16 +56,35 @@ export async function setFavoriteWheel(key, wheel)
 {
     if (!key)
         return 0;
-    for (let target = 1; target <= WHEEL_COUNT; target++)
+    return queueWrite(async () =>
     {
-        const keys = favoriteKeys(target);
-        const wanted = target === wheel;
-        if (wanted === keys.includes(key))
-            continue;
-        const next = wanted ? [...keys, key] : keys.filter(entry => entry !== key);
-        await setLAFlag(game.user,WHEEL_FLAGS[target - 1], next);
-    }
-    return wheel;
+        for (let target = 1; target <= WHEEL_COUNT; target++)
+        {
+            const keys = favoriteKeys(target);
+            const wanted = target === wheel;
+            if (wanted === keys.includes(key))
+                continue;
+            const next = wanted ? [...keys, key] : keys.filter(entry => entry !== key);
+            await setLAFlag(game.user,WHEEL_FLAGS[target - 1], next);
+        }
+        return wheel;
+    });
+}
+
+export function migrateFavoriteKeys(pairs)
+{
+    if (!pairs?.size)
+        return Promise.resolve();
+    return queueWrite(async () =>
+    {
+        for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
+        {
+            const keys = favoriteKeys(wheel);
+            if (!keys.some(key => pairs.has(key)))
+                continue;
+            await setLAFlag(game.user, WHEEL_FLAGS[wheel - 1], [...new Set(keys.map(key => pairs.get(key) ?? key))]);
+        }
+    }).catch(err => console.warn('lancer-automations | favorite key migration failed', err));
 }
 
 // The digit only shows once a wheel past the first is in use: with one wheel it says nothing.

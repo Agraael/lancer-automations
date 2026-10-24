@@ -1663,6 +1663,45 @@ class ShadowVisionFilter extends PIXI.Filter
 {
 }
 
+class PrimaryCopyFilter extends foundry.canvas.rendering.filters.AbstractBaseMaskFilter
+{
+    static fragmentShader = `
+    precision highp float;
+    varying vec2 vTextureCoord;
+    varying vec2 vMaskTextureCoord;
+    uniform sampler2D uSampler;
+    uniform sampler2D primaryTexture;
+    uniform sampler2D visionTexture;
+
+    void main(void) {
+        float revealed = texture2D(uSampler, vTextureCoord).a * (1.0 - texture2D(visionTexture, vMaskTextureCoord).r);
+        gl_FragColor = vec4(texture2D(primaryTexture, vMaskTextureCoord).rgb * revealed, revealed);
+    }
+    `;
+
+    static defaultUniforms = {
+        primaryTexture: PIXI.Texture.EMPTY,
+        visionTexture: PIXI.Texture.EMPTY,
+        screenDimensions: [1, 1]
+    };
+
+    apply(filterManager, input, output, clear, currentState)
+    {
+        this.uniforms.primaryTexture = canvas.primary.renderTexture;
+        this.uniforms.visionTexture = /** @type {any} */ (canvas.masks).vision.renderTexture;
+        super.apply(filterManager, input, output, clear, currentState);
+    }
+}
+
+let _primaryCopyFilter = null;
+function _getPrimaryCopyFilter()
+{
+    if (_primaryCopyFilter)
+        return _primaryCopyFilter;
+    _primaryCopyFilter = PrimaryCopyFilter.create();
+    return _primaryCopyFilter;
+}
+
 // 2D-visible but 3D-occluded: renders a gray fill instead of hiding or fully showing.
 class DetectionModeLancerLosShadow extends foundry.canvas.perception.DetectionMode
 {
@@ -2253,7 +2292,8 @@ function _wrapPlainSightVeto(mode)
 
 const _MESH_FILTER_NAMES = new Set(['SilhouetteOutlineFilter', 'ScanlineOutlineFilter']);
 const _REVEAL_FILTER_NAMES = new Set(['PlainVisionFilter', 'ShadowVisionFilter']);
-const _LOS_REVEAL_VIA_MASK = true;
+const _LOS_REVEAL_VIA_COPY = true;
+const _LOS_REVEAL_VIA_MASK = false;
 
 // Stock SilhouetteOutlineFilter breaks at scale<=1 and conflicts with our overlay; skip it.
 function _patchRenderDetectionFilter()
@@ -2322,7 +2362,9 @@ function _patchRenderDetectionFilter()
         }
         if (_REVEAL_FILTER_NAMES.has(filterName))
         {
-            if (!_LOS_REVEAL_VIA_MASK)
+            if (_LOS_REVEAL_VIA_COPY)
+                renderWithMeshFilters(this, renderer, _getPrimaryCopyFilter());
+            else if (!_LOS_REVEAL_VIA_MASK)
                 this.mesh?.render(renderer);
             return;
         }

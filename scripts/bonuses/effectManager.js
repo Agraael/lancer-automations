@@ -90,13 +90,18 @@ import {
     supportsConsumeOnUsage,
     getBonusDetailString,
     getBonusUsesInfo,
+    STAT_BONUS_GROUPS,
+    getV3DefenseRows,
+    setV3DefenseOff,
 } from "./genericBonuses.js";
 import { getBonusConditionHint } from "./bonus-condition.js";
 import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
 import { TG } from "../interactive/canvas-helpers.js";
-import { localize, localizeFormat } from "../tools/string-utils.js";
+import { localize, localizeFormat, escapeHtml } from "../tools/string-utils.js";
+import { durationText, sourceName } from "./status-tooltip.js";
+import { v3ConditionLabel } from "../tools/v3-condition.js";
 
 // Bonus composition modes. First entry is the default for backward compatibility.
 const RANGE_BONUS_MODES = [
@@ -129,7 +134,6 @@ const DAMAGE_CHANGE_TYPE_ALL = 'all';
 // rollTypes names which roll-type panel applies.
 const IMMUNITY_FILTER_FIELDS = {
     damage:     { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
-    resistance: { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
     effect:     { condition: true, applyToCondition: true },
     provoke:    { condition: true, applyToCondition: true },
     crit:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
@@ -138,6 +142,8 @@ const IMMUNITY_FILTER_FIELDS = {
 };
 const BONUS_FILTER_FIELDS = {
     reroll: { itemLids: true, itemId: true, condition: true },
+    resistance:    { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
+    vulnerability: { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
 };
 
 /** Renders a code field row: preview badge + Edit/Clear buttons; code stored in a hidden input. */
@@ -264,6 +270,8 @@ function gatherPresetData(html, prefix)
 
 function applyPresetData(html, prefix, data)
 {
+    if (prefix === 'bonus' && data['bonus-type'] === 'immunity' && ['resistance', 'vulnerability'].includes(data['bonus-immunity-subtype']))
+        data = { ...data, 'bonus-type': data['bonus-immunity-subtype'], 'bonus-immunity-subtype': 'effect' };
     const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
     const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
     for (const [id, value] of Object.entries(data))
@@ -280,6 +288,8 @@ function applyPresetData(html, prefix, data)
             $el.prop('checked', !!value);
         else
             $el.val(value);
+        if (id.endsWith('-duration'))
+            $el.trigger('change');
     }
     // Restore multi-select panel checkboxes (find by panel id, even if moved to body).
     for (const [key, val] of Object.entries(data))
@@ -559,6 +569,7 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onTurnStart', label: 'LA.effectManager.trigger.onTurnStart' },
     { value: 'onTurnEnd', label: 'LA.effectManager.trigger.onTurnEnd' },
     { value: 'onRoundStart', label: 'LA.effectManager.trigger.onRoundStart' },
+    { value: 'onRoundEnd', label: 'LA.effectManager.trigger.onRoundEnd' },
     { value: 'onEnterCombat', label: 'LA.effectManager.trigger.onEnterCombat' },
     { value: 'onExitCombat', label: 'LA.effectManager.trigger.onExitCombat' },
     { value: 'onFullRepair', label: 'LA.effectManager.trigger.onFullRepair' },
@@ -1071,9 +1082,13 @@ export async function executeEffectManager(options = {})
     ];
     // Permanent: same as indefinite at apply time, but survives Full Repair (snapshot/restore in lancer-modif.js).
     durations.push(
+        { label: 'roundEnd', turns: null, rounded: 1, name: "End of Round" },
+        { label: 'roundStart', turns: null, rounded: 1, name: "Start of Round" },
+        { label: 'encounter', turns: null, rounded: null, name: "End of Encounter" },
         { label: 'indefinite', turns: null, rounded: null, name: "Indefinite" },
         { label: 'permanent',  turns: null, rounded: null, name: "Permanent" }
     );
+    const allDurations = [...durations];
 
     if (!game.combat)
         durations = durations.filter(duration => duration.label === 'indefinite' || duration.label === 'permanent');
@@ -1083,7 +1098,7 @@ export async function executeEffectManager(options = {})
     const savedStatuses = hasCustomStatus ? (game.settings.get("temporary-custom-statuses", "savedStatuses") || []) : [];
     const allPresets = getStoredPresets();
 
-    const defaultDuration = 'end';
+    const defaultDuration = 'indefinite';
     const durationOptionsHtml = durations.map(duration => `<option value="${duration.label}" ${duration.label === defaultDuration ? 'selected' : ''}>${duration.name}</option>`).join('');
 
     // Bonus tab: same options as std/cust, plus "Constant" (no icon, always active, invisible; routes to addConstantBonus).
@@ -1115,6 +1130,7 @@ export async function executeEffectManager(options = {})
     ];
     if (getModuleSetting('enableInfectionDamageIntegration'))
         damageTypes.push({ name: 'Infection', icon: 'modules/lancer-automations/icons/infection.svg' });
+    damageTypes.push({ name: 'AoE', icon: 'systems/lancer/assets/icons/white/aoe_blast.svg' });
     const damageTypeIconsHtml = damageTypes.map(dmgType => `
         <div class="bonus-immunity-damage-option te-icon-option" data-type="${dmgType.name}" title="${dmgType.name}">
             <img src="${dmgType.icon}" width="24" height="24">
@@ -1250,12 +1266,12 @@ export async function executeEffectManager(options = {})
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="std-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
-                    <span class="dur-opts" style="flex-shrink:0;"> of </span>
-                    <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                    <span class="dur-opts dur-origin" style="flex-shrink:0;"> of </span>
+                    <div class="dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
                         <select id="std-origin" style="flex:1; min-width:0;">${originsHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="std-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <span class="dur-opts dur-count" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
                     <input type="number" id="std-turns" value="1" min="0" class="dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
@@ -1319,12 +1335,12 @@ export async function executeEffectManager(options = {})
                 <label>Until:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="cust-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
-                    <span class="dur-opts" style="flex-shrink:0;"> of </span>
-                    <div class="dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                    <span class="dur-opts dur-origin" style="flex-shrink:0;"> of </span>
+                    <div class="dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
                         <select id="cust-origin" style="flex:1; min-width:0;">${originsHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="cust-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="dur-opts" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <span class="dur-opts dur-count" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
                     <input type="number" id="cust-turns" value="1" min="0" class="dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
@@ -1398,12 +1414,12 @@ export async function executeEffectManager(options = {})
                 <label>Duration:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
                     <select id="bonus-duration" style="flex:0 0 120px !important; width:120px !important; max-width:120px !important;">${bonusDurationOptionsHtml}</select>
-                    <span class="bonus-dur-opts" style="flex-shrink:0;"> of </span>
-                    <div class="bonus-dur-opts" style="flex:0 0 130px; display:flex; gap:3px;">
+                    <span class="bonus-dur-opts dur-origin" style="flex-shrink:0;"> of </span>
+                    <div class="bonus-dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
                         <select id="bonus-durOrigin" style="flex:1; min-width:0;">${originsHtml}</select>
                         <button type="button" class="token-picker-btn" data-target="bonus-durOrigin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
                     </div>
-                    <span class="bonus-dur-opts" style="margin-left:3px; flex-shrink:0; white-space:nowrap;">Turns:</span>
+                    <span class="bonus-dur-opts dur-count" style="margin-left:3px; flex-shrink:0; white-space:nowrap;">Turns:</span>
                     <input type="number" id="bonus-durTurns" value="1" min="0" class="bonus-dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
                 </div>
             </div>
@@ -1416,13 +1432,15 @@ export async function executeEffectManager(options = {})
                     <label id="bonus-consume-usage-row" style="display:none; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;" data-tooltip="${localize('LA.effectManager.tip.consumeOnUsage')}">
                         <input type="checkbox" id="bonus-consumeOnUsage" checked> Consume on usage
                     </label>
-                    <label style="display:flex; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;">
+                    <label id="bonus-frequency-row" style="display:flex; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;">
                         Limit:
+                        <input type="number" id="bonus-frequency-count" value="1" min="1" style="display:none; flex:0 0 46px; min-width:46px; max-width:46px; text-align:center;">
                         <select id="bonus-frequency" style="flex:0 0 auto; width:auto; min-width:90px;">
                             <option value="">None</option>
-                            <option value="round">1/round</option>
-                            <option value="turn">1/turn</option>
-                            <option value="combat">1/combat</option>
+                            <option value="round">/round</option>
+                            <option value="turn">/turn</option>
+                            <option value="combat">/combat</option>
+                            <option value="mission">/mission</option>
                         </select>
                     </label>
                 </div>
@@ -1438,6 +1456,8 @@ export async function executeEffectManager(options = {})
                         <option value="tag">Tag</option>
                         <option value="range">Range</option>
                         <option value="immunity">Immunity</option>
+                        <option value="resistance">Resistance</option>
+                        <option value="vulnerability">Vulnerability</option>
                         <option value="target_modifier">Target Modifier</option>
                         <option value="reroll">Reroll</option>
                         <option value="movement_extra">Movement Extra</option>
@@ -1525,30 +1545,7 @@ export async function executeEffectManager(options = {})
                     <div class="form-group" style="flex:1; min-width:0; margin:0; display:flex; gap:6px; align-items:center;">
                         <label style="flex:0 0 auto;">Stat:</label>
                         <select id="bonus-stat" style="flex:1; min-width:0;">
-                            <optgroup label="Resources (Max)">
-                                <option value="system.hp.max">HP (Max)</option>
-                                <option value="system.heat.max">Heat Cap (Max)</option>
-                                <option value="system.repairs.max">Repair Cap (Max)</option>
-                                <option value="system.structure.max">Structure (Max)</option>
-                                <option value="system.stress.max">Stress (Max)</option>
-                            </optgroup>
-                            <optgroup label="Resources (Current)">
-                                <option value="system.hp.value">HP (Current)</option>
-                                <option value="system.heat.value">Heat (Current)</option>
-                                <option value="system.overshield.value">Overshield</option>
-                                <option value="system.burn">Burn</option>
-                                <option value="system.repairs.value">Repairs (Current)</option>
-                            </optgroup>
-                            <optgroup label="Stats">
-                                <option value="system.speed">Speed</option>
-                                <option value="system.evasion">Evasion</option>
-                                <option value="system.edef">E-Defense</option>
-                                <option value="system.save">Save Target</option>
-                                <option value="system.sensor_range">Sensor Range</option>
-                                <option value="system.tech_attack">Tech Attack</option>
-                                <option value="system.armor">Armor</option>
-                                <option value="system.size">Size</option>
-                            </optgroup>
+                            ${STAT_BONUS_GROUPS.map(group => `<optgroup label="${group.label}">${Object.entries(group.stats).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</optgroup>`).join('')}
                         </select>
                     </div>
                     <div class="form-group" style="flex:1; margin:0; display:flex; gap:6px; align-items:center; justify-content:flex-start;">
@@ -1662,7 +1659,6 @@ export async function executeEffectManager(options = {})
                     <select id="bonus-immunity-subtype">
                         <option value="effect">Effect</option>
                         <option value="damage">Damage</option>
-                        <option value="resistance">Resistance</option>
                         <option value="crit">Critical Hit</option>
                         <option value="hit">Hit</option>
                         <option value="miss">Miss</option>
@@ -1679,11 +1675,11 @@ export async function executeEffectManager(options = {})
                         ${statusEffectIconsHtml}
                     </div>
                 </div>
-                <div id="bonus-immunity-damage-row" style="display:none;">
-                    <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Damage Types:</label>
-                    <div class="te-icon-grid" id="bonus-immunity-damageTypes">
-                        ${damageTypeIconsHtml}
-                    </div>
+            </div>
+            <div id="bonus-immunity-damage-row" style="display:none;">
+                <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Damage Types:</label>
+                <div class="te-icon-grid" id="bonus-immunity-damageTypes">
+                    ${damageTypeIconsHtml}
                 </div>
             </div>
             <div id="bonus-type-target_modifier" style="display:none;">
@@ -1859,12 +1855,11 @@ export async function executeEffectManager(options = {})
             const _rebuildDurationSelects = () =>
             {
                 const inCombat = !!game.combat;
-                const def = inCombat ? 'end' : 'indefinite';
-                const opts = '<option value="end">End of Turn</option><option value="start">Start of Turn</option><option value="indefinite">Indefinite</option><option value="permanent">Permanent</option>';
-                const bonusOpts = '<option value="end">End of Turn</option><option value="start">Start of Turn</option><option value="indefinite">Indefinite</option>';
-                const noteHtml = inCombat
-                    ? ''
-                    : '<span class="la-em-oocombat-note" style="font-size:0.78em; font-style:italic; color:#a05; margin-left:6px;">⚠ no combat: turn-based won\'t tick</span>';
+                const def = 'indefinite';
+                const opts = allDurations
+                    .filter(duration => inCombat || duration.label === 'indefinite' || duration.label === 'permanent')
+                    .map(duration => `<option value="${duration.label}">${duration.name}</option>`).join('');
+                const bonusOpts = opts + '<option value="constant">Constant (no icon, always active)</option>';
                 for (const id of ['#std-duration', '#cust-duration'])
                 {
                     const $sel = html.find(id);
@@ -1873,22 +1868,19 @@ export async function executeEffectManager(options = {})
                     const cur = String($sel.val() ?? '');
                     $sel.html(opts);
                     $sel.val($sel.find(`option[value="${cur}"]`).length ? cur : def);
-                    $sel.siblings('.la-em-oocombat-note').remove();
-                    if (noteHtml)
-                        $sel.after(noteHtml);
                     $sel.trigger('change');
                 }
                 const $bonusSel = html.find('#bonus-duration');
                 if ($bonusSel.length)
                 {
                     const bonusCur = String($bonusSel.val() ?? '');
-                    $bonusSel.html('<option value="">None (Permanent, no Icon)</option>' + bonusOpts);
+                    $bonusSel.html(bonusOpts);
                     $bonusSel.val(($bonusSel.find(`option[value="${bonusCur}"]`).length ? bonusCur : def));
-                    $bonusSel.siblings('.la-em-oocombat-note').remove();
-                    if (noteHtml)
-                        $bonusSel.after(noteHtml);
                     $bonusSel.trigger('change');
                 }
+                constrainStdDuration();
+                constrainCustDuration();
+                constrainDurationForTarget();
             };
             const _onCombatChange = () => _rebuildDurationSelects();
             Hooks.on('createCombat', _onCombatChange);
@@ -2022,10 +2014,16 @@ export async function executeEffectManager(options = {})
             const toggleDurOpts = (prefix) =>
             {
                 const val = html.find(`#${prefix}-duration`).val();
-                if (val === 'indefinite' || val === 'permanent')
-                    html.find(`#${prefix}-duration`).siblings('.dur-opts').hide();
+                const $opts = html.find(`#${prefix}-duration`).siblings('.dur-opts');
+                const isRound = val === 'roundEnd' || val === 'roundStart';
+                if (val === 'indefinite' || val === 'permanent' || val === 'encounter')
+                    $opts.hide();
                 else
-                    html.find(`#${prefix}-duration`).siblings('.dur-opts').show();
+                    $opts.show();
+                if (isRound)
+                    $opts.filter('.dur-origin').hide();
+                $opts.filter('.dur-count').text(isRound ? 'Rounds:' : 'Turns:');
+                $opts.filter('input').attr('title', isRound ? 'Rounds, counting the current one' : '0 = next matching trigger (end/start of the current or next turn)');
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
@@ -2125,6 +2123,11 @@ export async function executeEffectManager(options = {})
             };
             _attachEffectHoverTooltip('.std-effect-option', 'data-id');
             _attachEffectHoverTooltip('.bonus-immunity-effect-option', 'data-effect');
+
+            html.find('#bonus-frequency').on('change', function ()
+            {
+                html.find('#bonus-frequency-count').css('display', $(this).val() ? '' : 'none');
+            });
 
             html.find('.bonus-uses-step').on('click', function ()
             {
@@ -2466,7 +2469,7 @@ export async function executeEffectManager(options = {})
                 const note = String(html.find(`#${prefix}-note`).val());
                 const duration = buildDuration(durationLabel, '', turns);
                 delete duration._preAdjusted;
-                if (['end', 'start', 'round'].includes(durationLabel))
+                if (['end', 'start'].includes(durationLabel))
                     duration.overrideTurnOriginId = '__REACTOR_ID__';
                 const extraOptions = {};
                 if (stack > 1)
@@ -2590,8 +2593,8 @@ export async function executeEffectManager(options = {})
             {
                 const id = $(this).data('target');
                 const meta = _codeFieldMeta[id] ?? { title: localize('LA.effectManager.codeField.code'), def: '' };
-                const isImmunity = String(html.find('#bonus-type').val() ?? '') === 'immunity';
-                const def = (isImmunity && _immunityCodeDefs[id]) ? _immunityCodeDefs[id] : meta.def;
+                const isDefense = ['immunity', 'resistance', 'vulnerability'].includes(String(html.find('#bonus-type').val() ?? ''));
+                const def = (isDefense && _immunityCodeDefs[id]) ? _immunityCodeDefs[id] : meta.def;
                 openCodeFieldDialog(html, id, meta.title, def);
             });
             html.find('.code-clear-btn').click(function ()
@@ -2801,7 +2804,8 @@ export async function executeEffectManager(options = {})
                 ).length;
                 const bonusCount = (getLAFlag(actor,"global_bonuses") || []).length
                     + (getLAFlag(actor,"constant_bonuses") || []).length
-                    + (getLAFlag(actor,"bonusTemplates") || []).length;
+                    + (getLAFlag(actor,"bonusTemplates") || []).length
+                    + getV3DefenseRows(actor).length;
                 const total = effectCount + bonusCount;
                 html.find('#manage-tab-count').text(total > 0 ? `(${total})` : '');
             };
@@ -2833,7 +2837,9 @@ export async function executeEffectManager(options = {})
                         effect.flags?.['temporary-custom-statuses']?.stack || 0;
 
                     let durText = "Indefinite";
-                    if (dur)
+                    if (getLAFlags(effect))
+                        durText = durationText(effect) || "Indefinite";
+                    else if (dur)
                         durText = `${dur.label}, ${dur.turns}t`;
 
                     let consumptionText = '';
@@ -2854,7 +2860,7 @@ export async function executeEffectManager(options = {})
                             <div class="te-effect-info">
                                 <img src="${effect.img}" width="24" height="24" style="border:none; background:#1a1a1a; border-radius:3px; padding:1px; object-fit:contain;">
                                 <span>${effect.name}</span>
-                                <span style="font-size:0.8em; opacity:0.7">(${durText})</span>
+                                <span style="font-size:0.8em; opacity:0.7; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom;">(${escapeHtml(durText)})</span>
                                 ${consumptionText}
                                 ${stack > 0 ? `<span style="font-weight:bold; margin-left:4px;">x${stack}</span>` : ''}
                             </div>
@@ -2903,7 +2909,8 @@ export async function executeEffectManager(options = {})
                 const allBonuses = [
                     ...globalBonuses.map(bonus => ({ ...bonus, _kind: 'global' })),
                     ...constantBonuses.map(bonus => ({ ...bonus, _kind: 'constant' })),
-                    ...bonusTemplates.map(template => ({ ...(template.bonusData || {}), _kind: 'template', _templateId: template.id, _addOptions: template.addOptions, uses: template.lastRuntimeUses ?? template.bonusData?.uses }))
+                    ...bonusTemplates.map(template => ({ ...(template.bonusData || {}), _kind: 'template', _templateId: template.id, _addOptions: template.addOptions, uses: template.lastRuntimeUses ?? template.bonusData?.uses })),
+                    ...getV3DefenseRows(actor).map(({ bonus, off, inactive }) => ({ ...bonus, _kind: 'data', _off: off, _inactive: inactive }))
                 ];
 
                 updateManageTabCount();
@@ -2917,11 +2924,23 @@ export async function executeEffectManager(options = {})
                         const lids = (bonus.itemLids && bonus.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${bonus.itemLids.join(', ')}]</span>` : '';
                         const types = (bonus.rollTypes && bonus.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${bonus.rollTypes.join(', ')}]</span>` : '';
                         const itemIdInfo = bonus.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${bonus.itemId}]</span>` : '';
-                        const kindLabel = bonus._kind === 'constant'
-                            ? ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(constant)</span>'
-                            : bonus._kind === 'template'
-                                ? ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(template)</span>'
-                                : '';
+                        let kindLabel = '';
+                        if (bonus._kind === 'constant')
+                            kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(constant)</span>';
+                        else if (bonus._kind === 'template')
+                            kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(template)</span>';
+                        else if (bonus._kind === 'data')
+                            kindLabel = ' <span style="font-size:0.75em; color:#2a9d8f;">(data)</span>';
+                        const source = sourceName(bonus);
+                        const sourceLine = source
+                            ? `<span style="display:block; font-size:0.8em; color:var(--la-ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fas fa-link"></i> ${escapeHtml(source)}</span>`
+                            : '';
+                        const dataConditionLine = bonus.dataCondition
+                            ? `<span style="display:block; font-size:0.8em; color:${bonus._inactive ? 'var(--la-ink-dim)' : '#2a9d8f'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fas fa-code-branch"></i> ${escapeHtml(`while ${v3ConditionLabel(bonus.dataCondition)}`)}</span>`
+                            : '';
+                        const actionBtn = bonus._kind === 'data'
+                            ? `<div class="te-delete-btn manage-bonus-toggle-btn" title="${bonus._off ? 'Switch on' : 'Switch off'}" style="color:#2a9d8f;"><i class="fas ${bonus._off ? 'fa-eye-slash' : 'fa-eye'}"></i></div>`
+                            : `<div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>`;
                         const condHint = getBonusConditionHint(bonus);
                         const condLabel = condHint
                             ? ' <span class="te-bonus-cond" style="font-size:0.75em; color:var(--la-accent); cursor:help;"><i class="fas fa-code-branch"></i> conditional</span>'
@@ -2937,12 +2956,17 @@ export async function executeEffectManager(options = {})
                         }
 
                         const bonusRow = $(`
-                            <div class="te-bonus-item">
-                                <span><strong>${bonus.name}</strong>${kindLabel}${condLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}</span>
-                                ${tierGateApplies(actor) ? tierGateControl(bonus.tier, `data-bonus-id="${bonus.id}"`) : ''}
-                                <div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>
+                            <div class="te-bonus-item"${bonus._off || bonus._inactive ? ' style="opacity:0.5;"' : ''}>
+                                <span style="min-width:0;"><strong>${bonus.name}</strong>${kindLabel}${condLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}${sourceLine}${dataConditionLine}</span>
+                                ${tierGateApplies(actor) && bonus._kind !== 'data' ? tierGateControl(bonus.tier, `data-bonus-id="${bonus.id}"`) : ''}
+                                ${actionBtn}
                             </div>
                         `);
+                        bonusRow.find('.manage-bonus-toggle-btn').click(async () =>
+                        {
+                            await setV3DefenseOff(actor, bonus.id, !bonus._off);
+                            setTimeout(updateManageList, 200);
+                        });
                         if (condHint)
                             bonusRow.find('.te-bonus-cond').attr('title', condHint);
 
@@ -3036,8 +3060,8 @@ export async function executeEffectManager(options = {})
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
 
-            // Durations valid for item / prototype-actor targets (no per-token-turn tracking = no `1 Round` etc).
-            const _durationsAllowedForDoc = new Set(['indefinite', 'permanent', 'constant', 'end', 'start', 'round']);
+            // Durations valid for item / prototype-actor targets (no round or encounter anchor on a template).
+            const _durationsAllowedForDoc = new Set(['indefinite', 'permanent', 'constant', 'end', 'start']);
             const _constrainDurationDropdown = (targetSelector, durationSelector) =>
             {
                 const tid = String(html.find(targetSelector).val());
@@ -3068,10 +3092,16 @@ export async function executeEffectManager(options = {})
             const toggleBonusDurOpts = () =>
             {
                 const val = html.find('#bonus-duration').val();
-                if (!val || val === 'indefinite' || val === 'permanent' || val === 'constant')
-                    html.find('.bonus-dur-opts').hide();
+                const $opts = html.find('.bonus-dur-opts');
+                const isRound = val === 'roundEnd' || val === 'roundStart';
+                if (!val || val === 'indefinite' || val === 'permanent' || val === 'constant' || val === 'encounter')
+                    $opts.hide();
                 else
-                    html.find('.bonus-dur-opts').show();
+                    $opts.show();
+                if (isRound)
+                    $opts.filter('.dur-origin').hide();
+                $opts.filter('.dur-count').text(isRound ? 'Rounds:' : 'Turns:');
+                $opts.filter('input').attr('title', isRound ? 'Rounds, counting the current one' : '0 = next matching trigger (end/start of the current or next turn)');
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
@@ -3276,6 +3306,8 @@ export async function executeEffectManager(options = {})
                     rollPanel = 'damage';
                 else if (type === 'immunity')
                     rollPanel = IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')]?.rollTypes ?? null;
+                else if (type === 'resistance' || type === 'vulnerability')
+                    rollPanel = 'damage';
                 const rollTypes = rollPanel
                     ? html.find(`#bonus-rollTypes-${rollPanel} input:checked`).map((_, el) => /** @type {HTMLInputElement} */ (el).value).get()
                     : [];
@@ -3380,7 +3412,7 @@ export async function executeEffectManager(options = {})
                             bonusData.effects.push($(this).data('effect'));
                         });
                     }
-                    else if (bonusData.subtype === 'damage' || bonusData.subtype === 'resistance')
+                    else if (bonusData.subtype === 'damage')
                     {
                         bonusData.damageTypes = [];
                         html.find('.bonus-immunity-damage-option.selected').each(function()
@@ -3388,6 +3420,19 @@ export async function executeEffectManager(options = {})
                             bonusData.damageTypes.push($(this).data('type'));
                         });
                     }
+                }
+                else if (type === 'resistance' || type === 'vulnerability')
+                {
+                    for (const field of ['rollTypes', 'itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
+                    {
+                        if (!BONUS_FILTER_FIELDS[type][field])
+                            delete bonusData[field];
+                    }
+                    bonusData.damageTypes = [];
+                    html.find('.bonus-immunity-damage-option.selected').each(function()
+                    {
+                        bonusData.damageTypes.push($(this).data('type'));
+                    });
                 }
                 else if (type === 'target_modifier')
                     bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
@@ -3418,6 +3463,8 @@ export async function executeEffectManager(options = {})
                     origin: durOrigin,
                     forcePrototype: typeof targetID === 'string' && targetID.includes('.'),
                 };
+                if (duration === 'roundEnd' || duration === 'roundStart')
+                    addOptions.durationRounds = durTurns;
                 const customIcon = String(html.find('#bonus-icon').val() || '').trim();
                 if (customIcon)
                     addOptions.icon = customIcon;
@@ -3464,7 +3511,12 @@ export async function executeEffectManager(options = {})
                     bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
                 const frequency = String(html.find('#bonus-frequency').val() || '');
                 if (frequency)
+                {
                     bonusData.frequency = frequency;
+                    const frequencyCount = Number.parseInt(String(html.find('#bonus-frequency-count').val() ?? '')) || 1;
+                    if (frequencyCount > 1)
+                        bonusData.frequencyCount = frequencyCount;
+                }
                 return { bonusData, addOptions, duration };
             };
 
@@ -3514,17 +3566,24 @@ export async function executeEffectManager(options = {})
             {
                 const uiType = String(html.find('#bonus-type').val() ?? '');
                 const subtype = String(html.find('#bonus-immunity-subtype').val() ?? '');
-                const show = ['roll', 'damage', 'target_modifier', 'reroll'].includes(uiType)
+                const show = ['roll', 'damage', 'target_modifier', 'reroll', 'resistance', 'vulnerability'].includes(uiType)
                     || (uiType === 'immunity' && supportsConsumeOnUsage('immunity', subtype));
                 const $row = html.find('#bonus-consume-usage-row');
                 if (uiType !== lastUsageUiType)
                 {
                     lastUsageUiType = uiType;
-                    html.find('#bonus-consumeOnUsage').prop('checked', uiType !== 'immunity');
+                    html.find('#bonus-consumeOnUsage').prop('checked', !['immunity', 'resistance', 'vulnerability'].includes(uiType));
                     html.find('#bonus-uses').val('');
                     html.find('#bonus-frequency').val('');
+                    html.find('#bonus-frequency-count').val(1).css('display', 'none');
                 }
                 $row.css('display', show ? 'inline-flex' : 'none');
+                html.find('#bonus-frequency-row').css('display', show ? 'flex' : 'none');
+                if (!show)
+                {
+                    html.find('#bonus-frequency').val('');
+                    html.find('#bonus-frequency-count').val(1).css('display', 'none');
+                }
                 ensureUsesForConsumption();
             };
 
@@ -3532,6 +3591,7 @@ export async function executeEffectManager(options = {})
             {
                 const uiType = String(html.find('#bonus-type').val() ?? '');
                 const isImmunity = uiType === 'immunity';
+                const isDefense = ['immunity', 'resistance', 'vulnerability'].includes(uiType);
                 const fields = isImmunity
                     ? (IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')] ?? {})
                     : (BONUS_FILTER_FIELDS[uiType] ?? null);
@@ -3548,17 +3608,25 @@ export async function executeEffectManager(options = {})
                 html.find('#row-bonus-tokens').toggle(!fields || !!fields.applyTo);
                 html.find('#bonus-condition-badge').closest('.form-group').toggle(!fields || !!fields.condition);
                 html.find('#bonus-applyToCondition-badge').closest('.form-group').toggle(!fields || !!fields.applyToCondition);
-                html.find('#bonus-condition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.conditionImmunity' : 'LA.effectManager.tip.conditionRoll'));
-                html.find('#bonus-applyToCondition-badge').attr('title', localize(isImmunity ? 'LA.effectManager.tip.applyToConditionImmunity' : 'LA.effectManager.tip.applyToConditionRoll'));
+                html.find('#bonus-condition-badge').attr('title', localize(isDefense ? 'LA.effectManager.tip.conditionImmunity' : 'LA.effectManager.tip.conditionRoll'));
+                html.find('#bonus-applyToCondition-badge').attr('title', localize(isDefense ? 'LA.effectManager.tip.applyToConditionImmunity' : 'LA.effectManager.tip.applyToConditionRoll'));
             };
             html.find('#bonus-consumeOnUsage').on('change', ensureUsesForConsumption);
             html.find('#bonus-trigger').on('change', 'input', ensureUsesForConsumption);
+
+            const syncDamageTypesRow = () =>
+            {
+                const type = String(html.find('#bonus-type').val() ?? '');
+                const subtype = String(html.find('#bonus-immunity-subtype').val() ?? '');
+                html.find('#bonus-immunity-damage-row').toggle(type === 'resistance' || type === 'vulnerability' || (type === 'immunity' && subtype === 'damage'));
+            };
 
             html.find('#bonus-type').on('change', function ()
             {
                 const type = $(this).val();
                 html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement_extra').hide();
                 html.find(`#bonus-type-${type}`).show();
+                syncDamageTypesRow();
                 updateConsumeUsageRow();
 
                 updateFilterRows();
@@ -3578,7 +3646,7 @@ export async function executeEffectManager(options = {})
             {
                 const subtype = $(this).val();
                 html.find('#bonus-immunity-effects-row').toggle(subtype === 'effect');
-                html.find('#bonus-immunity-damage-row').toggle(subtype === 'damage' || subtype === 'resistance');
+                syncDamageTypesRow();
                 updateConsumeUsageRow();
                 updateFilterRows();
                 if (dialog.position)

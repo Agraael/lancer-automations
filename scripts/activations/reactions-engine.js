@@ -6,7 +6,7 @@ import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
 import { consumeEffectCharge, runInOnInitTriggerContext } from "../bonuses/flagged-effects.js";
-import { deferResistanceEffectConsumption } from "../bonuses/genericBonuses.js";
+import { deferResistanceEffectConsumption, linkedBonusOf, bonusFrequencyFree, burnBonusFrequency } from "../bonuses/genericBonuses.js";
 import { getTokenDistance, getRelativeDisposition } from "../combat/overwatch.js";
 import { getItemLID, isItemAvailable, hasReactionAvailable, consumeReaction, reserveReaction, executeSimpleActivation, debugActivation, isRangedAttack } from "../tools/misc-tools.js";
 import { awaitPendingAck } from "../socket.js";
@@ -21,7 +21,8 @@ let cachedFlatGeneralReactions = null;
 const cachedNonActionReactionsByTrigger = new Map();
 /** @type {Map<string, Array>} triggerType to general reactions with sceneReactor on, evaluated once as the scene */
 const cachedSceneReactionsByTrigger = new Map();
-const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart', 'onFullRepair']);
+const COMBAT_INHERENT_TRIGGERS = new Set(['onEnterCombat', 'onExitCombat', 'onTurnStart', 'onTurnEnd', 'onRoundStart', 'onRoundEnd', 'onFullRepair']);
+const TOKENLESS_TRIGGERS = new Set(['onRoundStart', 'onRoundEnd']);
 // Custom triggers are fired on purpose by their caller, who owns the combat gating.
 const firesRegardlessOfCombat = triggerType => COMBAT_INHERENT_TRIGGERS.has(triggerType) || !BUILT_IN_TRIGGERS.has(triggerType);
 const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "weapon_mod", "npc_feature", "pilot_gear", "talent", "bond"]);
@@ -1609,7 +1610,7 @@ export async function processEffectConsumption(triggerType, data)
                 continue;
 
             const originId = consumption.originId || token.id;
-            if (!isOriginInvolved(originId, consumption.role, data))
+            if (!TOKENLESS_TRIGGERS.has(triggerType) && !isOriginInvolved(originId, consumption.role, data))
                 continue;
 
             if (!passesBuiltInFilters(consumption, triggerType, data))
@@ -1617,6 +1618,10 @@ export async function processEffectConsumption(triggerType, data)
 
             const processConsumption = async () =>
             {
+                const linkedBonus = linkedBonusOf(token.actor, effect);
+                const limitState = { actor: token.actor };
+                if (linkedBonus?.frequency && !bonusFrequencyFree(linkedBonus, limitState))
+                    return;
                 if (consumption.evaluate)
                 {
                     try
@@ -1639,6 +1644,8 @@ export async function processEffectConsumption(triggerType, data)
                     }
                 }
 
+                if (linkedBonus?.frequency)
+                    await burnBonusFrequency(linkedBonus, limitState);
                 if (triggerType === 'onDamage' && effect.changes?.some(change => change.key?.startsWith('system.resistances.')))
                 {
                     deferResistanceEffectConsumption(token.actor, effect);
@@ -1656,7 +1663,7 @@ export async function processEffectConsumption(triggerType, data)
     await Promise.all(consumptionPromises);
 }
 
-const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation', 'onEndActivation']);
+const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation', 'onEndActivation', 'onStatusApplied']);
 
 export async function handleTrigger(triggerType, data)
 {

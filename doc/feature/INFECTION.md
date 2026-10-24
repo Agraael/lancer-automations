@@ -34,7 +34,7 @@ Anything that clears Burn, **Stabilize** or a **Full Repair**, clears infection 
 
 <img align="right" src="../img/inf-card.png" width="45%"/>
 
-**Infection** is a weapon damage type alongside Kinetic, Energy, and the rest. Infection resistance halves it, though the Heat it deals can't be resisted.
+**Infection** is a weapon damage type alongside Kinetic, Energy, and the rest. Infection resistance halves it and infection vulnerability doubles it, though the Heat it deals can't be resisted.
 
 When an attack deals it, the module appends the infection amount to the system's own "took X damage" message. There's no extra button: the system's **Apply damage** applies the infection too, and its **Undo** control is rewired to take the infection Heat back out along with the damage.
 

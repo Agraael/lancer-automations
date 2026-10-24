@@ -102,7 +102,7 @@ export function tapeIcon(item, action, deployable = null)
  * @param {any} token
  * @returns {any|null}
  */
-function combatantFor(token)
+export function combatantFor(token)
 {
     const tokenId = token?.document?.id ?? token?.id ?? null;
     if (!tokenId || !game.combat?.active)

@@ -282,6 +282,16 @@ export function registerSettings()
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
+    game.settings.register(MODULE_ID,'statusRoundColor', {
+        name: 'LA.settings.statusRoundColor.name',
+        hint: 'LA.settings.statusRoundColor.hint',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: '#ff8c42',
+        onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
+    });
+
     game.settings.register(MODULE_ID,'statusBadgeFontScale', {
         name: 'LA.settings.statusBadgeFontScale.name',
         hint: 'LA.settings.statusBadgeFontScale.hint',
@@ -403,7 +413,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'uplinkAutoOpen', {

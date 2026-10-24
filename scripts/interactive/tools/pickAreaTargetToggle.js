@@ -23,6 +23,7 @@ export function cancelAreaPicker()
 
 // Placed shapes + targeted ids, kept after the picker exits (cleared on restart/HUD-close/scene-change).
 let _placedStore = null;
+const _placedBlastCenters = [];
 const _persistTargetIds = new Set();
 let _persistRelated = null;
 let _persistBeat = null;
@@ -54,6 +55,10 @@ function stopPersistBeat()
         _persistBeat = null;
     }
 }
+export function getPlacedBlastCenters()
+{
+    return _placedBlastCenters.map(blast => ({ center: { ...blast.center }, tokenIds: [...blast.tokenIds] }));
+}
 export function clearAreaTargetShape()
 {
     stopPersistBeat();
@@ -62,6 +67,7 @@ export function clearAreaTargetShape()
         _placedStore.destroy();
         _placedStore = null;
     }
+    _placedBlastCenters.length = 0;
     _persistTargetIds.clear();
     _persistRelated = null;
     clearToolPresence('areaPick');
@@ -166,6 +172,8 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
 
         const onPlace = (result) =>
         {
+            if (pattern === 'blast' && result.labelPt)
+                _placedBlastCenters.push({ center: { x: result.labelPt.x, y: result.labelPt.y }, tokenIds: result.caught.map(token => token.id) });
             for (const token of result.caught)
             {
                 const already = Array.from(game.user.targets ?? []).some(target => target.id === token.id);

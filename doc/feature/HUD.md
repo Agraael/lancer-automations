@@ -89,7 +89,7 @@ See also: movement actions → [Movement](./MOVEMENT.md), resurrect → [Wrecks]
 
 <img align="right" src="../img/hud-popup.png" width="45%"/>
 
-Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Menu rows and popups also carry the small markers below.
+Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Items with v3 LCP data (from Lancer NPC Import) also show its chips under the matching text, like on the sheets. Menu rows and popups also carry the small markers below.
 
 <br clear="right"/>
 
@@ -115,7 +115,7 @@ Right-click any item for a **detail popup** with its description, tags, range / 
 
 Press Shift+Z (or click the Statuses row) to open it. Search and toggle statuses on a grid: left-click adds or increments a stack, right-click removes one. When a status comes from several sources, a sub-manager lets you adjust each one. The panel also:
 
-- lists the token's **bonuses** (with a trash button to remove them),
+- lists the token's **bonuses** with the item or actor they come from (a trash button removes them, an eye button turns off a [v3 data bonus](./EFFECTS_AND_BONUSES.md#bonuses-from-v3-lcp-data)),
 - links to the **Effect Manager** (see [Effects & Bonuses](./EFFECTS_AND_BONUSES.md)),
 - has a **clear-all-effects** button,
 - and shows your **custom statuses** when Temporary Custom Statuses is installed.
@@ -160,7 +160,7 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
-**Status Wheel** - press **G** for the token's statuses and your starred ones. Click to apply, right-click to remove.
+**Status Wheel** - press **G** for the token's statuses and your starred ones. Click to apply, right-click to remove. The second page holds constant and v3 data bonuses: right-click removes a constant bonus, or turns a data bonus off and on.
 
 <br clear="right"/>
 

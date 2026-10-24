@@ -5,14 +5,27 @@ import { modifyAction } from '../tools/misc-tools.js';
 import { activateCombatantSocket, deactivateCombatantSocket, modifyCombatantActivationsSocket } from '../socket.js';
 import { playUiSound } from './sound.js';
 import { localize } from '../tools/string-utils.js';
+import { TAPE_COLORS, combatantFor } from './action-tape.js';
 
 const ACTION_DEFS = [
-    { key: 'protocol', icon: 'cci cci-protocol',                        color: '#00e5e5', label: 'LA.action.protocol' },
-    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', color: '#4caf50', label: 'LA.action.move',     isMove: true },
-    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  color: '#e65100', label: 'LA.action.full' },
-    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  color: '#ff9800', label: 'LA.action.quick' },
-    { key: 'reaction', icon: 'cci cci-reaction',                         color: '#be51ed', label: 'LA.action.reaction' },
+    { key: 'protocol', icon: 'cci cci-protocol',                        label: 'LA.action.protocol' },
+    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', label: 'LA.action.move',     isMove: true },
+    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  label: 'LA.action.full' },
+    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  label: 'LA.action.quick' },
+    { key: 'reaction', icon: 'cci cci-reaction',                         label: 'LA.action.reaction' },
 ];
+
+function toolBtn(icon, title, onClick, cls = '')
+{
+    const btn = $(`<span${cls ? ` class="${cls}"` : ''} style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="${title}"><i class="${icon}"></i></span>`);
+    btn.on('mouseenter', () =>
+    {
+        playUiSound('statusHover'); btn.css('color', '#fff');
+    });
+    btn.on('mouseleave', () => btn.css('color', '#888'));
+    btn.on('click', onClick);
+    return btn;
+}
 
 function _canMod(actor)
 {
@@ -38,9 +51,7 @@ function _canMod(actor)
  */
 export function buildCombatBar(actor, token)
 {
-    if (!game.combat?.active)
-        return null;
-    const combatant = game.combat.combatants.find(combatant => combatant.tokenId === token.document?.id);
+    const combatant = combatantFor(token);
     if (!combatant)
         return null;
 
@@ -137,7 +148,7 @@ export function buildCombatBar(actor, token)
             ? `${localize(def.label)}: ${actionValue ?? 0}`
             : `${localize(def.label)}: ${localize(isAvailable ? 'LA.action.available' : 'LA.action.spent')}`;
 
-        const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? def.color : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
+        const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? TAPE_COLORS[def.key] : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
         icon.on('mouseenter', () =>
         {
             playUiSound('statusHover'); icon.css({ filter: 'brightness(1.6)', opacity: 1 });
@@ -158,13 +169,7 @@ export function buildCombatBar(actor, token)
     if (canClick)
     {
         bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
-        const resetBtn = $(`<span class="la-action-reset" style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Reset Actions"><i class="mdi mdi-restore"></i></span>`);
-        resetBtn.on('mouseenter', () =>
-        {
-            playUiSound('statusHover'); resetBtn.css('color', '#fff');
-        });
-        resetBtn.on('mouseleave', () => resetBtn.css('color', '#888'));
-        resetBtn.on('click', async () =>
+        bar.append(toolBtn('mdi mdi-restore', 'Reset Actions', async () =>
         {
             const speed = actor.system?.speed ?? 0;
             await actor.update({
@@ -176,34 +181,19 @@ export function buildCombatBar(actor, token)
                     reaction: true,
                 } }
             });
-        });
-        bar.append(resetBtn);
+        }, 'la-action-reset'));
 
         // Revert last movement
-        const revertBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Revert Last Move"><i class="fas fa-step-backward"></i></span>`);
-        revertBtn.on('mouseenter', () =>
-        {
-            playUiSound('statusHover'); revertBtn.css('color', '#fff');
-        });
-        revertBtn.on('mouseleave', () => revertBtn.css('color', '#888'));
-        revertBtn.on('click', async () =>
+        bar.append(toolBtn('fas fa-step-backward', 'Revert Last Move', async () =>
         {
             await revertMovement(token);
-        });
-        bar.append(revertBtn);
+        }));
 
         // Clear movement history
-        const clearBtn = $(`<span style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="Clear Movement History"><i class="fas fa-trash"></i></span>`);
-        clearBtn.on('mouseenter', () =>
-        {
-            playUiSound('statusHover'); clearBtn.css('color', '#fff');
-        });
-        clearBtn.on('mouseleave', () => clearBtn.css('color', '#888'));
-        clearBtn.on('click', async () =>
+        bar.append(toolBtn('fas fa-trash', 'Clear Movement History', async () =>
         {
             await clearMovementHistory(token, false);
-        });
-        bar.append(clearBtn);
+        }));
     }
 
     return bar;

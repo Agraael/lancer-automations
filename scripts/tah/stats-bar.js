@@ -2,6 +2,7 @@
 
 import { playUiSound } from './sound.js';
 import { MODULE_ID } from '../tools/constants.js';
+import { combatantFor } from './action-tape.js';
 
 /** Whether the secondary stats panel is expanded. Persists across in-place updates. */
 let _statsExpanded = false;
@@ -92,9 +93,7 @@ export function buildStatsHtml(actor, token = null)
     const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}<i class="mdi mdi-hexagon-multiple-outline" style="font-size:1.05em;vertical-align:-1px;margin-left:1px;"></i></span>` : '';
 
     // Movement display
-    const tokenId = token?.document?.id ?? token?.id ?? null;
-    const inCombat = !!game.combat?.active &&
-        !!(/** @type {any} */ (game.combat)?.combatants?.find((/** @type {{ tokenId: string }} */ c) => c.tokenId === tokenId));
+    const inCombat = !!combatantFor(token);
     const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(2px);display:inline-block;"></i>`;
     let movCell;
     if (inCombat && token)

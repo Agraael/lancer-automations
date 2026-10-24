@@ -100,48 +100,20 @@ Hooks.on('init', () =>
     Hooks.on('closeActorSheet', _scheduleTahZUpdate);
     Hooks.on('closeActorSheetV2', _scheduleTahZUpdate);
     document.addEventListener('mousedown', _scheduleTahZUpdate, { capture: true });
-    game.keybindings.register(MODULE_ID, 'tah.toggleSearch', {
-        name: 'LA.keybindings.tah.toggleSearch.name',
-        hint: 'LA.keybindings.tah.toggleSearch.hint',
-        editable: [{ key: 'KeyF', modifiers: ['Shift'] }],
-        onDown: () =>
-        {
-            if (!enabled())
-                return false;
-            if (!hud.toggleSearch())
-                return false;
-            return true;
-        },
-        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
-    });
-    game.keybindings.register(MODULE_ID, 'tah.toggleFavorites', {
-        name: 'LA.keybindings.tah.toggleFavorites.name',
-        hint: 'LA.keybindings.tah.toggleFavorites.hint',
-        editable: [{ key: 'KeyX', modifiers: ['Shift'] }],
-        onDown: () =>
-        {
-            if (!enabled())
-                return false;
-            if (!hud.toggleFavorites())
-                return false;
-            return true;
-        },
-        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
-    });
-    game.keybindings.register(MODULE_ID, 'tah.toggleStatuses', {
-        name: 'LA.keybindings.tah.toggleStatuses.name',
-        hint: 'LA.keybindings.tah.toggleStatuses.hint',
-        editable: [{ key: 'KeyZ', modifiers: ['Shift'] }],
-        onDown: () =>
-        {
-            if (!enabled())
-                return false;
-            if (!hud.toggleStatuses())
-                return false;
-            return true;
-        },
-        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
-    });
+    for (const binding of [
+        { action: 'tah.toggleSearch', name: 'LA.keybindings.tah.toggleSearch.name', hint: 'LA.keybindings.tah.toggleSearch.hint', key: 'KeyF', toggle: () => hud.toggleSearch() },
+        { action: 'tah.toggleFavorites', name: 'LA.keybindings.tah.toggleFavorites.name', hint: 'LA.keybindings.tah.toggleFavorites.hint', key: 'KeyX', toggle: () => hud.toggleFavorites() },
+        { action: 'tah.toggleStatuses', name: 'LA.keybindings.tah.toggleStatuses.name', hint: 'LA.keybindings.tah.toggleStatuses.hint', key: 'KeyZ', toggle: () => hud.toggleStatuses() },
+    ])
+    {
+        game.keybindings.register(MODULE_ID, binding.action, {
+            name: binding.name,
+            hint: binding.hint,
+            editable: [{ key: binding.key, modifiers: ['Shift'] }],
+            onDown: () => enabled() && !!binding.toggle(),
+            precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
+        });
+    }
     game.settings.register(MODULE_ID, 'tah.clickToOpen', {
         name: 'LA.settings.tah.clickToOpen.name',
         hint: 'LA.settings.tah.clickToOpen.hint',
@@ -280,56 +252,23 @@ Hooks.on('init', () =>
         type: Boolean,
         default: true,
     });
-    game.settings.register(MODULE_ID, 'tah.uiSoundVolume', {
-        name: 'LA.settings.tah.uiSoundVolume.name',
-        hint: 'LA.settings.tah.uiSoundVolume.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.05 },
-    });
-    game.settings.register(MODULE_ID, 'tah.tokenFeedbackVolume', {
-        name: 'LA.settings.tah.tokenFeedbackVolume.name',
-        hint: 'LA.settings.tah.tokenFeedbackVolume.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.05 },
-    });
-    game.settings.register(MODULE_ID, 'tah.damageSoundVolume', {
-        name: 'LA.settings.tah.damageSoundVolume.name',
-        hint: 'LA.settings.tah.damageSoundVolume.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.05 },
-    });
-    game.settings.register(MODULE_ID, 'tah.actionFxVolume', {
-        name: 'LA.settings.tah.actionFxVolume.name',
-        hint: 'LA.settings.tah.actionFxVolume.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.05 },
-    });
+    for (const volumeKey of ['uiSoundVolume', 'tokenFeedbackVolume', 'damageSoundVolume', 'actionFxVolume', 'battleLogVolume'])
+    {
+        game.settings.register(MODULE_ID, `tah.${volumeKey}`, {
+            name: `LA.settings.tah.${volumeKey}.name`,
+            hint: `LA.settings.tah.${volumeKey}.hint`,
+            scope: 'client',
+            config: false,
+            type: Number,
+            default: 1,
+            range: { min: 0, max: 1, step: 0.05 },
+        });
+    }
     game.settings.register(MODULE_ID, 'battleLogEnabled', {
         scope: 'world',
         config: false,
         type: Boolean,
         default: false,
-    });
-    game.settings.register(MODULE_ID, 'tah.battleLogVolume', {
-        name: 'LA.settings.tah.battleLogVolume.name',
-        hint: 'LA.settings.tah.battleLogVolume.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0, max: 1, step: 0.05 },
     });
     for (const soundKey of ['fadeIn', 'fadeOut', 'loopBackground', 'typingLoop', 'displayList', 'longResult', 'shortResult', 'resultImpact', 'resultImpactGood', 'resultImpactBad', 'logOpen', 'incomingTrans', 'confirm', 'denied', 'fail'])
     {
@@ -754,54 +693,27 @@ Hooks.on('updateActor', (actor, change) =>
         return;
     if (!isRelevantActor(actor.id))
         return;
-    if (getLAFlags(change)?.lockedActions !== undefined)
+    if (getLAFlags(change)?.lockedActions !== undefined || change?.system?.core_energy !== undefined)
+    {
         hud.scheduleRefresh();
-    else if (change?.system?.core_energy !== undefined)
-        hud.scheduleRefresh();
+        if (change.system?.action_tracker)
+            hud._updateCombatBar?.();
+    }
     else
         hud.updateStatsInPlace();
 });
 
-// Item change: full debounced refresh so availability indicators update.
-Hooks.on('updateItem', (item) =>
+// Item or effect change: full debounced refresh so availability indicators update.
+for (const hookName of ['updateItem', 'createItem', 'deleteItem', 'createActiveEffect', 'deleteActiveEffect'])
 {
-    if (!enabled())
-        return;
-    if (isRelevantActor(item.parent?.id))
-        hud.scheduleRefresh();
-});
-
-Hooks.on('createItem', (item) =>
-{
-    if (!enabled())
-        return;
-    if (isRelevantActor(item.parent?.id))
-        hud.scheduleRefresh();
-});
-
-Hooks.on('deleteItem', (item) =>
-{
-    if (!enabled())
-        return;
-    if (isRelevantActor(item.parent?.id))
-        hud.scheduleRefresh();
-});
-
-Hooks.on('createActiveEffect', (effect) =>
-{
-    if (!enabled())
-        return;
-    if (isRelevantActor(effect.parent?.id))
-        hud.scheduleRefresh();
-});
-
-Hooks.on('deleteActiveEffect', (effect) =>
-{
-    if (!enabled())
-        return;
-    if (isRelevantActor(effect.parent?.id))
-        hud.scheduleRefresh();
-});
+    Hooks.on(hookName, (doc) =>
+    {
+        if (!enabled())
+            return;
+        if (isRelevantActor(doc.parent?.id))
+            hud.scheduleRefresh();
+    });
+}
 
 Hooks.on('updateToken', (tokenDoc) =>
 {
@@ -832,15 +744,6 @@ Hooks.on('updateCombatant', (combatant) =>
         hud.scheduleRefresh();
 });
 
-// Action tracker change: in-place combat-bar update only.
-Hooks.on('updateActor', (actor, change) =>
-{
-    if (!enabled())
-        return;
-    if (change.system?.action_tracker && isRelevantActor(actor.id))
-        hud._updateCombatBar?.();
-});
-
 Hooks.on('createCombat', () =>
 {
     if (!enabled())
@@ -857,7 +760,7 @@ Hooks.on('deleteCombat', () =>
         hud.scheduleRefresh();
 });
 
-import { activateRangePreview, deactivateRangePreview, getAttackRange, getRangeGlowForAction, usesLineOfSight, FIXED_MELEE_ACTIONS } from './hover.js';
+import { getAttackRange, getRangeGlowForAction, usesLineOfSight, FIXED_MELEE_ACTIONS, getSensorRange } from './hover.js';
 import { getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 
@@ -950,17 +853,6 @@ Hooks.on('lancer-automations.advancedMeasureStateChange', () =>
         hud.syncToggleCells();
 });
 
-const BASIC_MELEE_NAMES = new Set(['ram', 'ramming speed', 'grapple', 'improvised attack', 'pickup weapon', 'pick up weapon']);
-
-function _getSensorRange(actor)
-{
-    if (!actor)
-        return 10;
-    if (actor.type === 'pilot')
-        return 5;
-    return actor.system?.sensor_range ?? 10;
-}
-
 async function _computeAttackHudRange(state)
 {
     const actor = state.actor;
@@ -985,11 +877,11 @@ async function _computeAttackHudRange(state)
             return Math.max(1, max);
     }
 
-    if (BASIC_MELEE_NAMES.has(actionName))
+    if (FIXED_MELEE_ACTIONS.has(actionName))
         return 1;
 
     if (_isTechAttackState(state, actionName))
-        return _getSensorRange(actor);
+        return getSensorRange(actor);
 
     return null;
 }
@@ -1007,7 +899,7 @@ function _computeAttackHudGlow(state)
     const actionName = (state.data?.action?.name ?? state.data?.title ?? '').toLowerCase().trim();
     if (_isTechAttackState(state, actionName))
         return RANGE_GLOW.sensor;
-    if (state.item || BASIC_MELEE_NAMES.has(actionName))
+    if (state.item || FIXED_MELEE_ACTIONS.has(actionName))
         return RANGE_GLOW.weapon;
     return RANGE_GLOW.manual;
 }

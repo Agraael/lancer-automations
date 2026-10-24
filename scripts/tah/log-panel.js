@@ -1,6 +1,7 @@
 /* global $, game */
 
 import { HudPanel } from './hud-panel.js';
+import { escapeHtml } from '../tools/string-utils.js';
 
 function relTime(/** @type {number} */ timestamp)
 {
@@ -43,7 +44,7 @@ export class LogPanel extends HudPanel
 
         const panel = $(`<div class="la-hud-panel la-hud-log-panel"></div>`);
 
-        const header = $(`<div class="la-hud-col-label">Log · ${token?.name ?? actor.name}</div>`);
+        const header = $(`<div class="la-hud-col-label">Log · ${escapeHtml(token?.name ?? actor.name)}</div>`);
         panel.append(header);
 
         const list = $(`<div class="la-hud-log-list"></div>`);
@@ -62,7 +63,7 @@ export class LogPanel extends HudPanel
 
                 const row = $(`<div class="la-log-row">` +
                     `<div class="la-log-row__head">` +
-                    `<span class="la-log-row__name">${name}</span>` +
+                    `<span class="la-log-row__name">${escapeHtml(name)}</span>` +
                     `<span class="la-log-row__time">${time}</span>` +
                     `</div>` +
                     `<div class="la-log-content">${msg.content}</div>` +

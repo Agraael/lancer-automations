@@ -4,7 +4,8 @@ import { injectExtraDataUtility } from './flows.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { accDiffTargetToken } from '../combat/grid-helpers.js';
-import { applyDamageImmunities, getApplicableImmunityBonuses, getAttackImmunityBonuses, convertHeatToEnergyIfHeatless, consumeImmunityUse, burnBonusUsageForFlow } from '../bonuses/genericBonuses.js';
+import { applyDamageImmunities, getApplicableImmunityBonuses, getApplicableDefenseBonuses, getAttackImmunityBonuses, convertHeatToEnergyIfHeatless, consumeImmunityUse, burnBonusUsageForFlow, bonusCoversDamage } from '../bonuses/genericBonuses.js';
+import { getItemAreaRanges_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
@@ -286,6 +287,16 @@ export async function assertDamageTargetsStep(state)
     return true;
 }
 
+const AREA_PATTERNS = new Set(['blast', 'burst', 'cone', 'line']);
+
+function isAoeDamage(state)
+{
+    const shape = state.__laAttackShape ?? state.la_extraData?.laTargeting ?? state.la_extraData?.attackShape;
+    if (shape?.pattern)
+        return AREA_PATTERNS.has(String(shape.pattern).toLowerCase());
+    return getItemAreaRanges_WithBonus(state.data?.lancerItem ?? state.item, state.actor).length > 0;
+}
+
 export async function onDamageStep(state)
 {
     state = injectExtraDataUtility(state);
@@ -300,6 +311,7 @@ export async function onDamageStep(state)
     recordRollSnapshot('damage', state);
 
     const actionData = attackActionData(state, weapon);
+    const aoe = isAoeDamage(state);
 
     for (const targetInfo of targets)
     {
@@ -309,10 +321,11 @@ export async function onDamageStep(state)
 
         if (targetInfo.damage && targetToken.actor)
         {
-            const immunities = getApplicableImmunityBonuses(targetToken.actor, 'damage', state, { ownerTokenId: targetToken.id, otherToken: token });
+            const immunities = getApplicableImmunityBonuses(targetToken.actor, 'damage', state, { ownerTokenId: targetToken.id, otherToken: token })
+                .filter(bonus => bonusCoversDamage(bonus, aoe));
             targetInfo.laImmunity = immunities.map(bonus => bonus.id).filter(Boolean);
             const preTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
-            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state, immunities);
+            targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state, immunities, aoe);
             const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             if (postTotal < preTotal)
             {
@@ -324,9 +337,15 @@ export async function onDamageStep(state)
         if (targetToken.actor)
         {
             // Rides into the damage card via printDamageCard's spread, so every client sees the same verdict.
-            targetInfo.laResistance = getApplicableImmunityBonuses(targetToken.actor, 'resistance', state, { ownerTokenId: targetToken.id, otherToken: token })
+            targetInfo.laResistance = getApplicableDefenseBonuses(targetToken.actor, 'resistance', state, { ownerTokenId: targetToken.id, otherToken: token })
+                .filter(bonus => bonusCoversDamage(bonus, aoe))
                 .map(bonus => bonus.id)
                 .filter(Boolean);
+            targetInfo.laVulnerability = getApplicableDefenseBonuses(targetToken.actor, 'vulnerability', state, { ownerTokenId: targetToken.id, otherToken: token })
+                .filter(bonus => bonusCoversDamage(bonus, aoe))
+                .map(bonus => bonus.id)
+                .filter(Boolean);
+            targetInfo.laAoe = aoe;
         }
         if (Array.isArray(targetInfo.bonus_damage) && targetToken.actor)
             targetInfo.bonus_damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.bonus_damage);

@@ -54,6 +54,8 @@ export function registerFlowStatePersistence()
                 const attackData = message.flags?.lancer?.attackData;
                 if (!attackData)
                     return;
+                if (state.__laAttackShape)
+                    message.updateSource(/** @type {any} */ ({ "flags.lancer-automations.attackShape": { ...state.__laAttackShape } }));
                 const effectMatch = attackData.executeEffectId === state.data?.executeEffectId;
                 const hasInjectedTags = Array.isArray(state.la_extraData?.injectedTags) && state.la_extraData.injectedTags.length > 0;
                 const hasInjectedDamage = Array.isArray(state.la_extraData?.injectedDamage) && state.la_extraData.injectedDamage.length > 0;
@@ -93,7 +95,8 @@ export const ActiveFlowState = {
 export function bindChatMessageStateInterceptor(message, html)
 {
     const flowState = getLAFlags(message)?.flowState;
-    if (!flowState)
+    const attackShape = getLAFlags(message)?.attackShape;
+    if (!flowState && !attackShape)
         return;
 
     // v13's renderChatMessageHTML passes a raw HTMLElement; legacy/wrapped paths pass jQuery.
@@ -103,7 +106,7 @@ export function bindChatMessageStateInterceptor(message, html)
     {
         damageBtn.addEventListener("click", () =>
         {
-            ActiveFlowState.current = flowState;
+            ActiveFlowState.current = attackShape ? { ...flowState, attackShape } : flowState;
             // Clear it shortly after in case the flow doesn't begin synchronously for some reason
             setTimeout(() =>
             {

@@ -9,6 +9,7 @@ import {
     injectThrottledCheckbox,
     getImmunityBonuses,
     checkDamageResistances,
+    checkDamageVulnerabilities,
     mutateDamageWithBonus,
     mutatesBaseDamage,
     mutatesBonusDamage,
@@ -75,7 +76,7 @@ function applyStatRollPresets(state)
         if (Number(extra.accuracy))
             base.accuracy = (base.accuracy || 0) + Number(extra.accuracy);
         if (Number(extra.difficulty))
-            base.difficulty = (base.difficulty || 0) + Number(extra.difficulty);
+            base.accuracy = (base.accuracy || 0) - Number(extra.difficulty);
     }
     if (Number(extra.flatModifier))
         state.data.bonus = (state.data.bonus || 0) + Number(extra.flatModifier);
@@ -246,30 +247,6 @@ export function convertBonusDamageEntries(entries, bonuses, state)
     return cloned;
 }
 
-// What the damage HUD will add on top of the weapon's own line, as far as an attack-time evaluation can tell.
-export async function predictBonusDamage(state)
-{
-    const actor = state?.actor;
-    if (!actor)
-        return [];
-    const flowTags = new Set(['all', 'damage']);
-    const targetIds = Array.from(game.user?.targets || []).map(target => target.id);
-    const entries = [];
-    for (const bonus of flattenBonuses([...getGlobalBonuses(actor), ...getConstantBonuses(actor)]))
-    {
-        if (bonus.type !== 'damage' || (bonus.damageMode || 'add') !== 'add')
-            continue;
-        if (Array.isArray(bonus.applyTo) && bonus.applyTo.length && !bonus.applyTo.some(tokenId => targetIds.includes(tokenId)))
-            continue;
-        if (!isBonusApplicable(bonus, flowTags, state))
-            continue;
-        for (const entry of bonus.damage || [])
-            entries.push({ type: entry.type, val: entry.val });
-    }
-    const converters = await _collectDamageMutations(state, mutatesBonusDamage);
-    return convertBonusDamageEntries(entries, converters, state);
-}
-
 // Runs after rollReliable: by then the HUD's global and per-target bonus rows are back in the flow state, and both feed the roll.
 export async function bonusDamageMutateStep(state)
 {
@@ -421,7 +398,7 @@ function getHeatMitigation(actor)
     let enabled = true;
     enabled = !!getModuleSetting('resistSelfHeat', true);
     if (!enabled)
-        return { immune: false, resisted: false };
+        return { immune: false, multiplier: 1 };
 
     const immune = getImmunityBonuses(actor, "damage")
         .some(bonus => bonus.damageTypes?.some(damageType => ['heat', 'all'].includes(damageType.toLowerCase())));
@@ -429,7 +406,13 @@ function getHeatMitigation(actor)
         actor.system.resistances?.heat ||
         checkDamageResistances(actor, "heat").length > 0
     );
-    return { immune, resisted };
+    const vulnerable = checkDamageVulnerabilities(actor, "heat").length > 0;
+    let multiplier = 1;
+    if (resisted && !vulnerable)
+        multiplier = 0.5;
+    else if (vulnerable && !resisted)
+        multiplier = 2;
+    return { immune, multiplier };
 }
 
 export function wrapApplySelfHeat(flowSteps)
@@ -444,7 +427,7 @@ export function wrapApplySelfHeat(flowSteps)
         if (!actor || !state.data?.self_heat)
             return origApplySelfHeat(state, options);
 
-        const { immune: heatImmune, resisted: hasResistance } = getHeatMitigation(actor);
+        const { immune: heatImmune, multiplier } = getHeatMitigation(actor);
 
         if (heatImmune)
         {
@@ -456,17 +439,17 @@ export function wrapApplySelfHeat(flowSteps)
             return result;
         }
 
-        if (hasResistance)
+        if (multiplier !== 1)
         {
             const roll = await new Roll(state.data.self_heat).evaluate();
-            const halved = Math.ceil(roll.total / 2);
+            const scaled = Math.ceil(roll.total * multiplier);
             state.data.self_heat_result = { roll, tt: await roll.getTooltip() };
 
             const automationSettings = game.settings.get(game.system.id, "automationOptions");
             if (automationSettings?.attack_self_heat && (actor.is_mech() || actor.is_npc()))
             {
                 await actor.update(/** @type {any}*/({
-                    "system.heat.value": actor.system.heat.value + (state.data.overkill_heat ?? 0) + halved
+                    "system.heat.value": actor.system.heat.value + (state.data.overkill_heat ?? 0) + scaled
                 }));
             }
 
@@ -498,15 +481,15 @@ export function wrapUpdateOverchargeActor(flowSteps)
         if (!actor?.is_mech?.() || !Number.isFinite(rollTotal))
             return orig(state, options);
 
-        const { immune, resisted } = getHeatMitigation(actor);
-        if (!immune && !resisted)
+        const { immune, multiplier } = getHeatMitigation(actor);
+        if (!immune && multiplier === 1)
             return orig(state, options);
 
         await actor.update(/** @type {any}*/({ "system.overcharge": state.data.level }));
         const heatEnabled = game.settings.get(game.system.id, "automationOptions")?.overcharge_heat;
         if (heatEnabled)
         {
-            const applied = immune ? 0 : Math.ceil(rollTotal / 2);
+            const applied = immune ? 0 : Math.ceil(rollTotal * multiplier);
             await actor.update(/** @type {any}*/({ "system.heat.value": actor.system.heat.value + applied }));
         }
         return true;
@@ -525,8 +508,8 @@ export function wrapApplyOverkillHeat(flowSteps)
         if (!actor || !state.data?.overkill)
             return orig(state, options);
 
-        const { immune, resisted } = getHeatMitigation(actor);
-        if (!immune && !resisted)
+        const { immune, multiplier } = getHeatMitigation(actor);
+        if (!immune && multiplier === 1)
             return orig(state, options);
 
         let overkillHeat = 0;
@@ -546,7 +529,7 @@ export function wrapApplyOverkillHeat(flowSteps)
 
         if ((actor.is_mech?.() || actor.is_npc?.() || actor.is_deployable?.()) && (actor.system.heat?.max ?? 0) > 0)
         {
-            const applied = immune ? 0 : Math.ceil(overkillHeat / 2);
+            const applied = immune ? 0 : Math.ceil(overkillHeat * multiplier);
             await actor.update(/** @type {any}*/({ "system.heat.value": (Number(actor.system.heat.value) || 0) + applied }));
         }
         return true;

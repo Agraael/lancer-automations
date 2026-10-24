@@ -3,15 +3,15 @@
 import {
     isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
-    beginTargetSession, createTokenMark,
+    beginTargetSession, createTokenMark, getPlacedBlastCenters,
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
-import { predictBonusDamage } from './flow-wraps.js';
-import { escapeHtml } from '../tools/string-utils.js';
 import { accDiffTargetInvisible } from '../combat/grid-helpers.js';
+import { laInstallRollCardTags } from '../bonuses/roll-card-rows.js';
+import { laInstallRollCardHeader } from './roll-card-header.js';
 
 function buildHitChanceFor(state)
 {
@@ -114,29 +114,18 @@ async function injectButton(state, $form)
     const $targetingSection = $row.closest('.accdiff-grid__section');
     ($targetingSection.length ? $targetingSection : $row).addClass('la-targeting-section');
 
+    const targeting = state.la_extraData?.laTargeting ?? null;
+    if (targeting && !state.__laAttackShape)
+    {
+        state.__laAttackShape = {
+            pattern: String(targeting.pattern ?? 'target'),
+            size: Math.max(1, Number(targeting.size) || 1),
+            range: Math.max(0, Number(targeting.range) || 0),
+        };
+    }
+
     // Weapon attacks honor the auto-start setting; bare basic/tech attacks start empty like bare damage rolls.
     return buildTargetingUI(state, $form, $row, { weapon, aoe, hitChanceForFactory: buildHitChanceFor, autoStart: weapon ? 'setting' : 'ifEmpty' });
-}
-
-// The header only shows the weapon's own line; this adds what the damage HUD will put on top.
-async function injectDamagePreview(state, $form)
-{
-    if (!$form?.length || $form.find('.la-accdiff-bonus-dmg').length)
-        return;
-    const entries = await predictBonusDamage(state);
-    if (!entries.length)
-        return;
-    const parts = entries.map(entry =>
-    {
-        const type = String(entry.type || '').toLowerCase();
-        return `<i class="cci i--sm cci-${escapeHtml(type)} damage--${escapeHtml(type)}"></i>${escapeHtml(entry.val)} ${escapeHtml(entry.type)}`;
-    });
-    const $line = $(`<div class="la-accdiff-bonus-dmg" style="text-align:center;font-size:11px;opacity:0.85;padding:2px 0;color:var(--dark-text, #fff);">Bonus damage: +${parts.join(' + ')}</div>`);
-    const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
-    if ($section.length)
-        $section.append($line);
-    else
-        $form.find('.accdiff-footer').first().before($line);
 }
 
 export function registerAccDiffTargetButton()
@@ -154,7 +143,8 @@ export function registerAccDiffTargetButton()
             {
                 injectWhenReady(state, () => $('form[id^="accdiff"]'), injectButton, 'targeting');
                 injectWhenReady(state, () => $('form[id^="accdiff"]'), swapHeaderIcon, 'weapon header icon');
-                injectWhenReady(state, () => $('form[id^="accdiff"]'), injectDamagePreview, 'bonus damage preview');
+                injectWhenReady(state, () => $('form[id^="accdiff"]'), laInstallRollCardTags, 'roll card tags');
+                injectWhenReady(state, () => $('form[id^="accdiff"]'), laInstallRollCardHeader, 'roll card header');
                 if (getModuleSetting('enableAttackTargeting'))
                 {
                     const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
@@ -175,6 +165,9 @@ export function registerAccDiffTargetButton()
                     cancelAreaPicker();
                 if (isSingleTargetPickerActive())
                     cancelSingleTargetPicker();
+                const blastCenters = getPlacedBlastCenters();
+                if (blastCenters.length && state.__laAttackShape)
+                    state.__laAttackShape = { ...state.__laAttackShape, blastCenters };
                 clearAllAttackShapes();
             }
             catch

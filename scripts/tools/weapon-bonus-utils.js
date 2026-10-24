@@ -2,6 +2,7 @@ import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus,
 import { getLAFlag } from "./flag-utils.js";
 
 const REACH_RANGE_TYPES = new Set(["Range", "Threat", "Line", "Burst", "Cone"]);
+const AREA_RANGE_TYPES = ["Blast", "Burst", "Cone", "Line"];
 
 /** Returns the base { tags, range } for an item, handling mech_weapon profiles. Both arrays are shallow-cloned. */
 function _getItemBaseData(item)
@@ -176,6 +177,17 @@ export async function getItemTags_WithBonus(item, actor)
     const { tags, range } = _getItemBaseData(item);
     await _applyItemBonuses(item, resolvedActor, tags, range);
     return tags;
+}
+
+export function getItemAreaRanges_WithBonus(item, actor = null)
+{
+    if (!item?.system)
+        return [];
+    const { tags, range } = _getItemBaseData(item);
+    _applyItemBonuses(item, actor ?? item.parent ?? null, tags, range);
+    return range
+        .map(rangeEntry => ({ type: String(rangeEntry?.type ?? ''), val: Number.parseInt(rangeEntry?.val) || 0 }))
+        .filter(rangeEntry => rangeEntry.val > 0 && AREA_RANGE_TYPES.includes(rangeEntry.type));
 }
 
 /** Returns the maximum range value per range type across all weapons of the input.

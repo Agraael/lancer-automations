@@ -76,7 +76,7 @@ export async function baseApplyStructureEffects(state)
         if (directHit)
             await applyStatus(actor, ["stunned"], "Direct Hit", UNTIL_NEXT_TURN);
         else if (total === 2)
-            await applyStatus(actor, ["slow"], "Dismemberment");
+            await applyStatus(actor, ["slow"], "Dismemberment", { label: 'encounter' });
         else if (total === 3 || total === 4)
             await applyStatus(actor, ["prone"], "Powerful Hit");
         else if (total >= 5)

@@ -4,11 +4,12 @@
 import {
     isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
-    beginTargetSession, isTargetSessionActive, createTokenMark,
+    beginTargetSession, isTargetSessionActive, createTokenMark, getPlacedBlastCenters,
 } from '../interactive/canvas.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed } from './targeting-ui.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
+import { laInstallRollCardHeader } from './roll-card-header.js';
 
 const _formulaBounds = new Map();
 function formulaBounds(formula)
@@ -145,12 +146,13 @@ async function injectButton(state, $form)
     }
 
     const targeting = state.la_extraData?.laTargeting ?? null;
-    if (targeting && !state.__laAttackShape)
+    const seedShape = targeting ?? state.la_extraData?.attackShape ?? null;
+    if (seedShape && !state.__laAttackShape)
     {
         state.__laAttackShape = {
-            pattern: String(targeting.pattern ?? 'target'),
-            size: Math.max(1, Number(targeting.size) || 1),
-            range: Math.max(0, Number(targeting.range) || 0),
+            pattern: String(seedShape.pattern ?? 'target'),
+            size: Math.max(1, Number(seedShape.size) || 1),
+            range: Math.max(0, Number(seedShape.range) || 0),
         };
     }
     // Targeting is an optional tool here: never auto-engage on weapon damage (targets come from
@@ -186,6 +188,7 @@ export function registerDamageTargetButton()
                 return getModuleSetting('enableDamageTargeting');
             })();
             let attackerMark = null;
+            injectWhenReady(state, damageForm, laInstallRollCardHeader, 'roll card header');
             if (active)
             {
                 try
@@ -216,6 +219,9 @@ export function registerDamageTargetButton()
                             cancelAreaPicker();
                         if (isSingleTargetPickerActive())
                             cancelSingleTargetPicker();
+                        const blastCenters = getPlacedBlastCenters();
+                        if (blastCenters.length)
+                            state.__laKnockbackBlastCenters = blastCenters;
                         clearAllAttackShapes();
                     }
                     catch

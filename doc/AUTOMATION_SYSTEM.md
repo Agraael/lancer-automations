@@ -244,7 +244,7 @@ Filters short-circuit, in this order (rows 6 and 7 apply to item activations onl
 | # | Filter | Behavior |
 |---|---|---|
 | 1 | `onlyOnSourceMatch` | Matches the triggering item LID, deployable LID, or actor UUID against the registered key. Meaning per kind in [section 3](#3-item-vs-general-activations). |
-| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onEnterCombat`, `onExitCombat`), is `onFullRepair`, or is a [custom trigger](#custom-triggers). |
+| 2 | `outOfCombat` | If combat is not active and `outOfCombat` is `false`, skip. *Unless* the trigger is inherently combat-related (`onTurnStart`, `onTurnEnd`, `onRoundStart`, `onRoundEnd`, `onEnterCombat`, `onExitCombat`), is `onFullRepair`, or is a [custom trigger](#custom-triggers). |
 | 3 | `triggerSelf` / `triggerOther` / `triggerTarget` | If the reactor *is* the triggering token: require `triggerSelf: true`. If it isn't: pass with `triggerOther: true`, or with `triggerTarget: true` when the reactor is one of the event's targets. **`triggerOther` defaults to `true`**: it only skips when you set it to exactly `false`. |
 | 4 | `checkReaction` | Skip the reaction when the reactor has no reaction left this round. Runs only when the field is set `true`. Spending is separate: the world setting `consumeReaction`. |
 | 5 | `requireCanProvoke` | If `true`, skip if `triggerData.canTriggerReaction` is `false`. |

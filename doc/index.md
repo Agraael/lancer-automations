@@ -124,7 +124,7 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | Module | Description |
 |--------|-------------|
 | [JB2A - Patreon](https://www.patreon.com/JB2A) **or** [JB2A - Free](https://foundryvtt.com/packages/JB2A_DnD5e) | Source of most action FX visuals. Patreon is preferred since it has the full library. The free pack works too: missing assets are auto-swapped to free equivalents, sometimes recolored, so a few effects look a bit rougher. |
-| [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) | Bulk NPC import from LCP JSON, Comp/Con v3 cloud sync for pilots, pilot import with reserves/projects/organizations. |
+| [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) | Bulk NPC import from LCP JSON, Comp/Con v3 cloud sync for pilots, pilot import with reserves/projects/organizations. Keeps v3 LCP effect data that LA reads. |
 | [Actor Browser (fork)](https://github.com/Agraael/vtt-actor-browser-fork) | Browse and search actors across folders and compendiums with filtering and drag-and-drop. |
 
 ---

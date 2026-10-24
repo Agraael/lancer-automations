@@ -23,5 +23,6 @@ export function registerReactionRefreshHooks()
         if (before === undefined || before === true)
             return;
         foundry.utils.setProperty(changes, 'system.action_tracker.reaction', before);
+        actor.system.action_tracker.reaction = before;
     });
 }

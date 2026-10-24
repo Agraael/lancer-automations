@@ -91,8 +91,40 @@ const involuntaryMoveCheck = {
     }
 };
 
+const LEGACY_DEFENSE_CODE = /subtype\s*:\s*['"](resistance|vulnerability)['"]|(getImmunityBonuses|consumeImmunityUse|getApplicableImmunityBonuses|getGateImmunityBonuses|getAttackImmunityBonuses)\s*\([^)]*['"](resistance|vulnerability)['"]/;
+
+const defenseSubtypeCheck = {
+    id: 'defenseSubtypes',
+    message: 'Resistance and vulnerability are now their own bonus types. Replace { type: "immunity", subtype: "resistance" } with '
+        + '{ type: "resistance" }, getImmunityBonuses(actor, "resistance") with getResistanceBonuses(actor) and '
+        + 'consumeImmunityUse(actor, "resistance", ...) with consumeResistanceUse(actor, ...). Same for vulnerability. Update these:',
+    scan()
+    {
+        const hits = [];
+        for (const { label, reaction } of savedReactions())
+        {
+            if (Object.values(reaction ?? {}).some(value => typeof value === 'string' && LEGACY_DEFENSE_CODE.test(value)))
+                hits.push(label);
+        }
+
+        for (const script of ReactionManager.getStartupScripts())
+        {
+            if (typeof script?.code === 'string' && LEGACY_DEFENSE_CODE.test(script.code))
+                hits.push(`startup script ${script?.name || 'unnamed'}`);
+        }
+
+        for (const macro of game.macros ?? [])
+        {
+            if (macro.type === 'script' && LEGACY_DEFENSE_CODE.test(macro.command ?? ''))
+                hits.push(`macro ${macro.name}`);
+        }
+
+        return hits;
+    }
+};
+
 /** @type {DeprecationCheck[]} */
-const CHECKS = [endActivationCheck, involuntaryMoveCheck];
+const CHECKS = [endActivationCheck, involuntaryMoveCheck, defenseSubtypeCheck];
 
 /**
  * Run every deprecation check and report the results. GM only, the fixes are world-level.

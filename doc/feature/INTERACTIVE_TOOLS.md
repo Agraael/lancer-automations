@@ -90,7 +90,9 @@ For one-off effects you can skip the API: place a template by hand and attach th
 
 <img align="right" src="../img/it-knockback.png" width="45%"/>
 
-**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this after damage.
+**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this on hit targets after damage (**Automate Knockback on Hit**, `enableKnockbackFlow`).
+
+It lights the spaces directly away from the attacker, or from the Blast center when the Blast was placed with LA targeting. Other spaces warn but still work.
 
 **placeToken** drops tokens at grid-snapped spots, and **moveToken** moves or teleports a token while drawing a trace from start to destination. The move, knockback, and teleport pickers take **Ctrl+click** waypoints for multi-leg paths.
 

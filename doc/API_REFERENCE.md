@@ -458,6 +458,16 @@ Mutate `triggerData.flowState.data.damage` or `.bonus_damage` to alter base dama
 
 </details>
 
+<details id="onRoundEnd"><summary><b><code>onRoundEnd</code></b> - once at the end of every round, before the next <code>onRoundStart</code></summary>
+
+```js
+{ combat: Combat, round: number }
+```
+
+`round` is the round that ended.
+
+</details>
+
 <details id="onEnterCombat"><summary><b><code>onEnterCombat</code></b> / <b><code>onExitCombat</code></b> - token added to / removed from the combat tracker</summary>
 
 ```js
@@ -1012,7 +1022,7 @@ await api.applyEffectsToTokens({
 
 ```js
 await api.addGlobalBonus(target.actor, { name: "Squad Leader", val: 1, type: "accuracy", rollTypes: ["attack"] },
-    { duration: "1 Round", origin: reactorToken, consumption: { trigger: "onHit" } });
+    { duration: "roundEnd", origin: reactorToken, consumption: { trigger: "onHit" } });
 ```
 
 **Only spend on a failed AGI check**, using the gate:
@@ -1067,7 +1077,6 @@ Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine on
 |:--------|:-----------|:-------------|
 | `effect` | `checkEffectImmunities` | `effects: [names]` |
 | `damage` | `applyDamageImmunities` | `damageTypes: [types]`, `"all"` for every type |
-| `resistance` | `checkDamageResistances` (halves) | `damageTypes: [types]`, `"all"` for every type |
 | `crit` | `hasCritImmunity` | - |
 | `hit` | `hasHitImmunity` | - |
 | `miss` | `hasMissImmunity` | - |
@@ -1076,13 +1085,23 @@ Immunity bonuses (`type: "immunity"`) carry exactly one `subtype`. The engine on
 | `obstacle` | `isPhasing` (move through other characters) | - |
 | `provoke` | engagement + reaction gate | - |
 
+Resistance and vulnerability are bonus types of their own, `{ type: "resistance", damageTypes }` and `{ type: "vulnerability", damageTypes }`, checked by `checkDamageResistances` (halves) and `checkDamageVulnerabilities` (doubles, after armor).
+
+`"AoE"` in `damageTypes` (damage immunity, resistance, vulnerability) covers every type of area damage. Damage is area damage when the damage roll's targeting shape is Blast, Burst, Cone or Line. Without that shape, `executeDamageRoll`'s `targeting.pattern` or the attack's shape decides, then the weapon's area ranges (weapon mods and range bonuses included).
+
 ### Duration labels
 
 Accepted `duration.label` values:
-- `start` / `end` / `round` - tick down at turn start, turn end, or round change. Only these expire by time, and only in combat.
+- `start` / `end` - tick down at the origin token's turn start or turn end. `turns` counts those turns.
+- `roundStart` / `roundEnd` - end at the start or end of a round. `rounds` counts rounds including the current one: `roundEnd` with `rounds: 1` ends this round, `roundStart` with `rounds: 1` at the start of the next. `round` and `"1 Round"` are read as `roundEnd`.
+- `encounter` - ends when its combat ends. Applied with no combat, it ends when the next combat on that scene ends.
 - `indefinite` - never expires by time. `unlimited` is a retired alias, still accepted and normalized to `indefinite`.
 - `permanent` - never expires by time and [survives a Full Repair](feature/SYSTEM_ADDITIONS.md#permanent-statuses).
 - `constant` - bonus only: passive and invisible, no token icon or counter (same as `addConstantBonus`).
+
+Turn, round and encounter durations only expire in combat, and all three are removed when their combat ends. Each stack keeps its own duration, so an expiry removes only its own stacks.
+
+A turn duration counted on a token that never takes a turn counts its owner's turns (deployables) or else the holder's. When the origin leaves the combat, is deleted or is defeated, its pending turn durations become `roundEnd` of the current round.
 
 ### Stat codes
 
@@ -1112,7 +1131,7 @@ One entry in an activation group's `reactions` array. Interface: `ReactionConfig
 | <kbd>requireCanProvoke</kbd> | `boolean` | `false` | Skip unless the trigger source can provoke the reactor (engagement, provoke immunity). Used by Overwatch |
 | <kbd>checkUsage</kbd> | `boolean` | `false` | Item entries only. Skip when the item is unloaded, uncharged, out of uses, or past its `tg_turn` / `tg_round` limit |
 | <kbd>isReaction</kbd> | `boolean` | `false` | Marks the entry as a reaction in the manager UI |
-| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd`, `onRoundStart`, `onFullRepair` and custom triggers, which always fire |
+| <kbd>outOfCombat</kbd> | `boolean` | `false` | Also fire outside combat. Bypassed for `onEnterCombat`, `onExitCombat`, `onTurnStart`, `onTurnEnd`, `onRoundStart`, `onRoundEnd`, `onFullRepair` and custom triggers, which always fire |
 | <kbd>onlyOnSourceMatch</kbd> | `boolean` | `false` | Match by name (general) or by possession (item) |
 | <kbd>dispositionFilter</kbd> | `Array<"hostile" \| "friendly" \| "neutral" \| "secret">` | `[]` | Restrict by disposition toward the trigger |
 | <kbd>reactionPath</kbd> | `string` | `""` | Action path, e.g. `extraActions.Print`. Also gates availability: `ranks[N]` needs the talent at rank N+1, `profiles[N]` needs that weapon profile selected |

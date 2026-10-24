@@ -8,6 +8,7 @@ import { bindConsumeStatusToggles } from '../interactive/extra-config.js';
 import { appendItemPips } from './item-helpers.js';
 import { canMarkCascading, isItemCascading, setItemCascading } from '../setup/lancer-modif.js';
 import { localize } from '../tools/string-utils.js';
+import { getV3ChipRows } from '../tools/v3-data.js';
 
 const LA_DIRECT_AUTOMATED = new Set([
     'skirmish', 'barrage', 'fight', 'stabilize', 'boot up', 'shut down',
@@ -48,6 +49,62 @@ export function hasAutomation(itemOrName)
             return true;
     }
     return LA_DIRECT_AUTOMATED.has(lcName);
+}
+
+const V3_BOX_LABELS = { effect: 'EFFECT', on_hit: 'ON HIT', on_crit: 'ON CRIT', on_attack: 'ON ATTACK', on_miss: 'ON MISS' };
+
+function v3InScope(placement, scope)
+{
+    if (!scope)
+        return placement.type === 'box' || (placement.type === 'action' && !placement.path.startsWith('system.ranks.'));
+    if (scope.type === 'rank')
+        return (placement.type === 'rank' && placement.index === scope.index) || (placement.type === 'action' && placement.path.startsWith(`system.ranks.${scope.index}.`));
+    return Object.entries(scope).every(([key, value]) => placement[key] === value);
+}
+
+function v3Anchor(root, placement)
+{
+    const candidates = selector => [...root.querySelectorAll(selector)].filter(element => !element.closest('.la-weapon-mod') && element.closest('.la-mod-body')?.style.display !== 'none');
+    const section = label => candidates('.la-popup-section-label').find(span => span.textContent.trim() === label)?.parentElement ?? null;
+    const text = () => candidates('.la-popup-effect')[0] ?? null;
+    if (placement.type === 'box')
+        return section(V3_BOX_LABELS[placement.key]) ?? section('EFFECT') ?? text();
+    if (placement.type === 'action')
+        return candidates(`.la-popup-action[data-action-index="${placement.path.split('.').pop()}"]`)[0] ?? section('EFFECT') ?? text();
+    if (placement.type === 'core')
+        return section(placement.passive ? 'PASSIVE' : 'ACTIVE') ?? text();
+    return text();
+}
+
+export function v3ActionPath(item, action)
+{
+    const lists = [['system.actions', item?.system?.actions], ...(item?.system?.ranks ?? []).map((rank, index) => [`system.ranks.${index}.actions`, rank?.actions])];
+    for (const [path, actions] of lists)
+    {
+        const index = actions?.findIndex(entry => entry === action || entry?.name === action?.name) ?? -1;
+        if (index >= 0)
+            return `${path}.${index}`;
+    }
+    return null;
+}
+
+export function withV3Chips(html, item, scope = null)
+{
+    const rows = item?.documentName === 'Item' ? getV3ChipRows(item).filter(row => v3InScope(row.placement, scope)) : [];
+    if (!rows.length)
+        return html;
+    const template = document.createElement('template');
+    template.innerHTML = `<div>${html || ''}</div>`;
+    const root = template.content.firstElementChild;
+    for (const row of rows)
+    {
+        const anchor = v3Anchor(root, row.placement);
+        if (!anchor)
+            root.insertAdjacentHTML('beforeend', row.html);
+        else
+            anchor.insertAdjacentHTML(anchor.classList.contains('la-popup-effect') ? 'afterend' : 'beforeend', row.html);
+    }
+    return root.innerHTML;
 }
 
 /**
@@ -128,7 +185,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
  *   postRender?:   (popup: any) => void
  * }} opts
  */
-export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: showAt, postRender = null, pipsItem, pipsArgs, pips = true, skipExtras = false })
+export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: showAt, postRender = null, pipsItem, pipsArgs, pips = true, skipExtras = false, v3Scope = undefined })
 {
     const selector = '.' + cssClass.trim().split(/\s+/).pop(); // last class is the specific one
     const existing = $(selector);
@@ -138,7 +195,8 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
         return;
     }
     existing.remove();
-    let composedBody = bodyHtml;
+    const chipScope = v3Scope === undefined ? (skipExtras ? false : null) : v3Scope;
+    let composedBody = chipScope === false ? bodyHtml : withV3Chips(bodyHtml, item, chipScope);
     if (item && !skipExtras)
     {
         try

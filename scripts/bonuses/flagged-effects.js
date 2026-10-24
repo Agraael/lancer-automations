@@ -5,7 +5,8 @@ import { getLAFlag, setLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { linkTierGate } from '../interactive/deployables.js';
 import { isAdditionalStatusUnavailable } from '../setup/status-effects.js';
-import { untilEndOfTurn, untilStartOfTurn, currentTurnKey } from './duration-widget.js';
+import { untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey } from './duration-widget.js';
+import { buildEntry, durationEntries, entryDuration, normalizeDuration, tickTurnEntries, resolveTurnOrigin, combatForScene, sceneActors, remainingRounds } from './duration-clock.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { hasExecutorGM, isExecutorGM } from '../tools/misc-tools.js';
 import { playStatusAddedFX } from '../fx/actionFX.js';
@@ -214,14 +215,16 @@ function _sameIdentity(extraOptions, existingEffect)
 }
 
 // refresh mode: reset the effect's duration in place, stack untouched
-async function _refreshEffectDuration(existingEffect, duration, note, originID)
+async function _refreshEffectDuration(existingEffect, duration, note, originID, tokenDoc)
 {
+    const entry = buildEntry(duration, originID, effectStack(existingEffect), tokenDoc);
     await existingEffect.update(/** @type {any} */ ({
-        "flags.lancer-automations.duration": duration,
+        "flags.lancer-automations.duration": { ...duration, ...entryDuration(entry) },
         "flags.lancer-automations.note": note,
         "flags.lancer-automations.originID": originID,
         "flags.lancer-automations.appliedRound": game.combat?.round || 0,
-        "flags.lancer-automations.-=durationEntries": null
+        "flags.lancer-automations.appliedStack": effectStack(existingEffect),
+        "flags.lancer-automations.durationEntries": [entry]
     }));
 }
 
@@ -232,13 +235,14 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     const target = canvas.tokens.get(targetID);
     if (!target)
         return;
+    duration = normalizeDuration(duration);
 
     if (extraOptions.refresh && extraOptions.linkedBonusId)
     {
         const linkedExisting = /** @type {any} */ (target.actor).effects.find(/** @param {any} effect */ effect => getLAFlags(effect)?.linkedBonusId === extraOptions.linkedBonusId);
         if (linkedExisting)
         {
-            await _refreshEffectDuration(linkedExisting, duration, note, originID);
+            await _refreshEffectDuration(linkedExisting, duration, note, originID, target.document);
             return;
         }
     }
@@ -286,39 +290,26 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             {
                 if (extraOptions.refresh)
                 {
-                    await _refreshEffectDuration(existingEffect, duration, note, originID);
+                    await _refreshEffectDuration(existingEffect, duration, note, originID, target.document);
                     return;
                 }
                 const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
+                const priorEntries = durationEntries(existingEffect);
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
-
-                // Build duration entries for stack-aware expiration
-                const entries = [...(getLAFlag(existingEffect,'durationEntries') || [])];
-                if (entries.length === 0)
-                {
-                    const existingDur = getLAFlag(existingEffect,'duration');
-                    const existingOrigin = getLAFlag(existingEffect,'originID');
-                    const existingApplied = (game.modules.get(MODULE_ID)?.active && getLAFlag(existingEffect,'appliedStack'));
-                    const existingStack = effectStack(existingEffect);
-                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
-                        entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied || existingStack });
-                }
-                if (duration && duration.label !== 'indefinite' && duration.turns !== null)
-                    entries.push({ label: duration.label, turns: duration.turns, originID: originID, stack: addStack });
+                const newEntry = buildEntry(duration, originID, addStack, target.document);
 
                 /** @type {LancerEffectFlags} */
                 const flagsData = {
                     targetID: targetID,
                     effect: resolvedEffectData.name,
-                    duration: duration,
+                    duration: { ...duration, ...entryDuration(newEntry) },
                     note: note,
                     originID: originID,
                     appliedRound: game.combat?.round || 0,
                     appliedStack: addStack,
+                    durationEntries: [...priorEntries, newEntry],
                     ...extraOptions
                 };
-                if (entries.length > 0)
-                    flagsData.durationEntries = entries;
 
                 const totalStack = effectStack(existingEffect) + (extraOptions.stack || resolvedEffectData.stack || 1);
                 await existingEffect.update(/** @type {any} */ ({
@@ -328,15 +319,17 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 return;
             }
 
+            const createEntry = buildEntry(duration, originID, extraOptions.stack || resolvedEffectData.stack || 1, target.document);
             /** @type {LancerEffectFlags} */
             const lancerFlags = {
                 targetID: targetID,
                 effect: resolvedEffectData.name,
-                duration: duration,
+                duration: { ...duration, ...entryDuration(createEntry) },
                 note: note,
                 originID: originID,
                 appliedRound: game.combat?.round || 0,
                 appliedStack: extraOptions.stack || resolvedEffectData.stack || 1,
+                durationEntries: [createEntry],
                 ...extraOptions
             };
 
@@ -391,6 +384,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                     note: note,
                     originID: originID,
                     appliedRound: game.combat?.round || 0,
+                    durationEntries: [buildEntry(duration, originID, extraOptions.stack || resolvedEffectData.stack || 1, target.document)],
                     ...extraOptions
                 },
                 'temporary-custom-statuses': {
@@ -428,33 +422,23 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         {
             if (extraOptions.refresh)
             {
-                await _refreshEffectDuration(existingEffect, duration, note, originID);
+                await _refreshEffectDuration(existingEffect, duration, note, originID, target.document);
                 return;
             }
             const currentStack = effectStack(existingEffect);
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
+            const newEntry = buildEntry(duration, originID, addStack, target.document);
 
-            // Build duration entries for stack-aware expiration
             const updateData = {
                 "flags.statuscounter.value": newStack,
-                "flags.statuscounter.visible": newStack > 1
+                "flags.statuscounter.visible": newStack > 1,
+                "flags.lancer-automations.durationEntries": [...durationEntries(existingEffect), newEntry]
             };
 
-            if (duration && duration.label !== 'indefinite' && duration.turns !== null)
+            if (duration.label !== 'indefinite')
             {
-                const entries = [...(getLAFlag(existingEffect,'durationEntries') || [])];
-                if (entries.length === 0)
-                {
-                    const existingDur = getLAFlag(existingEffect,'duration');
-                    const existingOrigin = getLAFlag(existingEffect,'originID');
-                    const existingApplied = getLAFlag(existingEffect,'appliedStack') || currentStack;
-                    if (existingDur && existingDur.label !== 'indefinite' && existingDur.turns !== null)
-                        entries.push({ label: existingDur.label, turns: existingDur.turns, originID: existingOrigin, stack: existingApplied });
-                }
-                entries.push({ label: duration.label, turns: duration.turns, originID: originID, stack: addStack });
-                updateData["flags.lancer-automations.durationEntries"] = entries;
-                updateData["flags.lancer-automations.duration"] = duration;
+                updateData["flags.lancer-automations.duration"] = { ...duration, ...entryDuration(newEntry) };
                 updateData["flags.lancer-automations.originID"] = originID;
                 updateData["flags.lancer-automations.appliedStack"] = addStack;
             }
@@ -464,16 +448,18 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             return;
         }
 
+        const createEntry = buildEntry(duration, originID, extraOptions.stack || 1, target.document);
         const flags = {
             /** @type {LancerEffectFlags} */
             [MODULE_ID]: {
                 targetID: targetID,
                 effect: statusEffect.name,
-                duration: duration,
+                duration: { ...duration, ...entryDuration(createEntry) },
                 note: note,
                 originID: originID,
                 appliedRound: game.combat?.round || 0,
                 appliedStack: extraOptions.stack || 0,
+                durationEntries: [createEntry],
                 ...extraOptions
             }
         };
@@ -563,7 +549,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
  * @param {string} [options.note=""] - Note/description for the effect
  * @param {Object} [options.duration={}] - Duration object
  * @param {string} [options.duration.overrideTurnOriginId] - When set, ties duration tracking to this token ID instead of the target's turn
- * @param {string} [options.duration.label] - Display label for the duration (e.g. 'start', 'end', 'indefinite')
+ * @param {string} [options.duration.label] - Duration label (e.g. 'start', 'end', 'roundEnd', 'encounter', 'indefinite')
  * @param {number} [options.duration.turns] - Number of turns before expiration
  * @param {number} [options.duration.rounds] - Number of rounds before expiration
  * @param {Function} [options.checkEffectCallback=null] - Optional custom function to check if effect already exists
@@ -577,7 +563,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         tokens = [],
         effectNames = [],
         note = "",
-        duration = {},
+        duration: rawDuration = {},
         checkEffectCallback = null,
         notify = true,
         refresh = false
@@ -586,9 +572,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
     if (refresh)
         extraOptions = { ...extraOptions, refresh: true };
 
-    // 'unlimited' is the retired synonym of 'indefinite'
-    if (duration?.label === 'unlimited')
-        duration.label = 'indefinite';
+    const duration = normalizeDuration(rawDuration);
 
     if (extraOptions?.consumption?.grouped && !extraOptions.consumption.groupId)
         extraOptions.consumption.groupId = foundry.utils.randomID();
@@ -601,16 +585,11 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         return [];
     }
 
-    const hasLimitedDuration = duration && (
-        ['start', 'end', 'round'].includes(duration.label) ||
-        (duration.turns != null && duration.turns !== 0) ||
-        (duration.rounds != null && duration.rounds !== 0)
-    );
-    if (hasLimitedDuration && !game.combat?.started)
-    {
-        const names = effectsToApply.map(effect => typeof effect === 'string' ? effect : effect?.name).filter(Boolean).join(', ');
-        ui.notifications.warn(localizeFormat('LA.notify.outOfCombatDuration', { names }));
-    }
+    const effectLabels = effectsToApply.map(effect => typeof effect === 'string' ? effect : effect?.name).filter(Boolean).join(', ');
+    if (['start', 'end', 'roundStart', 'roundEnd'].includes(duration.label) && !game.combat?.started)
+        ui.notifications.warn(localizeFormat('LA.notify.outOfCombatDuration', { names: effectLabels }));
+    else if (duration.label === 'encounter' && !combatForScene(canvas.scene))
+        ui.notifications.warn(localizeFormat('LA.notify.outOfCombatEncounter', { names: effectLabels }));
 
     const validTokens = [];
 
@@ -689,7 +668,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                     !getLAFlags(existingEffect)?.effect &&
                     !existingEffect.flags?.['temporary-custom-statuses']?.originalName &&
                     !existingEffect.flags?.['csm-lancer-qol']?.effect &&
-                    (duration?.label || duration?.overrideTurnOriginId))
+                    (rawDuration?.label || rawDuration?.overrideTurnOriginId))
 
                     existingEffect = null;
 
@@ -728,10 +707,23 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         validTokens.push(token);
 
         const tokenID = token.id;
-        const originID = duration?.overrideTurnOriginId ?? token.id;
+        const sourceID = duration?.overrideTurnOriginId ?? token.id;
+        let originID = sourceID;
+        let originSwapped = false;
+        if (duration.label === 'start' || duration.label === 'end')
+        {
+            const resolved = resolveTurnOrigin(originID, token.document);
+            if (resolved.originID !== originID)
+            {
+                if (resolved.fallback)
+                    ui.notifications.warn(localizeFormat('LA.notify.durationOriginFallback', { origin: canvas.tokens?.get(originID)?.name ?? originID, names: effectLabels, holder: token.name }));
+                originID = resolved.originID;
+                originSwapped = true;
+            }
+        }
 
         let adjustedDuration = { ...duration };
-        if (!duration._preAdjusted && game.combat?.current?.tokenId === originID && duration.turns >= 1)
+        if (duration.label === 'end' && (!duration._preAdjusted || originSwapped) && game.combat?.current?.tokenId === originID && duration.turns >= 1)
             adjustedDuration.turns = duration.turns + 1;
         delete adjustedDuration._preAdjusted;
 
@@ -753,7 +745,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
 
         // bonus-linked effects get their own ping from addGlobalBonus
         if (!extraOptions.linkedBonusId)
-            playStatusAddedFX(token, canvas.tokens?.get?.(originID) ?? null);
+            playStatusAddedFX(token, canvas.tokens?.get?.(sourceID) ?? null);
     }
 
     return validTokens;
@@ -1499,20 +1491,14 @@ export async function consumeEffectCharge(effect)
  * @param {string} triggeringTokenId - The token ID whose turn is starting/ending
  * @returns {Promise<void>}
  */
-export async function processDurationEffects(triggerLabel, triggeringTokenId)
+export async function processDurationEffects(triggerLabel, triggeringTokenId, combat = null)
 {
     // Only the active GM processes duration to avoid conflicts
     if (!isExecutorGM())
         return;
 
-    const allTokens = canvas.tokens.placeables.filter(token => token.actor);
-
-    for (const token of allTokens)
+    for (const actor of sceneActors((combat ?? game.combat)?.scene ?? canvas.scene))
     {
-        const actor = token.actor;
-        if (!actor)
-            continue;
-
         const effects = [...actor.effects];
 
         for (const effect of effects)
@@ -1546,116 +1532,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId)
                 continue;
             }
 
-            // Check durationEntries first (multi-duration stacks)
-            const entries = flags.durationEntries;
-
-            if (entries && Array.isArray(entries) && entries.length > 0)
-            {
-                let totalStackToRemove = 0;
-                const remaining = [];
-                let modified = false;
-
-                for (const entry of entries)
-                {
-                    if (entry.label !== triggerLabel || entry.originID !== triggeringTokenId)
-                    {
-                        remaining.push(entry);
-                        continue;
-                    }
-
-                    modified = true;
-                    const newTurns = (entry.turns || 1) - 1;
-
-                    if (newTurns <= 0)
-                        totalStackToRemove += (entry.stack || 1);
-                    else
-                        remaining.push({ ...entry, turns: newTurns });
-                }
-
-                if (!modified)
-                    continue;
-
-                if (totalStackToRemove > 0)
-                {
-                    const currentStack = effect.flags?.statuscounter?.value || 1;
-                    const newStack = currentStack - totalStackToRemove;
-
-                    if (newStack <= 0 || remaining.length === 0)
-                    {
-                        log(`Duration expired for ${effect.name} (all stacks depleted), removing effect`);
-                        await effect.delete();
-                    }
-                    else
-                    {
-                        log(`Duration expired for ${effect.name}, removing ${totalStackToRemove} stacks (${newStack} remaining)`);
-                        await effect.update(/** @type {any} */({
-                            "flags.statuscounter.value": newStack,
-                            "flags.statuscounter.visible": newStack > 1,
-                            "flags.lancer-automations.durationEntries": remaining
-                        }));
-                    }
-                }
-                else
-                {
-                    // Entries were modified (turns decremented) but none expired yet
-                    await effect.update(/** @type {any} */({
-                        "flags.lancer-automations.durationEntries": remaining
-                    }));
-                }
-            }
-            else
-            {
-                // Fall back to single duration field
-                const dur = flags.duration;
-                if (!dur || dur.label === 'indefinite' || dur.turns === null || dur.turns === undefined)
-                    continue;
-                if (dur.label !== triggerLabel)
-                    continue;
-
-                const originID = flags.originID;
-                if (originID !== triggeringTokenId)
-                    continue;
-
-                const newTurns = (dur.turns || 1) - 1;
-
-                if (newTurns <= 0)
-                {
-                    const appliedStack = flags.appliedStack || 0;
-
-                    if (appliedStack > 0)
-                    {
-                        const currentStack = effect.flags?.statuscounter?.value || 0;
-                        const newStack = currentStack - appliedStack;
-
-                        if (newStack <= 0)
-                        {
-                            log(`Duration expired for ${effect.name}, removing effect (all stacks)`);
-                            await effect.delete();
-                        }
-                        else
-                        {
-                            log(`Duration expired for ${effect.name}, removing ${appliedStack} stacks (${newStack} remaining)`);
-                            await effect.update(/** @type {any} */({
-                                "flags.statuscounter.value": newStack,
-                                "flags.statuscounter.visible": newStack > 1,
-                                "flags.lancer-automations.duration": null,
-                                "flags.lancer-automations.appliedStack": null
-                            }));
-                        }
-                    }
-                    else
-                    {
-                        log(`Duration expired for ${effect.name}, removing effect`);
-                        await effect.delete();
-                    }
-                }
-                else
-                {
-                    await effect.update(/** @type {any} */({
-                        "flags.lancer-automations.duration.turns": newTurns
-                    }));
-                }
-            }
+            await tickTurnEntries(effect, triggerLabel, triggeringTokenId);
         }
     }
 }
@@ -1941,6 +1818,16 @@ Hooks.on('canvasReady', () =>
 {
     _lastZoomBoost = Math.round(_effectIconZoomBoost() * 20) / 20;
 });
+Hooks.on('updateCombat', (_combat, changed) =>
+{
+    if (!('round' in changed))
+        return;
+    for (const token of canvas.tokens?.placeables ?? [])
+    {
+        if (token.effects?.children?.length)
+            token.renderFlags.set({ refreshEffects: true });
+    }
+});
 
 function _shrinkEffectIcons(token)
 {
@@ -2156,6 +2043,11 @@ export function usageBadgeColor()
     return _badgeColor('statusUsageColor', '#c39bff');
 }
 
+export function roundBadgeColor()
+{
+    return _badgeColor('statusRoundColor', '#ff8c42');
+}
+
 /** Drop LA's own badges before a redraw. Texts statuscounter draws, when it runs, are left to it. */
 function _clearBadges(token)
 {
@@ -2276,16 +2168,11 @@ function _drawDurationBadges(token)
         const flags = getLAFlags(effect);
         if (!flags)
             continue;
-        const candidates = [];
-        const single = flags.duration;
-        if ((single?.label === 'end' || single?.label === 'start') && Number(single.turns) > 0)
-            candidates.push(Number(single.turns));
-        for (const entry of flags.durationEntries ?? [])
-        {
-            if ((entry?.label === 'end' || entry?.label === 'start') && Number(entry.turns) > 0)
-                candidates.push(Number(entry.turns));
-        }
-        if (!candidates.length)
+        const candidates = durationEntries(effect)
+            .filter(entry => (entry.label === 'end' || entry.label === 'start') && Number(entry.turns) > 0)
+            .map(entry => Number(entry.turns));
+        const rounds = candidates.length ? 0 : remainingRounds(effect);
+        if (!candidates.length && !rounds)
             continue;
         const sprite = spriteMap.get(index);
         if (!sprite)
@@ -2295,7 +2182,9 @@ function _drawDurationBadges(token)
         const sizeRatio = sprite.height / BADGE_REFERENCE_ICON;
         const left = sprite.x - (sprite.anchor?.x ?? 0) * sprite.width;
         const top = sprite.y - (sprite.anchor?.y ?? 0) * sprite.height;
-        const text = _badgeText(String(Math.min(...candidates)), _badgeColor('statusDurationColor', '#ffd700'), sizeRatio);
+        const text = candidates.length
+            ? _badgeText(String(Math.min(...candidates)), _badgeColor('statusDurationColor', '#ffd700'), sizeRatio)
+            : _badgeText(String(rounds), roundBadgeColor(), sizeRatio);
         text.anchor.set(0, 0);
         text.position.set(left - sprite.width * 0.3, top - sprite.height * 0.3);
         text._laDuration = true;
@@ -2424,6 +2313,9 @@ export function getLinkedEffects(source)
 export const EffectsAPI = {
     untilEndOfTurn,
     untilStartOfTurn,
+    untilEndOfRound,
+    untilStartOfRound,
+    untilEndOfEncounter,
     currentTurnKey,
     applyEffectsToTokens,
     removeEffectsByNameFromTokens,

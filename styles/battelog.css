@@ -297,7 +297,7 @@
     inset: 0;
     z-index: 100000;
     color: #d7ddda;
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -316,7 +316,7 @@
     flex-direction: column;
     gap: 18px;
     pointer-events: none;
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
 }
 
 .battelog-intro-preamble-inner {
@@ -342,7 +342,7 @@
 }
 
 .battelog-intro-preamble-title {
-    font-family: var(--bl-display);
+    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
     font-weight: 700;
     letter-spacing: 4px;
     font-size: clamp(13px, 1.9vw, 19px);
@@ -355,7 +355,7 @@
 }
 
 .battelog-intro-preamble-sub {
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     font-size: clamp(9px, 1.2vw, 12px);
     letter-spacing: 3px;
     color: #d0d3ce;
@@ -871,7 +871,7 @@
 }
 
 .battelog-intro-final-word {
-    font-family: var(--bl-display);
+    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
     font-weight: 700;
     text-transform: uppercase;
     font-size: clamp(52px, 10vw, 128px);
@@ -1072,7 +1072,7 @@
     width: 100%;
     min-height: 84px;
     resize: vertical;
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     font-size: 14px;
     line-height: 1.5;
     color: #d7ddda;
@@ -1109,7 +1109,7 @@
 }
 
 .battelog-intro-send {
-    font-family: var(--bl-display);
+    font-family: 'Saira Condensed', 'Oswald', system-ui, sans-serif;
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 3px;
@@ -1135,7 +1135,7 @@
 }
 
 .battelog-intro-decline {
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     font-size: 11px;
     letter-spacing: 1.5px;
     text-transform: uppercase;
@@ -1261,7 +1261,7 @@
     z-index: 3;
     overflow: hidden;
     color: #7f8a84;
-    font-family: var(--bl-mono);
+    font-family: 'Space Mono', 'Consolas', 'Menlo', monospace;
     font-size: 10px;
     letter-spacing: 1px;
 }
@@ -1557,7 +1557,7 @@
 
     45% {
         opacity: 1;
-        box-shadow: 0 0 16px color-mix(in srgb, var(--pcol-top-color, var(--hcard-accent, var(--la-primary))) 60%, transparent);
+        box-shadow: 0 0 16px color-mix(in srgb, var(--la-primary) 60%, transparent);
     }
 
     100% {

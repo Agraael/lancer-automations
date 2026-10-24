@@ -1,4 +1,5 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
+import { currentTurnKey } from "../bonuses/duration-builders.js";
 import { MODULE_ID } from "./constants.js";
 import { localize, localizeFormat } from "./string-utils.js";
 import { tfGetTeam, tfGetTeams } from "./token-factions-utils.js";
@@ -177,7 +178,10 @@ export function getActorActionItems(actor, activationType)
                 action.activation === activationType || action.activation === activationType + ' Action'
             );
             // Fallback: match by system.type when no tag and no explicit actions found
-            const typeMatched = !tagMatched && !extraActions.length && item.system?.type === activationType;
+            const typeActivation = item.system?.type === 'Tech'
+                ? (item.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')
+                : item.system?.type;
+            const typeMatched = !tagMatched && !extraActions.length && typeActivation === activationType;
             if (!hidePrimary && (tagMatched || typeMatched))
             {
                 results.push({
@@ -1465,10 +1469,7 @@ function _gateKey(key)
 // Combatant id rather than turn index, Lancer turn order is not fixed.
 function _turnStamp()
 {
-    const combat = game.combat;
-    if (!combat?.round)
-        return null;
-    return `${combat.round}:${combat.combatant?.id ?? combat.turn ?? 0}`;
+    return game.combat?.round ? currentTurnKey() : null;
 }
 
 // A gate from another combat is dead.
@@ -1700,38 +1701,43 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
         }, { tapeRecorded: true });
     }
 
-    // Bare attack needs a full acc_diff for tags (smart) to apply + show checked.
     const targets = targetsOverride ?? Array.from(game.user?.targets ?? []);
     const grit = action.grit ?? actor.system?.grit ?? actor.system?.tier ?? 0;
-    const flatBonus = Number(action.attack_bonus ?? 0);
-    const accuracy = Number(action.accuracy ?? 0);
-    const difficulty = Number(action.difficulty ?? 0);
-    const coverOf = (/** @type {any} */ tok) => tok.actor?.statuses?.has('cover_hard') ? 2 : tok.actor?.statuses?.has('cover_soft') ? 1 : 0;
-    const accDiff = {
-        title: action.name,
-        weapon: { accurate: hasTag('tg_accurate'), inaccurate: hasTag('tg_inaccurate'), seeking: hasTag('tg_seeking'), tech: false, smart: hasTag('tg_smart'), melee: action.attack_type === 'Melee', thrown: false, engaged: false, plugins: {} },
-        base: { grit, flatBonus, accuracy, difficulty, cover: 0, plugins: {} },
-        targets: targets.map(/** @type {any} */ (tok) => ({ targetUuid: tok.document.uuid, grit, flatBonus, accuracy, difficulty, cover: coverOf(tok), consumeLockOn: true, prone: !!tok.actor?.system?.statuses?.prone, stunned: !!tok.actor?.system?.statuses?.stunned, plugins: {} })),
-        runtimeData: actor.uuid
+    const accDiffPatch = {
+        weapon: { accurate: hasTag('tg_accurate'), inaccurate: hasTag('tg_inaccurate'), seeking: hasTag('tg_seeking'), smart: hasTag('tg_smart'), melee: action.attack_type === 'Melee' },
+        grit,
+        flatBonus: Number(action.attack_bonus ?? 0),
+        accuracy: Number(action.accuracy ?? 0),
+        difficulty: Number(action.difficulty ?? 0)
     };
+    const laTargeting = extraActionTargeting(action.range);
     return executeBasicAttack(actor, {
         type: 'attack',
         title: action.name,
         targets,
         fxSourceToken,
         fxItem,
-        grit,
-        flat_bonus: flatBonus,
         action: null,
         is_smart: hasTag('tg_smart'),
         tags: extraDisplayTags(weaponTags),
         damage: action.damage ?? [],
-        acc_diff: accDiff,
         attack_rolls: { roll: '', targeted: [] },
         attack_results: [],
         hit_results: [],
         reroll_data: ''
-    }, { tapeRecorded: true });
+    }, { tapeRecorded: true, accDiffPatch, ...(laTargeting ? { laTargeting } : {}) });
+}
+
+function extraActionTargeting(ranges)
+{
+    const entries = (ranges ?? [])
+        .map(/** @type {any} */ (entry) => ({ type: String(entry?.type ?? ''), val: Number(entry?.val) || 0 }))
+        .filter(entry => entry.val > 0);
+    const area = entries.find(entry => ['Blast', 'Burst', 'Cone', 'Line'].includes(entry.type));
+    const reach = Math.max(0, ...entries.filter(entry => entry.type === 'Range' || entry.type === 'Threat').map(entry => entry.val));
+    if (area)
+        return { pattern: area.type.toLowerCase(), size: area.val, range: reach };
+    return reach > 0 ? { pattern: 'target', size: 1, range: reach } : null;
 }
 
 /** @returns {Promise<void>} */
@@ -1923,7 +1929,7 @@ export async function executeReactorExplosion(token)
         .zIndex(100)
         .thenDo(async () =>
         {
-            await token.document.delete();
+            await token.document.delete({ laCause: 'reactor' });
         })
         .effect("jb2a.ground_cracks.01.orange")
         .persist()
@@ -2127,11 +2133,12 @@ export async function updateTokenSystem(token, data)
     }
 }
 
-/** Superheavy is stored as size on mech weapons and as type on NPC features. */
+/** Superheavy is the size on mech weapons and the start of weapon_type on NPC features ("Superheavy Rifle"). */
 function isSuperheavyWeapon(weapon)
 {
-    const size = weapon?.system?.size || weapon?.system?.type || "";
-    return size.toLowerCase() === 'superheavy';
+    const sys = weapon?.system;
+    const size = String(sys?.size || sys?.type || "").toLowerCase();
+    return size === 'superheavy' || String(sys?.weapon_type || "").toLowerCase().startsWith('superheavy');
 }
 
 function weaponActiveProfile(weapon)
@@ -2153,6 +2160,26 @@ export function weaponBarrageable(weapon)
     if (!isSuperheavyWeapon(weapon))
         return true;
     return weaponActiveProfile(weapon)?.barrageable !== false;
+}
+
+// Bonus damage: non-Aux is primary in X/Aux mounts; in Aux/Aux only the first weapon fired keeps bonus.
+function auxBonusRule(weapons)
+{
+    const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
+    const hasNonAux = weapons.some(weapon => !isAuxSize(weapon) && isItemUsable(weapon));
+    let auxPrimaryUsed = false;
+    return {
+        hasNonAux,
+        suppressBonus: (weapon) =>
+        {
+            if (hasNonAux)
+                return isAuxSize(weapon);
+            const suppressed = auxPrimaryUsed;
+            if (isItemUsable(weapon))
+                auxPrimaryUsed = true;
+            return suppressed;
+        }
+    };
 }
 
 /**
@@ -2204,10 +2231,6 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             ? actorOrToken
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
-    if (sourceToken && !options.noFX)
-        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken, 'skirmish');
-    if (sourceToken)
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
 
     let weapons;
     if (bypassMount)
@@ -2245,30 +2268,23 @@ export async function executeSkirmish(actorOrToken, bypassMount = null, preTarge
             weapons = [chosenMount];
     }
 
+    if (sourceToken && !options.noFX)
+        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken, 'skirmish');
+    if (sourceToken)
+        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
     if (!options.asReaction)
         await consumeAction(actor, 'quick');
     await printAttackActionCard(actor, 'SKIRMISH', weapons);
     if (sourceToken && !options.asReaction)
         await recordAction(sourceToken, { name: 'Skirmish', activation: 'Quick', icon: 'modules/lancer-automations/icons/skirmish.svg' });
 
-    // Bonus damage: non-Aux is primary in X/Aux mounts; in Aux/Aux only the first weapon fired keeps bonus.
-    const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
-    const hasNonAux = weapons.some(weapon => !isAuxSize(weapon));
-    let auxPrimaryUsed = false;
+    const { hasNonAux, suppressBonus } = auxBonusRule(weapons);
 
     const fireWeapon = async (weapon) =>
     {
         if (preTarget)
             /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
-        let suppressBonus;
-        if (hasNonAux)
-            suppressBonus = isAuxSize(weapon);
-        else
-        {
-            suppressBonus = auxPrimaryUsed;
-            auxPrimaryUsed = true;
-        }
-        const extraData = suppressBonus ? { _csmNoBonusDmg: { enabled: true } } : {};
+        const extraData = suppressBonus(weapon) ? { _csmNoBonusDmg: { enabled: true } } : {};
         await beginWeaponAttackFlow(weapon, {}, extraData);
     };
 
@@ -2309,11 +2325,6 @@ export async function executeFight(actorOrToken, bypassWeapon = null)
             ? actorOrToken
             : actor.token?.object || actor.getActiveTokens?.()?.[0] || null
     );
-    if (sourceToken)
-    {
-        queueActionFx(() => playFightFX(sourceToken), sourceToken, 'fight');
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'FIGHT', actionType: 'Quick' });
-    }
 
     let weapon = bypassWeapon;
     if (!weapon)
@@ -2329,8 +2340,44 @@ export async function executeFight(actorOrToken, bypassWeapon = null)
     if (!weapon)
         return;
     if (sourceToken)
+    {
+        queueActionFx(() => playFightFX(sourceToken), sourceToken, 'fight');
+        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'FIGHT', actionType: 'Full' });
+    }
+    await consumeAction(actor, 'full');
+    if (sourceToken)
         await recordAction(sourceToken, { name: 'Fight', activation: 'Full', icon: 'modules/lancer-automations/icons/crossed-slashes.svg' });
     await beginWeaponAttackFlow(weapon);
+}
+
+export async function executeImprovisedAttack(actorOrToken)
+{
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return;
+    const sourceToken = /** @type {Token|null} */ (
+        (/** @type {any} */ (actorOrToken))?.actor
+            ? actorOrToken
+            : actor.token?.object || actor.getActiveTokens?.()?.[0] || null
+    );
+    if (!sourceToken)
+    {
+        ui.notifications.error("lancer-automations | improvised attack requires a token.");
+        return;
+    }
+    const chosen = await chooseToken(sourceToken, { count: 1, range: 1 });
+    if (!chosen?.length)
+        return;
+    Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'IMPROVISED ATTACK', actionType: 'Full' });
+    await consumeAction(actor, 'full');
+    await recordAction(sourceToken, { name: 'Improvised Attack', activation: 'Full', icon: 'mdi mdi-hexagon-slice-6' });
+    await executeBasicAttack(actor, {
+        title: 'Improvised Attack',
+        attack_type: 'Melee',
+        action: { name: 'Improvised Attack', activation: 'Full' },
+        damage: [{ val: '1d6', type: 'Kinetic' }],
+        targets: chosen,
+    }, { tapeRecorded: true });
 }
 
 /**
@@ -2355,28 +2402,10 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
             ? actorOrToken
             : actor.token?.object || actor.getActiveTokens()[0] || null
     );
-    if (sourceToken)
-    {
-        queueActionFx(() => playBarrageFX(sourceToken), sourceToken, 'barrage');
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'BARRAGE', actionType: 'Full' });
-    }
 
-    const hasSuperheavy = (selectedItem) =>
-    {
-        if (selectedItem?.slots)
-        {
-            return selectedItem.slots.some(slot =>
-            {
-                const weapon = slot.weapon?.value;
-                if (!weapon)
-                    return false;
-                const size = weapon.system?.size || weapon.system?.type || "";
-                return size.toLowerCase() === 'superheavy';
-            });
-        }
-        const size = selectedItem?.system?.size || selectedItem?.system?.type || "";
-        return size.toLowerCase() === 'superheavy';
-    };
+    const hasSuperheavy = (selectedItem) => selectedItem?.slots
+        ? selectedItem.slots.some(slot => !!slot.weapon?.value && isSuperheavyWeapon(slot.weapon.value))
+        : isSuperheavyWeapon(selectedItem);
 
     const barrageValidator = (selected) =>
     {
@@ -2410,6 +2439,11 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
     if (!choices || choices.length === 0)
         return;
 
+    if (sourceToken)
+    {
+        queueActionFx(() => playBarrageFX(sourceToken), sourceToken, 'barrage');
+        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'BARRAGE', actionType: 'Full' });
+    }
     await consumeAction(actor, 'full');
     await printAttackActionCard(actor, 'BARRAGE', choices.flatMap(mount => mount.slots
         ? mount.slots
@@ -2433,9 +2467,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
         else
             weapons = [mount];
 
-        const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
-        const hasNonAux = weapons.some(weapon => !isAuxSize(weapon));
-        let auxPrimaryUsed = false;
+        const { hasNonAux, suppressBonus } = auxBonusRule(weapons);
 
         const fireWeapon = async (weapon) =>
         {
@@ -2443,15 +2475,7 @@ export async function executeBarrage(actorOrToken, bypassMount = null, preTarget
             {
                 /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
             }
-            let suppressBonus;
-            if (hasNonAux)
-                suppressBonus = isAuxSize(weapon);
-            else
-            {
-                suppressBonus = auxPrimaryUsed;
-                auxPrimaryUsed = true;
-            }
-            const extraData = suppressBonus ? { _csmNoBonusDmg: { enabled: true } } : {};
+            const extraData = suppressBonus(weapon) ? { _csmNoBonusDmg: { enabled: true } } : {};
             await beginWeaponAttackFlow(weapon, {}, extraData);
         };
 

@@ -2,6 +2,30 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-10-24-lancer-4-4-4",
+            "date": "2026-10-24",
+            "title": "Lancer Automations 4.4.4",
+            "body": [
+                "<p>Small update. First step of <b>v3 LCP</b> support: passive immunities, resistances and vulnerabilities on items imported with <b>Comp/Con Sync</b> are read and automated. Still unfinished.</p>",
+                "<p>Also a <b>Vulnerability</b> bonus type, <b>round and encounter durations</b>, <b>Per Mission</b> limits and <b>directional knockback</b>.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/173262568",
+            "linkLabel": "Lancer Automations 4.4.4 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
+            "id": "2026-10-16-lancer-4-4-0",
+            "date": "2026-10-16",
+            "title": "Lancer Automations 4.4.0",
+            "body": [
+                "<p>Mostly UI, small additions and fixes. <b>Battle Log</b> redesign with pilots tracked, an optional <b>Combat Carousel</b>, an <b>Environment actor</b> and <b>default deployable art</b>.</p>",
+                "<p>The <b>Token Factions fork</b> API changed: update LA, THT, GAA and Template Macro together. <b>Comp/Con Sync</b> can now export to Comp/Con.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-4-0-npc-172561962",
+            "linkLabel": "Lancer Automations 4.4.0 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-10-03-lancer-4-3-12",
             "date": "2026-10-03",
             "title": "Lancer Automations 4.3.12",

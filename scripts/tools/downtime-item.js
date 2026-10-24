@@ -102,28 +102,59 @@ export async function ensureDowntimePack()
     return pack;
 }
 
-/**
- * Import downtime actions from an LCP actions.json. Entries with activation "Downtime" become
- * downtime items in the world compendium, replacing by lid (name fallback). `la_results` on an
- * entry supplies roll bands.
- * @param {string} text
- * @returns {Promise<number>} imported count
- */
-export async function importDowntimeActionsJson(text)
+function parseDowntimeList(text)
 {
-    let data;
-    try
+    const data = JSON.parse(text);
+    return Array.isArray(data) ? data : (Array.isArray(data?.actions) ? data.actions : []);
+}
+
+function v2DowntimeItem(entry)
+{
+    const bands = Array.isArray(entry.la_results) && entry.la_results.length
+        ? entry.la_results.map(result => ({
+            min: Number(result.min ?? result.RollRange?.[0] ?? 0) || 0,
+            max: Number(result.max ?? result.RollRange?.at?.(-1) ?? 0) || 0,
+            short: result.short ?? result.ShortDesc ?? '',
+            long: result.long ?? result.LongDesc ?? '',
+            info: result.info ?? result.Info ?? '',
+        }))
+        : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
+    return { name: entry.name, lid: entry.id, description: entry.terse || entry.detail || '', bands };
+}
+
+function v3DowntimeItem(entry)
+{
+    const results = Array.isArray(entry.table?.results) ? entry.table.results : [];
+    const top = Math.max(0, ...results.map(result => Number(result.max) || 0));
+    const bands = results.length
+        ? results.map(result =>
+        {
+            const min = Number(result.min) || 0;
+            const max = Number(result.max) || 0;
+            if (max === top)
+                return { min, max: 100, short: `${min}+`, long: '', info: result.text ?? '' };
+            return { min, max, short: min === max ? String(min) : `${min}-${max}`, long: '', info: result.text ?? '' };
+        })
+        : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
+    const prompt = entry.table?.detail ? `<p><b>${entry.table.detail}</b></p>` : '';
+    return { name: entry.name, lid: entry.id, description: `${entry.detail || entry.terse || ''}${prompt}`, bands };
+}
+
+function downtimeItems(list)
+{
+    return list.flatMap(entry =>
     {
-        data = JSON.parse(text);
-    }
-    catch
-    {
-        ui.notifications.error(localize('LA.notify.downtimeImportInvalidJson'));
-        return 0;
-    }
-    const list = Array.isArray(data) ? data : (Array.isArray(data?.actions) ? data.actions : []);
-    const entries = list.filter(entry => entry?.activation === 'Downtime');
-    if (!entries.length)
+        if (entry?.activation === 'Downtime')
+            return [v2DowntimeItem(entry)];
+        if (entry && !entry.activation && entry.name && (entry.table || entry.detail || entry.terse))
+            return [v3DowntimeItem(entry)];
+        return [];
+    });
+}
+
+async function importDowntimeItems(items)
+{
+    if (!items.length)
     {
         ui.notifications.warn(localize('LA.notify.downtimeImportNoDowntimeActionsInThis'));
         return 0;
@@ -134,26 +165,17 @@ export async function importDowntimeActionsJson(text)
     if (wasLocked)
         await pack.configure({ locked: false });
     const docs = await pack.getDocuments();
-    for (const entry of entries)
+    for (const entry of items)
     {
-        const bands = Array.isArray(entry.la_results) && entry.la_results.length
-            ? entry.la_results.map(result => ({
-                min: Number(result.min ?? result.RollRange?.[0] ?? 0) || 0,
-                max: Number(result.max ?? result.RollRange?.at?.(-1) ?? 0) || 0,
-                short: result.short ?? result.ShortDesc ?? '',
-                long: result.long ?? result.LongDesc ?? '',
-                info: result.info ?? result.Info ?? '',
-            }))
-            : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
         const itemData = {
             name: entry.name ?? 'Downtime Action',
             type: DOWNTIME_TYPE,
             img: DOWNTIME_ICON,
             system: {
-                lid: entry.id ?? '',
-                description: entry.terse || entry.detail || '',
-                rollable: bands.some(band => band.max > 0),
-                results: bands,
+                lid: entry.lid ?? '',
+                description: entry.description,
+                rollable: entry.bands.some(band => band.max > 0),
+                results: entry.bands,
                 hidden: false,
             },
         };
@@ -164,11 +186,33 @@ export async function importDowntimeActionsJson(text)
             await Item.create(itemData, { pack: pack.collection });
     }
     await pack.configure({ locked: true });
-    ui.notifications.info(localizeFormat('LA.notify.downtimeImported', { count: entries.length, pack: pack.title ?? localize('LA.downtime.activitiesPack') }));
-    return entries.length;
+    ui.notifications.info(localizeFormat('LA.notify.downtimeImported', { count: items.length, pack: pack.title ?? localize('LA.downtime.activitiesPack') }));
+    return items.length;
 }
 
-async function readZipEntry(buffer, suffix)
+/**
+ * Import downtime actions from an LCP actions.json (v2, entries with activation "Downtime", `la_results`
+ * supplies roll bands) or downtime_actions.json (v3, `table.results` supplies roll bands). Items land in
+ * the world compendium, replacing by lid (name fallback).
+ * @param {string} text
+ * @returns {Promise<number>} imported count
+ */
+export async function importDowntimeActionsJson(text)
+{
+    let list;
+    try
+    {
+        list = parseDowntimeList(text);
+    }
+    catch
+    {
+        ui.notifications.error(localize('LA.notify.downtimeImportInvalidJson'));
+        return 0;
+    }
+    return importDowntimeItems(downtimeItems(list));
+}
+
+async function readZipEntry(buffer, fileName)
 {
     const view = new DataView(buffer);
     const bytes = new Uint8Array(buffer);
@@ -198,7 +242,7 @@ async function readZipEntry(buffer, suffix)
         const localOffset = view.getUint32(offset + 42, true);
         const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLen));
         offset += 46 + nameLen + extraLen + commentLen;
-        if (!name.toLowerCase().endsWith(suffix))
+        if (name.toLowerCase().split('/').pop() !== fileName)
             continue;
         const localNameLen = view.getUint16(localOffset + 26, true);
         const localExtraLen = view.getUint16(localOffset + 28, true);
@@ -236,7 +280,8 @@ export function openDowntimeImportDialog()
                         text = await file.text();
                     else
                     {
-                        text = await readZipEntry(await file.arrayBuffer(), 'actions.json');
+                        const buffer = await file.arrayBuffer();
+                        text = await readZipEntry(buffer, 'downtime_actions.json') ?? await readZipEntry(buffer, 'actions.json');
                         if (text == null)
                             return ui.notifications.warn(localize('LA.notify.downtimeImportNoActionsJsonInThis'));
                     }

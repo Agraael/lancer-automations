@@ -456,7 +456,7 @@ export function registerCarouselSettings()
         ...(range ? { range } : {}),
         onChange: scheduleRender,
     });
-    register(SETTING_ENABLED, 'world', Boolean, false);
+    register(SETTING_ENABLED, 'world', Boolean, true);
     for (const [key, { initial, min, max, step }] of Object.entries(NUMBER_SETTINGS))
         register(key, 'client', Number, initial, { min, max, step });
     registerEventSettings();

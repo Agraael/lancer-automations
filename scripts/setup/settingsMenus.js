@@ -375,6 +375,7 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'statusCounterColor', type: 'color' },
     { key: 'statusUsageColor', type: 'color' },
     { key: 'statusDurationColor', type: 'color' },
+    { key: 'statusRoundColor', type: 'color' },
     { key: 'statusBadgeFontScale', type: 'slider', min: 0.5, max: 2, step: 0.05 },
 
     { type: 'section', label: 'LA.settingsMenus.section.customTokenStatBars.label', collapsible: true, collapsed: true },

@@ -2,12 +2,18 @@ import { TG, createTokenTether } from '../interactive/canvas-helpers.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { createTokenMark } from '../interactive/target-shapes.js';
 import { localize } from '../tools/string-utils.js';
+import { buildDuration, untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey } from './duration-builders.js';
+
+export { buildDuration, untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey };
 
 export function durationOptionsHtml()
 {
     let durations = [
         { label: 'end', name: 'End of Turn' },
         { label: 'start', name: 'Start of Turn' },
+        { label: 'roundEnd', name: 'End of Round' },
+        { label: 'roundStart', name: 'Start of Round' },
+        { label: 'encounter', name: 'End of Encounter' },
         { label: 'indefinite', name: 'Indefinite' },
         { label: 'permanent', name: 'Permanent' },
     ];
@@ -30,9 +36,9 @@ export function durationFieldsHtml(prefix, selfTokenId)
     return `
         <div class="la-dur-tool" data-dur-prefix="${prefix}">
             <select id="${prefix}-duration" class="la-dur-select" title="Duration">${durationOptionsHtml()}</select>
-            <span class="dur-opts la-dur-of">of</span>
-            <select id="${prefix}-origin" class="dur-opts la-dur-origin" title="Duration origin token">${originOptionsHtml(selfTokenId)}</select>
-            <button type="button" class="token-picker-btn dur-opts la-dur-pick" data-target="${prefix}-origin" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
+            <span class="dur-opts la-dur-originpart la-dur-of">of</span>
+            <select id="${prefix}-origin" class="dur-opts la-dur-originpart la-dur-origin" title="Duration origin token">${originOptionsHtml(selfTokenId)}</select>
+            <button type="button" class="token-picker-btn dur-opts la-dur-originpart la-dur-pick" data-target="${prefix}-origin" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
             <input type="number" id="${prefix}-turns" value="1" min="0" class="dur-opts la-dur-turns" title="Turns. 0 = next matching trigger">
         </div>`;
 }
@@ -42,10 +48,18 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
     const toggle = () =>
     {
         const durationLabel = $root.find(`#${prefix}-duration`).val();
-        const off = durationLabel === 'indefinite' || durationLabel === 'permanent';
+        const off = durationLabel === 'indefinite' || durationLabel === 'permanent' || durationLabel === 'encounter';
+        const isRound = durationLabel === 'roundEnd' || durationLabel === 'roundStart';
         const opts = $root.find(`#${prefix}-duration`).siblings('.dur-opts');
         opts.toggleClass('la-dur-disabled', off);
         opts.filter('select, input, button').prop('disabled', off);
+        if (isRound)
+        {
+            const originParts = opts.filter('.la-dur-originpart');
+            originParts.addClass('la-dur-disabled');
+            originParts.filter('select, button').prop('disabled', true);
+        }
+        opts.filter('.la-dur-turns').attr('title', isRound ? 'Rounds, counting the current one' : 'Turns. 0 = next matching trigger');
     };
     $root.find(`#${prefix}-duration`).on('change', () =>
     {
@@ -76,53 +90,6 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
             onChange?.();
     });
     toggle();
-}
-
-// permanent/indefinite skip turns; otherwise adjust for whether it's origin's current turn.
-export function buildDuration(durationLabel, originID, turnsInput)
-{
-    if (durationLabel === 'permanent')
-        return { label: 'permanent', turns: null, rounds: null };
-    if (durationLabel === 'indefinite')
-        return { label: 'indefinite', turns: null, rounds: null };
-    const isOriginTurn = game.combat?.current?.tokenId === originID;
-    const turns = (durationLabel === 'end' && isOriginTurn) ? turnsInput + 1 : (turnsInput === 0 ? 1 : turnsInput);
-    return { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
-}
-
-/**
- * Duration ending at the end of a token's own turn, N turns out. Handles the +1 when it is
- * already that token's turn, and stamps the token as the turn origin.
- * @param {any} token
- * @param {number} [turns=1]
- * @returns {object}
- */
-export function untilEndOfTurn(token, turns = 1)
-{
-    const id = token?.id ?? token;
-    return { ...buildDuration('end', id, turns), overrideTurnOriginId: id };
-}
-
-/**
- * Same, ending at the start of the token's turn.
- * @param {any} token
- * @param {number} [turns=1]
- * @returns {object}
- */
-export function untilStartOfTurn(token, turns = 1)
-{
-    const id = token?.id ?? token;
-    return { ...buildDuration('start', id, turns), overrideTurnOriginId: id };
-}
-
-/**
- * Stable key for the current combat turn ("round:turn"), null out of combat.
- * Use it to tell "the turn this happened on" from any later turn.
- * @returns {string|null}
- */
-export function currentTurnKey()
-{
-    return game.combat ? `${game.combat.round}:${game.combat.turn}` : null;
 }
 
 // Same read/adjust logic as the Effect Manager apply (effectManager.js standard tab).

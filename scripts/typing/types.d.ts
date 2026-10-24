@@ -512,7 +512,7 @@ interface TriggerDataonHpGain extends TriggerDataBase {
     canTriggerReaction?: boolean;
 }
 
-interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnDestroyed extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; cause?: "reactor" | null; }
 interface TriggerDataOnStructure extends TriggerDataBase { triggeringToken: Token; remainingStructure: number; rollResult: number; rollDice: number[]; cancelStructureOutcome: CancelFunction; modifyRoll: (newTotal: number) => void; flowState: any; canTriggerReaction?: boolean; }
 
 /** Fired after a roll resolves, before the card prints. `reroll()` re-runs the Lancer roll step, `changeRoll(newTotal)` sets the total. Both cascade, re-firing onRoll so later reactions see the new result. */
@@ -631,7 +631,7 @@ type TriggerType =
     | "onPreHpChange" | "onHpLoss" | "onHpGain"
     | "onDeploy"
     | "onTurnStart" | "onTurnEnd"
-    | "onRoundStart"
+    | "onRoundStart" | "onRoundEnd"
     | "onEnterCombat" | "onExitCombat"
     | "onFullRepair"
     | "onUpdate";
@@ -746,15 +746,16 @@ interface LancerAutomationsAPI {
         damage?: Array<{ type: string; val: any }>;
         [key: string]: any;
     }, options?: {
-        duration?: "indefinite" | "end" | "start";
+        duration?: "indefinite" | "end" | "start" | "roundEnd" | "roundStart" | "encounter" | "permanent" | "constant";
         durationTurns?: number;
+        durationRounds?: number;
         origin?: string | Token;
         icon?: string;
         consumption?: ConsumptionConfig;
     }): Promise<string>;
     removeGlobalBonus: typeof import("../bonuses/genericBonuses.js").removeGlobalBonus;
     consumeBonusUse(actor: any, bonus: any, opts?: { removeWhenNoUses?: boolean }): Promise<string | false>;  // scripts/bonuses/genericBonuses.js
-    consumeImmunityUse(actor: any, subtype: string, state?: any, options?: { damageTypes?: string[] | null }): Promise<boolean>;  // scripts/bonuses/genericBonuses.js
+    consumeImmunityUse(actor: any, subtype: string, state?: any, options?: { damageTypes?: string[] | null; bonuses?: object[] | null; aoe?: boolean }): Promise<boolean>;  // scripts/bonuses/genericBonuses.js
     supportsConsumeOnUsage: typeof import("../bonuses/genericBonuses.js").supportsConsumeOnUsage;
     getGlobalBonuses: typeof import("../bonuses/genericBonuses.js").getGlobalBonuses;
     addConstantBonus: typeof import("../bonuses/genericBonuses.js").addConstantBonus;
@@ -762,7 +763,7 @@ interface LancerAutomationsAPI {
     getConstantBonuses: typeof import("../bonuses/genericBonuses.js").getConstantBonuses;
     removeConstantBonus: typeof import("../bonuses/genericBonuses.js").removeConstantBonus;
     getImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getImmunityBonuses;
-    applyDamageImmunities(actor: any, damages: Array<{ type: string; val: any }>): Array<{ type: string; val: any }>;  // scripts/bonuses/genericBonuses.js
+    applyDamageImmunities(actor: any, damages: Array<{ type: string; val: any }>, state?: any, bonuses?: object[] | null, aoe?: boolean): Array<{ type: string; val: any }>;  // scripts/bonuses/genericBonuses.js
     hasCritImmunity: typeof import("../bonuses/genericBonuses.js").hasCritImmunity;
     hasHitImmunity: typeof import("../bonuses/genericBonuses.js").hasHitImmunity;
     hasMissImmunity: typeof import("../bonuses/genericBonuses.js").hasMissImmunity;
@@ -835,8 +836,8 @@ interface LancerAutomationsAPI {
         title?: string;
         noCard?: boolean;
     }): Promise<any>;
-    moveTokenRuler(tokenOrTokens: Token | Token[], options?: { range?: number; free?: boolean; action?: string; title?: string; description?: string; icon?: string; headerClass?: string; cost?: number; urgent?: boolean; planOnly?: boolean }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
-    knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
+    moveTokenRuler(tokenOrTokens: Token | Token[], options?: { range?: number; free?: boolean; action?: string; title?: string; description?: string; icon?: string; headerClass?: string; cost?: number; urgent?: boolean; planOnly?: boolean; awayFrom?: Token | TokenDocument | { x: number; y: number } }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
+    knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any; awayFrom?: Token | TokenDocument | { x: number; y: number } }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
     applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any, options?: { asVoluntary?: boolean }): Promise<void>;  // scripts/interactive/canvas-helpers.js
     startChoiceCard: typeof import("../interactive/network.js").startChoiceCard;
     confirmCard(options?: { title?: string; description?: string; icon?: string; confirmText?: string; confirmIcon?: string; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<boolean>;  // scripts/interactive/network.js
@@ -1204,9 +1205,11 @@ interface Module {
 // Effect Flags
 
 interface DurationEntry {
-    label: string;
-    turns: number;
-    originID: string;
+    label: "start" | "end" | "roundStart" | "roundEnd" | "encounter" | "indefinite" | "permanent";
+    turns?: number | null;
+    round?: number | null;
+    combatId?: string;
+    originID: string | null;
     stack: number;
 }
 

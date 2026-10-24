@@ -55,29 +55,39 @@ export function getDefaultItemReactionRegistry()
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
-                    const result = await api.startChoiceCard({
-                        title: localize('LA.dialogTitle.customPaintJob'),
-                        item,
-                        originToken: reactorToken,
-                        choices: [
-                            { text: "Use",
-                                icon: "fas fa-dice-d6",
-                                callback: async () =>
-                                {} },
-                            { text: "Skip",
-                                icon: "fas fa-times",
-                                callback: async () =>
-                                {} }
-                        ]
-                    });
-                    if (result?.choiceIdx !== 0)
-                        return;
-                    const roll = await new Roll("1d6").evaluate();
-                    await roll.toMessage({
-                        speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
-                        flavor: `<b>Custom Paint Job</b>`
-                    });
-                    if (roll.total >= 6)
+                    const preConfirm = async () =>
+                    {
+                        const result = await api.startChoiceCard({
+                            title: localize('LA.dialogTitle.customPaintJob'),
+                            item,
+                            originToken: reactorToken,
+                            choices: [
+                                { text: "Use",
+                                    icon: "fas fa-dice-d6",
+                                    callback: async () =>
+                                    {} },
+                                { text: "Skip",
+                                    icon: "fas fa-times",
+                                    callback: async () =>
+                                    {} }
+                            ]
+                        });
+                        if (result?.choiceIdx !== 0)
+                            return false;
+                        const roll = await new Roll("1d6").evaluate();
+                        await roll.toMessage({
+                            speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
+                            flavor: `<b>Custom Paint Job</b>`
+                        });
+                        if (roll.total >= 6)
+                            return true;
+                        ChatMessage.create({
+                            speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
+                            content: localizeFormat('LA.reaction.paintJobFailed', { roll: roll.total })
+                        });
+                        return false;
+                    };
+                    const postChoice = async () =>
                     {
                         await item.update({ "system.disabled": true });
                         await reactorToken.actor.update({ "system.hp.value": 1 });
@@ -85,20 +95,13 @@ export function getDefaultItemReactionRegistry()
                             speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
                             content: localize('LA.reaction.content.customPaintJobSuccessTheHit')
                         });
-                        triggerData.cancelStructure(
-                            "Custom Paint Job - scratched the paint.",
-                            "CUSTOM PAINT JOB", false,
-                            null, null, null,
-                            { item, originToken: reactorToken }
-                        );
-                    }
-                    else
-                    {
-                        ChatMessage.create({
-                            speaker: ChatMessage.getSpeaker({ actor: reactorToken.actor }),
-                            content: localizeFormat('LA.reaction.paintJobFailed', { roll: roll.total })
-                        });
-                    }
+                    };
+                    triggerData.cancelStructure(
+                        "Custom Paint Job - scratched the paint.",
+                        "CUSTOM PAINT JOB", false,
+                        null, preConfirm, postChoice,
+                        { item, originToken: reactorToken }
+                    );
                 }
             }]
         }
@@ -405,7 +408,9 @@ export function getDefaultGeneralReactionRegistry()
                     const ranges = api.getMaxWeaponRanges_WithBonus(reactorToken);
                     const maxThreat = ranges.Threat || 1;
                     const distance = api.getTokenDistance(reactorToken, mover);
-                    return distance >= 1 && maxThreat >= distance;
+                    if (distance < 1 || maxThreat < distance)
+                        return false;
+                    return !getModuleSetting('lancerLos') || api.hasLineOfSight(reactorToken, mover);
                 },
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
@@ -667,8 +672,7 @@ export function getDefaultGeneralReactionRegistry()
                         await api.addConstantBonus(reactorToken.actor, {
                             id: BRACE_RESIST_ID,
                             name: "Brace",
-                            type: "immunity",
-                            subtype: "resistance",
+                            type: "resistance",
                             damageTypes: ["all"]
                         });
                     }
@@ -1441,7 +1445,7 @@ export function getDefaultGeneralReactionRegistry()
                 await api.applyEffectsToTokens({
                     tokens: [reactorToken],
                     effectNames: ["Disengage"],
-                    duration: { label: 'end', turns: 1, rounds: 0 }
+                    duration: api.untilEndOfTurn(reactorToken, 0)
                 });
                 await actionFX.queueActionFx(() => actionFX.playDisengageFX(reactorToken), reactorToken, 'disengage');
             }

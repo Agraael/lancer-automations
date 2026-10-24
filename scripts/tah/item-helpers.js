@@ -7,9 +7,9 @@ import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 import { getActivationIcon, executeProfileSwitch, executeSimpleActivation } from '../tools/misc-tools.js';
-import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits } from '../combat/per-frequency-tags.js';
+import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerMissionLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getPerMissionLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits, FREQ_SPECS, isPerFrequencyEnabled } from '../combat/per-frequency-tags.js';
 import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
-import { localize, localizeFormat } from '../tools/string-utils.js';
+import { localize, localizeFormat, escapeHtml } from '../tools/string-utils.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
@@ -70,7 +70,7 @@ function resolveActionScope(item, action, subKey = null)
  * Availability status of a Lancer item or standalone action object, for HUD badge display.
  * Checks loading, recharge, limited uses, disabled, destroyed, and cascading.
  * @param {Item|object} itemOrAction
- * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, destroyed: boolean, cascading: boolean }}
+ * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, disabled: boolean, destroyed: boolean, cascading: boolean }}
  */
 export function getItemStatus(itemOrAction, extraAction = null, { subKey = null } = {})
 {
@@ -78,7 +78,8 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
     const sys = isItem ? itemOrAction.system : itemOrAction;
     const itemTags = itemAllTags(sys);
 
-    let unavailable = !!(sys.disabled);
+    const disabled = !!(sys.disabled);
+    let unavailable = disabled;
     const destroyed = !!(sys.destroyed);
     const cascading = !!(sys.cascading);
     const parts = [];
@@ -123,10 +124,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         parts.push(`${current}/${max}`);
     };
 
-    const perFreqOn = (() =>
-    {
-        return !!getModuleSetting('enablePerRoundTurnTags');
-    })();
+    const perFreqOn = isPerFrequencyEnabled();
     const pushPerFreq = (max, used, iconReady, iconConsumed) =>
     {
         const ready = max - Math.min(max, used);
@@ -156,22 +154,30 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         const scoped = isItem ? resolveActionScope(itemOrAction, extraAction, subKey) : { sub: extraAction ?? sys, key: null };
         const freqSub = scoped.sub;
         const freqKey = scoped.key;
-        const perRound = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), freqSub ? getPerRoundLimitFromSub(freqSub) : getPerRoundLimit(itemOrAction));
-        const perTurn = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), freqSub ? getPerTurnLimitFromSub(freqSub) : getPerTurnLimit(itemOrAction));
+        const freqCtx = isItem && freqKey ? { item: itemOrAction, key: freqKey } : null;
+        const perRound = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), freqSub ? getPerRoundLimitFromSub(freqSub, freqCtx) : getPerRoundLimit(itemOrAction));
+        const perTurn = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), freqSub ? getPerTurnLimitFromSub(freqSub, freqCtx) : getPerTurnLimit(itemOrAction));
         let perScene = 0;
+        let perMission = 0;
         if (freqSub)
-            perScene = getPerSceneLimitFromSub(freqSub);
+        {
+            perScene = getPerSceneLimitFromSub(freqSub, freqCtx);
+            perMission = getPerMissionLimitFromSub(freqSub, freqCtx);
+        }
         else if (isItem && itemOrAction.type !== 'frame')
+        {
             perScene = getPerSceneLimit(itemOrAction);
+            perMission = getPerMissionLimit(itemOrAction);
+        }
         const freqUsed = (field) => freqKey && isItem
             ? getSubUsed(itemOrAction, freqKey, field)
             : Number(sys[field]?.value ?? 0);
-        if (perRound > 0)
-            pushPerFreq(perRound, freqUsed('uses_per_round'), 'mdi-restart', 'mdi-restart-off');
-        if (perTurn > 0)
-            pushPerFreq(perTurn, freqUsed('uses_per_turn'), 'mdi-circle-slice-8', 'mdi-circle-outline');
-        if (perScene > 0)
-            pushPerFreq(perScene, freqUsed('uses_per_scene'), 'mdi-cog', 'mdi-cog-off');
+        const limits = { uses_per_round: perRound, uses_per_turn: perTurn, uses_per_scene: perScene, uses_per_mission: perMission };
+        for (const spec of FREQ_SPECS)
+        {
+            if (limits[spec.field] > 0)
+                pushPerFreq(limits[spec.field], freqUsed(spec.field), spec.ready, spec.off);
+        }
     }
 
     // Item-attached extra: action.tags are guaranteed disjoint from itemTags (deduped at add-time).
@@ -184,7 +190,18 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         pushUses(extraAction.uses);
 
     const badge = parts.length ? parts.join(' ') : null;
-    return { labelPrefix: '', badge, badgeColor, unavailable, destroyed, cascading };
+    return { labelPrefix: '', badge, badgeColor, unavailable, disabled, destroyed, cascading };
+}
+
+export function statusKindOf(status)
+{
+    if (status.destroyed)
+        return 'destroyed';
+    if (status.cascading)
+        return 'cascading';
+    if (status.unavailable)
+        return status.disabled ? 'unavailable' : 'spent';
+    return null;
 }
 
 export function isWhiteIcon(icon)
@@ -201,6 +218,33 @@ export function tahScale()
     return Number(getModuleSetting('tah.uiScale')) || 1;
 }
 
+export function applyStripeStyle(row, stripe)
+{
+    row.data('restingBg', stripe.bg).data('restingBorder', stripe.border).data('hoverBg', stripe.hoverBg)
+        .data('restingColor', stripe.color).data('hoverColor', stripe.hoverColor);
+    row.css({ background: stripe.bg, borderLeftColor: stripe.border, color: stripe.color });
+    if (stripe.light)
+        row.addClass('la-hud-spent');
+    // Keep leading icon visible on dark stripes: flip whatever invert state laHudRenderIcon left.
+    const leadingIcon = row.find('img.la-hud-icon').first();
+    if (leadingIcon.length && stripe.light)
+        leadingIcon.css({ opacity: '0.6' });
+    else if (leadingIcon.length)
+    {
+        const wasInverted = (leadingIcon.attr('style') || '').includes('invert(1)');
+        leadingIcon.css({ filter: wasInverted ? 'none' : 'invert(1)', opacity: '0.55' });
+    }
+}
+
+export function slideInCol(col, { duration = 140, guard = true } = {})
+{
+    col.stop(true).css({ opacity: 0, marginLeft: -10, ...(guard ? { pointerEvents: 'none' } : {}) }).show().animate({ opacity: 1, marginLeft: 0 }, duration, function()
+    {
+        if (guard)
+            $(this).css('pointerEvents', '');
+    });
+}
+
 export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
 {
     if (!icon)
@@ -212,12 +256,12 @@ export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
         const cls = isWhite ? 'la-hud-icon la-hud-icon--white' : 'la-hud-icon la-hud-icon--dark';
         // LA icons fill their viewBox edge-to-edge; system icons ship with whitespace. Pad to match.
         const pad = icon.includes('modules/lancer-automations/') ? 'padding:0.8px;box-sizing:border-box;' : '';
-        return `<img class="${cls}" src="${icon}" style="width:${size}px;height:${size}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
+        return `<img class="${cls}" src="${escapeHtml(icon)}" style="width:${size}px;height:${size}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
-    return `<i class="${icon} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
+    return `<i class="${escapeHtml(icon)} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
 }
 
-/** Stripe palette for blocked / destroyed / cascading / unavailable rows. */
+/** Stripe palette for blocked / destroyed / cascading / unavailable / spent rows. */
 export function laHudStripeStyle(item)
 {
     if (item.stripeStyle)
@@ -268,6 +312,23 @@ export function laHudStripeStyle(item)
             border: '#a07744',
             color: '#e0c8a0',
             hoverColor: '#f0d8b8'
+        };
+    }
+    if (item.statusKind === 'spent')
+    {
+        return {
+            light: true,
+            bg: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--la-plate), var(--la-ink) 9%) 0 6px, var(--la-plate) 6px 12px)',
+            hoverBg: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--la-plate), var(--la-ink) 16%) 0 6px, color-mix(in srgb, var(--la-plate), var(--la-ink) 6%) 6px 12px)',
+            border: '#8e8a86',
+            color: 'color-mix(in srgb, var(--la-ink), transparent 40%)',
+            hoverColor: 'var(--la-ink)',
+            onDark: {
+                bg: 'repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.09) 0 6px, transparent 6px 12px), rgba(20, 20, 30, 0.9)',
+                hoverBg: 'repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.16) 0 6px, rgba(255, 255, 255, 0.05) 6px 12px), rgba(20, 20, 30, 0.9)',
+                color: 'rgba(221, 221, 221, 0.6)',
+                hoverColor: '#ddd'
+            }
         };
     }
     return null;
@@ -402,7 +463,7 @@ export function laHudItemChildren(item, opts = {})
                 icon: getActivationIcon(action),
                 badge: status.badge,
                 badgeColor: status.badgeColor,
-                statusKind: status.destroyed ? 'destroyed' : status.cascading ? 'cascading' : status.unavailable ? 'unavailable' : null,
+                statusKind: statusKindOf(status),
                 onClick: onActivate ? () => onActivate(action, source) : null,
             };
             entry.onRightClick = actionPopup ? actionPopup(action, source) : (row) =>
@@ -473,6 +534,94 @@ export function laHudItemChildren(item, opts = {})
     return items;
 }
 
+const PIP_LABEL_STYLE = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
+const PIP_STYLE = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
+const PIP_WRAP_STYLE = 'display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;';
+
+function pickPipValue(pipIdx, current, max)
+{
+    return Math.max(0, Math.min(max, pipIdx === current ? pipIdx - 1 : pipIdx));
+}
+
+function prependPipWrap(popup, cls = null)
+{
+    const wrap = $(`<div${cls ? ` class="${cls}"` : ''} style="${PIP_WRAP_STYLE}"></div>`);
+    popup.children().last().prepend(wrap);
+    return wrap;
+}
+
+function autoConsumeRow(item)
+{
+    const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
+    cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(item));
+    return cfgRow;
+}
+
+function readExtraActionEntry(doc, action)
+{
+    return (getLAFlag(doc, 'extraActions') || []).find(entry => entry.name === action.name) ?? action;
+}
+
+async function patchExtraActionEntry(doc, actionName, patch)
+{
+    const list = getLAFlag(doc, 'extraActions') || [];
+    const idx = list.findIndex(entry => entry.name === actionName);
+    if (idx < 0)
+        return;
+    const next = list.slice();
+    next[idx] = { ...next[idx], ...patch };
+    await setLAFlag(doc, 'extraActions', next);
+}
+
+function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, patch, rebuild, suffix = '' })
+{
+    if (hasLoading)
+    {
+        const loaded = state.loaded !== false;
+        const pip = $(`<span style="${PIP_STYLE}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
+        pip.on('click', async () =>
+        {
+            playUiSound('toggle');
+            await patch({ loaded: !loaded });
+            rebuild();
+        });
+        wrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Loading${suffix}</span>`), pip));
+    }
+    if (hasRecharge)
+    {
+        const charged = state.charged !== false;
+        const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
+        pip.on('click', async () =>
+        {
+            playUiSound('toggle');
+            await patch({ charged: !charged });
+            rebuild();
+        });
+        wrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Charged${suffix}</span>`), pip));
+    }
+    if (!hasLimited || state.uses == null)
+        return;
+    const isObj = typeof state.uses !== 'number';
+    const current = isObj ? (state.uses.value ?? 0) : state.uses;
+    const max = isObj ? (state.uses.max ?? 0) : state.uses;
+    if (!(max > 0))
+        return;
+    const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Uses${suffix}</span>`));
+    for (let pipIdx = 1; pipIdx <= max; pipIdx++)
+    {
+        const pip = $(`<span style="${PIP_STYLE}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
+        pip.on('click', async () =>
+        {
+            playUiSound('toggle');
+            const newVal = pickPipValue(pipIdx, current, max);
+            await patch(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
+            rebuild();
+        });
+        usesRow.append(pip);
+    }
+    wrap.append(usesRow);
+}
+
 /**
  * Appends an interactive uses/loading/charged pips section to a detail popup body.
  * Call as `postRender` on any item popup that might have limited/loading/recharge tags.
@@ -497,45 +646,36 @@ export function appendItemPips(item, popup, depthCallbacks)
     const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading');
     const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge');
     const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited');
-    const perFreqOn = (() =>
-    {
-        return !!getModuleSetting('enablePerRoundTurnTags');
-    })();
+    const perFreqOn = isPerFrequencyEnabled();
     const subEntry = scoped.sub;
-    const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry) : getPerRoundLimit(item)) : 0;
-    const perTurnMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), subEntry ? getPerTurnLimitFromSub(subEntry) : getPerTurnLimit(item)) : 0;
+    const subCtx = item?.documentName === 'Item' && subKey ? { item, key: subKey } : null;
+    const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry, subCtx) : getPerRoundLimit(item)) : 0;
+    const perTurnMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), subEntry ? getPerTurnLimitFromSub(subEntry, subCtx) : getPerTurnLimit(item)) : 0;
     const perSceneMax = !perFreqOn || isActorExtra ? 0
-        : subEntry ? getPerSceneLimitFromSub(subEntry)
+        : subEntry ? getPerSceneLimitFromSub(subEntry, subCtx)
             : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
+    const perMissionMax = !perFreqOn || isActorExtra ? 0
+        : subEntry ? getPerMissionLimitFromSub(subEntry, subCtx)
+            : (item?.type === 'frame' ? 0 : getPerMissionLimit(item));
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
     const isCoreActive = !!action && item?.type === 'frame' && (
         (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ candidate => candidate === action || candidate?.name === action?.name)
         || action?.name === item.system?.core_system?.active_name
         || action?.name === item.system?.core_system?.name
     );
-    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax && !perSceneMax && !isCoreActive)
+    if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax && !perSceneMax && !perMissionMax && !isCoreActive)
         return;
 
-    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
-    const S_PIP = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
-    const pipsWrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-    popup.children().last().prepend(pipsWrap);
+    const pipsWrap = prependPipWrap(popup);
     if (item?.documentName === 'Item')
-    {
-        const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
-        cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(item));
-        pipsWrap.append(cfgRow);
-    }
+        pipsWrap.append(autoConsumeRow(item));
 
     const readState = () =>
     {
         if (subKey)
             return getSubUses(item, subKey);
         if (isActorExtra)
-        {
-            const list = getLAFlag(item,'extraActions') || [];
-            return list.find(entry => entry.name === action.name) ?? action;
-        }
+            return readExtraActionEntry(item, action);
         return item.system;
     };
     const patchState = async (patch) =>
@@ -546,15 +686,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             return;
         }
         if (isActorExtra)
-        {
-            const list = getLAFlag(item,'extraActions') || [];
-            const idx = list.findIndex(entry => entry.name === action.name);
-            if (idx < 0)
-                return;
-            const next = list.slice();
-            next[idx] = { ...next[idx], ...patch };
-            await setLAFlag(item,'extraActions', next);
-        }
+            await patchExtraActionEntry(item, action.name, patch);
         else
         {
             const flat = {};
@@ -568,68 +700,19 @@ export function appendItemPips(item, popup, depthCallbacks)
     {
         pipsWrap.empty();
         const state = readState();
-        if (hasLoading)
-        {
-            const loaded = state.loaded !== false;
-            const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
-            pip.on('click', async () =>
-            {
-                playUiSound('toggle');
-                await patchState({ loaded: !loaded });
-                rebuild();
-            });
-            pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading</span>`), pip));
-        }
-        if (hasRecharge)
-        {
-            const charged = state.charged !== false;
-            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-            pip.on('click', async () =>
-            {
-                playUiSound('toggle');
-                await patchState({ charged: !charged });
-                rebuild();
-            });
-            pipsWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged</span>`), pip));
-        }
-        if (hasLimited && state.uses != null)
-        {
-            const isObj = typeof state.uses !== 'number';
-            const current = isObj ? (state.uses.value ?? 0) : state.uses;
-            const max = isObj ? (state.uses.max ?? 0) : state.uses;
-            if (max > 0)
-            {
-                const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
-                for (let i = 1; i <= max; i++)
-                {
-                    const pipIdx = i;
-                    const pip = $(`<span style="${S_PIP}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
-                    pip.on('click', async () =>
-                    {
-                        playUiSound('toggle');
-                        const newVal = Math.max(0, Math.min(max, pipIdx === current ? pipIdx - 1 : pipIdx));
-                        await patchState(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
-                        rebuild();
-                    });
-                    usesRow.append(pip);
-                }
-                pipsWrap.append(usesRow);
-            }
-        }
+        appendResourcePips(pipsWrap, state, { hasLoading, hasRecharge, hasLimited, patch: patchState, rebuild });
         const inCombat = !!game.combat?.started;
         const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) =>
         {
-            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${S_LBL}">${label}</span>`));
-            for (let i = 1; i <= max; i++)
+            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">${label}</span>`));
+            for (let pipIdx = 1; pipIdx <= max; pipIdx++)
             {
-                const pipIdx = i;
                 const consumed = pipIdx <= used;
-                const pip = $(`<span style="${S_PIP}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
+                const pip = $(`<span style="${PIP_STYLE}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
                 pip.on('click', async () =>
                 {
                     playUiSound('toggle');
-                    const newUsed = pipIdx === used ? pipIdx - 1 : pipIdx;
-                    await patchState({ [fieldKey]: { value: Math.max(0, Math.min(max, newUsed)) } });
+                    await patchState({ [fieldKey]: { value: pickPipValue(pipIdx, used, max) } });
                     rebuild();
                 });
                 usesRow.append(pip);
@@ -641,13 +724,15 @@ export function appendItemPips(item, popup, depthCallbacks)
         if (perTurnMax > 0)
             renderFreqRow('Per turn', perTurnMax, Number(state.uses_per_turn?.value ?? 0), 'uses_per_turn', 'mdi-circle-slice-8', 'mdi-circle-outline', !inCombat);
         if (perSceneMax > 0)
-            renderFreqRow('Per scene', perSceneMax, Number(state.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
+            renderFreqRow('Per encounter', perSceneMax, Number(state.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
+        if (perMissionMax > 0)
+            renderFreqRow('Per mission', perMissionMax, Number(state.uses_per_mission?.value ?? 0), 'uses_per_mission', 'mdi-flag', 'mdi-flag-off', false);
         if (isCoreActive)
         {
             const actor = item.parent ?? item.actor;
             const charged = (actor?.system?.core_energy ?? 0) > 0;
-            const row = $(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Core Power</span>`));
-            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`);
+            const row = $(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Core Power</span>`));
+            const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`);
             pip.on('click', async (ev) =>
             {
                 ev.stopPropagation();
@@ -671,68 +756,18 @@ export function appendItemPips(item, popup, depthCallbacks)
         const actionHasLimited  = action.tags.some(tag => tag.lid === 'tg_limited');
         if (actionHasLoading || actionHasRecharge || actionHasLimited)
         {
-            const readActionState = () => (getLAFlag(item,'extraActions') || [])
-                .find(entry => entry.name === action.name) ?? action;
-            const patchActionState = async (patch) =>
-            {
-                const list = getLAFlag(item,'extraActions') || [];
-                const idx = list.findIndex(entry => entry.name === action.name);
-                if (idx < 0)
-                    return;
-                const next = list.slice();
-                next[idx] = { ...next[idx], ...patch };
-                await setLAFlag(item,'extraActions', next);
-            };
-            const actionWrap = $(`<div class="la-ea-pips" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-            popup.children().last().prepend(actionWrap);
+            const actionWrap = prependPipWrap(popup, 'la-ea-pips');
             const rebuildAction = () =>
             {
                 actionWrap.empty();
-                const state = readActionState();
-                if (actionHasLoading)
-                {
-                    const loaded = state.loaded !== false;
-                    const pip = $(`<span style="${S_PIP}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
-                    pip.on('click', async () =>
-                    {
-                        playUiSound('toggle'); await patchActionState({ loaded: !loaded }); rebuildAction();
-                    });
-                    actionWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Loading*</span>`), pip));
-                }
-                if (actionHasRecharge)
-                {
-                    const charged = state.charged !== false;
-                    const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
-                    pip.on('click', async () =>
-                    {
-                        playUiSound('toggle'); await patchActionState({ charged: !charged }); rebuildAction();
-                    });
-                    actionWrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${S_LBL}">Charged*</span>`), pip));
-                }
-                if (actionHasLimited && state.uses != null)
-                {
-                    const isObj = typeof state.uses !== 'number';
-                    const current = isObj ? (state.uses.value ?? 0) : state.uses;
-                    const max = isObj ? (state.uses.max ?? 0) : state.uses;
-                    if (max > 0)
-                    {
-                        const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses*</span>`));
-                        for (let i = 1; i <= max; i++)
-                        {
-                            const pipIdx = i;
-                            const pip = $(`<span style="${S_PIP}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
-                            pip.on('click', async () =>
-                            {
-                                playUiSound('toggle');
-                                const newVal = Math.max(0, Math.min(max, pipIdx === current ? pipIdx - 1 : pipIdx));
-                                await patchActionState(isObj ? { uses: { ...state.uses, value: newVal } } : { uses: newVal });
-                                rebuildAction();
-                            });
-                            usesRow.append(pip);
-                        }
-                        actionWrap.append(usesRow);
-                    }
-                }
+                appendResourcePips(actionWrap, readExtraActionEntry(item, action), {
+                    hasLoading: actionHasLoading,
+                    hasRecharge: actionHasRecharge,
+                    hasLimited: actionHasLimited,
+                    patch: (patch) => patchExtraActionEntry(item, action.name, patch),
+                    rebuild: rebuildAction,
+                    suffix: '*',
+                });
             };
             rebuildAction();
         }
@@ -742,17 +777,15 @@ export function appendItemPips(item, popup, depthCallbacks)
     const extraAction = depthCallbacks?.action;
     if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI)
     {
-        const extraActionWrap = pipsWrap.length ? pipsWrap : $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-        if (!pipsWrap.length)
-            popup.children().last().prepend(extraActionWrap);
+        const extraActionWrap = pipsWrap;
         const rebuildExtraAction = () =>
         {
             const extraActionEntry = (getLAFlag(item,'extraActions') || []).find(entry => entry.name === extraAction.name);
             const charged = extraActionEntry ? extraActionEntry.charged !== false : extraAction.charged !== false;
             extraActionWrap.find('.la-ea-recharge-row').remove();
             const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
-            row.append($(`<span style="${S_LBL}">Charged</span>`));
-            const pip = $(`<span style="${S_PIP}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
+            row.append($(`<span style="${PIP_LABEL_STYLE}">Charged</span>`));
+            const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
             pip.on('click', async () =>
             {
                 playUiSound('toggle');
@@ -779,17 +812,15 @@ export function appendBondPowerPips(bond, powerIdx, popup)
     const power = /** @type {any} */ (bond)?.system?.powers?.[powerIdx];
     if (!power?.uses || !(power.uses.max > 0))
         return;
-    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
     const S_PIP = 'cursor:pointer;font-size:1.15em;line-height:1;padding:0 2px;';
-    const wrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-    popup.children().last().prepend(wrap);
+    const wrap = prependPipWrap(popup);
     const pipHolder = $(`<div></div>`);
     wrap.append(pipHolder);
     const max = power.uses.max;
     const rebuild = (/** @type {number} */ value) =>
     {
         pipHolder.empty();
-        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">${power.frequency || 'Uses'}</span>`));
+        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">${escapeHtml(power.frequency || 'Uses')}</span>`));
         for (let slot = 1; slot <= max; slot++)
         {
             const filled = slot <= value;
@@ -798,7 +829,7 @@ export function appendBondPowerPips(bond, powerIdx, popup)
             pip.on('click', async () =>
             {
                 playUiSound('toggle');
-                const target = Math.max(0, Math.min(max, pipIdx === value ? pipIdx - 1 : pipIdx));
+                const target = pickPipValue(pipIdx, value, max);
                 await bond.update({ [`system.powers.${powerIdx}.uses.value`]: target });
                 rebuild(target);
             });
@@ -815,29 +846,24 @@ export function appendReservePips(group, popup)
     if (!Array.isArray(group) || !group.length || !group[0]?.system?.consumable)
         return;
     const total = group.length;
-    const S_LBL = 'font-size:0.7em;color:#888;text-transform:uppercase;letter-spacing:0.05em;min-width:54px;flex-shrink:0;';
-    const S_PIP = 'cursor:pointer;font-size:1.3em;line-height:1;padding:0 2px;';
-    const wrap = $(`<div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #2a2a2a;"></div>`);
-    popup.children().last().prepend(wrap);
-    const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
-    cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(group[0]));
-    wrap.append(cfgRow);
+    const wrap = prependPipWrap(popup);
+    wrap.append(autoConsumeRow(group[0]));
     const pipHolder = $(`<div></div>`);
     wrap.append(pipHolder);
     const rebuild = () =>
     {
         pipHolder.empty();
         const available = group.filter(copy => !copy.system?.used).length;
-        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${S_LBL}">Uses</span>`));
+        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Uses</span>`));
         for (let slot = 1; slot <= total; slot++)
         {
             const pipIdx = slot;
             const filled = pipIdx <= available;
-            const pip = $(`<span style="${S_PIP}color:${filled ? '#3a9e6e' : '#444'};">${filled ? '⬢' : '⬡'}</span>`);
+            const pip = $(`<span style="${PIP_STYLE}color:${filled ? '#3a9e6e' : '#444'};">${filled ? '⬢' : '⬡'}</span>`);
             pip.on('click', async () =>
             {
                 playUiSound('toggle');
-                const target = Math.max(0, Math.min(total, pipIdx === available ? pipIdx - 1 : pipIdx));
+                const target = pickPipValue(pipIdx, available, total);
                 await _setReserveAvailable(group, target);
                 rebuild();
             });

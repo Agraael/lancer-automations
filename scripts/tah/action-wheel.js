@@ -54,12 +54,12 @@ function buildWheelItem(favorite, favoriteIndex, token)
 {
     return {
         key: favorite.favKey ?? String(favoriteIndex),
-        title: plainTitle(favorite.label),
+        title: plainTitle(favorite.text ?? favorite.label),
         current: false,
         buildContent: (buttonEl) =>
         {
             buttonEl.classList.add('lancer-aw-btn');
-            const embedded = !favorite.icon ? labelIconEl(favorite.label) : null;
+            const embedded = !favorite.icon ? labelIconEl(favorite.labelHtml) : null;
             if (embedded)
             {
                 embedded.style.cssText = 'width:24px;height:24px;font-size:24px;margin:0;';
@@ -73,12 +73,14 @@ function buildWheelItem(favorite, favoriteIndex, token)
             const stripe = laHudStripeStyle(favorite);
             if (!stripe)
                 return;
+            const palette = { ...stripe, ...(stripe.onDark ?? {}) };
             buttonEl.classList.add('striped');
-            buttonEl.style.setProperty('--aw-bg', stripe.bg);
-            buttonEl.style.setProperty('--aw-hover-bg', stripe.hoverBg);
-            buttonEl.style.setProperty('--aw-border', stripe.border);
-            buttonEl.style.setProperty('--aw-color', stripe.color);
-            buttonEl.style.setProperty('--aw-hover-color', stripe.hoverColor);
+            buttonEl.classList.toggle('spent', !!stripe.light);
+            buttonEl.style.setProperty('--aw-bg', palette.bg);
+            buttonEl.style.setProperty('--aw-hover-bg', palette.hoverBg);
+            buttonEl.style.setProperty('--aw-border', palette.border);
+            buttonEl.style.setProperty('--aw-color', palette.color);
+            buttonEl.style.setProperty('--aw-hover-color', palette.hoverColor);
         },
         onHoverChange: (isEntering) =>
         {
@@ -148,8 +150,8 @@ export async function toggleActionWheel()
     _page = filledPages[0];
     _openToken = token;
     openRadialWheel({
-        token,
-        anchor: token ? null : lastCursor(),
+        token: null,
+        anchor: lastCursor(),
         rootClass: 'lancer-action-wheel',
         showLabel: true,
         pageCount: _pageCount,

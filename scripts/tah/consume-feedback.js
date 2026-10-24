@@ -6,7 +6,7 @@ import { isActorScannedForUser } from '../tools/scan-lookup.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 const _lastConsume = new Map();
-const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene' };
+const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene', uses_per_mission: 'perMission' };
 // Per-X fields count uses spent, so their delta is shown inverted (spend = -1).
 const USED_COUNTER_TYPES = new Set(Object.values(SUB_FIELDS));
 
@@ -71,6 +71,7 @@ const RESOURCE_FIELDS = {
     perTurn:     { read: (item) => _readNum(item, 'system.uses_per_turn.value'),         get: (change) => _readNum(change, 'system.uses_per_turn.value') },
     perRound:    { read: (item) => _readNum(item, 'system.uses_per_round.value'),        get: (change) => _readNum(change, 'system.uses_per_round.value') },
     perScene:    { read: (item) => _readNum(item, 'system.uses_per_scene.value'),        get: (change) => _readNum(change, 'system.uses_per_scene.value') },
+    perMission:  { read: (item) => _readNum(item, 'system.uses_per_mission.value'),      get: (change) => _readNum(change, 'system.uses_per_mission.value') },
     reserveUsed: { read: (item) => _readBool(item, 'system.used'),                       get: (change) => _readBool(change, 'system.used') },
 };
 
@@ -84,7 +85,8 @@ function _formatLabel(type, pre, post)
         case 'charged':     return post ? 'Charged' : 'Discharged';
         case 'perTurn':     return `Per-Turn ${signedDelta(pre - post)}`;
         case 'perRound':    return `Per-Round ${signedDelta(pre - post)}`;
-        case 'perScene':    return `Per-Scene ${signedDelta(pre - post)}`;
+        case 'perScene':    return `Per-Encounter ${signedDelta(pre - post)}`;
+        case 'perMission':  return `Per-Mission ${signedDelta(pre - post)}`;
         case 'reserveUsed': return post ? 'Reserve Used' : 'Reserve Restored';
         default:            return '';
     }

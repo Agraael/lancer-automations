@@ -6,6 +6,7 @@ import { getSettingEnabled } from '../setup/settings-register.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { getV3Data } from '../tools/v3-data.js';
 const SETTING_KEY = 'enablePerRoundTurnTags';
 const TARGET_FLOWS = ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow', 'ActivationFlow', 'SystemFlow', 'CoreActiveFlow'];
 
@@ -13,6 +14,7 @@ function enabled()
 {
     return getSettingEnabled(SETTING_KEY);
 }
+export { enabled as isPerFrequencyEnabled };
 
 function inCombat()
 {
@@ -41,17 +43,70 @@ export function itemAllTags(itemOrSys)
     return [...(sys.active_profile?.tags ?? []), ...(sys.all_base_tags ?? sys.tags ?? [])];
 }
 
-const _RX_SCENE = /(\d+)\s*\/\s*scene\b/i;
+const _RX_SCENE = /(\d+)\s*\/\s*(?:scene|encounter)\b/i;
 const _RX_ROUND = /(\d+)\s*\/\s*round\b/i;
 const _RX_TURN = /(\d+)\s*\/\s*turn\b/i;
+const _RX_MISSION = /(\d+)\s*\/\s*mission\b/i;
 // Free text only counts when the frequency opens it (leading whitespace / HTML tags allowed).
 const _TEXT_LEAD = String.raw`^(?:\s|<[^>]*>|&nbsp;)*`;
-const _RX_SCENE_START = new RegExp(_TEXT_LEAD + String.raw`(\d+)\s*\/\s*scene\b`, 'i');
+const _RX_SCENE_START = new RegExp(_TEXT_LEAD + String.raw`(\d+)\s*\/\s*(?:scene|encounter)\b`, 'i');
 const _RX_ROUND_START = new RegExp(_TEXT_LEAD + String.raw`(\d+)\s*\/\s*round\b`, 'i');
 const _RX_TURN_START = new RegExp(_TEXT_LEAD + String.raw`(\d+)\s*\/\s*turn\b`, 'i');
+const _RX_MISSION_START = new RegExp(_TEXT_LEAD + String.raw`(\d+)\s*\/\s*mission\b`, 'i');
 const _USE_SCENE = new Set(['encounter', 'scene']);
 const _USE_ROUND = new Set(['round']);
 const _USE_TURN = new Set(['turn']);
+const _USE_MISSION = new Set(['mission']);
+
+const V3_SCOPES = { round: 'perRound', turn: 'perTurn', scene: 'perScene', encounter: 'perScene', mission: 'perMission' };
+const V3_HOOKS = ['on_attack', 'on_hit', 'on_crit', 'on_miss'];
+
+function v3Frequencies(item)
+{
+    const frequencies = [];
+    for (const entry of getV3Data(item))
+    {
+        const type = V3_SCOPES[entry.frequency?.per];
+        const count = entry.frequency?.count;
+        if (!type || !count)
+            continue;
+        const [first, second, third, fourth] = entry.path.split('.');
+        if (first === 'core_system')
+            continue;
+        if (first === 'ranks')
+            frequencies.push({ type, count, key: rankSubKey(Number(second)) });
+        else if (first === 'traits')
+            frequencies.push({ type, count, key: traitSubKey(Number(second)) });
+        else if (first === 'actions' && item.type !== 'npc_feature')
+            frequencies.push({ type, count, key: `a${second}` });
+        else if (first === 'profiles' && third === 'actions')
+            frequencies.push({ type, count, key: `p${second}a${fourth}` });
+        else
+            frequencies.push({ type, count, key: null, hit: V3_HOOKS.includes(first) || (first === 'profiles' && V3_HOOKS.includes(third)) });
+    }
+    return frequencies;
+}
+
+function v3Limit(item, type, key = null, { hitText = true } = {})
+{
+    let best = 0;
+    for (const frequency of v3Frequencies(item))
+    {
+        if (frequency.type === type && frequency.key === key && (hitText || !frequency.hit))
+            best = Math.max(best, frequency.count);
+    }
+    return best;
+}
+
+function v3SubLimit(ctx, type)
+{
+    return ctx?.item && ctx.key ? v3Limit(ctx.item, type, ctx.key) : 0;
+}
+
+export function traitSubKey(traitIdx)
+{
+    return `t${traitIdx}`;
+}
 
 function activeProfile(sys)
 {
@@ -107,9 +162,10 @@ function scanFreqLimit(sys, rx, useSet, textRx = rx, { hitText = true } = {})
 }
 
 const SCOPES = [
-    { type: 'perRound', label: 'round', field: 'uses_per_round', rx: _RX_ROUND, useSet: _USE_ROUND, textRx: _RX_ROUND_START, combatOnly: true, limit: (item) => getPerRoundLimit(item), subLimit: (sub) => getPerRoundLimitFromSub(sub) },
-    { type: 'perTurn', label: 'turn', field: 'uses_per_turn', rx: _RX_TURN, useSet: _USE_TURN, textRx: _RX_TURN_START, combatOnly: true, limit: (item) => getPerTurnLimit(item), subLimit: (sub) => getPerTurnLimitFromSub(sub) },
-    { type: 'perScene', label: 'scene', field: 'uses_per_scene', rx: _RX_SCENE, useSet: _USE_SCENE, textRx: _RX_SCENE_START, combatOnly: false, limit: (item) => getPerSceneLimit(item), subLimit: (sub) => getPerSceneLimitFromSub(sub) },
+    { type: 'perRound', label: 'round', field: 'uses_per_round', rx: _RX_ROUND, useSet: _USE_ROUND, textRx: _RX_ROUND_START, combatOnly: true, limit: (item) => getPerRoundLimit(item), subLimit: (sub, ctx) => getPerRoundLimitFromSub(sub, ctx) },
+    { type: 'perTurn', label: 'turn', field: 'uses_per_turn', rx: _RX_TURN, useSet: _USE_TURN, textRx: _RX_TURN_START, combatOnly: true, limit: (item) => getPerTurnLimit(item), subLimit: (sub, ctx) => getPerTurnLimitFromSub(sub, ctx) },
+    { type: 'perScene', label: 'encounter', field: 'uses_per_scene', rx: _RX_SCENE, useSet: _USE_SCENE, textRx: _RX_SCENE_START, combatOnly: false, limit: (item) => getPerSceneLimit(item), subLimit: (sub, ctx) => getPerSceneLimitFromSub(sub, ctx) },
+    { type: 'perMission', label: 'mission', field: 'uses_per_mission', rx: _RX_MISSION, useSet: _USE_MISSION, textRx: _RX_MISSION_START, combatOnly: false, limit: (item) => getPerMissionLimit(item), subLimit: (sub, ctx) => getPerMissionLimitFromSub(sub, ctx) },
 ];
 
 // Scopes whose only text source is on_hit / on_crit.
@@ -117,8 +173,8 @@ export function detectHitGatedScopes(item)
 {
     const sys = item?.system;
     return SCOPES
-        .filter(scope => scanFreqLimit(sys, scope.rx, scope.useSet, scope.textRx, { hitText: false }) === 0
-            && scanFreqLimit(sys, scope.rx, scope.useSet, scope.textRx) > 0)
+        .filter(scope => Math.max(scanFreqLimit(sys, scope.rx, scope.useSet, scope.textRx, { hitText: false }), v3Limit(item, scope.type, null, { hitText: false })) === 0
+            && Math.max(scanFreqLimit(sys, scope.rx, scope.useSet, scope.textRx), v3Limit(item, scope.type)) > 0)
         .map(scope => scope.type);
 }
 
@@ -165,27 +221,48 @@ function scanFreqLimitFromSub(sub, rx, useSet, textRx = rx)
 
 export function getPerRoundLimit(item)
 {
-    return Math.max(tagLimit(item, 'tg_round'), scanFreqLimit(item?.system, _RX_ROUND, _USE_ROUND, _RX_ROUND_START));
+    return Math.max(tagLimit(item, 'tg_round'), scanFreqLimit(item?.system, _RX_ROUND, _USE_ROUND, _RX_ROUND_START), v3Limit(item, 'perRound'));
 }
 export function getPerTurnLimit(item)
 {
-    return Math.max(tagLimit(item, 'tg_turn'), scanFreqLimit(item?.system, _RX_TURN, _USE_TURN, _RX_TURN_START));
+    return Math.max(tagLimit(item, 'tg_turn'), scanFreqLimit(item?.system, _RX_TURN, _USE_TURN, _RX_TURN_START), v3Limit(item, 'perTurn'));
 }
 export function getPerSceneLimit(item)
 {
-    return scanFreqLimit(item?.system, _RX_SCENE, _USE_SCENE, _RX_SCENE_START);
+    return Math.max(scanFreqLimit(item?.system, _RX_SCENE, _USE_SCENE, _RX_SCENE_START), v3Limit(item, 'perScene'));
 }
-export function getPerRoundLimitFromSub(sub)
+export function getPerMissionLimit(item)
 {
-    return scanFreqLimitFromSub(sub, _RX_ROUND, _USE_ROUND, _RX_ROUND_START);
+    return Math.max(scanFreqLimit(item?.system, _RX_MISSION, _USE_MISSION, _RX_MISSION_START), v3Limit(item, 'perMission'));
 }
-export function getPerTurnLimitFromSub(sub)
+export function getPerRoundLimitFromSub(sub, ctx = null)
 {
-    return scanFreqLimitFromSub(sub, _RX_TURN, _USE_TURN, _RX_TURN_START);
+    return Math.max(scanFreqLimitFromSub(sub, _RX_ROUND, _USE_ROUND, _RX_ROUND_START), v3SubLimit(ctx, 'perRound'));
 }
-export function getPerSceneLimitFromSub(sub)
+export function getPerTurnLimitFromSub(sub, ctx = null)
 {
-    return scanFreqLimitFromSub(sub, _RX_SCENE, _USE_SCENE, _RX_SCENE_START);
+    return Math.max(scanFreqLimitFromSub(sub, _RX_TURN, _USE_TURN, _RX_TURN_START), v3SubLimit(ctx, 'perTurn'));
+}
+export function getPerSceneLimitFromSub(sub, ctx = null)
+{
+    return Math.max(scanFreqLimitFromSub(sub, _RX_SCENE, _USE_SCENE, _RX_SCENE_START), v3SubLimit(ctx, 'perScene'));
+}
+export function getPerMissionLimitFromSub(sub, ctx = null)
+{
+    return Math.max(scanFreqLimitFromSub(sub, _RX_MISSION, _USE_MISSION, _RX_MISSION_START), v3SubLimit(ctx, 'perMission'));
+}
+
+export const FREQ_SPECS = [
+    { field: 'uses_per_round', limitFromSub: getPerRoundLimitFromSub, labelKey: 'LA.perFrequency.perRound', ready: 'mdi-restart', off: 'mdi-restart-off' },
+    { field: 'uses_per_turn', limitFromSub: getPerTurnLimitFromSub, labelKey: 'LA.perFrequency.perTurn', ready: 'mdi-circle-slice-8', off: 'mdi-circle-outline' },
+    { field: 'uses_per_scene', limitFromSub: getPerSceneLimitFromSub, labelKey: 'LA.perFrequency.perScene', ready: 'mdi-cog', off: 'mdi-cog-off' },
+    { field: 'uses_per_mission', limitFromSub: getPerMissionLimitFromSub, labelKey: 'LA.perFrequency.perMission', ready: 'mdi-flag', off: 'mdi-flag-off' },
+];
+
+function traitLimit(frame, type)
+{
+    const limitFn = type === 'perRound' ? getPerRoundLimitFromSub : type === 'perTurn' ? getPerTurnLimitFromSub : type === 'perMission' ? getPerMissionLimitFromSub : getPerSceneLimitFromSub;
+    return Math.max(0, ...(frame?.system?.traits ?? []).map((trait, traitIdx) => limitFn(trait, { item: frame, key: traitSubKey(traitIdx) })));
 }
 
 const SUB_FLAG = 'perFreqSub';
@@ -209,9 +286,9 @@ export async function patchSubUses(item, subKey, patch)
     await setLAFlag(item,SUB_FLAG, all);
 }
 
-export function subHasLimits(sub)
+export function subHasLimits(sub, ctx = null)
 {
-    return getPerRoundLimitFromSub(sub) > 0 || getPerTurnLimitFromSub(sub) > 0 || getPerSceneLimitFromSub(sub) > 0;
+    return getPerRoundLimitFromSub(sub, ctx) > 0 || getPerTurnLimitFromSub(sub, ctx) > 0 || getPerSceneLimitFromSub(sub, ctx) > 0 || getPerMissionLimitFromSub(sub, ctx) > 0;
 }
 
 // Nested actions with their own frequency, keyed like flowSub keys them.
@@ -233,7 +310,7 @@ export function itemActionSubs(item)
     (sys.actions ?? []).forEach((action, idx) => addSub(`a${idx}`, action));
     const profIdx = sys.selected_profile_index ?? 0;
     (sys.profiles?.[profIdx]?.actions ?? []).forEach((action, idx) => addSub(`p${profIdx}a${idx}`, action));
-    return subs.filter(sub => subHasLimits(sub.data));
+    return subs.filter(sub => subHasLimits(sub.data, { item, key: sub.key }));
 }
 
 export function actionSubKey(item, action)
@@ -246,19 +323,27 @@ export function actionSubKey(item, action)
 }
 
 // Resolves the sub-entry (talent rank or nested action) a flow targets, from Lancer's action_path.
+function rankSub(item, rankIdx)
+{
+    const rank = item.system?.ranks?.[rankIdx];
+    return rank && subHasLimits(rank, { item, key: rankSubKey(rankIdx) }) ? { key: rankSubKey(rankIdx), data: rank, name: rank.name } : null;
+}
+
 function flowSub(state)
 {
     const item = state?.item;
+    if (item && state?.name === 'TalentFlow')
+    {
+        const flowRank = state.data?.rank;
+        const rankIdx = (item.system?.ranks ?? []).findIndex(rank => rank === flowRank || (rank?.name && rank.name === flowRank?.name));
+        return rankSub(item, rankIdx);
+    }
     const path = String(state?.data?.action_path ?? '');
     if (!item || !path)
         return null;
     const rankMatch = /^system\.ranks\.(\d+)\.actions\./.exec(path);
     if (rankMatch)
-    {
-        const rankIdx = Number(rankMatch[1]);
-        const rank = item.system?.ranks?.[rankIdx];
-        return rank && subHasLimits(rank) ? { key: rankSubKey(rankIdx), data: rank, name: rank.name } : null;
-    }
+        return rankSub(item, Number(rankMatch[1]));
     const actionMatch = /^system\.(?:actions\.(\d+)|profiles\.(\d+)\.actions\.(\d+))$/.exec(path);
     if (!actionMatch)
         return null;
@@ -277,6 +362,10 @@ export function getPerTurnUsed(item)
 export function getPerSceneUsed(item)
 {
     return Number(item?.system?.uses_per_scene?.value ?? 0);
+}
+export function getPerMissionUsed(item)
+{
+    return Number(item?.system?.uses_per_mission?.value ?? 0);
 }
 export function injectPerFrequencySchemaFields()
 {
@@ -324,12 +413,23 @@ export function injectPerFrequencySchemaFields()
                 console.warn(`${MODULE_ID} | uses_per_scene inject failed on ${key}:`, e);
             }
         }
+        if (!fields.uses_per_mission)
+        {
+            try
+            {
+                fields.uses_per_mission = new SchemaField({ value: new NumberField({ initial: 0, integer: true, min: 0 }) });
+            }
+            catch (e)
+            {
+                console.warn(`${MODULE_ID} | uses_per_mission inject failed on ${key}:`, e);
+            }
+        }
     }
 }
 
 function scopeLimit(scope, item, sub)
 {
-    return sub ? scope.subLimit(sub.data) : scope.limit(item);
+    return sub ? scope.subLimit(sub.data, { item, key: sub.key }) : scope.limit(item);
 }
 
 function scopeUsed(scope, item, sub)
@@ -409,25 +509,30 @@ async function resetPerFrequencyOnRepairStep(state)
     {
         const patch = { _id: item.id };
         let touched = false;
-        if (getPerRoundLimit(item) > 0 && getPerRoundUsed(item) > 0)
+        if (Math.max(getPerRoundLimit(item), traitLimit(item, 'perRound')) > 0 && getPerRoundUsed(item) > 0)
         {
             patch['system.uses_per_round.value'] = 0;
             touched = true;
         }
-        if (getPerTurnLimit(item) > 0 && getPerTurnUsed(item) > 0)
+        if (Math.max(getPerTurnLimit(item), traitLimit(item, 'perTurn')) > 0 && getPerTurnUsed(item) > 0)
         {
             patch['system.uses_per_turn.value'] = 0;
             touched = true;
         }
-        if (getPerSceneLimit(item) > 0 && getPerSceneUsed(item) > 0)
+        if (Math.max(getPerSceneLimit(item), traitLimit(item, 'perScene')) > 0 && getPerSceneUsed(item) > 0)
         {
             patch['system.uses_per_scene.value'] = 0;
+            touched = true;
+        }
+        if (Math.max(getPerMissionLimit(item), traitLimit(item, 'perMission')) > 0 && getPerMissionUsed(item) > 0)
+        {
+            patch['system.uses_per_mission.value'] = 0;
             touched = true;
         }
         const subMap = getLAFlag(item,'perFreqSub');
         for (const [subKey, entry] of Object.entries(subMap ?? {}))
         {
-            for (const subField of ['uses_per_round', 'uses_per_turn', 'uses_per_scene'])
+            for (const subField of ['uses_per_round', 'uses_per_turn', 'uses_per_scene', 'uses_per_mission'])
             {
                 if (Number(entry?.[subField]?.value ?? 0) > 0)
                 {
@@ -463,6 +568,12 @@ export function registerPerFrequencyFlowSteps(flowSteps, flows)
         else if (flow.steps.includes('printActionUseCard'))
             flow.insertStepBefore('printActionUseCard', 'lancer-automations:consumePerFrequency');
     }
+    const talentFlow = flows.get('TalentFlow');
+    if (talentFlow?.steps?.includes('printTalentCard'))
+    {
+        talentFlow.insertStepBefore('printTalentCard', 'lancer-automations:checkPerFrequency');
+        talentFlow.insertStepBefore('printTalentCard', 'lancer-automations:consumePerFrequency');
+    }
     try
     {
         flows.get('FullRepairFlow')?.insertStepAfter('executeFullRepair', 'lancer-automations:resetPerFrequencyOnRepair');
@@ -481,35 +592,38 @@ async function resetForCombatants(combatants, scope)
     const limitFn = scope === 'round' ? getPerRoundLimit
         : scope === 'turn' ? getPerTurnLimit
             : getPerSceneLimit;
+    const type = scope === 'round' ? 'perRound' : scope === 'turn' ? 'perTurn' : 'perScene';
     for (const cb of combatants)
     {
-        const actor = cb.actor;
-        if (!actor?.items)
-            continue;
-        const updates = [];
-        for (const item of actor.items)
+        for (const actor of [cb.actor, cb.actor?.system?.pilot?.value])
         {
-            const patch = { _id: item.id };
-            let touched = false;
-            if (limitFn(item) > 0 && Number(item.system?.[field]?.value ?? 0) > 0)
+            if (!actor?.items)
+                continue;
+            const updates = [];
+            for (const item of actor.items)
             {
-                patch[`system.${field}.value`] = 0;
-                touched = true;
-            }
-            const subMap = getLAFlag(item,'perFreqSub');
-            for (const [subKey, entry] of Object.entries(subMap ?? {}))
-            {
-                if (Number(entry?.[field]?.value ?? 0) > 0)
+                const patch = { _id: item.id };
+                let touched = false;
+                if (Math.max(limitFn(item), traitLimit(item, type)) > 0 && Number(item.system?.[field]?.value ?? 0) > 0)
                 {
-                    patch[`flags.${MODULE_ID}.perFreqSub.${subKey}.${field}.value`] = 0;
+                    patch[`system.${field}.value`] = 0;
                     touched = true;
                 }
+                const subMap = getLAFlag(item,'perFreqSub');
+                for (const [subKey, entry] of Object.entries(subMap ?? {}))
+                {
+                    if (Number(entry?.[field]?.value ?? 0) > 0)
+                    {
+                        patch[`flags.${MODULE_ID}.perFreqSub.${subKey}.${field}.value`] = 0;
+                        touched = true;
+                    }
+                }
+                if (touched)
+                    updates.push(patch);
             }
-            if (touched)
-                updates.push(patch);
+            if (updates.length)
+                await actor.updateEmbeddedDocuments('Item', updates);
         }
-        if (updates.length)
-            await actor.updateEmbeddedDocuments('Item', updates);
     }
 }
 
@@ -577,7 +691,8 @@ function buildBadgeStandard(item)
     const roundLimit = getPerRoundLimit(item);
     const turnLimit = getPerTurnLimit(item);
     const sceneLimit = getPerSceneLimit(item);
-    if (!roundLimit && !turnLimit && !sceneLimit)
+    const missionLimit = getPerMissionLimit(item);
+    if (!roundLimit && !turnLimit && !sceneLimit && !missionLimit)
         return '';
     const blocks = [];
     if (roundLimit)
@@ -585,7 +700,9 @@ function buildBadgeStandard(item)
     if (turnLimit)
         blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER TURN</span>${pipsHtmlStandard(turnLimit, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')}</div>`);
     if (sceneLimit)
-        blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER SCENE</span>${pipsHtmlStandard(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')}</div>`);
+        blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">${localize('LA.perFrequency.perScene')}</span>${pipsHtmlStandard(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')}</div>`);
+    if (missionLimit)
+        blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">${localize('LA.perFrequency.perMission')}</span>${pipsHtmlStandard(missionLimit, getPerMissionUsed(item), 'mdi-flag', 'mdi-flag-off', 'uses_per_mission')}</div>`);
     return blocks.join('');
 }
 
@@ -594,16 +711,19 @@ function buildBadgeAlt(item)
     const roundLimit = getPerRoundLimit(item);
     const turnLimit = getPerTurnLimit(item);
     const sceneLimit = getPerSceneLimit(item);
-    if (!roundLimit && !turnLimit && !sceneLimit)
+    const missionLimit = getPerMissionLimit(item);
+    if (!roundLimit && !turnLimit && !sceneLimit && !missionLimit)
         return '';
     const blocks = [];
-    const wrap = (label, pips) => `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${item.id}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`;
+    const wrap = (label, pips) => `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr la-pf-card" data-item-id="${item.id}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`;
     if (roundLimit)
         blocks.push(wrap('PER ROUND', pipsHtmlAlt(roundLimit, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')));
     if (turnLimit)
         blocks.push(wrap('PER TURN', pipsHtmlAlt(turnLimit, getPerTurnUsed(item), 'mdi-circle-slice-8', 'mdi-circle-outline', 'uses_per_turn')));
     if (sceneLimit)
-        blocks.push(wrap('PER SCENE', pipsHtmlAlt(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')));
+        blocks.push(wrap(localize('LA.perFrequency.perScene'), pipsHtmlAlt(sceneLimit, getPerSceneUsed(item), 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')));
+    if (missionLimit)
+        blocks.push(wrap(localize('LA.perFrequency.perMission'), pipsHtmlAlt(missionLimit, getPerMissionUsed(item), 'mdi-flag', 'mdi-flag-off', 'uses_per_mission')));
     return blocks.join('');
 }
 
@@ -612,11 +732,8 @@ function buildSubBadges(item, subs, alt)
     const blocks = [];
     for (const sub of subs)
     {
-        const specs = [
-            { max: getPerRoundLimitFromSub(sub.data), field: 'uses_per_round', label: localize('LA.perFrequency.perRound'), ready: 'mdi-restart', off: 'mdi-restart-off' },
-            { max: getPerTurnLimitFromSub(sub.data), field: 'uses_per_turn', label: localize('LA.perFrequency.perTurn'), ready: 'mdi-circle-slice-8', off: 'mdi-circle-outline' },
-            { max: getPerSceneLimitFromSub(sub.data), field: 'uses_per_scene', label: localize('LA.perFrequency.perScene'), ready: 'mdi-cog', off: 'mdi-cog-off' },
-        ];
+        const ctx = { item, key: sub.key };
+        const specs = FREQ_SPECS.map(spec => ({ ...spec, max: spec.limitFromSub(sub.data, ctx), label: localize(spec.labelKey) }));
         for (const spec of specs)
         {
             if (!spec.max)
@@ -625,7 +742,7 @@ function buildSubBadges(item, subs, alt)
             const label = `${sub.label} · ${spec.label}`;
             const pips = alt ? pipsHtmlAlt(spec.max, used, spec.ready, spec.off, spec.field) : pipsHtmlStandard(spec.max, used, spec.ready, spec.off, spec.field);
             blocks.push(alt
-                ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${item.id}" data-sub-key="${sub.key}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`
+                ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr la-pf-card" data-item-id="${item.id}" data-sub-key="${sub.key}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`
                 : `<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}" data-sub-key="${sub.key}"><span style="margin:4px;">${label}</span>${pips}</div>`);
         }
     }
@@ -685,47 +802,61 @@ export function onRenderActorSheetPerFrequency(app, html)
     const actor = app.actor ?? app.document;
     if (!root || !actor?.items)
         return;
-    const isAlt = !!root.querySelector('.la-root, .la-common, .la-counterbox');
-    for (const el of root.querySelectorAll('[data-item-id]'))
+    const isAlt = !!(root.closest('.la-root, .la-common') ?? root.querySelector('.la-root, .la-common, .la-counterbox'));
+    const cardSelector = '[data-item-id], .ref[data-uuid]';
+    for (const el of root.querySelectorAll(cardSelector))
     {
-        const id = /** @type {any} */ (el).dataset.itemId;
-        const item = actor.items.get(id);
+        const uuidId = /Item\.([^.]+)$/.exec(/** @type {any} */ (el).dataset.uuid ?? '')?.[1];
+        const item = actor.items.get(uuidId) ?? actor.items.get(/** @type {any} */ (el).dataset.itemId);
         if (!item)
+            continue;
+        const id = item.id;
+        const ownedByCard = (/** @type {Element} */ node) => node.parentElement?.closest(cardSelector) === el;
+        if ([...el.querySelectorAll(`.la-pf-card[data-item-id="${id}"], .la-pf-group`)].some(ownedByCard))
             continue;
         if (isAlt)
         {
-            const existingCounter = el.querySelector(':scope .la-counterbox:not(.la-pf-card)');
-            const container = existingCounter ? existingCounter.parentElement : el;
-            if (!container)
-                continue;
-            if (container.querySelector(`:scope > .la-pf-card[data-item-id="${id}"]`))
-                continue;
-            const badgeHtml = item.type === 'talent' ? buildTalentBadges(item, true) : buildBadgeAlt(item) + buildActionBadges(item, true);
+            const rankIdx = Number(/** @type {any} */ (el.querySelector('[data-rank]'))?.dataset.rank);
+            let badgeHtml;
+            if (item.type !== 'talent')
+                badgeHtml = buildBadgeAlt(item) + buildActionBadges(item, true);
+            else if (Number.isInteger(rankIdx) && item.system?.ranks?.[rankIdx])
+                badgeHtml = buildSubBadges(item, [{ key: rankSubKey(rankIdx), data: item.system.ranks[rankIdx], label: ['I', 'II', 'III'][rankIdx] ?? String(rankIdx + 1) }], true);
             if (!badgeHtml)
                 continue;
-            if (existingCounter)
-                existingCounter.insertAdjacentHTML('afterend', badgeHtml);
-            else
-                container.insertAdjacentHTML('beforeend', badgeHtml);
+            let band = [...el.querySelectorAll(':scope > div > .la-bckg-header-anti')].find(candidate => candidate.querySelector('.la-counterbox'));
+            if (!band)
+            {
+                const bandHtml = '<div class="-widthfull -padding2-l la-pf-band"><div class="la-flexrow clipped-bot-alt la-text-header la-bckg-header-anti -widthfull -fontface-stylized"></div></div>';
+                const summary = el.querySelector(':scope > .la-summary');
+                if (summary)
+                    summary.insertAdjacentHTML('afterend', bandHtml);
+                else
+                    el.insertAdjacentHTML('afterbegin', bandHtml);
+                band = el.querySelector(':scope > .la-pf-band > div');
+            }
+            band?.insertAdjacentHTML('beforeend', badgeHtml);
         }
         else
         {
-            const body = el.querySelector(':scope .lancer-body') ?? el;
-            if (body.querySelector(`:scope > .la-pf-card[data-item-id="${id}"]`))
-                continue;
             const badgeHtml = item.type === 'talent' ? buildTalentBadges(item, false) : buildBadgeStandard(item) + buildActionBadges(item, false);
-            if (!badgeHtml)
+            const counters = [...el.querySelectorAll('.limited-card, .charged-box')]
+                .filter(counter => !counter.classList.contains('la-pf-card') && ownedByCard(counter));
+            if (!badgeHtml && !counters.length)
                 continue;
-            const charged = body.querySelector(':scope > .charged-box:not(.la-pf-card)');
-            const limited = body.querySelector(':scope > .limited-card:not(.la-pf-card)');
-            const anchor = charged ?? limited;
-            if (anchor)
-                anchor.insertAdjacentHTML('afterend', badgeHtml);
+            const group = document.createElement('div');
+            group.className = 'la-pf-group';
+            group.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:2px 0;';
+            group.append(...counters);
+            group.insertAdjacentHTML('beforeend', badgeHtml);
+            const header = el.querySelector(':scope > .lancer-header') ?? el.querySelector('.lancer-header');
+            if (header)
+                header.after(group);
             else
-                body.insertAdjacentHTML('afterbegin', badgeHtml);
+                el.prepend(group);
         }
     }
-    // Per-trait per-scene injection.
+    // Per-trait frequency injection.
     const seenTraitKeys = new Set();
     for (const traitBtn of root.querySelectorAll('[data-type="trait"][data-uuid][data-index]'))
     {
@@ -745,8 +876,9 @@ export function onRenderActorSheetPerFrequency(app, html)
         const trait = /** @type {any} */ (frame)?.system?.traits?.[traitIdx];
         if (!frame || !trait)
             continue;
-        const sceneMax = getPerSceneLimitFromSub(trait);
-        if (!sceneMax)
+        const ctx = { item: frame, key: traitSubKey(traitIdx) };
+        const specs = FREQ_SPECS.map(spec => ({ ...spec, max: spec.limitFromSub(trait, ctx), label: localize(spec.labelKey) })).filter(spec => spec.max);
+        if (!specs.length)
             continue;
         let body = traitBtn.closest('.frame-trait')?.querySelector(':scope > .lancer-body') ?? null;
         const altBody = root.querySelector(`[data-la-collapse-id="${actor.uuid}_${frame.id}_trait_${traitIdx}"]`);
@@ -757,14 +889,17 @@ export function onRenderActorSheetPerFrequency(app, html)
         const useAlt = !!altBody && body === altBody;
         if (body.querySelector(`:scope > .la-pf-card[data-item-id="${frame.id}"][data-trait-idx="${traitIdx}"]`))
             continue;
-        const sceneUsed = Number(/** @type {any} */ (frame).system?.uses_per_scene?.value ?? 0);
-        const pips = useAlt
-            ? pipsHtmlAlt(sceneMax, sceneUsed, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene')
-            : pipsHtmlStandard(sceneMax, sceneUsed, 'mdi-cog', 'mdi-cog-off', 'uses_per_scene');
-        const card = useAlt
-            ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span class="la-counterbox__span -fontsizemedium">PER SCENE</span>${pips}</div>`
-            : `<div class="clipped card charged-box la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span style="margin:4px;">PER SCENE</span>${pips}</div>`;
-        body.insertAdjacentHTML('beforeend', card);
+        for (const spec of specs)
+        {
+            const used = Number(/** @type {any} */ (frame).system?.[spec.field]?.value ?? 0);
+            const pips = useAlt
+                ? pipsHtmlAlt(spec.max, used, spec.ready, spec.off, spec.field)
+                : pipsHtmlStandard(spec.max, used, spec.ready, spec.off, spec.field);
+            const card = useAlt
+                ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span class="la-counterbox__span -fontsizemedium">${spec.label}</span>${pips}</div>`
+                : `<div class="clipped card charged-box la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}"><span style="margin:4px;">${spec.label}</span>${pips}</div>`;
+            body.insertAdjacentHTML('beforeend', card);
+        }
     }
     bindPipClicks(root, actor);
 }

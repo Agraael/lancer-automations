@@ -3,8 +3,9 @@
 import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './genericBonuses.js';
 import { linkedBonusConditionLines, linkedBonusFrequencyLabel, linkedBonusHasLambdaGate } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
-import { effectStack, isUsageEffect } from './flagged-effects.js';
-import { localize } from '../tools/string-utils.js';
+import { effectStack, isUsageEffect, roundBadgeColor } from './flagged-effects.js';
+import { durationEntries, roundsLeft } from './duration-clock.js';
+import { localize, escapeHtml } from '../tools/string-utils.js';
 
 /**
  * @typedef {Object} StatusTooltipData
@@ -14,16 +15,20 @@ import { localize } from '../tools/string-utils.js';
  * @property {string} [bonus]
  * @property {string} [frequency] - How often the bonus may apply, empty when unlimited.
  * @property {string[]} [conditional] - Gate lines of the linked bonus, non-empty means gated.
+ * @property {string} [source] - Name of the item or actor it comes from.
+ * @property {boolean} [off] - A data bonus switched off on this token.
+ * @property {string} [condition]
+ * @property {boolean} [conditionMet]
  * @property {string} [description] - Trusted HTML, comes from effect/status config.
  */
 
 /** Shortest turn-based entry, null when the effect has none. */
 function bestTurnEntry(effect)
 {
-    const flags = getLAFlags(effect);
-    const entries = [flags?.duration, ...(flags?.durationEntries ?? [])].filter(Boolean);
+    if (!getLAFlags(effect))
+        return null;
     let best = null;
-    for (const entry of entries)
+    for (const entry of durationEntries(effect))
     {
         if ((entry.label === 'end' || entry.label === 'start') && Number(entry.turns) > 0)
         {
@@ -52,26 +57,89 @@ export function instanceCount(actor, effect)
     return sameName.reduce((total, entry) => total + effectStack(entry), 0);
 }
 
-/** Shortest turn-based entry wins, otherwise the first entry decides the wording. */
+function plural(count, word)
+{
+    return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function holderTokenIds(effect)
+{
+    const actor = effect?.parent;
+    const ids = new Set();
+    if (actor?.token)
+        ids.add(actor.token.id);
+    for (const token of actor?.getActiveTokens?.(false, true) ?? [])
+        ids.add(token.id);
+    return ids;
+}
+
+function tokenName(tokenId)
+{
+    return canvas.tokens?.get(tokenId)?.name
+        ?? game.scenes?.find(scene => scene.tokens.has(tokenId))?.tokens.get(tokenId)?.name
+        ?? '';
+}
+
+function durationLine(entry, holderIds)
+{
+    if (entry.label === 'start' || entry.label === 'end')
+    {
+        const turns = Number(entry.turns);
+        const count = Number.isFinite(turns) ? ` (${plural(turns, 'turn')})` : '';
+        const own = !entry.originID || holderIds.has(entry.originID);
+        return { text: `${entry.label === 'end' ? 'End' : 'Start'} of ${own ? 'own turn' : 'turn'}${count}`, whose: own ? null : tokenName(entry.originID), round: false };
+    }
+    if (entry.label === 'roundEnd' || entry.label === 'roundStart')
+    {
+        const left = roundsLeft(entry);
+        const number = Number.isFinite(Number(entry.round)) && entry.round !== null ? ` ${entry.round}` : '';
+        const count = left !== null ? ` (${plural(left, 'round')})` : '';
+        return { text: `${entry.label === 'roundEnd' ? 'End' : 'Start'} of round${number}${count}`, whose: null, round: true };
+    }
+    if (entry.label === 'encounter')
+        return { text: 'End of encounter', whose: null, round: false };
+    if (entry.label === 'permanent')
+        return { text: 'Permanent', whose: null, round: false };
+    return { text: 'Indefinite', whose: null, round: false };
+}
+
+export function durationLines(effect)
+{
+    if (!getLAFlags(effect))
+        return [];
+    const holderIds = holderTokenIds(effect);
+    const lines = [];
+    for (const entry of durationEntries(effect))
+    {
+        const line = durationLine(entry, holderIds);
+        const stack = Math.max(1, Number(entry.stack) || 1);
+        const same = lines.find(other => other.text === line.text && other.whose === line.whose);
+        if (same)
+            same.stack += stack;
+        else
+            lines.push({ ...line, stack });
+    }
+    return lines;
+}
+
 export function durationText(effect)
 {
-    const flags = getLAFlags(effect);
-    const entries = [flags?.duration, ...(flags?.durationEntries ?? [])].filter(Boolean);
-    const best = bestTurnEntry(effect);
-    if (best)
-        return `${best.turns} turn${best.turns > 1 ? 's' : ''} (${best.label} of turn)`;
-    const first = entries[0];
-    if (first?.label === 'permanent')
-        return 'Permanent';
-    if (first?.label === 'indefinite')
-        return 'Indefinite';
-    if (first?.label === 'round')
+    const lines = durationLines(effect);
+    const counted = lines.length > 1;
+    return lines.map(line => `${counted ? `×${line.stack} ` : ''}${line.text}${line.whose ? `, turn of ${line.whose}` : ''}`).join(' · ');
+}
+
+export function durationHtml(effect)
+{
+    const lines = durationLines(effect);
+    const counted = lines.length > 1;
+    const roundColor = roundBadgeColor();
+    return lines.map(line =>
     {
-        const rounds = Number(first.rounds ?? first.turns);
-        if (rounds > 0)
-            return `${rounds} round${rounds > 1 ? 's' : ''}`;
-    }
-    return '';
+        const style = line.round ? ` style="color:${roundColor};"` : '';
+        const whose = line.whose ? `<div class="la-status-tooltip-whose">Turn of ${escapeHtml(line.whose)}</div>` : '';
+        return `<div${style}>${counted ? `×${line.stack} ` : ''}${line.text}</div>${whose}`;
+    }).join('');
 }
 
 /**
@@ -123,6 +191,15 @@ export function bonusText(bonus, actor = null, uses = getBonusUsesInfo(actor, bo
     return `${detail} <span class="la-status-tooltip-uses">[${uses.label}]</span>${uses.onUse ? ' [on-use]' : ''}`;
 }
 
+export function sourceName(record)
+{
+    if (record?.dataSource?.name)
+        return record.dataSource.name;
+    const markers = record?.documentName ? getLAFlags(record) : record;
+    const uuid = markers?.sourceItemUuid ?? markers?.sourceActorUuid;
+    return uuid ? (/** @type {any} */ (fromUuidSync(uuid))?.name ?? '') : '';
+}
+
 /** Effect description, falling back to the status config it carries. */
 export function descriptionHtml(effect)
 {
@@ -149,10 +226,11 @@ export function effectTooltipData(actor, effect)
     return {
         name: effect?.name ?? '',
         count: instanceCount(actor, effect),
-        duration: durationText(effect),
+        duration: durationHtml(effect),
         bonus: linkedBonusText(actor, effect),
         frequency: linkedBonusFrequencyLabel(actor, effect),
         conditional: linkedBonusHasLambdaGate(actor, effect) ? linkedBonusConditionLines(actor, effect) : [],
+        source: sourceName(effect),
         description: descriptionHtml(effect)
     };
 }
@@ -172,6 +250,12 @@ export function showStatusTooltip(data)
         parts.push(`<div class="la-status-tooltip-duration">${data.duration}</div>`);
     if (data.bonus)
         parts.push(`<div class="la-status-tooltip-bonus">${data.bonus}</div>`);
+    if (data.source)
+        parts.push(`<div class="la-status-tooltip-source"><i class="fas fa-link"></i> ${escapeHtml(data.source)}</div>`);
+    if (data.condition)
+        parts.push(`<div class="la-status-tooltip-cond${data.conditionMet ? '' : ' la-status-tooltip-cond--unmet'}"><i class="fas fa-code-branch"></i> ${escapeHtml(data.condition)}${data.conditionMet ? '' : ' · not met'}</div>`);
+    if (data.off)
+        parts.push('<div class="la-status-tooltip-off">Switched off. Right-click to turn it back on.</div>');
     if (data.frequency)
         parts.push(`<div class="la-status-tooltip-cond"><i class="fas fa-rotate-left"></i> ${data.frequency}</div>`);
     if (data.conditional?.length)

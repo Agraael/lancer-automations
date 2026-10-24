@@ -10,6 +10,7 @@ import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { localize } from '../tools/string-utils.js';
 import { getLAFlags } from '../tools/flag-utils.js';
+import * as customFilterClasses from '../filters/customFilters.js';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
 // Effect definitions
@@ -1377,6 +1378,24 @@ async function autoStatusCorePowerOff(actor)
     await actor.toggleStatusEffect('core_power_active', { active: false });
 }
 
+async function setCoreActiveField(actor, active)
+{
+    if (actor?.type !== 'mech' || !!actor.system?.core_active === active)
+        return;
+    await actor.update({ 'system.core_active': active });
+}
+
+async function corePowerOff(actor)
+{
+    await autoStatusCorePowerOff(actor);
+    await setCoreActiveField(actor, false);
+}
+
+function grantsCorePowerStatus(effect)
+{
+    return effect?.parent?.documentName === 'Actor' && !!effect.statuses?.has('core_power_active');
+}
+
 // Hook handlers
 
 function _isTemplateAE(document)
@@ -1587,6 +1606,26 @@ function _dedupeMeshFilters(token)
     });
 }
 
+const _CUSTOM_FILTER_CLASSES = new Set(Object.values(customFilterClasses));
+function _pruneOrphanCustomFilters(token)
+{
+    const mesh = token?.mesh;
+    if (!mesh?.filters?.length)
+        return;
+    const flagIds = new Set((token.document?.flags?.tokenmagic?.filters ?? []).map(flagEntry => flagEntry?.tmFilters?.tmFilterId));
+    const kept = mesh.filters.filter(filter =>
+    {
+        if (!_CUSTOM_FILTER_CLASSES.has(filter.constructor) || flagIds.has(filter.filterId))
+            return true;
+        filter.enabled = false;
+        filter.destroy();
+        return false;
+    });
+    if (kept.length !== mesh.filters.length)
+        mesh.filters = kept.length ? kept : null;
+    _dedupeMeshFilters(token);
+}
+
 // Every flag write re-enters TMFX's rebuild, so puppets go in before it and the mesh is swept after.
 async function _writeFilters(token, write)
 {
@@ -1598,19 +1637,19 @@ async function _writeFilters(token, write)
 const _reconcileTimers = new Map();
 function reconcileStatusFX(actor)
 {
-    if (!actor?.id)
+    if (!actor?.uuid)
         return;
     if (!actor.isOwner)
         return;
-    const prev = _reconcileTimers.get(actor.id);
+    const prev = _reconcileTimers.get(actor.uuid);
     if (prev)
         clearTimeout(prev);
     const timer = setTimeout(() =>
     {
-        _reconcileTimers.delete(actor.id);
+        _reconcileTimers.delete(actor.uuid);
         _doReconcileStatusFX(actor);
     }, 50);
-    _reconcileTimers.set(actor.id, timer);
+    _reconcileTimers.set(actor.uuid, timer);
 }
 
 // TMFX restores fracture/chains from flags frozen; drop them so reconcile rebuilds them live.
@@ -1667,6 +1706,16 @@ export function initStatusFX()
             autoStatusCascading(item.parent);
     });
 
+    Hooks.on('updateToken', (document, change) =>
+    {
+        const tmfxChange = /** @type {any} */ (change.flags)?.tokenmagic;
+        if (!tmfxChange || !('filters' in tmfxChange || '-=filters' in tmfxChange))
+            return;
+        const token = document.object;
+        if (token)
+            setTimeout(() => _pruneOrphanCustomFilters(token), 0);
+    });
+
     Hooks.on('canvasReady', () => setTimeout(_reapplyCustomFiltersAfterLoad, 300));
     if (canvas?.ready)
         setTimeout(_reapplyCustomFiltersAfterLoad, 300);
@@ -1681,6 +1730,7 @@ Hooks.once('lancer.registerFlows', (steps, flows) =>
     steps.set('addCorePowerSE', async ({ actor }) =>
     {
         await autoStatusCorePowerOn(actor);
+        await setCoreActiveField(actor, true);
         return true;
     });
     flows.get('CoreActiveFlow')?.insertStepAfter('consumeCorePower', 'addCorePowerSE');
@@ -1689,7 +1739,7 @@ Hooks.once('lancer.registerFlows', (steps, flows) =>
 Hooks.on('preDeleteCombatant', (combatant) =>
 {
     if (combatant.actor)
-        autoStatusCorePowerOff(combatant.actor);
+        corePowerOff(combatant.actor);
 });
 
 Hooks.on('preDeleteCombat', (combat) =>
@@ -1697,6 +1747,31 @@ Hooks.on('preDeleteCombat', (combat) =>
     for (const combatant of combat.combatants ?? [])
     {
         if (combatant.actor)
-            autoStatusCorePowerOff(combatant.actor);
+            corePowerOff(combatant.actor);
     }
+});
+
+Hooks.on('createActiveEffect', (effect, _options, userId) =>
+{
+    if (userId === game.user.id && grantsCorePowerStatus(effect))
+        setCoreActiveField(effect.parent, true);
+});
+
+Hooks.on('deleteActiveEffect', (effect, _options, userId) =>
+{
+    if (userId !== game.user.id || !grantsCorePowerStatus(effect))
+        return;
+    const actor = effect.parent;
+    if (!actor.effects.some(other => other.id !== effect.id && !other.disabled && other.statuses?.has('core_power_active')))
+        setCoreActiveField(actor, false);
+});
+
+Hooks.on('updateActor', (actor, changes, _options, userId) =>
+{
+    if (userId !== game.user.id || !foundry.utils.hasProperty(changes, 'system.core_active'))
+        return;
+    if (actor.system.core_active)
+        autoStatusCorePowerOn(actor);
+    else
+        autoStatusCorePowerOff(actor);
 });

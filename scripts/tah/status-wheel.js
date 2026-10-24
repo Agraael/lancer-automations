@@ -2,14 +2,16 @@ import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWhee
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
-import { applyEffectsToTokens, effectStack } from '../bonuses/flagged-effects.js';
-import { removeGlobalBonus, removeConstantBonus, getBonusIcon, isBonusRemovalPending } from '../bonuses/genericBonuses.js';
+import { applyEffectsToTokens, effectStack, roundBadgeColor } from '../bonuses/flagged-effects.js';
+import { remainingRounds } from '../bonuses/duration-clock.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, isBonusRemovalPending, getV3DefenseRows, setV3DefenseOff } from '../bonuses/genericBonuses.js';
 import { getBonusConditionLines, getBonusFrequencyLabel, hasLambdaGate } from '../bonuses/bonus-condition.js';
-import { isPermanentEffect, confirmPermanentRemoval } from './status-panel.js';
-import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns } from '../bonuses/status-tooltip.js';
+import { isPermanentEffect, confirmPermanentRemoval, setEffectStack } from './status-panel.js';
+import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns, sourceName } from '../bonuses/status-tooltip.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { localize } from '../tools/string-utils.js';
+import { v3ConditionLabel } from '../tools/v3-condition.js';
 const ICON_SIZE = 24;
 // Matches Foundry's own tooltip dwell, the wheel is swept through so an instant tip would flicker.
 const TIP_DELAY_MS = 500;
@@ -22,6 +24,8 @@ const BONUS_BG = '#cbb6e8';
 const BONUS_BORDER = '#4a2f7a';
 const CONSTANT_BG = '#f2b47a';
 const CONSTANT_BORDER = '#8a4310';
+const DATA_BG = '#a8dcd1';
+const DATA_BORDER = '#1d6b62';
 
 let _openToken = null;
 let _page = 1;
@@ -63,6 +67,12 @@ function totalStack(effects)
 function leastTurns(effects)
 {
     const values = effects.map(remainingTurns).filter(turns => turns > 0);
+    return values.length ? Math.min(...values) : 0;
+}
+
+function leastRounds(effects)
+{
+    const values = effects.map(remainingRounds).filter(rounds => rounds > 0);
     return values.length ? Math.min(...values) : 0;
 }
 
@@ -140,7 +150,7 @@ function collectEntries(actor)
     return entries;
 }
 
-/** Second page: constant bonuses, which never carry a token icon or an effect. */
+/** Second page: constant and data bonuses, which never carry a token icon or an effect. */
 function constantEntries(actor)
 {
     return /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || [])
@@ -154,12 +164,26 @@ function constantEntries(actor)
             active: true,
             permanent: false,
         }))
-        .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name));
+        .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name))
+        .concat(getV3DefenseRows(actor)
+            .map(({ bonus, off, inactive }) => ({
+                kind: 'data',
+                key: `data:${bonus.id}`,
+                name: bonus.name ?? 'Bonus',
+                icon: getBonusIcon(bonus),
+                bonus,
+                effects: [],
+                active: !off && !inactive,
+                off,
+                inactive,
+                permanent: false,
+            }))
+            .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name)));
 }
 
 function isBonusEntry(entry)
 {
-    return entry.kind === 'bonus' || entry.kind === 'constant';
+    return entry.kind === 'bonus' || entry.kind === 'constant' || entry.kind === 'data';
 }
 
 async function applyStatus(tokens, entry)
@@ -205,7 +229,7 @@ async function unwindStatus(tokens, entry)
         const stack = getStack(last);
         if (stack > 1)
         {
-            await last.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
+            await setEffectStack(last, stack - 1);
             continue;
         }
         if (!await confirmPermanentRemoval(entry.name, [last]))
@@ -217,8 +241,7 @@ async function unwindStatus(tokens, entry)
 async function stepStack(entry, delta)
 {
     const effect = entry.effects[0];
-    const next = getStack(effect) + delta;
-    await effect.update({ 'flags.statuscounter.value': next, 'flags.statuscounter.visible': next > 1 });
+    await setEffectStack(effect, getStack(effect) + delta);
 }
 
 async function onLeftClick(tokens, entry)
@@ -244,7 +267,9 @@ async function onRightClick(tokens, entry)
     {
         for (const token of tokens)
         {
-            if (entry.kind === 'constant')
+            if (entry.kind === 'data')
+                await setV3DefenseOff(token.actor, entry.bonus.id, !entry.off);
+            else if (entry.kind === 'constant')
                 await removeConstantBonus(token.actor, entry.bonus.id);
             else
                 await removeGlobalBonus(token.actor, entry.bonus.id);
@@ -269,6 +294,8 @@ function iconHtml(icon)
 
 function styleFor(entry)
 {
+    if (entry.kind === 'data')
+        return entry.off || entry.inactive ? null : { bg: DATA_BG, border: DATA_BORDER };
     if (entry.kind === 'constant')
         return { bg: CONSTANT_BG, border: CONSTANT_BORDER };
     if (entry.kind === 'bonus')
@@ -296,6 +323,10 @@ function tooltipData(entry, actor)
         return {
             name: entry.name,
             bonus: bonusText(entry.bonus, actor),
+            source: sourceName(entry.bonus),
+            off: !!entry.off,
+            condition: entry.bonus?.dataCondition ? `while ${v3ConditionLabel(entry.bonus.dataCondition)}` : '',
+            conditionMet: !entry.inactive,
             frequency: getBonusFrequencyLabel(entry.bonus),
             conditional: hasLambdaGate(entry.bonus) ? getBonusConditionLines(entry.bonus) : []
         };
@@ -312,6 +343,7 @@ function buildWheelItem(entry, tokens)
     const instances = entry.effects.length;
     const uses = totalStack(entry.effects);
     const turns = leastTurns(entry.effects);
+    const rounds = turns > 0 ? 0 : leastRounds(entry.effects);
     return {
         key: entry.key,
         title: entry.name,
@@ -324,6 +356,11 @@ function buildWheelItem(entry, tokens)
             el.innerHTML = iconHtml(entry.icon);
             if (turns > 0)
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns">${turns}</span>`);
+            else if (rounds > 0)
+            {
+                const color = roundBadgeColor();
+                el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns" style="color:${color}; border-color:color-mix(in srgb, ${color} 55%, #000);">${rounds}</span>`);
+            }
             // same split as the token badge: blue instances, purple usage beside it or in its place
             if (instances > 1)
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack">${instances}</span>`);
@@ -348,6 +385,10 @@ function buildWheelItem(entry, tokens)
         },
         styleButton: (el) =>
         {
+            const dashed = entry.kind === 'data' && entry.off;
+            const unmet = entry.kind === 'data' && !entry.off && entry.inactive;
+            el.style.borderStyle = dashed ? 'dashed' : '';
+            el.style.borderColor = dashed || unmet ? DATA_BORDER : '';
             const style = styleFor(entry);
             if (!style)
                 return;

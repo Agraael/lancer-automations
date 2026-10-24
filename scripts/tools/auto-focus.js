@@ -70,12 +70,13 @@ export function focusTokenIds(focusKind, tokenIds)
     focusTokens(focusKind, (tokenIds ?? []).map(tokenId => canvas.tokens?.get(tokenId)));
 }
 
-// Rolls and action FX are seen by everyone, so everyone follows them.
+// Everyone follows rolls and action FX, except the roller when they control the acting token.
 export function broadcastFocus(focusKind, tokens)
 {
     if (!canvas.scene)
         return;
-    focusTokens(focusKind, tokens);
+    if (!canvas.tokens.get(tokens?.[0]?.id)?.controlled)
+        focusTokens(focusKind, tokens);
     const tokenIds = [...new Set((tokens ?? []).map(token => token?.id).filter(Boolean))];
     if (tokenIds.length === 0)
         return;

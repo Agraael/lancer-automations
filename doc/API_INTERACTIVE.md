@@ -599,6 +599,7 @@ Interactive drag-ruler with pathfinding: Ctrl+click adds a waypoint, right-click
 | <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
 | <kbd>urgent</kbd> | `boolean` | `false` | Jump the card queue |
 | <kbd>planOnly</kbd> | `boolean` | `false` | Resolve the planned paths without moving. Returns `Array<{token, path}>` |
+| <kbd>awayFrom</kbd> | `Token \| {x, y}` | `null` | Lights only the spaces directly away from this token or point. Others warn but still work |
 
 Returns the moved document(s), the plans with `planOnly`, or `null` on cancel.
 
@@ -643,9 +644,10 @@ Knockback with the drag-ruler picker: plan a destination per token, Confirm comm
 | <kbd>icon</kbd> | `string` | `"fas fa-arrow-right"` | FontAwesome class for the card |
 | <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
 | <kbd>urgent</kbd> | `boolean` | `true` | Pass `false` to wait in the card queue |
+| <kbd>awayFrom</kbd> | `Token \| {x, y}` | `null` | Point of origin, see `moveTokenRuler` |
 
 ```js
-await api.knockBackToken([target], 3, { triggeringToken: reactorToken });
+await api.knockBackToken([target], 3, { triggeringToken: reactorToken, awayFrom: reactorToken });
 ```
 
 </details>

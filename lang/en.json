@@ -573,7 +573,6 @@
       "pickStatus": "Pick Status",
       "pickToken": "Pick Token",
       "presetExists": "Preset Exists",
-      "rangeBreakdown": "{type} Breakdown",
       "reactorExplosion": "Reactor Explosion",
       "reactorExplosionCaps": "REACTOR EXPLOSION",
       "reactorMeltdown": "Reactor Meltdown",
@@ -731,6 +730,7 @@
         "onPreMove": "On Pre Move",
         "onPreStatusApplied": "On Pre Status Applied",
         "onPreStatusRemoved": "On Pre Status Removed",
+        "onRoundEnd": "On Round End",
         "onRoundStart": "On Round Start",
         "onStatusApplied": "On Status Applied",
         "onStatusRemoved": "On Status Removed",
@@ -980,17 +980,19 @@
       "deployableCreateFailed": "Failed to create deployable actor for: {input}",
       "deployableNotFound": "Deployable not found: {input}",
       "deprecatedActivations": "{count} saved activation(s) use a deprecated pattern. See the console for details.",
+      "deprecatedApi": "An automation uses deprecated Lancer Automations code. {message} The console lists every use.",
       "destinationIsOutOfRange": "Destination is out of range.",
       "dismountNoPilot": "Dismount: no linked pilot found on {name}.",
       "dismountThisActionMustBeUsedBy": "Dismount: this action must be used by a mech token.",
       "distanceBetween": "Distance: {distance} spaces ({from} ↔ {to})",
       "downtimeImportInvalidJson": "Downtime import: invalid JSON.",
-      "downtimeImportNoActionsJsonInThis": "Downtime import: no actions.json in this LCP.",
+      "downtimeImportNoActionsJsonInThis": "Downtime import: no actions.json or downtime_actions.json in this LCP.",
       "downtimeImportNoDowntimeActionsInThis": "Downtime import: no downtime actions in this file.",
       "downtimeImportNoFileSelected": "Downtime import: no file selected.",
       "downtimeImported": "Downtime import: {count} activities in \"{pack}\".",
       "downtimeJournalFailed": "Error creating Downtime Journal: {error}",
       "downtimeNoPilotAvailable": "Downtime: no pilot available.",
+      "durationOriginFallback": "{origin} takes no turns in this combat: {names} counts {holder}'s turns instead.",
       "effectNotFound": "Effect {name} not found",
       "ejectNoPilot": "Eject: no linked pilot found on {name}.",
       "ejectThisActionMustBeUsedBy": "Eject: this action must be used by a mech token.",
@@ -1040,6 +1042,8 @@
       "journalEntryRequestDeclined": "Journal entry request declined",
       "journalRequestSent": "Journal creation request sent to GM for {count} target{plural}",
       "keyReservedByFoundry": "\"{key}\" is reserved by Foundry and cannot be bound.",
+      "knockbackNotAway": "Not directly away from {name}.",
+      "knockbackNotAwayFromPoint": "Not directly away from the point of origin.",
       "labelledItemDisabled": "{label} {name} is disabled!",
       "lancerAutomationsMacroPackNotFound": "lancer-automations macro pack not found",
       "lancerAutomationsSetupApplied": "Lancer Automations setup applied.",
@@ -1131,6 +1135,7 @@
       "onlyTheGmCanSyncTokenHeights": "Only the GM can sync token heights.",
       "optedOutNoMoreDataWillBe": "Opted out. No more data will be sent.",
       "outOfCombatDuration": "Out of combat: {names} duration will not tick.",
+      "outOfCombatEncounter": "No combat: {names} ends when the next combat on this scene ends.",
       "packsLocked": "Could not write to {packs}. Open the Compendium tab, right-click each pack, pick \"Toggle Edit Lock\", and re-run.",
       "parseFileFailed": "Failed to parse file: {error}",
       "perRoundLimit": "{name}: per-round limit reached.",
@@ -1216,6 +1221,7 @@
       "tokensWillAppear": "{count} token(s) will appear at round {round}",
       "tookChoiceCard": "{name} took the choice card.",
       "totalCostExceedsAvailableRepairs": "Total cost exceeds available repairs.",
+      "turnTriggersOtherScene": "Turn triggers skipped: open {scene} to run them. Durations still tick.",
       "uncharged": "{name} is uncharged.",
       "unchargedDeploy": "{name} is uncharged. You must reload or recharge it before deploying.",
       "unlinkedFrom": "Unlinked {target} from {owner}.",
@@ -1304,6 +1310,10 @@
       "climb-waypoints": {
         "explain": "Adds a climb step wherever terrain elevation changes under the token, so the cost is billed at each climb.",
         "label": "Split movement with climb steps when terrain height changes?"
+      },
+      "combat-carousel": {
+        "explain": "Combatants in team lanes at the top of the screen.",
+        "label": "Show the Combat Carousel during combat?"
       },
       "consume-action": {
         "explain": "Spends the action automatically when an activation flow completes.",
@@ -1446,7 +1456,7 @@
       },
       "per-round-tags": {
         "explain": "Items tagged with those limits get pip counters and are capped.",
-        "label": "Enforce per-round / per-turn / per-scene use limits?"
+        "label": "Enforce per-round / per-turn / per-encounter use limits?"
       },
       "ppg-actions": {
         "explain": "Homebrew actions from PPG (Prototype Pattern Group), shown in the Actions category.",
@@ -1681,8 +1691,9 @@
       "youCanChangeAnyOfThese": "You can change any of these later in"
     },
     "perFrequency": {
+      "perMission": "PER MISSION",
       "perRound": "PER ROUND",
-      "perScene": "PER SCENE",
+      "perScene": "PER ENCOUNTER",
       "perTurn": "PER TURN"
     },
     "pilotReserves": {
@@ -2318,8 +2329,8 @@
         "name": "One-Structure NPC Auto-Destroy"
       },
       "enablePerRoundTurnTags": {
-        "hint": "Enforce per-round and per-turn tags (tg_round, tg_turn) and per-scene frequencies (\"N/scene\", use=\"Encounter\"). Blocks attacks/activations at the limit and auto-resets on round/turn/combat. Requires reload.",
-        "name": "Per-Round / Per-Turn / Per-Scene Enforcement"
+        "hint": "Enforce per-round and per-turn tags (tg_round, tg_turn) and per-encounter frequencies (\"N/encounter\", \"N/scene\", use=\"Encounter\"). Blocks attacks/activations at the limit and auto-resets on round/turn/combat. Requires reload.",
+        "name": "Per-Round / Per-Turn / Per-Encounter Enforcement"
       },
       "enablePersonalStuff": {
         "hint": "My personal bag of tweaks, might not be useful to anyone else.",
@@ -2568,7 +2579,7 @@
         "name": "Activation Notification Mode"
       },
       "resistSelfHeat": {
-        "hint": "Halve self-inflicted heat from self-heat, overkill, and overcharge when the mech resists Heat.",
+        "hint": "Halve self-inflicted heat from self-heat, overkill, and overcharge when the mech resists Heat, double it when vulnerable to Heat.",
         "name": "Resist Self-Inflicted Heat"
       },
       "scanJournalSource": {
@@ -2681,6 +2692,10 @@
       "statusIconMinZoomScale": {
         "hint": "Below this zoom level the icons keep a constant screen size. 0 = disabled.",
         "name": "Minimum Icon Zoom Scale"
+      },
+      "statusRoundColor": {
+        "hint": "Color of the remaining-rounds number drawn on status icons.",
+        "name": "Round Counter Color"
       },
       "statusUsageColor": {
         "hint": "Color of the usage number drawn on status icons and in the combat tracker.",
@@ -4654,7 +4669,8 @@
         "favorites": "Favorites",
         "reserves": "Reserves",
         "resources": "Resources",
-        "results": "Results"
+        "results": "Results",
+        "secondMount": "Second Mount"
       },
       "confirmFullRepair": "<p>Fully repair these {count} units?</p><p style=\"opacity:0.75;\">{names}</p>",
       "detail": {
@@ -4698,6 +4714,7 @@
         "attacks": "Attacks",
         "attributes": "Attributes",
         "barrage": "Barrage",
+        "barrageWith": "Barrage with",
         "basic": "Basic",
         "basicAttack": "Basic Attack",
         "basicTech": "Basic Tech",
@@ -4796,7 +4813,6 @@
         "systems": "Systems",
         "talents": "Talents",
         "tech": "Tech",
-        "techAttack": "Tech Attack",
         "teleport": "Teleport",
         "templates": "Templates",
         "throwWeapon": "Throw Weapon",
@@ -4818,7 +4834,7 @@
       "profiles": "PROFILES",
       "searchStatuses": "Search statuses…",
       "selectMacro": "(select a macro)",
-      "statusHelp": "Click: apply or add a stack<br>Right-click: remove or reduce<br>Ctrl+click: favorite<br>Hover: description",
+      "statusHelp": "Click: apply or add a stack<br>Right-click: remove or reduce<br>Ctrl+right-click: favorite<br>Hover: description",
       "wheel": "Wheel {n}"
     },
     "tokenStatBar": {
@@ -4876,7 +4892,7 @@
         "optionalAutoConsumeTriggerOnHit": "Optional auto-consume trigger (on hit, on damage, on turn end...). Picking some triggers reveals extra filters: item LID, action name, status, check type.",
         "pickAShapeBlastBurstCone": "Pick a shape - Blast, Burst, Cone, Line - or a single Target mark. Options make it 3D (elevation), auto-follow terrain, and propagate cell to cell.",
         "pickAStatusAndAStack": "Pick a status and a stack count. Target is up top.",
-        "pressFOnASelectedToken": "Press <b>F</b> on a selected token: your favorites form a wheel around it. Click an icon to use it, right-click for its details, hover for the range preview. <b>Tab</b> switches to the second wheel once you have one.",
+        "pressFOnASelectedToken": "Press <b>F</b> with a token selected: your favorites form a wheel at the cursor. Click an icon to use it, right-click for its details, hover for the range preview. <b>Tab</b> switches to the next wheel once you have more than one.",
         "pressGForTheStatusesOn": "Press <b>G</b> for the statuses on the token plus the ones starred in the status panel. Click to apply or add a stack, right-click to remove one. Removing a permanent effect asks first.",
         "pressMOnASelectedToken": "Press <b>M</b> on a selected token to open this wheel and set its <b>base</b> movement type - walk, fly, drift, each with its own cost rules.",
         "prettySimpleHereSTheConfiguration": "Pretty simple, here's the configuration menu where all the Lancer Automations options live. Note: some settings are <b>client-side</b> (per user) and not shared world-wide (Token Action HUD, custom stat bars, vision debug overlays, etc.). Each player must enable them on their own client.",

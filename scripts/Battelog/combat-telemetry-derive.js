@@ -202,7 +202,7 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const heatLine = rawHeat.map((heat, i) => heat + (stressMax - stressAtRound[i]) * heatMax);
 
     const dmgValueFor = ev => (
-        ev.type === 'damage' && ev.byId === log.tokenId
+        ev.type === 'damage' && ev.byId === log.tokenId && ev.targetId !== log.tokenId
             ? (ev.damages ?? []).reduce((n, d) => n + (d.amount ?? 0), 0)
             : 0
     );
@@ -568,7 +568,7 @@ function _buildBreakdown(events, telemetry, byId)
         {
             if (ev.type === 'damage')
             {
-                if (ev.byId === byId)
+                if (ev.byId === byId && ev.targetId !== byId)
                 {
                     for (const d of (ev.damages ?? []))
                         dmgOutByType.set(d.type, (dmgOutByType.get(d.type) ?? 0) + (d.amount ?? 0));
@@ -990,7 +990,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         {
             if (ev.type === 'damage')
             {
-                if (ev.byId === log.tokenId && matches(ev.targetId))
+                if (ev.byId === log.tokenId && ev.targetId !== log.tokenId && matches(ev.targetId))
                 {
                     for (const d of (ev.damages ?? []))
                         addToBucket(dealtBucket, d.type, d.amount ?? 0);
@@ -1004,7 +1004,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
             else if (ev.type === 'damage-undo')
             {
                 const reverted = (ev.hpRestored ?? 0) + (ev.overshieldRestored ?? 0);
-                if (ev.byId === log.tokenId && matches(ev.targetId))
+                if (ev.byId === log.tokenId && ev.targetId !== log.tokenId && matches(ev.targetId))
                     dealtBucket.physical = Math.max(0, dealtBucket.physical - reverted);
                 if (ev.targetId === log.tokenId && matches(ev.byId))
                     takenBucket.physical = Math.max(0, takenBucket.physical - reverted);
@@ -1033,6 +1033,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         killed,
         round: destroyedEv?.round ?? null,
         turnDied: destroyedEv?.turn ?? null,
+        deathCause: destroyedEv?.cause ?? null,
         dmgDealt,
         dmgTaken,
         physicalDmgDealt: dealtBucket.physical,
@@ -1051,7 +1052,7 @@ function _attributeKill(victim, telemetry)
 {
     if (!victim.killed || victim.round == null)
         return { killerId: null, killerTeam: null, assistIds: [], killerIsPilot: false, pilotAssistIds: [] };
-    return attributeKill(telemetry, victim.tokenId, victim.round);
+    return attributeKill(telemetry, victim.tokenId, victim.round, victim.deathCause);
 }
 
 

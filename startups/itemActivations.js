@@ -1823,8 +1823,7 @@ const ablativeShieldingAutomation = {
                 bonusData: {
                     id: `ablative_shielding_${item.id}`,
                     name: "Ablative Shielding",
-                    type: "immunity",
-                    subtype: "resistance",
+                    type: "resistance",
                     damageTypes: ["Energy"]
                 },
                 addOptions: { duration: 'constant' }
@@ -2981,8 +2980,7 @@ const collapsePlatingAutomation = {
                 bonusData: {
                     id: `collapse_plating_${item.id}`,
                     name: "Collapse Plating",
-                    type: "immunity",
-                    subtype: "resistance",
+                    type: "resistance",
                     damageTypes: ["Kinetic"]
                 },
                 addOptions: { duration: 'constant' }
@@ -3367,8 +3365,7 @@ async function grantInterdiction(bearerToken, bastionToken, enemyToken, item, la
     await la.addGlobalBonus(bearerToken.actor, {
         id: `friendly-interdiction-${bastionToken.id}`,
         name: INTERDICTION_NAME,
-        type: 'immunity',
-        subtype: 'resistance',
+        type: 'resistance',
         damageTypes: ['all'],
         applyToCondition: interdictionAppliesTo,
         context: { ownerTokenId: bastionToken.id }
@@ -3618,8 +3615,7 @@ function buildSiegeGuardianAuraCallback()
         await api.addGlobalBonus(token.actor, {
             id: `siege-guardian-${parent.id}`,
             name: 'Siege Guardian',
-            type: 'immunity',
-            subtype: 'resistance',
+            type: 'resistance',
             damageTypes: ['all'],
             condition: (state) =>
             {
@@ -4732,7 +4728,8 @@ api.registerDefaultItemReactions({
                         duration: "1 Round",
                         origin: reactorToken,
                         consumption: {
-                            trigger: "onHit"
+                            trigger: "onHit",
+                            role: "source"
                         }
                     });
                 }
@@ -6511,7 +6508,7 @@ api.registerDefaultItemReactions({
                     uses: 1
                 }, {
                     origin: reactorToken,
-                    consumption: { trigger: "onDamage" }
+                    consumption: { trigger: "onDamage", role: "source" }
                 });
             }
         }]

@@ -3,6 +3,7 @@
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
+import { normalizeBonusShape } from '../bonuses/genericBonuses.js';
 
 const MIGRATIONS = [
     {
@@ -71,6 +72,50 @@ const MIGRATIONS = [
                 }
                 if (changed)
                     await game.settings.set(MODULE_ID, key, saved);
+            }
+            Hooks.callAll('lancer-automations.clearCaches');
+        },
+    },
+    {
+        id: 'defenseBonusTypes_v1',
+        async run()
+        {
+            const keys = ['global_bonuses', 'constant_bonuses', 'ephemeral_bonuses', 'bonusTemplates'];
+            const reshape = (entry, key) => (key === 'bonusTemplates' && entry?.bonusData
+                ? { ...entry, bonusData: normalizeBonusShape(entry.bonusData) }
+                : normalizeBonusShape(entry));
+            const migrateDoc = async (doc) =>
+            {
+                for (const key of keys)
+                {
+                    const list = doc?.getFlag?.(MODULE_ID, key);
+                    if (!Array.isArray(list))
+                        continue;
+                    const next = list.map(entry => reshape(entry, key));
+                    const changed = next.some((entry, index) => (key === 'bonusTemplates'
+                        ? entry.bonusData !== list[index]?.bonusData
+                        : entry !== list[index]));
+                    if (changed)
+                        await doc.setFlag(MODULE_ID, key, next);
+                }
+            };
+            const migrateActor = async (actor) =>
+            {
+                await migrateDoc(actor);
+                for (const item of actor?.items ?? [])
+                    await migrateDoc(item);
+            };
+            for (const actor of game.actors)
+                await migrateActor(actor);
+            for (const item of game.items)
+                await migrateDoc(item);
+            for (const scene of game.scenes)
+            {
+                for (const tokenDoc of scene.tokens)
+                {
+                    if (!tokenDoc.actorLink && tokenDoc.actor)
+                        await migrateActor(tokenDoc.actor);
+                }
             }
             Hooks.callAll('lancer-automations.clearCaches');
         },

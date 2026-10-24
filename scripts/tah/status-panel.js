@@ -1,17 +1,20 @@
 /* global $, game, CONFIG */
 
-import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString, getBonusUsesInfo, isBonusRemovalPending } from '../bonuses/genericBonuses.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, getBonusDetailString, getBonusUsesInfo, isBonusRemovalPending, getV3DefenseRows, setV3DefenseOff } from '../bonuses/genericBonuses.js';
 import { getBonusConditionHint } from '../bonuses/bonus-condition.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { applyEffectsToTokens, effectStack } from '../bonuses/flagged-effects.js';
 import { durationFieldsHtml, setupDurationUI, getDurationConfig, createDurationMarks } from '../bonuses/duration-widget.js';
+import { hasPermanentEntry } from '../bonuses/duration-clock.js';
 import { playUiSound } from './sound.js';
 import { tahScale, laHudRenderIcon } from './item-helpers.js';
 import { HudPanel } from './hud-panel.js';
 import { openCursorMenu } from './cursor-menu.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml } from '../tools/string-utils.js';
+import { durationText, sourceName } from '../bonuses/status-tooltip.js';
+import { v3ConditionLabel } from '../tools/v3-condition.js';
 
 function getBonusDetailStr(/** @type {any} */ bonus)
 {
@@ -30,7 +33,7 @@ export function isPermanentEffect(effects)
     {
         const laFlags = getLAFlags(effect);
         const duration = laFlags?.duration ?? /** @type {any} */ (effect.flags)?.['csm-lancer-qol']?.duration;
-        if (duration?.label === 'permanent')
+        if (laFlags ? hasPermanentEntry(effect) : duration?.label === 'permanent')
             return true;
     }
     return false;
@@ -42,12 +45,17 @@ export async function confirmPermanentRemoval(label, effects)
     if (!isPermanentEffect(effects))
         return true;
     return await openCursorMenu({
-        head: `${label} is permanent`,
+        head: `${escapeHtml(label)} is permanent`,
         rows: [
             { value: true, label: localize('LA.common.remove'), glyph: '✕', cls: 'la-menu-popup-danger' },
             { value: false, label: localize('LA.common.keep') },
         ],
     }) === true;
+}
+
+export function setEffectStack(effect, value)
+{
+    return effect.update({ 'flags.statuscounter.value': value, 'flags.statuscounter.visible': value > 1 });
 }
 
 let _lastSearchQuery = '';
@@ -58,6 +66,34 @@ const BG_HOVER   = 'color-mix(in srgb, var(--la-plate), #000 12%)';
 // Row text: plate ink when inactive (flips with the plate), dark on the light active/permanent bg.
 const FG_DEFAULT = 'var(--la-ink)';
 const FG_ACTIVE  = '#111';
+
+function stackBadgeText(effects)
+{
+    const totalStack = effects.reduce((sum, effect) => sum + effectStack(effect), 0);
+    const parts = [];
+    if (totalStack > 1)
+        parts.push(`×${totalStack}`);
+    if (effects.length > 1)
+        parts.push(`[${effects.length}]`);
+    return parts.join(' ');
+}
+
+// active-row colors: yellow when any active effect is permanent, blue otherwise
+function rowColors(active, perm = false)
+{
+    return {
+        background: active ? (perm ? '#f0e0a0' : '#b8d4f0') : BG_DEFAULT,
+        borderLeftColor: active ? (perm ? '#a07020' : '#1a4a7a') : 'transparent',
+        color: active ? FG_ACTIVE : FG_DEFAULT,
+    };
+}
+
+function setRowActive(rowEl, active, perm = false)
+{
+    rowEl.data('active', active);
+    rowEl.data('permanent', active && perm);
+    rowEl.css(rowColors(active, perm));
+}
 
 export class StatusPanel extends HudPanel
 {
@@ -110,24 +146,8 @@ export class StatusPanel extends HudPanel
             const statusId = rowEl.attr('data-status-id');
             const effects = /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff => eff.statuses?.has(statusId) && !eff.disabled);
             const nowActive = effects.length > 0;
-            const nowPerm = nowActive && effects.some(/** @type {any} */ eff =>
-            {
-                const laFlags = getLAFlags(eff);
-                const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
-                return dur?.label === 'permanent';
-            });
-            rowEl.data('active', nowActive);
-            rowEl.data('permanent', nowPerm);
-            const bg = nowActive ? (nowPerm ? '#f0e0a0' : '#b8d4f0') : BG_DEFAULT;
-            const border = nowActive ? (nowPerm ? '#a07020' : '#1a4a7a') : 'transparent';
-            rowEl.css({ background: bg, borderLeftColor: border, color: nowActive ? FG_ACTIVE : FG_DEFAULT });
-            const totalStack = effects.reduce((sum, /** @type {any} */ eff) => sum + effectStack(eff), 0);
-            const parts = [];
-            if (totalStack > 1)
-                parts.push(`×${totalStack}`);
-            if (effects.length > 1)
-                parts.push(`[${effects.length}]`);
-            rowEl.find('.la-status-badge').text(parts.join(' '));
+            setRowActive(rowEl, nowActive, nowActive && isPermanentEffect(effects));
+            rowEl.find('.la-status-badge').text(stackBadgeText(effects));
         });
     }
 
@@ -141,7 +161,6 @@ export class StatusPanel extends HudPanel
             return;
 
         const hasTempCustomStatuses = !!game.modules.get('temporary-custom-statuses')?.active;
-        const tempCustomStatusesApi = hasTempCustomStatuses ? /** @type {any} */ (game.modules.get('temporary-custom-statuses'))?.api : null;
         const savedStatuses = hasTempCustomStatuses ? (game.settings.get('temporary-custom-statuses', 'savedStatuses') ?? []) : [];
         const activeCustomEffects = hasTempCustomStatuses
             ? /** @type {any[]} */ ([...actor.effects]).filter(/** @type {any} */ eff =>
@@ -209,33 +228,13 @@ export class StatusPanel extends HudPanel
 
         const isPermanent = (/** @type {any} */ status) => isPermanentEffect(getEffectsForStatus(status.id));
 
-        // active-row colors: yellow when any active effect is permanent, blue otherwise
-        const ACTIVE_BG_NORMAL    = '#b8d4f0';
-        const ACTIVE_BORDER_NORMAL = '#1a4a7a';
-        const ACTIVE_BG_PERM      = '#f0e0a0';
-        const ACTIVE_BORDER_PERM  = '#a07020';
-        const activeBg     = (/** @type {boolean} */ perm) => perm ? ACTIVE_BG_PERM : ACTIVE_BG_NORMAL;
-        const activeBorder = (/** @type {boolean} */ perm) => perm ? ACTIVE_BORDER_PERM : ACTIVE_BORDER_NORMAL;
-
         const isCustomActive = (/** @type {string} */ name) =>
             /** @type {any[]} */ ([...actor.effects]).some(/** @type {any} */ eff =>
                 (eff.getFlag?.('temporary-custom-statuses', 'originalName') === name || eff.name === name) &&
                 !eff.disabled
             );
 
-        const getStatusBadge = (/** @type {any} */ s) =>
-        {
-            const effects = getEffectsForStatus(s.id);
-            if (!effects.length)
-                return '';
-            const totalStack = effects.reduce((sum, e) => sum + getStack(e), 0);
-            const parts = [];
-            if (totalStack > 1)
-                parts.push(`×${totalStack}`);
-            if (effects.length > 1)
-                parts.push(`[${effects.length}]`);
-            return parts.join(' ');
-        };
+        const getStatusBadge = (/** @type {any} */ s) => stackBadgeText(getEffectsForStatus(s.id));
 
         const buildStatusTooltip = (/** @type {any} */ status) =>
         {
@@ -260,22 +259,13 @@ export class StatusPanel extends HudPanel
                 if (effects.length > 1 || stackStr)
                     lines.push(`<div class="la-tooltip-label">${label}${stackStr}</div>`);
                 const dur = laFlags?.duration ?? /** @type {any} */ (eff.flags)?.['csm-lancer-qol']?.duration;
-                if (dur?.label)
-                    lines.push(`<div class="la-tooltip-duration">Duration: ${dur.label}</div>`);
+                const durLabel = laFlags ? durationText(eff) : dur?.label;
+                if (durLabel)
+                    lines.push(`<div class="la-tooltip-duration">Duration: ${escapeHtml(durLabel)}</div>`);
             }
             return lines.length ? lines.join('') : null;
         };
 
-        const setRowActive =(/** @type {any} */ rowEl, /** @type {boolean} */ nowActive, /** @type {boolean} */ perm = false) =>
-        {
-            rowEl.data('active', nowActive);
-            rowEl.data('permanent', nowActive && perm);
-            rowEl.css({
-                background: nowActive ? activeBg(perm) : BG_DEFAULT,
-                borderLeftColor: nowActive ? activeBorder(perm) : 'transparent',
-                color: nowActive ? FG_ACTIVE : FG_DEFAULT
-            });
-        };
         const updateRowBadge = (/** @type {any} */ rowEl, /** @type {any} */ s) =>
         {
             rowEl.find('.la-status-badge').text(getStatusBadge(s));
@@ -288,7 +278,7 @@ export class StatusPanel extends HudPanel
                 return null;
             const label = game.i18n.localize(s.name ?? s.id);
             const tooltipEl = $(`<div class="la-status-tooltip">
-                <div class="la-status-tooltip__title">${label}</div>
+                <div class="la-status-tooltip__title">${escapeHtml(label)}</div>
                 <div class="la-status-tooltip__body">${body}</div>
             </div>`);
             $('body').append(tooltipEl);
@@ -297,6 +287,95 @@ export class StatusPanel extends HudPanel
             const top = Math.min(rect.top, window.innerHeight - tooltipHeight - 8);
             tooltipEl.css({ top, left: rect.right + 6 });
             return tooltipEl;
+        };
+
+        const bindStatusRow = (rowEl, spec) =>
+        {
+            let tooltipEl = /** @type {any} */ (null);
+            let tooltipTimer = null;
+            rowEl.on('mouseenter', function()
+            {
+                playUiSound('statusHover');
+                if (!$(this).data('active'))
+                    $(this).css({ background: BG_HOVER, borderLeftColor: 'var(--la-edge)' });
+                const self = $(this);
+                tooltipTimer = setTimeout(() =>
+                {
+                    tooltipEl = showTooltip(self, spec.tooltipStatus);
+                }, 600);
+            }).on('mouseleave', function()
+            {
+                clearTimeout(tooltipTimer); tooltipTimer = null;
+                tooltipEl?.remove(); tooltipEl = null;
+                $(this).css(rowColors($(this).data('active'), $(this).data('permanent')));
+            });
+
+            rowEl.on('click', async () =>
+            {
+                playUiSound('toggle');
+                const effects = spec.getEffects();
+                if (effects.length > 1)
+                {
+                    this._openSubtypeManager(actor, spec.subtypeStatus, effects, rowEl);
+                    return;
+                }
+                this._incDepth();
+                try
+                {
+                    if (effects.length === 1)
+                        await setEffectStack(effects[0], getStack(effects[0]) + 1);
+                    else
+                        await this._applyWithDuration(spec.applyStatus);
+                    spec.updateRow();
+                }
+                finally
+                {
+                    this._decDepth();
+                }
+            });
+
+            rowEl.on('contextmenu', async (ev) =>
+            {
+                ev.preventDefault();
+                if (ev.ctrlKey && spec.onCtrlRightClick)
+                {
+                    await spec.onCtrlRightClick();
+                    return;
+                }
+                playUiSound('toggle');
+                const effects = spec.getEffects();
+                if (effects.length > 1)
+                {
+                    this._openSubtypeManager(actor, spec.subtypeStatus, effects, rowEl);
+                    return;
+                }
+                this._incDepth();
+                try
+                {
+                    const stack = effects.length ? getStack(effects[0]) : 0;
+                    if (!effects.length)
+                        await this._applyWithDuration(spec.applyStatus);
+                    else if (stack > 1)
+                        await setEffectStack(effects[0], stack - 1);
+                    else
+                    {
+                        if (!await confirmPermanentRemoval(spec.name, effects))
+                            return;
+                        await actor.deleteEmbeddedDocuments('ActiveEffect', [effects[0].id]);
+                        for (const token of this._tokens.slice(1))
+                        {
+                            const tokenEff = [...token.actor.effects].find(spec.matchesOther);
+                            if (tokenEff)
+                                await token.actor.deleteEmbeddedDocuments('ActiveEffect', [tokenEff.id]);
+                        }
+                    }
+                    spec.updateRow();
+                }
+                finally
+                {
+                    this._decDepth();
+                }
+            });
         };
 
         const searchBar =$(`<input type="text" class="la-status-search" placeholder="${localize('LA.tokenHud.searchStatuses')}">`);
@@ -346,138 +425,35 @@ export class StatusPanel extends HudPanel
         for (const status of allStatuses)
         {
             const active = isActive(status);
-            const perm   = active && isPermanent(status);
-            const badge  = getStatusBadge(status);
-            const bg     = active ? activeBg(perm) : BG_DEFAULT;
-            const border = active ? activeBorder(perm) : 'transparent';
-            const fg     = active ? FG_ACTIVE : FG_DEFAULT;
-            const rowEl = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};color:${fg};" data-status-id="${status.id}">
-                <img class="la-status-row__img" src="${status.icon ?? status.img ?? ''}" onerror="this.style.display='none'">
-                <span class="la-status-name">${game.i18n.localize(status.name ?? status.id)}</span>
-                <span class="la-status-badge">${badge}</span>
+            const rowEl = $(`<div class="la-hud-status-row" data-status-id="${status.id}">
+                <img class="la-status-row__img" src="${escapeHtml(status.icon ?? status.img ?? '')}" onerror="this.style.display='none'">
+                <span class="la-status-name">${escapeHtml(game.i18n.localize(status.name ?? status.id))}</span>
+                <span class="la-status-badge">${getStatusBadge(status)}</span>
             </div>`);
-            rowEl.data('active', active);
-            rowEl.data('permanent', perm);
+            setRowActive(rowEl, active, active && isPermanent(status));
             if (favoriteIds.has(status.id))
                 rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
 
-            let tooltipEl = /** @type {any} */ (null);
-            let tooltipTimer = null;
-            rowEl.on('mouseenter', function()
-            {
-                playUiSound('statusHover');
-                if (!$(this).data('active'))
-                    $(this).css({ background: BG_HOVER, borderLeftColor: 'var(--la-edge)' });
-                const self = $(this);
-                tooltipTimer = setTimeout(() =>
+            bindStatusRow(rowEl, {
+                name: status.name,
+                tooltipStatus: status,
+                applyStatus: status,
+                subtypeStatus: status,
+                getEffects: () => getEffectsForStatus(status.id),
+                matchesOther: (matchingEff) => matchingEff.statuses?.has(status.id) && !matchingEff.disabled,
+                updateRow: () =>
                 {
-                    tooltipEl = showTooltip(self, status);
-                }, 600);
-            }).on('mouseleave', function()
-            {
-                clearTimeout(tooltipTimer); tooltipTimer = null;
-                tooltipEl?.remove(); tooltipEl = null;
-                const active = $(this).data('active');
-                const perm = $(this).data('permanent');
-                $(this).css({ background: active ? activeBg(perm) : BG_DEFAULT, borderLeftColor: active ? activeBorder(perm) : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
-            });
-
-            rowEl.on('click', async () =>
-            {
-                playUiSound('toggle');
-                const effects = getEffectsForStatus(status.id);
-                if (effects.length > 1)
-                {
-                    this._openSubtypeManager(actor, status, effects, rowEl);
-                    return;
-                }
-                this._incDepth();
-                try
-                {
-                    if (effects.length === 1)
-                    {
-                        const eff = effects[0];
-                        await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
-                    }
-                    else if (effects.length === 0)
-                        await this._applyWithDuration(status);
-                    else
-                    {
-                        if (!await confirmPermanentRemoval(status.name, effects))
-                            return;
-                        for (const token of this._tokens)
-                            await /** @type {any} */ (token).toggleEffect(status);
-                    }
                     updateRowBadge(rowEl, status);
                     setRowActive(rowEl, isActive(status), isPermanent(status));
-                }
-                finally
-                {
-                    this._decDepth();
-                }
-            });
-
-            rowEl.on('contextmenu', async (ev) =>
-            {
-                ev.preventDefault();
-                if (ev.ctrlKey)
+                },
+                onCtrlRightClick: async () =>
                 {
                     const nowFav = await toggleStatusFavorite(status.id);
                     playUiSound('toggle');
                     rowEl.find('.la-hud-fav-mark').remove();
                     if (nowFav)
                         rowEl.css('position', 'relative').append('<span class="la-hud-fav-mark">★</span>');
-                    return;
-                }
-                playUiSound('toggle');
-                const effects = getEffectsForStatus(status.id);
-                if (effects.length > 1)
-                {
-                    this._openSubtypeManager(actor, status, effects, rowEl);
-                    return;
-                }
-                if (effects.length === 0)
-                {
-                    // Right-click on inactive: same as left-click toggle
-                    this._incDepth();
-                    try
-                    {
-                        await this._applyWithDuration(status);
-                        updateRowBadge(rowEl, status);
-                        setRowActive(rowEl, isActive(status), isPermanent(status));
-                    }
-                    finally
-                    {
-                        this._decDepth();
-                    }
-                    return;
-                }
-                this._incDepth();
-                try
-                {
-                    const eff = effects[0];
-                    const stack = getStack(eff);
-                    if (stack > 1)
-                        await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
-                    else
-                    {
-                        if (!await confirmPermanentRemoval(status.name, effects))
-                            return;
-                        await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                        for (const token of this._tokens.slice(1))
-                        {
-                            const tokenEff = [...token.actor.effects].find(matchingEff => matchingEff.statuses?.has(status.id) && !matchingEff.disabled);
-                            if (tokenEff)
-                                await token.actor.deleteEmbeddedDocuments('ActiveEffect', [tokenEff.id]);
-                        }
-                    }
-                    updateRowBadge(rowEl, status);
-                    setRowActive(rowEl, isActive(status), isPermanent(status));
-                }
-                finally
-                {
-                    this._decDepth();
-                }
+                },
             });
 
             gridEl.append(rowEl);
@@ -527,160 +503,32 @@ export class StatusPanel extends HudPanel
                     (e.getFlag?.('temporary-custom-statuses', 'originalName') === name || e.name === name) && !e.disabled
                 );
 
-            const getCustomBadge = (/** @type {string} */ name) =>
-            {
-                const effs = getCustomEffects(name);
-                if (!effs.length)
-                    return '';
-                const totalStack = effs.reduce((sum, /** @type {any} */ eff) => sum + getStack(eff), 0);
-                const parts = [];
-                if (totalStack > 1)
-                    parts.push(`×${totalStack}`);
-                if (effs.length > 1)
-                    parts.push(`[${effs.length}]`);
-                return parts.join(' ');
-            };
-
             rightEl.append($(`<div class="la-hud-panel-section-header">Custom</div>`));
             const customListEl = $(`<div class="lancer-scroll la-hud-custom-list"></div>`);
             for (const customStatus of /** @type {any[]} */ (customSaved))
             {
-                const active = isCustomActive(customStatus.name);
-                const badge  = getCustomBadge(customStatus.name);
-                const bg     = active ? '#b8d4f0' : BG_DEFAULT;
-                const border = active ? '#1a4a7a' : 'transparent';
-                const fg     = active ? FG_ACTIVE : FG_DEFAULT;
-                const customRow = $(`<div class="la-hud-status-row" style="background:${bg};border-left-color:${border};color:${fg};">
-                    <img class="la-status-row__img" src="${customStatus.icon ?? ''}" onerror="this.style.display='none'">
-                    <span class="la-status-name">${customStatus.name}</span>
-                    <span class="la-status-badge">${badge}</span>
+                const customRow = $(`<div class="la-hud-status-row">
+                    <img class="la-status-row__img" src="${escapeHtml(customStatus.icon ?? '')}" onerror="this.style.display='none'">
+                    <span class="la-status-name">${escapeHtml(customStatus.name)}</span>
+                    <span class="la-status-badge">${stackBadgeText(getCustomEffects(customStatus.name))}</span>
                 </div>`);
-                // status-shaped so the tooltip finds the applied effects by id
-                const customTooltipStatus = {
-                    id: customStatus.name.slugify(),
+                setRowActive(customRow, isCustomActive(customStatus.name));
+
+                bindStatusRow(customRow, {
                     name: customStatus.name,
-                    description: customStatus.description
-                };
-                let customTooltipEl = /** @type {any} */ (null);
-                let customTooltipTimer = null;
-                customRow.on('mouseenter', function()
-                {
-                    playUiSound('statusHover');
-                    if (!$(this).data('active'))
-                        $(this).css({ background: BG_HOVER, borderLeftColor: 'var(--la-edge)' });
-                    const self = $(this);
-                    customTooltipTimer = setTimeout(() =>
+                    // status-shaped so the tooltip finds the applied effects by id
+                    tooltipStatus: { id: customStatus.name.slugify(), name: customStatus.name, description: customStatus.description },
+                    applyStatus: customStatus,
+                    subtypeStatus: { id: customStatus.name, name: customStatus.name, icon: customStatus.icon },
+                    getEffects: () => getCustomEffects(customStatus.name),
+                    matchesOther: (candidate) => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || candidate.name === customStatus.name,
+                    updateRow: () =>
                     {
-                        customTooltipEl = showTooltip(self, customTooltipStatus);
-                    }, 600);
-                }).on('mouseleave', function()
-                {
-                    clearTimeout(customTooltipTimer); customTooltipTimer = null;
-                    customTooltipEl?.remove(); customTooltipEl = null;
-                    const active = $(this).data('active');
-                    $(this).css({ background: active ? '#b8d4f0' : BG_DEFAULT, borderLeftColor: active ? '#1a4a7a' : 'transparent', color: active ? FG_ACTIVE : FG_DEFAULT });
-                });
-                customRow.data('active', active);
-
-                const updateCustomRow = () =>
-                {
-                    customRow.find('.la-status-badge').text(getCustomBadge(customStatus.name));
-                    setRowActive(customRow, isCustomActive(customStatus.name));
-                    this.syncRows();
-                };
-
-                customRow.on('click', async () =>
-                {
-                    playUiSound('toggle');
-                    const effs = getCustomEffects(customStatus.name);
-                    if (effs.length > 1)
-                    {
-                        this._openSubtypeManager(actor, { id: customStatus.name, name: customStatus.name, icon: customStatus.icon }, effs, customRow);
-                        return;
-                    }
-                    this._incDepth();
-                    try
-                    {
-                        if (effs.length === 1)
-                        {
-                            const eff = effs[0];
-                            await eff.update({ 'flags.statuscounter.value': getStack(eff) + 1, 'flags.statuscounter.visible': true });
-                        }
-                        else if (effs.length === 0)
-                        {
-                            for (const token of this._tokens)
-                                await tempCustomStatusesApi.addStatus(token.actor, customStatus.name, customStatus.icon, 1);
-                        }
-                        else
-                        {
-                            if (!await confirmPermanentRemoval(customStatus.name, effs))
-                                return;
-                            await actor.deleteEmbeddedDocuments('ActiveEffect', [effs[0].id]);
-                            for (const tok of this._tokens.slice(1))
-                            {
-                                const eff = [...tok.actor.effects].find(candidate => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || candidate.name === customStatus.name);
-                                if (eff)
-                                    await tok.actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                            }
-                        }
-                        updateCustomRow();
-                    }
-                    finally
-                    {
-                        this._decDepth();
-                    }
-                });
-
-                customRow.on('contextmenu', async (ev) =>
-                {
-                    ev.preventDefault();
-                    playUiSound('toggle');
-                    const effs = getCustomEffects(customStatus.name);
-                    if (effs.length > 1)
-                    {
-                        this._openSubtypeManager(actor, { id: customStatus.name, name: customStatus.name, icon: customStatus.icon }, effs, customRow);
-                        return;
-                    }
-                    if (effs.length === 0)
-                    {
-                        this._incDepth();
-                        try
-                        {
-                            for (const token of this._tokens)
-                                await tempCustomStatusesApi.addStatus(token.actor, customStatus.name, customStatus.icon, 1);
-                            updateCustomRow();
-                        }
-                        finally
-                        {
-                            this._decDepth();
-                        }
-                        return;
-                    }
-                    this._incDepth();
-                    try
-                    {
-                        const eff = effs[0];
-                        const stack = getStack(eff);
-                        if (stack > 1)
-                            await eff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
-                        else
-                        {
-                            if (!await confirmPermanentRemoval(customStatus.name, effs))
-                                return;
-                            await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
-                            for (const token of this._tokens.slice(1))
-                            {
-                                const matchingEff = [...token.actor.effects].find(candidate => candidate.getFlag?.('temporary-custom-statuses', 'originalName') === customStatus.name || candidate.name === customStatus.name);
-                                if (matchingEff)
-                                    await token.actor.deleteEmbeddedDocuments('ActiveEffect', [matchingEff.id]);
-                            }
-                        }
-                        updateCustomRow();
-                    }
-                    finally
-                    {
-                        this._decDepth();
-                    }
+                        customRow.find('.la-status-badge').text(stackBadgeText(getCustomEffects(customStatus.name)));
+                        setRowActive(customRow, isCustomActive(customStatus.name));
+                        this.syncRows();
+                    },
+                    onCtrlRightClick: null,
                 });
 
                 customListEl.append(customRow);
@@ -694,8 +542,9 @@ export class StatusPanel extends HudPanel
             .filter((/** @type {any} */ bonus) => !isBonusRemovalPending(actor, bonus.id));
         const constantBonuses = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
         const allBonuses = [
-            ...globalBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'global', idx: i })),
-            ...constantBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'constant', idx: i })),
+            ...globalBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'global', idx: i, off: false, inactive: false })),
+            ...constantBonuses.map((/** @type {any} */ bonus, i) => ({ bonus, kind: 'constant', idx: i, off: false, inactive: false })),
+            ...getV3DefenseRows(actor).map(({ bonus, off, inactive }, i) => ({ bonus, kind: 'data', idx: i, off, inactive })),
         ];
         rightEl.append($(`<div class="la-hud-panel-section-header">Bonuses</div>`));
         const bonusListEl = $(`<div class="lancer-scroll la-bonus-list"></div>`);
@@ -703,23 +552,36 @@ export class StatusPanel extends HudPanel
             bonusListEl.append($(`<div class="la-status-empty">No bonuses</div>`));
         else
         {
-            for (const { bonus, kind } of allBonuses)
+            for (const { bonus, kind, off, inactive } of allBonuses)
             {
                 const detail = getBonusDetailStr(bonus);
-                const kindBadge = kind === 'constant' ? ' <span class="la-bonus-row__kind">(const)</span>' : '';
-                const condHint = getBonusConditionHint(bonus);
-                const condBadge = condHint ? ' <span class="la-bonus-row__cond"><i class="fas fa-code-branch"></i></span>' : '';
+                let kindBadge = '';
+                if (kind === 'constant')
+                    kindBadge = ' <span class="la-bonus-row__kind">(const)</span>';
+                else if (kind === 'data')
+                    kindBadge = ' <span class="la-bonus-row__kind la-bonus-row__kind--data">(data)</span>';
+                const source = sourceName(bonus);
+                const sourceLine = source ? `<div class="la-bonus-row__src"><i class="fas fa-link"></i> ${escapeHtml(source)}</div>` : '';
+                const actionIcon = kind === 'data'
+                    ? `<i class="la-bonus-del la-bonus-toggle fas ${off ? 'fa-eye-slash' : 'fa-eye'}" title="${off ? 'Switch on' : 'Switch off'}"></i>`
+                    : '<i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>';
+                const dataCondition = bonus.dataCondition ? `while ${v3ConditionLabel(bonus.dataCondition)}` : '';
+                const condHint = getBonusConditionHint(bonus) || dataCondition;
+                const condBadge = condHint ? ` <span class="la-bonus-row__cond${dataCondition ? ' la-bonus-row__cond--data' : ''}"><i class="fas fa-code-branch"></i></span>` : '';
+                const condLine = dataCondition
+                    ? `<div class="la-bonus-row__condline${inactive ? ' la-bonus-row__condline--unmet' : ''}"><i class="fas fa-code-branch"></i> ${escapeHtml(dataCondition)}</div>`
+                    : '';
                 const uses = getBonusUsesInfo(actor, bonus);
                 const usesBadge = uses
-                    ? ` <span class="la-bonus-row__uses">[${uses.label}]</span>${uses.onUse ? ' <span class="la-bonus-row__kind">[on-use]</span>' : ''}`
+                    ? ` <span class="la-bonus-row__uses">[${escapeHtml(uses.label)}]</span>${uses.onUse ? ' <span class="la-bonus-row__kind">[on-use]</span>' : ''}`
                     : '';
-                const row = $(`<div class="la-bonus-row" title="${bonus.name}: ${detail}">
+                const row = $(`<div class="la-bonus-row${off ? ' la-bonus-row--off' : ''}${inactive ? ' la-bonus-row--unmet' : ''}" title="${escapeHtml(`${bonus.name}: ${detail}`)}">
                     ${laHudRenderIcon(bonus.icon || getBonusIcon(bonus))}
                     <div class="la-bonus-row__body">
-                        <b>${bonus.name}</b>${kindBadge}${condBadge}<br>
-                        <span class="la-bonus-row__detail">${detail}</span>${usesBadge}
+                        <b>${escapeHtml(bonus.name)}</b>${kindBadge}${condBadge}<br>
+                        <span class="la-bonus-row__detail">${escapeHtml(detail)}</span>${usesBadge}${sourceLine}${condLine}
                     </div>
-                    <i class="la-bonus-del fas fa-trash" title="Delete bonus"></i>
+                    ${actionIcon}
                 </div>`);
                 if (condHint)
                     row.find('.la-bonus-row__cond').attr('title', condHint);
@@ -734,6 +596,14 @@ export class StatusPanel extends HudPanel
                     .on('click', async (ev) =>
                     {
                         ev.stopPropagation();
+                        if (kind === 'data')
+                        {
+                            const nowOff = !row.hasClass('la-bonus-row--off');
+                            await setV3DefenseOff(actor, bonus.id, nowOff);
+                            row.toggleClass('la-bonus-row--off', nowOff);
+                            $(ev.currentTarget).toggleClass('fa-eye', !nowOff).toggleClass('fa-eye-slash', nowOff).attr('title', nowOff ? 'Switch on' : 'Switch off');
+                            return;
+                        }
                         if (kind === 'global')
                             await removeGlobalBonus(actor, bonus.id);
                         else
@@ -789,7 +659,7 @@ export class StatusPanel extends HudPanel
         const statusName = game.i18n.localize(statusConfig.name ?? statusConfig.id);
 
         const panel = $(`<div class="la-hud-sub-panel"></div>`);
-        const header = $(`<div class="la-hud-sub-header">${statusName} <span class="la-sub-close">✕</span></div>`);
+        const header = $(`<div class="la-hud-sub-header">${escapeHtml(statusName)} <span class="la-sub-close">✕</span></div>`);
         const body  = $(`<div></div>`);
         panel.append(header, body);
         header.find('.la-sub-close').on('click', () =>
@@ -828,7 +698,7 @@ export class StatusPanel extends HudPanel
                         return;
                     const stack = getStack(liveEff);
                     if (stack > 1)
-                        await liveEff.update({ 'flags.statuscounter.value': stack - 1, 'flags.statuscounter.visible': stack - 1 > 1 });
+                        await setEffectStack(liveEff, stack - 1);
                     else
                         await actor.deleteEmbeddedDocuments('ActiveEffect', [eff.id]);
                     refresh();
@@ -838,8 +708,7 @@ export class StatusPanel extends HudPanel
                     const liveEff = /** @type {any} */ (actor.effects).get(eff.id);
                     if (!liveEff)
                         return;
-                    const stack = getStack(liveEff);
-                    await liveEff.update({ 'flags.statuscounter.value': stack + 1, 'flags.statuscounter.visible': true });
+                    await setEffectStack(liveEff, getStack(liveEff) + 1);
                     refresh();
                 });
                 row.find('.la-sub-del').on('click', async () =>

@@ -22,7 +22,7 @@ export { moveToken } from "./tools/moveToken.js";
 export { placeToken } from "./tools/placeToken.js";
 export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";
 export { pickTokensCardless, isCardlessTokenPickerActive, cancelCardlessTokenPicker } from "./tools/pickTokensCardless.js";
-export { pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape } from "./tools/pickAreaTargetToggle.js";
+export { pickAreaTargetToggle, isAreaPickerActive, cancelAreaPicker, clearAreaTargetShape, getPlacedBlastCenters } from "./tools/pickAreaTargetToggle.js";
 export { clearSingleTargetShape, beginTargetSession, isTargetSessionActive, createTokenMark, createChanceLabel } from "./target-shapes.js";
 export { rangePulse, RANGE_PULSE_PRIORITY } from "./range-pulse-manager.js";
 export {

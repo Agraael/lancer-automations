@@ -9,6 +9,8 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { deriveSaveDc } from '../tools/misc-tools.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
+import { laInstallRollCardTags } from '../bonuses/roll-card-rows.js';
+import { laInstallRollCardHeader } from './roll-card-header.js';
 
 function rollerLiveChance(state)
 {
@@ -126,6 +128,31 @@ function injectButton(state, $form)
     $row.append($btn);
 }
 
+function neutralizeSaveTargets(accDiff)
+{
+    for (const entry of accDiff?.targets ?? [])
+    {
+        entry.cover = 0;
+        entry.prone = false;
+        entry.consumeLockOn = false;
+    }
+}
+
+function keepSaveTargetsNeutral(state)
+{
+    const accDiff = state.data?.acc_diff;
+    if (typeof accDiff?.replaceTargets !== 'function')
+        return;
+    const replace = accDiff.replaceTargets.bind(accDiff);
+    accDiff.replaceTargets = function (targetUuids)
+    {
+        replace(targetUuids);
+        neutralizeSaveTargets(this);
+        return this;
+    };
+    neutralizeSaveTargets(accDiff);
+}
+
 // Show only the explicit pre-seeded API target; otherwise start clean so a stray target isn't taken as the check target.
 function seedSingleTarget(state)
 {
@@ -159,10 +186,47 @@ export function registerStatRollTargetButton()
                 return getModuleSetting('statRollTargeting') || !!state.la_extraData?.forceTargeting;
             })();
             const preId = active ? state.la_extraData?.targetTokenId : null;
+            const seeded = { tokenId: state.la_extraData?.targetTokenId, val: state.la_extraData?.targetVal, title: state.data?.title };
             let rollerMark = null;
             let rollerChance = null;
             let saveTether = null;
             let tetherHookId = null;
+            let pickHookId = null;
+            if (isStatOrSkillRoll)
+                keepSaveTargetsNeutral(state);
+            const syncPick = (user) =>
+            {
+                if (user && user !== game.user)
+                    return;
+                state.la_extraData = state.la_extraData || {};
+                const chosen = Array.from(game.user.targets ?? [])[0] ?? null;
+                if (chosen && !(preId && chosen.id === preId))
+                {
+                    state.la_extraData.targetTokenId = chosen.id;
+                    state.la_extraData.targetVal = deriveTargetVal(chosen);
+                    applySaveTitle(state, state.la_extraData.targetVal);
+                }
+                else if (!chosen && preId)
+                {
+                    delete state.la_extraData.targetTokenId;
+                    state.la_extraData.targetVal = 10;
+                    applySaveTitle(state, null);
+                }
+                else
+                {
+                    if (seeded.tokenId === undefined)
+                        delete state.la_extraData.targetTokenId;
+                    else
+                        state.la_extraData.targetTokenId = seeded.tokenId;
+                    if (seeded.val === undefined)
+                        delete state.la_extraData.targetVal;
+                    else
+                        state.la_extraData.targetVal = seeded.val;
+                    state.data.title = seeded.title;
+                }
+                if (state.data?.acc_diff)
+                    state.data.acc_diff.title = state.data.title;
+            };
             if (active)
             {
                 try
@@ -180,10 +244,13 @@ export function registerStatRollTargetButton()
                         : []);
                     refreshTether();
                     tetherHookId = Hooks.on('targetToken', refreshTether);
+                    pickHookId = Hooks.on('targetToken', syncPick);
                 }
                 catch
                 { /* */ }
             }
+            injectWhenReady(state, statRollForm, laInstallRollCardTags, 'roll card tags');
+            injectWhenReady(state, statRollForm, laInstallRollCardHeader, 'roll card header');
             if (isStatOrSkillRoll && chanceLabelsOn())
             {
                 try
@@ -235,6 +302,8 @@ export function registerStatRollTargetButton()
                             saveTether?.destroy();
                             if (tetherHookId)
                                 Hooks.off('targetToken', tetherHookId);
+                            if (pickHookId)
+                                Hooks.off('targetToken', pickHookId);
                             if (isSingleTargetPickerActive())
                                 cancelSingleTargetPicker();
                             clearSingleTargetShape();

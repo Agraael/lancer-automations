@@ -145,6 +145,8 @@ export async function knockbackDamageStep(state)
 
     for (const targetInfo of targets)
     {
+        if (!targetInfo.hit && !targetInfo.crit)
+            continue;
         const target = targetInfo.target;
         if (target)
         {
@@ -162,10 +164,23 @@ export async function knockbackDamageStep(state)
         || state.actor?.getActiveTokens()?.[0];
 
     const itemName = state.item?.name || state.data?.title || 'Damage';
-    await knockBackToken(hitTokens, distance, {
-        title: `${itemName} Knockback`,
-        triggeringToken: attackerToken
-    });
+    const blastCenters = state.__laKnockbackBlastCenters ?? state.la_extraData?.attackShape?.blastCenters ?? [];
+    const tokensByOrigin = new Map();
+    for (const token of hitTokens)
+    {
+        const origin = blastCenters.find(blast => blast.tokenIds.includes(token.id))?.center ?? attackerToken;
+        if (!tokensByOrigin.has(origin))
+            tokensByOrigin.set(origin, []);
+        tokensByOrigin.get(origin).push(token);
+    }
+    for (const [origin, tokens] of tokensByOrigin)
+    {
+        await knockBackToken(tokens, distance, {
+            title: `${itemName} Knockback`,
+            triggeringToken: attackerToken,
+            awayFrom: origin
+        });
+    }
 
     return true;
 }
@@ -369,6 +384,13 @@ export async function pullInjectedTagsFromAttack(state)
     {
         state.la_extraData = state.la_extraData || {};
         state.la_extraData.flow_bonus = [...(state.la_extraData.flow_bonus || []), ...flowBonus];
+    }
+
+    const attackShape = ActiveFlowState.current?.attackShape;
+    if (attackShape)
+    {
+        state.la_extraData = state.la_extraData || {};
+        state.la_extraData.attackShape = attackShape;
     }
     return true;
 }

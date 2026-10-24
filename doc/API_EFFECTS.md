@@ -23,7 +23,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 | <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
 | <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }`. `isCustom: true` marks a Temporary-Custom-Statuses effect, not a built-in status |
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
-| <kbd>duration</kbd> | `Object` | `{}` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
+| <kbd>duration</kbd> | `Object` | `{}` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). `turns` counts turn labels, `rounds` counts round labels. When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | <kbd>checkEffectCallback</kbd> | `(token: Token, effectData: object) => boolean` | `null` | Dup-check predicate `(token, effectData) => boolean`. Returning `true` blocks the apply with a warning |
 | <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config `{ prefixText, source, whisper }` (or `true`) |
 | <kbd>refresh</kbd> | `boolean` | `false` | If the effect already exists, reset its duration instead of blocking. Stack untouched |
@@ -182,19 +182,24 @@ await api.deleteAllEffects([token]);
 </details>
 
 <details id="untilEndOfTurn">
-<summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
+<summary><b><code>untilEndOfTurn</code></b><br><b><code>untilStartOfTurn</code></b><br><b><code>untilEndOfRound</code></b><br><b><code>untilStartOfRound</code></b><br><b><code>untilEndOfEncounter</code></b> → <code>object</code><br><b><code>currentTurnKey</code></b> → <code>string|null</code></summary>
 
 <br>
 
 ```js
-api.untilEndOfTurn(token, turns = 1)      // → duration object
+api.untilEndOfTurn(token, turns = 1)
 api.untilStartOfTurn(token, turns = 1)
-api.currentTurnKey()                       // → "round:turn", null out of combat
+api.untilEndOfRound(rounds = 1)
+api.untilStartOfRound(rounds = 1)
+api.untilEndOfEncounter()
+api.currentTurnKey()
 ```
 
-`untilEndOfTurn` / `untilStartOfTurn` build the "until the end of *their* next turn" duration: the token becomes the turn origin, and the count is bumped by one when it is already that token's turn. Use these instead of hand-writing `{ label: 'end', turns: 1, rounds: 0 }`, which is off by one if applied on the target's own turn.
+`untilEndOfTurn` / `untilStartOfTurn` build the "until the end of *their* next turn" duration: the token becomes the turn origin, and the end count is bumped by one when it is already that token's turn.
 
-`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn.
+`untilEndOfRound` / `untilStartOfRound` count rounds including the current one: `untilEndOfRound(1)` ends at the end of this round, `untilStartOfRound(1)` at the start of the next. `untilEndOfEncounter` ends when the combat ends.
+
+`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn. Each activation of a combatant gets its own key. `null` out of combat.
 
 ```js
 await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slow'], duration: api.untilEndOfTurn(target) });
@@ -448,8 +453,9 @@ Returns `undefined` if `actor` is falsy.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
-| <kbd>duration</kbd> | `string` | `'end'` in combat | A [duration label](API_REFERENCE.md#duration-labels). A string here, unlike the effect APIs where `duration` is an object |
-| <kbd>durationTurns</kbd> | `number` | `1` | Origin turns until the effect ends. See below |
+| <kbd>duration</kbd> | `string` | `'indefinite'` | A [duration label](API_REFERENCE.md#duration-labels). A string here, unlike the effect APIs where `duration` is an object. `'constant'` goes to `addConstantBonus` |
+| <kbd>durationTurns</kbd> | `number` | `1` | Origin turns until the effect ends, for `'start'` / `'end'`. See below |
+| <kbd>durationRounds</kbd> | `number` | `1` | Rounds for `'roundStart'` / `'roundEnd'`, counting the current one |
 | <kbd>origin</kbd> | `Token\|TokenDocument\|string` | the actor's token | Whose turns `durationTurns` counts |
 | <kbd>consumption</kbd> | `ConsumptionConfig` | `null` | A [Consumption](API_REFERENCE.md#consumption) config |
 | <kbd>refresh</kbd> | `boolean` | `false` | Re-add an existing bonus id in place: values replaced, linked effect's duration reset instead of blocked |
@@ -461,7 +467,7 @@ Returns `undefined` if `actor` is falsy.
 - `1`: one full origin turn (default). With `duration: "end"` applied during origin's own turn, ends at end of origin's *next* turn.
 - `n ≥ 2`: `n` origin turns.
 
-None of that applies out of combat, or with `duration: 'indefinite'`. There is no clamping: the effect is created indefinite, with no turn count. The prototype write (no scene token, or `forcePrototype`) is indefinite too.
+Out of combat, `'start'` and `'end'` become indefinite. The prototype write (no scene token, or `forcePrototype`) keeps `'permanent'`, `'encounter'` and the round labels, and makes turn labels indefinite.
 
 **`bonusData` Object:**
 
@@ -472,10 +478,10 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 |:---------|:-----|:------------|
 | <kbd>id</kbd> | `string` | Optional custom ID |
 | <kbd>name</kbd> | `string` | Display name |
-| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"`, `"movement_extra"` |
+| <kbd>type</kbd> | `string` | `"accuracy"`, `"difficulty"`, `"damage"`, `"stat"`, `"immunity"`, `"resistance"`, `"vulnerability"`, `"tag"`, `"range"`, `"multi"`, `"target_modifier"`, `"reroll"`, `"movement_extra"` |
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Charges. Written to the linked effect's counter, the same one `consumeEffectCharge` reads |
-| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, immunity (effect/crit/hit/miss/damage/resistance/provoke/terrain). An immunity charge burns where that immunity is consulted, never on the bearer's own roll, so resistance burns at damage-apply time. Default true, except immunity which defaults false. The `Auto-consume on:` triggers burn regardless and take precedence. |
+| <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, resistance, vulnerability, immunity (effect/crit/hit/miss/damage/provoke/terrain). An immunity, resistance or vulnerability charge burns where it is consulted, never on the bearer's own roll, so resistance burns at damage-apply time. Default true, except immunity, resistance and vulnerability, which default false. The `Auto-consume on:` triggers burn regardless and take precedence. |
 | <kbd>frequency</kbd> | `"round" \| "turn" \| "combat"` | Applies once per round / turn / combat, then stops until the window passes. Gated with the [gate API](API_FLAGS.md#consumeGate) under the key `bonus:<id>`, burned where the bonus is actually consulted. Out of combat gates never block, so the bonus always applies |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
 | <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. On an `immunity`, `actor` is the other party and the owner is `context.ownerTokenId`. |
@@ -494,7 +500,7 @@ None of that applies out of combat, or with `duration: 'indefinite'`. There is n
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | One of the [immunity subtypes](API_REFERENCE.md#immunity-subtypes) |
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
-| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"` or `"resistance"`. List of damage types (e.g. `["Energy", "Kinetic"]`). `"all"` covers every type, and `"variable"` is treated the same way. Infection is included only while its integration setting is on |
+| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"`. List of damage types (e.g. `["Energy", "Kinetic"]`). `"all"` covers every type, and `"variable"` is treated the same way. `"AoE"` covers every type of [area damage](API_REFERENCE.md#immunity-subtypes). Infection is included only while its integration setting is on |
 
 `"provoke"` acts like permanent DISENGAGE. No extra fields required.
 
@@ -502,11 +508,24 @@ Filters honoured per subtype:
 
 | Subtype | Honoured |
 |:--------|:---------|
-| `damage`, `resistance`, `crit`, `hit`, `miss` | `rollTypes`, `itemLids`, `condition`, `applyToCondition` |
+| `damage`, `crit`, `hit`, `miss` | `rollTypes`, `itemLids`, `condition`, `applyToCondition` |
 | `effect`, `provoke` | `condition`, `applyToCondition` |
 | `terrain`, `obstacle`, `elevation` | none |
 
-`itemLids` filters the other party's weapon. `applyTo` and `applyToTargetter` are ignored. A filtered `resistance` is not written to `system.resistances`, so it no longer shows as a checked resistance on the sheet.
+`itemLids` filters the other party's weapon. `applyTo` and `applyToTargetter` are ignored.
+
+</details>
+
+<details>
+<summary>Resistance and vulnerability fields (type: "resistance" / "vulnerability")</summary>
+
+| Property | Type | Description |
+|:---------|:-----|:------------|
+| <kbd>damageTypes</kbd> | `Array` | Same values as damage immunity, `"AoE"` included |
+
+A `resistance` halves its types after armor. A `vulnerability` doubles them after armor, so the two cancel out on the same type. Shredded and Cannot Be Reduced remove armor and resistance, not vulnerability.
+
+Both honour `rollTypes`, `itemLids`, `condition` and `applyToCondition`, with the roles of an immunity: `itemLids` filters the other party's weapon, `applyTo` and `applyToTargetter` are ignored. A filtered resistance is not written to `system.resistances`, so it no longer shows as a checked resistance on the sheet. The `"AoE"` entry of a resistance is never written there either.
 
 </details>
 
@@ -767,7 +786,7 @@ Attaches a bonus to each source doc. Applies immediately on active tokens. Each 
 The `duration` in `addOptions` decides how it shows up:
 
 - `'constant'`: passive, invisible, no token icon (same as `addConstantBonus`).
-- anything else (`'permanent'`, `'indefinite'`, `'end'`, `'start'`, `'round'`): full bonus with icon, uses / consumption, and turn tracking (same as `addGlobalBonus`).
+- anything else (`'permanent'`, `'indefinite'`, `'end'`, `'start'`, `'roundEnd'`, `'roundStart'`, `'encounter'`): full bonus with icon, uses / consumption, and duration tracking (same as `addGlobalBonus`).
 
 `bonusData` and `addOptions` shapes match `addGlobalBonus`.
 
@@ -901,17 +920,22 @@ await api.injectBonusToFlowState(triggerData.flowState, {
 
 ---
 
-## Immunity Queries
+## Immunity, Resistance and Vulnerability Queries
 
 <details id="getImmunityBonuses">
-<summary><b><code>getImmunityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b> → <code>string[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code></summary>
+<summary><b><code>getImmunityBonuses</code></b><br><b><code>getResistanceBonuses</code></b><br><b><code>getVulnerabilityBonuses</code></b> → <code>any[]</code><br><b><code>checkDamageResistances</code></b><br><b><code>checkDamageVulnerabilities</code></b> → <code>string[]</code><br><b><code>applyDamageImmunities</code></b> → <code>Array&lt;{ type: string; val: any }&gt;</code><br><b><code>consumeResistanceUse</code></b><br><b><code>consumeVulnerabilityUse</code></b> <sup>async</sup> → <code>boolean</code></summary>
 
 <br>
 
 ```js
-api.getImmunityBonuses(actor, subtype?, state)              // → Array<object>
-api.checkDamageResistances(actor, damageType, allowedIds)   // → Array<string>
-api.applyDamageImmunities(actor, damages, state, bonuses)   // → Array<object>
+api.getImmunityBonuses(actor, subtype?, state)                        // → Array<object>
+api.getResistanceBonuses(actor, state)                                // → Array<object>
+api.getVulnerabilityBonuses(actor, state)                             // → Array<object>
+api.checkDamageResistances(actor, damageType, allowedIds, aoe)        // → Array<string>
+api.checkDamageVulnerabilities(actor, damageType, allowedIds, aoe)    // → Array<string>
+api.applyDamageImmunities(actor, damages, state, bonuses, aoe)        // → Array<object>
+await api.consumeResistanceUse(actor, state, { damageTypes, bonuses, aoe })
+await api.consumeVulnerabilityUse(actor, state, { damageTypes, bonuses, aoe })
 ```
 
 **Params:** <kbd>actor</kbd> `Actor | Token` · <kbd>subtype</kbd> `string` immunity subtype, omit for all · <kbd>damageType</kbd> `string` · <kbd>damages</kbd> `Array<{type, val}>`
@@ -919,8 +943,11 @@ api.applyDamageImmunities(actor, damages, state, bonuses)   // → Array<object>
 | Function | Description |
 |:---------|:------------|
 | `getImmunityBonuses` | Returns the actor's immunity bonuses of the given [subtype](API_REFERENCE.md#immunity-subtypes), or every immunity bonus when <kbd>subtype</kbd> is omitted. A Token resolves to its actor. Unknown subtypes log a console warning. **No filters are applied**, so this is the raw list. |
-| `checkDamageResistances` | Source **names** of the "resistance" subtype bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. <kbd>allowedIds</kbd> (`string[]`, default `null`) keeps only the filtered bonuses whose id is listed, which is how a decision made during the damage flow reaches apply time. `null` filters nothing. |
-| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. <kbd>bonuses</kbd> (`object[]`, default `null`) supplies a prefiltered list instead of re-reading the flags. |
+| `getResistanceBonuses`, `getVulnerabilityBonuses` | The actor's resistance or vulnerability bonuses, raw like `getImmunityBonuses`. |
+| `checkDamageResistances` | Source **names** of the resistance bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. <kbd>allowedIds</kbd> (`string[]`, default `null`) keeps only the filtered bonuses whose id is listed, which is how a decision made during the damage flow reaches apply time. `null` filters nothing. <kbd>aoe</kbd> (`boolean`, default `false`) lets `"AoE"` entries match. |
+| `checkDamageVulnerabilities` | Same as `checkDamageResistances`, for vulnerability bonuses. |
+| `consumeResistanceUse`, `consumeVulnerabilityUse` | Burn the frequency gate and, with `consumeOnUsage`, one charge of the matching bonuses. <kbd>damageTypes</kbd> keeps the bonuses covering one of these types, <kbd>bonuses</kbd> supplies a prefiltered list, <kbd>aoe</kbd> lets `"AoE"` entries match. `true` when something was spent. |
+| `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. <kbd>bonuses</kbd> (`object[]`, default `null`) supplies a prefiltered list instead of re-reading the flags. <kbd>aoe</kbd> (`boolean`, default `false`) lets `"AoE"` entries zero every type. |
 
 `getImmunityBonuses` takes <kbd>state</kbd> only to fold in flow-scoped bonuses. To apply a bonus's own filters, use one of the three helpers below.
 

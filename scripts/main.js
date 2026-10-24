@@ -153,6 +153,7 @@ import {
     applyActorTemplatesToTokens,
     persistRuntimeStackToTemplate,
 } from "./bonuses/flagged-effects.js";
+import { onCombatClock, processEncounterEnd, processRoundEntries, processOriginDeparture } from "./bonuses/duration-clock.js";
 import { initStatusIconHover } from "./bonuses/status-icon-hover.js";
 import { initStatusCounter } from "./bonuses/status-counter.js";
 import {
@@ -160,6 +161,8 @@ import {
     injectKnockbackCheckbox,
     injectNoBonusDmgCheckbox,
     getImmunityBonuses,
+    getResistanceBonuses,
+    getVulnerabilityBonuses,
     getEffectImmunityBonuses,
     checkDamageResistances,
     initDamageCalcWrapper,
@@ -186,6 +189,8 @@ import {
     cleanupItemBonusesFromActor,
     cleanupForeignBonusRuntimes,
     linkBonusToItem,
+    registerBonusFrequencyFlowSteps,
+    initV3TimedDefenses,
     BonusesAPI
 } from "./bonuses/genericBonuses.js";
 import { EffectManagerAPI } from "./bonuses/effectManager.js";
@@ -211,6 +216,7 @@ import { DowntimeAPI } from "./tools/downtime.js";
 import { initDowntimeItems } from "./tools/downtime-item.js";
 import { RestAPI } from "./tools/rest.js";
 import { ScanAPI, registerScanFlowSteps } from "./tools/scan.js";
+import { V3DataAPI } from "./tools/v3-data.js";
 import { FlagsAPI, getLAFlag, getLAFlags } from "./tools/flag-utils.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { updateStructure, preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
@@ -253,6 +259,7 @@ import { CardStackTests } from "../tests/card-stack.js";
 import { MovementCapTests } from "../tests/movement-cap.js";
 import { FlowQueueTests } from "../tests/flow-queue.js";
 import { StructStressTests } from "../tests/struct-stress.js";
+import { V3LimitsTests } from "../tests/v3-limits.js";
 
 // Eager registrations (all imports above evaluate first)
 registerAccDiffTargetButton();
@@ -714,6 +721,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) =>
     registerMeleeCoverFix(flowSteps, flows);
     registerUseAmmoFlow(flowSteps, flows); // Ammo flow
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
+    registerBonusFrequencyFlowSteps(flowSteps, flows);
     registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
     registerScanFlowSteps(flowSteps, flows); // Override v3's printScanCard + post-process journal
 });
@@ -843,6 +851,7 @@ Hooks.once('ready', async () =>
     initCollapseHook();
     initStatusIconHover();
     initStatusCounter();
+    initV3TimedDefenses();
     if (game.modules.get('status-halo')?.active && getModuleSetting('statusHalo'))
         ui.notifications.warn(localize('LA.notify.lancerAutomationsTheStatusIconHaloSetting'));
 
@@ -1236,6 +1245,7 @@ Hooks.on('ready', async () =>
         ...TerrainAPI,
         ...DowntimeAPI,
         ...ScanAPI,
+        ...V3DataAPI,
         ...FlagsAPI,
         ...TemplateActorsAPI,
         ...RestAPI,
@@ -1305,6 +1315,7 @@ Hooks.on('ready', async () =>
             movementCap: MovementCapTests,
             flowQueue: FlowQueueTests,
             structStress: StructStressTests,
+            v3Limits: V3LimitsTests,
         }
     });
     initSocket();
@@ -1792,12 +1803,24 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             // The flow already judged condition and frequency, and the gate is spent by now, so never recompute here.
             const targetResult = app.flags?.lancer?.damageData?.targetDamageResults?.find(entry => entry.target === uuid);
             const asJudged = (bonuses, ids) => Array.isArray(ids) ? bonuses.filter(bonus => ids.includes(bonus.id)) : bonuses;
-
-            const immuneTypes = new Set();
-            asJudged(getImmunityBonuses(actor, "damage"), targetResult?.laImmunity).forEach(bonus =>
+            const areaHit = targetResult?.laAoe === true;
+            const typeLabel = (type) => (type === 'aoe' ? 'AoE' : capitalize(type));
+            const judgedTypes = (bonuses, ids) =>
             {
-                bonus.damageTypes?.forEach(damageType => immuneTypes.add(damageType.toLowerCase()));
-            });
+                const types = new Set();
+                asJudged(bonuses, ids).forEach(bonus =>
+                {
+                    bonus.damageTypes?.forEach(damageType =>
+                    {
+                        const lower = damageType.toLowerCase();
+                        if (lower !== 'aoe' || areaHit)
+                            types.add(lower);
+                    });
+                });
+                return types;
+            };
+
+            const immuneTypes = judgedTypes(getImmunityBonuses(actor, "damage"), targetResult?.laImmunity);
 
             if (immuneTypes.has('all') || immuneTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => immuneTypes.has(type)))
                 tagsHtml += chip('Immune to All', 'mdi mdi-shield');
@@ -1805,7 +1828,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             {
                 immuneTypes.forEach(damageType =>
                 {
-                    tagsHtml += chip(`Immune to ${capitalize(damageType)}`, 'mdi mdi-shield');
+                    tagsHtml += chip(`Immune to ${typeLabel(damageType)}`, 'mdi mdi-shield');
                 });
             }
 
@@ -1815,10 +1838,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
                 if (actor.system?.resistances?.[type])
                     resistTypes.add(type);
             }
-            asJudged(getImmunityBonuses(actor, "resistance"), targetResult?.laResistance).forEach(bonus =>
-            {
-                bonus.damageTypes?.forEach(damageType => resistTypes.add(damageType.toLowerCase()));
-            });
+            judgedTypes(getResistanceBonuses(actor), targetResult?.laResistance).forEach(damageType => resistTypes.add(damageType));
 
             if (resistTypes.has('all') || resistTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => resistTypes.has(type)))
                 tagsHtml += chip('Resist All', 'mdi mdi-shield-half-full');
@@ -1826,9 +1846,21 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             {
                 resistTypes.forEach(damageType =>
                 {
-                    const capitalizedType = capitalize(damageType);
+                    const capitalizedType = typeLabel(damageType);
                     if (!tagsContainer.find(`span[data-tooltip="Resistance to ${capitalizedType}"]`).length)
                         tagsHtml += chip(`Resist ${capitalizedType}`, 'mdi mdi-shield-half-full');
+                });
+            }
+
+            const vulnerableTypes = judgedTypes(getVulnerabilityBonuses(actor), targetResult?.laVulnerability);
+
+            if (vulnerableTypes.has('all') || vulnerableTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => vulnerableTypes.has(type)))
+                tagsHtml += chip('Vulnerable to All', 'mdi mdi-shield-alert');
+            else
+            {
+                vulnerableTypes.forEach(damageType =>
+                {
+                    tagsHtml += chip(`Vulnerable to ${typeLabel(damageType)}`, 'mdi mdi-shield-alert');
                 });
             }
 
@@ -1954,44 +1986,101 @@ Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) =>
     });
 });
 
-Hooks.on('combatTurnChange', async (combat, prior, current) =>
+const _otherSceneWarned = new Set();
+
+function _combatTurnToken(combat, combatantId)
+{
+    const tokenId = combat.combatants.get(combatantId)?.tokenId ?? null;
+    const onCanvas = !combat.scene || combat.scene.id === canvas.scene?.id;
+    const token = tokenId && onCanvas ? canvas.tokens.get(tokenId) ?? null : null;
+    if (tokenId && !onCanvas && !_otherSceneWarned.has(combat.id))
+    {
+        _otherSceneWarned.add(combat.id);
+        ui.notifications.warn(localizeFormat('LA.notify.turnTriggersOtherScene', { scene: combat.scene?.name ?? '' }));
+    }
+    return { tokenId, token };
+}
+
+Hooks.on('combatTurnChange', (combat, prior, current) =>
 {
     if (!game.users.activeGM?.isSelf)
         return;
-    if (prior.combatantId)
+    const priorId = prior.combatantId;
+    const currentId = current.combatantId;
+    onCombatClock(async () =>
     {
-        const endingCombatant = combat.combatants.get(prior.combatantId);
-        const endingToken = endingCombatant?.token ? canvas.tokens.get(endingCombatant.token.id) : null;
-        if (endingToken)
+        if (priorId)
         {
-            await handleTrigger('onTurnEnd', { triggeringToken: endingToken });
-            await processDurationEffects('end', endingToken.id);
+            const { tokenId, token } = _combatTurnToken(combat, priorId);
+            if (token)
+                await handleTrigger('onTurnEnd', { triggeringToken: token });
+            if (tokenId)
+                await processDurationEffects('end', tokenId, combat);
         }
-    }
 
-    if (current.combatantId)
+        if (currentId)
+        {
+            const { tokenId, token } = _combatTurnToken(combat, currentId);
+            if (token)
+            {
+                clearMoveData(token.document.id);
+                initMovementCap(token);
+                await handleTrigger('onTurnStart', { triggeringToken: token });
+            }
+            if (tokenId)
+                await processDurationEffects('start', tokenId, combat);
+            if (token)
+            {
+                if (token.actor)
+                    await rechargeExtraActionsForActor(token.actor);
+                await refreshActionLimits(token, { turnStart: true });
+            }
+        }
+    });
+});
+
+Hooks.on('updateCombat', (combat, changed, options) =>
+{
+    if (!game.users.activeGM?.isSelf || !('round' in changed) || options?.direction === -1 || !(combat.round > 0))
+        return;
+    const round = combat.round;
+    onCombatClock(async () =>
     {
-        const startingCombatant = combat.combatants.get(current.combatantId);
-        const startingToken = startingCombatant?.token ? canvas.tokens.get(startingCombatant.token.id) : null;
-        if (startingToken)
-        {
-            clearMoveData(startingToken.document.id);
-            initMovementCap(startingToken);
-            await handleTrigger('onTurnStart', { triggeringToken: startingToken });
-            await processDurationEffects('start', startingToken.id);
-            if (startingToken.actor)
-                await rechargeExtraActionsForActor(startingToken.actor);
-            await refreshActionLimits(startingToken, { turnStart: true });
-        }
-    }
+        await processRoundEntries(combat, round, 'end');
+        if (round > 1)
+            await handleTrigger('onRoundEnd', { combat, round: round - 1 });
+        await processRoundEntries(combat, round, 'start');
+        await handleTrigger('onRoundStart', { combat, round });
+    });
+});
 
+Hooks.on('deleteCombatant', (combatant) =>
+{
+    if (game.users.activeGM?.isSelf && combatant.parent)
+        onCombatClock(() => processOriginDeparture(combatant.parent, /** @type {any} */ (combatant).tokenId));
+});
+
+Hooks.on('updateCombatant', (combatant, changed) =>
+{
+    if (game.users.activeGM?.isSelf && changed.defeated === true && combatant.parent)
+        onCombatClock(() => processOriginDeparture(combatant.parent, /** @type {any} */ (combatant).tokenId));
+});
+
+Hooks.on('deleteToken', (tokenDoc) =>
+{
+    if (!game.users.activeGM?.isSelf)
+        return;
+    for (const combat of game.combats ?? [])
+    {
+        if (combat.scene?.id === tokenDoc.parent?.id)
+            onCombatClock(() => processOriginDeparture(combat, tokenDoc.id));
+    }
 });
 
 Hooks.on('combatStart', async (combat) =>
 {
     if (!game.users.activeGM?.isSelf)
         return;
-    await handleTrigger('onRoundStart', { combat, round: combat.round ?? 1 });
     for (const combatant of combat.combatants)
     {
         if (!combatant.actor)
@@ -2006,7 +2095,6 @@ Hooks.on('combatRound', async (combat, updateData, opts) =>
 {
     if (!game.users.activeGM?.isSelf)
         return;
-    await handleTrigger('onRoundStart', { combat, round: updateData?.round ?? combat.round });
     if (opts?.direction !== -1)
     {
         for (const combatant of combat.combatants)
@@ -2052,6 +2140,12 @@ Hooks.on('deleteCombatant', async (combatant, options, userId) =>
     if (!token)
         return;
     await handleTrigger('onExitCombat', { triggeringToken: token });
+});
+
+Hooks.on('deleteCombat', (combat) =>
+{
+    if (game.users.activeGM?.isSelf)
+        onCombatClock(() => processEncounterEnd(combat));
 });
 
 Hooks.on('deleteCombat', async (combat, options, userId) =>
@@ -2274,7 +2368,7 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) =>
 });
 
 
-Hooks.on('preDeleteToken', async (tokenDocument, _options, userId) =>
+Hooks.on('preDeleteToken', async (tokenDocument, options, userId) =>
 {
     if (userId !== game.userId)
         return;
@@ -2283,11 +2377,12 @@ Hooks.on('preDeleteToken', async (tokenDocument, _options, userId) =>
         return;
     const structure = actor.system?.structure?.value ?? 1;
     const stress = actor.system?.stress?.value ?? 1;
-    if (structure > 0 && stress > 0)
+    const cause = /** @type {any} */ (options)?.laCause ?? null;
+    if (structure > 0 && stress > 0 && !cause)
         return;
     const token = canvas.tokens.get(tokenDocument.id)
         ?? { document: tokenDocument, id: tokenDocument.id, name: tokenDocument.name, actor };
-    await handleTrigger('onDestroyed', { triggeringToken: token });
+    await handleTrigger('onDestroyed', { triggeringToken: token, cause });
 });
 
 Hooks.on('createToken', (tokenDocument, options, userId) =>

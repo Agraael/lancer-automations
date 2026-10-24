@@ -2,13 +2,15 @@
 // mirror cards, live on a timer or saved to a small localStorage history.
 
 import { openUplinkPanel, closeUplinkPanel } from './panel.js';
-import { resolveLiveRoll, getCachedRanges, getCachedBonusDamage, statRollLabel } from './live-rolls.js';
+import { resolveLiveRoll, getCachedRanges, statRollLabel } from './live-rolls.js';
 import { usesLineOfSight } from '../tah/hover.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { accDiffTargetToken, accDiffTargetInvisible } from '../combat/grid-helpers.js';
+import { laLiveLine } from '../activations/roll-card-header.js';
 
 const SNAPSHOTS_KEY = 'la-uplink-snapshots';
 const MAX_SNAPSHOTS = 12;
+const TAG_TONES = ['acc', 'diff', 'mod'];
 
 export function getSnapshots()
 {
@@ -156,18 +158,25 @@ function losActive(kind, state)
 
 function rowInfo(row)
 {
+    const box = /** @type {HTMLInputElement|null} */ (row.querySelector(':scope > input[type="checkbox"]'));
+    const tag = row.querySelector(':scope > .la2-val');
+    const pills = Array.from(row.querySelectorAll(':scope > .la2-pills > .la2-pill'));
+    const note = pills.find(pill => pill.classList.contains('la2-pill-note'));
+    const info = row.classList.contains('la2-info');
     return {
-        label: row.querySelector('span')?.textContent.trim() || '',
-        on: !!row.querySelector('input[type="checkbox"]')?.checked
+        name: row.querySelector('.la2-name-text')?.textContent.trim() || '',
+        tag: tag ? { text: tag.textContent.trim(), tone: TAG_TONES.find(tone => tag.classList.contains(`la2-tone-${tone}`)) || 'mod' } : null,
+        parts: pills.filter(pill => pill !== note).map(pill => ({ text: pill.textContent.trim(), limit: pill.classList.contains('la2-pill-limit') })),
+        note: note?.textContent.trim() || null,
+        info,
+        on: info || !!box?.checked,
+        disabled: !!box?.disabled
     };
 }
 
 function rowDamage(row)
 {
-    return Array.from(row.querySelectorAll('i.cci')).map(icon => ({
-        type: icon.dataset.tooltip || '',
-        val: /** @type {HTMLInputElement|null} */ (icon.nextElementSibling)?.value ?? ''
-    }));
+    return Array.from(row.querySelectorAll('[data-dmg-type]')).map(chip => ({ type: chip.getAttribute('data-dmg-type') || '', val: chip.getAttribute('data-dmg-val') || '' }));
 }
 
 // LA-injected rows of the open attack/stat dialog, read on the roller's client.
@@ -180,7 +189,7 @@ function accDiffLaRows(raw)
     for (const row of form.querySelectorAll('.csm-global-bonus-row'))
     {
         const info = rowInfo(row);
-        global[/\(-\d+\)\s*$/.test(info.label) ? 'diff' : 'acc'].push(info);
+        global[info.tag?.tone === 'diff' ? 'diff' : 'acc'].push(info);
     }
     const targets = {};
     for (const card of form.querySelectorAll('.accdiff-target'))
@@ -210,31 +219,13 @@ function damageLaRows()
     return {
         global: Array.from(form.querySelectorAll('.csm-bonus-container .csm-bonus-config-row')).map(withDamage),
         targets: Array.from(form.querySelectorAll('.damage-hud-target-card')).map(card =>
-            Array.from(card.querySelectorAll('.csm-bonus-config-row, label[class*="la-tmod-dmg-"]')).map(withDamage))
+            Array.from(card.querySelectorAll('.csm-bonus-config-row, .la-tmod-dmg-card')).map(withDamage))
     };
 }
 
 function rollerTokenUuid(state)
 {
     return state.actor?.token?.uuid ?? state.actor?.getActiveTokens?.()?.[0]?.document?.uuid ?? null;
-}
-
-function attackDamage(state)
-{
-    const item = state.data?.lancerItem ?? state.item;
-    const profile = item?.currentProfile?.();
-    const plain = plainDamage(profile?.damage);
-    return plain.length ? plain : null;
-}
-
-// The unmodified profile line, so the mirror can grey it out when bonuses changed it.
-function attackDamageBase(state)
-{
-    const item = state.data?.lancerItem ?? state.item;
-    const raw = item?.type === 'mech_weapon' ? item.system?.active_profile?.damage
-        : item?.type === 'pilot_weapon' ? item.system?.damage : null;
-    const plain = plainDamage(Array.isArray(raw) ? raw : []);
-    return plain.length ? plain : null;
 }
 
 /**
@@ -283,16 +274,13 @@ export function captureSnapshot(kind, state)
             actorName: state.actor?.name || '',
             actorImg: state.actor?.img || '',
             weaponIcon: kind === 'attack' || kind === 'damage' ? (weaponTypeIcon(state.data?.lancerItem ?? state.item) || '') : '',
-            attackDamage: kind === 'attack' || kind === 'tech' ? attackDamage(state) : null,
-            attackDamageBase: kind === 'attack' ? attackDamageBase(state) : null,
-            attackBonusDamage: kind === 'attack' || kind === 'tech' ? getCachedBonusDamage(state) : null,
             itemName: state.item?.name || '',
             title: state.data?.title || '',
             raw,
             totals,
             losActive: losActive(kind, state),
             rollerTokenUuid: rollerTokenUuid(state),
-            ranges: kind === 'hase' ? null : getCachedRanges(state),
+            liveLine: laLiveLine(state, kind, getCachedRanges(state)),
             checkLabel: kind === 'hase' ? statRollLabel(state) : '',
             statBonus: kind === 'hase' ? Number(state.data?.bonus) || 0 : null,
             laRows: kind === 'damage' ? damageLaRows() : accDiffLaRows(raw),

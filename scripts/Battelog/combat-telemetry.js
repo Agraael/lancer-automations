@@ -126,6 +126,15 @@
  * @property {string} tokenId
  * @property {string|null} [killerId]
  * @property {string[]} [assistIds]
+ * @property {'reactor'} [cause]
+ */
+
+/**
+ * @typedef {Object} MeltdownEvent
+ * @property {'meltdown'} type
+ * @property {number} round
+ * @property {number|null} turn
+ * @property {string} tokenId
  */
 
 /**
@@ -139,6 +148,7 @@
  *   | StressLossEvent
  *   | GearLostEvent
  *   | DestroyedEvent
+ *   | MeltdownEvent
  * } TelemetryEvent
  */
 
@@ -166,4 +176,4 @@ export const ACTION_CATEGORIES = /** @type {ActionCategory[]} */ (['skill', 'che
 export const DAMAGE_TYPES = /** @type {DamageType[]} */ (['kinetic', 'energy', 'explosive', 'variable', 'heat', 'burn', 'infection']);
 export const DOT_TYPES = /** @type {DamageType[]} */ (['burn', 'infection']);
 export const SAVE_KINDS = /** @type {const} */ (['hull', 'agi', 'sys', 'eng']);
-export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed'];
+export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed', 'meltdown'];

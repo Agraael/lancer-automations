@@ -1,4 +1,4 @@
-import { snapTokenCenter, getInRangeOffsets, getOccupiedOffsets, pixelToOffset, getHexCenter, neighborKeys } from "../../combat/grid-helpers.js";
+import { snapTokenCenter, getInRangeOffsets, getOccupiedOffsets, pixelToOffset, getHexCenter, neighborKeys, getMinGridDistance, measureGridDistance } from "../../combat/grid-helpers.js";
 import { playTargetingMove, playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from "../../tah/sound.js";
 import { _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard } from "../cards.js";
 import {
@@ -6,7 +6,7 @@ import {
     pointerToWorld, suppressTokenLayerClick, addGraphicsBelowTokens,
     createPickerSession, createMultiPlusIndicator, isCtrlDown,
     _groupCellsByDistance, _makeRangePulseTick,
-    paintCellRegion, paintPerimeterGlow,
+    paintCellRegion, paintPerimeterGlow, paintBlockedRangeContour,
     _staticGridAlpha,
     suppressEvent,
     teardownRangePulse,
@@ -18,7 +18,7 @@ import { _transformFoundPath } from "../../movement/terrain-trigger-waypoints.js
 import { makeWallBlocker } from "../../movement/wall-block.js";
 import { freeTwinOf, parseAction } from "../../movement/movement-actions.js";
 
-import { localize } from '../../tools/string-utils.js';
+import { localize, localizeFormat } from '../../tools/string-utils.js';
 // Above this budget the cost-aware Dijkstra sweep gets too big; fall back to plain grid range.
 const REACHABLE_BUDGET_CAP = 15;
 
@@ -41,6 +41,7 @@ const REACHABLE_BUDGET_CAP = 15;
  * @param {number} [options.cost] Fixed movement cost recorded for the move, instead of the measured path cost
  * @param {boolean} [options.urgent=false] Jump the card queue
  * @param {boolean} [options.planOnly=false] Resolve the planned paths without moving: Array<{token, path}>
+ * @param {Token|TokenDocument|{x: number, y: number}} [options.awayFrom] Lights only the cells away from this token or point, soft warning only
  * @returns {Promise<TokenDocument|TokenDocument[]|Array<{token: Token, path: object[]}>|null>} Moved doc(s) matching the input shape (plans with planOnly), null on cancel
  */
 export async function moveTokenRuler(tokenOrTokens, options = {})
@@ -50,6 +51,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
     if (!tokenList.length)
         return null;
     const range = options.range ?? -1;
+    const awayFrom = options.awayFrom?.object ?? options.awayFrom ?? null;
     const free = !!options.free;
     const cost = Number.isFinite(options.cost) ? options.cost : null;
     const action = options.action ?? null;
@@ -317,6 +319,46 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             }
         };
 
+        const awayFromDistance = (moveTok, pos) =>
+        {
+            if (awayFrom.document)
+                return getMinGridDistance(moveTok, awayFrom, pos, false);
+            const gridDistance = canvas.scene?.grid?.distance || 1;
+            return Math.min(...getOccupiedOffsets(moveTok, pos).map(offset => Math.round(measureGridDistance(getHexCenter(offset.col, offset.row), awayFrom) / gridDistance)));
+        };
+
+        const isAwayFrom = (moveTok, pos) =>
+        {
+            if (!awayFrom || awayFrom.id === moveTok.id)
+                return true;
+            const start = stateOf(moveTok).origin;
+            const doc = moveTok.document;
+            const moved = Math.round(measureGridDistance(doc.getCenterPoint(start), doc.getCenterPoint(pos)) / (canvas.scene?.grid?.distance || 1));
+            return awayFromDistance(moveTok, pos) >= awayFromDistance(moveTok, start) + moved;
+        };
+
+        const awayCells = (moveTok, cells) =>
+        {
+            if (!awayFrom || awayFrom.id === moveTok.id || !cells?.size)
+                return cells;
+            const lit = new Set();
+            const seen = new Set();
+            for (const cellKey of cells)
+            {
+                const [col, row] = cellKey.split(',').map(Number);
+                const pos = snapTokenCenter(moveTok, getHexCenter(col, row));
+                const posKey = `${pos.x},${pos.y}`;
+                if (seen.has(posKey))
+                    continue;
+                seen.add(posKey);
+                if (!isAwayFrom(moveTok, pos))
+                    continue;
+                for (const offset of getOccupiedOffsets(moveTok, pos))
+                    lit.add(`${offset.col},${offset.row}`);
+            }
+            return new Set([...lit].filter(cellKey => cells.has(cellKey)));
+        };
+
         const rebuildPulse = () =>
         {
             if (range < 0)
@@ -326,23 +368,26 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const fromWaypoint = state.waypoints.at(-1) ?? state.origin;
             const remaining = Math.max(0, range - usedBudget(moveTok));
             reachableSet = computeReachableSet(moveTok, fromWaypoint, remaining);
+            const litSet = awayCells(moveTok, reachableSet);
             const fromOffsets = getOccupiedOffsets(moveTok, { x: fromWaypoint.x, y: fromWaypoint.y });
             rangePulse.set('interactive:moveTokenRuler', {
                 priority: RANGE_PULSE_PRIORITY.INTERACTIVE,
                 build: () =>
                 {
                     const baseGraphic = new PIXI.Graphics();
-                    paintCellRegion(baseGraphic, reachableSet, {
+                    paintCellRegion(baseGraphic, litSet, {
                         color: RANGE_PULSE_STYLE.baseColor,
                         alpha: RANGE_PULSE_STYLE.staticFillAlpha,
                         lineColor: RANGE_PULSE_STYLE.lineColor,
                         lineAlpha: _staticGridAlpha(RANGE_PULSE_STYLE.staticLineAlpha),
                     });
-                    paintPerimeterGlow(baseGraphic, reachableSet);
+                    paintPerimeterGlow(baseGraphic, litSet);
+                    if (litSet !== reachableSet)
+                        paintBlockedRangeContour(baseGraphic, reachableSet, litSet);
                     addGraphicsBelowTokens(baseGraphic);
                     const pulseGraphic = new PIXI.Graphics();
                     canvas.stage.addChild(pulseGraphic).eventMode = 'none';
-                    const hexesByDist = _groupCellsByDistance(fromOffsets, reachableSet);
+                    const hexesByDist = _groupCellsByDistance(fromOffsets, litSet);
                     const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, Math.max(1, remaining), { originToken: moveTok });
                     canvas.app.ticker.add(wavePulse);
                     return () => teardownRangePulse(wavePulse, baseGraphic, pulseGraphic);
@@ -469,6 +514,8 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             lastSnapped = snapped;
             if (!isDestInRange(moveTok, snapped.x, snapped.y))
                 ui.notifications.warn(localize('LA.notify.destinationIsOutOfRange'));
+            else if (!isAwayFrom(moveTok, snapped))
+                ui.notifications.warn(awayFrom.document ? localizeFormat('LA.notify.knockbackNotAway', { name: awayFrom.name }) : localize('LA.notify.knockbackNotAwayFromPoint'));
             if (isCtrlDown(event))
             {
                 state.selectedPos = null;
@@ -585,6 +632,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
  * @param {boolean} [options.urgent=true] Jump the card queue; pass false to queue normally
  * @param {string} [options.title="KNOCKBACK"]
  * @param {string} [options.description="Select destination for each token."]
+ * @param {Token|TokenDocument|{x: number, y: number}} [options.awayFrom] Lights only the cells away from this token or point, soft warning only
  * @returns {Promise<Array<{tokenId: string, updateData: object}>>} The planned moves, [] on cancel
  */
 export async function knockBackToken(tokens, distance, options = {})
@@ -593,6 +641,7 @@ export async function knockBackToken(tokens, distance, options = {})
         range: distance,
         action: 'forced',
         planOnly: true,
+        awayFrom: options.awayFrom ?? null,
         urgent: options.urgent !== false,
         title: options.title || 'KNOCKBACK',
         description: options.description || 'Select destination for each token.',

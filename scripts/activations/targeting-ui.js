@@ -11,13 +11,12 @@ import { firstKeyFor, eventMatchesKeybind } from '../interactive/keybindings.js'
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/misc-tools.js';
+import { getItemAreaRanges_WithBonus } from '../tools/weapon-bonus-utils.js';
 import { isActorScannedForUser } from '../tools/scan-lookup.js';
 import { playUiSound } from '../tah/sound.js';
 import { usesLineOfSight } from '../tah/hover.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 import { setPickerTargetCursor } from '../interactive/tools/advancedMeasure.js';
-
-const AOE_TYPES = ['Blast', 'Burst', 'Cone', 'Line'];
 
 // Who sees the target-info labels (hit chance / damage range): 'off' | 'gm' | 'all'.
 export function targetInfoAllowed()
@@ -131,20 +130,7 @@ function throwDistance(lancerItem)
 // AoE ranges on the weapon → [{ type:'Blast'|'Burst'|'Cone'|'Line', val:number }].
 export function aoeRanges(lancerItem)
 {
-    if (!lancerItem || typeof lancerItem.rangesFor !== 'function')
-        return [];
-    let ranges = [];
-    try
-    {
-        ranges = lancerItem.rangesFor(AOE_TYPES) ?? [];
-    }
-    catch
-    {
-        ranges = [];
-    }
-    return ranges
-        .map(entry => ({ type: String(entry?.type ?? ''), val: Number(entry?.val) || 0 }))
-        .filter(entry => entry.val > 0 && AOE_TYPES.includes(entry.type));
+    return getItemAreaRanges_WithBonus(lancerItem);
 }
 
 function sensorRange(actor)
@@ -180,15 +166,13 @@ function injectToggleRow($form)
 {
     if ($form.find('.la-accdiff-area-toggles').length)
         return;
-    // without flex:0 0 auto, Foundry's `.flexrow > * { flex: 1 }` stretches the labels and the row's centering does nothing
-    const labelStyle = 'flex:0 0 auto;display:flex;align-items:center;gap:4px;cursor:pointer;';
     const losToggle = getSettingEnabled('rangePulseLos')
-        ? `<label style="${labelStyle}"><input type="checkbox" class="la-tg-los" checked> Line of sight</label>`
+        ? '<label class="la2-toggle"><input type="checkbox" class="la-tg-los" checked><i class="mdi mdi-eye-outline"></i>Line of sight</label>'
         : '';
-    const $toggleRow = $(`<div class="la-accdiff-area-toggles flexrow" style="gap:12px;justify-content:center;padding:4px 0 2px;font-size:11px;color:var(--dark-text, #fff);flex-wrap:wrap;">
-        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-elev" checked> Elevation aware</label>
-        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-autoelev" checked> Auto elevation</label>
-        <label class="la-tg-area-lbl" style="${labelStyle}"><input type="checkbox" class="la-tg-prop" checked> Propagation</label>
+    const $toggleRow = $(`<div class="la-accdiff-area-toggles la2-tgopts">
+        <label class="la2-toggle la-tg-area-lbl"><input type="checkbox" class="la-tg-elev" checked>Elevation aware</label>
+        <label class="la2-toggle la-tg-area-lbl"><input type="checkbox" class="la-tg-autoelev" checked>Auto elevation</label>
+        <label class="la2-toggle la-tg-area-lbl"><input type="checkbox" class="la-tg-prop" checked>Propagation</label>
         ${losToggle}
     </div>`);
     const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');

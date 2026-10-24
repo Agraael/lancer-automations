@@ -1,4 +1,5 @@
-import { runInOnInitTriggerContext } from '../bonuses/flagged-effects.js';
+import { runInOnInitTriggerContext, effectStack } from '../bonuses/flagged-effects.js';
+import { durationEntries } from '../bonuses/duration-clock.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getDesiredWallHeight } from '../tools/token-height.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
@@ -160,12 +161,20 @@ async function snapshotPermanentEffects(state)
 {
     if (!state.actor || !state.data)
         return true;
-    const perm = state.actor.effects
-        .filter(e => getLAFlag(e,'duration')?.label === 'permanent')
+    const keptEffects = state.actor.effects.filter(effect => getLAFlags(effect) && durationEntries(effect).some(entry => entry.label === 'permanent'));
+    if (keptEffects.length)
+        await state.actor.updateEmbeddedDocuments('ActiveEffect', keptEffects.map(effect => ({ _id: effect.id, [`flags.${MODULE_ID}.repairKeep`]: true })));
+    const perm = keptEffects
         .map(effect =>
         {
             const effectData = effect.toObject();
-            delete effectData._id;
+            delete effectData.flags?.[MODULE_ID]?.repairKeep;
+            const kept = durationEntries(effect).filter(entry => entry.label === 'permanent');
+            const stack = Math.min(effectStack(effect), kept.reduce((total, entry) => total + (Number(entry.stack) || 1), 0));
+            foundry.utils.setProperty(effectData, `flags.${MODULE_ID}.durationEntries`, kept);
+            foundry.utils.setProperty(effectData, `flags.${MODULE_ID}.duration`, { label: 'permanent' });
+            if (effectData.flags?.statuscounter)
+                foundry.utils.mergeObject(effectData.flags.statuscounter, { value: stack, visible: stack > 1 });
             return effectData;
         });
     state.data._permEffects = perm;
@@ -177,7 +186,27 @@ async function restorePermanentEffects(state)
     const perm = state.data?._permEffects;
     if (!state.actor || !perm?.length)
         return true;
-    await state.actor.createEmbeddedDocuments('ActiveEffect', perm);
+    const actor = state.actor;
+    const survivors = perm.filter(effectData => actor.effects.has(effectData._id));
+    const missing = perm.filter(effectData => !actor.effects.has(effectData._id));
+    if (survivors.length)
+        await actor.updateEmbeddedDocuments('ActiveEffect', survivors.map(effectData => ({ _id: effectData._id, [`flags.${MODULE_ID}.-=repairKeep`]: null })));
+    if (missing.length)
+        await actor.createEmbeddedDocuments('ActiveEffect', missing, { keepId: true });
+    for (const effectData of missing)
+    {
+        const statDirect = effectData.flags?.[MODULE_ID]?.statDirect;
+        if (!statDirect?.key)
+            continue;
+        const current = Number(foundry.utils.getProperty(actor, statDirect.key)) || 0;
+        const maxPath = statDirect.key.replace('.value', '.max');
+        const max = maxPath !== statDirect.key ? foundry.utils.getProperty(actor, maxPath) : undefined;
+        let next = Math.max(0, current + (Number(statDirect.value) || 0));
+        if (max !== undefined)
+            next = Math.min(next, Number(max));
+        await actor.update({ [statDirect.key]: next });
+        await actor.effects.get(effectData._id)?.update({ [`flags.${MODULE_ID}.statDirect.preBonusValue`]: current });
+    }
     return true;
 }
 
@@ -1515,7 +1544,8 @@ export function wrapInitTechAttackData(flowSteps)
     flowSteps.set('initTechAttackData', async function(state, options)
     {
         const savedTitle = state.data?.title;
-        const result = await orig(state, options);
+        const init = !state.item && state.actor?.is_deployable?.() ? flowSteps.get('initAttackData') : orig;
+        const result = await init(state, options);
         if (savedTitle && state.data?.title === "TECH ATTACK")
         {
             state.data.title = savedTitle;
@@ -1609,10 +1639,37 @@ async function forceNonTechAttack(state)
     return true;
 }
 
+async function applyAccDiffPatch(state)
+{
+    const patch = state.la_extraData?.accDiffPatch;
+    const accDiff = state.data?.acc_diff;
+    if (!patch || !accDiff?.base || !accDiff.weapon)
+        return true;
+    for (const [key, value] of Object.entries(patch.weapon ?? {}))
+    {
+        if (value)
+            accDiff.weapon[key] = true;
+    }
+    const base = accDiff.base;
+    if (patch.grit != null)
+        base.grit = Number(patch.grit) || 0;
+    if (patch.flatBonus)
+        base.flatBonus = Number(patch.flatBonus) || 0;
+    base.accuracy = (Number(base.accuracy) || 0) + (Number(patch.accuracy) || 0) - (Number(patch.difficulty) || 0);
+    state.data.grit = base.grit;
+    state.data.flat_bonus = base.flatBonus;
+    state.data.is_smart = !!accDiff.weapon.smart;
+    return true;
+}
+
 export function registerNonTechAttackStep(flowSteps, flows)
 {
     flowSteps.set('lancer-automations:forceNonTechAttack', forceNonTechAttack);
-    flows.get('BasicAttackFlow')?.insertStepAfter('initAttackData', 'lancer-automations:forceNonTechAttack');
+    flowSteps.set('lancer-automations:applyAccDiffPatch', applyAccDiffPatch);
+    const basicAttack = flows.get('BasicAttackFlow');
+    basicAttack?.insertStepAfter('initAttackData', 'lancer-automations:forceNonTechAttack');
+    if (basicAttack?.steps?.includes('lancer-automations:forceNonTechAttack'))
+        basicAttack.insertStepAfter('lancer-automations:forceNonTechAttack', 'lancer-automations:applyAccDiffPatch');
 }
 
 export const ItemDisabledAPI = {

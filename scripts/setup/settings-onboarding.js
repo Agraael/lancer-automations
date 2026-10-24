@@ -39,6 +39,12 @@ const GROUPS = [
                 keys: ['tahEnabled'],
             },
             {
+                id: 'combat-carousel',
+                label: 'LA.onboarding.combat-carousel.label',
+                explain: 'LA.onboarding.combat-carousel.explain',
+                keys: ['combatCarousel'],
+            },
+            {
                 id: 'prevent-wasd-movement',
                 label: 'LA.onboarding.prevent-wasd-movement.label',
                 explain: 'LA.onboarding.prevent-wasd-movement.explain',
@@ -713,7 +719,7 @@ const GROUPS = [
                 id: 'roll-uplink',
                 label: 'LA.onboarding.roll-uplink.label',
                 explain: 'LA.onboarding.roll-uplink.explain',
-                keys: ['uplinkEnabled'],
+                keys: ['uplinkEnabled', 'uplinkAutoOpen'],
             },
         ],
     },
@@ -722,6 +728,7 @@ const GROUPS = [
 // One-click loadout: question id -> answer. Absent id = leave the current value.
 const RECOMMENDED = {
     'tah-enabled': true,
+    'combat-carousel': true,
     'range-preview-hover': true,
     'tah-narrative-mode': true,
     'token-stat-bar': true,
@@ -778,6 +785,7 @@ const RECOMMENDED = {
     'wreck-cinematics': true,
     'remove-wrecks-combat': true,
     'actor-token-sync': false,
+    'roll-uplink': true,
     'obstruction-step-over': true,
 };
 
@@ -805,6 +813,7 @@ const QUICK_IDS = new Set([
 // Shown by default in the walk-through; the rest sits behind each group's "Show all" expander.
 const ESSENTIAL_IDS = new Set([
     'tah-enabled',
+    'combat-carousel',
     'tah-click-to-open',
     'dialog-theme',
     'token-stat-bar',

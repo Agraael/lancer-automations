@@ -129,7 +129,7 @@ export const SOURCE_MATCH_TRIGGERS = new Set([
 
 // Editor picker groups, also the complete built-in list: any other trigger name is a custom trigger.
 export const TRIGGER_GROUPS = [
-    { label: "LA.triggerGroup.combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onTurnStart", "onTurnEnd"] },
+    { label: "LA.triggerGroup.combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onRoundEnd", "onTurnStart", "onTurnEnd"] },
     { label: "LA.triggerGroup.movement", triggers: ["onPreMove", "onMove", "onPreInvoluntaryMove", "onInvoluntaryMove"] },
     { label: "LA.triggerGroup.rolls", triggers: ["onRoll"] },
     { label: "LA.triggerGroup.attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
@@ -2201,6 +2201,7 @@ export class ReactionEditor extends FormApplication
             onTurnStart: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTurnEnd: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onRoundStart: "{ combat, round, canTriggerReaction}",
+            onRoundEnd: "{ combat, round, canTriggerReaction}",
             onPreStatusApplied: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl), canTriggerReaction}",
             onPreStatusRemoved: "{ triggeringToken, statusId, effect, cancelChange(reasonText, title, allowConfirm, userIdControl), canTriggerReaction}",
             onStatusApplied: "{ triggeringToken, statusId, effect, distanceToTrigger, canTriggerReaction}",
@@ -2210,7 +2211,7 @@ export class ReactionEditor extends FormApplication
             onPreStress: "{ triggeringToken, remainingStress, cancelStress(reasonText, title, allowConfirm, userIdControl), flowState, distanceToTrigger, canTriggerReaction}",
             onStress: "{ triggeringToken, remainingStress, rollResult, rollDice, cancelStressOutcome(reasonText, title, allowConfirm, userIdControl), modifyRoll(newTotal), flowState, distanceToTrigger, canTriggerReaction}",
             onHeatGain: "{ triggeringToken, heatChange, currentHeat, inDangerZone, distanceToTrigger, canTriggerReaction}",
-            onDestroyed: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
+            onDestroyed: "{ triggeringToken, cause, distanceToTrigger, canTriggerReaction}",
             onTokenCreated: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTokenRemoved: "{ triggeringToken, distanceToTrigger, canTriggerReaction}",
             onTokenVisibility: "{ triggeringToken, isHidden, distanceToTrigger, canTriggerReaction}",

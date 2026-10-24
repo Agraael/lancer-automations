@@ -43,7 +43,7 @@ export function cleanupDetachedRangePreviews()
 }
 
 /** Sensor range for an actor (synchronous). */
-function getSensorRange(actor)
+export function getSensorRange(actor)
 {
     if (!actor)
         return 10;
@@ -232,7 +232,7 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
         if (name === 'overwatch')
             return Math.max(1, await getActorMaxThreat(actor));
         if (name === 'search')
-            return actor?.type === 'pilot' ? 5 : getSensorRange(actor);
+            return getSensorRange(actor);
         if (name === 'disengage')
             return 1;
         if (name === 'eject')
@@ -246,14 +246,29 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
 
 /**
  * Called by _openCol for every row that carries hoverData.
- * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, profile?: any, token?: any, isEntering: boolean, isLeaving: boolean, el?: any, deployLid?: string }} data
+ * @param {{ actor: any, item?: any, action?: { name: string, activation?: string }, category?: string, profile?: any, token?: any, isEntering: boolean, isLeaving: boolean, el?: any, deployLid?: string, weapons?: any[] }} data
  */
-export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering, el, deployLid })
+export async function onHudRowHover({ actor, item, action, category, profile, token, isEntering, el, deployLid, weapons })
 {
     if (!token)
         return;
     if (!getModuleSetting('tah.rangePreview'))
         return;
+    if (isEntering && weapons?.length)
+    {
+        let max = 0;
+        let freeMax = 0;
+        for (const weapon of weapons)
+        {
+            const reach = getWeaponReachRange(weapon, actor);
+            max = Math.max(max, reach);
+            if (weaponIgnoresLineOfSight(weapon))
+                freeMax = Math.max(freeMax, reach);
+        }
+        if (max > 0)
+            await activateRangePreview(token, Math.max(1, max), el, RANGE_GLOW.reach, max > freeMax, freeMax);
+        return;
+    }
     if (isEntering)
     {
         const range = await computePreviewRange(category, action ?? null, actor, item ?? null, profile ?? null, deployLid);

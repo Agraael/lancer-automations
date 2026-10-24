@@ -248,7 +248,7 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 | <kbd>hit_results</kbd> | `Array` | `[]` | Per-target hit outcomes that decide which targets take damage (chained damage rolls carry these instead of user targets). Element: `{ target: Token, total: string, hit: boolean, crit: boolean, usedLockOn?: boolean }`. |
 | <kbd>targeting</kbd> | `Object` | - | See below. |
 
-**`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }` - opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target.
+**`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }` - opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target. An area pattern makes the damage [AoE](API_REFERENCE.md#immunity-subtypes).
 
 ```js
 await api.executeDamageRoll(reactorToken, [target], 2, 'Heat', 'Ring of Fire');

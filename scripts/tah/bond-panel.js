@@ -1,4 +1,5 @@
 import { HudPanel } from './hud-panel.js';
+import { escapeHtml } from '../tools/string-utils.js';
 
 export class BondPanel extends HudPanel
 {
@@ -14,7 +15,7 @@ export class BondPanel extends HudPanel
         const swallow = (/** @type {any} */ jq) => jq.on('mousedown click focus', (/** @type {any} */ ev) => ev.stopPropagation());
 
         const panel = $(`<div class="la-hud-panel la-hud-bond-panel"></div>`);
-        panel.append($(`<div class="la-hud-col-label">Bond · ${bond.name}</div>`));
+        panel.append($(`<div class="la-hud-col-label">Bond · ${escapeHtml(bond.name)}</div>`));
 
         const body = $(`<div class="la-hud-bond-body"></div>`);
 

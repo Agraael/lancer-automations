@@ -82,7 +82,7 @@ The module exposes **move** and **reaction** from the action tracker, plus **inf
 
 ## Self-heat resistance
 
-With **Resist Self-Inflicted Heat** (**`resistSelfHeat`**, Combat & Movement → Structure & Damage, off by default) on, a mech that resists Heat takes half of its own self-inflicted heat.
+With **Resist Self-Inflicted Heat** (**`resistSelfHeat`**, Combat & Movement → Structure & Damage, off by default) on, a mech that resists Heat takes half of its own self-inflicted heat, and a mech vulnerable to Heat takes double.
 
 With **Heat as Energy on heatless targets** (**`convertHeatToEnergyOnHeatless`**, same section, on by default), Heat damage becomes Energy against targets with no heat capacity (pilots, biological NPCs), the way Lancer already does for pilots.
 

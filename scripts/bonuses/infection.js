@@ -13,7 +13,7 @@
  *   - Stabilize and Full Repair also clear Infection.
  */
 
-import { checkDamageResistances, consumeImmunityUse } from './genericBonuses.js';
+import { checkDamageResistances, checkDamageVulnerabilities, consumeResistanceUse, consumeVulnerabilityUse } from './genericBonuses.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 
@@ -600,15 +600,23 @@ export function initInfectionHooks()
             // Run after the system's jQuery click handler.
             setTimeout(async () =>
             {
+                const aoe = targetResult.laAoe === true;
                 const shredded = actor.system?.statuses?.shredded;
                 const nativeResist = !shredded && actor.system?.resistances?.infection;
-                const bonusResist = !shredded && !nativeResist && checkDamageResistances(actor, 'infection').length > 0;
+                const bonusResist = !shredded && !nativeResist && checkDamageResistances(actor, 'infection', null, aoe).length > 0;
                 const resistant = nativeResist || bonusResist;
-                const finalInfection = resistant ? Math.ceil(scaledInfection / 2) : scaledInfection;
+                const vulnerable = checkDamageVulnerabilities(actor, 'infection', null, aoe).length > 0;
+                const dealtInfection = vulnerable ? scaledInfection * 2 : scaledInfection;
+                const finalInfection = resistant ? Math.ceil(dealtInfection / 2) : dealtInfection;
                 if (bonusResist)
-                    await consumeImmunityUse(actor, 'resistance', null, { damageTypes: ['infection'] });
+                    await consumeResistanceUse(actor, null, { damageTypes: ['infection'], aoe });
+                if (vulnerable)
+                    await consumeVulnerabilityUse(actor, null, { damageTypes: ['infection'], aoe });
+                const floatToken = target?.object ?? actor.getActiveTokens?.()?.[0];
                 if (resistant)
-                    broadcastFloatTokenText(target?.object ?? actor.getActiveTokens?.()?.[0], 'Resisted', 0x4da6ff);
+                    broadcastFloatTokenText(floatToken, 'Resisted', 0x4da6ff);
+                if (vulnerable)
+                    broadcastFloatTokenText(floatToken, 'Vulnerable', 0xff5c5c);
 
                 const currentInfection = actor.system?.infection ?? 0;
                 const updates = { 'system.infection': currentInfection + finalInfection };

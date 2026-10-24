@@ -1,6 +1,8 @@
 // Uplink mirror card: a miniature of the real roll HUDs. Structure, classes,
 // and CSS values are lifted from the system's AccDiffHUD / DamageHUD styles.
 
+import { LANCER_ROW_TAGS, laValueTag, laPills, laDamageChips, laStatesHtml } from '../bonuses/roll-card-rows.js';
+
 const COVER_LABELS = ['No Cover', 'Soft (-1)', 'Hard (-2)'];
 const COVER_ICONS = ['mdi mdi-shield-outline', 'mdi mdi-shield-half-full', 'mdi mdi-shield'];
 const QUALITY_LABELS = ['Miss', 'Hit', 'Crit'];
@@ -13,7 +15,6 @@ const HEAD_META = {
     hase: { cls: 'lancer-weapon', icon: 'fas fa-dice-d20' }
 };
 const DMG_ICONS = { kinetic: 'cci-kinetic', energy: 'cci-energy', explosive: 'cci-explosive', heat: 'cci-heat', burn: 'cci-burn', variable: 'cci-variable', infection: 'cci-infection' };
-const RANGE_ICONS = { range: 'cci-range', threat: 'cci-threat', thrown: 'cci-thrown', blast: 'cci-blast', burst: 'cci-burst', cone: 'cci-cone', line: 'cci-line' };
 
 function esc(text)
 {
@@ -25,6 +26,31 @@ function esc(text)
 function checkbox(label, checked, disabled = false)
 {
     return `<label class="lau-chk${checked ? ' on' : ''}${disabled ? ' dis' : ''}"><i></i><span>${esc(label)}</span></label>`;
+}
+
+function rowHtml({ name, tagHtml = '', parts = [], note = null, on = true, disabled = false, info = false })
+{
+    const cls = ['la2m-row', on ? 'on' : '', disabled ? 'dis' : '', info ? 'info' : ''].filter(Boolean).join(' ');
+    const box = info ? '<i class="mdi mdi-link-variant la2m-link"></i>' : '<i class="la2m-box"></i>';
+    return `<div class="${cls}">${box}<span class="la2m-name">${esc(name)}</span>${tagHtml}${laPills(parts, note)}</div>`;
+}
+
+function lancerRow(label, checked, disabled = false)
+{
+    const entry = LANCER_ROW_TAGS[label];
+    if (!entry)
+        return checkbox(label, checked, disabled);
+    return rowHtml({ name: entry[0], tagHtml: laValueTag(entry[1], entry[2]), on: checked, disabled });
+}
+
+function laRow(row)
+{
+    let tagHtml = '';
+    if (row.damage?.length)
+        tagHtml = laDamageChips(row.damage);
+    else if (row.tag)
+        tagHtml = laValueTag(row.tag.text, row.tag.tone);
+    return rowHtml({ ...row, tagHtml });
 }
 
 function radioRow(labels, activeIdx, icons = null)
@@ -67,31 +93,18 @@ function damageLine(list)
     }).join('');
 }
 
-function targetingRow(snapshot)
+function liveLine(snapshot)
 {
-    const rangeEntries = Object.entries(snapshot.ranges || {});
-    const damageTotal = snapshot.raw?.base?.total;
-    const damageEntries = snapshot.kind === 'damage'
-        ? [...(damageTotal?.damage || snapshot.raw.weapon?.damage || []), ...(damageTotal?.bonusDamage || snapshot.raw.weapon?.bonusDamage || [])]
-        : snapshot.attackDamage || [];
-    if (!rangeEntries.length && !damageEntries.length)
+    const line = snapshot.liveLine;
+    if (!line)
         return '';
-    const chips = rangeEntries.map(([type, rangeVal]) =>
+    const rangeHtml = line.ranges.map(entry => `<span data-hover-range="${Number(entry.val) || 0}"><i class="cci cci-${esc(String(entry.type).toLowerCase())}"></i>${esc(entry.val)}</span>`).join('');
+    const damageHtml = line.damage.map(entry =>
     {
-        const icon = RANGE_ICONS[String(type).toLowerCase()];
-        const iconHtml = icon ? `<i class="cci ${icon} i--s" style="border:none"></i>` : '';
-        return `<span class="lau-range" data-hover-range="${Number(rangeVal) || 0}">${iconHtml}<span>${esc(icon ? rangeVal : `${type} ${rangeVal}`)}</span></span>`;
+        const type = esc(String(entry.type).toLowerCase());
+        return `<span><i class="cci cci-${type} damage--${type}"></i>${esc(entry.val)}</span>`;
     }).join('');
-    const baseEntries = snapshot.kind === 'damage' ? [] : (snapshot.attackDamageBase || []);
-    const baseChanged = baseEntries.length > 0 && JSON.stringify(baseEntries) !== JSON.stringify(snapshot.attackDamage || []);
-    const baseHtml = baseChanged
-        ? `<span style="color:#777;font-size:0.85em;margin-left:4px;">(base: ${esc(baseEntries.map(entry => `${entry.val} ${entry.type}`).join(' + '))})</span>`
-        : '';
-    const bonusEntries = snapshot.kind === 'damage' ? [] : (snapshot.attackBonusDamage || []);
-    const bonusHtml = bonusEntries.length
-        ? `<span style="opacity:0.7;margin:0 2px;">+</span>${damageLine(bonusEntries)}`
-        : '';
-    return `<div class="lau-radrow"><b class="lau-tglabel">Targeting</b>${chips}${damageLine(damageEntries)}${baseHtml}${bonusHtml}</div>`;
+    return `<div class="lau-profile">${rangeHtml}${rangeHtml && damageHtml ? '<span class="lau-sep">//</span>' : ''}${damageHtml}</div>`;
 }
 
 function miniHeader(snapshot, uuid)
@@ -112,23 +125,23 @@ function accDiffBody(snapshot)
     const isHase = snapshot.kind === 'hase';
     const laRows = snapshot.laRows || {};
     const accColumn = [
-        checkbox('Accurate (+1)', weapon.accurate),
-        checkbox('Smart (*)', weapon.smart)
+        lancerRow('Accurate (+1)', weapon.accurate),
+        lancerRow('Smart (*)', weapon.smart)
     ];
     if (!isHase)
-        accColumn.push(checkbox('Seeking (*)', weapon.seeking));
+        accColumn.push(lancerRow('Seeking (*)', weapon.seeking));
     const diffColumn = [
-        checkbox('Inaccurate (-1)', weapon.inaccurate),
-        checkbox('Impaired (-1)', weapon.impaired, true)
+        lancerRow('Inaccurate (-1)', weapon.inaccurate),
+        lancerRow('Impaired (-1)', weapon.impaired, true)
     ];
     if (!isHase && weapon.melee && !weapon.tech)
-        diffColumn.push(checkbox('Thrown (*)', weapon.thrown));
+        diffColumn.push(lancerRow('Thrown (*)', weapon.thrown));
     if (!isHase && !weapon.tech)
-        diffColumn.push(checkbox('Engaged (-1)', weapon.engaged));
+        diffColumn.push(lancerRow('Engaged (-1)', weapon.engaged));
     for (const row of laRows.global?.acc || [])
-        accColumn.push(checkbox(row.label, row.on));
+        accColumn.push(laRow(row));
     for (const row of laRows.global?.diff || [])
-        diffColumn.push(checkbox(row.label, row.on));
+        diffColumn.push(laRow(row));
     rows.push(`<div class="lau-cols">
         <div class="lau-col">${sectionHeader('cci cci-accuracy', 'Accuracy')}${accColumn.join('')}</div>
         <div class="lau-col">${sectionHeader('cci cci-difficulty', 'Difficulty')}${diffColumn.join('')}</div>
@@ -147,25 +160,17 @@ function accDiffBody(snapshot)
         ${(raw.targets || []).length === 0 ? `<span>${totalBadge(snapshot.totals?.base)}</span>` : ''}
     </div>`);
     if (laRows.modifiers?.length)
-        rows.push(`<div class="lau-chiprow lau-lamods">${laRows.modifiers.map(row => checkbox(row.label, row.on)).join('')}</div>`);
-    rows.push(targetingRow(snapshot));
+        rows.push(`<div class="lau-larows lau-lamods">${laRows.modifiers.map(laRow).join('')}</div>`);
 
     if ((raw.targets || []).length)
     {
+        const showsCover = !isHase && !weapon.tech && !(weapon.melee && !weapon.thrown);
         const cards = raw.targets.map(target =>
         {
             const total = snapshot.totals?.targets?.find(entry => entry.uuid === target.targetUuid)?.total;
-            const chips = [];
-            if (target.lockOn)
-                chips.push(checkbox('Lock On (+1)', true));
-            if (target.prone)
-                chips.push(checkbox('Prone (+1)', true));
-            if (target.stunned)
-                chips.push(checkbox('Stunned', true));
-            if (target.invisible)
-                chips.push(checkbox('Invisible (*)', true));
+            const cardRows = isHase ? [] : [lancerRow('Invisible (*)', target.invisible)];
             for (const row of laRows.targets?.[target.targetUuid] || [])
-                chips.push(checkbox(row.label, row.on));
+                cardRows.push(laRow(row));
             const modifiers = [];
             if (target.accuracy)
                 modifiers.push(`Acc +${target.accuracy}`);
@@ -173,8 +178,9 @@ function accDiffBody(snapshot)
                 modifiers.push(`Diff +${target.difficulty}`);
             return `<div class="lau-tcard">
                 ${miniHeader(snapshot, target.targetUuid)}
-                ${isHase ? '' : radioRow(COVER_LABELS, target.cover, COVER_ICONS)}
-                ${chips.length ? `<div class="lau-chiprow">${chips.join('')}</div>` : ''}
+                ${showsCover ? radioRow(COVER_LABELS, target.cover, COVER_ICONS) : ''}
+                ${isHase ? '' : laStatesHtml(target)}
+                ${cardRows.length ? `<div class="lau-larows">${cardRows.join('')}</div>` : ''}
                 <div class="lau-trow">
                     ${modifiers.length ? `<span class="lau-tmods">${modifiers.join(' · ')}</span>` : ''}
                     <span class="lau-tot"><span class="lau-totlabel">Total</span>${totalBadge(total)}</span>
@@ -207,11 +213,6 @@ function withoutSynced(list, laRows)
     });
 }
 
-function laDamageRow(row)
-{
-    return `<div class="lau-larow">${checkbox(row.label, row.on)}${damageLine(row.damage)}</div>`;
-}
-
 function damageBody(snapshot)
 {
     const raw = snapshot.raw;
@@ -241,8 +242,12 @@ function damageBody(snapshot)
         config.push(checkbox('Throttled (Half Dmg)', laConfig.throttled.enabled));
     rows.push(`<div class="lau-chiprow">${config.join('')}</div>`);
     if (laRows.global?.length)
-        rows.push(`${sectionHeader('', 'Global Bonuses')}<div class="lau-larows">${laRows.global.map(laDamageRow).join('')}</div>`);
-    rows.push(targetingRow(snapshot));
+    {
+        const globalRows = laRows.global.map(laRow);
+        const half = Math.ceil(globalRows.length / 2);
+        const columns = [globalRows.slice(0, half), globalRows.slice(half)].filter(list => list.length);
+        rows.push(`${sectionHeader('', 'Global Bonuses')}<div class="lau-split">${columns.map(list => `<div class="lau-larows">${list.join('')}</div>`).join('')}</div>`);
+    }
 
     if ((raw.targets || []).length)
     {
@@ -253,7 +258,7 @@ function damageBody(snapshot)
             ${miniHeader(snapshot, target.targetUuid)}
             ${radioRow(QUALITY_LABELS, target.quality, QUALITY_ICONS)}
             <div class="lau-chiprow">${checkbox('AP', target.ap)}${checkbox('1/2', target.halfDamage)}${checkbox('No Reduce', target.paracausal)}</div>
-            ${laTarget.length ? `<div class="lau-larows">${laTarget.map(laDamageRow).join('')}</div>` : ''}
+            ${laTarget.length ? `<div class="lau-larows">${laTarget.map(laRow).join('')}</div>` : ''}
             ${damageLine(withoutSynced(target.bonusDamage, laTarget))}
         </div>`;
         }).join('');
@@ -289,6 +294,7 @@ export function buildMirrorCard(snapshot)
             <span class="lau-title"><span class="lau-title-text">${esc(title)}</span></span>
             <span class="lau-who">${snapshot.actorImg ? `<img class="lau-who-img" src="${esc(snapshot.actorImg)}" alt=""${snapshot.rollerTokenUuid ? ` data-pan-uuid="${esc(snapshot.rollerTokenUuid)}"` : ''} onerror="this.remove()">` : ''}${esc(snapshot.user || snapshot.actorName)}</span>
         </div>
+        ${liveLine(snapshot)}
         <div class="lau-hud-body">${body}</div>`;
     return card;
 }

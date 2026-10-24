@@ -29,7 +29,7 @@ Its tabs:
 
 Pick a status from the searchable grid and apply it with:
 
-- a **duration** - end of turn, start of turn, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn.
+- a **duration** - end of turn, start of turn, end of round, start of round, end of encounter, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn, the **Rounds** count includes the current round.
 - **Turns** set to `0` means "next matching trigger": the end or start of the current turn if it is the origin's turn, otherwise the next one.
 - a **stack count**.
 - an optional **note** (e.g. "granted by X").
@@ -75,7 +75,7 @@ For anything the filters can't express, write a short **evaluate function** that
 
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
-- **General** - visible on the token. Give it a duration (end of turn, start of turn, indefinite, or permanent) and it shows an icon like a status, with optional charges.
+- **General** - visible on the token. Give it a duration (end of turn, start of turn, end or start of round, end of encounter, indefinite, or permanent) and it shows an icon like a status, with optional charges.
 - **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [Automation Engine](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC Examples](./NPC_EXAMPLES.md)). It survives a reload.
 - **Flow** - injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from an activation.
 
@@ -94,7 +94,9 @@ Full API (every type, immunity queries, flow injection) is in [Effects API](../A
 | **Stat** | Change an actor stat: HP, Heat, Armor, Speed, Evasion, etc. Modes: Add (delta) or Replace (set to `val`). |
 | **Tag** | Add, increment, override, or remove a weapon tag (Accurate, Overkill, ...). |
 | **Range** | Change a weapon's ranges (Range, Threat, Blast, Burst, Cone, Line). |
-| **Immunity** | Immunity to a damage type, effect, crit, terrain, or engagement. Prompts a choice card on incoming damage (below). |
+| **Immunity** | Immunity to a damage type (AoE included), effect, crit, terrain, or engagement. Prompts a choice card on incoming damage (below). |
+| **Resistance** | Halves a damage type (AoE included). |
+| **Vulnerability** | Doubles a damage type after armor (AoE included). |
 | **Target Modifier** | Tactical changes to the target: cover, invisibility, armor-piercing, half-damage, paracausal, or force a hit / crit / miss. |
 | **Reroll** | Reroll a roll type (attack, tech attack, damage, skill, structure, stress). Modes: retry, highest, lowest, or choose. |
 | **Movement Extra** | Extra spaces added to each move. Applies to Boost or Standard Move. |
@@ -111,7 +113,7 @@ Subtype lists per type are in [`addGlobalBonus`](../API_EFFECTS.md#addGlobalBonu
 - **Uses** - a charge count. The bonus is removed when it hits zero.
 - **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
 
-Immunity bonuses take these filters too, and the dialog shows a different set per subtype. Damage, resistance, crit, hit and miss get Roll Type, Items (LID) and both code fields. Effect and provoke get the code fields only. Terrain, obstacle and elevation get none. The roles are reversed: `reactorToken` is you, `target` is the other party.
+Immunity, resistance and vulnerability bonuses take these filters too, and the dialog shows a different set per immunity subtype. Resistance, vulnerability, and the damage, crit, hit and miss immunities get Roll Type, Items (LID) and both code fields. Effect and provoke get the code fields only. Terrain, obstacle and elevation get none. The roles are reversed: `reactorToken` is you, `target` is the other party.
 
 Reroll bonuses get Items (LID), Item ID, Condition and the Limit dropdown. Tokens, Targetter and Apply-to Condition are hidden for them, a reroll has no per-target side.
 - **Consumption** - the same trigger system as effects above, to deplete charges on events.
@@ -132,6 +134,33 @@ When the owner is a tiered NPC, an entry can be **tier-gated** so it only applie
 
 ---
 
+## Bonuses from v3 LCP data
+
+Items imported from a v3 LCP with [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) keep the LCP's effect data. LA reads part of it straight from the item. Nothing is stored on the token, so editing the item's data updates the bonus right away, on tokens already in the scene too.
+
+For now only passive resistances, vulnerabilities and immunities (`add_resist`) are read. An effect applies when:
+
+- every `add_resist` entry targets `self`, with no `duration` or `save`,
+- the effect has no `damage`, `add_status`, `add_other`, `add_special`, `attack`, `save`, `activation`, `condition`, `duration` or `frequency`,
+- it sits on the item itself, a trait, or the core system's passive effects. Effects inside actions, deployables, or on hit / crit / attack / miss are skipped.
+
+One entry that fails skips the whole effect.
+
+| v3 data | LA bonus |
+|---------|----------|
+| `resistance` | Resistance |
+| `vulnerability` | Vulnerability |
+| `immunity` to a damage type | Damage Immunity. Burn immunity also blocks the Burn status. |
+| `immunity` to a status | Effect Immunity |
+| `aoe` | AoE |
+| `all` | All |
+
+A destroyed or disabled item stops applying them, same for a talent rank not reached or an inactive weapon profile. If an LA automation on the same item adds the same bonus, both apply.
+
+They show as a teal **data** kind in the TAH status panel, the [Manage tab](#manage-tab) and the second page of the status wheel, with the name of the item they come from. Turn one off for a token with the eye button, or right-click it on the wheel. An off bonus stays listed, faded (dashed on the wheel), and turns back on the same way.
+
+---
+
 ## Immunity and the choice card
 
 When a token holds an immunity bonus and takes matching damage, a **choice card** prompts whether to apply the immunity.
@@ -144,7 +173,9 @@ When a token holds an immunity bonus and takes matching damage, a **choice card*
 
 <img align="right" src="../img/em-manage.png" width="55%"/>
 
-See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included.
+See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Each bonus also shows the item or actor it comes from.
+
+[v3 data bonuses](#bonuses-from-v3-lcp-data) are listed too, with an eye button instead of the trash to turn them off for this token.
 
 Duplicate module effects that share a name collapse into one icon with a count badge.
 

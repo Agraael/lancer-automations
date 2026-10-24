@@ -8,9 +8,9 @@
 
 import { getActivationIcon } from '../tools/misc-tools.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
-import { damageBonusScope } from '../bonuses/genericBonuses.js';
+import { damageBonusScope, normalizeBonusShape } from '../bonuses/genericBonuses.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml } from '../tools/string-utils.js';
 
 function activationChipContent(action)
 {
@@ -63,7 +63,7 @@ function damageIcon(type)
  */
 export function laPopupSectionLabel(text, bg)
 {
-    return `<span style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
+    return `<span class="la-popup-section-label" style="display:inline-block;background:${bg};color:#fff;font-size:0.65em;padding:1px 5px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;margin-bottom:3px;">${text}</span>`;
 }
 
 /**
@@ -130,10 +130,10 @@ export function laFormatDetailHtml(rawHtml)
         .replaceAll(/<br\s*\/?>/gi, '\n')
         .replaceAll(/<\/li>/gi, '\n')
         .replaceAll(/<\/div>/gi, '\n');
-    const text = $('<div>').html(withBreaks).text()
+    const text = (new DOMParser().parseFromString(withBreaks, 'text/html').body.textContent ?? '')
         .replaceAll(/\n{3,}/g, '\n\n')
         .trim();
-    return text ? text.replaceAll('\n', '<br>') : '';
+    return text ? escapeHtml(text).replaceAll('\n', '<br>') : '';
 }
 
 // Resolve a tag lid to its Lancer-configured display name (tags stored as bare {lid}).
@@ -198,10 +198,10 @@ export function laRenderActions(actions, resolveStr)
     if (!actions?.length)
         return '';
     const resolve = resolveStr ?? (s => s);
-    const items = actions.map(action =>
+    const items = actions.map((action, index) =>
     {
         const effectHtml = laFormatDetailHtml(resolve(action.detail || action.effect || ''));
-        return `<div style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;">
+        return `<div class="la-popup-action" data-action-index="${index}" style="margin-top:4px;padding:4px 6px;background:rgba(255,255,255,0.04);border-radius:3px;">
             <div style="font-size:0.78em;font-weight:bold;color:#ccc;display:flex;align-items:center;flex-wrap:wrap;">${action.name || ''}${activationChip(action)}</div>
             ${effectHtml ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${effectHtml}</div>` : ''}
         </div>`;
@@ -537,7 +537,7 @@ export function laRenderWeaponMod(modName, modItem)
         : '';
     const modBody = `${modActionsHtml}${modEffect ? `<div style="font-size:0.8em;color:#bbb;margin-top:3px;line-height:1.3;">${modEffect}</div>` : ''}${modTagsHtml}`;
     const hasDetail = !!(modEffect || modTagsArr.length || modActionsHtml);
-    return `<div class="la-mod-block" style="margin-bottom:8px;padding:5px 7px;background:rgba(255,100,0,0.07);border:1px solid rgba(255,100,0,0.35);border-radius:3px;${hasDetail ? 'cursor:pointer;' : ''}">
+    return `<div class="la-mod-block la-weapon-mod" style="margin-bottom:8px;padding:5px 7px;background:rgba(255,100,0,0.07);border:1px solid rgba(255,100,0,0.35);border-radius:3px;${hasDetail ? 'cursor:pointer;' : ''}">
         <div style="font-size:0.72em;font-weight:bold;color:#ff6400;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;">
             <span>MOD · ${modName}</span>
             ${hasDetail ? '<span class="la-mod-toggle" style="opacity:0.6;font-size:0.9em;">▶</span>' : ''}
@@ -605,11 +605,14 @@ function laRenderBonusList(bonuses)
             const filterStr = weaponTypes.length < 6 && weaponTypes.length > 0 ? ` (${weaponTypes.join('/')})` : '';
             return `${sign}${bonus.val} ${rangeStr}${filterStr}`;
         }
+        const defense = normalizeBonusShape(bonus);
+        if (defense.type === 'resistance' || defense.type === 'vulnerability')
+            return `${defense.type === 'resistance' ? 'Resistance' : 'Vulnerability'}: ${(defense.damageTypes || []).join(', ')}`;
         if (kind === 'immunity')
         {
             if (bonus.subtype === 'effect' && bonus.effects)
                 return `Immunity: ${bonus.effects.join(', ')}`;
-            if (bonus.subtype === 'damage' || bonus.subtype === 'resistance')
+            if (bonus.subtype === 'damage')
                 return `${bonus.subtype}: ${(bonus.damageTypes || []).join(', ')}`;
             return `Immunity: ${bonus.subtype}`;
         }
@@ -775,7 +778,7 @@ export function laRenderActionDetail(action, opts = {})
         return '';
     const { sourceName = null } = opts;
     const sourceHtml = sourceName
-        ? `<div style="font-size:0.72em;color:#777;margin-bottom:6px;">From: ${sourceName}</div>`
+        ? `<div style="font-size:0.72em;color:#777;margin-bottom:6px;">From: ${escapeHtml(sourceName)}</div>`
         : '';
     // Attack roll info: just flat bonus and accuracy
     let attackHtml = '';
@@ -864,8 +867,8 @@ export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weap
         <div class="${cssClass}" style="position:fixed;z-index:10000;background:#181818;border:1px solid ${themeColors.border};border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
             <div style="background:linear-gradient(90deg,${themeColors.gradFrom},${themeColors.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${themeColors.headerBorder};border-radius:4px 4px 0 0;">
                 <div>
-                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${displayTitle}</div>
-                    <div class="la-detail-subtitle" style="font-size:0.72em;color:#aaa;">${subtitle}</div>
+                    <div style="font-weight:bold;font-size:0.95em;color:#fff;">${escapeHtml(displayTitle)}</div>
+                    <div class="la-detail-subtitle" style="font-size:0.72em;color:#aaa;">${escapeHtml(subtitle)}</div>
                 </div>
                 <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
             </div>

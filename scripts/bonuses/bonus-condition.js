@@ -17,14 +17,22 @@ function lambdaSource(value)
  * @param {object} bonus
  * @returns {string[]} Empty when the bonus always applies
  */
-const FREQUENCY_LABELS = { round: 'Once per round', turn: 'Once per turn', combat: 'Once per combat' };
+const FREQUENCY_PERIODS = new Set(['round', 'turn', 'combat', 'mission']);
+
+function frequencyLabel(entry)
+{
+    if (!FREQUENCY_PERIODS.has(entry?.frequency))
+        return '';
+    const count = Math.max(1, Number.parseInt(entry.frequencyCount) || 1);
+    return count === 1 ? `Once per ${entry.frequency}` : `${count} times per ${entry.frequency}`;
+}
 
 export function getBonusConditionLines(bonus)
 {
     const lines = [];
     const collect = (entry, prefix) =>
     {
-        const frequency = FREQUENCY_LABELS[entry?.frequency];
+        const frequency = frequencyLabel(entry);
         if (frequency)
             lines.push(`${prefix}${frequency}`);
         const own = lambdaSource(entry?.condition);
@@ -47,7 +55,7 @@ export function getBonusConditionLines(bonus)
  */
 export function getBonusFrequencyLabel(bonus)
 {
-    return FREQUENCY_LABELS[bonus?.frequency] ?? '';
+    return frequencyLabel(bonus);
 }
 
 /**

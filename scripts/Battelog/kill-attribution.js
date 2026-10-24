@@ -7,7 +7,7 @@ const BUCKET_TEAM = {
     secrets: 'secret',
 };
 
-export function attributeKill(telemetry, victimTokenId, cutoffRound)
+export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = null)
 {
     const allLogs = [];
     const teamOf = new Map();
@@ -21,11 +21,15 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound)
     }
     const sideOf = new Map(allLogs.map(log => [log.tokenId, log.side ?? 'player']));
     const victimSide = sideOf.get(victimTokenId) ?? 'enemy';
+    const meltdownSeqs = cause === 'reactor'
+        ? (allLogs.find(log => log.tokenId === victimTokenId)?.events ?? []).filter(ev => ev.type === 'meltdown').map(ev => ev.seq ?? 0)
+        : [];
+    const cutoffSeq = meltdownSeqs.length ? Math.max(...meltdownSeqs) : Infinity;
     const contributions = [];
     const undoes = [];
     const add = (id, round, seq, pilot = false) =>
     {
-        if (!id || id === victimTokenId || (sideOf.get(id) ?? 'player') === victimSide)
+        if (!id || id === victimTokenId || (sideOf.get(id) ?? 'player') === victimSide || (seq ?? 0) > cutoffSeq)
             return;
         contributions.push({ id, round, seq: seq ?? 0, pilot });
     };

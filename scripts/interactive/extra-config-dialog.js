@@ -22,11 +22,12 @@ const TYPE_DESCRIPTIONS = {
     charged:     'Recharge - flip to uncharged on activation (NPC features).',
     perTurn:     'Per-turn limit - increment used-this-turn counter.',
     perRound:    'Per-round limit - increment used-this-round counter.',
-    perScene:    'Per-scene limit - increment used-this-scene counter.',
+    perScene:    'Per-encounter limit - increment used-this-encounter counter.',
+    perMission:  'Per-mission limit - increment used-this-mission counter, reset on full repair.',
     reserveUsed: 'Reserve - mark used on activation.',
 };
 const CONSUME_ON_LABELS = { auto: 'Auto', activation: 'On attack', hit: 'On hit' };
-const PER_X_TYPES = new Set(['perTurn', 'perRound', 'perScene']);
+const PER_X_TYPES = new Set(['perTurn', 'perRound', 'perScene', 'perMission']);
 
 function isWeaponItem(item)
 {
@@ -42,7 +43,7 @@ export function openExtraConfigDialog(item)
     }
 
     const present = _detectResources(item);
-    const subs = itemActionSubs(item).map(sub => ({ ...sub, types: _subResources(sub.data) })).filter(sub => sub.types.length);
+    const subs = itemActionSubs(item).map(sub => ({ ...sub, types: _subResources(sub.data, { item, key: sub.key }) })).filter(sub => sub.types.length);
     const isWeapon = isWeaponItem(item);
 
     const renderContent = () =>

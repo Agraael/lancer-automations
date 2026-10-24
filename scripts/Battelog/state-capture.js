@@ -53,7 +53,7 @@ function _tokenActor(combat, tokenId)
 // wrecked or deleted, so capture its final vitals, then the destroyed event.
 const _destroyedInFlight = new Set();
 
-async function _gmEmitDestroyed(combat, tokenId, actor, round)
+async function _gmEmitDestroyed(combat, tokenId, actor, round, cause = null)
 {
     const key = `${combat.id}:${tokenId}`;
     if (_destroyedInFlight.has(key))
@@ -72,8 +72,8 @@ async function _gmEmitDestroyed(combat, tokenId, actor, round)
     {
         if (currentEntry.events.some(ev => ev.type === 'destroyed'))
             return null;
-        const { killerId, assistIds } = attributeKill(currentTelemetry, tokenId, useRound);
-        return { type: 'destroyed', round: useRound, turn: useTurn, tokenId, killerId, assistIds };
+        const { killerId, assistIds } = attributeKill(currentTelemetry, tokenId, useRound, cause);
+        return { type: 'destroyed', round: useRound, turn: useTurn, tokenId, killerId, assistIds, ...(cause ? { cause } : {}) };
     });
 }
 
@@ -85,13 +85,13 @@ function _emitLoss(combat, tokenId, event)
         game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: tokenId, event } });
 }
 
-function _die(combat, tokenId, actor)
+function _die(combat, tokenId, actor, cause = null)
 {
     const round = combat.round ?? 0;
     if (isExecutorGM())
-        _gmEmitDestroyed(combat, tokenId, actor, round);
+        _gmEmitDestroyed(combat, tokenId, actor, round, cause);
     else
-        game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: tokenId, event: { type: 'destroyed', round, turn: combat.turn ?? null, tokenId } } });
+        game.socket.emit('module.lancer-automations', { action: 'battleLogEvent', payload: { combatId: combat.id, entryId: tokenId, event: { type: 'destroyed', round, turn: combat.turn ?? null, tokenId, cause } } });
 }
 
 // GM sink for relayed state events; deaths get the final-tick treatment.
@@ -104,7 +104,7 @@ export function handleRemoteStateEvent(payload)
         return;
     const event = payload.event;
     if (event?.type === 'destroyed')
-        _gmEmitDestroyed(combat, payload.entryId ?? event.tokenId, null, event.round);
+        _gmEmitDestroyed(combat, payload.entryId ?? event.tokenId, null, event.round, event.cause ?? null);
     else
         appendEvent(combat, payload.entryId ?? event.byId, event);
 }
@@ -133,7 +133,9 @@ function _onStateTrigger(triggerType, data)
             _die(combat, tokenId, actor);
     }
     else if (triggerType === 'onDestroyed')
-        _die(combat, tokenId, actor);
+        _die(combat, tokenId, actor, data.cause ?? null);
+    else if (triggerType === 'onStatusApplied' && data.statusId === 'reactor_meltdown')
+        _emitLoss(combat, tokenId, { type: 'meltdown', round, turn: combat.turn ?? null, tokenId });
 }
 
 async function _onUpdateItem(item, change)

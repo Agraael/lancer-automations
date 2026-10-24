@@ -3,7 +3,7 @@
 import { playUiSound } from './sound.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 import { HudPanel } from './hud-panel.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml } from '../tools/string-utils.js';
 
 /** Pull every visible scan journal entry. */
 function _collectVisibleScans()
@@ -66,10 +66,10 @@ export class GlossaryPanel extends HudPanel
             for (const s of filtered)
             {
                 const row = $(`<div class="la-glossary-row">
-                    <img class="la-glossary-row__img" src="${s.img}" alt="">
+                    <img class="la-glossary-row__img" src="${escapeHtml(s.img)}" alt="">
                     <div class="la-glossary-row__body">
-                        <span class="la-hud-clip"><span class="la-hud-pan la-glossary-row__name">${s.name}</span></span>
-                        <span class="la-glossary-row__sub">${s.scanIndex ? `SCAN ${s.scanIndex}` : s.displayName}</span>
+                        <span class="la-hud-clip"><span class="la-hud-pan la-glossary-row__name">${escapeHtml(s.name)}</span></span>
+                        <span class="la-glossary-row__sub">${s.scanIndex ? `SCAN ${escapeHtml(s.scanIndex)}` : escapeHtml(s.displayName)}</span>
                     </div>
                     <i class="fas fa-book-open la-glossary-row__icon"></i>
                 </div>`);

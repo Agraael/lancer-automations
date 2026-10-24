@@ -1,13 +1,13 @@
 // Per-item Extra Config: auto-consume opt-out list + consume/recharge API.
 // Future Extra Config features live under the same flag object with their own get/set pairs.
 
-import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub } from '../combat/per-frequency-tags.js';
+import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerMissionLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getPerMissionLimitFromSub } from '../combat/per-frequency-tags.js';
 
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 const FLAG_KEY = 'extraConfig';
 
-export const CANONICAL_TYPES = ['uses', 'loading', 'charged', 'perTurn', 'perRound', 'perScene', 'reserveUsed'];
+export const CANONICAL_TYPES = ['uses', 'loading', 'charged', 'perTurn', 'perRound', 'perScene', 'perMission', 'reserveUsed'];
 
 export const RESOURCE_LABELS = {
     uses:        'Uses (Limited)',
@@ -15,7 +15,8 @@ export const RESOURCE_LABELS = {
     charged:     'Recharge',
     perTurn:     'Per-Turn',
     perRound:    'Per-Round',
-    perScene:    'Per-Scene',
+    perScene:    'Per-Encounter',
+    perMission:  'Per-Mission',
     reserveUsed: 'Reserve Used',
 };
 
@@ -39,6 +40,8 @@ export function _hasResource(item, type)
             return getPerRoundLimit(item) > 0 || (Number(item.system?.uses_per_round?.value) || 0) > 0;
         case 'perScene':
             return getPerSceneLimit(item) > 0;
+        case 'perMission':
+            return getPerMissionLimit(item) > 0;
         case 'reserveUsed':
             return !!(item.is_reserve?.() && item.system?.consumable);
         default:
@@ -88,7 +91,7 @@ export function isAutoConsumeDisabled(item, type)
 /**
  * Toggle auto-consume opt-out for a single resource type.
  * @param {any} item
- * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'reserveUsed'} type
+ * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'perMission'|'reserveUsed'} type
  * @param {boolean} disabled - true = do NOT auto-consume on activation; false = default behaviour.
  * @returns {Promise<string[]>} the new autoConsumeDisabled array
  */
@@ -123,19 +126,19 @@ export async function setItemAutoConsumeDisabledAll(item, disabled)
     if (disabled)
     {
         for (const sub of itemActionSubs(item))
-            subAutoConsumeDisabled[sub.key] = _subResources(sub.data);
+            subAutoConsumeDisabled[sub.key] = _subResources(sub.data, { item, key: sub.key });
     }
     await configureItemExtraConfig(item, { autoConsumeDisabled: disabledTypes, subAutoConsumeDisabled });
     return disabledTypes;
 }
 
-const SUB_LIMIT = { perRound: getPerRoundLimitFromSub, perTurn: getPerTurnLimitFromSub, perScene: getPerSceneLimitFromSub };
+const SUB_LIMIT = { perRound: getPerRoundLimitFromSub, perTurn: getPerTurnLimitFromSub, perScene: getPerSceneLimitFromSub, perMission: getPerMissionLimitFromSub };
 export const CONSUME_ON_MODES = ['auto', 'activation', 'hit'];
 
 /** Per-X resource types a nested action carries on its own. */
-export function _subResources(sub)
+export function _subResources(sub, ctx = null)
 {
-    return Object.keys(SUB_LIMIT).filter(type => SUB_LIMIT[type](sub) > 0);
+    return Object.keys(SUB_LIMIT).filter(type => SUB_LIMIT[type](sub, ctx) > 0);
 }
 
 /** @returns {Set<string>} Types with auto-consume turned off for one nested action (key from actionSubKey). */
@@ -148,7 +151,7 @@ export function getSubAutoConsumeDisabled(item, subKey)
 /**
  * @param {any} item
  * @param {string} subKey
- * @param {'perTurn'|'perRound'|'perScene'} type
+ * @param {'perTurn'|'perRound'|'perScene'|'perMission'} type
  * @param {boolean} disabled
  * @returns {Promise<string[]>}
  */
@@ -178,7 +181,7 @@ export function getConsumeOn(item, type)
 
 /**
  * @param {any} item
- * @param {'perTurn'|'perRound'|'perScene'} type
+ * @param {'perTurn'|'perRound'|'perScene'|'perMission'} type
  * @param {'auto'|'activation'|'hit'} mode
  */
 export async function setConsumeOn(item, type, mode)
@@ -250,6 +253,12 @@ async function _applyResourceDelta(item, type, delta)
             await item.update({ 'system.uses_per_scene.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_scene?.value) || 0;
         }
+        case 'perMission':
+        {
+            const cur = Number(item.system?.uses_per_mission?.value) || 0;
+            await item.update({ 'system.uses_per_mission.value': _clampAt(cur - delta, Infinity) });
+            return Number(item.system?.uses_per_mission?.value) || 0;
+        }
         case 'reserveUsed':
         {
             const used = delta < 0;
@@ -263,7 +272,7 @@ async function _applyResourceDelta(item, type, delta)
 
 /**
  * @param {any} item
- * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'reserveUsed'} type
+ * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'perMission'|'reserveUsed'} type
  * @param {number} [amount=1]
  * @returns {Promise<number|boolean|null>}
  */
@@ -278,7 +287,7 @@ export async function consumeItemResource(item, type, amount = 1)
 
 /**
  * @param {any} item
- * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'reserveUsed'} type
+ * @param {'uses'|'loading'|'charged'|'perTurn'|'perRound'|'perScene'|'perMission'|'reserveUsed'} type
  * @param {number} [amount=1]
  * @returns {Promise<number|boolean|null>}
  */
@@ -326,7 +335,7 @@ export function renderConsumeStatusHtml(item, action = null)
     if (subKey)
     {
         const disabled = getSubAutoConsumeDisabled(item, subKey);
-        rows = _subResources(action).map(type => _inlineRow(type, disabled.has(type), 'on activation', subKey, '')).join('');
+        rows = _subResources(action, { item, key: subKey }).map(type => _inlineRow(type, disabled.has(type), 'on activation', subKey, '')).join('');
     }
     else
     {
