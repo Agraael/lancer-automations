@@ -124,6 +124,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         };
         const cleanup = () =>
         {
+            pickState.__laHudClosed = true; // a pending auto-start (targeting-ui.js) checks this
             teardownCanvas();
             unbindEscape();
             _removeInfoCard(cardEl);

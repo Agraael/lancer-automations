@@ -158,6 +158,7 @@ export function registerAccDiffTargetButton()
             }
             const hudResult = await original(state, options);
             // HUD closed (roll or cancel): stop the picker + drop shapes
+            state.__laHudClosed = true; // pending auto-starts (e.g. targeting-ui.js) should check this
             try
             {
                 attackerMark?.destroy();

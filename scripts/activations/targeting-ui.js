@@ -502,7 +502,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             else
                 strip.$strip.stop(true, true).slideUp(120);
         });
-        maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
+        maybeAutoStart(state, $form, $row, { mode: autoStart, hudHasTargets });
         return;
     }
 
@@ -699,7 +699,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         else
             strip.$strip.stop(true, true).slideUp(120);
     });
-    maybeAutoStart($form, $row, { mode: autoStart, hudHasTargets });
+    maybeAutoStart(state, $form, $row, { mode: autoStart, hudHasTargets });
 }
 
 // Display keeps the base range; placement/pulse reach adds the area size under the hood.
@@ -861,7 +861,7 @@ function updateAttackShapePreview(casterToken, range)
 }
 
 // Auto-launch first targeting button. mode: 'setting' (opt-in world setting), 'ifEmpty' (no target set), 'force' (always), 'never'.
-function maybeAutoStart($form, $row, { mode = 'setting', hudHasTargets = null } = {})
+function maybeAutoStart(state, $form, $row, { mode = 'setting', hudHasTargets = null } = {})
 {
     if (mode === 'never')
         return;
@@ -881,5 +881,13 @@ function maybeAutoStart($form, $row, { mode = 'setting', hudHasTargets = null } 
         return;
     const $targetBtn = $row.find('.la-accdiff-target-button').first();
     if ($targetBtn.length)
-        setTimeout(() => $targetBtn.trigger('click'), 50);
+    {
+        setTimeout(() =>
+        {
+            // ensure HUD hasn't closed before the timer fired
+            if (state?.__laHudClosed)
+                return;
+            $targetBtn.trigger('click');
+        }, 50);
+    }
 }

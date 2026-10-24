@@ -210,6 +210,7 @@ export function registerDamageTargetButton()
             }
             finally
             {
+                state.__laHudClosed = true; // pending auto-starts (e.g. targeting-ui.js) should check this
                 if (active)
                 {
                     try
