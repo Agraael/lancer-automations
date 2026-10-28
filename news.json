@@ -2,6 +2,15 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-10-28-reaction-refresh",
+            "date": "2026-10-28",
+            "title": "Reactions should refresh every turn",
+            "body": [
+                "<p>Hi there... I made a mistake: reactions refresh once per round instead of once per turn. I mixed it up with <b>Overwatch</b>, which is once per round. Fixed in the next update, Friday or Saturday. Until then, give the reaction back by hand.</p>",
+                "<p>Sorry for the inconvenience.</p>"
+            ]
+        },
+        {
             "id": "2026-10-24-lancer-4-4-4",
             "date": "2026-10-24",
             "title": "Lancer Automations 4.4.4",
