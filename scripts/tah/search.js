@@ -1,11 +1,11 @@
 /* global $, game */
 
 import { onHudRowHover } from './hover.js';
-import { getModuleSetting } from '../tools/settings-utils.js';
 import { playUiSound } from './sound.js';
-import { tahScale, laHudStripeStyle, applyStripeStyle, slideInCol } from './item-helpers.js';
+import { tahScale, laHudStripeStyle, applyStripeStyle, markRightClick, slideInCol, capColumnItems } from './item-helpers.js';
 import { favoriteWheel, favMarkHtml } from './favorites.js';
 import { localize } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 /**
  * Collect search results across all categories.
@@ -91,30 +91,30 @@ function catLabel(label)
  *
  * @param {any} col     jQuery column element (c2).
  * @param {any[]} results  From `collectSearchResults`.
- * @param {{ el: any, makeRow: Function, token: any, onCtrlRightClick?: Function|null }} ctx
+ * @param {{ el: any, makeRow: Function, token: any, onCtrlRightClick?: Function|null, view?: string, animate?: boolean }} ctx
  */
-export function openSearchResults(col, results, { el, makeRow, token, onCtrlRightClick = null })
+export function openSearchResults(col, results, { el, makeRow, token, onCtrlRightClick = null, view = 'results', animate = true })
 {
+    const label = col.find('.la-hud-col-label');
+    const sameView = col.is(':visible') && label.attr('data-col') === view;
     col.children(':not(.la-hud-col-label)').remove();
-    col.find('.la-hud-col-label').attr('data-col', 'results').text(localize('LA.tokenHud.col.results'));
+    label.attr('data-col', view).text(localize(view === 'favorites' ? 'LA.tokenHud.col.favorites' : 'LA.tokenHud.col.results'));
 
-    // Align top with first category row
-    const firstRow = el.children().first().find('.la-hud-row').first();
-    const colTop = firstRow.length ? (firstRow.offset().top - el.offset().top) / tahScale() : 0;
+    // Align top with the Menu band
+    const band = el.children().first().children('.la-hud-col-label');
+    const colTop = band.length ? (band.offset().top - el.offset().top) / tahScale() : 0;
     col.css('top', colTop);
 
-    const maxItems = getModuleSetting('tah.maxColumnItems') ?? 0;
-    const maxHeight = maxItems > 0 ? `${48 * maxItems}px` : '420px';
-    const scrollWrap = $(`<div class="la-hud-search-scroll lancer-scroll" style="max-height:${maxHeight};overflow-y:auto;overflow-x:hidden;"></div>`);
+    const scrollWrap = $(htmlToElement(`<div class="la-hud-search-scroll"></div>`));
     if (!results.length)
-        scrollWrap.append($(`<div class="la-hud-muted">No results</div>`));
+        scrollWrap.append(htmlToElement(`<div class="la-hud-muted">No results</div>`));
     else
     {
         for (const item of results)
         {
             const labelHasIcon = typeof item.labelHtml === 'string' && item.labelHtml.includes('<');
             const rowIcon = item.icon ?? (labelHasIcon ? null : 'fas fa-circle-dot');
-            const row = makeRow(item.label, false, rowIcon, item.activation ?? null, item.badge ?? null, item.badgeColor ?? null, 0, item.sizeLevel ?? null, item.labelHtml ?? null);
+            const row = makeRow(item.label, false, rowIcon, item.activation ?? null, item.badge ?? null, item.badgeTone ?? null, 0, item.sizeLevel ?? null, item.labelHtml ?? null);
             if (item.favKey)
             {
                 row.attr('data-la-fav-key', item.favKey);
@@ -132,7 +132,9 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
                 row.on('mouseleave', () => onHudRowHover({ ...hoverData, token, isEntering: false, isLeaving: true  }));
             }
             const catColor = stripe && !stripe.light ? 'color:rgba(255,255,255,0.9);' : '';
-            row.append($(`<span class="la-hud-cat" style="flex-shrink:0;padding-right:8px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.06em;line-height:1;opacity:0.8;${catColor}" title="${item._catLabel}">${catLabel(item._catLabel)}</span>`));
+            row.append(htmlToElement(`<span class="la-hud-cat" style="flex-shrink:0;padding-right:8px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.06em;line-height:1;${catColor}">${catLabel(item._catLabel)}</span>`));
+            if (item.onRightClick)
+                markRightClick(row);
             row.on('mouseenter', () => playUiSound('hover'));
             row.on('click', () =>
             {
@@ -155,5 +157,9 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
         }
     }
     col.append(scrollWrap);
-    slideInCol(col, { duration: 250, guard: false });
+    capColumnItems(col, results.length);
+    if (sameView || !animate)
+        col.stop(true).css({ opacity: '', marginLeft: '', pointerEvents: '' }).show();
+    else
+        slideInCol(col, { duration: 250, guard: false });
 }

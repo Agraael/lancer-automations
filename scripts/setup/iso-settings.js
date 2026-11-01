@@ -124,8 +124,10 @@ export function isAnyIsoModuleActive()
 }
 
 // Iso counter-transform state for a token, or null if not applicable.
-export function getIsoStateForToken(token)
+export function getIsoStateForToken(token, featureKey = null)
 {
+    if (featureKey && !getModuleSetting(featureKey))
+        return null;
     const provider = getIsoProvider(token?.scene);
     if (!provider || provider.isTokenDisabled(token))
         return null;
@@ -172,8 +174,8 @@ const ISO_PERSPECTIVE_PROVIDER = {
     elevationDelta(elevation)
     {
         const scale = canvas.scene.grid.size / canvas.scene.grid.distance;
-        const d = elevation * scale;
-        return { x: d, y: -d };
+        const elevationOffset = elevation * scale;
+        return { x: elevationOffset, y: -elevationOffset };
     },
 };
 
@@ -230,16 +232,16 @@ export function isoLabelTransform(scene, settingKey = null)
     const stage = canvas.app?.stage;
     if (!stage)
         return null;
-    const t = new PIXI.Transform();
-    t.rotation = stage.rotation;
-    t.skew.set(stage.skew.x, stage.skew.y);
-    t.updateLocalTransform();
-    const m = t.localTransform.clone().invert();
+    const transform = new PIXI.Transform();
+    transform.rotation = stage.rotation;
+    transform.skew.set(stage.skew.x, stage.skew.y);
+    transform.updateLocalTransform();
+    const invertedMatrix = transform.localTransform.clone().invert();
     return {
-        skewX: -Math.atan2(-m.c, m.d),
-        skewY: Math.atan2(m.b, m.a),
-        scaleX: Math.hypot(m.a, m.b),
-        scaleY: Math.hypot(m.c, m.d),
+        skewX: -Math.atan2(-invertedMatrix.c, invertedMatrix.d),
+        skewY: Math.atan2(invertedMatrix.b, invertedMatrix.a),
+        scaleX: Math.hypot(invertedMatrix.a, invertedMatrix.b),
+        scaleY: Math.hypot(invertedMatrix.c, invertedMatrix.d),
     };
 }
 
@@ -277,8 +279,8 @@ Hooks.on('updateScene', (scene, changes) =>
 // #scrollingText is private, so find it by its config zIndex.
 function _scrollTextContainer()
 {
-    const z = CONFIG?.Canvas?.groups?.interface?.zIndexScrollingText ?? 1100;
-    return (canvas.interface?.children ?? []).find(c => c instanceof PIXI.Container && c.zIndex === z) ?? null;
+    const zIndex = CONFIG?.Canvas?.groups?.interface?.zIndexScrollingText ?? 1100;
+    return (canvas.interface?.children ?? []).find(child => child instanceof PIXI.Container && child.zIndex === zIndex) ?? null;
 }
 
 // Only set while it holds the iso recipe. The text wrapper maps origins through it.
@@ -286,14 +288,14 @@ let _scrollContainer = null;
 
 function _tokenAtPoint(point)
 {
-    const toks = canvas.tokens?.placeables ?? [];
-    for (const token of toks)
+    const tokens = canvas.tokens?.placeables ?? [];
+    for (const token of tokens)
     {
         const center = token.center;
         if (center && Math.abs(center.x - point.x) < 1 && Math.abs(center.y - point.y) < 1)
             return token;
     }
-    return toks.find(token => token.bounds?.contains?.(point.x, point.y)) ?? null;
+    return tokens.find(token => token.bounds?.contains?.(point.x, point.y)) ?? null;
 }
 
 // Give the container the stat-bar recipe so the text reads the same way as the bars.
@@ -372,8 +374,7 @@ function _debugOverlayOn()
     }
 }
 
-// Draws for each token: click-zone rect (red), native shape bounds (yellow),
-// center dot (cyan), mesh.position dot (magenta) so the two test-points are visible.
+// Shows both test points per token: click-zone rect (red), native bounds (yellow), center (cyan), mesh.position (magenta).
 function _refreshTokenIsoDebug(token)
 {
     if (!token?.mesh)
@@ -439,8 +440,8 @@ Hooks.once('ready', () =>
             const container = _scrollContainer;
             if (!container || container.destroyed || !origin)
                 return wrapped.call(this, origin, content, options);
-            const tok = _tokenAtPoint(origin);
-            const target = tok?.mesh ? tok.mesh.position : origin;
+            const token = _tokenAtPoint(origin);
+            const target = token?.mesh ? token.mesh.position : origin;
             // inverse-map through the recipe so it lands at `target` on screen, uprighted
             container.transform.updateLocalTransform();
             const local = container.localTransform.applyInverse(new PIXI.Point(target.x, target.y));
@@ -472,16 +473,16 @@ Hooks.once('ready', () =>
             const releaseOthers = opts.releaseOthers ?? true;
             const oldSet = new Set(this.controlled);
             const newSet = new Set();
-            for (const p of this.controllableObjects())
+            for (const placeable of this.controllableObjects())
             {
-                if (_inSelectPoly(poly, p))
-                    newSet.add(p);
+                if (_inSelectPoly(poly, placeable))
+                    newSet.add(placeable);
             }
             const toRelease = oldSet.difference(newSet);
             if (releaseOthers)
-                toRelease.forEach(p => p.release());
+                toRelease.forEach(placeable => placeable.release());
             const toControl = newSet.difference(oldSet);
-            toControl.forEach(p => p.control({ releaseOthers: false }));
+            toControl.forEach(placeable => placeable.control({ releaseOthers: false }));
             return (releaseOthers && toRelease.size > 0) || toControl.size > 0;
         }, 'MIXED');
 

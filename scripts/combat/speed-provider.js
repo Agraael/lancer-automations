@@ -1,7 +1,6 @@
 /* global Hooks, game, Color, CONST */
 
 import { MODULE_ID } from '../tools/constants.js';
-import { setLAFlag } from '../tools/flag-utils.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const COLOR_STANDARD = 'speedProvider.colorStandard';
 const COLOR_BOOST = 'speedProvider.colorBoost';
@@ -35,10 +34,7 @@ function getColor(key, fallback)
     }
 }
 
-/**
- * Speed tier ranges for a token: cumulative max distances in grid units.
- * Used by LancerTokenRuler to color segments.
- */
+/** Speed tier ranges for a token (cumulative max distances in grid units), used by LancerTokenRuler to color segments. */
 export function getSpeedRanges(token)
 {
     const colors = {
@@ -57,7 +53,7 @@ function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         requiresReload: true
     });
     game.settings.register(MODULE_ID, COLOR_STANDARD, {
@@ -99,20 +95,4 @@ Hooks.on('preCreateActiveEffect', (effect) =>
         const changes = [...effect.changes, { key: 'system.speed', value: '3', mode: MODES.ADD, priority: 100 }];
         effect.updateSource({ changes });
     }
-});
-
-Hooks.on('updateCombat', (combat, change) =>
-{
-    if (!isEnabled() || conflictModuleActive())
-        return;
-    if (!('turn' in change) || !combat.current?.tokenId)
-        return;
-    const token = game.canvas?.tokens?.get(combat.current.tokenId);
-    if (!token?.isOwner)
-        return;
-    const combatant = combat.combatants?.get(combat.current.combatantId);
-    if (!combatant?.isOwner)
-        return;
-    const conditionIds = Array.from(token.actor?.statuses ?? []);
-    setLAFlag(combatant,'speedProvider.turn-status', conditionIds);
 });

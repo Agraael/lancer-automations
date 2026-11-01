@@ -8,6 +8,8 @@ import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from './flag-utils.js';
 import { getOrCreateTemplateActor } from './template-actors.js';
 import { escapeHtml as _escapeText, localize, localizeFormat } from './string-utils.js';
 import { FLAG_PORTRAIT_MODE, FLAG_PORTRAIT_IMG, FLAG_PORTRAIT_MECH_PILOT, PORTRAIT_MODES, PORTRAIT_PILOT } from '../tah/portrait.js';
+import { isLancerActor, isExecutorGM } from '../utils/lancer-token.js';
+import { cancelButton } from './dialog-utils.js';
 
 function log(...args)
 {
@@ -399,18 +401,10 @@ async function spawnDifficultTerrain(token)
         const cells = getTokenCells(token);
         if (cells.length === 0)
             return;
-        const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
         // Each cell gets its own elevation based on the ground below it.
         for (const [row, col] of cells)
         {
-            const existing = terrainAPI.getCell(col, row) || [];
-            let maxHeight = 0;
-            for (const terrainEntry of existing)
-            {
-                const terrainType = terrainTypes.find(candidateType => candidateType.id === terrainEntry.terrainTypeId);
-                if (terrainType?.usesHeight && terrainType?.isSolid)
-                    maxHeight = Math.max(maxHeight, (terrainEntry.elevation || 0) + (terrainEntry.height || 0));
-            }
+            const maxHeight = game.modules.get(MODULE_ID)?.api?.getHexGroundElevation?.(col, row, terrainAPI) ?? 0;
             await terrainAPI.paintCells([[row, col]], {
                 id: terrainTypeId,
                 height: terrainHeight,
@@ -458,11 +452,11 @@ export async function preLoadImageForAll(src, push = false)
 
 export async function updateStructure(token)
 {
-    let response = '';
+    let statusMessage = '';
     const structure = token.actor.system.structure.value;
     if (structure <= 0)
     {
-        response = `${token.name} structure is zero or less.`;
+        statusMessage = `${token.name} structure is zero or less.`;
         if (game.combat && token.combatant && getModuleSetting('enableRemoveFromCombat'))
         {
             log(`${token.name} is dead, removing from combat.`);
@@ -486,14 +480,14 @@ export async function updateStructure(token)
     }
     else
     {
-        response = `${token.name} structure is greater than zero.`;
+        statusMessage = `${token.name} structure is greater than zero.`;
         if (isSquad(token) && getModuleSetting('squadLostOnDeath'))
             await token.actor.toggleStatusEffect('mia', { active: false, overlay: true });
         if (game.combat && !token.combatant && getModuleSetting('enableRemoveFromCombat'))
             await token.document.toggleCombatant();
         await macroEffect('Wreck', token.actor, token, false);
     }
-    return response;
+    return statusMessage;
 }
 
 function resolveWreckFaction(token)
@@ -569,7 +563,7 @@ async function wreckIt(token)
     if (tileWreck)
     {
         new Sequence()
-            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && getModuleSetting('enableWreckAudio') && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
+            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
             .effect().file(effectPath).scaleToObject(wreckScale * 2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
             .playIf(!!effectPath && playWreckEffect && getModuleSetting('enableWreckAnimation'))
             .thenDo(async () =>
@@ -600,7 +594,7 @@ async function wreckIt(token)
     else
     {
         new Sequence()
-            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && getModuleSetting('enableWreckAudio') && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
+            .sound().file(soundPath).volume(getModuleSetting('wreckMasterVolume') ?? 1).playIf(!!soundPath && playWreckSound && (getModuleSetting('wreckMasterVolume') ?? 1) > 0)
             .effect().file(effectPath).scaleToObject(2.25).atLocation(token).mirrorX(Math.random() > 0.5).waitUntilFinished(-500)
             .playIf(!!effectPath && playWreckEffect && getModuleSetting('enableWreckAnimation'))
             .thenDo(async () =>
@@ -613,7 +607,6 @@ async function wreckIt(token)
                         if (wreckActor)
                         {
                             const gameplaySize = token.actor?.system?.size ?? 1;
-                            const category = getTokenCategory(token);
                             const fragile = category === 'human' || category === 'pilot' || category === 'squad';
                             const wreckHP = fragile ? 1 : Math.min(4, gameplaySize) * 10;
                             const wreckFaction = resolveWreckFaction(token);
@@ -778,7 +771,7 @@ async function unWreckTile(tile)
 
 export async function preWreck(document, _change, userId)
 {
-    if (!game.users.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
     const size = document.actor?.system?.size ?? 1;
     let wreckImgPath = getLAFlag(document,'wreckImgPath');
@@ -844,7 +837,7 @@ function _renderWreckTab(app, html, data)
     if (!tokenDoc?.actor)
         return;
     const actorType = tokenDoc.actor.type;
-    if (!['mech', 'npc', 'pilot', 'deployable'].includes(actorType))
+    if (!isLancerActor(tokenDoc.actor))
         return;
 
     const rootEl = typeof html?.querySelector === 'function' ? html : html?.[0];
@@ -942,9 +935,9 @@ function _buildWreckSectionHtml(flags)
     const playSound = flags.playWreckSound ?? true;
     const playEffect = flags.playWreckEffect ?? true;
     const wreckMode = flags.wreckMode ?? 'default';
-    const modeOpt = (val, label) => `<option value="${val}" ${wreckMode === val ? 'selected' : ''}>${label}</option>`;
+    const modeOpt = (value, label) => `<option value="${value}"${wreckMode === value ? 'selected' : ''}>${label}</option>`;
     const terrainOverride = flags.terrainOverride ?? 'default';
-    const terrainOpt = (val, label) => `<option value="${val}" ${terrainOverride === val ? 'selected' : ''}>${label}</option>`;
+    const terrainOpt = (value, label) => `<option value="${value}"${terrainOverride === value ? 'selected' : ''}>${label}</option>`;
     return `
         <div class="form-group">
             <label>Wreck Mode</label>
@@ -1023,7 +1016,7 @@ function _buildWreckSectionHtml(flags)
 function _buildAwarenessSectionHtml(flags)
 {
     const mode = flags.awarenessMode ?? 'default';
-    const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
+    const opt = (value, label) => `<option value="${value}"${mode === value ? 'selected' : ''}>${label}</option>`;
     return `
         <div class="form-group">
             <label>Detection Visual</label>
@@ -1045,7 +1038,7 @@ function _buildStatHintSectionHtml(flags)
     const unknownLabel = flags.statHintUnknownLabel ?? '';
     const triSelect = (name, current) =>
     {
-        const opt = (val, label) => `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`;
+        const opt = (value, label) => `<option value="${value}"${current === value ? 'selected' : ''}>${label}</option>`;
         return `<select name="flags.${MODULE_ID}.${name}" data-dtype="String">
             ${opt('default', 'Default (use global setting)')}
             ${opt('on', 'On')}
@@ -1077,7 +1070,7 @@ function _buildMovementSectionHtml(flags)
 {
     const disableAutoTerrain = !!flags.disableAutoTerrainElevation;
     const autoRotate = flags.autoRotate ?? 'default';
-    const opt = (val, label) => `<option value="${val}" ${autoRotate === val ? 'selected' : ''}>${label}</option>`;
+    const opt = (value, label) => `<option value="${value}"${autoRotate === value ? 'selected' : ''}>${label}</option>`;
     return `
         <div class="form-group">
             <label>Disable Auto-elevation from Terrain</label>
@@ -1102,9 +1095,9 @@ function _buildPortraitSectionHtml(flags, actorType)
 {
     const mode = flags[FLAG_PORTRAIT_MODE] ?? PORTRAIT_MODES.DEFAULT;
     const img = flags[FLAG_PORTRAIT_IMG] ?? '';
-    const opt = (val, label) => `<option value="${val}" ${mode === val ? 'selected' : ''}>${label}</option>`;
+    const opt = (value, label) => `<option value="${value}"${mode === value ? 'selected' : ''}>${label}</option>`;
     const pilot = flags[FLAG_PORTRAIT_MECH_PILOT] ?? PORTRAIT_PILOT.DEFAULT;
-    const pilotOpt = (val, label) => `<option value="${val}" ${pilot === val ? 'selected' : ''}>${label}</option>`;
+    const pilotOpt = (value, label) => `<option value="${value}"${pilot === value ? 'selected' : ''}>${label}</option>`;
     const pilotRow = actorType !== 'mech' ? '' : `
         <div class="form-group">
             <label>Use Pilot Portrait</label>
@@ -1371,7 +1364,7 @@ function _promptLinkScanDoc(rootEl, tokenDoc, app)
                     _refreshScanSection(rootEl, tokenDoc, app);
                 },
             },
-            cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}` },
+            cancel: cancelButton(),
         },
         default: 'link',
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 420 }).render(true);

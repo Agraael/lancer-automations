@@ -8,9 +8,9 @@ Lancer Automations draws its own bars and labels directly on the token, as a rep
 
 ## Settings
 
-Everything here lives in the **Tokens & Display** tab. The bars and the hover popup sit in the **Custom Token Stat Bars** and **Token Stat Hint** sections, the halo, hover info and effect icon scale in **Status Icons**, and **Allow Half-Size Tokens** at the top of the tab.
+The bars and the hover popup live in the **Stat Bars & Hint** tab, in the **Custom Token Stat Bars** and **Token Stat Hint** sections. The halo, hover info and effect icon scale are in **Tokens & Display → Status Icons**, and **Allow Half-Size Tokens** at the top of **Tokens & Display**.
 
-Turn the bars on with **Enable Custom Token Stat Bars** (`tokenStatBar`). It needs a reload, and the whole subsystem is skipped while the **Bar Brawl** module is active, so disable that module first.
+**Enable Custom Token Stat Bars** (`tokenStatBar`) is on by default. It needs a reload, and the whole subsystem is skipped while the **Bar Brawl** module is active, so disable that module first.
 
 <img src="../img/td-settings.png" width="70%"/>
 
@@ -28,7 +28,7 @@ Under the token, depending on the actor type:
 - **Pilot bond stress** on pilot tokens (when enabled).
 - A **reaction** pip on the edge (solid when available, dim when spent), and **armor** ticks beside HP (GM and owners only).
 
-Elevation also gets a small badge at the token's corner (up/down arrow with the value) instead of Foundry's default tooltip. Numeric values next to the bars can be turned off with **Show Numeric Values on Bars**, and the status-effect icons on the token are scaled by **Effect Icon Scale** to make room.
+Elevation also gets a small badge at the token's corner (up/down arrow with the value) instead of Foundry's default tooltip. Numeric values next to the bars can be turned on with **Show Numeric Values on Bars**, and the status-effect icons on the token are scaled by **Effect Icon Scale** to make room.
 
 <br clear="right"/>
 
@@ -82,7 +82,7 @@ Set on an item or actor instead of one token, an extra bar becomes a template th
 
 <img align="right" src="../img/td-talent-counters.png" width="45%"/>
 
-With **Auto-add Talent & Frame Counter Bars** (`statBarAutoInjectTalents`) on, the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section.
+With **Auto-add Talent & Frame Counter Bars** (`statBarAutoInjectTalents`) on (default), the module adds an extra bar for every talent rank counter and frame core counter on Lancer tokens. The **color** and **width %** of new auto-bars are set in the same section.
 
 A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-Injected** button rebuilds them from its current talents and frame.
 
@@ -103,13 +103,13 @@ In the Custom Token Stat Bars settings:
 
 <img align="right" src="../img/td-stat-hint.png" width="45%"/>
 
-A hover popup with a token's full stats, enabled with **Enable Token Stat Hint** (`tokenStatHintEnabled`). Settings cover the hover **delay**, the popup **scale**, whether it shows for the token you control, whether it's **combat only**, and whether it carries a HASE line (**Show HASE**).
+A hover popup with a token's full stats, enabled with **Token Stats on Hover** (`tokenStatHintEnabled`, on by default). Settings cover the hover **delay**, the **Popup Position** (docked bottom-left by default, or next to the token), the popup **scale**, whether it shows for the token you control, whether it's **combat only**, and whether it carries a HASE line (**Show HASE**). Docked, it lists statuses and bonuses as names or icons (**Docked Status List**).
 
 For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned).
 
 A scanned token (or the GM view) shows the full stat block. An unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
 
-To drop the scan gate entirely, turn on **Reveal Stats Without Scanning** (**Activations → Scan**). Every actor then reads as scanned, for the hint, the scanned stat bars, and the consume feedback alike.
+**Count As Scanned Without A Scan** (`scanRevealMode`, **Activations → Scan**) sets who reads as scanned without one: **Nobody**, **Player tokens**, **Players and allies** (default), or **Everyone**. **Everyone** drops the scan gate entirely, for the hint, the scanned stat bars, and the consume feedback alike.
 
 <br clear="right"/>
 
@@ -127,7 +127,7 @@ With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid
 
 ## Status icons
 
-**Status Icon Halo** circles the icons around the token instead of stacking them in a column, with sliders for ring radius and the angle of the first icon. Inspired by [status-halo](https://gitlab.com/mxzf/status-halo). If that module is also on, you get a warning on load.
+**Status Icon Halo** (on by default) circles the icons around the token instead of stacking them in a column, with sliders for ring radius and the angle of the first icon. Inspired by [status-halo](https://gitlab.com/mxzf/status-halo). If that module is also on, you get a warning on load.
 
 **Status Icon Hover Info** enlarges the icon under the cursor and shows its name, description, duration and bonus.
 
@@ -139,8 +139,8 @@ With **`allowHalfSizeTokens`** on, a size-0.5 actor's token takes up half a grid
 | **Show Only In Combat by Default** | Tokens without a per-token override show the bar only in combat. |
 | **Default Row Height (px)** | Leave 0 for auto (scales with grid). |
 | **Display Pilot Stress Bar** | Bond stress on pilot tokens and sheets. When Annoying's sheet already shows one, it is recolored instead. |
-| **Visibility: Out of Combat** | Who sees stat bars outside combat: All, Owners only, Owners + scanned, or None. |
-| **Visibility: In Combat** | Who sees stat bars during combat, same four choices. |
+| **Visibility: Out of Combat** | Who sees stat bars outside combat: All, Owners only (default), Owners + scanned, or None. |
+| **Visibility: In Combat** | Who sees stat bars during combat, same four choices. Owners + scanned by default. |
 | **Change Flash Follows Visibility** | Value changes only flash the bar for viewers the visibility settings allow. |
 | **Auto-Injected Bar Color** | Default color for auto-injected bars that do not set their own. |
 | **Auto-Injected Bar Width (%)** | Default width % for auto-injected bars, each on its own line. |

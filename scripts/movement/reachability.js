@@ -15,7 +15,7 @@ import { isHostile } from "../combat/overwatch.js";
 
 function autoElevDisabled()
 {
-    return !!getModuleSetting('disableAutoTerrainElevation');
+    return getModuleSetting('terrainElevationMode') === 'off';
 }
 
 // A cell counts as off-map (a wall) when its center falls outside the scene rectangle.

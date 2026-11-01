@@ -1,5 +1,6 @@
 import { HudPanel } from './hud-panel.js';
 import { escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 export class BondPanel extends HudPanel
 {
@@ -14,21 +15,24 @@ export class BondPanel extends HudPanel
         const state = actor.system.bond_state ?? {};
         const swallow = (/** @type {any} */ jq) => jq.on('mousedown click focus', (/** @type {any} */ ev) => ev.stopPropagation());
 
-        const panel = $(`<div class="la-hud-panel la-hud-bond-panel"></div>`);
-        panel.append($(`<div class="la-hud-col-label">Bond · ${escapeHtml(bond.name)}</div>`));
+        const panel = $(htmlToElement(`<div class="la-hud-panel la-hud-bond-panel"></div>`));
+        panel.append(htmlToElement(`<div class="la-hud-col-label">Bond · ${escapeHtml(bond.name)}</div>`));
 
-        const body = $(`<div class="la-hud-bond-body"></div>`);
+        const body = $(htmlToElement(`<div class="la-hud-bond-body"></div>`));
 
         // Questions
-        body.append($(`<div class="la-hud-panel-section-header">QUESTIONS</div>`));
+        body.append(htmlToElement(`<div class="la-hud-panel-section-header">QUESTIONS</div>`));
         (bond.system?.questions ?? []).forEach((/** @type {any} */ entry, /** @type {number} */ questionIdx) =>
         {
-            const wrap = $(`<div class="la-bond-field"></div>`);
-            wrap.append($(`<div class="la-bond-field__label"></div>`).text(entry.question ?? ''));
-            const select = $(`<select class="la-bond-select"></select>`);
+            const wrap = $(htmlToElement(`<div class="la-bond-field"></div>`));
+            const questionLabel = document.createElement('div');
+            questionLabel.className = 'la-bond-field__label';
+            questionLabel.textContent = entry.question ?? '';
+            wrap.append(questionLabel);
+            const select = $(htmlToElement(`<select class="la-bond-select"></select>`));
             const current = state.answers?.[questionIdx] ?? '';
             for (const option of (entry.options ?? []))
-                select.append($(`<option${option === current ? ' selected' : ''}></option>`).attr('value', option).text(option));
+                select.append(new Option(option, option, option === current, option === current));
             swallow(select);
             select.on('change', async () =>
             {
@@ -39,14 +43,16 @@ export class BondPanel extends HudPanel
         });
 
         // XP checklist
-        body.append($(`<div class="la-hud-panel-section-header">XP CHECKLIST</div>`));
+        body.append(htmlToElement(`<div class="la-hud-panel-section-header">XP CHECKLIST</div>`));
         const checkRow = (/** @type {string} */ label, /** @type {boolean} */ checked, /** @type {(on: boolean) => Promise<any>} */ write) =>
         {
-            const row = $(`<label class="la-bond-check"></label>`);
-            const box = $(`<input type="checkbox"${checked ? ' checked' : ''}>`);
+            const row = $(htmlToElement(`<label class="la-bond-check"></label>`));
+            const box = $(htmlToElement(`<input type="checkbox"${checked ? ' checked' : ''}>`));
             swallow(box);
             box.on('change', async () => write(box.is(':checked')));
-            row.append(box, $(`<span></span>`).text(label));
+            const labelText = document.createElement('span');
+            labelText.textContent = label;
+            row.append(box, labelText);
             row.on('mouseenter', () => this._cancelCollapse());
             return row;
         };
@@ -57,14 +63,14 @@ export class BondPanel extends HudPanel
         });
 
         // Minor ideal: the checkbox scores it, the select records which one it was
-        const minorWrap = $(`<div class="la-bond-minor"></div>`);
-        const minorBox = $(`<input type="checkbox"${state.xp_checklist?.minor_ideal === true ? ' checked' : ''}>`);
+        const minorWrap = $(htmlToElement(`<div class="la-bond-minor"></div>`));
+        const minorBox = $(htmlToElement(`<input type="checkbox"${state.xp_checklist?.minor_ideal === true ? ' checked' : ''}>`));
         swallow(minorBox);
         minorBox.on('change', async () => actor.update({ 'system.bond_state.xp_checklist.minor_ideal': minorBox.is(':checked') }));
-        const minorSelect = $(`<select class="la-bond-select"></select>`);
+        const minorSelect = $(htmlToElement(`<select class="la-bond-select"></select>`));
         const minorCurrent = state.minor_ideal ?? '';
         for (const ideal of (bond.system?.minor_ideals ?? []))
-            minorSelect.append($(`<option${ideal === minorCurrent ? ' selected' : ''}></option>`).attr('value', ideal).text(ideal));
+            minorSelect.append(new Option(ideal, ideal, ideal === minorCurrent, ideal === minorCurrent));
         swallow(minorSelect);
         minorSelect.on('change', async () => actor.update({ 'system.bond_state.minor_ideal': String(minorSelect.val()) }));
         minorWrap.append(minorBox, minorSelect);
@@ -75,15 +81,15 @@ export class BondPanel extends HudPanel
             async (on) => actor.update({ 'system.bond_state.xp_checklist.veteran_power': on })));
 
         // Actions
-        const buttons = $(`<div class="la-bond-buttons"></div>`);
-        const tallyBtn = $(`<button type="button" class="la-bond-btn"><i class="mdi mdi-arrow-up-bold-hexagon-outline"></i> Tally XP</button>`);
+        const buttons = $(htmlToElement(`<div class="la-bond-buttons"></div>`));
+        const tallyBtn = $(htmlToElement(`<button type="button" class="la-bond-btn"><i class="mdi mdi-arrow-up-bold-hexagon-outline"></i> Tally XP</button>`));
         swallow(tallyBtn);
         tallyBtn.on('click', async () =>
         {
             await actor.tallyBondXP?.();
             this.refresh();
         });
-        const refreshBtn = $(`<button type="button" class="la-bond-btn"><i class="mdi mdi-refresh"></i> Refresh Powers</button>`);
+        const refreshBtn = $(htmlToElement(`<button type="button" class="la-bond-btn"><i class="mdi mdi-refresh"></i> Refresh Powers</button>`));
         swallow(refreshBtn);
         refreshBtn.on('click', async () =>
         {

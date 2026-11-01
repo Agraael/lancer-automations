@@ -2,6 +2,7 @@
 
 import { socketRequestWithAck } from '../socket.js';
 import { localize } from './string-utils.js';
+import { cancelButton } from './dialog-utils.js';
 
 const TPL = {
     menu:      'modules/lancer-automations/templates/rest-menu.html',
@@ -344,7 +345,7 @@ async function _showEmergencyRest(mech, pilot)
                     setTimeout(() => _showRegularRest(mech, pilot), 80);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'confirm',
         render: (html) =>
@@ -476,7 +477,7 @@ async function _showRegularRest(mech, pilot)
                     await _postRestReport(mech, pilot, lines);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'confirm',
         render: (html) =>

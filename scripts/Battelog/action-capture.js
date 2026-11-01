@@ -2,10 +2,12 @@ import { appendEvent } from './telemetry-store.js';
 import { findActiveCombatForToken, findTelemetryCombatForToken, resolveEntryTokenId, resolveCreditTokenId, pilotTokenOf, numOr } from './battelog-utils.js';
 import { SAVE_KINDS } from './combat-telemetry.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
+import { getLAFlags } from '../tools/flag-utils.js';
 
 let _registered = false;
 
 const REAL_ACTIVATIONS = new Set(['Quick', 'Full', 'Free', 'Protocol', 'Reaction', 'Quick Tech', 'Full Tech', 'Invade']);
+const DEBUFF_STATUSES = new Set(['lockon', 'slow', 'immobilized', 'jammed', 'shredded', 'impaired', 'stunned', 'dazed']);
 
 function _emit(combat, byId, event)
 {
@@ -124,6 +126,9 @@ function _onFlow(flow, success, opts)
     const event = { type: 'action', round: combat.round ?? 0, byId: tokenId, name, activation, success: true };
     if (pilotTokenId)
         event.pilotTokenId = pilotTokenId;
+    const tapeId = flow?.state?.la_extraData?.tapeId;
+    if (tapeId)
+        event.tapeId = tapeId;
     _emit(combat, tokenId, event);
 }
 
@@ -145,7 +150,53 @@ function _onNamedAction(data)
     const event = { type: 'action', round: combat.round ?? 0, byId, name, activation: data?.actionType ?? null, success: true };
     if (pilotTokenId)
         event.pilotTokenId = pilotTokenId;
+    if (data?.tapeId)
+        event.tapeId = data.tapeId;
     _emit(combat, byId, event);
+}
+
+function _onActionUndo(data)
+{
+    const byId = resolveCreditTokenId(data?.token?.id ?? data?.token?.document?.id);
+    if (!byId || !data?.tapeId)
+        return;
+    const combat = findActiveCombatForToken(byId) ?? findTelemetryCombatForToken(byId);
+    if (!combat)
+        return;
+    _emit(combat, byId, { type: 'action-undo', round: combat.round ?? 0, byId, tapeId: data.tapeId });
+}
+
+function _onStatusApplied(data)
+{
+    const statusId = data?.statusId;
+    if (!DEBUFF_STATUSES.has(statusId))
+        return;
+    const targetId = data?.triggeringToken?.id;
+    const byId = resolveCreditTokenId(getLAFlags(data?.effect)?.originID);
+    if (!byId || !targetId || byId === targetId)
+        return;
+    const combat = findActiveCombatForToken(byId) ?? findTelemetryCombatForToken(byId);
+    if (!combat)
+        return;
+    const event = { type: 'status', round: combat.round ?? 0, byId, targetId, statusId };
+    const tapeId = getLAFlags(data?.effect)?.tapeId;
+    if (tapeId)
+        event.tapeId = tapeId;
+    _emit(combat, byId, event);
+}
+
+function _onDeploy(data)
+{
+    if (data?.deployType !== 'deployable')
+        return;
+    const byId = resolveCreditTokenId(data?.triggeringToken?.id);
+    const count = (data?.deployedTokens ?? []).filter(Boolean).length;
+    if (!byId || count === 0)
+        return;
+    const combat = findActiveCombatForToken(byId) ?? findTelemetryCombatForToken(byId);
+    if (!combat)
+        return;
+    _emit(combat, byId, { type: 'deploy', round: combat.round ?? 0, byId, count, name: String(data?.item?.name ?? '').toUpperCase() });
 }
 
 function _onFlowHook(flow, success, opts)
@@ -171,6 +222,10 @@ export function registerActionCapture()
         {
             if (triggerType === 'onCheck')
                 _onCheck(data);
+            else if (triggerType === 'onStatusApplied')
+                _onStatusApplied(data);
+            else if (triggerType === 'onDeploy')
+                _onDeploy(data);
         }
         catch (err)
         {
@@ -186,6 +241,17 @@ export function registerActionCapture()
         catch (err)
         {
             console.error('lancer-automations | battle-log named-action failed:', err);
+        }
+    });
+    Hooks.on('lancer-automations.battelog.actionUndo', (data) =>
+    {
+        try
+        {
+            _onActionUndo(data);
+        }
+        catch (err)
+        {
+            console.error('lancer-automations | battle-log action-undo failed:', err);
         }
     });
     Hooks.on('lancer.postFlow.ActivationFlow', (flow, success) => _onFlowHook(flow, success));

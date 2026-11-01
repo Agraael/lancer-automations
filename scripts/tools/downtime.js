@@ -1,16 +1,6 @@
 import { DOWNTIME_TYPE, DOWNTIME_PACK, importDowntimeActionsJson, openDowntimeImportDialog } from './downtime-item.js';
 import { localize, localizeFormat } from './string-utils.js';
 
-let unionDate = () =>
-{
-    const date = new Date();
-    let day = date.getDate();
-    let month = date.getMonth() + 1;
-    let year = date.getFullYear() + 2992;
-
-    return `${year}${month}${day}`;
-};
-
 function generateId(length)
 {
     let result = '';
@@ -535,7 +525,7 @@ export async function executeDowntime()
                           const descriptionDiv = document.getElementById('activityDescription');
                           const selectedActivityName = activitySelect.value;
 
-                          const selectedActivity = activitiesData.find(act => act.Name === selectedActivityName);
+                          const selectedActivity = activitiesData.find(activity => activity.Name === selectedActivityName);
 
                           if (selectedActivity && selectedActivity.Description) {
                             descriptionDiv.textContent = selectedActivity.Description;

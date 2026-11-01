@@ -57,7 +57,10 @@ function reconcile()
     const winner = pickWinner();
     if (!winner)
     {
+        const had = activeOwner !== null;
         destroyActive();
+        if (had)
+            Hooks.callAll("lancer-automations.rangePulseChanged", null);
         return;
     }
     if (winner.ownerId === activeOwner && winner.request.signature === activeSignature)
@@ -74,6 +77,7 @@ function reconcile()
         console.warn("lancer-automations | range pulse build failed", err);
         activeDestroy = null;
     }
+    Hooks.callAll("lancer-automations.rangePulseChanged", activeOwner);
 }
 
 export const rangePulse = {

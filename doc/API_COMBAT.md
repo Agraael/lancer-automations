@@ -637,7 +637,7 @@ const threat = ranges.Threat ?? 1;
 await api.getMaxWeaponReach_WithBonus(input)
 ```
 
-Returns the single highest reach value across all scanned weapons. Scans `Range`, `Threat`, `Line`, `Burst`, and `Cone` (ignores `Blast`). Also accounts for the `tg_thrown` tag.
+Highest reach across all scanned weapons, the same number as the Advanced Measure **Max Reach**. A weapon's `Blast`, `Burst`, `Cone` or `Line` size adds to its `Range`, never to its `Threat`. The `tg_thrown` tag counts as reach on its own.
 
 | Param | Type | Description |
 |:------|:-----|:------------|

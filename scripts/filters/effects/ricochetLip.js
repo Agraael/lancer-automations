@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, setDirVFromDegrees } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, setDirVFromDegrees } from '../filter-core.js';
 
 // FilterRicochetLip: rounds come in along a bearing and die on the leading edge instead of landing.
 // No alpha early-out: confine 0 lets the streaks fly through open ground.
@@ -24,14 +24,7 @@ uniform vec3 roundColor;
 uniform vec3 sparkColor;
 uniform vec3 lipColor;
 uniform vec2 dirV;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 
@@ -85,43 +78,16 @@ void main()
 }
 `;
 
-export class FilterRicochetLip extends PIXI.Filter
+export class FilterRicochetLip extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, ricochetLipFragment);
-
-        this.uniforms.roundColor = new Float32Array([1.0, 0.85, 0.63]);
-        this.uniforms.sparkColor = new Float32Array([1.0, 0.94, 0.75]);
-        this.uniforms.lipColor = new Float32Array([0.60, 0.64, 0.68]);
-        this.uniforms.dirV = new Float32Array([0.574, -0.819]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterRicochetLip.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(ricochetLipFragment, params, {
+            roundColor: new Float32Array([1.0, 0.85, 0.63]),
+            sparkColor: new Float32Array([1.0, 0.94, 0.75]),
+            lipColor: new Float32Array([0.60, 0.64, 0.68]),
+            dirV: new Float32Array([0.574, -0.819]),
+        });
     }
 
     get lanes()
@@ -277,15 +243,6 @@ export class FilterRicochetLip extends PIXI.Filter
     {
         this._bearing = value;
         setDirVFromDegrees(this.uniforms, value);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

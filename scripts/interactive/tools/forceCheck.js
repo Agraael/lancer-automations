@@ -1,6 +1,7 @@
 import { _queueCard, _createInfoCard, _removeInfoCard, bindCardEscape } from "../cards.js";
 import { MODULE_ID } from "../../tools/constants.js";
 import { localize } from "../../tools/string-utils.js";
+import { htmlToElement } from "../../tools/dom-utils.js";
 import {
     pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker,
     isAreaPickerActive, cancelAreaPicker,
@@ -9,6 +10,8 @@ import {
 } from "../canvas.js";
 import { buildTargetingUI, clearAllAttackShapes, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance } from "../../activations/targeting-ui.js";
 import { TG, createTokenTether } from "../canvas-helpers.js";
+import { shapeSpecFromRanges } from "../../tools/weapon-bonus-utils.js";
+import { deriveSaveDc } from "../../utils/lancer-token.js";
 
 const PICK_PULSE_OWNER = 'la-forcecheck-pick';
 const SAVE_PULSE_OWNER = 'la-forcecheck-save';
@@ -20,11 +23,6 @@ function normalizeToken(ref)
     if (ref.getActiveTokens)
         return ref.getActiveTokens()[0] ?? null;
     return ref.object ?? ref;
-}
-
-function deriveSaveDc(saveVsToken)
-{
-    return saveVsToken?.actor?.system?.save || 10;
 }
 
 /**
@@ -46,22 +44,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         };
         const pickState = { actor: caster?.actor ?? null, data: { title: 'Force Check' } };
         if (Array.isArray(range))
-        {
-            const shape = { pattern: 'target', size: 1, range: 0 };
-            for (const entry of range)
-            {
-                const type = String(entry?.type ?? '');
-                const amount = Math.max(0, Number(entry?.val) || 0);
-                if (type === 'Range' || type === 'Threat')
-                    shape.range = amount;
-                else if (['Blast', 'Burst', 'Cone', 'Line'].includes(type))
-                {
-                    shape.pattern = type.toLowerCase();
-                    shape.size = Math.max(1, amount);
-                }
-            }
-            pickState.__laAttackShape = shape;
-        }
+            pickState.__laAttackShape = shapeSpecFromRanges(range) ?? { pattern: 'target', size: 1, range: 0 };
         else if (range != null && range !== '')
             pickState.__laAttackShape = { pattern: 'target', size: 1, range: Math.max(0, Number(range) || 0) };
 
@@ -98,12 +81,13 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             .filter(token => token.id !== state.saveVs?.id && (!filter || filter(token)));
         const successChanceFor = () => targetInfoAllowed()
             ? (token) => targetInfoAllowedFor(token?.actor)
-                ? haseSuccessChance(token?.actor, state.skill, state.saveVs ? deriveSaveDc(state.saveVs) : 10)
+                ? haseSuccessChance(token?.actor, state.skill, deriveSaveDc(state.saveVs?.actor))
                 : UNKNOWN_CHANCE
             : null;
 
         const teardownCanvas = () =>
         {
+            pickState.__laHudClosed = true;
             if (isSingleTargetPickerActive())
                 cancelSingleTargetPicker();
             if (isAreaPickerActive())
@@ -155,7 +139,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             if (token)
             {
                 const name = token.name ?? token.document?.name ?? '?';
-                label.text(`${name} (save ${deriveSaveDc(token)})`);
+                label.text(`${name} (save ${deriveSaveDc(token.actor)})`);
                 clearBtn.css('display', '');
             }
             else
@@ -181,13 +165,13 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             {
                 const name = token.name ?? token.document?.name ?? '?';
                 const src = token.document?.texture?.src ?? '';
-                const row = $(`
+                const row = htmlToElement(`
                     <div class="la-selected-target" data-token-id="${token.id}">
                         <img src="${src}" alt="${name}">
                         <span class="la-selected-target-name">${name}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
                     </div>`);
-                row.find('.la-selected-target-remove').on('click', () =>
+                row.querySelector('.la-selected-target-remove').addEventListener('click', () =>
                 {
                     token.setTarget?.(false, { releaseOthers: false });
                 });

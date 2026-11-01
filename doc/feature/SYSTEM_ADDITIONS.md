@@ -38,7 +38,7 @@ A system's ammo is set up on its item sheet. The **Apply Fixes (LCP Data)** tool
 
 <img align="right" src="../img/sa-statuses.png" width="45%"/>
 
-Nothing here is registered unconditionally. The **LaSossis Additional statuses and effects** toggle (**`additionalStatuses`**, Statuses & FX tab) registers **Guardian**, **Bulwark** and **Phasing**, plus 19 more beyond Lancer's defaults, like Immovable, Throttled, Climber, Brace, Dazed, Resist All, and Aided. **Infection** is registered on its own, by the [Infection Damage Integration](./INFECTION.md) setting.
+Nothing here is registered unconditionally. The **Extra Lancer Statuses** toggle (**`additionalStatuses`**, Statuses & FX tab) registers **Guardian**, **Bulwark** and **Phasing**, plus 19 more beyond Lancer's defaults, like Immovable, Throttled, Climber, Brace, Dazed, Resist All, and Aided. **Infection** is registered on its own, by the [Infection Damage Type](./INFECTION.md) setting.
 
 These are mine and predate the module by years: states LCPs and alternate structure tables describe but never register as statuses. Safe to leave off, automations that use them just skip.
 
@@ -82,7 +82,7 @@ The module exposes **move** and **reaction** from the action tracker, plus **inf
 
 ## Self-heat resistance
 
-With **Resist Self-Inflicted Heat** (**`resistSelfHeat`**, Combat & Movement → Structure & Damage, off by default) on, a mech that resists Heat takes half of its own self-inflicted heat, and a mech vulnerable to Heat takes double.
+With **Resist Self-Inflicted Heat** (**`resistSelfHeat`**, Combat & Movement → Structure & Damage, on by default) on, a mech that resists Heat takes half of its own self-inflicted heat, and a mech vulnerable to Heat takes double.
 
 With **Heat as Energy on heatless targets** (**`convertHeatToEnergyOnHeatless`**, same section, on by default), Heat damage becomes Energy against targets with no heat capacity (pilots, biological NPCs), the way Lancer already does for pilots.
 

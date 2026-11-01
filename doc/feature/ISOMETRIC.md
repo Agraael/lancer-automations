@@ -43,4 +43,4 @@ Each of the remaining toggles cancels the skew on one overlay. All are on by def
 | **Sequencer Effect Shape** (`iso.effectAspect`) | Sequencer effects: un-squashed on iso scenes, beams kept flat on non-iso scenes |
 | **Restore Token Anchor on Non-Iso Scenes** (`iso.restoreAnchor`) | Fixes the token anchor on non-iso scenes (Isometric Perspective only) |
 
-**Stat Bar / Nameplate / Status Icons**, **Target Reticle** and **Token Click Zone** are greyed out unless **Enable Custom Token Stat Bars** (**`tokenStatBar`**, Tokens & Display tab) is on. They realign what that system draws, so without it there's nothing to realign.
+**Stat Bar / Nameplate / Status Icons**, **Target Reticle** and **Token Click Zone** are greyed out unless **Enable Custom Token Stat Bars** (**`tokenStatBar`**, Stat Bars & Hint tab) is on. They realign what that system draws, so without it there's nothing to realign.

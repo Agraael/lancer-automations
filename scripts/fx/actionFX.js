@@ -2,7 +2,7 @@
 
 import { isActionFXEnabled, isRollResultFXEnabled, isDamageImpactFXEnabled } from './statusFX.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { localizeFormat } from '../tools/string-utils.js';
+import { localizeFormat, escapeHtml } from '../tools/string-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { playStatsSound, playStatusSfxSound } from '../tah/sound.js';
 import { isFriendly } from '../combat/overwatch.js';
@@ -81,8 +81,7 @@ const ACTION_FX_PREVIEW = {
 };
 
 /**
- * Read the Lancer size off whatever `.atLocation()` was handed. Deployables keep it under
- * `system.stats`, everything else under `system`.
+ * Lancer size of the `.atLocation()` source, under `system.stats` on deployables and `system` otherwise.
  * @param {any} source  Token, TokenDocument or Actor
  * @returns {number}
  */
@@ -945,7 +944,7 @@ function _measureTspanAdvances(svgMarkup)
         document.body.appendChild(holder);
         try
         {
-            return [...holder.querySelectorAll('text tspan')].map(el => el.getComputedTextLength?.() ?? 0);
+            return [.../** @type {NodeListOf<SVGTSpanElement>} */ (holder.querySelectorAll('text tspan'))].map(el => el.getComputedTextLength?.() ?? 0);
         }
         finally
         {
@@ -965,11 +964,6 @@ function _measureOriginalAdvance(svgPath, raw)
     const advance = _measureTspanAdvances(raw)?.[0] ?? null;
     _svgAdvanceCache.set(svgPath, advance);
     return advance;
-}
-
-function _escapeXml(text)
-{
-    return String(text).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
 // Swap the banner's baked tspan text for a custom label; two lines + font shrink when it overflows.
@@ -1032,7 +1026,7 @@ async function _badgeSvgWithLabel(svgPath, label)
                 openTag = openTag.replace(/\bid="[^"]*"\s*/, '');
             return openTag;
         });
-        let out = raw.replace(full, opens.map((openTag, index) => `${openTag}${_escapeXml(lines[index])}</tspan>`).join(''));
+        let out = raw.replace(full, opens.map((openTag, index) => `${openTag}${escapeHtml(lines[index])}</tspan>`).join(''));
         if (scaleValue < 1)
             out = out.replace(/font-size:[\d.]+px/, `font-size:${(fontSize * scaleValue).toFixed(2)}px`);
         return out;
@@ -2052,9 +2046,7 @@ const _TITLES_WITH_SPECIFIC_FX = new Set([
     'Lock On', 'Bolster', 'Aid', 'Brace',
 ]);
 
-/** Dispatch a tech-tier or generic-tier action FX based on activation + title. */
-// two action FX launched close together: the second waits for the first;
-// Sequencer's play() resolves early for effects, so each entry also holds a minimum time
+// Queued action FX play one after another, each held at least this long since Sequencer's play() resolves early.
 const FX_MIN_HOLD_MS = 1500;
 let _actionFxChain = Promise.resolve();
 // Play functions are async, a bare undefined means no FX (title handled elsewhere).
@@ -2074,6 +2066,7 @@ export function queueActionFx(fn, sourceToken = null, actionKey = null)
 }
 const _queueActionFx = queueActionFx;
 
+/** Dispatch a tech-tier or generic-tier action FX based on activation + title. */
 export function playActionFxByActivation(activation, token, title, { nameOnBadge = true } = {})
 {
     _queueActionFx(() => _playActionFxForActivation(activation, token, title, nameOnBadge), token, () => _activationFxKey(activation, token, title));

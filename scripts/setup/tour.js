@@ -1,12 +1,15 @@
 /* global Tour, game, ui, Dialog, Hooks, FormApplication, $, fetch */
 
 import { maybeRunSettingsOnboarding } from './settings-onboarding.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getWeapons } from '../interactive/deployables.js';
+import { queueFirstRun } from './first-run-queue.js';
 
 const SETTING_TOUR_DONE = 'tourCompleted';
-const SETTING_MOVEMENT_WARNING_SHOWN = 'movementWarningShown';
+const SETTING_RESUME_TOUR = 'tourResumeAfterReload';
+const GM_TOUR_IDS = ['config-tour', 'activation-manager-tour', 'tah-tour', 'effect-manager-tour', 'ruler-tour', 'advanced-measure-tour'];
+const PLAYER_TOUR_IDS = ['tah-tour', 'ruler-tour', 'advanced-measure-tour'];
 import { MODULE_ID } from '../tools/constants.js';
 const ROOT = '#lancer-automations-config';
 const RM_ROOT = '#reaction-manager-config';
@@ -270,11 +273,25 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="combat"]`,
     },
     {
+        id: 'statuses',
+        tab: 'statuses',
+        title: localize('LA.tour.step.statusesFx'),
+        content: localize('LA.tour.content.theFxSectionStatusVisualEffects'),
+        selector: `${ROOT} .tab[data-tab="statuses"]`,
+    },
+    {
         id: 'wrecks',
         tab: 'wrecks',
         title: localize('LA.tour.step.wrecks'),
         content: localize('LA.tour.content.whatHappensWhenSomethingDiesSpawn'),
         selector: `${ROOT} .tab[data-tab="wrecks"]`,
+    },
+    {
+        id: 'vision',
+        tab: 'vision',
+        title: localize('LA.tour.step.vision'),
+        content: localize('LA.tour.content.visionFromEdgeForBigTokens'),
+        selector: `${ROOT} .tab[data-tab="vision"]`,
     },
     {
         id: 'tokens',
@@ -306,20 +323,6 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="sounds"]`,
     },
     {
-        id: 'statuses',
-        tab: 'statuses',
-        title: localize('LA.tour.step.statusesFx'),
-        content: localize('LA.tour.content.theFxSectionStatusVisualEffects'),
-        selector: `${ROOT} .tab[data-tab="statuses"]`,
-    },
-    {
-        id: 'debug',
-        tab: 'debug',
-        title: localize('LA.tour.step.debug'),
-        content: localize('LA.tour.content.flipTheseOnIfSomethingFeels'),
-        selector: `${ROOT} .tab[data-tab="debug"]`,
-    },
-    {
         id: 'tools',
         tab: 'tools',
         title: localize('LA.tour.step.toolsExtras'),
@@ -327,18 +330,18 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="tools"]`,
     },
     {
-        id: 'vision',
-        tab: 'experimental',
-        title: localize('LA.tour.step.vision'),
-        content: localize('LA.tour.content.visionFromEdgeForBigTokens'),
-        selector: `${ROOT} .tab[data-tab="experimental"]`,
-    },
-    {
         id: 'tutorials',
         tab: 'tutorials',
         title: localize('LA.tour.step.tutorialsHelp'),
         content: localize('LA.tour.content.reRunTheSetupWizardOr'),
         selector: `${ROOT} .tab[data-tab="tutorials"]`,
+    },
+    {
+        id: 'debug',
+        tab: 'debug',
+        title: localize('LA.tour.step.debug'),
+        content: localize('LA.tour.content.flipTheseOnIfSomethingFeels'),
+        selector: `${ROOT} .tab[data-tab="debug"]`,
     },
     {
         id: 'save',
@@ -417,7 +420,7 @@ const ACTIVATION_MANAGER_STEPS = [
         id: 'editor-options',
         title: localize('LA.tour.step.filters'),
         content: localize('LA.tour.content.narrowWhenItFiresReactTo'),
-        selector: '#reaction-editor .options-grid',
+        selector: '#reaction-editor .la-eligibility',
         action: _ensureReactionEditorOpen,
     },
     {
@@ -618,7 +621,7 @@ const TAH_STEPS = [
         id: 'move-history',
         title: localize('LA.tour.step.movementHistory'),
         content: localize('LA.tour.content.revertTheLastMoveOrClear'),
-        selector: '#la-combat-bar span[title="Revert Last Move"]',
+        selector: '#la-combat-bar span[title="Revert Last Action"]',
     },
     {
         id: 'keyboard-nav',
@@ -641,22 +644,22 @@ const TAH_STEPS = [
         {
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-item`).forEach((el) => el.classList.remove('la-hud-tour-item'));
             // TAH wires click or mouseenter per the click-to-open setting; trigger both so bound handlers fire.
-            const c1Rows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
-            if (c1Rows[0])
+            const col1Rows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
+            if (col1Rows[0])
             {
-                $(c1Rows[0]).trigger('mouseenter');
-                $(c1Rows[0]).trigger('click');
+                $(col1Rows[0]).trigger('mouseenter');
+                $(col1Rows[0]).trigger('click');
             }
             for (let i = 0; i < 40; i++)
             {
                 const allRows = document.querySelectorAll(`${TAH_ROOT} .la-hud-row`);
-                if (allRows.length > c1Rows.length)
+                if (allRows.length > col1Rows.length)
                     break;
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
             const allRows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
-            const firstChild = allRows[c1Rows.length];
-            firstChild?.classList.add('la-hud-tour-item');
+            const firstItemRow = allRows[col1Rows.length];
+            firstItemRow?.classList.add('la-hud-tour-item');
         },
         cleanup: () =>
         {
@@ -732,7 +735,7 @@ const TAH_STEPS = [
             }
             for (let attempt = 0; attempt < 40; attempt++)
             {
-                const leaf = document.querySelector(`${TAH_ROOT} .la-hud-row[title="Right click for details"]`);
+                const leaf = document.querySelector(`${TAH_ROOT} .la-hud-row.la-hud-rclick`);
                 if (leaf)
                 {
                     $(leaf).trigger('contextmenu'); break;
@@ -838,7 +841,7 @@ const TAH_STEPS = [
         {
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-utility`).forEach((el) => el.classList.remove('la-hud-tour-utility'));
             const rows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
-            const utilityRow = rows.find((r) => r.textContent?.trim().toLowerCase().startsWith('utility'));
+            const utilityRow = rows.find((row) => row.textContent?.trim().toLowerCase().startsWith('utility'));
             utilityRow?.classList.add('la-hud-tour-utility');
         },
         cleanup: () =>
@@ -891,7 +894,7 @@ const RULER_STEPS = [
     {
         id: 'intro',
         title: localize('LA.tour.step.lancerRuler'),
-        content: localize('LA.tour.content.dragATokenToMeasureThe'),
+        content: `${localize('LA.tour.content.dragATokenToMeasureThe')}${localize('LA.onboarding.movement-beta.note')}`,
         selector: 'body',
         allowCanvas: true,
     },
@@ -965,19 +968,19 @@ const ADV_MEASURE_STEPS = [
         id: 'shapes',
         title: localize('LA.tour.step.shapes'),
         content: localize('LA.tour.content.pickAShapeBlastBurstCone'),
-        selector: `${AM_ROOT} .la-mt-icon-btn`,
+        selector: `${AM_ROOT} .la-mt-shapes`,
     },
     {
         id: 'range',
         title: localize('LA.tour.step.rangePulse'),
         content: localize('LA.tour.content.pulseARangeAroundTheShape'),
-        selector: `${AM_ROOT} .la-mt-dd`,
+        selector: `${AM_ROOT} .la-mt-range`,
     },
     {
         id: 'pins',
         title: localize('LA.tour.step.pinnedRings'),
         content: localize('LA.tour.content.rightClickARangeSourceOr'),
-        selector: `${AM_ROOT} .la-mt-dd`,
+        selector: `${AM_ROOT} .la-mt-range`,
     },
     {
         id: 'marker',
@@ -1350,7 +1353,7 @@ function _closeEffectManager()
     const el = document.querySelector(EM_ROOT);
     if (!el)
         return;
-    const dlg = Object.values(/** @type {any} */ (ui.windows)).find((w) => /** @type {any} */ (w).element?.[0] === el || /** @type {any} */ (w).element?.[0]?.contains(el));
+    const dlg = Object.values(/** @type {any} */ (ui.windows)).find((win) => /** @type {any} */ (win).element?.[0] === el || /** @type {any} */ (win).element?.[0]?.contains(el));
     try
     {
         /** @type {any} */ (dlg)?.close?.();
@@ -1427,7 +1430,10 @@ async function _closeAdvMeasure()
 async function _ensureReactionEditorOpen()
 {
     if (document.querySelector('#reaction-editor'))
+    {
+        document.querySelector('#reaction-editor .la-band-fold')?.setAttribute('open', '');
         return true;
+    }
     const btn = document.querySelector(`${RM_ROOT} .tab[data-tab="custom"] .add-reaction`);
     if (btn instanceof HTMLElement)
         btn.click();
@@ -1586,12 +1592,12 @@ export async function startAddExtraTour()
     return startTour('add-extra-tour');
 }
 
-// Welcome dialog (first install + menu button); resolves 'setup'|'tour'|'skip', Setup Wizard button GM-only.
+// Welcome dialog (first install + menu button); resolves 'setup'|'tour:<id>'|'skip', Setup Wizard button GM-only.
 function _welcomeDialog()
 {
     const isGM = !!game.user?.isGM;
     const setupNote = isGM
-        ? `<p style="margin: 8px 0 0;"><b>First time here?</b> Hit <b>Setup Wizard</b> to turn the module's main features on or off with a few plain yes/no questions, then take the tour.</p>`
+        ? `<p style="margin: 8px 0 0;">${localize('LA.tour.welcome.firstTime')}</p>`
         : '';
     return new Promise((resolve) =>
     {
@@ -1604,148 +1610,101 @@ function _welcomeDialog()
                 callback: () => resolve('setup'),
             };
         }
-        buttons.start = {
-            icon: '<i class="fas fa-play"></i>',
-            label: localize('LA.settings.tourMenu.label'),
-            callback: () => resolve('tour'),
-        };
         buttons.skip = {
             icon: '<i class="fas fa-times"></i>',
             label: localize('LA.common.skip'),
             callback: () => resolve('skip'),
         };
-        new Dialog({
+        const dialog = new Dialog({
             title: localize('LA.tour.step.lancerAutomations'),
             content: `
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">WELCOME TO LANCER AUTOMATIONS</div>
-                    <div class="lancer-dialog-subtitle">A module that went way bigger than I initially planned.</div>
+                    <div class="lancer-dialog-title">${localize('LA.tour.welcome.title')}</div>
+                    <div class="lancer-dialog-subtitle">${localize('LA.tour.welcome.subtitle')}</div>
                 </div>
                 <div style="padding: 8px 10px; line-height: 1.5;">
-                    <p style="margin: 0 0 8px;">First of all, thanks for downloading.</p>
-                    <p style="margin: 0 0 8px;">It's a very dense, powerful, big module. Its use is mainly for me, so the design is catered to what I like.</p>
-                    <p style="margin: 0 0 8px;">Since it's a big module, here's a set of tours for the important stuff. They can run long, so take them one at a time and come back later.</p>
-                    <p style="margin: 0 0 8px;">If you have any question or issue, head out to the <a href="https://discord.com/invite/lancer" target="_blank" rel="noopener">Lancer Discord</a>, or come talk to me directly on <a href="https://discord.com/channels/426286410496999425/1436087781666455642" target="_blank" rel="noopener">my channel</a>.</p>
-                    <p style="margin: 0; opacity: 0.85;">This module is free and always will be. If you wanna support my late nights, <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener">Patreon</a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener">Ko-fi</a>.</p>
+                    <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.thanks')}</p>
+                    <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.dense')}</p>
+                    <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.tours')}</p>
+                    ${_tourListHtml()}
+                    <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.help')}</p>
+                    <p style="margin: 0; opacity: 0.85;">${localize('LA.tour.welcome.support')}</p>
                     ${setupNote}
-                    <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);"><b>Last warning:</b> if you installed this without reading <a href="https://agraael.github.io/lancer-automations/" target="_blank" rel="noopener">the documentation</a>, please go read it. This is not a plug and play module, and you have to be serious about that.</p>
+                    <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);">${localize('LA.tour.welcome.lastWarning')}</p>
                 </div>
-                <p style="padding: 6px 10px 0; font-size: 0.85em; opacity: 0.7; border-top: 1px solid rgba(120,46,34,0.2); margin-top: 6px;">You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b> &gt; <b>Tour</b>, or from Foundry's <b>Configure Tours</b> menu.</p>
+                <p style="padding: 6px 10px 0; font-size: 0.85em; opacity: 0.7; border-top: 1px solid rgba(120,46,34,0.2); margin-top: 6px;">${localize('LA.tour.resumeBody')}</p>
             `,
             buttons,
-            default: isGM ? 'setup' : 'start',
+            default: isGM ? 'setup' : 'skip',
+            render: (html) => _bindTourList(html, (id) =>
+            {
+                resolve(`tour:${id}`);
+                dialog.close();
+            }),
             close: () => resolve('skip'),
-        }, { width: 600, classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+        }, { width: 600, classes: ['lancer-dialog-base', 'lancer-no-title'] });
+        dialog.render(true);
     });
 }
 
-function _movementWarningDialog()
+function _tourListHtml()
+{
+    const ids = game.user?.isGM ? GM_TOUR_IDS : PLAYER_TOUR_IDS;
+    const rows = ids.map(id => TOURS.find(entry => entry.id === id)?.get()).filter(Boolean).map((tour, index) =>
+    {
+        const title = String(tour.title ?? '').replace(/^Lancer Automations:\s*/i, '');
+        const steps = tour.steps?.length ?? 0;
+        return `<div class="la-tour-row"><div class="la-kb-text"><div class="la-kb-name">${title}${steps ? `<span class="la-tour-steps">${localizeFormat('LA.tour.stepCount', { count: steps })}</span>` : ''}</div></div><button type="button" class="la-tour-play lancer-action-btn la-primary" data-tour-id="${ids[index]}"><i class="fas fa-play"></i> ${localize('LA.configUi.play')}</button></div>`;
+    });
+    return `<div class="la-welcome-tours">${rows.join('')}</div>`;
+}
+
+function _bindTourList(html, onPick)
+{
+    const root = html?.[0] ?? html;
+    for (const button of root.querySelectorAll('[data-tour-id]'))
+        button.addEventListener('click', () => onPick(button.dataset.tourId));
+}
+
+function _resumeDialog()
 {
     return new Promise((resolve) =>
     {
-        new Dialog({
-            title: localize('LA.tour.step.lancerAutomationsMovement'),
+        const dialog = new Dialog({
+            title: localize('LA.tour.step.lancerAutomations'),
             content: `
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">A WORD ON MOVEMENT</div>
-                    <div class="lancer-dialog-subtitle">Please read this once.</div>
+                    <div class="lancer-dialog-title">${localize('LA.tour.resumeTitle')}</div>
+                    <div class="lancer-dialog-subtitle">${localize('LA.tour.resumeSubtitle')}</div>
                 </div>
-                <div style="padding: 8px 10px; line-height: 1.5;">
-                    <p style="margin: 0 0 8px;">Movement and the automation around it (Overwatch, Engagement, reactions on move, boost split, etc.) hooks into Foundry's v13 move pipeline. The multi step stacks (Boost &amp; Move, Overcharge &amp; Boost &amp; Move) advance on <code>onMove</code> / <code>onActivation</code>, which fire post commit, so each leg has settled before the next one runs.</p>
-                    <p style="margin: 0 0 8px;">It's only medium stable though, so a few caveats:</p>
-                    <ul style="margin: 0 0 8px 18px;">
-                        <li>Be wary on <b>very vertical maps</b>: heavy climbing / hover / big elevation deltas can throw off the cost math, and the longer chains (3 leg Overcharge path) have the most surface to misbehave.</li>
-                        <li>If a stack stalls or a leg lands wrong, fall back to <b>Ignore</b> on the choice card, or hold the <b>free movement</b> key for a single drag.</li>
-                        <li>For purely measuring (no token follow, no cost), <b>Ctrl+drag</b> from any empty hex gives you the vanilla ruler.</li>
-                    </ul>
-                    <p style="margin: 0; opacity: 0.85;">Predictive / multi waypoint dragging is still beta. If you hit weirdness, splitting the move into two drags usually unblocks it.</p>
-                </div>
+                ${_tourListHtml()}
+                <p style="padding: 8px 10px 0; font-size: 0.85em; opacity: 0.7;">${localize('LA.tour.resumeBody')}</p>
             `,
             buttons: {
-                ok: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: localize('LA.common.gotIt'),
-                    callback: () => resolve(true),
+                later: {
+                    icon: '<i class="fas fa-clock"></i>',
+                    label: localize('LA.common.later'),
+                    callback: () => resolve(null),
                 },
             },
-            default: 'ok',
-            close: () => resolve(true),
-        }, { width: 600, classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
+            default: 'later',
+            render: (html) => _bindTourList(html, (id) =>
+            {
+                resolve(id);
+                dialog.close();
+            }),
+            close: () => resolve(null),
+        }, { width: 460, classes: ['lancer-dialog-base', 'lancer-no-title'] });
+        dialog.render(true);
     });
 }
 
-async function _maybeShowMovementWarning()
+async function _runResume()
 {
-    const shown = !!getModuleSetting(SETTING_MOVEMENT_WARNING_SHOWN);
-    if (shown)
-        return;
-    await _movementWarningDialog();
-    try
-    {
-        await game.settings.set(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN, true);
-    }
-    catch
-    { /* not ready */ }
-}
-
-// GMs get all four tours + ruler; players only get TAH + ruler (the rest show GM-only forms).
-async function _runFullTour()
-{
-    if (!game.user.isGM)
-    {
-        if (_tahTour)
-        {
-            _tahTour.onComplete(async () =>
-            {
-                if (_rulerTour)
-                {
-                    _rulerTour.onComplete(async () =>
-                    {
-                        await startAdvMeasureTour();
-                    });
-                }
-                await startRulerTour();
-            });
-        }
-        await startTahTour();
-        return;
-    }
-    await _ensureConfigOpen();
-    if (!_configTour)
-        return;
-    _configTour.onComplete(async () =>
-    {
-        if (_activationTour)
-        {
-            _activationTour.onComplete(async () =>
-            {
-                if (_tahTour)
-                {
-                    _tahTour.onComplete(async () =>
-                    {
-                        if (_effectManagerTour)
-                        {
-                            _effectManagerTour.onComplete(async () =>
-                            {
-                                if (_rulerTour)
-                                {
-                                    _rulerTour.onComplete(async () =>
-                                    {
-                                        await startAdvMeasureTour();
-                                    });
-                                }
-                                await startRulerTour();
-                            });
-                        }
-                        await startEffectManagerTour();
-                    });
-                }
-                await startTahTour();
-            });
-        }
-        await startActivationManagerTour();
-    });
-    await _configTour.start();
+    await game.settings.set(MODULE_ID, SETTING_RESUME_TOUR, false);
+    const id = await _resumeDialog();
+    if (id)
+        await startTour(id);
 }
 
 async function _runChooser()
@@ -1753,11 +1712,17 @@ async function _runChooser()
     const choice = await _welcomeDialog();
     if (choice === 'setup')
     {
-        await maybeRunSettingsOnboarding();
+        const stayed = await maybeRunSettingsOnboarding();
+        if (!stayed)
+        {
+            await game.settings.set(MODULE_ID, SETTING_RESUME_TOUR, true);
+            await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
+            return;
+        }
         return _runChooser();
     }
-    if (choice === 'tour')
-        await _runFullTour();
+    if (choice.startsWith('tour:'))
+        await startTour(choice.slice('tour:'.length));
     try
     {
         await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
@@ -1788,7 +1753,7 @@ export function registerTourBootstrap()
         default: false,
     });
 
-    game.settings.register(MODULE_ID, SETTING_MOVEMENT_WARNING_SHOWN, {
+    game.settings.register(MODULE_ID, SETTING_RESUME_TOUR, {
         scope: 'client',
         config: false,
         type: Boolean,
@@ -1868,7 +1833,8 @@ export function registerTourBootstrap()
     {
         const done = !!getModuleSetting(SETTING_TOUR_DONE, true);
         if (!done)
-            await _runChooser();
-        await _maybeShowMovementWarning();
+            await queueFirstRun(() => _runChooser());
+        else if (getModuleSetting(SETTING_RESUME_TOUR))
+            await queueFirstRun(() => _runResume());
     });
 }

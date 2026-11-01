@@ -2,7 +2,7 @@
 
 import {
     isHexGrid, offsetToCube, cubeDistance,
-    pixelToOffset, getOccupiedOffsets, getInRangeOffsets,
+    pixelToOffset, getOccupiedOffsets,
 } from "../../combat/grid-helpers.js";
 
 import {
@@ -18,7 +18,8 @@ import { getLAFlag, setLAFlag } from "../../tools/flag-utils.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
-import { localize } from '../../tools/string-utils.js';
+import { localize, localizeFormat } from '../../tools/string-utils.js';
+import { isExecutorGM } from '../../utils/lancer-token.js';
 const ZONE_TEXTURE_DRIFT = { x: 15, y: 15 };
 
 /**
@@ -75,7 +76,7 @@ async function _applyZoneExpiry(results, casterToken, expires)
 
 Hooks.on('combatTurnChange', async (combat, prior, current) =>
 {
-    if (!game.users.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
     const priorTokenId = prior?.combatantId ? combat.combatants.get(prior.combatantId)?.token?.id : null;
     const currentTokenId = current?.combatantId ? combat.combatants.get(current.combatantId)?.token?.id : null;
@@ -114,7 +115,7 @@ async function _placeZoneInner(casterToken, options = {})
         if (entry?.graphicsState)
             _opts.tmacGraphics = { ...foundry.utils.deepClone(entry.graphicsState), ..._opts.tmacGraphics };
         else
-            ui.notifications.warn(`placeZone: template preset "${_opts.preset}" not found.`);
+            ui.notifications.warn(localizeFormat('LA.notify.placeZonePresetMissing', { preset: _opts.preset }));
     }
 
     // Place zones in templatemacro's Advanced Mode (custom render) unless explicitly opted out.
@@ -232,10 +233,10 @@ async function _placeZoneInner(casterToken, options = {})
                 readout.text(`Elevation: ${autoElev ? 'auto' : casterElev}`);
         };
 
-        const tmDrag = game.modules.get('templatemacro')?.api;
+        const templateMacroApi = game.modules.get('templatemacro')?.api;
         const doCleanup = () =>
         {
-            tmDrag?.setPreviewElevationBase?.(null);
+            templateMacroApi?.setPreviewElevationBase?.(null);
             rangePulse.clear('interactive:placeZone');
             restoreLayerClick();
             _removeInfoCard(cardEl);
@@ -282,8 +283,7 @@ async function _placeZoneInner(casterToken, options = {})
         });
         refreshElevReadout();
 
-        // Lancer binds template-placement cancel to right-click (oncontextmenu) and has no Escape
-        // handler. Swallow right-click; only Escape cancels the current placement.
+        // Lancer cancels template placement on right-click and has no Escape handler, so swallow right-click and let only Escape cancel.
         const withEscOnlyCancel = (placePromise) =>
         {
             const view = /** @type {any} */ (canvas.app?.view);
@@ -338,7 +338,7 @@ async function _placeZoneInner(casterToken, options = {})
         // One interactive placement; returns a { x, y, template } result, or null if cancelled.
         const placeOne = async () =>
         {
-            tmDrag?.setPreviewElevationBase?.((doc) => zoneElevation(doc.x, doc.y));
+            templateMacroApi?.setPreviewElevationBase?.((doc) => zoneElevation(doc.x, doc.y));
             const onMove = (e) =>
             {
                 const { x, y } = pointerToWorld(e);
@@ -369,7 +369,7 @@ async function _placeZoneInner(casterToken, options = {})
             }
             finally
             {
-                tmDrag?.setPreviewElevationBase?.(null);
+                templateMacroApi?.setPreviewElevationBase?.(null);
                 canvas.stage.off('pointermove', onMove);
             }
         };
@@ -415,7 +415,7 @@ async function _placeZoneInner(casterToken, options = {})
 
                 const result = await placeOne();
 
-                if (result?.template && !tmDrag?.setPreviewElevationBase)
+                if (result?.template && !templateMacroApi?.setPreviewElevationBase)
                 {
                     try
                     {

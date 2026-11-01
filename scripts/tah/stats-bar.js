@@ -3,23 +3,20 @@
 import { playUiSound } from './sound.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { combatantFor } from './action-tape.js';
+import { corePowerState, corePowerDisplay, isDangerZoneHeat, shortOverchargeTerm } from '../utils/lancer-token.js';
+import { REPAIR_COLOR_CSS, haseValueColor, overchargeColor, mixColor, cssHex, hpColorCss, heatColorCss, dangerHeatColorCss, pilotStressColorCss } from '../tools/color-utils.js';
+import { ensureHaseChipStyle, statPipsHtml } from '../tools/hase-chip.js';
+import { reactionCounts } from '../combat/action-extras.js';
 
 /** Whether the secondary stats panel is expanded. Persists across in-place updates. */
 let _statsExpanded = false;
+let _statsOpenTimer = null;
 
 /** Collapse the stats detail panel (call when the HUD closes). */
 export function resetStatsExpanded()
 {
+    clearTimeout(_statsOpenTimer);
     _statsExpanded = false;
-}
-
-/** Linear interpolation between two RGB colours. t=0→colour1, t=1→colour2. */
-function lerpColor(r1, g1, b1, r2, g2, b2, t)
-{
-    const r = Math.round(r1 + (r2 - r1) * t);
-    const g = Math.round(g1 + (g2 - g1) * t);
-    const b = Math.round(b1 + (b2 - b1) * t);
-    return `rgb(${r},${g},${b})`;
 }
 
 /**
@@ -31,6 +28,7 @@ function lerpColor(r1, g1, b1, r2, g2, b2, t)
  */
 export function buildStatsHtml(actor, token = null)
 {
+    ensureHaseChipStyle();
     const sys = actor.system;
     const strVal    = sys.structure?.value ?? 0;
     const strMax    = sys.structure?.max  ?? 0;
@@ -46,55 +44,51 @@ export function buildStatsHtml(actor, token = null)
     const bondXpVal = sys.bond_state?.xp?.value ?? 0;
     const bondXpMax = sys.bond_state?.xp?.max ?? 0;
     const hasBondXp = actor.type === 'pilot' && bondXpMax > 0 && !!actor.items?.find?.((/** @type {any} */ ownedItem) => ownedItem.type === 'bond');
-    const pilotStressRatio = pilotStressMax > 0 ? pilotStressVal / pilotStressMax : 0;
-    // grey at 0 -> #d9b800 at max
-    const pilotStressColor = lerpColor(136, 136, 136, 217, 184, 0, pilotStressRatio);
+    const pilotStressColor = pilotStressColorCss(pilotStressVal, pilotStressMax);
     const hp          = sys.hp     ?? { value: 0, max: 0 };
     const heat        = sys.heat   ?? { value: 0, max: 0 };
     const overshield  = sys.overshield?.value ?? 0;
     const hasRepairs  = sys.repairs != null;
     const repairs     = sys.repairs?.value ?? 0;
+    const repairsMax  = sys.repairs?.max ?? 0;
     const burn        = sys.burn ?? 0;
     const infection   = sys.infection ?? 0;
     const oc          = sys.overcharge ?? 0;
-    const reaction    = sys.action_tracker?.reaction ?? false;
+    const reactions   = reactionCounts(actor);
 
-    const hpRatio    = hp.max > 0 ? hp.value / hp.max : 1;
-    const heatRatio  = heat.max > 0 ? heat.value / heat.max : 0;
-    // HP: red → yellow → green (two-stop, avoids brown midpoint). Over max (OS boost) → cyan/teal.
-    const hpColor = hpRatio > 1
-        ? '#5ec0c5'
-        : hpRatio < 0.5
-            ? lerpColor(244, 67, 54, 255, 215, 0,  hpRatio * 2)
-            : lerpColor(255, 215, 0, 76, 175, 80, (hpRatio - 0.5) * 2);
-    // Heat: grey → yellow → orange → red (3-segment)
-    let heatColor;
-    if (heatRatio < 1 / 3)
-        heatColor = lerpColor(136, 136, 136, 255, 215, 0,  heatRatio * 3);
-    else if (heatRatio < 2 / 3)
-        heatColor = lerpColor(255, 215, 0, 255, 140, 0, (heatRatio - 1 / 3) * 3);
-    else
-        heatColor = lerpColor(255, 140, 0, 244, 67, 54, (heatRatio - 2 / 3) * 3);
-
-    const strPips    = Array.from({ length: strMax },    (_, i) => `<i class="cci cci-structure" style="font-size:1.1em;color:${i >= strMax    - strVal    ? '#e8d060' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
-    const stressPips = Array.from({ length: stressMax }, (_, i) => `<i class="cci cci-reactor" style="font-size:1.1em;color:${i >= stressMax - stressVal ? '#e07830' : '#3a3a3a'};vertical-align:middle;transform:translateY(2px);display:inline-block;"></i>`).join('');
+    const hpColor = hpColorCss(hp.value, hp.max);
+    const heatColor = heatColorCss(heat.value, heat.max);
 
     const hasOvercharge = !!sys.overcharge_sequence;
     const ocSeq    = hasOvercharge ? sys.overcharge_sequence.split(',').map(/** @type {(s:string)=>string} */ s => s.trim()) : [];
-    const ocLabel  = hasOvercharge ? (ocSeq[Math.min(oc, ocSeq.length - 1)] ?? '—') : null;
+    const ocLabel  = hasOvercharge ? shortOverchargeTerm(ocSeq[Math.min(oc, ocSeq.length - 1)] ?? '') : null;
     const ocMax    = ocSeq.length - 1;
-    const ocColor  = !hasOvercharge ? '#555' : ocMax > 0 ? lerpColor(204, 170, 50, 244, 67, 54, Math.min(oc / ocMax, 1)) : '#eb4034';
-    const SEP = `<span style="color:#444;">│</span>`;
+    const ocColor  = !hasOvercharge ? '#555' : ocMax > 0 ? cssHex(overchargeColor(oc, ocMax)) : '#eb4034';
+    const SEP = `<span class="la-stats-sep">│</span>`;
     const EMPTY = '<span></span>';
-    const cellWrap = (/** @type {string} */ inner) => `<span style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;">${inner}</span>`;
-    const repairImg   = `<img src="systems/lancer/assets/icons/white/repair.svg" title="Repairs" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${repairs > 0 ? 1 : 0.3};">`;
-    const reactionNum = `<span title="Reaction" style="color:${reaction ? '#a855f7' : '#aaa'};font-weight:bold;">${reaction ? '1' : '0'}</span>`;
-    const reactionImg = `<img src="systems/lancer/assets/icons/white/reaction.svg" title="Reaction" style="width:1.47em;height:1.47em;vertical-align:middle;background:none;border:none;opacity:${reaction ? 1 : 0.3};">`;
-    const overshieldHtml = overshield > 0 ? `${SEP}<span title="Overshield" style="color:#60a5fa;">${overshield}<i class="mdi mdi-hexagon-multiple-outline" style="font-size:1.05em;vertical-align:-1px;margin-left:1px;"></i></span>` : '';
+    const glyph = (/** @type {string} */ cls) => `<i class="${cls}"></i>`;
+    const cell = (/** @type {string} */ title, /** @type {string} */ color, /** @type {string} */ glyphHtml, /** @type {string|number} */ value, { extra = '', ghost = '' } = {}) =>
+    {
+        const val = `<span class="la-stats-val">${value}</span>`;
+        const slot = ghost ? `<span class="la-stats-slot" data-ghost="${ghost}">${val}</span>` : val;
+        return `<span class="la-stats-cell${extra ? ` ${extra}` : ''}" title="${title}" style="color:${color};"><span class="la-stats-glyph">${glyphHtml}</span>${slot}</span>`;
+    };
+    const group = (/** @type {string} */ inner) => `<span class="la-stats-group">${inner}</span>`;
+    const overshieldHtml = overshield > 0 ? `${SEP}${cell('Overshield', '#60a5fa', glyph('mdi mdi-hexagon-multiple-outline'), overshield)}` : '';
+    const heatCell = () =>
+    {
+        const text = `${heat.value}/${heat.max}`;
+        const ghost = `${heat.max}/${heat.max}`;
+        if (!isDangerZoneHeat(heat.value, heat.max))
+            return cell('Heat', heatColor, glyph('cci cci-heat'), text, { extra: 'la-stats-heat', ghost });
+        if (heat.value >= heat.max)
+            return cell('Heat', '#ff5a4e', glyph('cci cci-status-danger-zone'), text, { extra: 'la-stats-heat la-stats-critical', ghost });
+        return cell('Heat', dangerHeatColorCss(heat.value, heat.max), glyph('cci cci-status-danger-zone'), text, { extra: 'la-stats-heat la-stats-heat--danger', ghost });
+    };
 
     // Movement display
     const inCombat = !!combatantFor(token);
-    const movIcon = `<i class="mdi mdi-arrow-right-bold-hexagon-outline" title="Movement" style="font-size:1.12em;color:#fff;line-height:0;transform:translateY(2px);display:inline-block;"></i>`;
+    const movGlyph = glyph('mdi mdi-arrow-right-bold-hexagon-outline');
     let movCell;
     if (inCombat && token)
     {
@@ -106,13 +100,13 @@ export function buildStatsHtml(actor, token = null)
         if (cap <= 0)
             movColor = '#aaa';
         else if (regularCost <= cap)
-            movColor = lerpColor(76, 175, 80, 255, 235, 59, regularCost / cap);   // green→yellow
+            movColor = cssHex(mixColor(0x4caf50, 0xffeb3b, regularCost / cap));   // green→yellow
         else
-            movColor = lerpColor(255, 235, 59, 244, 67, 54, Math.min(1, (regularCost - cap) / cap));   // yellow→red
-        movCell = cellWrap(`${movIcon}<span title="Movement used / cap" style="color:${movColor};">${regularCost}/${cap}</span>`);
+            movColor = cssHex(mixColor(0xffeb3b, 0xf44336, (regularCost - cap) / cap));   // yellow→red
+        movCell = cell('Movement used / cap', movColor, movGlyph, `${regularCost}/${cap}`, { extra: 'la-stats-move', ghost: `${cap}/${cap}` });
     }
     else
-        movCell = cellWrap(`${movIcon}<span title="Speed" style="color:#aaa;">${sys.speed ?? 0}</span>`);
+        movCell = cell('Speed', '#aaa', movGlyph, sys.speed ?? 0, { extra: 'la-stats-move' });
 
     // Secondary stats row
     const armor       = sys.armor ?? 0;
@@ -121,20 +115,19 @@ export function buildStatsHtml(actor, token = null)
     const techAttack  = sys.tech_attack ?? 0;
     const save        = sys.save ?? 0;
     const sensorRange = sys.sensor_range ?? 0;
-    const coreEnergy  = sys.core_energy ?? 0;
-    const coreActive  = sys.core_active ?? false;
-    const hasCoreSystem = sys.core_energy != null;
+    const core        = corePowerState(actor);
+    const coreShown   = corePowerDisplay(core);
     const S_STAT = 'font-size:0.95em;';
     const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
     const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
     const statCell = (/** @type {string} */ iconSrc, /** @type {string} */ title, /** @type {string} */ valueHtml) =>
         `<span style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;">${statIcon(iconSrc, title)}${valueHtml}</span>`;
-    const coreCell = hasCoreSystem
-        ? `<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreEnergy > 0 ? (coreActive ? '#a855f7' : '#3a9e6e') : '#c33'};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreEnergy > 0 ? (coreActive ? 'ON' : '✓') : '✗'}</span>`
+    const coreCell = core.hasCore
+        ? `<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreShown.color};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreShown.label}</span>`
         : '';
 
-    const haseCell = (/** @type {string} */ letter, /** @type {string} */ title, /** @type {number|null|undefined} */ value) =>
-        `<span title="${title}" style="white-space:nowrap;"><span style="color:#fff;font-weight:bold;">${letter}</span> <span style="color:#aaa;">${(value ?? 0) >= 0 ? '+' : ''}${value ?? 0}</span></span>`;
+    const haseCell = (/** @type {string} */ letter, /** @type {string} */ title, /** @type {number|null|undefined} */ value, chipClass = '') =>
+        `<span title="${title}" style="white-space:nowrap;display:inline-flex;align-items:center;gap:4px;"><i class="la-hase-chip${chipClass}">${letter}</i><span style="color:${haseValueColor(value ?? 0)};">${(value ?? 0) >= 0 ? '+' : ''}${value ?? 0}</span></span>`;
     const hasHase = [sys.hull, sys.agi, sys.sys, sys.eng].some(value => value != null);
     const haseHtml = hasHase
         ? `<div style="width:1px;background:#444;align-self:stretch;margin:0 6px;flex-shrink:0;"></div>` +
@@ -152,53 +145,53 @@ export function buildStatsHtml(actor, token = null)
     const bottomRow = [];
     if (hasStructure || hasStress)
     {
-        topRow.push(hasStructure ? cellWrap(strPips) : EMPTY, hasStructure ? SEP : EMPTY);
-        bottomRow.push(hasStress ? cellWrap(stressPips) : EMPTY, hasStress ? SEP : EMPTY);
+        topRow.push(hasStructure ? statPipsHtml('cci-structure', strVal, strMax, '#e8d060') : EMPTY, hasStructure ? SEP : EMPTY);
+        bottomRow.push(hasStress ? statPipsHtml('cci-reactor', stressVal, stressMax, '#e07830') : EMPTY, hasStress ? SEP : EMPTY);
     }
-    topRow.push(cellWrap(`<span title="HP" style="color:${hpColor};">${hp.value}/${hp.max} ♥</span>${overshieldHtml}`));
+    const hpCritical = hp.max > 0 && hp.value * 10 <= hp.max;
+    topRow.push(group(`${cell('HP', hpColor, glyph('mdi mdi-heart'), `${hp.value}/${hp.max}`, { extra: hpCritical ? 'la-stats-critical' : '', ghost: `${hp.max}/${hp.max}` })}${overshieldHtml}`));
     bottomRow.push(hasHeat
-        ? cellWrap(`<span title="Heat" style="color:${heatColor};">${heat.value}/${heat.max}🌡</span>`)
-        : (hasPilotStress
-            ? cellWrap(`<span title="Stress" style="color:${pilotStressColor};">${pilotStressVal}/${pilotStressMax}<i class="mdi mdi-brain" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>`)
-            : EMPTY));
+        ? heatCell()
+        : (hasPilotStress ? cell('Stress', pilotStressColor, glyph('mdi mdi-brain'), `${pilotStressVal}/${pilotStressMax}`) : EMPTY));
     const topExtras = [];
     if (hasRepairs)
-        topExtras.push(cellWrap(`${repairImg}<span style="color:${repairs > 0 ? '#66cc66' : '#aaa'};">${repairs}</span>`));
+        topExtras.push(cell('Repairs', repairs > 0 ? REPAIR_COLOR_CSS : '#aaa', glyph('cci cci-repair'), repairsMax > 0 ? `${repairs}/${repairsMax}` : repairs, repairsMax > 0 ? { ghost: `${repairsMax}/${repairsMax}` } : {}));
     const bottomExtras = [];
     if (hasBondXp)
-        bottomExtras.push(cellWrap(`<span title="Bond XP" style="color:${bondXpVal > 0 ? '#00b8d4' : '#888'};">${bondXpVal}/${bondXpMax}<i class="mdi mdi-head-cog-outline" style="font-size:1.1em;vertical-align:middle;margin-left:1px;"></i></span>`));
-    if (burn > 0)
-        bottomExtras.push(cellWrap(`<span title="Burn" style="color:#d74242;"><i class="cci cci-burn" style="font-size:1.1em;vertical-align:middle;"></i>${burn}</span>`));
-    if (infection > 0)
-        bottomExtras.push(cellWrap(`<span title="Infection" style="color:#1a8a3a;">☣${infection}</span>`));
+        bottomExtras.push(cell('Bond XP', bondXpVal > 0 ? '#00b8d4' : '#888', glyph('mdi mdi-head-cog-outline'), `${bondXpVal}/${bondXpMax}`));
     if (hasOvercharge)
-        bottomExtras.push(cellWrap(`<span title="Overcharge" style="color:${ocColor};"><i class="cci cci-overcharge" style="font-size:1.1em;vertical-align:middle;"></i>${ocLabel}</span>`));
+        bottomExtras.push(cell('Overcharge', ocColor, glyph('cci cci-overcharge'), ocLabel));
     while (topExtras.length < bottomExtras.length)
         topExtras.push(null);
     while (bottomExtras.length < topExtras.length)
         bottomExtras.push(null);
-    topExtras.forEach((cell, index) =>
+    topExtras.forEach((topCell, index) =>
     {
-        topRow.push(cell ? SEP : EMPTY, cell ?? EMPTY);
+        topRow.push(topCell ? SEP : EMPTY, topCell ?? EMPTY);
         bottomRow.push(bottomExtras[index] ? SEP : EMPTY, bottomExtras[index] ?? EMPTY);
     });
     topRow.push(SEP, movCell);
-    bottomRow.push(SEP, cellWrap(`${reactionImg}${reactionNum}`));
+    bottomRow.push(SEP, cell('Reaction', reactions.left ? '#a855f7' : '#aaa', glyph('cci cci-reaction'), reactions.text, { extra: 'la-stats-reaction', ghost: reactions.total > 1 ? `${reactions.total}/${reactions.total}` : '' }));
+    if (burn > 0 || infection > 0)
+    {
+        topRow.push(burn > 0 ? SEP : EMPTY, burn > 0 ? cell('Burn', '#d74242', glyph('cci cci-burn'), burn) : EMPTY);
+        bottomRow.push(infection > 0 ? SEP : EMPTY, infection > 0 ? cell('Infection', '#1a8a3a', glyph('mdi mdi-biohazard'), infection) : EMPTY);
+    }
 
-    return `<div id="la-hud-stats" style="background:#111;border-bottom:2px solid var(--primary-color);padding:2px 0 2px 8px;font-size:0.97em;color:#888;width:max-content;display:flex;align-items:stretch;position:relative;z-index:2;">` +
-        `<div style="display:grid;grid-template-columns:repeat(${topRow.length},auto);column-gap:3px;row-gap:2px;align-items:center;justify-items:start;align-self:center;">` +
+    return `<div id="la-hud-stats">` +
+        `<div class="la-stats-grid" style="grid-template-columns:repeat(${topRow.length},auto);">` +
         `${topRow.join('')}${bottomRow.join('')}` +
         `</div>` +
-        `<div class="la-stats-toggle" title="Toggle Stats" style="cursor:pointer;user-select:none;width:10px;background:var(--primary-color);display:flex;align-items:center;justify-content:center;margin-left:6px;flex-shrink:0;">` +
-        `<span style="font-size:0.55em;color:#111;font-weight:bold;line-height:1;">${arrow}</span>` +
+        `<div class="la-stats-toggle" title="Toggle Stats">` +
+        `<span>${arrow}</span>` +
         `</div>` +
         `<div class="la-stats-detail" style="${expanded};padding:0 8px 0 6px;justify-content:center;align-items:stretch;">` +
-        `<div style="display:grid;grid-template-columns:repeat(${hasCoreSystem ? 4 : 3},auto);column-gap:10px;row-gap:2px;align-items:center;justify-items:start;align-self:center;${S_STAT}">` +
+        `<div style="display:grid;grid-template-columns:repeat(${core.hasCore ? 4 : 3},auto);column-gap:10px;row-gap:2px;align-items:center;justify-items:start;align-self:center;${S_STAT}">` +
         `${statCell('systems/lancer/assets/icons/white/shield_outline.svg', 'Armor', `<span title="Armor" style="color:#aaa;">${armor}</span>`)}` +
         `${statCell('systems/lancer/assets/icons/white/evasion.svg', 'Evasion', `<span title="Evasion" style="color:#aaa;">${evasion}</span>`)}` +
         `${statCell('systems/lancer/assets/icons/white/edef.svg', 'E-Defense', `<span title="E-Defense" style="color:#aaa;">${edef}</span>`)}` +
-        `${hasCoreSystem ? (sys.grit != null
-            ? `<span title="Grit" style="white-space:nowrap;"><span style="color:#ffaa55;font-weight:bold;">G</span> <span style="color:#aaa;">+${sys.grit}</span></span>`
+        `${core.hasCore ? (sys.grit != null
+            ? haseCell('G', 'Grit', sys.grit, ' la-grit')
             : '<span></span>') : ''}` +
         `${statCell('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack', `<span title="Tech Attack" style="color:#aaa;">${techAttack >= 0 ? '+' : ''}${techAttack}</span>`)}` +
         `${statCell('systems/lancer/assets/icons/white/save.svg', 'Save', `<span title="Save" style="color:#aaa;">${save}</span>`)}` +
@@ -218,6 +211,7 @@ export function buildStatsHtml(actor, token = null)
  */
 export function buildStatsEl(actor, token = null)
 {
+    clearTimeout(_statsOpenTimer);
     const el = $(buildStatsHtml(actor, token));
     const detail = el.find('.la-stats-detail');
     const toggle = el.find('.la-stats-toggle');
@@ -232,6 +226,7 @@ export function buildStatsEl(actor, token = null)
         if (_statsExpanded)
             return;
         _statsExpanded = true;
+        playUiSound('details');
         detail.stop(true).css({ display: 'flex', width: 0, opacity: 0 });
         const targetWidth = detail.prop('scrollWidth');
         detail.animate({ width: targetWidth, opacity: 1 }, slideMs(targetWidth), function ()
@@ -253,12 +248,18 @@ export function buildStatsEl(actor, token = null)
     };
     el.on('mouseenter', () =>
     {
-        playUiSound('details'); openDetail();
+        clearTimeout(_statsOpenTimer);
+        _statsOpenTimer = setTimeout(openDetail, 250);
     });
-    el.on('mouseleave', closeDetail);
+    el.on('mouseleave', () =>
+    {
+        clearTimeout(_statsOpenTimer);
+        closeDetail();
+    });
     toggle.on('click', (ev) =>
     {
         ev.stopPropagation();
+        clearTimeout(_statsOpenTimer);
         if (_statsExpanded)
             closeDetail();
         else

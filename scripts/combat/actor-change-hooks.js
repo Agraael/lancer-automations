@@ -4,6 +4,7 @@ import { localize } from "../tools/string-utils.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/index.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { updateStructure } from "../tools/wreck.js";
+import { isDangerZoneHeat } from "../utils/lancer-token.js";
 
 const previousHeatValues = new Map();
 const previousHPValues = new Map();
@@ -83,10 +84,10 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 const identity = modifyHpChange._reactorIdentity;
                 if (identity)
                     _cancelledBy.push(identity);
-                const def = modifyHpChange._defaultContext ?? {};
-                item = item ?? def.item ?? null;
-                originToken = originToken ?? def.originToken ?? null;
-                relatedToken = relatedToken ?? def.relatedToken ?? null;
+                const defaults = modifyHpChange._defaultContext ?? {};
+                item = item ?? defaults.item ?? null;
+                originToken = originToken ?? defaults.originToken ?? null;
+                relatedToken = relatedToken ?? defaults.relatedToken ?? null;
 
                 const executeModify = async () =>
                 {
@@ -198,10 +199,10 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 const identity = modifyHeatChange._reactorIdentity;
                 if (identity)
                     _cancelledBy.push(identity);
-                const def = modifyHeatChange._defaultContext ?? {};
-                item = item ?? def.item ?? null;
-                originToken = originToken ?? def.originToken ?? null;
-                relatedToken = relatedToken ?? def.relatedToken ?? null;
+                const defaults = modifyHeatChange._defaultContext ?? {};
+                item = item ?? defaults.item ?? null;
+                originToken = originToken ?? defaults.originToken ?? null;
+                relatedToken = relatedToken ?? defaults.relatedToken ?? null;
 
                 const executeModify = async () =>
                 {
@@ -303,7 +304,7 @@ Hooks.on('updateActor', async (actor, change, options, userId) =>
         if (heatChange > 0)
         {
             const heatMax = actor.system.heat.max;
-            const inDangerZone = currentHeat >= Math.floor(heatMax / 2);
+            const inDangerZone = isDangerZoneHeat(currentHeat, heatMax);
             await handleTrigger('onHeatGain', { triggeringToken: token, heatChange, currentHeat, inDangerZone });
         }
         else if (heatChange < 0)

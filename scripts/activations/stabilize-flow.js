@@ -1,8 +1,11 @@
 import { laDetailPopup } from "../interactive/detail-renderers.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 import { chooseToken } from "../interactive/index.js";
-import { consumeAction } from "../tools/misc-tools.js";
+import { consumeAction, activationSpendKind } from "../tools/misc-tools.js";
+import { patchTapeEntry, wasUndone } from "../tah/action-tape.js";
+import { flowChanges, removedRecord } from "../tah/tape-changes.js";
 import { _flowSourceToken, _flowResolveActivationLabel } from "../fx/actionFX.js";
 
 async function laPickConditionFromActor(targetActor, prompt, anchorHtml)
@@ -46,7 +49,7 @@ async function laPickConditionFromActor(targetActor, prompt, anchorHtml)
         {
             $(this).css({ background: '', borderColor: 'transparent' });
         });
-        $('body').append(popup);
+        popup.appendTo(document.body);
         const anchorDialog = anchorHtml.closest('.app, .application, .window-app').first();
         const anchorDialogOffset = anchorDialog.offset() ?? { left: 100, top: 100 };
         const anchorDialogWidthPx = anchorDialog.outerWidth() ?? 480;
@@ -100,11 +103,7 @@ export async function laStabilizePrompt(state)
                             resolve(true);
                         }
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
-                        label: localize('LA.common.cancel'),
-                        callback: () => resolve(false)
-                    }
+                    cancel: cancelButton(() => resolve(false))
                 },
                 default: 'submit',
                 close: () => resolve(false)
@@ -179,11 +178,7 @@ export async function laStabilizePrompt(state)
                         resolve(true);
                     }
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize('LA.common.cancel'),
-                    callback: () => resolve(false)
-                }
+                cancel: cancelButton(() => resolve(false))
             },
             default: 'submit',
             close: () => resolve(false),
@@ -258,6 +253,12 @@ export async function laStabilizeExtras(state)
         try
         {
             const target = await fromUuid(state.data.la_clearTargetUuid);
+            const cleared = target?.effects?.get?.(state.data.la_clearEffectId);
+            if (cleared)
+            {
+                state.la_extraData = state.la_extraData ?? {};
+                state.la_extraData.removedEffects = [...(state.la_extraData.removedEffects ?? []), removedRecord(cleared)];
+            }
             if (target?.deleteEmbeddedDocuments)
                 await target.deleteEmbeddedDocuments('ActiveEffect', [state.data.la_clearEffectId]);
         }
@@ -282,25 +283,34 @@ export async function laStabilizeExtras(state)
     return true;
 }
 
+function _flowSpendKind(flow)
+{
+    if (flow?.constructor?.name === 'StabilizeFlow')
+        return 'full';
+    const kind = activationSpendKind(_flowResolveActivationLabel(flow));
+    return kind === 'quick' || kind === 'full' ? kind : null;
+}
+
 async function _consumeFlowAction(flow, success)
 {
-    if (!success)
-        return;
-    if (!getModuleSetting('consumeAction'))
-        return;
     const token = _flowSourceToken(flow);
     if (!token)
         return;
-    if (flow?.constructor?.name === 'StabilizeFlow')
-    {
-        await consumeAction(token, 'full');
+    const tapeId = flow?.state?.la_extraData?.tapeId;
+    if (wasUndone(tapeId))
         return;
-    }
-    const label = _flowResolveActivationLabel(flow);
-    if (label === 'Quick' || label === 'Quick Tech' || label === 'Invade')
-        await consumeAction(token, 'quick');
-    else if (label === 'Full' || label === 'Full Tech')
-        await consumeAction(token, 'full');
+    const changes = flowChanges(flow, token.actor);
+    const kind = success && !flow?.state?.la_extraData?.freeUse && getModuleSetting('consumeAction') ? _flowSpendKind(flow) : null;
+    const tracker = kind ? await consumeAction(token, kind) : null;
+    await patchTapeEntry(token, tapeId, { changes, ...(tracker ? { tracker } : {}) });
+}
+
+async function _settleFlowChip(flow)
+{
+    const token = _flowSourceToken(flow);
+    const tapeId = flow?.state?.la_extraData?.tapeId;
+    if (token && !wasUndone(tapeId))
+        await patchTapeEntry(token, tapeId, { changes: flowChanges(flow, token.actor) });
 }
 Hooks.on('lancer.postFlow.ActivationFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.SystemFlow', _consumeFlowAction);
@@ -309,3 +319,5 @@ Hooks.on('lancer.postFlow.SimpleActivationFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.CoreActiveFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.TalentFlow', _consumeFlowAction);
 Hooks.on('lancer.postFlow.StabilizeFlow', _consumeFlowAction);
+for (const flowName of ['OverchargeFlow', 'BondPowerFlow', 'SimpleHTMLFlow', 'SendUnknownToChat', 'WeaponAttackFlow', 'BasicAttackFlow'])
+    Hooks.on(`lancer.postFlow.${flowName}`, _settleFlowChip);

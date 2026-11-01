@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS } from '../filter-core.js';
 
 // FilterSeamBeat: the open-seams split driven by a falling beat, so the chassis is hammered apart on a clock.
 // No alpha early-out: the halo lives outside the sprite.
@@ -21,14 +21,7 @@ uniform float rimWidth;
 uniform float rimBase;
 uniform float rimKick;
 uniform float glow;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 vec4 tapC(vec2 uv)
 {
@@ -98,42 +91,15 @@ void main()
 }
 `;
 
-export class FilterSeamBeat extends PIXI.Filter
+export class FilterSeamBeat extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, seamBeatFragment);
-
-        this.uniforms.seamColor = new Float32Array([1.0, 0.18, 0.24]);
-        this.uniforms.seamCore = new Float32Array([1.0, 0.69, 0.63]);
-        this.uniforms.rimColor = new Float32Array([1.0, 0.23, 0.16]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterSeamBeat.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(seamBeatFragment, params, {
+            seamColor: new Float32Array([1.0, 0.18, 0.24]),
+            seamCore: new Float32Array([1.0, 0.69, 0.63]),
+            rimColor: new Float32Array([1.0, 0.23, 0.16]),
+        });
     }
 
     get blocks()
@@ -260,15 +226,6 @@ export class FilterSeamBeat extends PIXI.Filter
     set glow(value)
     {
         this.uniforms.glow = value;
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

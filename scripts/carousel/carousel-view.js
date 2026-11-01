@@ -83,7 +83,7 @@ function resolveSides(combatants)
 
 function barValues(model)
 {
-    const values = { overshield: model.overshield };
+    const values = { overshield: model.overshield, armor: model.armor };
     for (const row of model.rows)
     {
         if (row.pips)
@@ -99,12 +99,15 @@ function barValues(model)
     return values;
 }
 
-function statusList(actor)
+export function cardStatusEntries(actor)
 {
     const defeatedId = CONFIG.specialStatusEffects.DEFEATED;
-    return statusIconEntries(actor)
-        .filter(entry => !entry.effect.statuses?.has(defeatedId))
-        .map(entry => ({ img: entry.effect.img, badge: statusBadge(entry) }));
+    return statusIconEntries(actor).filter(entry => !entry.effect.statuses?.has(defeatedId));
+}
+
+function statusList(actor)
+{
+    return cardStatusEntries(actor).map(entry => ({ img: entry.effect.img, badge: statusBadge(entry) }));
 }
 
 export const eventRound = combat => Math.max(1, combat.round ?? 0);

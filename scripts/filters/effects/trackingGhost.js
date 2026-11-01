@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter } from '../filter-core.js';
+import { LaCustomFilter } from '../filter-core.js';
 
 // FilterTrackingGhost: stale duplicates lagging behind the body, snapping inward until they converge.
 // No alpha early-out: the ghosts live exactly where the chassis is not, and are masked to stay there.
@@ -64,42 +64,15 @@ void main()
 }
 `;
 
-export class FilterTrackingGhost extends PIXI.Filter
+export class FilterTrackingGhost extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, trackingGhostFragment);
-
-        this.uniforms.colorHot = new Float32Array([1.0, 0.27, 0.13]);
-        this.uniforms.colorCold = new Float32Array([0.13, 0.85, 1.0]);
-        this.uniforms.lockDir = new Float32Array([0.0, 1.0]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterTrackingGhost.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(trackingGhostFragment, params, {
+            colorHot: new Float32Array([1.0, 0.27, 0.13]),
+            colorCold: new Float32Array([0.13, 0.85, 1.0]),
+            lockDir: new Float32Array([0.0, 1.0]),
+        });
     }
 
     get colorHot()
@@ -194,15 +167,6 @@ export class FilterTrackingGhost extends PIXI.Filter
     set chirpStrength(value)
     {
         this.uniforms.chirpStrength = value;
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

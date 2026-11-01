@@ -18,6 +18,7 @@ export const TAH_NAV_KEYBINDS = [
     { id: 'tahNavRight', name: 'TAH: Column Right', key: 'KeyD', modifiers: ['Shift'] },
     { id: 'tahNavActivate', name: 'TAH: Activate (left-click)', key: 'KeyE', modifiers: ['Shift'] },
     { id: 'tahNavContext', name: 'TAH: Context (right-click)', key: 'KeyQ', modifiers: ['Shift'] },
+    ...Array.from({ length: 9 }, (unused, index) => ({ id: `tahNavRow${index + 1}`, name: `TAH: Row ${index + 1}`, key: `Digit${index + 1}`, modifiers: ['Shift'] })),
 ];
 
 export function registerElevTiltKeybindings()
@@ -50,6 +51,11 @@ export function eventMatchesKeybind(event, actionId)
             return true;
     }
     return false;
+}
+
+export function isTypingTarget(target)
+{
+    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !!target?.isContentEditable;
 }
 
 // Key codes bound to a shortcut (read inside the tools' own keydown handlers).

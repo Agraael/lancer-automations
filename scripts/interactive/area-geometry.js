@@ -5,9 +5,10 @@
 
 import {
     isHexGrid, getHexCenter, pixelToOffset, getOccupiedOffsets, getInRangeOffsets, neighborKeys,
-    cubeRound,
+    cubeRound, cubeDistance,
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
+import { isTokenVisible } from "../utils/lancer-token.js";
 
 export const CONE_STEPS_PER_TURN = 12;
 export const CONE_STEP_DEG = 360 / CONE_STEPS_PER_TURN; // 30°
@@ -40,7 +41,6 @@ function tokenVerticalSize(token)
 const verticalOverlap = (aBot, aTop, bBot, bTop) => aBot < bTop && bBot < aTop;
 
 // Hex line drawing (Red Blob Games): cube lerp + cube_round → a clean 1-wide path.
-const cubeDistance = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.s - b.s)) / 2;
 function cubeLineDraw(a, b)
 {
     const N = Math.max(1, cubeDistance(a, b));
@@ -174,7 +174,7 @@ function makeCtxHelpers(ctx)
 {
     const {
         elevationAware = false, propagation = false,
-        includeHidden = false, includeSelf = false, casterToken = null,
+        includeHidden = false, visibleOnly = false, includeSelf = false, casterToken = null,
     } = ctx || {};
 
     const keepConnected = (affected, seedKeys) =>
@@ -237,6 +237,8 @@ function makeCtxHelpers(ctx)
                 continue;
             if (!includeHidden && token.document.hidden)
                 continue;
+            if (visibleOnly && !isTokenVisible(token))
+                continue;
             if (!includeSelf && casterToken && token.id === casterToken.id)
                 continue;
             if (!getOccupiedOffsets(token).some(occOff => affected.has(`${occOff.col},${occOff.row}`)))
@@ -260,6 +262,8 @@ function makeCtxHelpers(ctx)
             if (skipId && token.id === skipId)
                 continue;
             if (!includeHidden && token.document.hidden)
+                continue;
+            if (visibleOnly && !isTokenVisible(token))
                 continue;
             if (!includeSelf && casterToken && token.id === casterToken.id)
                 continue;
@@ -462,7 +466,7 @@ function line(centerPt, length, areaElev, rotation, size, ctxHelpers, tilt = 0)
 /**
  * Compute an AoE's affected cells + caught tokens. elevBot/elevTop are the vertical band it covers.
  * @param {{pattern:string, centerPt?:{x:number,y:number}, hostToken?:any, areaRange:number, size?:number, rotation?:number, areaElev?:number, tilt?:number}} opts
- * @param {{elevationAware?:boolean, propagation?:boolean, includeHidden?:boolean, includeSelf?:boolean, casterToken?:any}} [ctx]
+ * @param {{elevationAware?:boolean, propagation?:boolean, includeHidden?:boolean, visibleOnly?:boolean, includeSelf?:boolean, casterToken?:any}} [ctx]
  * @returns {{caught:any[], affected:Set<string>, hostElev?:number, elevBot:number, elevTop:number, elevByCell?:Map<string,number>}}
  */
 export function computeArea(opts, ctx = {})

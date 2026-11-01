@@ -1,11 +1,11 @@
 import { moveTokenTo } from "./move-api.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { getLAFlag } from "../tools/flag-utils.js";
+import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID, BOOST_DETAIL } from "../tools/constants.js";
 import { isForceFreeMovement } from "./keybindings.js";
 import { parseAction } from "./movement-actions.js";
 import { consumeAction, executeSimpleActivation } from "../tools/misc-tools.js";
-import { recordAction } from "../tah/action-tape.js";
+import { recordAction, currentTurnChips, settleMoveChips } from "../tah/action-tape.js";
 import * as actionFX from "../fx/actionFX.js";
 import { handleTrigger } from "../activations/reactions-engine.js";
 import { cancelRulerDrag, startChoiceCard, getTokenOwnerUserId, drawMovementTrace } from "../interactive/index.js";
@@ -14,14 +14,20 @@ import { findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { getBoostOfferMode } from "../setup/settings-register.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { getV3DataBonuses } from '../bonuses/genericBonuses.js';
+import { resolvePilot } from '../utils/lancer-token.js';
 // Bridges multi-segment moves where preUpdateToken fires per-segment.
 export const _moveHistoryCache = new Map();
+const _pendingMoveChips = new Map();
+/** @type {Record<string, string>} */
+const MOVE_CHIP_NAMES = { move: 'Move', free: 'Free Movement', forced: 'Forced Movement' };
 
-Hooks.on('updateToken', (document, change, _options, userId) =>
+Hooks.on('updateToken', (document, change, options, userId) =>
 {
-    if (userId === game.user.id)
+    const updateOptions = /** @type {any} */ (options);
+    if (userId === game.user.id && !updateOptions?.isUndo && !updateOptions?.laResetMoveCache)
         return;
-    const flags = change.flags?.['lancer-automations'];
+    const flags = getLAFlags(change);
     if (flags && ('moveHistory' in flags || '-=moveHistory' in flags))
         _moveHistoryCache.delete(document.id);
 });
@@ -196,16 +202,50 @@ export async function clearMoveTracking(tokenOrId)
 }
 
 // Tag a Boost so reverting the move it enabled drops the leg it granted.
-export function recordBoostCast(tokenOrId, speed)
+export function recordBoostCast(tokenOrId, speed, tapeId = null)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const pending = Number(data.pendingExtra) || 0;
-    const boostCasts = [...(data.boostCasts ?? []), { atMoveIndex: (data.moves ?? []).length, speed, extra: pending }];
+    const cast = { atMoveIndex: (data.moves ?? []).length, speed, extra: pending };
+    if (tapeId)
+        cast.tapeId = tapeId;
+    const boostCasts = [...(data.boostCasts ?? []), cast];
     _writeMoveHistory(doc, { ...data, boostCasts, pendingExtra: 0 });
     _cacheMovementCap(doc);
+}
+
+export function removeBoostCast(tokenOrId, tapeId)
+{
+    const doc = _getMoveHistoryDoc(tokenOrId);
+    if (!doc || !tapeId)
+        return null;
+    const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
+    const cast = (data.boostCasts ?? []).find(candidate => candidate.tapeId === tapeId);
+    if (!cast)
+        return null;
+    _writeMoveHistory(doc, {
+        ...data,
+        boostCasts: data.boostCasts.filter(candidate => candidate !== cast),
+        pendingExtra: (Number(data.pendingExtra) || 0) + (Number(cast.extra) || 0),
+    });
+    _cacheMovementCap(doc);
+    return cast;
+}
+
+export function boostBandUsed(tokenOrId, tapeId)
+{
+    const castIndex = (_getMoveHistoryData(tokenOrId).boostCasts ?? []).findIndex(cast => cast.tapeId === tapeId);
+    if (castIndex < 0)
+        return false;
+    const granted = getMovementBands(tokenOrId).filter(band => band.granted);
+    const band = granted[1 + castIndex];
+    if (!band)
+        return false;
+    const total = granted.at(-1)?.max ?? 0;
+    return getIntentionalMoveData(tokenOrId).cost > total - band.size + 1e-9;
 }
 
 /**
@@ -213,11 +253,12 @@ export function recordBoostCast(tokenOrId, speed)
  * @param {Token} token
  * @param {string} actionName
  * @param {boolean} isEnd
+ * @param {string|null} [tapeId]
  */
-export function noteActivation(token, actionName, isEnd)
+export function noteActivation(token, actionName, isEnd, tapeId = null)
 {
     if (!isEnd && actionName === 'Boost')
-        recordBoostCast(token, tokenSpeed(token));
+        recordBoostCast(token, tokenSpeed(token), tapeId);
 }
 
 /**
@@ -271,11 +312,13 @@ function _standingExtras(actor)
     const totals = { standard: 0, boost: 0 };
     if (!actor)
         return totals;
-    totals.boost = _nerveweaveBoost(actor);
+    const dataRows = getV3DataBonuses(actor, ['movement_extra']);
+    totals.boost = _nerveweaveBoost(actor, dataRows);
     const api = game.modules.get(MODULE_ID)?.api;
     const all = [
         ...(api?.getGlobalBonuses?.(actor) ?? []),
-        ...(api?.getConstantBonuses?.(actor) ?? [])
+        ...(api?.getConstantBonuses?.(actor) ?? []),
+        ...dataRows.map(row => row.bonus)
     ];
     for (const bonus of all)
     {
@@ -289,12 +332,13 @@ function _standingExtras(actor)
     return totals;
 }
 
-function _nerveweaveBoost(actor)
+function _nerveweaveBoost(actor, dataRows = [])
 {
     if (!actor?.is_mech?.())
         return 0;
-    const pilot = actor.system?.pilot?.value;
-    return pilot?.items?.some(item => item.system?.lid === 'cb_integrated_nerveweave') ? 2 : 0;
+    const pilot = resolvePilot(actor);
+    const nerveweave = pilot?.items?.find(item => item.system?.lid === 'cb_integrated_nerveweave');
+    return nerveweave && !dataRows.some(row => row.item?.id === nerveweave.id) ? 2 : 0;
 }
 
 const LIMITLESS_LIDS = new Set([
@@ -369,8 +413,6 @@ export function getMovementBands(tokenOrId)
     const speed = tokenSpeed(token);
     const data = _getMoveHistoryData(tokenOrId);
     const prone = _hasLiveStatus(actor, 'prone');
-    const startedStatuses = getLAFlag(token.combatant,'speedProvider.turn-status') ?? [];
-    const startedProne = startedStatuses.some(status => typeof status === 'string' && status.endsWith('prone'));
     const slowed = prone || _hasLiveStatus(actor, 'slow');
 
     const bands = [];
@@ -381,10 +423,8 @@ export function getMovementBands(tokenOrId)
         bands.push({ name, size: Math.max(0, size), max: acc, granted });
     };
 
-    // Standing up costs the standard move, so its base is 0 then; the band is still emitted (size 0, hidden by the colour map) so extras always have a home.
     const standing = _standingExtras(actor);
-    const standardBase = (startedProne && !prone) ? 0 : speed + standing.standard;
-    push('standard', standardBase + (Number(data.standardExtra) || 0), true);
+    push('standard', speed + standing.standard + (Number(data.standardExtra) || 0), true);
 
     const boostBase = speed + standing.boost;
     const casts = data.boostCasts ?? [];
@@ -404,27 +444,53 @@ function _cacheMovementCap(tokenDoc)
     _writeMovementCap(tokenDoc, getMovementCap(tokenDoc));
 }
 
-export function undoMoveData(tokenOrId, _distance)
+export function undoMoveData(tokenOrId, _distance, movementId = null)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const moves = data.moves || [];
-    const newLength = Math.max(0, moves.length - 1);
-    const boostCasts = [];
-    for (const cast of (data.boostCasts ?? []))
-    {
-        // Dropping the leg is the refund: the cap is summed from what is left.
-        if (moves.length > 0 && cast.atMoveIndex === newLength)
-            continue;
-        if (cast.atMoveIndex > newLength)
-            boostCasts.push({ ...cast, atMoveIndex: newLength });
-        else
-            boostCasts.push(cast);
-    }
-    _writeMoveHistory(doc, { ...data, moves: moves.slice(0, -1), boostCasts });
+    const removed = movementId
+        ? moves.flatMap((move, index) => (move.movementId === movementId ? [index] : []))
+        : (moves.length ? [moves.length - 1] : []);
+    if (!removed.length)
+        return;
+    let boostCasts = data.boostCasts ?? [];
+    for (const index of [...removed].reverse())
+        boostCasts = boostCasts.map(cast => (cast.atMoveIndex > index ? { ...cast, atMoveIndex: cast.atMoveIndex - 1 } : cast));
+    const remaining = moves.filter((move, index) => !removed.includes(index));
+    _writeMoveHistory(doc, { ...data, moves: remaining, boostCasts });
     _cacheMovementCap(doc);
+    const token = doc.object ?? canvas.tokens?.get(doc.id);
+    if (!token)
+        return Promise.resolve();
+    return settleMoveChips(token, remaining).catch(err => console.warn('lancer-automations | settleMoveChips failed', err));
+}
+
+function _sanctionedSpend(tokenOrId)
+{
+    return (_getMoveHistoryData(tokenOrId).moves ?? [])
+        .filter(move => move.isDrag && !move.isFreeMovement && !move.capBypass)
+        .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved ?? 0), 0);
+}
+
+export function getMovementUsage(tokenOrId)
+{
+    const data = _getMoveHistoryData(tokenOrId);
+    const lastCast = (data.boostCasts ?? []).at(-1);
+    return {
+        used: _intentionalTotals(data.moves).cost,
+        cap: getMovementCap(tokenOrId),
+        legStart: lastCast ? _intentionalTotals((data.moves ?? []).slice(0, lastCast.atMoveIndex)).cost : 0
+    };
+}
+
+export function getChipMoved(tokenOrId, chipId)
+{
+    return (_getMoveHistoryData(tokenOrId).moves ?? [])
+        .filter(move => move.chipId === chipId)
+        .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved ?? 0), 0);
 }
 
 export function getCumulativeMoveData(tokenOrId)
@@ -436,13 +502,17 @@ export function getCumulativeMoveData(tokenOrId)
     );
 }
 
-export function getIntentionalMoveData(tokenOrId)
+function _intentionalTotals(moves)
 {
-    const data = _getMoveHistoryData(tokenOrId);
-    return (data.moves || []).filter(move => move.isDrag && !move.isFreeMovement).reduce(
+    return (moves || []).filter(move => move.isDrag && !move.isFreeMovement).reduce(
         (acc, move) => ({ moved: acc.moved + move.distanceMoved, cost: acc.cost + (move.movementCost ?? move.distanceMoved) }),
         { moved: 0, cost: 0 }
     );
+}
+
+export function getIntentionalMoveData(tokenOrId)
+{
+    return _intentionalTotals(_getMoveHistoryData(tokenOrId).moves);
 }
 
 // Derived: the granted legs, never below sanctioned spend. Bypass walks (Ignore, cap system off) read as over-cap.
@@ -456,17 +526,14 @@ export function getMovementCap(tokenOrId)
         return getLAFlag(doc,'movementCap') ?? 0;
     const granted = getMovementBands(tokenOrId).filter(band => band.granted);
     const total = granted.length ? granted[granted.length - 1].max : 0;
-    const sanctioned = (_getMoveHistoryData(tokenOrId).moves ?? [])
-        .filter(move => move.isDrag && !move.isFreeMovement && !move.capBypass)
-        .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved ?? 0), 0);
-    return Math.max(total, sanctioned);
+    return Math.max(total, _sanctionedSpend(tokenOrId));
 }
 
 function _capSystemOff()
 {
     try
     {
-        return !getModuleSetting('enableMovementCapDetection') && getBoostOfferMode() === 'no';
+        return getBoostOfferMode() === 'off';
     }
     catch
     {
@@ -592,13 +659,12 @@ function _clearCapRuler(token)
 export function _handleMovementCapExceeded(token, ctx)
 {
     const { options, change, startPos, endPos, moveInfo, moveToMovementCost, moveIsFreeMovement, triggerData, intentPath, intentEndPos } = ctx;
-    const capDetect = getModuleSetting('enableMovementCapDetection');
     const boostMode = getBoostOfferMode();
-    const boostOffer = boostMode !== 'no';
+    const boostOffer = boostMode === 'yes' || boostMode === 'auto';
     const autoBoost = boostMode === 'auto';
     const isTokenInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === token.id);
     if (options.ignoreMovementCap
-        || (!capDetect && !boostOffer)
+        || boostMode === 'off'
         || !isTokenInCombat || moveIsFreeMovement || moveToMovementCost <= 0)
 
         return;
@@ -1045,7 +1111,7 @@ export async function handleTokenMove(document, change, options, userId)
 
     const startPos = { x: document.x, y: document.y, elevation: document.elevation };
     const endPos = { x: change.x ?? document.x, y: change.y ?? document.y, elevation: change.elevation ?? document.elevation };
-    const elevationMoved = change.elevation ?? document.elevation;
+    const newElevation = change.elevation ?? document.elevation;
 
     const v13Method = options.movement?.[document.id]?.method;
     const isForceMovement = _moveHasForcedAction(document, options);
@@ -1067,7 +1133,7 @@ export async function handleTokenMove(document, change, options, userId)
         actionFX.playTeleportSoundFX();
     }
 
-    const { distanceMoved, movementCost, isFreeMovement, costOverridden } = _computeMoveData(options, startPos, endPos, elevationMoved, document);
+    const { distanceMoved, movementCost, isFreeMovement, costOverridden } = _computeMoveData(options, startPos, endPos, newElevation, document);
 
     const moveInfo = {
         isInvoluntary: !isDrag,
@@ -1097,19 +1163,44 @@ export async function handleTokenMove(document, change, options, userId)
 
     // Use movementCost (not raw distance) so terrain penalty counts toward the boost threshold.
     const prevIntentional = existingMoves
-        .filter(m => m.isDrag && !m.isFreeMovement && !m.isForceMovement)
-        .reduce((acc, m) => acc + (m.movementCost ?? m.distanceMoved), 0);
+        .filter(move => move.isDrag && !move.isFreeMovement && !move.isForceMovement)
+        .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved), 0);
+
+    let chipId = null;
+    /** @type {'move'|'free'|'forced'|null} */
+    let chipKind = null;
+    let newChip = false;
+    let firstChip = false;
+    if (inCombat && (isDrag || isForceMovement))
+    {
+        chipKind = isForceMovement ? 'forced' : (isFreeMovement ? 'free' : 'move');
+        const turnChips = currentTurnChips(token);
+        const lastChip = turnChips.at(-1);
+        const pendingChips = _pendingMoveChips.get(tokenId) ?? [];
+        const latest = pendingChips.at(-1) ?? (lastChip?.move ? { id: lastChip.id, kind: lastChip.moveKind ?? 'move' } : null);
+        chipId = latest?.kind === chipKind ? latest.id : null;
+        if (!chipId)
+        {
+            newChip = true;
+            firstChip = chipKind === 'move'
+                && !turnChips.some(entry => entry.move && (entry.moveKind ?? 'move') === 'move')
+                && !pendingChips.some(pending => pending.kind === 'move');
+            chipId = foundry.utils.randomID();
+        }
+    }
 
     // id from the live movement op; updateToken stamps the fallback.
     const newData = {
         ...existingData,
         moves: [...existingMoves, {
             movementId: options._movement?.[tokenId]?.id ?? null,
+            chipId,
             distanceMoved,
             movementCost,
             isDrag,
             isFreeMovement,
             isForceMovement,
+            isTeleport,
             costOverridden: costOverridden === true,
             capBypass: options.ignoreMovementCap === true || _capSystemOff(),
             startPos
@@ -1122,10 +1213,14 @@ export async function handleTokenMove(document, change, options, userId)
         const isLastSegment = !options.rulerSegment || options.lastRulerSegment === true;
         if (tokenDoc.isOwner && isLastSegment)
             tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
-        if (isDrag && !isFreeMovement && !isTeleport && prevIntentional === 0)
+        if (newChip)
         {
-            consumeAction(token, 'move');
-            recordAction(token, { name: 'Move', activation: 'Move', icon: 'mdi mdi-arrow-right-bold-hexagon-outline' });
+            const pendingChip = { id: chipId, kind: chipKind };
+            _pendingMoveChips.set(tokenId, [...(_pendingMoveChips.get(tokenId) ?? []), pendingChip]);
+            const spend = firstChip ? consumeAction(token, 'move').catch(() => null) : Promise.resolve(null);
+            spend
+                .then(tracker => recordAction(token, { id: chipId, name: MOVE_CHIP_NAMES[chipKind], activation: 'Move', icon: 'mdi mdi-arrow-right-bold-hexagon-outline', tracker, move: true, moveKind: chipKind }))
+                .finally(() => _pendingMoveChips.set(tokenId, (_pendingMoveChips.get(tokenId) ?? []).filter(pending => pending !== pendingChip)));
         }
         if (isForceMovement && !isFreeMovement && !options.isUndo)
             Hooks.callAll('lancer-automations.battelog.involuntaryMove', { token, distance: distanceMoved });
@@ -1153,7 +1248,7 @@ export async function handleTokenMove(document, change, options, userId)
             spentAfter
         };
     }
-    await handleTrigger(isDrag ? 'onMove' : 'onInvoluntaryMove', { triggeringToken: token, distanceMoved, elevationMoved, startPos, endPos, isDrag, moveInfo, moveLeg, ...(isDrag ? {} : _involuntaryMoveData(options)) });
+    await handleTrigger(isDrag ? 'onMove' : 'onInvoluntaryMove', { triggeringToken: token, distanceMoved, elevationMoved: newElevation, startPos, endPos, isDrag, moveInfo, moveLeg, ...(isDrag ? {} : _involuntaryMoveData(options)) });
 
     const pendingWaypointCount = options._movement?.[token.id]?.pending?.waypoints?.length ?? 0;
     if (isDrag && pendingWaypointCount === 0)

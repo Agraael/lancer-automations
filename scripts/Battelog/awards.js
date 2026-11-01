@@ -9,6 +9,7 @@
  * @property {number} minValue                      top must meet this to qualify
  * @property {(value: number, player: any) => string} format   stat cell label ("12 KILLS")
  * @property {number} weight                    MVP points when held
+ * @property {string} [secondDescription]
  */
 
 /** @type {AwardDefinition[]} */
@@ -19,6 +20,7 @@ export const AWARDS = [
         label: 'LA.award.EXECUTIONER.label',
         icon: 'fa-skull',
         description: 'LA.award.EXECUTIONER.description',
+        secondDescription: 'LA.award.EXECUTIONER.second',
         stat: p => p.kills ?? 0,
         minValue: 3,
         format: v => `${v} KILLS`,
@@ -29,6 +31,7 @@ export const AWARDS = [
         label: 'LA.award.HEAVY.label',
         icon: 'fa-explosion',
         description: 'LA.award.HEAVY.description',
+        secondDescription: 'LA.award.HEAVY.second',
         stat: p => p.physicalDmgDealt ?? 0,
         minValue: 40,
         format: v => `${v} DMG`,
@@ -49,6 +52,7 @@ export const AWARDS = [
         label: 'LA.award.ANCHOR.label',
         icon: 'fa-shield-halved',
         description: 'LA.award.ANCHOR.description',
+        secondDescription: 'LA.award.ANCHOR.second',
         stat: p => p.destroyed ? 0 : (p.physicalDmgTaken ?? 0),
         minValue: 10,
         format: v => `${v} DMG TAKEN`,
@@ -69,6 +73,7 @@ export const AWARDS = [
         label: 'LA.award.SUPPORT.label',
         icon: 'fa-hand-holding-medical',
         description: 'LA.award.SUPPORT.description',
+        secondDescription: 'LA.award.SUPPORT.second',
         stat: p => p.assists ?? 0,
         minValue: 2,
         format: v => `${v} ASSISTS`,
@@ -122,6 +127,7 @@ export const AWARDS = [
         label: 'LA.award.GHOST.label',
         icon: 'fa-ghost',
         description: 'LA.award.GHOST.description',
+        secondDescription: 'LA.award.GHOST.second',
         stat: p => p.bd?.dmgIn?.evaded ?? 0,
         minValue: 3,
         format: v => `${v} EVADED`,
@@ -158,6 +164,7 @@ export const AWARDS = [
         label: 'LA.award.BULLSEYE.label',
         icon: 'fa-eye',
         description: 'LA.award.BULLSEYE.description',
+        secondDescription: 'LA.award.BULLSEYE.second',
         stat: p => p.bd?.acc?.crits ?? 0,
         minValue: 2,
         format: v => `${v} CRITS`,
@@ -335,5 +342,112 @@ export const AWARDS = [
         stat: player => player.hpRestored ?? 0,
         minValue: 5,
         format: value => `${value} HP RECOVERED`,
+    },
+    {
+        key: 'ENFORCER',
+        weight: 2,
+        label: 'LA.award.ENFORCER.label',
+        icon: 'fa-gavel',
+        description: 'LA.award.ENFORCER.description',
+        stat: player => player.failedSavesForced ?? 0,
+        minValue: 2,
+        format: value => `${value} FAILED SAVES`,
+    },
+    {
+        key: 'PUPPETEER',
+        weight: 2,
+        label: 'LA.award.PUPPETEER.label',
+        icon: 'fa-masks-theater',
+        description: 'LA.award.PUPPETEER.description',
+        stat: player => player.statusesInflicted ?? 0,
+        minValue: 3,
+        format: value => `${value} STATUSES`,
+    },
+    {
+        key: 'GIANT_SLAYER',
+        weight: 2,
+        label: 'LA.award.GIANT_SLAYER.label',
+        icon: 'fa-mountain',
+        description: 'LA.award.GIANT_SLAYER.description',
+        stat: player => player.bigGameDmg ?? 0,
+        minValue: 15,
+        format: value => `${value} DMG TO ELITES`,
+    },
+    {
+        key: 'STEADY',
+        weight: 1,
+        label: 'LA.award.STEADY.label',
+        icon: 'fa-wave-square',
+        description: 'LA.award.STEADY.description',
+        stat: player => (player.dmgLine ?? []).filter(value => value > 0).length,
+        minValue: 3,
+        format: value => `${value} ROUNDS`,
+    },
+    {
+        key: 'VERSATILE',
+        weight: 1,
+        label: 'LA.award.VERSATILE.label',
+        icon: 'fa-toolbox',
+        description: 'LA.award.VERSATILE.description',
+        stat: player => new Set([...(player.bd?.weapons ?? []), ...(player.bd?.techActs ?? []), ...(player.bd?.skills ?? [])].map(entry => entry.k)).size,
+        minValue: 5,
+        format: value => `${value} TOOLS USED`,
+    },
+    {
+        key: 'OVERDRIVE',
+        weight: 1,
+        label: 'LA.award.OVERDRIVE.label',
+        icon: 'fa-car-battery',
+        description: 'LA.award.OVERDRIVE.description',
+        stat: player => player.overcharges ?? 0,
+        minValue: 2,
+        format: value => `${value} OVERCHARGES`,
+    },
+    {
+        key: 'ENGINEER',
+        weight: 1,
+        label: 'LA.award.ENGINEER.label',
+        icon: 'fa-helmet-safety',
+        description: 'LA.award.ENGINEER.description',
+        stat: player => player.deploysPlaced ?? 0,
+        minValue: 2,
+        format: value => `${value} DEPLOYED`,
+    },
+    {
+        key: 'SCRAPPER',
+        weight: 1,
+        label: 'LA.award.SCRAPPER.label',
+        icon: 'fa-gears',
+        description: 'LA.award.SCRAPPER.description',
+        stat: player => player.destroyed ? 0
+            : (player.gearLost?.weapons?.length ?? 0) + (player.gearLost?.systems?.length ?? 0) + (player.gearLost?.cascading?.length ?? 0),
+        minValue: 2,
+        format: value => `${value} GEAR LOST`,
+    },
+    {
+        key: 'PINBALL',
+        weight: 1,
+        label: 'LA.award.PINBALL.label',
+        icon: 'fa-arrows-spin',
+        description: 'LA.award.PINBALL.description',
+        stat: player => player.bd?.movement?.knockback ?? 0,
+        minValue: 3,
+        format: value => `${value} SPACES PUSHED`,
+    },
+    {
+        key: 'BOOTS_ON_THE_GROUND',
+        weight: 1,
+        label: 'LA.award.BOOTS_ON_THE_GROUND.label',
+        icon: 'fa-shoe-prints',
+        description: 'LA.award.BOOTS_ON_THE_GROUND.description',
+        stat: player =>
+        {
+            const side = player.pilotSide;
+            if (player.pilotOnly || !side?.fielded)
+                return 0;
+            return (side.attacks ?? 0) + (side.techAtk ?? 0) + (side.skills ?? 0);
+        },
+        minValue: 1,
+        format: value => `${value} PILOT ACTIONS`,
     },
 ];

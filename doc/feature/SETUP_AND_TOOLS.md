@@ -8,7 +8,7 @@ Setup and housekeeping: optional content, actor and data cleanup, news, guided t
 
 ## Settings
 
-The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
+The **Tools** tab, with the tours under **Tutorials**.
 
 <img src="../img/st-settings.png" width="70%"/>
 
@@ -16,7 +16,7 @@ The **Tools & Extras** tab, with the tours under **Tutorial & Help**.
 
 ## Optional content packs
 
-**LaSossis's Items** (**`enableLaSossisItems`**) loads my prebuilt item activations. It's greyed out unless **LaSossis Additional statuses and effects** (**`additionalStatuses`**, Statuses & FX tab) is on, since the activations use those statuses. Some of them also want the personal NPC Deployables LCP: the **Get the Deployables LCP** button right below downloads it, then import it through the Lancer Compendium Manager.
+**LaSossis's Items** (**`enableLaSossisItems`**) loads my prebuilt item activations. It's greyed out unless **Extra Lancer Statuses** (**`additionalStatuses`**, Statuses & FX tab) is on, since the activations use those statuses. Some of them also want the personal NPC Deployables LCP: the **Get the Deployables LCP** button right below downloads it, then import it through the Lancer Compendium Manager.
 
 **LaSossis's Personal Stuff** (**`enablePersonalStuff`**) loads my personal tweaks, probably not useful to anyone else. Both load as startup scripts, so toggling either needs a reload.
 

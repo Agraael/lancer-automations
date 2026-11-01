@@ -11,7 +11,8 @@
         "moduleResolution": "bundler",
         "lib": [
             "esnext",
-            "dom"
+            "dom",
+            "dom.iterable"
         ],
         "types": ["fvtt-types"],
         "skipLibCheck": true

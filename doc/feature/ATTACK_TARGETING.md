@@ -2,7 +2,7 @@
 
 [← Back to Home](../index.md)
 
-With **LA Attack Targeting** (**`enableAttackTargeting`**) on, the attack HUD gains a picker for choosing your target or placing your area straight from the accuracy/difficulty dialog. Whatever you pick becomes a normal Foundry target the roll reads as usual, and it stays targeted after the roll unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on, which it is not by default.
+With **Attack HUD Target Picker** (**`attackTargeting`**) on, the attack HUD gains a picker for choosing your target or placing your area straight from the accuracy/difficulty dialog. Whatever you pick becomes a normal Foundry target the roll reads as usual, and it stays targeted after the roll unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on, which it is not by default.
 
 Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes, marks, and range readouts on the canvas any time - see [Advanced Measure tool](#advanced-measure-tool) below.
 
@@ -10,9 +10,9 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 ## Settings
 
-**Combat & Movement → Targeting** holds **LA Attack Targeting** (**`enableAttackTargeting`**), **Auto-Start Target Picking** (**`autoStartTargetPicking`**) to open the picker the moment an attack starts with no target set, and **Clear Targets After Roll** (**`clearTargetsAfterRoll`**, off by default). **LA Damage Targeting** (**`enableDamageTargeting`**) puts the same picker on the damage HUD, hold Shift for multiple.
+**Combat & Movement → Targeting** holds **Attack HUD Target Picker** (**`attackTargeting`**): **Off**, **Picker**, or **Picker, auto-start** (default), which opens the picker the moment an attack starts with no target set. It also holds **Clear Targets After Roll** (**`clearTargetsAfterRoll`**, off by default). **Damage HUD Target Picker** (**`enableDamageTargeting`**) puts the same picker on the damage HUD, hold Shift for multiple.
 
-**Ruler & Measures → Advanced Measure** holds **Select Target cursor** (**`targetToolCursor`**) and **Measure cursor** (**`rulerToolCursor`**), which swap the cursor and play a sound while those tools are active.
+**Ruler & Measures → Advanced Measure** holds **Tool cursors** (**`rulerToolCursor`**), which swaps the cursor and plays a sound while the measure and target tools are active.
 
 ---
 
@@ -20,7 +20,7 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 <img align="right" src="../img/at-buttons.png" width="45%"/>
 
-When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a melee weapon gets **Threat N**, a tech attack gets **Sensors N**, and an area-of-effect (AoE) weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation aware / Auto elevation / Propagation** toggle row below them (plus **Line of sight** when [range pulse LOS](./VISION.md#range-pulse-line-of-sight) is on).
+When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a melee weapon gets **Threat N**, a tech attack gets **Sensors N**, and an area-of-effect (AoE) weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation / Terrain / Spread** toggle row below them (plus **Line of sight** when [range pulse LOS](./VISION.md#range-pulse-line-of-sight) is on).
 
 A weapon that has both a Range and a Threat, and whose two values differ, also gets a swap arrow beside the button to flip the label between them.
 
@@ -48,7 +48,7 @@ Where tokens overlap, a small picker lists them to choose from.
 
 ## Hit chance and damage
 
-Each targeted token gets a live **hit chance** and **damage range** label. **`targetInfoDisplay`** sets who sees them: **No**, **GM only** (default), or **GM and players**.
+Each targeted token gets a live **hit chance** and **damage range** label. **`targetInfoDisplay`** sets who sees them: **No**, **GM only**, or **GM and players** (default).
 
 <img src="../vid/at-hitchance.gif" width="70%"/>
 
@@ -73,11 +73,11 @@ Placing a template catches every token inside it as a target. **Blast** drops a 
 
 ---
 
-## Elevation, auto-elevation, propagation
+## Elevation, terrain, spread
 
 <img align="right" src="../img/at-elevation.png" width="45%"/>
 
-The toggle row controls the 3-D side. **Elevation aware** catches tokens by vertical overlap and lets tall terrain block the shape. **Auto elevation** sits the area on the Terrain Height Tools ground beneath it. **Propagation** floods the area out from its origin so it can't reach over terrain into a pocket behind. With all three off, the area is flat.
+The toggle row controls the 3-D side. **Elevation** catches tokens by vertical overlap and lets tall terrain block the shape. **Terrain** sits the area on the Terrain Height Tools ground beneath it. **Spread** floods the area out from its origin so it can't reach over terrain into a pocket behind. With all three off, the area is flat.
 
 <br clear="right"/>
 
@@ -97,20 +97,24 @@ Closing the HUD stops the picker and clears its shapes. Your targets stay on aft
 
 ## Advanced Measure tool
 
-Press **Shift+R** to toggle a standalone measure toolbar, docked above the macro hotbar. It's per-client and works outside any attack or flow. On it:
+Press **Shift+R**, or its button under the Ruler in the Token controls, to toggle a standalone measure toolbar, docked above the macro hotbar. It's per-client and works outside any attack or flow. It greys out while an attack, damage or HASE HUD is open. On it:
 
-- **Blast / Burst / Cone / Line** - arm a shape at a chosen size. Click to drop, click (or right-click) again to remove. With no shape armed you move and drag tokens as usual.
-- **Target** (the reticle) - click a token to target it.
-- the **range source** selector - **Threat**, **Sensor**, **Max Reach**, **Weapon**, **Manual**, or **None**, pulsing that range around the reference token. The reference is whatever you have selected. [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips it, with an eye toggle on the manual radius.
+- **Blast / Burst / Cone / Line** - arm a shape, then set its size and the **Elevation / Terrain / Spread** toggles in the panel above it. Each click drops a shape, and a click inside one removes it. With no shape armed you move and drag tokens as usual.
+- **Mark** (the reticle) - click a token or a hex to put a gold mark on it, click again or right-click to remove it. Marks never target.
+- the **range source** selector - **Threat**, **Sensor**, **Max Reach**, **Weapon**, or **Manual**, pulsing that range around the reference token. Click the active one again to turn it off. **Manual** opens a range stepper and **Weapon** your weapon list. The reference is the token you hover, else your selection. [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips it, with a **Sight** toggle per source in the list.
 - **Movement reach** - the reference token's movement, in the ruler's speed tiers.
 - **Tactical distance labels** - distances from the reference token.
 - the **eye** - [line of sight](./VISION.md#lancer-line-of-sight) to your marks, or to your targets when nothing is marked. [What the colors mean](./VISION.md#reading-the-sightlines).
 
-**Shift+click** marks a token (which targets it) or a hex (which sets the Manual range).
+**Max Reach** is your furthest weapon reach. A weapon's Blast, Burst, Cone or Line size adds to its Range, never to its Threat.
 
-**Clear** wipes the current placements. The **✕** (or Shift+R again) closes the toolbar. Closing hides the marks and toolbar but keeps them, so reopening picks up where you left off.
+**Shift+click** marks a token or a hex in white, and Shift+drag paints. A marked token is measured from like a selected one, and a marked hex gets the Manual pulse. While the toolbar is open, Shift+click no longer adds to your selection.
 
-Hover the **?** for the full keybind list, including **T** to step through the range sources and **G** to clear everything.
+**Right-click** a range source, or a weapon in its list, to pin its ring on the token. Pins stay after you move on and after you close the toolbar, until you unpin them or change scene. The TAH range toggles make the same pins.
+
+**Clear** (**Shift+G**) removes your shapes and marks and keeps everything else. The **✕**, Shift+R again, or **Esc** closes the toolbar. Esc stops placing a shape or mark first. Reopening brings your shapes, marks and source back, with no shape armed. Changing scene clears everything.
+
+Click the **?** for the full keybind list, read from your bindings, including **T** to step through the range sources.
 
 Movement reach works for one token or a whole selection at once:
 
@@ -123,4 +127,4 @@ Movement reach works for one token or a whole selection at once:
 | Option | What it does |
 |:--|:--|
 | **HASE Chance Labels** | Live success % over the roller during stat rolls, saves, and contests. |
-| **Range Preview on Attack/Damage HUD** | Pulse the attacker's weapon/tech range on the canvas when an attack card prints. |
+| **Range Preview While Attacking** | Pulse the attacker's weapon/tech range on the canvas when an attack card prints. |

@@ -2,7 +2,7 @@
 
 import { getMinGridDistance, getDistanceTokenToPoint } from '../combat/grid-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { ISO_SETTINGS, isIsoFeatureEnabled, getIsoStateForToken } from '../setup/iso-settings.js';
+import { ISO_SETTINGS, getIsoStateForToken } from '../setup/iso-settings.js';
 import { hasLineOfSight } from '../vision/lancerDetectionModes.js';
 import { belowBarsY } from '../tah/tokenStatBar.js';
 
@@ -26,13 +26,6 @@ function gridScale()
 function labelResolution(scale)
 {
     return Math.min(8, Math.max(2, 2 / scale));
-}
-
-function _getIsoState(token)
-{
-    if (!isIsoFeatureEnabled(ISO_SETTINGS.tacticalDistance))
-        return null;
-    return getIsoStateForToken(token);
 }
 
 function getMode()
@@ -386,7 +379,7 @@ function positionLabel(target, label)
 {
     label.alpha = target.alpha ?? 1;
     const below = labelBelow();
-    const iso = _getIsoState(target);
+    const iso = getIsoStateForToken(target, ISO_SETTINGS.tacticalDistance);
     const zoomK = zoomCounterScale();
     const gap = 4 * gridScale();
     if (iso && target.mesh)

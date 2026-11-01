@@ -12,8 +12,8 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 It is on out of the box, from the **Enable Token Action HUD** setting (**`tahEnabled`**, needs a reload). It attaches near the top-left of the screen:
 
-- **Move it** by dragging, after unlocking it: the HUD starts locked, so click the 🔒 on the title bar first. The **reset** button puts it back. Stays above open actor sheets (`tah.aboveActorSheets`).
-- Categories open on **hover** by default, or set **`tah.clickToOpen`** to open them on click. `tah.hoverCloseDelay` controls how long the menu lingers after the mouse leaves, and `tah.maxColumnItems` makes long columns scroll.
+- **Move it** by dragging, after unlocking it: the HUD starts locked, so click the 🔒 on the title bar first. It stays unlocked until you select another token. The **reset** button puts it back. Stays above open actor sheets (`tah.aboveActorSheets`).
+- Categories open on **hover** by default, or set **Open Menus** (**`tah.openMode`**) to **On click**. With hover, `tah.hoverCloseDelay` controls how long the menu lingers after the mouse leaves, and `tah.maxColumnItems` makes long columns scroll.
 
 Its settings live in the **Token Action HUD** tab.
 
@@ -27,16 +27,17 @@ Its settings live in the **Token Action HUD** tab.
 
 The bar at the top of the HUD shows:
 
-- the **token name** - click it to open the actor sheet (shows "N TOKENS" when several are selected),
-- a **combat toggle** (the swords icon) to add or remove the token from combat,
-- an optional **team / disposition stripe** down the edge (`tah.showDisposition`, uses Token Factions teams if installed, otherwise the disposition),
-- an optional **portrait** above the bar: token art or actor portrait (`tah.portrait.mode`), overridable per token in the L.A tab of the token config.
+- the **token name** - click it to open the actor sheet (shows "N TOKENS" when several are selected). Names past 500 px are cut and scroll on hover,
+- a **license chip** before the name: LL for pilots and their mechs, T for NPCs,
+- a **combat toggle** (the swords icon) to add or remove the token from combat. In combat it turns red, joined to the chip,
+- an optional **team / disposition stripe** at the end of the bar (`tah.showDisposition`, uses Token Factions teams if installed, otherwise the disposition). Hover it to show the label,
+- a **portrait** above the bar: token art (default), actor portrait, or none (`tah.portrait.mode`), overridable per token in the L.A tab of the token config.
 
 ---
 
 ## Stats bar
 
-A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it), then **heat**, stress, pilot bond stress, burn, infection, overcharge, and reaction. A toggle slides out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
+A compact readout under the header: **HP**, structure, overshield, repairs, and **movement** (used/cap in combat, or speed outside it), then **heat**, stress, pilot bond stress, overcharge, and reaction, with burn and infection at the end. Heat turns amber with the Danger Zone icon from half the cap, with red stripes at the cap. HP gets the same stripes at 10% or less. Rest on the bar to slide out a **secondary row**: armor, evasion, e-defense, tech attack, save, sensor range, and core power.
 
 <img src="../img/hud-stats.png" width="70%"/>
 
@@ -79,6 +80,8 @@ The left column lists categories. Opening one cascades its items out to the righ
 | **Statuses** | Opens the status panel (below) |
 | **Macros** | Your pinned macros (`tah.macroList`), right-click a slot to edit it |
 
+Counters show their value with ▲ ▼ arrows.
+
 Toggle `tah.showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category. These come from PPG (Prototype Pattern Group).
 
 See also: movement actions → [Movement](./MOVEMENT.md), resurrect → [Wrecks](./WRECK.md), reinforcement → [Gameplay Automation](./GAMEPLAY_AUTOMATION.md), scan → [Gameplay Automation](./GAMEPLAY_AUTOMATION.md).
@@ -89,7 +92,7 @@ See also: movement actions → [Movement](./MOVEMENT.md), resurrect → [Wrecks]
 
 <img align="right" src="../img/hud-popup.png" width="45%"/>
 
-Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Items with v3 LCP data (from Lancer NPC Import) also show its chips under the matching text, like on the sheets. Menu rows and popups also carry the small markers below.
+Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Items with v3 LCP data (from Lancer NPC Import) also show its chips under the matching text, like on the sheets. Rows with a popup show a small triangle in their corner on hover. Clicking a weapon in the Weapons menu doesn't attack: use the **Attack** button in its popup. Menu rows and popups also carry the small markers below.
 
 <br clear="right"/>
 
@@ -144,13 +147,13 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <img align="right" src="../img/hud-search.png" width="35%"/>
 
-**Search** - press Shift+F (or click the search icon) to filter every category at once. Matches gather into a single column as you type.
+**Search** - press Shift+F (or click the search icon in the Menu band) to filter every category at once. Matches update as you type, and Enter uses the selected one, or the first.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-favorites.png" width="35%"/>
 
-**Favorites** - Ctrl+right-click an item to pick its wheel (1 to 3). The star tab on the HUD's edge gathers your favorites in one place, and Shift+X opens or closes that column.
+**Favorites** - Ctrl+right-click an item to pick its wheel (1 to 3). The star in the Menu band gathers your favorites, and Shift+X opens or closes that column.
 
 <br clear="right"/>
 
@@ -164,7 +167,7 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <br clear="right"/>
 
-**Wheel size** - *Wheel Radius Offset* under Radial Wheels moves the ring in or out.
+**Wheel size** - *Wheel Radius Offset* under Opening & Layout moves the ring in or out.
 
 <br clear="right"/>
 
@@ -176,7 +179,7 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <img align="right" src="../img/hud-lock.png" width="35%"/>
 
-**HUD position** - the 🔒 icon on the title bar unlocks the HUD for dragging (cursor turns to grab, ↺ resets to default).
+**HUD position** - the 🔒 icon on the title bar unlocks the HUD for dragging (cursor turns to grab, ↺ resets to default). It stays unlocked until you select another token.
 
 <br clear="right"/>
 
@@ -186,11 +189,13 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 With **`tah.keyboardNav`** on (default), you can drive the whole HUD from the keyboard:
 
-- **Shift+WASD** moves a cursor through the menus: up/down within a column, left/right to step into a submenu or back out.
+- **Shift+WASD** moves a cursor through the menus: up/down within a column, left/right to step into a submenu or back out. The first press starts from the row under the mouse.
+- **Shift+1** to **Shift+9** jump to that row (small numbers mark them).
 - **Shift+E** activates the focused row (left-click), **Shift+Q** opens its context action (right-click).
+- **Escape** closes the popup, then the cursor.
 - The cursor clears after a spell of no input. **`tah.keyboardNavResetDelay`** sets how long it lingers.
 
-The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token. Turn on **`tah.preventWasdMovement`** to block that during nav.
+The nav keys are rebindable under **TAH: Move / Activate / Context / Row / Back Out** in Foundry's Configure Controls. Bare W/A/S/D/Q/E nudge the selected token. Turn on **`tah.preventWasdMovement`** to block that during nav.
 
 ---
 
@@ -204,17 +209,17 @@ The nav keys are rebindable under **TAH: Move / Activate / Context** in Foundry'
 
 <img align="right" src="../vid/hud-measures.gif" width="35%"/>
 
-**Range measures** - toggles in the Utility → Measures menu that drive the [Advanced Measure tool](./ATTACK_TARGETING.md) to pulse a range on the canvas: **Threat**, **Sensors**, **Max Reach**, and, when the Lancer ruler is on, **Movement**. A **Custom** measure lets you set a size and toggle it on.
+**Range measures** - toggles in the Utility → Measures menu, run through the [Advanced Measure tool](./ATTACK_TARGETING.md#advanced-measure-tool). **Threat**, **Sensors** and **Max Reach** pin a range ring on the token, and it stays until you toggle it off, even with the measure toolbar closed. A **Custom** measure lets you set a size and pin it the same way. When the Lancer ruler is on, **Movement** turns on the toolbar's movement reach.
 
 <br clear="right"/>
 
-**Area Elevation Aware** (`tah.areaElevationAware`) - not a measure, it is the default for the area pickers (blast, cone, and the like). When on, areas become 3D volumes that clip to terrain.
+**3D Areas by Default** (`tah.areaElevationAware`) - not a measure, it is the default for the area pickers (blast, cone, and the like). When on, areas become 3D volumes that clip to terrain.
 
 ---
 
 ## Narrative mode
 
-With **`tah.narrativeMode`** on, the HUD still shows when no token is selected, linked to one of your pilots (pick it from the header). Exposes the pilot-relevant categories: pilot, skills, resources, utility, macros.
+With **`tah.narrativeMode`** on (default), the HUD still shows when no token is selected, linked to one of your pilots (pick it from the header). Exposes the pilot-relevant categories: pilot, skills, resources, utility, macros.
 
 ## Notable options
 
@@ -225,12 +230,12 @@ With **`tah.narrativeMode`** on, the HUD still shows when no token is selected, 
 | **Narrative TAH** | When no token is selected, show a narrative HUD linkable to a pilot. |
 | **TAH Above Actor Sheets** | Keep the TAH on top of open actor sheets. |
 | **Show Team / Disposition Indicator** | Colored stripe on the title bar: team if Token Factions advanced teams is active, otherwise disposition. |
-| **Click to Open** | Open categories on click instead of hover. |
+| **Open Menus** | Open categories on hover or on click. |
 | **Hover Close Delay (seconds)** | How long the HUD stays open after the mouse leaves. |
-| **Max items per column** | Rows per column before it scrolls (0 = no cap, top menu never capped). |
-| **HUD Scale** | Size of the Token Action HUD and its popups. |
-| **HUD Portrait** | Artwork above the name bar: none, token art, or actor portrait. Tokens can override it in the L.A tab. |
-| **Portrait Applies To** | Mechs and pilots only, or all actors. |
+| **Max items per column** | Rows per column before it scrolls (20 by default, 0 = no cap, top menu never capped). |
+| **HUD Scale** | Size of the Token Action HUD, its popups and the measure toolbar. |
+| **HUD Portrait** | Artwork above the name bar: none, token art (default), or actor portrait. Tokens can override it in the L.A tab. |
+| **Portrait Applies To** | All actors (default), or mechs and pilots only. |
 | **Mechs Use Pilot Art** | Draw the linked pilot's image instead of the mech's. |
 | **Portrait Scale** | Size of the portrait. |
 | **Weapon Range Preview** | Show weapon range on the map when hovering items in the HUD. Works standalone, no extra module needed. |

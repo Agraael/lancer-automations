@@ -283,7 +283,7 @@ const movingTargetSniperAutomation = {
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle)
             {
-                ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
+                ui.notifications.warn(game.i18n.format('LA.notify.movingTargetRifleMissing', { name: reactorToken.name }));
                 return;
             }
             if (rifle.system.loaded === false)
@@ -343,7 +343,7 @@ const movingTargetSniperAutomation = {
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle)
             {
-                ui.notifications.warn(`Moving Target: Anti-materiel Rifle not found on ${reactorToken.name}.`);
+                ui.notifications.warn(game.i18n.format('LA.notify.movingTargetRifleMissing', { name: reactorToken.name }));
                 return;
             }
             await api.attackWith(rifle, mover ? [mover] : null);
@@ -1202,10 +1202,10 @@ const sniperMarkAutomation = {
                         },
                         flagKey: 'sniperSourceId'
                     });
-                    ui.notifications.info(`Sniper's Mark: ${target.name} is now marked.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.snipersMarkApplied', { name: target.name }));
                 }
                 else
-                    ui.notifications.info(`Sniper's Mark: removed from ${target.name}.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.snipersMarkRemoved', { name: target.name }));
             }
         },
         {
@@ -2512,7 +2512,7 @@ async function _sandblastTurnEndHookFn(template, scene, token)
         return;
     const current = token.actor.system.hp.value;
     await token.actor.update({ 'system.hp.value': current - 3 });
-    ui.notifications.info(`${token.name} takes 3 AP Kinetic damage from Sandblast.`);
+    ui.notifications.info(game.i18n.format('LA.notify.sandblastDamage', { name: token.name }));
 }
 
 async function _remoteCloudHealHookFn(template, scene, token)
@@ -3219,7 +3219,7 @@ const witchPredatoryLogicAutomation = {
                 const weapons = api.getWeapons(target).filter(weapon =>
                     !weapon.system?.tags?.some(tag => (tag.id ?? tag.lid) === 'tg_superheavy'));
                 if (!weapons.length)
-                    return ui.notifications.info(`Predatory Logic: ${target.name} has no non-Superheavy weapon.`);
+                    return ui.notifications.info(game.i18n.format('LA.notify.predatoryLogicNoWeapon', { name: target.name }));
 
                 const weapon = await api.pickCard(weapons, {
                     title: "PREDATORY LOGIC",
@@ -3832,7 +3832,7 @@ const assistedReloadGeneralAutomation = {
                 );
             }
 
-            ui.notifications.info(`${reactorToken.name} reloaded ${granted.token.name}'s ${weapon.name}.`);
+            ui.notifications.info(game.i18n.format('LA.notify.reloadedAllyWeapon', { name: reactorToken.name, target: granted.token.name, weapon: weapon.name }));
         },
         onMessage: async function (triggerType, data, reactorToken, item, activationName, api)
         {
@@ -3894,7 +3894,7 @@ const witchPetrifyAutomation = {
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
                 if (api.findMarkedTokens(reactorToken, WITCH_PETRIFY_EFFECT, { flagKey: WITCH_PETRIFY_FLAG }).length)
-                    return ui.notifications.info("Petrify is already affecting a character.");
+                    return ui.notifications.info(game.i18n.localize('LA.notify.petrifyAlreadyActive'));
 
                 const target = witchTechTargets(triggerData)[0];
                 if (!target)
@@ -3902,7 +3902,7 @@ const witchPetrifyAutomation = {
                 const sceneId = canvas.scene?.id ?? '';
                 const petrified = api.getActorFlags(target.actor, 'petrifiedScenes') ?? [];
                 if (petrified.includes(sceneId))
-                    return ui.notifications.info(`Petrify: ${target.name} was already petrified this scene.`);
+                    return ui.notifications.info(game.i18n.format('LA.notify.petrifyAlreadyUsed', { name: target.name }));
 
                 await api.addActorFlags(target.actor, { petrifiedScenes: [...petrified, sceneId] });
                 await api.applyEffectsToTokens({
@@ -4060,7 +4060,7 @@ api.registerDefaultItemReactions({
                 const target = targetData.target;
 
                 if (triggerData.targets.length > 1)
-                    ui.notifications.info("Battlefield Diagnostics: Multiple targets hit. Only applying to the first target.");
+                    ui.notifications.info(game.i18n.localize('LA.notify.diagnosticsFirstTargetOnly'));
 
                 const weapons = api.getWeapons(target);
 
@@ -4109,7 +4109,7 @@ api.registerDefaultItemReactions({
                                     removeTag: true,
                                     itemId: chosenWeapon.id
                                 }, { duration: "end", origin: reactorToken });
-                                ui.notifications.info(`${target.name}'s ${chosenWeapon.name} loses Ordnance until the end of their next turn!`);
+                                ui.notifications.info(game.i18n.format('LA.notify.weaponLosesOrdnance', { name: target.name, weapon: chosenWeapon.name }));
                             }
                         }
                     });
@@ -4153,7 +4153,7 @@ api.registerDefaultItemReactions({
                                         val: tagVal,
                                         itemId: chosenWeapon.id
                                     }, { duration: "end", origin: reactorToken });
-                                    ui.notifications.info(`${target.name}'s ${chosenWeapon.name} gains ${tagDisplayName} until the end of their next turn!`);
+                                    ui.notifications.info(game.i18n.format('LA.notify.weaponGainsTag', { name: target.name, weapon: chosenWeapon.name, tag: tagDisplayName }));
                                 }
                             }
                         });
@@ -4162,7 +4162,7 @@ api.registerDefaultItemReactions({
 
                 if (actionChoices.length === 0)
                 {
-                    ui.notifications.info(`${target.name} has no valid weapons to calibrate.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.noWeaponsToCalibrate', { name: target.name }));
                     return;
                 }
 
@@ -4219,7 +4219,7 @@ api.registerDefaultItemReactions({
 
                 if (conditions.length === 0)
                 {
-                    ui.notifications.info(`${target.name} has no conditions to clear.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.noConditionsToClear', { name: target.name }));
                     return;
                 }
 
@@ -4234,7 +4234,7 @@ api.registerDefaultItemReactions({
                 if (chosenCondition)
                 {
                     api.deleteEffect(target, chosenCondition);
-                    ui.notifications.info(`Cleared ${chosenCondition.name} from ${target.name}.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.clearedConditionFrom', { condition: chosenCondition.name, name: target.name }));
                 }
             }
         }]
@@ -5480,7 +5480,7 @@ api.registerDefaultItemReactions({
             },
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                const gmUserId = game.users.find(u => u.isGM && u.active)?.id;
+                const gmUserId = api.getActiveGMId();
                 await api.startChoiceCard({
                     title: "FEIGN DEATH",
                     description: `Does <b>${reactorToken.name}</b> feign death?`,
@@ -6439,7 +6439,7 @@ api.registerDefaultItemReactions({
                         tokens: [target],
                         effectNames: [statusId]
                     });
-                    ui.notifications.info(`${target.name}: ${statusId} cleared.`);
+                    ui.notifications.info(game.i18n.format('LA.notify.statusCleared', { name: target.name, status: statusId }));
                 };
 
                 if (hasStunned && !hasJammed)
@@ -6846,12 +6846,12 @@ api.registerDefaultGeneralReactions({
             const immEffects = api.findEffectsOnToken(reactorToken, 'immobilized', { hasFlags: ['sealantBlendSourceId'] });
             if (immEffects.length === 0)
             {
-                ui.notifications.warn(`${reactorToken.name} has no Sealant Blend immobilization to break free from.`);
+                ui.notifications.warn(game.i18n.format('LA.notify.noSealantToBreak', { name: reactorToken.name }));
                 return;
             }
             for (const effect of immEffects)
                 await effect.delete();
-            ui.notifications.info(`${reactorToken.name} breaks free from the Sealant Blend!`);
+            ui.notifications.info(game.i18n.format('LA.notify.brokeFreeFromSealant', { name: reactorToken.name }));
         }
     },
     "Boost (Industrial)": {

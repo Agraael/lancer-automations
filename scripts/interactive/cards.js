@@ -6,6 +6,7 @@ import { createTokenMark } from "./target-shapes.js";
 import { focusTokens } from "../tools/auto-focus.js";
 
 import { localize } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 // Info Card Helpers (internal)
 
 export function isWhiteSvgIcon(iconPath)
@@ -111,7 +112,7 @@ export function _updatePendingBadge()
     const hiddenAliveTitles = _cardVisualStack.slice(0, -1).map((cardEl) => cardEl[0]?._laCardTitle || 'Card');
     const serialPendingTitles = _cardQueueTitles.slice(_serialActive ? 1 : 0);
     const pendingTitles = [...hiddenAliveTitles, ...serialPendingTitles];
-    const banner = $('.la-info-card .la-card-queue-banner');
+    const banner = $(document.querySelectorAll('.la-info-card .la-card-queue-banner'));
     if (pendingTitles.length > 0)
     {
         const pendingCount = pendingTitles.length;
@@ -127,11 +128,13 @@ export function _updatePendingBadge()
             div.dataset.tooltipDirection = 'UP';
             div.innerHTML = html;
             // Prepend INSIDE the visible card body (before the lancer-header).
-            const hud = $('.la-info-card').last().find('.lancer-hud').first();
-            if (hud.length)
+            const cards = document.querySelectorAll('.la-info-card');
+            const lastCard = cards[cards.length - 1];
+            const hud = lastCard?.querySelector('.lancer-hud');
+            if (hud)
                 hud.prepend(div);
             else
-                $('.la-info-card').last().prepend(div);
+                lastCard?.prepend(div);
         }
     }
     else
@@ -204,10 +207,10 @@ export function _createInfoCard(type, opts)
     } = opts;
 
     // Remove orphaned info cards (not on the visual stack)
-    $('.la-info-card').each(function ()
+    document.querySelectorAll('.la-info-card').forEach(card =>
     {
-        if (!_cardVisualStack.some(el => el[0] === this))
-            $(this).remove();
+        if (!_cardVisualStack.some(el => el[0] === card))
+            card.remove();
     });
 
     let infoRowHtml = '';
@@ -502,19 +505,19 @@ export function _createInfoCard(type, opts)
     </div>`;
 
     // v13: #hudzone is created lazily (only with a Lancer HUD shown); fall back to #la-hudzone so cards always have a container.
-    let container = $('#hudzone');
+    let container = $(document.querySelector('#hudzone'));
     if (!container.length)
     {
-        let laHud = $('#la-hudzone');
+        let laHud = $(document.querySelector('#la-hudzone'));
         if (!laHud.length)
         {
-            laHud = $('<div id="la-hudzone" class="lancer-hud-zone" style="position:fixed;bottom:0;right:var(--sidebar-width,38px);z-index:70;display:flex;flex-direction:column-reverse;align-items:flex-end;pointer-events:none;"></div>');
-            $('body').append(laHud);
+            laHud = $(htmlToElement('<div id="la-hudzone" class="lancer-hud-zone" style="position:fixed;bottom:0;right:var(--sidebar-width,38px);z-index:70;display:flex;flex-direction:column-reverse;align-items:flex-end;pointer-events:none;"></div>'));
+            laHud.appendTo(document.body);
         }
         container = laHud;
     }
     container.append(html);
-    const cardEl = $('.la-info-card').last();
+    const cardEl = $(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.la-info-card'))).last();
 
     // Re-parent the card into Lancer's real #hudzone if it appears later (DAMAGE ROLL / ATTACK HUD opens).
     const reparentHook = Hooks.on('renderApplication', () =>
@@ -737,8 +740,8 @@ export function _updateInfoCard(cardEl, type, cardState)
         const placeBtn = cardEl.find('[data-role="place-more"]');
         if (placeBtn.length)
         {
-            const can = cardState.canPlaceMore !== false;
-            placeBtn.prop('disabled', !can).css({ opacity: can ? 1 : 0.45, cursor: can ? 'pointer' : 'not-allowed' });
+            const canPlaceMore = cardState.canPlaceMore !== false;
+            placeBtn.prop('disabled', !canPlaceMore).css({ opacity: canPlaceMore ? 1 : 0.45, cursor: canPlaceMore ? 'pointer' : 'not-allowed' });
             placeBtn.off('click').on('click', () =>
             {
                 if (cardState.canPlaceMore !== false)
@@ -929,26 +932,26 @@ export function _updateInfoCard(cardEl, type, cardState)
             listEl.html('<div class="la-empty-state">No deployables available</div>');
         else
         {
-            cardState.deployables.forEach((dep, idx) =>
+            cardState.deployables.forEach((deployable, idx) =>
             {
-                const disabledClass = dep.disabled ? "la-choice-done" : "";
-                const imgHtml = dep.img
-                    ? `<img src="${dep.img}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
+                const disabledClass = deployable.disabled ? "la-choice-done" : "";
+                const imgHtml = deployable.img
+                    ? `<img src="${deployable.img}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
                     : `<i class="cci cci-deployable" style="font-size:16px; margin-right:8px;"></i>`;
-                const usesHtml = dep.usesText
-                    ? `<span style="font-size:0.8em; color:#ff6400; margin-left:auto; white-space:nowrap;"><i class="fas fa-battery-three-quarters"></i> ${dep.usesText}</span>`
+                const usesHtml = deployable.usesText
+                    ? `<span style="font-size:0.8em; color:#ff6400; margin-left:auto; white-space:nowrap;"><i class="fas fa-battery-three-quarters"></i> ${deployable.usesText}</span>`
                     : '';
-                const chargesHtml = dep.chargesText
-                    ? `<span style="font-size:0.8em; color:#4488ff; margin-left:${dep.usesText ? '6px' : 'auto'}; white-space:nowrap;"><i class="fas fa-bolt"></i> ${dep.chargesText}</span>`
+                const chargesHtml = deployable.chargesText
+                    ? `<span style="font-size:0.8em; color:#4488ff; margin-left:${deployable.usesText ? '6px' : 'auto'}; white-space:nowrap;"><i class="fas fa-bolt"></i> ${deployable.chargesText}</span>`
                     : '';
-                const badgeHtml = dep.fromCompendium
+                const badgeHtml = deployable.fromCompendium
                     ? `<span style="font-size:0.65em; background:#ff6400; color:white; padding:1px 4px; border-radius:2px; margin-left:6px;">COMP</span>`
                     : '';
 
                 listEl.append(`
-                    <div class="la-choice-item ${disabledClass}" data-dep-index="${idx}" style="display:flex; align-items:center; gap:4px; cursor:${dep.disabled ? 'not-allowed' : 'pointer'};">
+                    <div class="la-choice-item ${disabledClass}" data-dep-index="${idx}" style="display:flex; align-items:center; gap:4px; cursor:${deployable.disabled ? 'not-allowed' : 'pointer'};">
                         ${imgHtml}
-                        <span class="la-choice-text" style="flex:1;">${dep.name}${badgeHtml}</span>
+                        <span class="la-choice-text" style="flex:1;">${deployable.name}${badgeHtml}</span>
                         ${usesHtml}
                         ${chargesHtml}
                     </div>`);
@@ -968,16 +971,16 @@ export function _updateInfoCard(cardEl, type, cardState)
         if (listEl.length && cardState.tokens)
         {
             listEl.empty();
-            cardState.tokens.forEach((row, idx) =>
+            cardState.tokens.forEach((token, idx) =>
             {
                 const isActive = idx === cardState.activeIndex;
-                const statusIcon = row.planned
+                const statusIcon = token.planned
                     ? '<i class="fas fa-check" style="color:var(--lancer-color-green, #3a9e6e);"></i>'
                     : '<i class="fas fa-arrow-right" style="opacity:0.6;"></i>';
                 listEl.append(`
                     <div class="la-selected-target" data-token-index="${idx}" style="${isActive ? 'border-color:#ff6400; background:rgba(255,100,0,0.12);' : ''}">
-                        <img src="${row.img}" alt="${row.name}">
-                        <span class="la-selected-target-name">${row.name}</span>
+                        <img src="${token.img}" alt="${token.name}">
+                        <span class="la-selected-target-name">${token.name}</span>
                         <span style="margin-left:auto;">${statusIcon}</span>
                     </div>`);
             });

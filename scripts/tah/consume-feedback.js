@@ -5,7 +5,9 @@ import { isActorScannedForUser } from '../tools/scan-lookup.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { getExternalSetting } from '../tools/settings-utils.js';
 const _lastConsume = new Map();
+const _seenDocs = new Set();
 const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene', uses_per_mission: 'perMission' };
 // Per-X fields count uses spent, so their delta is shown inverted (spend = -1).
 const USED_COUNTER_TYPES = new Set(Object.values(SUB_FIELDS));
@@ -88,6 +90,7 @@ function _formatLabel(type, pre, post)
         case 'perScene':    return `Per-Encounter ${signedDelta(pre - post)}`;
         case 'perMission':  return `Per-Mission ${signedDelta(pre - post)}`;
         case 'reserveUsed': return post ? 'Reserve Used' : 'Reserve Restored';
+        case 'core':        return `Core Power ${signedDelta(post - pre)}`;
         default:            return '';
     }
 }
@@ -99,28 +102,27 @@ function _canSeeConsume(actor)
         return true;
     if (actor?.type === 'pilot' || actor?.type === 'mech')
         return true;
-    if (getLAFlag(actor,'scannedByAll'))
-        return true;
     return isActorScannedForUser(actor, game.user);
 }
 
 function _floatingNumbersOn()
 {
-    try
-    {
-        return !!game.settings.get('lancer', 'floatingNumbers');
-    }
-    catch
-    {
-        return true;
-    }
+    return !!getExternalSetting('lancer', 'floatingNumbers', true);
+}
+
+function _feedbackTokens(actor)
+{
+    const own = actor?.getActiveTokens?.() ?? [];
+    if (own.length || actor?.type !== 'pilot')
+        return own;
+    return (canvas?.tokens?.placeables ?? []).filter(token => token.actor?.system?.pilot?.value?.id === actor.id);
 }
 
 export function spawnConsumeFeedback(actor, type, pre, post, labelOverride = null)
 {
     try
     {
-        const tokens = actor?.getActiveTokens?.() ?? [];
+        const tokens = _feedbackTokens(actor);
         const token = tokens.find(/** @type {any} */ activeToken => activeToken.visible) ?? tokens[0];
         if (!token || !token.visible)
             return;
@@ -160,6 +162,7 @@ function _snapshotItem(item)
 {
     if (!item?.uuid)
         return;
+    _seenDocs.add(item.uuid);
     for (const [type, { read }] of Object.entries(RESOURCE_FIELDS))
     {
         const value = read(item);
@@ -179,17 +182,48 @@ function _snapshotItem(item)
     }
 }
 
+function _snapshotActor(actor)
+{
+    if (!actor?.uuid)
+        return;
+    _seenDocs.add(actor.uuid);
+    const core = _readNum(actor, 'system.core_energy');
+    if (core !== undefined)
+        _lastConsume.set(`${actor.uuid}:core`, core);
+    for (const entry of _subEntries(actor))
+        _lastConsume.set(entry.key, entry.value);
+}
+
+function _spawnSubChanges(doc, actor, suppressed)
+{
+    for (const entry of _subEntries(doc))
+    {
+        const prev = _lastConsume.get(entry.key) ?? (_seenDocs.has(doc.uuid) ? 0 : undefined);
+        _lastConsume.set(entry.key, entry.value);
+        if (prev === undefined || prev === entry.value || suppressed)
+            continue;
+        spawnConsumeFeedback(actor, entry.type, prev, entry.value);
+    }
+}
+
 // Seed the per-client snapshot from the current scene so the first consume already has a previous value.
 function _seedFromCanvas()
 {
     _lastConsume.clear();
+    _seenDocs.clear();
     for (const token of canvas?.tokens?.placeables ?? [])
     {
         const actor = token.actor;
         if (!actor)
             continue;
-        for (const item of actor.items ?? [])
-            _snapshotItem(item);
+        for (const owner of [actor, actor.system?.pilot?.value])
+        {
+            if (!owner)
+                continue;
+            _snapshotActor(owner);
+            for (const item of owner.items ?? [])
+                _snapshotItem(item);
+        }
     }
 }
 
@@ -209,7 +243,7 @@ export function initConsumeFeedback()
             if (actor?.documentName !== 'Actor')
                 return;
             // Suppressed updates still refresh the snapshot so the next real delta stays correct.
-            const suppressed = options?.laConsumeFeedback === false;
+            const suppressed = /** @type {any} */ (options)?.laConsumeFeedback === false;
             for (const [type, { get }] of Object.entries(RESOURCE_FIELDS))
             {
                 const post = get(change);
@@ -224,16 +258,7 @@ export function initConsumeFeedback()
                 spawnConsumeFeedback(actor, type, prev, post);
             }
             if (Object.keys(foundry.utils.flattenObject(change)).some(key => key.includes('perFreqSub')))
-            {
-                for (const entry of _subEntries(item))
-                {
-                    const prev = _lastConsume.get(entry.key);
-                    _lastConsume.set(entry.key, entry.value);
-                    if (prev === undefined || prev === entry.value || suppressed)
-                        continue;
-                    spawnConsumeFeedback(actor, entry.type, prev, entry.value);
-                }
-            }
+                _spawnSubChanges(item, actor, suppressed);
             if (item.type === 'bond' && change.system?.powers !== undefined)
             {
                 (/** @type {any[]} */ (item.system?.powers ?? [])).forEach((power, powerIdx) =>
@@ -255,6 +280,31 @@ export function initConsumeFeedback()
         catch (err)
         {
             console.warn(`${MODULE_ID} | consume-feedback: updateItem handler failed`, err);
+        }
+    });
+
+    Hooks.on('updateActor', (actor, change, options) =>
+    {
+        try
+        {
+            if (!actor?.uuid)
+                return;
+            const suppressed = /** @type {any} */ (options)?.laConsumeFeedback === false;
+            const core = _readNum(change, 'system.core_energy');
+            if (core !== undefined)
+            {
+                const key = `${actor.uuid}:core`;
+                const prev = _lastConsume.get(key);
+                _lastConsume.set(key, core);
+                if (prev !== undefined && prev !== core && !suppressed)
+                    spawnConsumeFeedback(actor, 'core', prev, core);
+            }
+            if (Object.keys(foundry.utils.flattenObject(change)).some(key => key.includes('perFreqSub')))
+                _spawnSubChanges(actor, actor, suppressed);
+        }
+        catch (err)
+        {
+            console.warn(`${MODULE_ID} | consume-feedback: updateActor handler failed`, err);
         }
     });
 }

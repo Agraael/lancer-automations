@@ -3,6 +3,7 @@
 import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
 import { rollCard } from "../interactive/tools/rollCard.js";
@@ -683,11 +684,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
                             resolve({ type: "system", system: item.data });
                     }
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel"),
-                    callback: () => resolve(null)
-                }
+                cancel: cancelButton(() => resolve(null))
             },
             default: "destroy",
             render: (html) =>
@@ -695,7 +692,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
                 html.find('.la-choice-item').on('contextmenu', function(e)
                 {
                     e.preventDefault();
-                    $('.la-trauma-detail-popup').remove();
+                    document.querySelectorAll('.la-trauma-detail-popup').forEach(node => node.remove());
                     const itemId = $(this).data('item-id');
                     const item = items.find(candidateItem => candidateItem.id === itemId);
                     if (!item?.detail)
@@ -757,9 +754,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
     });
 }
 
-/**
- * Manual System Trauma function for macros/hotkeys
- */
+/** Manual System Trauma function for macros/hotkeys */
 export async function manualSystemTrauma()
 {
     let token = canvas.tokens.controlled[0];
@@ -919,11 +914,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
                         label: hitType,
                         callback: () => resolve(true)
                     },
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
-                        label: localize("LA.common.cancel"),
-                        callback: () => resolve(false)
-                    }
+                    cancel: cancelButton(() => resolve(false))
                 },
                 default: "proceed"
             }, {
@@ -1023,11 +1014,7 @@ export async function tearOffDirectHitFlow(state)
                     label: localize("LA.altStruct.directHit"),
                     callback: () => resolve(true)
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel"),
-                    callback: () => resolve(false)
-                }
+                cancel: cancelButton(() => resolve(false))
             },
             default: "proceed"
         }, {
@@ -1110,11 +1097,7 @@ export async function tearOffCrushingHitFlow(state)
                     label: localize("LA.altStruct.crushingHit"),
                     callback: () => resolve(true)
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel"),
-                    callback: () => resolve(false)
-                }
+                cancel: cancelButton(() => resolve(false))
             },
             default: "proceed"
         }, {
@@ -1248,7 +1231,7 @@ export async function handleCrushingHitHullCheckResult(actor, success)
     return { title, description: localize('LA.altStruct.result.hullFailedDestroyed') };
 }
 
-/** Applies IMPAIRED on a Glancing Blow (5-6) structure roll. */
+/** Applies SLOW + IMPAIRED on a Direct Hit at 3+ structure and IMPAIRED on a Glancing Blow (5-6). */
 export async function applyStructureEffects(state)
 {
     if (!state.data)

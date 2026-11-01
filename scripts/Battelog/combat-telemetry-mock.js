@@ -35,7 +35,7 @@ const HOSTILE_HEAT_FLOOR = 5;
 
 const _rand   = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 const _pick   = arr => arr[Math.floor(Math.random() * arr.length)];
-const _chance = p => Math.random() < p;
+const _chance = probability => Math.random() < probability;
 
 function pickRandom(arr, count)
 {
@@ -117,8 +117,7 @@ function absorbDamage(state, damageType, raw)
     return { landed: Math.max(0, remaining), absorbedArmor, absorbedOvershield };
 }
 
-// Lancer rule: hp ≤ 0 and structure > 0 → structure damage. Overkill carries
-// into the next pool: hp becomes (hp + hpMax). Structure at 0 = destroyed.
+// Lancer rule: hp ≤ 0 costs a structure and overkill carries over (hp += hpMax), structure 0 = destroyed.
 function applyHpDamage(round, combatant, state, landed)
 {
     if (landed <= 0)
@@ -126,8 +125,7 @@ function applyHpDamage(round, combatant, state, landed)
     state.hp -= landed;
     if (state.hp > 0 || state.destroyed || state.struct <= 0)
         return false;
-    // Mock cheat: reserve exactly one force-destroyed mech for post-sim. Players
-    // at their last structure refill without losing it and without dying.
+    // Mock cheat: players on their last structure refill instead, one mech is force-destroyed post-sim.
     if (state.side === 'player' && state.struct === 1)
     {
         state.hp += state.hpMax;
@@ -265,9 +263,6 @@ function reactionAction(round, actor)
 function utilityAction(round, actor, actorState)
 {
     const name = _pick(UTILITY_ACTS);
-    // Self-repair heals a bit; count it as a state change but not an incoming damage event.
-    if (name === 'SELF REPAIR')
-        actorState.hp = Math.min(actorState.hpMax, actorState.hp + _rand(2, 4));
     pushEvent(actor, {
         type: 'action',
         round,
@@ -337,8 +332,7 @@ function coolHeat(state)
         state.heat = Math.max(0, state.heat - 1);
 }
 
-// Lancer rule: heat > heatMax and stress > 0 → overheat. Leftover carries over
-// (heat becomes heat - heatMax). Stress at 0 = destroyed (reactor meltdown).
+// Lancer rule: heat over heatMax costs a stress and the excess carries over, stress 0 = reactor meltdown.
 function gainHeat(round, combatant, state, amount)
 {
     if (amount <= 0)
@@ -354,13 +348,12 @@ function gainHeat(round, combatant, state, amount)
         state.heat = state.heatMax;
 }
 
-// Lancer action economy per turn: 1 protocol (top of turn) + (1 full OR 2 quick)
-// + 1 move + optional reaction + optional free actions.
+// Lancer turn: 1 protocol (top of turn) + (1 full OR 2 quick) + 1 move + optional reaction and free actions.
 function playerTurn(round, actor, actorState, targets)
 {
     if (targets.length === 0)
         return;
-    const hasTargets = () => targets.some(t => !t.__state.destroyed);
+    const hasTargets = () => targets.some(target => !target.__state.destroyed);
 
     if (_chance(0.3))
         pushEvent(actor, { type: 'action', round, byId: actor.tokenId, activation: 'Protocol', name: 'PROTOCOL', success: true });
@@ -651,14 +644,14 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
 
     // Push hostile casualties to ~90 %.
     const targetDead = Math.floor(hostiles.length * 0.9);
-    const stillAlive = hostiles.filter(h => !h.__state.destroyed);
+    const stillAlive = hostiles.filter(hostile => !hostile.__state.destroyed);
     const finishOff = Math.max(0, targetDead - (hostiles.length - stillAlive.length));
     const doomedHostiles = pickRandom(stillAlive, finishOff);
-    for (const h of doomedHostiles)
+    for (const hostile of doomedHostiles)
     {
-        h.__state.destroyed = true;
+        hostile.__state.destroyed = true;
         _turn = _rand(0, Math.max(0, players.length + hostiles.length - 1));
-        pushEvent(h, { type: 'destroyed', round: _rand(2, roundCount), tokenId: h.tokenId });
+        pushEvent(hostile, { type: 'destroyed', round: _rand(2, roundCount), tokenId: hostile.tokenId });
         _turn = null;
     }
 

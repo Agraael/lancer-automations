@@ -171,7 +171,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const themeName = $root[0]?.querySelector('.battelog-recap-theme-name');
                 const themeClip = themeName?.querySelector('.battelog-recap-theme-clip');
-                const themeScroll = themeClip?.querySelector('.battelog-recap-theme-scroll');
+                const themeScroll = /** @type {HTMLElement} */ (themeClip?.querySelector('.battelog-recap-theme-scroll'));
                 if (!themeName || !themeClip || !themeScroll)
                     return;
                 if (themeScroll.scrollWidth <= themeClip.clientWidth + 4)
@@ -857,7 +857,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
 
             const measureRibbons = () =>
             {
-                const nodes = $root[0].querySelectorAll('.battelog-pcol-ribbon-text');
+                const nodes = /** @type {NodeListOf<HTMLElement>} */ ($root[0].querySelectorAll('.battelog-pcol-ribbon-text'));
                 for (const node of nodes)
                 {
                     const overflow = node.scrollWidth - node.clientWidth;
@@ -1028,9 +1028,9 @@ function _edefPct(battleData)
 
 function _damageTypeRows(section)
 {
-    const types = (section?.types ?? []).filter(t => (t.v ?? 0) > 0);
-    const physical = types.filter(t => t.k !== 'HEAT' && t.k !== 'INFECTION');
-    const special = types.filter(t => t.k === 'HEAT' || t.k === 'INFECTION');
+    const types = (section?.types ?? []).filter(dmgType => (dmgType.v ?? 0) > 0);
+    const physical = types.filter(dmgType => dmgType.k !== 'HEAT' && dmgType.k !== 'INFECTION');
+    const special = types.filter(dmgType => dmgType.k === 'HEAT' || dmgType.k === 'INFECTION');
     const build = dmgType => ({ k: dmgType.k, v: String(dmgType.v), kIcon: _DMG_ICON[dmgType.k], kColor: _DMG_COLOR[dmgType.k] });
     return [
         ...physical.map(build),
@@ -1129,8 +1129,6 @@ function _splitKillRows(list, pilotList)
 // Flat token-bar palette from scripts/tah/tokenStatBar.js BAR_DEFS.
 const _BAR_HP     = '#66cc66';
 const _BAR_HEAT   = '#cc4422';
-const _BAR_STRUCT = '#ffd633';
-const _BAR_STRESS = '#ff8822';
 
 function _accAvg(player)
 {
@@ -1138,7 +1136,7 @@ function _accAvg(player)
     if (total != null)
         return total;
     const vals = ['ranged', 'melee', 'tech']
-        .map(k => player?.bd?.acc?.[k])
+        .map(accField => player?.bd?.acc?.[accField])
         .filter(stat => stat != null);
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : (player?.accuracy ?? 0);
 }
@@ -1319,12 +1317,14 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
     const topAction = player.topAction ?? '-';
 
     const awards = _playerAwards(player, allAwards);
+    const awardIcon = award => (award.second ? 'fa-medal battelog-award-second-icon' : award.icon);
+    const secondTag = award => (award.second ? `<span class="battelog-award-second-tag">${_escape(localize('LA.recap.secondPlace'))}</span>` : '');
     const medalsHtml = awards.map(award => `
         <span class="battelog-pcol-medal ${award.key === 'MVP' ? 'is-mvp' : ''} ${award.key === 'KIA' ? 'is-kia' : ''}">
-            <i class="fas ${award.icon}"></i> ${award.label}
+            <i class="fas ${awardIcon(award)}"></i> ${award.label}
             <div class="battelog-pcol-medal-tip">
                 <div class="battelog-pcol-medal-tip-title">
-                    <i class="fas ${award.icon}"></i> ${_escape(award.label)}
+                    <i class="fas ${awardIcon(award)}"></i> ${_escape(award.label)}${secondTag(award)}
                 </div>
                 <div class="battelog-pcol-medal-tip-sub">${_escape(award.sub ?? '')}.</div>
                 <div class="battelog-pcol-medal-tip-stat">${_escape(award.stat ?? '')}</div>
@@ -1368,7 +1368,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                         <div class="battelog-tip-rows">
                             ${awards.map(award => `
                             <div class="battelog-tip-row">
-                                <span class="battelog-tip-k"><i class="fas ${award.icon}"></i> ${_escape(award.label)}</span>
+                                <span class="battelog-tip-k"><i class="fas ${awardIcon(award)}"></i> ${_escape(award.label)}${secondTag(award)}</span>
                                 <span class="battelog-tip-v">${_escape(award.stat ?? '')}</span>
                             </div>`).join('')}
                         </div>
@@ -1984,7 +1984,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
     const badgeHtml = isNemesis
         ? `<div class="battelog-hcard-marker nem has-tip"><i class="fas fa-skull-crossbones"></i> NEMESIS${_hcardBadgeTipHtml('NEMESIS', 'Single NPC that dealt the most damage across the fight.')}</div>`
         : isDanger
-            ? `<div class="battelog-hcard-marker top has-tip"><i class="fas fa-triangle-exclamation"></i> TOP THREAT${_hcardBadgeTipHtml('TOP THREAT', 'Highest combined damage, Nemesis excluded.')}</div>`
+            ? `<div class="battelog-hcard-marker top has-tip"><i class="fas fa-triangle-exclamation"></i> TOP THREAT${_hcardBadgeTipHtml('TOP THREAT', 'Group of 2+ identical units with the highest combined damage, Nemesis excluded.')}</div>`
             : '';
     const metaHtml = `<span class="battelog-hcard-meta">SIZE <b>${_escape(size)}</b></span>`;
     const cardClass = `battelog-hcard stagger is-side-${_escape(group.side ?? 'hostile')} ${allKilled ? 'is-killed' : 'is-active'} ${scanned ? '' : 'is-unscanned'} ${isDanger ? 'is-danger' : ''} ${isNemesis ? 'is-nemesis' : ''} ${group.team?.color ? 'on-team' : ''}`;
@@ -2302,7 +2302,7 @@ function _telemetryTurnAxis(battle)
 
 function _telemetryMetric(view)
 {
-    return TELEMETRY_METRICS.find(m => m.key === view) ?? TELEMETRY_METRICS[0];
+    return TELEMETRY_METRICS.find(metric => metric.key === view) ?? TELEMETRY_METRICS[0];
 }
 
 // Kills uses the same custom SVG as the Squad tab; other metrics stay on FA glyphs.
@@ -2428,10 +2428,10 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
 {
     const metric = _telemetryMetric(view);
     const rounds = battle.mission?.rounds ?? battle.rounds?.length ?? 0;
-    const metricButtons = TELEMETRY_METRICS.map(m => `
-        <button type="button" class="battelog-telemetry-metric ${m.key === view ? 'on' : ''}" data-metric="${m.key}">
-            ${_metricIconHtml(m)}
-            <span class="battelog-telemetry-metric-label">${_escape(localize(m.label))}</span>
+    const metricButtons = TELEMETRY_METRICS.map(metric => `
+        <button type="button" class="battelog-telemetry-metric ${metric.key === view ? 'on' : ''}" data-metric="${metric.key}">
+            ${_metricIconHtml(metric)}
+            <span class="battelog-telemetry-metric-label">${_escape(localize(metric.label))}</span>
         </button>
     `).join('');
     const turns = battle.mission?.turns ?? null;

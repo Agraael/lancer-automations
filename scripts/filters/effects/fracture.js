@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_HASH2, GLSL_VNOISE } from '../filter-core.js';
+import { LaCustomFilter, GLSL_HASH1, GLSL_HASH2, GLSL_VNOISE, GLSL_BLENDER_VEC3 } from '../filter-core.js';
 
 // FilterFracture: Voronoi F2-F1 glowing cracks with noise distortion.
 
@@ -20,26 +20,7 @@ uniform sampler2D uSampler;
 varying vec2 vTextureCoord;
 varying vec2 vFilterCoord;
 
-vec4 blenderVec3(int blend, vec4 fColv4, vec4 sColv4)
-{
-    vec3 fCol = vec3(fColv4);
-    vec3 sCol = vec3(sColv4);
-    if      (blend == 1)  { fCol = fCol * sCol; }
-    else if (blend == 2)  { fCol = (1. - (1. - fCol) * (1. - sCol)); }
-    else if (blend == 3)  { fCol = min(fCol, sCol); }
-    else if (blend == 4)  { fCol = max(fCol, sCol); }
-    else if (blend == 5)  { fCol = abs(fCol - sCol); }
-    else if (blend == 6)  { fCol = 1. - abs(1. - fCol - sCol); }
-    else if (blend == 7)  { fCol = fCol + sCol - (2. * fCol * sCol); }
-    else if (blend == 8)  { fCol = all(lessThanEqual(fCol, vec3(0.5))) ? (2. * fCol * sCol) : (1. - 2. * (1. - fCol) * (1. - sCol)); }
-    else if (blend == 9)  { fCol = all(lessThanEqual(sCol, vec3(0.5))) ? (2. * fCol * sCol) : (1. - 2. * (1. - fCol) * (1. - sCol)); }
-    else if (blend == 10) { fCol = all(lessThanEqual(sCol, vec3(0.5))) ? (2. * fCol * sCol + fCol * fCol * (1. - 2. * sCol)) : sqrt(fCol) * (2. * sCol - 1.) + (2. * fCol) * (1. - sCol); }
-    else if (blend == 11) { fCol = fCol / (1.0 - sCol); }
-    else if (blend == 12) { fCol = 1.0 - (1.0 - fCol) / sCol; }
-    else if (blend == 13) { fCol = fCol + sCol; }
-    else                  { fCol = fCol + sCol; }
-    return vec4(fCol, 1.0);
-}
+${GLSL_BLENDER_VEC3}
 
 ${GLSL_HASH2}
 ${GLSL_HASH1}
@@ -90,8 +71,7 @@ void main()
     // F2-F1: zero at cell boundaries, large inside cells
     float edge = d2 - d1;
 
-    // Noise mask: randomly hide sections of cracks
-    // Uses position along the edge to break up continuous lines
+    // Noise mask: hide random sections so the cracks never read as continuous lines
     float mask = vnoise(uv * 2.5 + time * 0.05);
     mask = smoothstep(maskAmount, maskAmount + 0.3, mask);
 
@@ -111,40 +91,11 @@ void main()
 }
 `;
 
-export class FilterFracture extends PIXI.Filter
+export class FilterFracture extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, fractureFragment);
-
-        this.uniforms.color = new Float32Array([1.0, 1.0, 1.0]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterFracture.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 0.3;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(fractureFragment, params, { color: new Float32Array([1.0, 1.0, 1.0]) }, 0.3);
     }
 
     get color()
@@ -181,15 +132,6 @@ export class FilterFracture extends PIXI.Filter
     set crackWidth(value)
     {
         this.uniforms.crackWidth = value;
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 
     get warpStrength()

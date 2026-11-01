@@ -536,6 +536,28 @@ export function wrapApplyOverkillHeat(flowSteps)
     });
 }
 
+export function wrapFreeUseCard(flowSteps)
+{
+    const orig = flowSteps.get('printActionUseCard');
+    if (!orig)
+        return;
+    flowSteps.set('printActionUseCard', async function wrappedPrintActionUseCard(state, options)
+    {
+        const action = state?.data?.action;
+        if (!action || !state.la_extraData?.freeUse)
+            return orig.call(this, state, options);
+        state.data.action = { ...action, activation: 'Free' };
+        try
+        {
+            return await orig.call(this, state, options);
+        }
+        finally
+        {
+            state.data.action = action;
+        }
+    });
+}
+
 export function wrapExtraActionRecharge(flowSteps, flows)
 {
     // (a) Wrap findRechargeableSystems so the flow doesn't abort when only

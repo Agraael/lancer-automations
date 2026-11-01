@@ -6,6 +6,7 @@ import { MODULE_ID } from '../tools/constants.js';
 import { applyStandingUp } from '../tools/movement-tools.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { isOverwatchSpent } from '../combat/overwatch.js';
 
 const CODE_INSTEAD = { activationType: "code", activationMode: "instead" };
 
@@ -360,7 +361,7 @@ export function getDefaultGeneralReactionRegistry()
                 actionType: "Reaction",
                 outOfCombat: false,
                 enabled: false,
-                frequency: "Other",
+                frequency: "1/Round",
                 requireCanProvoke: true,
                 evaluate: function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
@@ -389,7 +390,7 @@ export function getDefaultGeneralReactionRegistry()
                 outOfCombat: false,
                 enabled: false,
                 actionType: "Reaction",
-                frequency: "Other",
+                frequency: "1/Round",
                 isReaction: true,
                 checkReaction: true,
                 requireCanProvoke: true,
@@ -401,7 +402,7 @@ export function getDefaultGeneralReactionRegistry()
                     const mover = triggerData.triggeringToken;
                     if (!mover)
                         return false;
-                    if (triggerData.moveInfo?.isInvoluntary)
+                    if (triggerData.moveInfo?.isInvoluntary || isOverwatchSpent(reactorToken))
                         return false;
                     if (api.isFriendly(reactorToken, mover))
                         return false;
@@ -769,7 +770,7 @@ export function getDefaultGeneralReactionRegistry()
                                 icon: "fas fa-dice-d20",
                                 callback: async () =>
                                 {
-                                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`, 10, { sourceAction: "Flying" });
+                                    const result = await api.executeStatRoll(reactorToken.actor, "AGI", `AGILITY Save (${label} while Flying)`, 10, { sourceAction: "Flying", rollTypes: ['save'] });
                                     if (result.completed && !result.passed)
                                         await api.removeEffectsByNameFromTokens({ tokens: [reactorToken], effectNames: ["Flying"], notify: true });
                                 }
@@ -801,7 +802,7 @@ export function getDefaultGeneralReactionRegistry()
                     count: 1,
                     title: localize('LA.dialogTitle.lockOnSelectTarget'),
                     description: sensorRange !== sensors ? `Choose a target within Range ${sensorRange}` : `Choose a target within Sensors (${sensorRange})`,
-                    filter: t => t.actor?.type !== 'deployable',
+                    filter: token => token.actor?.type !== 'deployable',
                 });
                 if (!targets || targets.length === 0)
                     return;
@@ -974,7 +975,7 @@ export function getDefaultGeneralReactionRegistry()
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
-                        filter: (t) => !api.findEffectOnToken(t, "Aided")
+                        filter: (token) => !api.findEffectOnToken(token, "Aided")
                     });
                     if (!chosen || chosen.length === 0)
                         return;
@@ -1066,7 +1067,7 @@ export function getDefaultGeneralReactionRegistry()
                 const targets = triggerData.targets;
                 if (!targets || targets.length === 0)
                     return;
-                const targetTokens = targets.map(t => t.target);
+                const targetTokens = targets.map(target => target.target);
 
                 const actor = reactorToken.actor;
                 const effects = actor.type === 'npc'
@@ -1097,7 +1098,7 @@ export function getDefaultGeneralReactionRegistry()
                     const chosen = await api.chooseToken(reactorToken, {
                         count: 1,
                         range: 1,
-                        filter: (t) => t.actor.system.size <= reactorToken.actor.system.size,
+                        filter: (token) => token.actor.system.size <= reactorToken.actor.system.size,
                         filterWarning: "Target is larger than you"
                     });
                     if (!chosen || chosen.length === 0)
@@ -1110,7 +1111,7 @@ export function getDefaultGeneralReactionRegistry()
                         action: { name: "Ram", activation: "Quick" },
                         effect: localize('LA.reaction.makeAMeleeAttackAgainstAn'),
                         tags: [{ lid: 'tg_knockback', val: 1 }]
-                    }, { tapeRecorded: true });
+                    }, { tapeRecorded: true, rollTypes: ['ram'] });
                 }
             }, {
                 triggers: ["onHit"],
@@ -1126,7 +1127,7 @@ export function getDefaultGeneralReactionRegistry()
                     const targets = triggerData.targets;
                     if (!targets || targets.length === 0)
                         return;
-                    const targetTokens = targets.map(t => t.target);
+                    const targetTokens = targets.map(target => target.target);
 
                     await api.applyEffectsToTokens({
                         tokens: targetTokens,
@@ -1177,7 +1178,7 @@ export function getDefaultGeneralReactionRegistry()
                 ...CODE_INSTEAD,
                 activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
                 {
-                    const gmUserId = game.users.activeGM?.id;
+                    const gmUserId = api.getActiveGMId();
                     await api.startChoiceCard({
                         title: "FALLING?",
                         description: localizeFormat('LA.reaction.hangingInAir', { name: reactorToken.name }),
@@ -1875,9 +1876,9 @@ export function getDefaultGeneralReactionRegistry()
             ...CODE_INSTEAD,
             activationCode: async function (triggerType, triggerData, reactorToken, item, activationName, api)
             {
-                const squeezeProne = api.findEffectOnToken(reactorToken, e =>
-                    e.statuses?.has("prone") &&
-                    getLAFlags(e)?.squeezeSource === reactorToken.id
+                const squeezeProne = api.findEffectOnToken(reactorToken, effect =>
+                    effect.statuses?.has("prone") &&
+                    getLAFlags(effect)?.squeezeSource === reactorToken.id
                 );
                 if (squeezeProne)
                 {
@@ -2050,7 +2051,7 @@ export function getDefaultGeneralReactionRegistry()
                 const targets = await api.chooseToken(reactorToken, {
                     range: 1,
                     includeSelf: false,
-                    filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
+                    filter: (token) => token.actor?.type === 'mech' || token.actor?.type === 'npc',
                     title: localize('LA.dialogTitle.mountCaps'),
                     description: localizeFormat('LA.reaction.mountPrompt', { pilot: pilotName }),
                     icon: "cci cci-pilot"
@@ -2116,7 +2117,7 @@ export function getDefaultGeneralReactionRegistry()
             const targets = await api.chooseToken(reactorToken, {
                 range: 1,
                 includeSelf: false,
-                filter: (t) => t.actor?.type === 'mech' || t.actor?.type === 'npc',
+                filter: (token) => token.actor?.type === 'mech' || token.actor?.type === 'npc',
                 title: localize('LA.dialogTitle.jockeyCaps'),
                 description: localize('LA.reaction.chooseTheAdjacentMechTo'),
                 icon: "modules/lancer-automations/icons/rope-dart.svg"

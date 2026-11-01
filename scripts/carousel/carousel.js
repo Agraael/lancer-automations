@@ -1,11 +1,13 @@
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
-import { escapeHtml, localize } from '../tools/string-utils.js';
+import { escapeHtml, localize, localizeFormat } from '../tools/string-utils.js';
 import { isAltHeld } from '../tah/statbar/state.js';
 import { FLASH_HOLD_MS, FLASH_SHRINK_MS } from '../tah/statbar/config.js';
 import { isTokenVisible } from '../utils/lancer-token.js';
-import { buildCarouselView, EVENT_FLAG } from './carousel-view.js';
+import { buildCarouselView, EVENT_FLAG, cardStatusEntries } from './carousel-view.js';
+import { effectTooltipData, showStatusTooltip, moveStatusTooltip, durationText } from '../bonuses/status-tooltip.js';
+import { playUiSound } from '../tah/sound.js';
 import { slotHtml, headHtml, sideButtonsHtml } from './carousel-html.js';
 import { reconcileLanes, indexSlots, setPeak, resetPeaks, fitStrip, edgeFade, bindEdges, stopEdgeScroll, centerActive, revealSlot, resumeScroll, cancelScroll, panNames, captureRects, playFlip } from './carousel-layout.js';
 import { registerEventSettings, openAddEvent, initEventExpiry } from './carousel-events.js';
@@ -62,6 +64,8 @@ let _introPending = false;
 let _hoveredToken = null;
 let _hoveredSlotId = null;
 let _canvasHoverId = null;
+let _statusTip = null;
+let _statusChip = null;
 let _buttonsHtml = { left: null, right: null };
 const _shown = new Map();
 const _laneLeft = new Map();
@@ -149,6 +153,48 @@ function hoverTokenOut(event)
     _hoveredToken = null;
 }
 
+function closeStatusTip()
+{
+    _statusTip?.remove();
+    _statusTip = null;
+    _statusChip = null;
+}
+
+function statusTipData(chip, actor)
+{
+    const entries = cardStatusEntries(actor);
+    if (chip.dataset.more === undefined)
+    {
+        const entry = entries[Number(chip.dataset.st)];
+        return entry ? effectTooltipData(actor, entry.effect) : null;
+    }
+    const hidden = entries.slice(Number(chip.dataset.more));
+    if (!hidden.length)
+        return null;
+    const lines = hidden.map(entry =>
+    {
+        const duration = durationText(entry.effect);
+        return `<div>${escapeHtml(entry.effect.name)}${duration ? ` <span class="la-status-tooltip-duration">· ${escapeHtml(duration)}</span>` : ''}</div>`;
+    });
+    return { name: escapeHtml(localizeFormat('LA.carousel.moreStatuses', { count: hidden.length })), description: lines.join('') };
+}
+
+function syncStatusTip(chip, slot)
+{
+    if (chip === _statusChip)
+        return;
+    closeStatusTip();
+    const actor = chip ? viewedCombatant(slot)?.actor : null;
+    const data = actor ? statusTipData(chip, actor) : null;
+    if (!data)
+        return;
+    _statusChip = chip;
+    _statusTip = showStatusTooltip(data);
+    const rect = chip.getBoundingClientRect();
+    moveStatusTooltip(_statusTip, rect.right, rect.top, 8);
+    playUiSound('statusHover');
+}
+
 function onClick(event)
 {
     const combat = game.combat;
@@ -222,6 +268,7 @@ function onPointerOver(event)
         hoverTokenIn(slot, event);
     else
         hoverTokenOut(event);
+    syncStatusTip(event.target.closest('.lac-st'), slot);
 }
 
 function onPointerLeave(event)
@@ -231,6 +278,7 @@ function onPointerLeave(event)
         resetPeaks(strip);
     _hoveredSlotId = null;
     hoverTokenOut(event);
+    closeStatusTip();
 }
 
 function onWheel(event)
@@ -274,6 +322,7 @@ function mount()
 function unmount()
 {
     hoverTokenOut();
+    closeStatusTip();
     stopEdgeScroll();
     _root?.remove();
     _root = null;
@@ -424,6 +473,8 @@ function render()
     const keepScroll = strip.scrollLeft;
     strip.classList.add('no-win-anim');
     reconcileLanes(strip, laneItems(view, size));
+    if (_statusChip && !_statusChip.isConnected)
+        closeStatusTip();
     indexSlots(strip);
     applyPeaks(strip);
     applyLiveClasses();

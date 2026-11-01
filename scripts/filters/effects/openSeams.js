@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
 
 // FilterOpenSeams: plates contract toward their own centres, so the seam is where a plate actually moved.
 
@@ -18,14 +18,7 @@ uniform vec2 lightDir;
 uniform vec3 lipColor;
 uniform float lipGain;
 uniform float lipW;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_HASH2}
@@ -82,43 +75,16 @@ void main()
 }
 `;
 
-export class FilterOpenSeams extends PIXI.Filter
+export class FilterOpenSeams extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, openSeamsFragment);
-
-        this.uniforms.seamColor = new Float32Array([1.0, 0.18, 0.24]);
-        this.uniforms.seamCore = new Float32Array([1.0, 0.69, 0.63]);
-        this.uniforms.lipColor = new Float32Array([0.85, 0.77, 0.69]);
-        this.uniforms.lightDir = new Float32Array([0.707, -0.707]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterOpenSeams.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(openSeamsFragment, params, {
+            seamColor: new Float32Array([1.0, 0.18, 0.24]),
+            seamCore: new Float32Array([1.0, 0.69, 0.63]),
+            lipColor: new Float32Array([0.85, 0.77, 0.69]),
+            lightDir: new Float32Array([0.707, -0.707]),
+        });
     }
 
     get blocks()
@@ -231,15 +197,6 @@ export class FilterOpenSeams extends PIXI.Filter
         const radians = (value * Math.PI) / 180;
         this.uniforms.lightDir[0] = -Math.sin(radians);
         this.uniforms.lightDir[1] = Math.cos(radians);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

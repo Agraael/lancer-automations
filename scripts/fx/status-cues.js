@@ -23,7 +23,7 @@ const cueKeys = new Map();
 
 function cueMode()
 {
-    return getModuleSetting('guardianBulwarkAuraMode') || 'always';
+    return getModuleSetting('guardianBulwarkAuraMode') || 'combat';
 }
 
 function cueColor(token)

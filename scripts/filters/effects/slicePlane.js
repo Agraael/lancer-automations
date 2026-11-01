@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, setDirVFromDegrees } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, setDirVFromDegrees } from '../filter-core.js';
 
 // FilterSlicePlane: a cut travels across the chassis and the two halves slide apart along it, then close.
 // No alpha early-out: the displaced half lands where the sprite is not.
@@ -13,14 +13,7 @@ uniform float bounce;
 uniform float travel;
 uniform vec3 edgeColor;
 uniform vec2 dirV;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 vec4 tapC(vec2 uv)
 {
@@ -57,41 +50,14 @@ void main()
 }
 `;
 
-export class FilterSlicePlane extends PIXI.Filter
+export class FilterSlicePlane extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, slicePlaneFragment);
-
-        this.uniforms.edgeColor = new Float32Array([0.63, 0.42, 1.0]);
-        this.uniforms.dirV = new Float32Array([-0.423, 0.906]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterSlicePlane.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(slicePlaneFragment, params, {
+            edgeColor: new Float32Array([0.63, 0.42, 1.0]),
+            dirV: new Float32Array([-0.423, 0.906]),
+        });
     }
 
     get slide()
@@ -148,15 +114,6 @@ export class FilterSlicePlane extends PIXI.Filter
     {
         this._cutAngle = value;
         setDirVFromDegrees(this.uniforms, value);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

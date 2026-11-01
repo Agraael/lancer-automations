@@ -1173,7 +1173,7 @@ function applyLancerCost(tokenDoc, inputWaypoints, result)
 
 function _autoElevDisabled()
 {
-    return !!getModuleSetting('disableAutoTerrainElevation');
+    return getModuleSetting('terrainElevationMode') === 'off';
 }
 
 // Gate: Lancer ruler (cost + per-cell render) on. Auto-elevation is handled

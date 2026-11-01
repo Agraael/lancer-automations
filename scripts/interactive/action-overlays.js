@@ -2,6 +2,7 @@
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
 const FLAG_KEY = 'actionOverlays';
 
 // setFlag treats dots in keys as paths; action names can contain them.
@@ -73,7 +74,7 @@ export async function setActionOverlay(target, actionName, overlay)
     const doc = _resolveDoc(target);
     if (!doc || !actionName)
     {
-        ui.notifications.error("setActionOverlay: target and actionName are required.");
+        ui.notifications.error(localize('LA.notify.setActionOverlayArgs'));
         return null;
     }
     const map = getLAFlag(doc,FLAG_KEY) || {};

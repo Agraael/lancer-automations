@@ -1,8 +1,9 @@
 import { getPendingUpdate } from "./version-check.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
-import { localize } from "../tools/string-utils.js";
+import { localize, escapeHtml } from "../tools/string-utils.js";
 import { getSupabase } from "./supabase-client.js";
 import { getOrCreateInstallId } from "./telemetry.js";
+import { afterFirstRun } from "./first-run-queue.js";
 import { escapeAttr as _escAttr } from "../tools/misc-tools.js";
 
 import { MODULE_ID } from "../tools/constants.js";
@@ -17,7 +18,7 @@ const NEWS_PENDING = "pending";
 const POLL_RESPONDED_SETTING = "respondedPollIds";
 const HISTORY_HINT = `<p style="margin-top: 12px; padding: 8px 10px; background: rgba(120,46,34,0.08); border-left: 3px solid #782e22; border-radius: 2px; font-size: 0.9em;">
     <i class="fas fa-info-circle"></i> Past news and release notes are available under
-    <b>Configure Settings → Module Settings → Lancer Automations → Tools & Extras → News & Releases</b>.
+    <b>Configure Settings → Module Settings → Lancer Automations → Tools → News & Releases</b>.
 </p>`;
 
 function _getRole()
@@ -169,7 +170,7 @@ function _renderField(field)
     if (!name)
         return "";
     const label = String(field?.label ?? name);
-    const placeholderAttr = field?.placeholder ? `placeholder="${String(field.placeholder).replaceAll('"', "&quot;")}"` : "";
+    const placeholderAttr = field?.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : "";
     const required = field?.required ? "required" : "";
     let input;
     if (field?.type === "select" && Array.isArray(field.options))
@@ -178,7 +179,7 @@ function _renderField(field)
         {
             const value = typeof opt === "object" ? String(opt.value ?? "") : String(opt);
             const optLabel = typeof opt === "object" ? String(opt.label ?? opt.value ?? "") : String(opt);
-            return `<option value="${value.replaceAll('"', "&quot;")}">${optLabel}</option>`;
+            return `<option value="${escapeHtml(value)}">${optLabel}</option>`;
         }).join("");
         input = `<select name="${name}" ${required} style="width:100%;"><option value=""></option>${opts}</select>`;
     }
@@ -517,6 +518,7 @@ async function _runNews()
     else
         news = _filterEntries(entries, { seen: new Set(seenRaw), role, version, isGM });
 
+    await afterFirstRun();
     _showCombinedDialog({ news, update, firstRun });
 }
 

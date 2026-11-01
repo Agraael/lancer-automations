@@ -7,7 +7,7 @@ const SETTING_CACHE_ALL = 'settingsCacheAllModules';
 let _cacheAll = false;
 
 // Each write path clears before its onChange runs, on every client for world scope.
-function _clearing(wrapped, ...args)
+function _clearCacheWrapper(wrapped, ...args)
 {
     _cache.clear();
     return wrapped(...args);
@@ -53,7 +53,7 @@ Hooks.once('init', () =>
 
     for (const target of ['foundry.helpers.ClientSettings.prototype.set', 'foundry.helpers.ClientSettings.prototype.register',
         'foundry.documents.Setting.prototype._onCreate', 'foundry.documents.Setting.prototype._onUpdate', 'foundry.documents.Setting.prototype._onDelete'])
-        libWrapper.register(MODULE_ID, target, _clearing, 'WRAPPER');
+        libWrapper.register(MODULE_ID, target, _clearCacheWrapper, 'WRAPPER');
 });
 
 function _read(namespace, key, fallback)
@@ -68,8 +68,7 @@ function _read(namespace, key, fallback)
     }
 }
 
-// Read a lancer-automations setting, falling back instead of throwing when it is
-// not registered yet. Returns the value as registered, whatever its type.
+// Falls back instead of throwing while the setting is unregistered, and never coerces the value's type.
 export function getModuleSetting(key, fallback)
 {
     return _read(MODULE_ID, key, fallback);

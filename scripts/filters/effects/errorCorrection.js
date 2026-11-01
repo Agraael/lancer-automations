@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter } from '../filter-core.js';
+import { LaCustomFilter } from '../filter-core.js';
 
 // FilterErrorCorrection: a band sweeps up the chassis and sharpens contrast as it passes.
 
@@ -44,40 +44,11 @@ void main()
 }
 `;
 
-export class FilterErrorCorrection extends PIXI.Filter
+export class FilterErrorCorrection extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, errorCorrectionFragment);
-
-        this.uniforms.bandColor = new Float32Array([0.50, 0.91, 1.0]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterErrorCorrection.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(errorCorrectionFragment, params, { bandColor: new Float32Array([0.50, 0.91, 1.0]) });
     }
 
     get bandWidth()
@@ -114,15 +85,6 @@ export class FilterErrorCorrection extends PIXI.Filter
     set bandColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.bandColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

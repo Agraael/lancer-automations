@@ -1,14 +1,12 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
-import { currentTurnKey } from "../bonuses/duration-builders.js";
+import { checkGate, consumeGate, clearGate, consumeOncePerRound, consumeOncePerTurn } from "./gates.js";
 import { MODULE_ID } from "./constants.js";
 import { localize, localizeFormat } from "./string-utils.js";
+import { cancelButton } from "./dialog-utils.js";
 import { tfGetTeam, tfGetTeams } from "./token-factions-utils.js";
-import { getLAFlag } from "./flag-utils.js";
-import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
-import { choseMount, chooseInvade, InteractiveAPI, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
-import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus } from "../bonuses/genericBonuses.js";
-import { getItemActions, findItemByLid, linkTierGate, isPrimaryActionHidden, gateActions } from "../interactive/deployables.js";
-import { playSkirmishFX, playBarrageFX, playFightFX, playStandingUpFX, playTeleportFX, playSelfDestructFX, playContestedOutcomeFX, playMineDetonationFX, queueActionFx } from "../fx/actionFX.js";
+import { chooseInvade, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
+import { findItemByLid } from "../interactive/deployables.js";
+import { playSelfDestructFX, playContestedOutcomeFX, playMineDetonationFX } from "../fx/actionFX.js";
 import { awaitPendingAck } from "../socket.js";
 import { afterFx } from "../activations/after-fx.js";
 import { redirectNextLwfxSource } from "../activations/flow-steps-extra.js";
@@ -17,8 +15,11 @@ import { handleTrigger } from "../activations/reactions-engine.js";
 import { ReactionManager } from "../activations/reaction-manager.js";
 import { executeStandingUp, executeTeleport, executeFall, boostMove } from "./movement-tools.js";
 import { getItemStatus } from "../tah/item-helpers.js";
-import { recordAction } from "../tah/action-tape.js";
 import { isActionLocked } from "../interactive/deployables.js";
+import { deriveSaveDc, STAT_PATHS, isExecutorGM, hasExecutorGM, inDangerZone, getTier, tierValue, getWeaponType, weaponClass, getItemType } from "../utils/lancer-token.js";
+export { deriveSaveDc, isExecutorGM, hasExecutorGM, inDangerZone, getTier, tierValue, getWeaponType, weaponClass, getItemType };
+import { hasReactionAvailable, setReaction, modifyAction, consumeAction, gainAction } from "./action-economy.js";
+import { executeSkirmish, executeBarrage } from "./attack-actions.js";
 
 /**
  * Whether an item can be used right now, matching the TAH row state: not destroyed or
@@ -36,28 +37,13 @@ export function isItemUsable(item)
     return !isActionLocked(item, item.name);
 }
 
-// isGM is true for assistants too, so gating shared work on it runs it on every GM client.
-/** @returns {boolean} */
-export function isExecutorGM()
-{
-    return game.users?.activeGM?.isSelf === true;
-}
-
-/**
- * Whether any GM client is online to service a relayed socket request.
- * @returns {boolean}
- */
-export function hasExecutorGM()
-{
-    return !!game.users?.activeGM;
-}
 import { openAddReserveDialog } from "./pilot-reserves.js";
 import { openClocksDialog } from "./pilot-clocks.js";
 import {
     getWeaponProfiles_WithBonus, getItemTags_WithBonus,
     getMaxWeaponRanges_WithBonus, getActorMaxThreat,
     getMaxWeaponReach_WithBonus, getMaxItemRanges_WithBonus,
-    getSensorRange_WithBonus
+    getSensorRange_WithBonus, shapeSpecFromRanges
 } from "./weapon-bonus-utils.js";
 export { executeStandingUp, executeTeleport, executeFall, boostMove } from "./movement-tools.js";
 export { openAddReserveDialog } from "./pilot-reserves.js";
@@ -69,40 +55,12 @@ export {
     getMaxWeaponReach_WithBonus, getMaxItemRanges_WithBonus,
     getSensorRange_WithBonus, weaponPulseRange
 } from "./weapon-bonus-utils.js";
-
-/**
- * CodeMirror keeps its own height, so a resizable dialog has to push a new one on every resize.
- * @param {number} [buttonReservedH] default 40 matches the forced CSS height on .dialog-buttons
- * @returns {ResizeObserver|null} observer to disconnect in the dialog's close handler
- */
-export function attachEditorResizeObserver(editor, windowEl, buttonReservedH = 40)
-{
-    if (!windowEl)
-        return null;
-    const updateSize = () =>
-    {
-        const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
-        editor.setSize(null, windowEl.offsetHeight - headerH - buttonReservedH);
-        editor.refresh();
-    };
-    setTimeout(updateSize, 50);
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(windowEl);
-    return observer;
-}
-
-/** Maps activation type strings to the NPC feature tag LID that signals that activation. */
-export const ACTIVATION_TAG_MAP = {
-    'Quick':      'tg_quick_action',
-    'Full':       'tg_full_action',
-    'Quick Tech': 'tg_quick_tech',
-    'Full Tech':  'tg_full_tech',
-    'Protocol':   'tg_protocol',
-    'Reaction':   'tg_reaction',
-    'Free':       'tg_free_action',
-    'Deactivate': 'tg_deactivate',
-    'Invade':     'tg_invade',
-};
+export { checkGate, consumeGate, clearGate, consumeOncePerRound, consumeOncePerTurn } from "./gates.js";
+export { hasReactionAvailable, reserveReaction, consumeReaction, setReaction, activationSpendKind, modifyAction, consumeAction, gainAction } from "./action-economy.js";
+export { weaponSkirmishable, weaponBarrageable, executeSkirmish, executeFight, executeImprovisedAttack, executeBarrage } from "./attack-actions.js";
+export { ACTIVATION_TAG_MAP, coreGrantedActions, coreActivationAction, getActorActionItems } from "./actor-actions.js";
+export { attachEditorResizeObserver } from "./dom-utils.js";
+export { getItemLID, isItemAvailable } from "../utils/lancer-token.js";
 
 /** @returns {{color: string, label: string} | null} */
 export function getTokenDispositionInfo(token)
@@ -149,396 +107,19 @@ export function getTokenDispositionInfo(token)
 }
 
 /**
- * Returns all actor items (with their source item) whose activation matches `activationType`.
- *
- * - Mech / pilot: scans loadout systems, weapon slots (weapon + mod), and frame passive actions.
- *   Uses `getItemActions(item)` so extraActions flags are included.
- * - NPC: scans npc_feature items by tag (e.g. tg_quick_action → "Quick").
- *   Also checks getItemActions() in case an NPC feature has an explicit actions array.
- *
- * @param {Actor} actor
- * @param {string} activationType  e.g. "Quick", "Full", "Quick Tech", "Full Tech", "Invade"
- * @returns {{ action: Object, sourceItem: Item }[]}
- */
-export function getActorActionItems(actor, activationType)
-{
-    const results = [];
-
-    if (actor?.type === 'npc')
-    {
-        const tagLid = ACTIVATION_TAG_MAP[activationType];
-        for (const item of (actor.items ?? []))
-        {
-            if (item.type !== 'npc_feature')
-                continue;
-            const itemTags = item.system?.tags ?? [];
-            const tagMatched = tagLid ? itemTags.some(tag => tag.lid === tagLid) : false;
-            const hidePrimary = isPrimaryActionHidden(item);
-            const extraActions = getItemActions(item, { extraOnly: hidePrimary }).filter(action =>
-                action.activation === activationType || action.activation === activationType + ' Action'
-            );
-            // Fallback: match by system.type when no tag and no explicit actions found
-            const typeActivation = item.system?.type === 'Tech'
-                ? (item.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')
-                : item.system?.type;
-            const typeMatched = !tagMatched && !extraActions.length && typeActivation === activationType;
-            if (!hidePrimary && (tagMatched || typeMatched))
-            {
-                results.push({
-                    action: {
-                        name: item.name,
-                        activation: activationType,
-                        detail: item.system?.effect ?? '',
-                        trigger: item.system?.trigger ?? '',
-                        tags: itemTags,
-                        tech_attack: item.system?.tech_attack ?? false,
-                        attack_bonus: item.system?.attack_bonus ?? null,
-                        accuracy: item.system?.accuracy ?? null,
-                        range: item.system?.range ?? [],
-                        damage: item.system?.damage ?? [],
-                        on_hit: item.system?.on_hit ?? '',
-                    },
-                    sourceItem: item,
-                });
-            }
-            for (const action of extraActions)
-                results.push({ action, sourceItem: item });
-        }
-    }
-    else
-    {
-        for (const systemSlot of (actor?.system?.loadout?.systems ?? []))
-        {
-            const item = systemSlot?.value;
-            if (!item)
-                continue;
-            for (const action of getItemActions(item, { extraOnly: isPrimaryActionHidden(item) }))
-            {
-                if (action.activation === activationType)
-                    results.push({ action, sourceItem: item });
-            }
-        }
-        for (const mount of (actor?.system?.loadout?.weapon_mounts ?? []))
-        {
-            for (const slot of (mount.slots ?? []))
-            {
-                const weapon = slot.weapon?.value;
-                if (weapon)
-                {
-                    for (const action of getItemActions(weapon, { extraOnly: isPrimaryActionHidden(weapon) }))
-                    {
-                        if (action.activation === activationType)
-                            results.push({ action, sourceItem: weapon });
-                    }
-                }
-                const mod = slot.mod?.value;
-                if (mod)
-                {
-                    for (const action of getItemActions(mod, { extraOnly: isPrimaryActionHidden(mod) }))
-                    {
-                        if (action.activation === activationType)
-                            results.push({ action, sourceItem: mod });
-                    }
-                }
-            }
-        }
-        const frame = actor?.system?.loadout?.frame?.value;
-        if (frame)
-        {
-            const coreSystem = frame.system?.core_system;
-            if (coreSystem?.activation === activationType)
-            {
-                results.push({
-                    action: { name: coreSystem.active_name ?? 'Core Power', activation: coreSystem.activation, detail: coreSystem.active_effect ?? '', _coreActive: true },
-                    sourceItem: frame,
-                    _coreActive: true,
-                });
-            }
-            for (const action of (coreSystem?.active_actions ?? []))
-            {
-                if (action.activation === activationType)
-                    results.push({ action, sourceItem: frame });
-            }
-            for (const action of (coreSystem?.passive_actions ?? []))
-            {
-                if (action.activation === activationType)
-                    results.push({ action, sourceItem: frame });
-            }
-            for (const trait of (frame.system?.traits ?? []))
-            {
-                for (const action of (trait.actions ?? []))
-                {
-                    if (action.activation === activationType)
-                        results.push({ action, sourceItem: frame });
-                }
-            }
-        }
-
-        if (actor?.type === 'pilot')
-        {
-            for (const item of (actor.items ?? []))
-            {
-                if (item.type === 'pilot_gear' || item.type === 'pilot_armor' || item.type === 'pilot_weapon')
-                {
-                    for (const action of getItemActions(item, { extraOnly: isPrimaryActionHidden(item) }))
-                    {
-                        if (action.activation === activationType)
-                            results.push({ action, sourceItem: item });
-                    }
-                }
-            }
-        }
-        else
-        {
-            const pilot = actor?.system?.pilot?.value;
-            if (pilot)
-            {
-                for (const item of (pilot.items ?? []))
-                {
-                    if (item.type === 'talent')
-                    {
-                        const currRank = item.system?.curr_rank ?? 0;
-                        for (let rankIndex = 0; rankIndex < currRank; rankIndex++)
-                        {
-                            for (const action of (item.system?.ranks?.[rankIndex]?.actions ?? []))
-                            {
-                                if (action.activation === activationType)
-                                    results.push({ action, sourceItem: item, rankIdx: rankIndex });
-                            }
-                        }
-                    }
-                    else if (item.type === 'core_bonus')
-                    {
-                        for (const action of getItemActions(item, { extraOnly: isPrimaryActionHidden(item) }))
-                        {
-                            if (action.activation === activationType)
-                                results.push({ action, sourceItem: item });
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Actor-level extra actions (stored on actor flag via addExtraActions(actor, ...))
-    const actorExtraActions = gateActions(
-        (getLAFlag(actor,'extraActions') || []).filter((/** @type {any} */ action) => linkTierGate(action, actor)),
-        actor
-    );
-    for (const action of actorExtraActions)
-    {
-        if (action.activation === activationType)
-            results.push({ action: { ...action, _isExtra: true }, sourceItem: null });
-    }
-
-    return results;
-}
-
-const STAT_PATHS = {
-    HULL: "system.hull",
-    AGI: "system.agi",
-    SYS: "system.sys",
-    ENG: "system.eng",
-    GRIT: "system.grit"
-};
-
-/**
- * DC of a save forced by `targetActor`. A save is rolled against the aggressor's SAVE stat, which
- * the system derives for every actor type (10 + GRIT on mechs and pilots, statblock value on NPCs).
- * @param {any} targetActor
- * @param {string|null} [statOverride] - Read this HASE stat raw instead, for contest-style checks.
- * @returns {number}
- */
-export function deriveSaveDc(targetActor, statOverride = null)
-{
-    if (!targetActor)
-        return 10;
-    if (statOverride)
-    {
-        const lookupStat = String(statOverride).toUpperCase();
-        return foundry.utils.getProperty(targetActor, STAT_PATHS[lookupStat] || lookupStat.toLowerCase()) || 10;
-    }
-    return targetActor.system?.save || 10;
-}
-
-
-export function getItemLID(item)
-{
-    return item.system?.lid || null;
-}
-
-export function isItemAvailable(item, reactionPath)
-{
-    if (!item || item.system?.destroyed || item.system?.disabled)
-        return false;
-
-    if (item.type === "talent" && reactionPath)
-    {
-        const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
-        if (rankMatch)
-        {
-            const requiredRank = Number.parseInt(rankMatch[1]) + 1;
-            if ((item.system?.curr_rank || 0) < requiredRank)
-                return false;
-        }
-    }
-
-    if (item.type === "mech_weapon" && reactionPath)
-    {
-        const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
-        if (profileMatch)
-        {
-            const requiredProfile = Number.parseInt(profileMatch[1]);
-            const currentProfile = item.system?.selected_profile_index ?? 0;
-            if (currentProfile !== requiredProfile)
-                return false;
-        }
-    }
-
-    return true;
-}
-
-// Reaction spends in flight, so a second reaction evaluated before the update lands already sees it gone.
-const _reactionSpendPending = new Set();
-const RESERVE_TIMEOUT_MS = 10000;
-let _reserveHook = null;
-
-export function hasReactionAvailable(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor || tokenOrActor;
-    const tokenId = tokenOrActor?.id && tokenOrActor !== actor ? tokenOrActor.id : actor?.token?.id;
-    const combat = game.combat;
-    const inCombat = !!combat?.started && combat.combatants.some(combatant =>
-        (tokenId && combatant.tokenId === tokenId) || (actor && combatant.actor?.id === actor.id)
-    );
-    if (!inCombat)
-        return true;
-    if (actor?.uuid && _reactionSpendPending.has(actor.uuid))
-        return false;
-    const reaction = actor?.system?.action_tracker?.reaction;
-    return reaction !== undefined && Number(reaction) > 0;
-}
-
-export function reserveReaction(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor || tokenOrActor;
-    if (!actor?.uuid)
-        return;
-    _reactionSpendPending.add(actor.uuid);
-    if (_reserveHook === null)
-    {
-        _reserveHook = Hooks.on('updateActor', (updated, changes) =>
-        {
-            if (foundry.utils.getProperty(changes, 'system.action_tracker.reaction') !== undefined)
-                _reactionSpendPending.delete(updated.uuid);
-        });
-    }
-    setTimeout(() => _reactionSpendPending.delete(actor.uuid), RESERVE_TIMEOUT_MS);
-}
-
-export async function consumeReaction(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor || tokenOrActor;
-    if (!actor || !hasReactionAvailable(tokenOrActor))
-        return false;
-    _reactionSpendPending.add(actor.uuid);
-    try
-    {
-        const left = (actor.system.action_tracker.reaction ?? 1) - 1;
-        await actor.update({ 'system.action_tracker.reaction': left });
-    }
-    finally
-    {
-        _reactionSpendPending.delete(actor.uuid);
-    }
-    return true;
-}
-
-/**
- * Sets reaction availability for an actor.
- * @param {Token|Actor} actorOrToken
- * @param {boolean} value  true = reaction available, false = reaction spent
- * @returns {Promise<void>}
- */
-export async function setReaction(actorOrToken, value)
-{
-    const actor = actorOrToken?.actor ?? actorOrToken;
-    if (!actor)
-        return;
-    await actor.update({ "system.action_tracker.reaction": Boolean(value) });
-}
-
-/** Mirrors Lancer's modAction cascade. spend=true consumes, spend=false refunds. */
-export async function modifyAction(actorOrToken, kind, spend = true)
-{
-    const actor = actorOrToken?.actor ?? actorOrToken;
-    if (!actor)
-        return;
-    const actionTracker = /** @type {any} */ ({ ...(actor.system?.action_tracker ?? {}) });
-    switch (kind)
-    {
-        case 'free':
-            actionTracker.free = !spend;
-            break;
-        case 'quick':
-            if (spend)
-            {
-                if (actionTracker.full)
-                    actionTracker.full = false;
-                else
-                    actionTracker.quick = false;
-            }
-            else
-                actionTracker.quick = true;
-            break;
-        case 'full':
-            if (spend)
-            {
-                actionTracker.full = false;
-                actionTracker.quick = false;
-            }
-            else
-                actionTracker.full = true;
-            break;
-        case 'protocol':
-            actionTracker.protocol = !spend;
-            break;
-        case 'reaction':
-            actionTracker.reaction = !spend;
-            break;
-        case 'move':
-            actionTracker.move = spend ? 0 : (actor.system?.speed ?? 0);
-            break;
-        default:
-            actionTracker[kind] = !spend;
-    }
-    if (spend && kind !== 'protocol')
-        actionTracker.protocol = false;
-    await actor.update(/** @type {any} */ ({ 'system.action_tracker': actionTracker }));
-}
-
-export async function consumeAction(actorOrToken, kind)
-{
-    return modifyAction(actorOrToken, kind, true);
-}
-export async function gainAction(actorOrToken, kind)
-{
-    return modifyAction(actorOrToken, kind, false);
-}
-
-/**
  * Sets a resource value on an item: uses, loaded, charged, talent counter, or frame core system counter.
  *
  * Detection order:
- *   1. Talent items               → system.counters[counterIndex].value (clamped to counter min/max)
+ *   1. Talent items               → system.ranks[N].counters[M].value (clamped to counter min/max)
  *   2. Frame items                → system.core_system.counters[counterIndex].value (clamped to counter min/max)
  *   3. Items with uses.max > 0    → system.uses.value (clamped 0..max)
- *   4. Items with a loaded field  → system.loaded (Boolean(value))
- *   5. Items with a charged field → system.charged (Boolean(value))
+ *   4. Recharge items             → system.charged (Boolean(value))
+ *   5. Items with a loaded field  → system.loaded (Boolean(value))
+ *   6. Items with a charged field → system.charged (Boolean(value))
  *
  * @param {Item} item
  * @param {number|boolean} value  Target value. For loaded/charged: truthy/falsy. For uses/counters: number.
- * @param {number} [counterIndex=0]  For talents: index into system.counters. For frames: index into system.core_system.counters.
+ * @param {number} [counterIndex=0]  For talents: index across the unlocked ranks' counters. For frames: index into system.core_system.counters.
  * @returns {Promise<void>}
  */
 export async function setItemResource(item, value, counterIndex = 0)
@@ -604,7 +185,6 @@ export async function setItemResource(item, value, counterIndex = 0)
 }
 
 /**
- * Adds a tag to an item.
  * @param {Item} item - The item document to modify.
  * @param {Object} tagData - The tag object to add (e.g. { id: "tg_heat_self", val: "2" }).
  * @returns {Promise<Item>} The updated item.
@@ -669,19 +249,6 @@ export async function removeItemTag(item, tagId)
 }
 
 /**
- * Danger Zone: heat at or above half the heat cap.
- * @param {any} tokenOrActor
- * @returns {boolean}
- */
-export function inDangerZone(tokenOrActor)
-{
-    const heat = (tokenOrActor?.actor ?? tokenOrActor)?.system?.heat;
-    if (!heat)
-        return false;
-    return (heat.value ?? 0) >= Math.floor((heat.max ?? 0) / 2);
-}
-
-/**
  * Execute a Lancer stat roll (hull, agi, sys, eng, grit) via StatRollFlow.
  * `extraData.accuracy` / `extraData.difficulty` / `extraData.flatModifier` pre-fill the HASE HUD,
  * the same way a weapon's tags pre-fill an attack. The player can still change them.
@@ -704,6 +271,8 @@ export async function executeStatRoll(actor, stat, title, target = 10, extraData
     }
 
     const { targetStat, sendToOwner, cardTitle, cardDescription, ...restExtraData } = (extraData && typeof extraData === 'object') ? extraData : {};
+    if (!restExtraData.rollTypes && target && typeof target === 'object' && !targetStat)
+        restExtraData.rollTypes = ['save'];
 
     // Send the roll to the token owner's client via socket so they roll it themselves.
     if (sendToOwner)
@@ -865,6 +434,7 @@ export async function executeSaveVsEffect(targets, options = /** @type {any} */ 
         const description = typeof cardDescription === 'function' ? cardDescription(target) : cardDescription;
         const result = await executeStatRoll(target.actor, stat, title, origin, {
             sendToOwner,
+            rollTypes: ['save'],
             accuracy: perTarget(accuracy, target),
             difficulty: perTarget(difficulty, target),
             flatModifier: perTarget(flatModifier, target),
@@ -905,7 +475,7 @@ export async function executeSaveVsEffect(targets, options = /** @type {any} */ 
         const originToken = (typeof origin === 'object' && origin) ? origin : null;
         if (!originToken)
         {
-            ui.notifications.warn("lancer-automations | halfDamageOnSave needs a Token origin, damage roll skipped.");
+            ui.notifications.warn(localize('LA.notify.halfDamageNeedsToken'));
         }
         else
         {
@@ -918,11 +488,9 @@ export async function executeSaveVsEffect(targets, options = /** @type {any} */ 
 }
 
 /**
+ * Contested stat check between two actors/tokens, higher total wins and FX stay off during the rolls.
+ * The winner gets the success overlay, the loser the failure one. A tie plays no FX and gives `winner === null`.
  * `accuracy1`/`difficulty1`/`flatModifier1` (and the `2` variants) pre-fill each side's HASE HUD.
- * Run a contested stat check between two actors/tokens. Each rolls their own stat
- * (with FX suppressed during the rolls); higher total wins. The winner gets the success
- * overlay on its token, the loser gets the failure overlay. On a tie, no FX play and
- * `winner === null`.
  *
  * @param {any} input1     Actor or Token (passing a Token preserves the involved token for FX)
  * @param {string} stat1   Stat key for input1 (e.g. "HULL", "AGI", "SYS", "ENG", "GRIT")
@@ -1079,6 +647,7 @@ export async function executeForceCheck(skill, targets = null, options = {})
         {
             rollExtra.targetTokenId = saveVsToken.id;
             rollExtra.forceTargeting = true;
+            rollExtra.rollTypes = ['save'];
         }
         const rollResult = await executeStatRoll(rollerActor, skill, rollTitle, saveDc, rollExtra);
         return {
@@ -1201,7 +770,7 @@ function setFlowTargets(targets)
  * @param {Object} [extraData]
  * @returns {Promise<{completed: boolean, flow?: object}>}
  */
-async function beginWeaponAttackFlow(weapon, options = {}, extraData = {})
+export async function beginWeaponAttackFlow(weapon, options = {}, extraData = {})
 {
     const WeaponAttackFlow = game.lancer.flows.get("WeaponAttackFlow");
     if (!WeaponAttackFlow)
@@ -1378,28 +947,6 @@ export async function attackRollWith(weapon, targets = null, options = {})
 }
 
 /**
- * Actor tier clamped to 1-3. Accepts a token or actor.
- * @returns {number} 1, 2 or 3
- */
-export function getTier(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor ?? tokenOrActor;
-    const tier = Number(actor?.system?.tier) || 1;
-    return Math.max(1, Math.min(3, tier));
-}
-
-/**
- * Value matching the actor's tier.
- * @param {any} tokenOrActor
- * @param {any[]} values  [tier1, tier2, tier3]
- * @returns {any} The entry matching the actor's tier
- */
-export function tierValue(tokenOrActor, values)
-{
-    return values?.[getTier(tokenOrActor) - 1];
-}
-
-/**
  * Read a la_extraData flag off the trigger's flow state.
  * @returns {any} The stored value, or undefined when there is no flow state
  */
@@ -1447,135 +994,6 @@ export function afterFlow(triggerData, callback)
     });
     return true;
 }
-
-const GATE_FLAG = 'gates';
-
-function _gateActor(owner)
-{
-    return /** @type {any} */ (owner)?.actor ?? owner;
-}
-
-function _gateSubject(subject)
-{
-    return String(typeof subject === 'string' ? subject : (subject?.id ?? '_self')).replace(/\./g, '_');
-}
-
-// Dots in a flag key are path separators for expandObject, so a uuid-derived key would nest itself away.
-function _gateKey(key)
-{
-    return String(key).replace(/\./g, '_');
-}
-
-// Combatant id rather than turn index, Lancer turn order is not fixed.
-function _turnStamp()
-{
-    return game.combat?.round ? currentTurnKey() : null;
-}
-
-// A gate from another combat is dead.
-function _gateBlocked(entry)
-{
-    if (!entry || entry.c !== game.combat?.id)
-        return false;
-    if (entry.t != null)
-        return entry.t === _turnStamp();
-    return entry.r === null || (game.combat?.round ?? 0) <= entry.r;
-}
-
-/**
- * True when the gate is free and `consumeGate` would succeed. Never writes.
- * @param {Token|Actor|any} owner
- * @param {string} key
- * @param {Token|Actor|string|null} [subject] - String or token. Omit for a single gate on the owner.
- * @returns {boolean}
- */
-export function checkGate(owner, key, subject = null)
-{
-    const actor = _gateActor(owner);
-    if (!actor || !key)
-        return true;
-    const api = game.modules.get(MODULE_ID)?.api;
-    const gates = api?.getActorFlags(actor, GATE_FLAG) || {};
-    return !_gateBlocked(gates[_gateKey(key)]?.[_gateSubject(subject)]);
-}
-
-/**
- * Take a gate. Expiry is checked on read, nothing ticks. Out of combat every call succeeds.
- * @param {Token|Actor|any} owner
- * @param {string} key - Name of the gate, e.g. `'ring_of_fire'`.
- * @param {Object} [options]
- * @param {Token|Actor|string|null} [options.subject] - String or token. Omit for a single gate on the owner.
- * @param {number|null} [options.rounds=1] - Rounds blocked counting the current one, null lasts the whole combat.
- * @param {boolean} [options.turn] - Block for the current turn instead of a round count.
- * @returns {Promise<boolean>} true when the gate was free and is now taken
- */
-export async function consumeGate(owner, key, options = {})
-{
-    const actor = _gateActor(owner);
-    if (!actor || !key)
-        return true;
-    const api = game.modules.get(MODULE_ID)?.api;
-    const gates = api.getActorFlags(actor, GATE_FLAG) || {};
-    const gateKey = _gateKey(key);
-    const subjectId = _gateSubject(options.subject);
-    if (_gateBlocked(gates[gateKey]?.[subjectId]))
-        return false;
-
-    const combat = game.combat;
-    if (!combat?.round)
-        return true;
-    const entry = options.turn
-        ? { c: combat.id, t: _turnStamp() }
-        : { c: combat.id, r: options.rounds === null ? null : combat.round + Math.max(1, options.rounds ?? 1) - 1 };
-    await api.addActorFlags(actor, { [GATE_FLAG]: { [gateKey]: { [subjectId]: entry } } });
-    return true;
-}
-
-/**
- * Release a gate. Omit `subject` to release the whole key.
- * @param {Token|Actor|any} owner
- * @param {string} key
- * @param {Token|Actor|string|null} [subject]
- * @returns {Promise<void>}
- */
-export async function clearGate(owner, key, subject = null)
-{
-    const actor = _gateActor(owner);
-    if (!actor || !key)
-        return;
-    const api = game.modules.get(MODULE_ID)?.api;
-    // setFlag merges, so null the entries instead of deleting them
-    const value = subject === null ? null : { [_gateSubject(subject)]: null };
-    await api.addActorFlags(actor, { [GATE_FLAG]: { [_gateKey(key)]: value } });
-}
-
-/**
- * Once-per-round gate stored on `owner`, counted separately per `subject`.
- * Out of combat every call is the first one.
- * @param {Token|Actor} owner - Holds the flag, usually the reactor.
- * @param {string} key - Name of the gate, e.g. `'ring_of_fire'`.
- * @param {Token|Actor|string} [subject] - Who is being gated. Omit for a single gate on the owner.
- * @returns {Promise<boolean>} true the first time this round, false afterwards
- */
-export function consumeOncePerRound(owner, key, subject = null)
-{
-    return consumeGate(owner, key, { subject, rounds: 1 });
-}
-
-/**
- * Once-per-turn gate, free again when the turn changes.
- * @param {Token|Actor} owner
- * @param {string} key
- * @param {Token|Actor|string} [subject]
- * @returns {Promise<boolean>} true the first time this turn, false afterwards
- */
-export function consumeOncePerTurn(owner, key, subject = null)
-{
-    return consumeGate(owner, key, { subject, turn: true });
-}
-
-
-
 
 /** @returns {Promise<{completed: boolean, flow?: object}>} */
 export async function executeBasicAttack(actor, options = {}, extraData = {})
@@ -1634,7 +1052,7 @@ export async function executeTechAttack(target, options = {}, extraData = {})
         return { completed: false };
     if (!target)
     {
-        ui.notifications.error("lancer-automations | executeTechAttack: target (actor or item) is required.");
+        ui.notifications.error(localize('LA.notify.executeTechAttackNeedsTarget'));
         return { completed: false };
     }
     const { damage, targets = null, ...flowOptions } = /** @type {any} */ (options);
@@ -1710,7 +1128,7 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
         accuracy: Number(action.accuracy ?? 0),
         difficulty: Number(action.difficulty ?? 0)
     };
-    const laTargeting = extraActionTargeting(action.range);
+    const laTargeting = shapeSpecFromRanges(action.range);
     return executeBasicAttack(actor, {
         type: 'attack',
         title: action.name,
@@ -1728,24 +1146,12 @@ export async function executeExtraActionCombat(actorOrToken, action, sourceItem 
     }, { tapeRecorded: true, accDiffPatch, ...(laTargeting ? { laTargeting } : {}) });
 }
 
-function extraActionTargeting(ranges)
-{
-    const entries = (ranges ?? [])
-        .map(/** @type {any} */ (entry) => ({ type: String(entry?.type ?? ''), val: Number(entry?.val) || 0 }))
-        .filter(entry => entry.val > 0);
-    const area = entries.find(entry => ['Blast', 'Burst', 'Cone', 'Line'].includes(entry.type));
-    const reach = Math.max(0, ...entries.filter(entry => entry.type === 'Range' || entry.type === 'Threat').map(entry => entry.val));
-    if (area)
-        return { pattern: area.type.toLowerCase(), size: area.val, range: reach };
-    return reach > 0 ? { pattern: 'target', size: 1, range: reach } : null;
-}
-
 /** @returns {Promise<void>} */
 export async function executeReactorMeltdown(tokenOrActor, turns = null)
 {
     if (!tokenOrActor)
     {
-        ui.notifications.error('lancer-automations | executeReactorMeltdown requires a token or actor.');
+        ui.notifications.error(localize('LA.notify.reactorMeltdownNeedsTarget'));
         return;
     }
     const actor = tokenOrActor.actor ?? tokenOrActor;
@@ -1795,11 +1201,7 @@ export async function executeReactorMeltdown(tokenOrActor, turns = null)
                     </div>
                 `,
                 buttons: {
-                    cancel: {
-                        icon: '<i class="fas fa-times"></i>',
-                        label: localize("LA.common.cancel"),
-                        callback: () => resolve(null)
-                    }
+                    cancel: cancelButton(() => resolve(null))
                 },
                 default: "cancel",
                 close: () => resolve(null),
@@ -1851,7 +1253,7 @@ export async function executeReactorExplosion(token)
 {
     if (!token)
     {
-        ui.notifications.error('lancer-automations | executeReactorExplosion requires a token.');
+        ui.notifications.error(localize('LA.notify.reactorExplosionNeedsToken'));
         return;
     }
 
@@ -2017,7 +1419,7 @@ export async function activateGeneralAction(actorOrToken, name)
     const reaction = Array.isArray(entry?.reactions) ? entry.reactions[0] : (entry?.triggers ? entry : null);
     if (!actor || !reaction)
     {
-        ui.notifications.error(`lancer-automations | activateGeneralAction: no general action "${name}".`);
+        ui.notifications.error(localizeFormat('LA.notify.generalActionMissing', { name }));
         return { completed: false };
     }
     return executeSimpleActivation(actor, {
@@ -2047,7 +1449,7 @@ export async function executeItemActivation(item, options = {}, extraData = {})
 {
     if (!item)
     {
-        ui.notifications.error("lancer-automations | executeActivation requires an item.");
+        ui.notifications.error(localize('LA.notify.executeActivationNeedsItem'));
         return { completed: false };
     }
     const flows = /** @type {any} */ (game.lancer)?.flows;
@@ -2061,7 +1463,7 @@ export async function executeItemActivation(item, options = {}, extraData = {})
         const FlowClass = flows.get(flowName);
         if (!FlowClass)
         {
-            ui.notifications.error(`lancer-automations | flow "${flowName}" not found.`);
+            ui.notifications.error(localizeFormat('LA.notify.flowNotFoundPrefixed', { name: flowName }));
             return { completed: false };
         }
         flow = new FlowClass(item.uuid ?? item, path ? { action_path: path } : {});
@@ -2076,7 +1478,7 @@ export async function executeItemActivation(item, options = {}, extraData = {})
         const rank = item.system?.ranks?.[rankIdx];
         if (!rank)
         {
-            ui.notifications.error(`lancer-automations | executeItemActivation: "${item.name}" has no rank ${rankIdx + 1}.`);
+            ui.notifications.error(localizeFormat('LA.notify.itemActivationNoRank', { name: item.name, rank: rankIdx + 1 }));
             return { completed: false };
         }
         if (match?.[2] !== undefined)
@@ -2089,7 +1491,7 @@ export async function executeItemActivation(item, options = {}, extraData = {})
         const powerIdx = Number(_subPath(path).match(/^powers\.(\d+)$/)?.[1] ?? 0);
         if (!item.system?.powers?.[powerIdx])
         {
-            ui.notifications.error(`lancer-automations | executeItemActivation: "${item.name}" has no power ${powerIdx}.`);
+            ui.notifications.error(localizeFormat('LA.notify.itemActivationNoPower', { name: item.name, power: powerIdx }));
             return { completed: false };
         }
         flow = new (flows.get("BondPowerFlow"))(item.uuid ?? item, { powerIndex: powerIdx });
@@ -2102,7 +1504,7 @@ export async function executeItemActivation(item, options = {}, extraData = {})
         flow = new (flows.get("WeaponAttackFlow"))(item.uuid ?? item, {});
     else
     {
-        ui.notifications.error("lancer-automations | executeActivation: cannot determine flow for item.");
+        ui.notifications.error(localize('LA.notify.executeActivationNoFlow'));
         return { completed: false };
     }
     if (extraData && typeof extraData === 'object')
@@ -2133,405 +1535,6 @@ export async function updateTokenSystem(token, data)
     }
 }
 
-/** Superheavy is the size on mech weapons and the start of weapon_type on NPC features ("Superheavy Rifle"). */
-function isSuperheavyWeapon(weapon)
-{
-    const sys = weapon?.system;
-    const size = String(sys?.size || sys?.type || "").toLowerCase();
-    return size === 'superheavy' || String(sys?.weapon_type || "").toLowerCase().startsWith('superheavy');
-}
-
-function weaponActiveProfile(weapon)
-{
-    const sys = weapon?.system;
-    return sys?.active_profile ?? sys?.profiles?.[sys?.selected_profile_index ?? 0] ?? null;
-}
-
-// Superheavies are barrage-only, unless the active profile says otherwise (Leviathan HAC).
-export function weaponSkirmishable(weapon)
-{
-    if (!isSuperheavyWeapon(weapon))
-        return true;
-    return weaponActiveProfile(weapon)?.skirmishable === true;
-}
-
-export function weaponBarrageable(weapon)
-{
-    if (!isSuperheavyWeapon(weapon))
-        return true;
-    return weaponActiveProfile(weapon)?.barrageable !== false;
-}
-
-// Bonus damage: non-Aux is primary in X/Aux mounts; in Aux/Aux only the first weapon fired keeps bonus.
-function auxBonusRule(weapons)
-{
-    const isAuxSize = (weapon) => String(weapon.system?.size || "").toLowerCase() === 'auxiliary';
-    const hasNonAux = weapons.some(weapon => !isAuxSize(weapon) && isItemUsable(weapon));
-    let auxPrimaryUsed = false;
-    return {
-        hasNonAux,
-        suppressBonus: (weapon) =>
-        {
-            if (hasNonAux)
-                return isAuxSize(weapon);
-            const suppressed = auxPrimaryUsed;
-            if (isItemUsable(weapon))
-                auxPrimaryUsed = true;
-            return suppressed;
-        }
-    };
-}
-
-/**
- * Post the action card listing the weapons an attack action fires.
- * @param {Actor} actor
- * @param {string} label   Header text, e.g. "SKIRMISH"
- * @param {any[]} weapons  Weapon items, in firing order
- * @returns {Promise<void>}
- */
-async function printAttackActionCard(actor, label, weapons)
-{
-    if (!weapons.length)
-        return;
-    const rows = weapons.map(weapon => `
-        <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;">
-            <img src="${weapon.img}" width="24" height="24" style="border:none;flex:0 0 auto;"/>
-            <span>${weapon.name}</span>
-        </div>`).join('');
-    await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="card clipped-bot" style="margin:0;">
-            <div class="lancer-header lancer-primary">// ${label} //</div>
-            <div style="display:flex;flex-direction:column;gap:2px;padding:4px;">${rows}</div>
-        </div>`
-    });
-}
-
-/**
- * Executes a Skirmish action: target validation, weapon selection, and attack/damage flow.
- * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
- * @param {any} [bypassMount=null] - Direct mount to use, skipping selection.
- * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
- * @param {((weapon: any) => boolean)|null} [weaponFilter=null] - Keeps only the weapons it accepts.
- * @param {{noFX?: boolean, asReaction?: boolean}} [options={}] - `asReaction` spends no quick action and leaves the tape to the reaction itself.
- * @returns {Promise<void>}
- */
-export async function executeSkirmish(actorOrToken, bypassMount = null, preTarget = null, weaponFilter = null, options = {})
-{
-    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-
-    if (!actor)
-    {
-        ui.notifications.error("lancer-automations | skirmish requires a token.");
-        return;
-    }
-
-    const sourceToken = /** @type {Token|null} */ (
-        (/** @type {any} */ (actorOrToken))?.actor
-            ? actorOrToken
-            : actor.token?.object || actor.getActiveTokens()[0] || null
-    );
-
-    let weapons;
-    if (bypassMount)
-    {
-        weapons = (bypassMount.slots ?? [])
-            .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
-            .filter(Boolean);
-        if (!weapons.length)
-            return;
-    }
-    else
-    {
-        // one/mount; no superheavy; non-fitting shown disabled
-        const filterPredicate = (weapon) =>
-        {
-            if (!weaponSkirmishable(weapon))
-                return false;
-            if (weaponFilter)
-                return weaponFilter(weapon);
-            return true;
-        };
-
-        const choices = await choseMount(actor, 1, filterPredicate, null, "SKIRMISH");
-        if (!choices || choices.length === 0)
-            return;
-
-        const chosenMount = choices[0];
-        if (chosenMount.slots)
-        {
-            weapons = chosenMount.slots
-                .map(slot => slot.weapon?.value)
-                .filter(Boolean);
-        }
-        else
-            weapons = [chosenMount];
-    }
-
-    if (sourceToken && !options.noFX)
-        queueActionFx(() => playSkirmishFX(sourceToken), sourceToken, 'skirmish');
-    if (sourceToken)
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'SKIRMISH', actionType: 'Quick' });
-    if (!options.asReaction)
-        await consumeAction(actor, 'quick');
-    await printAttackActionCard(actor, 'SKIRMISH', weapons);
-    if (sourceToken && !options.asReaction)
-        await recordAction(sourceToken, { name: 'Skirmish', activation: 'Quick', icon: 'modules/lancer-automations/icons/skirmish.svg' });
-
-    const { hasNonAux, suppressBonus } = auxBonusRule(weapons);
-
-    const fireWeapon = async (weapon) =>
-    {
-        if (preTarget)
-            /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
-        const extraData = suppressBonus(weapon) ? { _csmNoBonusDmg: { enabled: true } } : {};
-        await beginWeaponAttackFlow(weapon, {}, extraData);
-    };
-
-    if (weapons.length === 1)
-        await fireWeapon(weapons[0]);
-    else
-    {
-        const choices = weapons.map(weapon => ({
-            text: weapon.name,
-            icon: weapon.img,
-            callback: async () => fireWeapon(weapon)
-        }));
-
-        await InteractiveAPI.startChoiceCard({
-            title: localize('LA.dialogTitle.skirmishWeaponOrder'),
-            description: hasNonAux
-                ? "Aux weapons don't deal bonus damage."
-                : "First weapon fired deals bonus damage; others don't.",
-            mode: "and",
-            choices
-        });
-    }
-}
-
-/**
- * Executes a Fight action for a pilot: choose one pilot weapon and attack.
- * @param {Actor|Token|TokenDocument} actorOrToken
- * @param {Item|null} bypassWeapon  Direct weapon item to attack with (skips selection dialog).
- * @returns {Promise<void>}
- */
-export async function executeFight(actorOrToken, bypassWeapon = null)
-{
-    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-    if (!actor)
-        return;
-    const sourceToken = /** @type {Token|null} */ (
-        (/** @type {any} */ (actorOrToken))?.actor
-            ? actorOrToken
-            : actor.token?.object || actor.getActiveTokens?.()?.[0] || null
-    );
-
-    let weapon = bypassWeapon;
-    if (!weapon)
-    {
-        const choices = await choseMount(actor, 1, null, null, 'FIGHT');
-        if (!choices?.length)
-            return;
-        const chosenMount = choices[0];
-        weapon = chosenMount.slots
-            ? chosenMount.slots.find(/** @type {any} */ slot => slot.weapon?.value)?.weapon?.value ?? null
-            : chosenMount;
-    }
-    if (!weapon)
-        return;
-    if (sourceToken)
-    {
-        queueActionFx(() => playFightFX(sourceToken), sourceToken, 'fight');
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'FIGHT', actionType: 'Full' });
-    }
-    await consumeAction(actor, 'full');
-    if (sourceToken)
-        await recordAction(sourceToken, { name: 'Fight', activation: 'Full', icon: 'modules/lancer-automations/icons/crossed-slashes.svg' });
-    await beginWeaponAttackFlow(weapon);
-}
-
-export async function executeImprovisedAttack(actorOrToken)
-{
-    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-    if (!actor)
-        return;
-    const sourceToken = /** @type {Token|null} */ (
-        (/** @type {any} */ (actorOrToken))?.actor
-            ? actorOrToken
-            : actor.token?.object || actor.getActiveTokens?.()?.[0] || null
-    );
-    if (!sourceToken)
-    {
-        ui.notifications.error("lancer-automations | improvised attack requires a token.");
-        return;
-    }
-    Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'IMPROVISED ATTACK', actionType: 'Full' });
-    await consumeAction(actor, 'full');
-    await recordAction(sourceToken, { name: 'Improvised Attack', activation: 'Full', icon: 'mdi mdi-hexagon-slice-6' });
-    await executeBasicAttack(actor, {
-        title: 'Improvised Attack',
-        attack_type: 'Melee',
-        action: { name: 'Improvised Attack', activation: 'Full' },
-        damage: [{ val: actor.type === 'npc' ? String(tierValue(actor, [3, 4, 6])) : '1d6', type: 'Kinetic' }],
-    }, { tapeRecorded: true, laTargeting: { pattern: 'target', size: 1, range: 1, rangeType: 'Threat' } });
-}
-
-/**
- * Executes a Barrage action: attacks with either two different mounts or one superheavy mount.
- * @param {Actor|Token|TokenDocument} actorOrToken - The acting entity.
- * @param {any} [bypassMount=null] - Direct mount(s) to use, skipping selection.
- * @param {Token|null} [preTarget=null] - Token to pre-target before each attack flow.
- * @returns {Promise<void>}
- */
-export async function executeBarrage(actorOrToken, bypassMount = null, preTarget = null)
-{
-    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-
-    if (!actor)
-    {
-        ui.notifications.error("lancer-automations | barrage requires a token.");
-        return;
-    }
-
-    const sourceToken = /** @type {Token|null} */ (
-        (/** @type {any} */ (actorOrToken))?.actor
-            ? actorOrToken
-            : actor.token?.object || actor.getActiveTokens()[0] || null
-    );
-
-    const hasSuperheavy = (selectedItem) => selectedItem?.slots
-        ? selectedItem.slots.some(slot => !!slot.weapon?.value && isSuperheavyWeapon(slot.weapon.value))
-        : isSuperheavyWeapon(selectedItem);
-
-    const barrageValidator = (selected) =>
-    {
-        if (selected.length === 0)
-            return { valid: false, message: "Select 1 or 2 mounts.", level: "info" };
-
-        if (selected.length === 1)
-        {
-            const isSuperheavy = hasSuperheavy(selected[0]);
-            return {
-                valid: true,
-                message: isSuperheavy ? "Superheavy weapon selected." : "1 mount selected.",
-                level: "success",
-            };
-        }
-
-        if (selected.length === 2)
-        {
-            const anySuperheavy = selected.some(mount => hasSuperheavy(mount));
-            return anySuperheavy
-                ? { valid: false, message: "Cannot mix a Superheavy weapon with another mount.", level: "error" }
-                : { valid: true, message: "2 mounts selected.", level: "success" };
-        }
-
-        return { valid: false, message: "Invalid selection.", level: "error" };
-    };
-
-    const choices = bypassMount
-        ? (Array.isArray(bypassMount) ? bypassMount : [bypassMount])
-        : await choseMount(actor, 2, weaponBarrageable, null, "BARRAGE", barrageValidator);
-    if (!choices || choices.length === 0)
-        return;
-
-    if (sourceToken)
-    {
-        queueActionFx(() => playBarrageFX(sourceToken), sourceToken, 'barrage');
-        Hooks.callAll('lancer-automations.battelog.action', { token: sourceToken, name: 'BARRAGE', actionType: 'Full' });
-    }
-    await consumeAction(actor, 'full');
-    await printAttackActionCard(actor, 'BARRAGE', choices.flatMap(mount => mount.slots
-        ? mount.slots
-            .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
-            .filter(Boolean)
-        : [mount]));
-    if (sourceToken)
-        await recordAction(sourceToken, { name: 'Barrage', activation: 'Full', icon: 'modules/lancer-automations/icons/barrage.svg' });
-
-    // AND card when mount has multiple weapons
-    // RAW: Aux weapons in a Barrage don't deal bonus damage; the Main/Heavy/SH does.
-    const fireMountWeapons = async (mount) =>
-    {
-        let weapons;
-        if (mount.slots)
-        {
-            weapons = mount.slots
-                .map(slot => slot.weapon?.value ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id) : null))
-                .filter(Boolean);
-        }
-        else
-            weapons = [mount];
-
-        const { hasNonAux, suppressBonus } = auxBonusRule(weapons);
-
-        const fireWeapon = async (weapon) =>
-        {
-            if (preTarget)
-            {
-                /** @type {any} */ (canvas.tokens).setTargets([preTarget.id]);
-            }
-            const extraData = suppressBonus(weapon) ? { _csmNoBonusDmg: { enabled: true } } : {};
-            await beginWeaponAttackFlow(weapon, {}, extraData);
-        };
-
-        if (weapons.length === 1)
-            await fireWeapon(weapons[0]);
-        else if (weapons.length > 1)
-        {
-            const choices = weapons.map(weapon => ({
-                text: weapon.name,
-                icon: weapon.img,
-                callback: async () => fireWeapon(weapon)
-            }));
-            await InteractiveAPI.startChoiceCard({
-                title: localize('LA.dialogTitle.weaponOrder'),
-                description: hasNonAux
-                    ? `Firing weapons from ${mount.type || "Mount"}. Aux weapons don't deal bonus damage.`
-                    : `Firing weapons from ${mount.type || "Mount"}. First weapon fired deals bonus damage; others don't.`,
-                mode: "and",
-                choices
-            });
-        }
-    };
-
-    if (choices.length === 1)
-    {
-        // Superheavy, just fire its weapons
-        await fireMountWeapons(choices[0]);
-    }
-    else
-    {
-        const mountChoices = choices.map((mount, index) =>
-        {
-            const mountLabel = mount.name || mount.type || "Mount " + (index + 1);
-            const weaponNames = (mount.slots ?? [])
-                .map(slot => slot.weapon?.value?.name ?? (slot.weapon?.id ? actor.items.get(slot.weapon.id)?.name : null))
-                .filter(Boolean);
-            const text = weaponNames.length
-                ? `Fire ${mountLabel} (${weaponNames.join(", ")})`
-                : `Fire ${mountLabel}`;
-            return {
-                text,
-                icon: mount.slots?.[0]?.weapon?.value?.img || "icons/svg/item-bag.svg",
-                callback: async () =>
-                {
-                    await fireMountWeapons(mount);
-                }
-            };
-        });
-
-        await InteractiveAPI.startChoiceCard({
-            title: localize('LA.dialogTitle.barrageMountOrder'),
-            description: localize('LA.misc.selectWhichMountToTriggerAux'),
-            mode: "and",
-            choices: mountChoices
-        });
-    }
-}
-
-
-
 /**
  * Token position as a plain point.
  * @param {any} tokenLike - Token or TokenDocument
@@ -2558,63 +1561,13 @@ export function getToken(idOrUuid)
 
 /**
  * Same x / y / elevation.
- * @param {{x: number, y: number, elevation?: number}} a
- * @param {{x: number, y: number, elevation?: number}} b
+ * @param {{x: number, y: number, elevation?: number}} pos1
+ * @param {{x: number, y: number, elevation?: number}} pos2
  * @returns {boolean}
  */
-export function samePosition(a, b)
+export function samePosition(pos1, pos2)
 {
-    return !!a && !!b && a.x === b.x && a.y === b.y && (a.elevation ?? 0) === (b.elevation ?? 0);
-}
-
-/**
- * Returns the weapon subtype string (e.g. "Superheavy Rifle", "Melee").
- * Synchronous: no bonus application.
- * @param {Item} item
- * @returns {string}
- */
-export function getWeaponType(item)
-{
-    const sys = item?.system;
-    if (!sys)
-        return "";
-    // Weapon profiles carry it as `type`; only npc_feature has a `weapon_type` field.
-    return sys.active_profile?.type
-        || sys.profiles?.[sys.selected_profile_index ?? 0]?.type
-        || sys.weapon_type
-        || "";
-}
-
-/**
- * Coarse weapon class: "melee", "nexus", "ranged", or "" when unknown.
- * Substring match because NPC features fold the size in ("Heavy Melee", "Main Nexus").
- * @param {Item} item
- * @returns {string}
- */
-export function weaponClass(item)
-{
-    const type = String(getWeaponType(item) || "").toLowerCase();
-    if (!type)
-        return "";
-    if (type.includes("melee"))
-        return "melee";
-    if (type.includes("nexus"))
-        return "nexus";
-    return "ranged";
-}
-
-/**
- * Returns the Lancer item type string (e.g. "Weapon", "System", "mech_weapon").
- * Prefers item.system.type (Lancer type) over item.type (Foundry type).
- * Synchronous: no bonus application.
- * @param {Item} item
- * @returns {string}
- */
-export function getItemType(item)
-{
-    if (!item)
-        return "";
-    return item.system?.type || item.type || "";
+    return !!pos1 && !!pos2 && pos1.x === pos2.x && pos1.y === pos2.y && (pos1.elevation ?? 0) === (pos2.elevation ?? 0);
 }
 
 /**
@@ -2628,7 +1581,7 @@ export async function executeInvade(actorOrToken, bypassChoice = null)
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
     {
-        ui.notifications.error("lancer-automations | executeInvade requires a token or actor.");
+        ui.notifications.error(localize('LA.notify.executeInvadeNeedsTarget'));
         return;
     }
 
@@ -2648,7 +1601,9 @@ export async function executeInvade(actorOrToken, bypassChoice = null)
     }
     else
     {
-        await executeTechAttack(selected.item, {
+        // TechAttackFlow only accepts actors and system/npc_feature items; weapons are invalid
+        const isWeapon = /** @type {any} */ (selected.item)?.type?.includes('weapon');
+        await executeTechAttack(!isWeapon && selected.item ? selected.item : actor, {
             title: selected.name,
             invade: true,
             attack_type: "Tech",
@@ -2809,7 +1764,4 @@ export const MiscAPI = {
     openClocksDialog,
 };
 
-export function escapeAttr(value)
-{
-    return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+export { escapeHtml as escapeAttr } from './string-utils.js';

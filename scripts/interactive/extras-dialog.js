@@ -12,7 +12,7 @@ import {
     setExtraDeployableOpts,
     openDeployablePicker,
 } from './deployables.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml as escAttr } from '../tools/string-utils.js';
 import { getActionOverlays, getActionOverlay, setActionOverlay, removeActionOverlay } from './action-overlays.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
@@ -21,11 +21,6 @@ import { isWhiteIcon } from '../tah/item-helpers.js';
 import { tierGateControl, bindTierGate, tierGateApplies, readTierGate } from './tier-gate.js';
 
 const ACTIVATIONS = ['Quick', 'Full', 'Free', 'Reaction', 'Protocol', 'Quick Tech', 'Full Tech', 'Invade'];
-
-function escAttr(str)
-{
-    return String(str).replace(/"/g, '&quot;');
-}
 
 function iconHtml(img, size = 22)
 {
@@ -70,60 +65,6 @@ function rangeRowHtml(rangeValue = '', type = 'Range')
     </div>`;
 }
 
-// Detached actor picker so the main Extras window stays compact.
-function openActorPickerPopup(target, onAdded)
-{
-    const actors = (game.actors?.contents ?? [])
-        .slice()
-        .sort((/** @type {any} */ actorA, /** @type {any} */ actorB) => actorA.name.localeCompare(actorB.name));
-    const rowsHtml = actors.length
-        ? actors.map((/** @type {any} */ actor) => `
-            <div class="la-ap-row" data-uuid="${escAttr(actor.uuid)}" data-name="${escAttr(actor.name)}" style="cursor:pointer;padding:4px 8px;display:flex;align-items:center;gap:8px;background:var(--la-plate);border-left:3px solid transparent;">
-                ${iconHtml(actor.img, 20)}
-                <span style="flex:1;font-size:0.88em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${actor.name} <span style="color:var(--la-ink-dim);font-size:0.85em;">[${actor.type}]</span></span>
-            </div>`).join('')
-        : '<div style="padding:8px;text-align:center;color:var(--la-ink-dim);font-size:0.82em;font-style:italic;">No actors in world.</div>';
-    const content = `
-        <div class="lancer-dialog-header"><div class="lancer-dialog-title">ADD DEPLOYABLE ACTOR</div></div>
-        <input type="text" class="la-ap-search" placeholder="${localize('LA.common.searchActors')}" style="margin-top:8px;width:100%;height:28px;padding:2px 8px;font-size:0.9em;box-sizing:border-box;">
-        <div class="la-ap-list lancer-scroll" style="margin-top:6px;max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;border:1px solid var(--la-edge);background:color-mix(in srgb, var(--la-plate), var(--la-ink) 6%);">${rowsHtml}</div>`;
-    const dlg = new Dialog({
-        title: localize('LA.dialogTitle.addDeployableActor'),
-        content,
-        buttons: { close: { label: localize('LA.common.close') } },
-        default: 'close',
-        render: (/** @type {any} */ html) =>
-        {
-            html.find('.la-ap-search').on('input', (/** @type {any} */ ev) =>
-            {
-                const query = String($(ev.currentTarget).val() ?? '').toLowerCase().trim();
-                html.find('.la-ap-row').each((/** @type {any} */ _i, /** @type {any} */ el) =>
-                {
-                    const name = String($(el).data('name') ?? '').toLowerCase();
-                    $(el).toggle(!query || name.includes(query));
-                });
-            });
-            html.find('.la-ap-row').on('click', async (/** @type {any} */ ev) =>
-            {
-                const uuid = $(ev.currentTarget).data('uuid');
-                if (!uuid)
-                    return;
-                const doc = /** @type {any} */ (await fromUuid(uuid));
-                if (doc?.documentName !== 'Actor')
-                    return;
-                await addExtraDeploymentActor(target, doc);
-                const cur = getLAFlag(target,'extraDeployableActorsViaUI') || [];
-                if (!cur.includes(uuid))
-                    await setLAFlag(target,'extraDeployableActorsViaUI', [...cur, uuid]);
-                dlg.close();
-                onAdded();
-            });
-            html.find('.la-ap-search').trigger('focus');
-        },
-    }, { width: 360, height: 'auto', classes: ['lancer-dialog-base', 'lancer-no-title'] });
-    dlg.render(true);
-}
-
 function renderExtraBarsSection(target)
 {
     const bars = getExtraBars(target) || [];
@@ -160,7 +101,7 @@ export function openExtrasDialog(target)
 {
     if (!target)
     {
-        ui.notifications.warn("openExtrasDialog: no target (actor or item).");
+        ui.notifications.warn(localize('LA.notify.extrasDialogNoTarget'));
         return;
     }
     const isItem = target.documentName === 'Item';
@@ -181,53 +122,53 @@ export function openExtrasDialog(target)
             .map((/** @type {any} */ entry) => (typeof entry === 'string' ? { lid: entry, name: entry, img: null } : entry))
             .filter((/** @type {any} */ lidEntry) => lidEntry?.lid && allDepLids.has(lidEntry.lid));
 
-        const stateBadge = (/** @type {any} */ a) =>
+        const stateBadge = (/** @type {any} */ action) =>
         {
-            const tags = a.tags ?? [];
+            const tags = action.tags ?? [];
             const parts = [];
             if (tags.some((/** @type {any} */ tag) => tag.lid === 'tg_loading'))
-                parts.push(a.loaded === false ? '<span style="color:#c33;">⬡</span>' : '<span style="color:#3a9e6e;">⬢</span>');
-            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_recharge'))
+                parts.push(action.loaded === false ? '<span style="color:#c33;">⬡</span>' : '<span style="color:#3a9e6e;">⬢</span>');
+            if (tags.some((/** @type {any} */ tag) => tag.lid === 'tg_recharge'))
             {
-                const charged = a.charged !== false;
-                parts.push(`<span style="color:${charged ? '#3a9e6e' : '#c33'};">⟳${a.recharge ?? ''}</span>`);
+                const charged = action.charged !== false;
+                parts.push(`<span style="color:${charged ? '#3a9e6e' : '#c33'};">⟳${action.recharge ?? ''}</span>`);
             }
-            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_limited'))
+            if (tags.some((/** @type {any} */ tag) => tag.lid === 'tg_limited'))
             {
-                const usesValue = a.uses?.value ?? 0;
-                const usesMax = a.uses?.max ?? 0;
+                const usesValue = action.uses?.value ?? 0;
+                const usesMax = action.uses?.max ?? 0;
                 parts.push(`<span style="color:${usesValue <= 0 ? '#c33' : '#3a9e6e'};">${usesValue}/${usesMax}</span>`);
             }
-            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_turn'))
+            if (tags.some((/** @type {any} */ tag) => tag.lid === 'tg_turn'))
             {
-                const perTurnValue = a.usesPerTurn?.value ?? 0;
-                const perTurnMax = a.usesPerTurn?.max ?? 0;
+                const perTurnValue = action.usesPerTurn?.value ?? 0;
+                const perTurnMax = action.usesPerTurn?.max ?? 0;
                 parts.push(`<span style="color:${perTurnValue <= 0 ? '#c33' : '#3a9e6e'};" title="Per turn">↻${perTurnValue}/${perTurnMax}T</span>`);
             }
-            if (tags.some((/** @type {any} */ t) => t.lid === 'tg_round'))
+            if (tags.some((/** @type {any} */ tag) => tag.lid === 'tg_round'))
             {
-                const perRoundValue = a.usesPerRound?.value ?? 0;
-                const perRoundMax = a.usesPerRound?.max ?? 0;
+                const perRoundValue = action.usesPerRound?.value ?? 0;
+                const perRoundMax = action.usesPerRound?.max ?? 0;
                 parts.push(`<span style="color:${perRoundValue <= 0 ? '#c33' : '#3a9e6e'};" title="Per round">↻${perRoundValue}/${perRoundMax}R</span>`);
             }
             return parts.length ? `<span style="font-size:0.82em;margin-right:4px;">${parts.join(' ')}</span>` : '';
         };
-        const hasResetable = (/** @type {any} */ a) =>
+        const hasResetable = (/** @type {any} */ action) =>
         {
-            const tags = a.tags ?? [];
-            return tags.some((/** @type {any} */ t) => ['tg_loading', 'tg_recharge', 'tg_limited', 'tg_turn', 'tg_round'].includes(t.lid));
+            const tags = action.tags ?? [];
+            return tags.some((/** @type {any} */ tag) => ['tg_loading', 'tg_recharge', 'tg_limited', 'tg_turn', 'tg_round'].includes(tag.lid));
         };
         const showTier = tierGateApplies(target);
         const actionRows = uiActions.length
-            ? uiActions.map((/** @type {any} */ a) => `
+            ? uiActions.map((/** @type {any} */ action) => `
                 <div class="la-tah-pick" style="padding:4px 8px;display:flex;align-items:center;gap:8px;background:var(--la-plate);border-left:3px solid transparent;">
-                    ${iconHtml(a.icon || 'icons/svg/dice-target.svg', 22)}
-                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name} <span style="color:var(--la-ink-dim);font-size:0.85em;">[${a.activation || ''}]</span></span>
-                    ${stateBadge(a)}
-                    ${showTier ? tierGateControl(a.tier, `data-action-name="${escAttr(a.name)}"`) : ''}
-                    ${hasResetable(a) ? `<span class="la-extras-reset-action" data-name="${escAttr(a.name)}" title="Reset" style="cursor:pointer;color:var(--la-ink-dim);padding:2px 6px;"><i class="fas fa-undo"></i></span>` : ''}
-                    <span class="la-extras-modify-action" data-name="${escAttr(a.name)}" title="Modify" style="cursor:pointer;color:var(--la-ink-dim);padding:2px 6px;"><i class="fas fa-pen"></i></span>
-                    <span class="la-extras-remove-action" data-name="${escAttr(a.name)}" title="Remove" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>
+                    ${iconHtml(action.icon || 'icons/svg/dice-target.svg', 22)}
+                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${action.name} <span style="color:var(--la-ink-dim);font-size:0.85em;">[${action.activation || ''}]</span></span>
+                    ${stateBadge(action)}
+                    ${showTier ? tierGateControl(action.tier, `data-action-name="${escAttr(action.name)}"`) : ''}
+                    ${hasResetable(action) ? `<span class="la-extras-reset-action" data-name="${escAttr(action.name)}" title="Reset" style="cursor:pointer;color:var(--la-ink-dim);padding:2px 6px;"><i class="fas fa-undo"></i></span>` : ''}
+                    <span class="la-extras-modify-action" data-name="${escAttr(action.name)}" title="Modify" style="cursor:pointer;color:var(--la-ink-dim);padding:2px 6px;"><i class="fas fa-pen"></i></span>
+                    <span class="la-extras-remove-action" data-name="${escAttr(action.name)}" title="Remove" style="cursor:pointer;color:#a33;padding:2px 6px;"><i class="fas fa-trash"></i></span>
                 </div>`).join('')
             : '<div style="padding:8px;text-align:center;color:var(--la-ink-dim);font-size:0.82em;font-style:italic;">No actions added via this dialog.</div>';
         const depRowsUuid = uiMarkerUuids.map((/** @type {string} */ uuid) =>
@@ -830,7 +771,7 @@ export function openExtrasDialog(target)
                     const name = $(ev.currentTarget).data('name');
                     if (!name)
                         return;
-                    await removeExtraActions(target, (/** @type {any} */ a) => a.name === name && a._addedViaExtrasUI === true);
+                    await removeExtraActions(target, (/** @type {any} */ action) => action.name === name && action._addedViaExtrasUI === true);
                     rerender();
                 });
                 html.find('.la-extras-reset-action').on('click', async (ev) =>
@@ -848,7 +789,7 @@ export function openExtrasDialog(target)
                         {
                             await addExtraDeploymentLids(target, entry.lid);
                             const cur = getLAFlag(target,'extraDeployableLidsViaUI') || [];
-                            if (!cur.some((/** @type {any} */ e) => (typeof e === 'string' ? e : e?.lid) === entry.lid))
+                            if (!cur.some((/** @type {any} */ lidItem) => (typeof lidItem === 'string' ? lidItem : lidItem?.lid) === entry.lid))
                                 await setLAFlag(target,'extraDeployableLidsViaUI', [...cur, { lid: entry.lid, name: entry.name, img: entry.img }]);
                             rerender();
                         },
@@ -870,7 +811,7 @@ export function openExtrasDialog(target)
                     const cur = getLAFlag(target,'extraDeployables') || [];
                     await setLAFlag(target,'extraDeployables', cur.filter((/** @type {string} */ existingLid) => existingLid !== lid));
                     const marker = getLAFlag(target,'extraDeployableLidsViaUI') || [];
-                    await setLAFlag(target,'extraDeployableLidsViaUI', marker.filter((/** @type {any} */ e) => (typeof e === 'string' ? e : e?.lid) !== lid));
+                    await setLAFlag(target,'extraDeployableLidsViaUI', marker.filter((/** @type {any} */ lidItem) => (typeof lidItem === 'string' ? lidItem : lidItem?.lid) !== lid));
                     rerender();
                 });
                 html.find('.la-extras-dep-range').on('change', async (ev) =>
@@ -917,7 +858,7 @@ export function openExtrasDialog(target)
                     if (actionName)
                     {
                         const list = foundry.utils.deepClone(getLAFlag(target,'extraActions') || []);
-                        const entry = list.find((/** @type {any} */ a) => a.name === actionName && a._addedViaExtrasUI === true);
+                        const entry = list.find((/** @type {any} */ action) => action.name === actionName && action._addedViaExtrasUI === true);
                         if (entry)
                         {
                             if (tier)
@@ -932,7 +873,7 @@ export function openExtrasDialog(target)
                     if (barId)
                     {
                         const records = foundry.utils.deepClone(getLAFlag(target,'extraBarTemplates') || []);
-                        const record = records.find((/** @type {any} */ r) => r.id === barId);
+                        const record = records.find((/** @type {any} */ candidate) => candidate.id === barId);
                         if (record)
                         {
                             record.entry = record.entry ?? {};

@@ -122,10 +122,7 @@ export function playBattleLogSound(variant, { loop = false, volumeScale = 1 } = 
 {
     const noop = { stop: () =>
     {} };
-    let vol = 0;
-    if (getModuleSetting(`tah.battleLog.${variant}`) === false)
-        return noop;
-    vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
+    const vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
     if (vol <= 0)
         return noop;
     const entry = BATTLELOG_SOUNDS[variant];

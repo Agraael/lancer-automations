@@ -132,7 +132,7 @@ export async function stressCheckMultipleOnes(state)
     if (!roll)
         throw new TypeError(`Stress check hasn't been rolled yet!`);
 
-    // Crushing hits
+    // Multiple ones: critical reactor failure
     let onesRolled = getRollCount(roll, 1);
     if (onesRolled > 1)
     {
@@ -207,7 +207,6 @@ export async function applyStressEffects(state)
 
     if (hasMultipleOnes)
     {
-    // Multiple 1s: EXPOSED + THROTTLED + Critical Meltdown
         try
         {
             // EXPOSED ends on stabilize or a passed ENG check, not on a turn timer
@@ -317,7 +316,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
         {
             if (engineeringSuccess)
             {
-                // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["slow", "throttled"],
@@ -328,7 +326,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
             }
             else
             {
-                // Failure: EXPOSED
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["exposed"],
@@ -341,7 +338,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
         {
             if (engineeringSuccess)
             {
-                // Success: SLOW + THROTTLED
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["slow", "throttled"],
@@ -352,7 +348,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
             }
             else
             {
-                // Failure: EXPOSED + Meltdown
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["exposed"],
@@ -365,7 +360,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
         {
             if (engineeringSuccess)
             {
-                // Success: THROTTLED only
                 await applyEffectsToTokens({
                     tokens: [token],
                     effectNames: ["throttled"],
@@ -376,7 +370,6 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
             }
             else
             {
-                // Failure: Meltdown
                 description = `${localize('LA.altStruct.result.engFailedMeltdown3')}<br>${meltdownButton()}`;
             }
         }

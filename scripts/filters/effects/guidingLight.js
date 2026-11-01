@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, setDirVFromDegrees } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, setDirVFromDegrees } from '../filter-core.js';
 
 // FilterGuidingLight: a key light from the helper's side with a gleam travelling the lit contour.
 
@@ -14,14 +14,7 @@ uniform float gleamGain;
 uniform float rimStrength;
 uniform vec3 aidColor;
 uniform vec2 dirV;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 float tapA(vec2 uv)
 {
@@ -74,41 +67,14 @@ void main()
 }
 `;
 
-export class FilterGuidingLight extends PIXI.Filter
+export class FilterGuidingLight extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, guidingLightFragment);
-
-        this.uniforms.aidColor = new Float32Array([0.66, 0.94, 0.78]);
-        this.uniforms.dirV = new Float32Array([0.5, -0.866]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterGuidingLight.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(guidingLightFragment, params, {
+            aidColor: new Float32Array([0.66, 0.94, 0.78]),
+            dirV: new Float32Array([0.5, -0.866]),
+        });
     }
 
     get rimWidth()
@@ -183,15 +149,6 @@ export class FilterGuidingLight extends PIXI.Filter
     {
         this._bearing = value;
         setDirVFromDegrees(this.uniforms, value);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

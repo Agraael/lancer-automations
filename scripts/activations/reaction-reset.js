@@ -3,6 +3,7 @@
 
 import { ReactionManager } from "./reaction-manager.js";
 import { localize } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 export class ReactionReset extends FormApplication
 {
     static get defaultOptions()
@@ -66,10 +67,7 @@ export class ReactionReset extends FormApplication
                         }
                     }
                 },
-                no: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel")
-                }
+                no: cancelButton()
             },
             default: "no"
         }, { classes: ['lancer-dialog-base'] }).render(true);

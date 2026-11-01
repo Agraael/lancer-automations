@@ -10,7 +10,7 @@ Infection is a damage type from [HORUS: Thy Hubris Manifest](https://cornylius.i
 
 <img align="right" src="../img/inf-settings.png" width="45%"/>
 
-**Combat & Movement → Structure & Damage**, the **Infection Damage Integration** toggle (**`enableInfectionDamageIntegration`**).
+**Combat & Movement → Structure & Damage**, the **Infection Damage Type** toggle (**`enableInfectionDamageIntegration`**).
 
 <br clear="right"/>
 

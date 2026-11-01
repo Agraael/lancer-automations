@@ -1,4 +1,5 @@
 import { escapeHtml } from "../tools/string-utils.js";
+import { htmlToElement } from "../tools/dom-utils.js";
 
 export function laSigned(value)
 {
@@ -101,7 +102,7 @@ export function laCardSlot($body, slot)
     let $rows = $body.children('.la2-cardrows');
     if (!$rows.length)
     {
-        $rows = $('<div class="la2-cardrows"><div class="la2-slot" data-slot="state"></div><div class="la2-slot" data-slot="vis"></div><div class="la2-slot" data-slot="bonus"></div><div class="la2-slot" data-slot="mod"></div></div>');
+        $rows = $(htmlToElement('<div class="la2-cardrows"><div class="la2-slot" data-slot="state"></div><div class="la2-slot" data-slot="vis"></div><div class="la2-slot" data-slot="bonus"></div><div class="la2-slot" data-slot="mod"></div></div>'));
         $body.append($rows);
     }
     return $rows.children(`[data-slot="${slot}"]`);
@@ -170,7 +171,7 @@ export function laTagLancerRows($form)
 
 export function laSyncInvisibility(state)
 {
-    const $form = $('form[id^="accdiff"]');
+    const $form = $(document.querySelectorAll('form[id^="accdiff"]'));
     const targets = state?.data?.acc_diff?.targets ?? [];
     if ($form.length === 0 || targets.length === 0)
         return;

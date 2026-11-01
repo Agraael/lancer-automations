@@ -12,7 +12,7 @@ So what is it? It tries to track everything that happens during a combat and han
 
 ## Settings
 
-The **Battle Log** tab: **Enable Battle Log**, **Disable awards**, and **Theme music** (a default, or one per outcome).
+The **Battle Log** tab: **Enable Battle Log** (on by default), **Disable awards**, and **Theme music** (a default, or one per outcome).
 
 ---
 

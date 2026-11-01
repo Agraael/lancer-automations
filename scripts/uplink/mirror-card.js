@@ -2,6 +2,7 @@
 // and CSS values are lifted from the system's AccDiffHUD / DamageHUD styles.
 
 import { LANCER_ROW_TAGS, laValueTag, laPills, laDamageChips, laStatesHtml } from '../bonuses/roll-card-rows.js';
+import { signedNumber as signed } from '../tools/string-utils.js';
 
 const COVER_LABELS = ['No Cover', 'Soft (-1)', 'Hard (-2)'];
 const COVER_ICONS = ['mdi mdi-shield-outline', 'mdi mdi-shield-half-full', 'mdi mdi-shield'];
@@ -63,11 +64,6 @@ function radioRow(labels, activeIdx, icons = null)
     return `<div class="lau-radrow">${parts.join('')}</div>`;
 }
 
-function signed(num)
-{
-    const amount = Number(num) || 0;
-    return amount >= 0 ? `+${amount}` : `${amount}`;
-}
 
 function totalBadge(total)
 {

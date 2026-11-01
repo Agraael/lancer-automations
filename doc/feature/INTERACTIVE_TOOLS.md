@@ -90,7 +90,7 @@ For one-off effects you can skip the API: place a template by hand and attach th
 
 <img align="right" src="../img/it-knockback.png" width="45%"/>
 
-**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this on hit targets after damage (**Automate Knockback on Hit**, `enableKnockbackFlow`).
+**knockBackToken** pushes or pulls tokens a set distance, one at a time, snapping to the grid and respecting obstacles. The **Knockback** checkbox in the damage dialog reads a weapon's Knockback tag and runs this on hit targets after damage (**Automate Knockback on Hit**, `enableKnockbackFlow`, on by default).
 
 It lights the spaces directly away from the attacker, or from the Blast center when the Blast was placed with LA targeting. Other spaces warn but still work.
 
@@ -106,8 +106,8 @@ It lights the spaces directly away from the attacker, or from the Blast center w
 
 The attack HUD's target and area buttons are covered in [Advanced Targeting and Measurement](./ATTACK_TARGETING.md#the-targeting-buttons). Two related settings:
 
-- **Stat Roll Targeting** - with **`statRollTargeting`** on, a stat or skill roll (HULL / AGI / SYS / ENG) gets the same target button as an attack, using the picked token's save or matching stat as the difficulty.
-- **Range Preview on Attack/Damage HUD** - with **`tah.rangePreviewOnAttackCard`** on, the attacker's reach is drawn on the canvas when the attack card opens, following the **Thrown** box for a thrown weapon.
+- **Stat Roll Targeting** - with **`statRollTargeting`** on (default), a stat or skill roll (HULL / AGI / SYS / ENG) gets the same target button as an attack, using the picked token's save or matching stat as the difficulty.
+- **Range Preview While Attacking** - with **`tah.rangePreviewOnAttackCard`** on, the attacker's reach is drawn on the canvas when the attack card opens, following the **Thrown** box for a thrown weapon.
 
 <br clear="right"/>
 
@@ -164,7 +164,7 @@ Set **Combat** to **Attack** or **Damage** to make an action roll. Attack rolls 
 
 <img align="right" src="../img/it-overlap-picker.png" width="45%"/>
 
-With **`overlapTokenPicker`** on, clicking a spot where tokens are stacked shows a small picker so you choose which one.
+With **`overlapTokenPicker`** on (default), clicking a spot where tokens are stacked shows a small picker so you choose which one.
 
 <br clear="right"/>
 
@@ -179,4 +179,4 @@ With **`displayToolsToOthers`** on (the default), your in-progress tools, target
 | Option | What it does |
 |:--|:--|
 | **Ctrl Ruler** | Hold Ctrl to switch to the Measure Distance ruler. |
-| **Measure Toolbar Scale** | Size of the measure toolbar. |
+| **HUD Scale** | Size of the measure toolbar, shared with the Token Action HUD. |

@@ -137,11 +137,11 @@ Hooks.once('init', () =>
         editable: [{ key: 'KeyV' }],
         onDown: () =>
         {
-            _forceFree = true; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOn'); return true;
+            _forceFree = true; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOn'); Hooks.callAll(`${MODULE_ID}.freeKeyChanged`, true); return true;
         },
         onUp:   () =>
         {
-            _forceFree = false; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOff'); return true;
+            _forceFree = false; refreshActiveDragPreviews(); holdKeyFeedback('LA.dragFeedback.freeOff'); Hooks.callAll(`${MODULE_ID}.freeKeyChanged`, false); return true;
         },
         repeat: false,
         precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY

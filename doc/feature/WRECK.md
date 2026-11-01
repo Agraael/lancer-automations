@@ -56,7 +56,7 @@ Wreck **tiles** get a **Resurrect** button in the **Tile HUD** that brings the o
 
 ## FX & sound
 
-The explosion animation and sound are **`enableWreckAnimation`** and **`enableWreckAudio`**, with **`wreckMasterVolume`** over the top and **`disableHumanDeathSound`** to keep corpses quiet.
+The explosion animation is **`enableWreckAnimation`**, the sound follows **`wreckMasterVolume`** (0 mutes it), and **`disableHumanDeathSound`** keeps corpses quiet.
 
 ---
 

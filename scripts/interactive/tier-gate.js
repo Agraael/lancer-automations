@@ -56,3 +56,25 @@ export function bindTierGate($root, onChange)
         onChange?.(next > 0 ? next : null, gate);
     });
 }
+
+// NPC tier honoring tier_override, null for non-NPC / unowned (never tier-gated).
+export function getOwnerTier(ownerActor, item = null)
+{
+    if (ownerActor?.type !== 'npc')
+        return null;
+    const override = Number(item?.system?.tier_override ?? 0);
+    const tier = override > 0 ? override : (Number(ownerActor.system?.tier) || 1);
+    return Math.max(1, Math.min(3, tier));
+}
+
+// A link applies unless gated to a tier the NPC owner is not. Non-NPC owners ignore the gate.
+export function linkTierGate(entry, ownerActor, item = null)
+{
+    const gate = Number(entry?.tier ?? 0);
+    if (!gate)
+        return true;
+    const ownerTier = getOwnerTier(ownerActor, item);
+    if (ownerTier == null)
+        return true;
+    return gate === ownerTier;
+}

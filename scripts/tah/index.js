@@ -6,6 +6,7 @@ import { getLAFlags } from '../tools/flag-utils.js';
 import { playUiSound, WAYPOINT_ADD_SOUND, WAYPOINT_REMOVE_SOUND } from './sound.js';
 import { forceHideStatHint } from './tokenStatHint.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
+import { isLancerActor, resolvePilot } from '../utils/lancer-token.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const SETTING = 'tahEnabled';
@@ -25,7 +26,7 @@ function isRelevantActor(actorId)
         return true;
     return (hud._tokens ?? []).some(token =>
         token.actor?.id === actorId ||
-        token.actor?.system?.pilot?.value?.id === actorId
+        resolvePilot(token)?.id === actorId
     );
 }
 
@@ -114,23 +115,34 @@ Hooks.on('init', () =>
             precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
         });
     }
-    game.settings.register(MODULE_ID, 'tah.clickToOpen', {
-        name: 'LA.settings.tah.clickToOpen.name',
-        hint: 'LA.settings.tah.clickToOpen.hint',
+    game.keybindings.register(MODULE_ID, 'tah.escape', {
+        name: 'LA.keybindings.tah.escape.name',
+        hint: 'LA.keybindings.tah.escape.hint',
+        editable: [{ key: 'Escape' }],
+        onDown: (context) => enabled() && hud.escape(context),
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
+    });
+    game.settings.register(MODULE_ID, 'tah.openMode', {
+        name: 'LA.settings.tah.openMode.name',
+        hint: 'LA.settings.tah.openMode.hint',
         scope: 'client',
         config: false,
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: {
+            hover: 'LA.settings.tah.openMode.choices.hover',
+            click: 'LA.settings.tah.openMode.choices.click',
+        },
+        default: 'hover',
     });
     game.settings.register(MODULE_ID, 'tah.narrativeMode', {
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         onChange: () =>
         {
             const tokens = (canvas?.tokens?.controlled ?? []).filter(token =>
-                ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type) && token.actor?.isOwner);
+                isLancerActor(token.actor) && token.actor?.isOwner);
             if (tokens.length === 0)
             {
                 if (getModuleSetting('tah.narrativeMode'))
@@ -200,7 +212,7 @@ Hooks.on('init', () =>
         scope: 'client',
         config: false,
         type: Number,
-        default: 0,
+        default: 20,
         range: { min: 0, max: 50, step: 1 },
     });
     game.settings.register(MODULE_ID, 'tah.wheelRadiusOffset', {
@@ -209,7 +221,7 @@ Hooks.on('init', () =>
         scope: 'client',
         config: false,
         type: Number,
-        default: 0,
+        default: 20,
         range: { min: -40, max: 120, step: 5 },
     });
     game.settings.register(MODULE_ID, 'tah.rangePreview', {
@@ -228,7 +240,11 @@ Hooks.on('init', () =>
         type: Number,
         default: 1,
         range: { min: 0.6, max: 1.6, step: 0.05 },
-        onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
+        onChange: (value) =>
+        {
+            Hooks.callAll('forceUpdateTokenActionHud');
+            Hooks.callAll(`${MODULE_ID}.uiScaleChanged`, value);
+        },
     });
     game.settings.register(MODULE_ID, 'tah.statusFavorites', {
         scope: 'client',
@@ -268,14 +284,8 @@ Hooks.on('init', () =>
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
     });
-    for (const soundKey of ['fadeIn', 'fadeOut', 'loopBackground', 'typingLoop', 'displayList', 'longResult', 'shortResult', 'resultImpact', 'resultImpactGood', 'resultImpactBad', 'logOpen', 'incomingTrans', 'confirm', 'denied', 'fail'])
-    {
-        game.settings.register(MODULE_ID, `tah.battleLog.${soundKey}`, {
-            scope: 'client', config: false, type: Boolean, default: true,
-        });
-    }
     for (const key of ['themeDefault', 'themeVictory', 'themeDefeat', 'themePartial'])
     {
         game.settings.register(MODULE_ID, `tah.battleLog.${key}`, {
@@ -398,7 +408,7 @@ Hooks.on('init', () =>
             token: 'LA.settings.tah.portrait.mode.choices.token',
             actor: 'LA.settings.tah.portrait.mode.choices.actor',
         },
-        default: 'off',
+        default: 'token',
         onChange: () =>
         {
             game.settings.set(MODULE_ID, 'tah.position', null);
@@ -415,7 +425,7 @@ Hooks.on('init', () =>
             mechPilot: 'LA.settings.tah.portrait.scope.choices.mechPilot',
             all: 'LA.settings.tah.portrait.scope.choices.all',
         },
-        default: 'mechPilot',
+        default: 'all',
         onChange: () => Hooks.callAll('forceUpdateTokenActionHud'),
     });
     game.settings.register(MODULE_ID, 'tah.portrait.mechUsePilot', {
@@ -665,7 +675,7 @@ Hooks.on('controlToken', (_token, controlled) =>
     {
         _pendingHudUpdate = false;
         const ownedTokens = /** @type {any[]} */ (canvas?.tokens?.controlled ?? []).filter(token =>
-            ['mech', 'npc', 'pilot', 'deployable'].includes(token.actor?.type) && token.actor?.isOwner
+            isLancerActor(token.actor) && token.actor?.isOwner
         );
         if (ownedTokens.length > 0)
             hud.bind(ownedTokens);
@@ -693,7 +703,7 @@ Hooks.on('updateActor', (actor, change) =>
         return;
     if (!isRelevantActor(actor.id))
         return;
-    if (getLAFlags(change)?.lockedActions !== undefined || change?.system?.core_energy !== undefined)
+    if (getLAFlags(change)?.lockedActions !== undefined || getLAFlags(change)?.perFreqSub !== undefined || change?.system?.core_energy !== undefined)
     {
         hud.scheduleRefresh();
         if (change.system?.action_tracker)
@@ -715,13 +725,29 @@ for (const hookName of ['updateItem', 'createItem', 'deleteItem', 'createActiveE
     });
 }
 
-Hooks.on('updateToken', (tokenDoc) =>
+Hooks.on('updateActiveEffect', (effect) =>
+{
+    if (enabled() && isRelevantActor(effect.parent?.id))
+        hud._updateEffectStrip();
+});
+
+Hooks.on(`${MODULE_ID}.freeKeyChanged`, () =>
+{
+    if (enabled())
+        hud._paintSpendCue();
+});
+
+const TOKEN_REFRESH_IGNORED = ['x', 'y', 'elevation', 'rotation', 'sort', '_stats', 'flags.tokenmagic'];
+
+Hooks.on('updateToken', (tokenDoc, change) =>
 {
     if (!enabled())
         return;
     if ((hud._tokens ?? []).some(token => token.id === tokenDoc.id))
     {
-        hud.scheduleRefresh();
+        const keys = Object.keys(foundry.utils.flattenObject(change ?? {})).filter(key => key !== '_id');
+        if (keys.some(key => !TOKEN_REFRESH_IGNORED.some(prefix => key === prefix || key.startsWith(`${prefix}.`))))
+            hud.scheduleRefresh();
         hud.updateStatsInPlace();
     }
 });
@@ -734,13 +760,20 @@ Hooks.on('updateCombat', () =>
         hud.scheduleRefresh(250);
 });
 
-Hooks.on('updateCombatant', (combatant) =>
+const TAPE_FLAG_PATH = `flags.${MODULE_ID}.actionTape`;
+
+Hooks.on('updateCombatant', (combatant, change) =>
 {
     if (!enabled())
         return;
     if ((hud._tokens ?? []).some(token => token.document?.id === combatant.tokenId))
+    {
         hud._updateCombatBar?.();
-    if (isRelevantActor(combatant.actorId))
+        hud._updateActionTape?.();
+    }
+    const keys = Object.keys(foundry.utils.flattenObject(change ?? {})).filter(key => key !== '_id');
+    const tapeOnly = keys.length > 0 && keys.every(key => key === TAPE_FLAG_PATH || key.startsWith(`${TAPE_FLAG_PATH}.`) || key === `flags.${MODULE_ID}.-=actionTape`);
+    if (isRelevantActor(combatant.actorId) && !tapeOnly)
         hud.scheduleRefresh();
 });
 
@@ -827,12 +860,12 @@ Hooks.on('canvasReady', () =>
     _cleanupLegacyLARangeAuras();
 });
 
-Hooks.on('forceUpdateTokenActionHud', () =>
+Hooks.on('forceUpdateTokenActionHud', (options) =>
 {
     if (!enabled())
         return;
     if (hud._token || hud._narrativeMode)
-        hud.refresh();
+        hud.refresh({ force: !options?.patch });
 });
 
 // Tape-only repaint: the flag write lands on the combatant, and a full refresh would close the columns.
@@ -866,13 +899,13 @@ async function _computeAttackHudRange(state)
         const throwDist = ranges['Thrown'] ?? 0;
         if (state.data?.acc_diff?.weapon?.thrown && throwDist > 0)
             return Math.max(1, throwDist);
-        const shape = Math.max(0, ranges['Blast'] ?? 0, ranges['Cone'] ?? 0, ranges['Line'] ?? 0, ranges['Burst'] ?? 0);
+        const notThrown = { ...ranges, Thrown: 0 };
         // Range/Threat switch (accdiff button): follow the chosen mode when both exist and differ.
         const rangeVal = ranges['Range'] ?? 0;
         const threatVal = ranges['Threat'] ?? 0;
         if (rangeVal > 0 && threatVal > 0 && rangeVal !== threatVal)
-            return Math.max(1, (state.__laUseThreat ? threatVal : rangeVal) + shape);
-        const max = weaponPulseRange(ranges);
+            return Math.max(1, weaponPulseRange(state.__laUseThreat ? { ...notThrown, Range: 0 } : { ...notThrown, Threat: 0 }));
+        const max = weaponPulseRange(notThrown);
         if (max > 0)
             return Math.max(1, max);
     }

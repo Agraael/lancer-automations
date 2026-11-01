@@ -35,7 +35,7 @@ function openFavoriteDetails(favorite, favoriteIndex)
     rowEl.scrollIntoView({ block: 'nearest' });
     hud._setActive($(scrollWrap), $(rowEl));
     $(scrollWrap).one('mouseenter', () => hud._setActive($(scrollWrap), $()));
-    $('.la-hud-popup').remove();
+    document.querySelectorAll('.la-hud-popup').forEach(node => node.remove());
     if (favorite.onRightClick)
         $(rowEl).trigger('contextmenu');
 }

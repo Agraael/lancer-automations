@@ -2,12 +2,15 @@
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag, setLAFlag, unsetLAFlag } from '../tools/flag-utils.js';
+import { localize } from '../tools/string-utils.js';
+import { ordnanceWindowClosed } from '../tah/action-tape.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 const RESTORE_FLAG = 'actionTrackerRestore';
 
 // brace / dazed: 1 quick action only (Lancer "prefer full, then quick" spend logic means
 // full=false + quick=true allows exactly one quick before quick flips to false).
 const ACTION_LIMITING_EFFECTS = [
-    { statusId: 'brace',                          locks: ['protocol', 'full'],            actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
+    { statusId: 'brace',                          locks: ['protocol', 'full', 'reaction'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'dazed',                          locks: ['protocol', 'full', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'DeadRings_statuses_staggered',   locks: ['protocol', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'slow',                           locks: [],                              actionLocks: ['Boost'] },
@@ -31,6 +34,23 @@ export function lockEntryLabel(entry)
     if (typeof entry === 'string')
         return entry;
     return String(entry?.reason || entry?.id || '');
+}
+
+function isOrdnanceWeapon(item)
+{
+    const tags = [...(item.system?.active_profile?.tags ?? []), ...(item.system?.all_base_tags ?? []), ...(item.system?.tags ?? [])];
+    return tags.some(tag => tag?.lid === 'tg_ordnance');
+}
+
+function getOrdnanceLocks(actor, actionName)
+{
+    if (!actionName)
+        return [];
+    const weapon = actor?.items?.find(item => item.name === actionName && isOrdnanceWeapon(item));
+    const token = actor?.token?.object ?? actor?.getActiveTokens?.()?.[0];
+    if (!weapon || !token || !ordnanceWindowClosed(token))
+        return [];
+    return [{ item: weapon, actionName, reason: localize('LA.tokenHud.ordnanceLocked'), kind: null }];
 }
 
 // Item-held locks (actionLocks item flag), live only while the item is owned and active.
@@ -129,7 +149,7 @@ export function getActionLockInfo(actor, actionName, activation = null)
         ...tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry))),
         ...getActorActionTypeLocks(actor, actionName, activation)
     ];
-    const itemLocks = [...getItemActionLocks(actor, actionName), ...getItemActionTypeLocks(actor, actionName, activation)];
+    const itemLocks = [...getItemActionLocks(actor, actionName), ...getItemActionTypeLocks(actor, actionName, activation), ...getOrdnanceLocks(actor, actionName)];
     return { statuses, sources, itemLocks };
 }
 
@@ -220,7 +240,7 @@ function _findTokenForActor(actor)
 
 function _resolveActorToken(effect)
 {
-    if (!game.users.activeGM?.isSelf)
+    if (!isExecutorGM())
         return null;
     const actor = effect?.parent;
     if (!actor || actor.documentName !== 'Actor')
@@ -230,7 +250,7 @@ function _resolveActorToken(effect)
 
 async function _cleanupStaleStatusLocks()
 {
-    if (!game.users.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
     for (const actor of game.actors ?? [])
     {
@@ -282,7 +302,7 @@ export function registerActionLimitsHooks()
     {
         if (options?._laActionLimits)
             return;
-        if (!game.users.activeGM?.isSelf)
+        if (!isExecutorGM())
             return;
         const hasCapture = !!getLAFlag(actor,RESTORE_FLAG);
         const hasLimiting = ACTION_LIMITING_EFFECTS.some(e => e.locks?.length && _hasStatus(actor, e.statusId));

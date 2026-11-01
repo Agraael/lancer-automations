@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
 
 const sliceTearFragment = `
 precision highp float;
@@ -19,14 +19,7 @@ uniform float blockChance;
 uniform float scan;
 uniform vec3 glitchA;
 uniform vec3 glitchB;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 ${GLSL_HASH1}
 ${GLSL_HASH2}
 
@@ -77,41 +70,14 @@ void main()
 }
 `;
 
-export class FilterSliceTear extends PIXI.Filter
+export class FilterSliceTear extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, sliceTearFragment);
-
-        this.uniforms.glitchA = new Float32Array([0.58, 0.13, 0.71]);
-        this.uniforms.glitchB = new Float32Array([0.61, 1.0, 0.23]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterSliceTear.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(sliceTearFragment, params, {
+            glitchA: new Float32Array([0.58, 0.13, 0.71]),
+            glitchB: new Float32Array([0.61, 1.0, 0.23]),
+        });
     }
 
     get tickRate()
@@ -247,15 +213,6 @@ export class FilterSliceTear extends PIXI.Filter
     set glitchB(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.glitchB);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

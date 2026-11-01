@@ -1,977 +1,48 @@
-/* global canvas, game, ui, FilePicker, Dialog, CodeMirror, PIXI, performance, fromUuidSync */
+/* global canvas, game, ui, FilePicker, Dialog, CodeMirror, PIXI, performance */
 
-/** Duration-origin value meaning "every target is its own reference". */
-const EACH_ORIGIN = '__each';
-
-/** Split a target field value into ids. Multi-target fields hold a comma-joined list. */
-function _emTargetIds(targetID)
-{
-    return String(targetID ?? '').split(',').map(id => id.trim()).filter(Boolean);
-}
-
-/** One apply call per token when each target is its own duration reference, otherwise one for all. */
-function _emApplyGroups(tokens, originID)
-{
-    if (originID !== EACH_ORIGIN)
-        return [{ tokens, origin: originID }];
-    return tokens.map(token => ({ tokens: [token], origin: token.id }));
-}
-
-/** Notification label for a resolved target list. */
-function _emTargetLabel(docs)
-{
-    if (docs.length > 3)
-        return `${docs.length} tokens`;
-    return docs.map(doc => doc.name).join(', ');
-}
-
-/** Resolve every id in a target field value. */
-function _resolveEmTargets(targetID)
-{
-    return _emTargetIds(targetID).map(id => _resolveEmTarget(id));
-}
-
-/**
- * Point a target `<select>` at one or more ids, adding a synthetic option for a multi-token set.
- * @param {any} $select
- * @param {string[]} ids
- */
-function _setEmTargetValue($select, ids)
-{
-    const el = $select[0];
-    if (!el)
-        return;
-    const value = ids.join(', ');
-    if (el.tagName === 'SELECT')
-    {
-        $select.find('option.em-multi-opt').remove();
-        if (ids.length > 1)
-            $select.prepend(`<option class="em-multi-opt" value="${value}">${ids.length} tokens</option>`);
-    }
-    $select.val(value).change();
-}
-
-/** Resolve a dropdown targetID to `{actor, token, item}`. targetID can be a scene tokenId or an actor/item UUID. */
-function _resolveEmTarget(targetID)
-{
-    if (typeof targetID === 'string' && targetID.includes(','))
-        targetID = _emTargetIds(targetID)[0];
-    if (!targetID)
-        return { actor: null, token: null, item: null };
-    if (typeof targetID === 'string' && targetID.includes('.'))
-    {
-        const doc = /** @type {any} */ (fromUuidSync(targetID));
-        if (doc?.documentName === 'Item')
-            return { actor: doc, token: null, item: doc };
-        return { actor: doc?.documentName === 'Actor' ? doc : null, token: null, item: null };
-    }
-    const token = canvas.tokens.get(targetID);
-    return { actor: token?.actor ?? null, token: token ?? null, item: null };
-}
-
+import { EACH_ORIGIN, _emTargetIds, _emApplyGroups, _emTargetLabel, _resolveEmTargets, _setEmTargetValue, _resolveEmTarget } from "./effect-manager-targets.js";
 import {
     applyEffectsToTokens,
     linkEffectToItem,
     linkEffectToActor
 } from "./flagged-effects.js";
 import { createDurationMarks, buildDuration } from "./duration-widget.js";
-import { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { durationChoice, ANY_TURN_ORIGIN } from "./duration-builders.js";
+import { getLAFlag, unsetLAFlag } from "../tools/flag-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import {
     addGlobalBonus,
     addConstantBonus,
-    removeGlobalBonus,
-    removeConstantBonus,
     linkBonusToItem,
     linkBonusToActor,
-    unlinkBonusFromItem,
-    unlinkBonusFromActor,
     supportsConsumeOnUsage,
-    getBonusDetailString,
-    getBonusUsesInfo,
     STAT_BONUS_GROUPS,
-    getV3DefenseRows,
-    setV3DefenseOff,
 } from "./genericBonuses.js";
-import { getBonusConditionHint } from "./bonus-condition.js";
-import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc-tools.js";
-import { installLancerHints } from "../setup/codemirror-hints.js";
-import { tierGateControl, bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
+import { attachEditorResizeObserver } from "../tools/misc-tools.js";
+import {
+    updateCodeFieldBadge,
+    presetCategoryFor,
+    getStoredPresets,
+    setStoredPresets,
+    gatherPresetData,
+    applyPresetData,
+    openCodeFieldDialog,
+    openItemBrowser,
+    openStatusPicker,
+    initLaMultiSelect,
+    setupTriggerUI,
+    getTriggerConfig,
+} from "./effect-manager-widgets.js";
+import { bindTierGate, readTierGate, tierGateApplies } from "../interactive/tier-gate.js";
 import { TG } from "../interactive/canvas-helpers.js";
-import { localize, localizeFormat, escapeHtml } from "../tools/string-utils.js";
-import { durationText, sourceName } from "./status-tooltip.js";
-import { v3ConditionLabel } from "../tools/v3-condition.js";
-
-// Bonus composition modes. First entry is the default for backward compatibility.
-const RANGE_BONUS_MODES = [
-    { value: 'add', label: 'LA.effectManager.mode.addValue' },
-    { value: 'override', label: 'LA.effectManager.mode.overrideValue' },
-    { value: 'change', label: 'LA.effectManager.mode.changeAllRanges' },
-];
-const TAG_BONUS_MODES = [
-    { value: 'add', label: 'LA.effectManager.mode.addValue' },
-    { value: 'override', label: 'LA.effectManager.mode.overrideValue' },
-];
-const DAMAGE_BONUS_MODES = [
-    { value: 'add', label: 'LA.effectManager.mode.bonus' },
-    { value: 'add_base', label: 'LA.effectManager.mode.add' },
-    { value: 'replace', label: 'LA.effectManager.mode.replace' },
-    { value: 'change_type', label: 'LA.effectManager.mode.changeType' },
-];
-const DAMAGE_CHANGE_TYPE_SCOPES = [
-    { value: 'base', label: 'LA.effectManager.mode.weaponDamage' },
-    { value: 'bonus', label: 'LA.effectManager.mode.bonusDamage' },
-    { value: 'all', label: 'LA.effectManager.mode.both' },
-];
-const STAT_BONUS_MODES = [
-    { value: 'add', label: 'LA.effectManager.mode.add' },
-    { value: 'replace', label: 'LA.effectManager.mode.replace' },
-];
-const DAMAGE_CHANGE_TYPE_ALL = 'all';
-
-// Filter fields the dialog offers per immunity subtype. Absent subtype is left untouched on save.
-// rollTypes names which roll-type panel applies.
-const IMMUNITY_FILTER_FIELDS = {
-    damage:     { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
-    effect:     { condition: true, applyToCondition: true },
-    provoke:    { condition: true, applyToCondition: true },
-    crit:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
-    hit:    { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
-    miss:   { rollTypes: 'roll', itemLids: true, condition: true, applyToCondition: true },
-};
-const BONUS_FILTER_FIELDS = {
-    reroll: { itemLids: true, itemId: true, condition: true },
-    resistance:    { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
-    vulnerability: { rollTypes: 'damage', itemLids: true, condition: true, applyToCondition: true },
-};
-
-/** Renders a code field row: preview badge + Edit/Clear buttons; code stored in a hidden input. */
-function codeFieldRow(id, label, placeholder)
-{
-    return `
-        <div class="form-group">
-            <label>${label}:</label>
-            <div style="flex:1; display:flex; gap:6px; align-items:center; min-width:0;">
-                <button type="button" id="${id}-badge" class="code-field-badge" data-target="${id}" title="${placeholder}">
-                    <span class="code-field-dot"></span>
-                    <span class="code-field-state">Empty</span>
-                </button>
-                <input type="hidden" id="${id}-value">
-                <button type="button" class="code-clear-btn" data-target="${id}" title="Clear" style="flex:0 0 24px; width:24px; height:24px; padding:0; line-height:1;"><i class="fas fa-times"></i></button>
-            </div>
-        </div>
-    `;
-}
-
-function updateCodeFieldBadge(html, fieldId)
-{
-    const value = String(html.find(`#${fieldId}-value`).val() || '').trim();
-    const $badge = html.find(`#${fieldId}-badge`);
-    if (!$badge.length)
-        return;
-    if (value)
-    {
-        $badge.addClass('has-value');
-        $badge.find('.code-field-state').text('Set');
-        const preview = value.replace(/\s+/g, ' ').trim().slice(0, 300);
-        $badge.attr('title', preview);
-    }
-    else
-    {
-        $badge.removeClass('has-value');
-        $badge.find('.code-field-state').text('Empty');
-        $badge.attr('title', 'Click to set');
-    }
-}
-
-function presetBarHtml(prefix, presets)
-{
-    return `
-        <div class="preset-bar" data-prefix="${prefix}">
-            <label>Preset:</label>
-            <select id="${prefix}-preset-load" style="flex:1;">
-                <option value="">— Load —</option>
-                ${presets.map(p => `<option value="${p.name}">${p.name}</option>`).join('')}
-            </select>
-            <button type="button" class="te-btn-icon ${prefix}-preset-delete" title="Delete selected preset" style="flex:0 0 28px; width:28px; height:26px; padding:0;"><i class="fas fa-trash"></i></button>
-        </div>
-    `;
-}
-
-// Token-related field IDs that should NOT be saved/restored in a preset.
-const PRESET_SKIP_IDS = {
-    std: ['std-target', 'std-origin', 'std-trigger-origin'],
-    cust: ['cust-target', 'cust-saved', 'cust-origin', 'cust-trigger-origin'],
-    bonus: ['bonus-target', 'bonus-durOrigin', 'bonus-trigger-origin', 'bonus-applyTo']
-};
-
-function presetCategoryFor(prefix)
-{
-    return prefix === 'std' ? 'standard' : prefix === 'cust' ? 'custom' : 'bonus';
-}
-
-function getStoredPresets()
-{
-    const raw = getLAFlag(game.user,'effectManagerPresets') || {};
-    return { standard: raw.standard || [], custom: raw.custom || [], bonus: raw.bonus || [] };
-}
-
-async function setStoredPresets(presets)
-{
-    await setLAFlag(game.user,'effectManagerPresets', presets);
-}
-
-function gatherPresetData(html, prefix)
-{
-    const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
-    const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
-    const presetFields = {};
-    $tab.find('input, select, textarea').each(function ()
-    {
-        const id = this.id;
-        if (!id || skip.has(id))
-            return;
-        const $el = $(this);
-        const type = ($el.attr('type') || '').toLowerCase();
-        if (type === 'checkbox' || type === 'radio')
-            presetFields[id] = $el.is(':checked');
-        else
-            presetFields[id] = $el.val();
-    });
-    // Multi-select checkboxes (la-multi-select-panel): they may have been moved to body.
-    $tab.find('.la-multi-select-panel').each(function ()
-    {
-        const panelId = this.id;
-        if (!panelId)
-            return;
-        const checked = $(`#${panelId} input[type=checkbox]:checked`).map((_, el) => el.value).get();
-        presetFields[`__panel__${panelId}`] = checked;
-    });
-    if (prefix === 'bonus')
-    {
-        const dmg = [];
-        $tab.find('#bonus-damage-list .bonus-damage-entry').each(function ()
-        {
-            const $entry = $(this);
-            const idx = $entry.data('index');
-            dmg.push({
-                val: $entry.find(`#bonus-dmgVal-${idx}`).val(),
-                type: $entry.find(`#bonus-dmgType-${idx}`).val(),
-                from: $entry.find(`#bonus-dmgFrom-${idx}`).val(),
-            });
-        });
-        presetFields.__damageEntries = dmg;
-        presetFields.__immunityEffects = $tab.find('.bonus-immunity-effect-option.selected').map((_, el) => $(el).data('effect')).get();
-        presetFields.__immunityDamage = $tab.find('.bonus-immunity-damage-option.selected').map((_, el) => $(el).data('type')).get();
-    }
-    return presetFields;
-}
-
-function applyPresetData(html, prefix, data)
-{
-    if (prefix === 'bonus' && data['bonus-type'] === 'immunity' && ['resistance', 'vulnerability'].includes(data['bonus-immunity-subtype']))
-        data = { ...data, 'bonus-type': data['bonus-immunity-subtype'], 'bonus-immunity-subtype': 'effect' };
-    const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
-    const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
-    for (const [id, value] of Object.entries(data))
-    {
-        if (id.startsWith('__'))
-            continue;
-        if (skip.has(id))
-            continue;
-        const $el = $tab.find(`#${id}`);
-        if (!$el.length)
-            continue;
-        const type = ($el.attr('type') || '').toLowerCase();
-        if (type === 'checkbox' || type === 'radio')
-            $el.prop('checked', !!value);
-        else
-            $el.val(value);
-        if (id.endsWith('-duration'))
-            $el.trigger('change');
-    }
-    // Restore multi-select panel checkboxes (find by panel id, even if moved to body).
-    for (const [key, val] of Object.entries(data))
-    {
-        if (!key.startsWith('__panel__'))
-            continue;
-        const panelId = key.slice('__panel__'.length);
-        $(`#${panelId} input[type=checkbox]`).each(function ()
-        {
-            $(this).prop('checked', val.includes(this.value));
-        });
-        // Trigger change so any dependent UI updates.
-        $(`#${panelId} input[type=checkbox]`).first().trigger('change');
-    }
-    if (prefix === 'bonus' && Array.isArray(data.__damageEntries))
-    {
-        const $list = $tab.find('#bonus-damage-list');
-        $list.empty();
-        data.__damageEntries.forEach((entry, idx) =>
-        {
-            $list.append(`
-                <div class="bonus-damage-entry form-group" data-index="${idx}">
-                    <select id="bonus-dmgFrom-${idx}" class="bonus-damage-from" style="flex:1; display:none;"></select>
-                    <span class="bonus-damage-arrow" style="display:none; padding:0 4px;">→</span>
-                    <input type="text" id="bonus-dmgVal-${idx}" value="${entry.val ?? '1d6'}" placeholder="1d6" class="bonus-damage-val" style="flex:1;">
-                    <select id="bonus-dmgType-${idx}" style="flex:1;"></select>
-                    <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="${idx}" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
-                </div>
-            `);
-            // copy dmg type options from first entry (dmgTypeOptionsHtml not directly accessible here)
-            const $firstTypeSelect = $tab.find('select[id^="bonus-dmgType-"]').first();
-            const optionsHtml = $firstTypeSelect.html();
-            if (optionsHtml)
-            {
-                $tab.find(`#bonus-dmgType-${idx}`).html(optionsHtml).val(entry.type);
-                $tab.find(`#bonus-dmgFrom-${idx}`).html(`<option value="all">All Types</option>${optionsHtml}`).val(entry.from ?? 'all');
-            }
-        });
-    }
-    // Immunity selections.
-    if (prefix === 'bonus' && Array.isArray(data.__immunityEffects))
-    {
-        $tab.find('.bonus-immunity-effect-option').each(function ()
-        {
-            $(this).toggleClass('selected', data.__immunityEffects.includes($(this).data('effect')));
-        });
-    }
-    if (prefix === 'bonus' && Array.isArray(data.__immunityDamage))
-    {
-        $tab.find('.bonus-immunity-damage-option').each(function ()
-        {
-            $(this).toggleClass('selected', data.__immunityDamage.includes($(this).data('type')));
-        });
-    }
-    // Bonus-type-specific section visibility.
-    $tab.find('#bonus-type').trigger('change');
-    // Refresh damage bonus row markup for current mode after entries were rebuilt.
-    $tab.find('#bonus-damageMode').trigger('change');
-    // Sync icon previews if present.
-    const $icon = $tab.find('#cust-icon, #bonus-icon');
-    if ($icon.length)
-    {
-        $icon.each(function ()
-        {
-            const path = String($(this).val() || '');
-            const $img = $tab.find(`#${this.id}-preview`);
-            if ($img.length)
-            {
-                $img.attr('src', path);
-                $img[0].style.opacity = '1';
-            }
-        });
-    }
-    // Code-field badges.
-    $tab.find('.code-field-badge').each(function ()
-    {
-        updateCodeFieldBadge(html, $(this).data('target'));
-    });
-    $tab.find('.la-multi-select').each(function ()
-    {
-        const trigger = $(this).find('.la-multi-select-trigger');
-        const panelId = $(this).find('.la-multi-select-panel').attr('id');
-        if (!panelId)
-            return;
-        const checked = $(`#${panelId} input:checked`);
-        if (checked.length === 0)
-            trigger.text('— Select —');
-        else
-            trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
-    });
-}
-
-/**
- * Opens a CodeMirror editor dialog bound to a hidden input + preview pair.
- * Mirrors reaction-manager's expanded editor (Alt-Enter completion via installLancerHints).
- */
-function openCodeFieldDialog(html, fieldId, title, defaultCode = '')
-{
-    const $value = html.find(`#${fieldId}-value`);
-    const stored = String($value.val() || '');
-    const initial = stored || defaultCode;
-    let editor;
-    let resizeObserver;
-
-    new Dialog({
-        title: localizeFormat('LA.effectManager.editTitle', { title }),
-        content: `<div class="lcm-host"></div>
-            <style>
-                .lcm-dialog .window-content { padding:0 !important; overflow:hidden !important; background:#272822; }
-                .lcm-dialog .dialog-buttons { height:40px !important; min-height:40px !important; max-height:40px !important; background:#333 !important; border-top:1px solid #111 !important; padding:0 !important; margin:0 !important; display:flex !important; }
-                .lcm-dialog button.dialog-button { background:#444 !important; color:#fff !important; border:none !important; border-right:1px solid #222 !important; width:100% !important; height:100% !important; margin:0 !important; display:flex !important; align-items:center !important; justify-content:center !important; font-size:1em !important; border-radius:0 !important; box-shadow:none !important; }
-                .lcm-dialog button.dialog-button:last-child { border-right:none !important; }
-                .lcm-dialog button.dialog-button:hover { background:#555 !important; }
-            </style>`,
-        buttons: {
-            save: {
-                label: localize("LA.common.save"),
-                icon: '<i class="fas fa-save" style="margin-right:8px;"></i>',
-                callback: () =>
-                {
-                    const code = editor.getValue();
-                    $value.val(code);
-                    updateCodeFieldBadge(html, fieldId);
-                }
-            },
-            cancel: {
-                label: localize("LA.common.cancel"),
-                icon: '<i class="fas fa-times" style="margin-right:8px;"></i>'
-            }
-        },
-        default: "save",
-        render: (dlgHtml) =>
-        {
-            const host = dlgHtml.find('.lcm-host')[0];
-            editor = CodeMirror(host, {
-                value: initial,
-                mode: 'javascript',
-                theme: 'monokai',
-                lineNumbers: true,
-                matchBrackets: true,
-                styleActiveLine: true,
-                indentUnit: 4,
-                smartIndent: true,
-                lineWrapping: false,
-                scrollbarStyle: "native"
-            });
-            installLancerHints(editor, 'evaluate');
-            const windowEl = dlgHtml.closest('.window-app')[0];
-            resizeObserver = attachEditorResizeObserver(editor, windowEl);
-        },
-        close: () =>
-        {
-            resizeObserver?.disconnect();
-        }
-    }, {
-        width: 700,
-        height: 500,
-        resizable: true,
-        classes: ["dialog", "lcm-dialog", "lancer-dialog-base", "lancer-no-title"]
-    }).render(true);
-}
-
-/**
- * Open item browser and populate targetInput with the selected LID.
- * @param {JQuery} targetInput
- * @returns {Promise<string|null>}
- */
-export async function openItemBrowser(targetInput)
-{
-    const result = await openItemBrowserDialog();
-    if (result && targetInput)
-        targetInput.val(result.lid);
-    return result?.lid ?? null;
-}
-
-/**
- * Open a status picker dialog and populate targetInput with the selected status ID.
- * Shows all CONFIG.statusEffects plus custom statuses from temporary-custom-statuses if present.
- * @param {JQuery} targetInput
- */
-function openStatusPicker(targetInput)
-{
-    const statuses = [...(CONFIG.statusEffects || [])];
-
-    const customApi = game.modules.get('temporary-custom-statuses')?.api;
-    if (customApi && typeof customApi.getStatuses === 'function')
-    {
-        const customStatuses = customApi.getStatuses() || [];
-        for (const customStatus of customStatuses)
-        {
-            if (!statuses.some(existing => existing.id === customStatus.id))
-                statuses.push(customStatus);
-        }
-    }
-
-    const currentVal = targetInput ? /** @type {string} */ (targetInput.val()) || '' : '';
-    const alreadySelected = new Set(currentVal.split(',').map(s => s.trim()).filter(Boolean));
-
-    const gridHtml = statuses.map(status =>
-    {
-        const icon = status.img || status.icon || '';
-        const id = status.id || status.name || '';
-        let label = status.name || id;
-        if (typeof status.name === 'string' && status.name.startsWith('lancer'))
-            label = game.i18n.localize(status.name);
-        const isSelected = alreadySelected.has(id);
-        return `<div class="lancer-status-entry${isSelected ? ' selected' : ''}" data-id="${id}" title="${label}"
-            style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? 'var(--primary-color)' : 'transparent'};">
-            <div style="width:40px;height:40px;background:#1a1a1a;border-radius:4px;display:flex;align-items:center;justify-content:center;">
-                <img src="${icon}" width="32" height="32" style="object-fit:contain;">
-            </div>
-            <span style="font-size:0.6em;text-align:center;word-break:break-all;margin-top:2px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</span>
-        </div>`;
-    }).join('');
-
-    const dialog = new Dialog({
-        title: localize('LA.dialogTitle.pickStatus'),
-        content: `
-            <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
-                <h1 class="lancer-dialog-title">PICK STATUS</h1>
-                <p class="lancer-dialog-subtitle">Click to toggle. Multiple can be selected.</p>
-            </div>
-            <div style="max-height:300px;overflow-y:auto;padding:4px;">
-                <div style="display:flex;flex-wrap:wrap;">${gridHtml}</div>
-            </div>
-        `,
-        buttons: {
-            confirm: {
-                label: `<i class="fas fa-check"></i> ${localize('LA.common.confirm')}`,
-                callback: (html) =>
-                {
-                    const selected = html.find('.lancer-status-entry.selected').map(function ()
-                    {
-                        return $(this).data('id');
-                    }).get();
-                    if (targetInput)
-                        targetInput.val(selected.join(', '));
-                }
-            },
-            cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
-                callback: () =>
-                {} }
-        },
-        render: (html) =>
-        {
-            html.find('.lancer-status-entry').on('click', function ()
-            {
-                $(this).toggleClass('selected');
-                $(this).css('border-color', $(this).hasClass('selected') ? 'var(--primary-color)' : 'transparent');
-            });
-        },
-        default: "confirm"
-    }, { width: 420, classes: ["lancer-dialog-base", "lancer-no-title"] });
-    dialog.render(true);
-}
-
-const CONSUMPTION_TRIGGER_LIST = [
-    { value: 'onAttack', label: 'LA.effectManager.trigger.onAttack' },
-    { value: 'onHit', label: 'LA.effectManager.trigger.onHit' },
-    { value: 'onMiss', label: 'LA.effectManager.trigger.onMiss' },
-    { value: 'onPreDamage', label: 'LA.effectManager.trigger.onPreDamage' },
-    { value: 'onDamage', label: 'LA.effectManager.trigger.onDamage' },
-    { value: 'onTechAttack', label: 'LA.effectManager.trigger.onTechAttack' },
-    { value: 'onTechHit', label: 'LA.effectManager.trigger.onTechHit' },
-    { value: 'onMove', label: 'LA.effectManager.trigger.onMove' },
-    { value: 'onPreMove', label: 'LA.effectManager.trigger.onPreMove' },
-    { value: 'onInitActivation', label: 'LA.effectManager.trigger.onInitActivation' },
-    { value: 'onActivation', label: 'LA.effectManager.trigger.onActivation' },
-    { value: 'onInitEndActivation', label: 'LA.effectManager.trigger.onInitEndActivation' },
-    { value: 'onEndActivation', label: 'LA.effectManager.trigger.onEndActivation' },
-    { value: 'onPostActivation', label: 'LA.effectManager.trigger.onPostActivation' },
-    { value: 'onPostEndActivation', label: 'LA.effectManager.trigger.onPostEndActivation' },
-    { value: 'onDeploy', label: 'LA.effectManager.trigger.onDeploy' },
-    { value: 'onCheck', label: 'LA.effectManager.trigger.onCheck' },
-    { value: 'onHeatGain', label: 'LA.effectManager.trigger.onHeatGain' },
-    { value: 'onHpLoss', label: 'LA.effectManager.trigger.onHpLoss' },
-    { value: 'onTurnStart', label: 'LA.effectManager.trigger.onTurnStart' },
-    { value: 'onTurnEnd', label: 'LA.effectManager.trigger.onTurnEnd' },
-    { value: 'onRoundStart', label: 'LA.effectManager.trigger.onRoundStart' },
-    { value: 'onRoundEnd', label: 'LA.effectManager.trigger.onRoundEnd' },
-    { value: 'onEnterCombat', label: 'LA.effectManager.trigger.onEnterCombat' },
-    { value: 'onExitCombat', label: 'LA.effectManager.trigger.onExitCombat' },
-    { value: 'onFullRepair', label: 'LA.effectManager.trigger.onFullRepair' },
-    { value: 'onPreStatusApplied', label: 'LA.effectManager.trigger.onPreStatusApplied' },
-    { value: 'onPreStatusRemoved', label: 'LA.effectManager.trigger.onPreStatusRemoved' },
-    { value: 'onStatusApplied', label: 'LA.effectManager.trigger.onStatusApplied' },
-    { value: 'onStatusRemoved', label: 'LA.effectManager.trigger.onStatusRemoved' }
-];
-
-function consumptionTriggerCheckboxesHtml()
-{
-    return CONSUMPTION_TRIGGER_LIST
-        .map(triggerOption => `<label><input type="checkbox" value="${triggerOption.value}"> ${localize(triggerOption.label)}</label>`)
-        .join('');
-}
-
-/**
- * Hoisted la-multi-select initializer (button-trigger + checkbox panel).
- * @param {JQuery} html
- * @param {string} containerId
- */
-function initLaMultiSelect(html, containerId)
-{
-    const container = html.find(`#${containerId}`);
-    const trigger = container.find('.la-multi-select-trigger');
-    const panel = container.find('.la-multi-select-panel');
-    const updateTriggerLabel = () =>
-    {
-        const checked = panel.find('input:checked');
-        if (checked.length === 0)
-            trigger.text('— Select —');
-        else
-            trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
-    };
-    const panelHome = panel.parent();
-    const positionPanel = () =>
-    {
-        const rect = trigger[0].getBoundingClientRect();
-        const panelStyle = panel[0].style;
-        panelStyle.setProperty('position', 'fixed', 'important');
-        panelStyle.setProperty('top', `${rect.bottom + 2}px`, 'important');
-        panelStyle.setProperty('left', `${rect.left}px`, 'important');
-        panelStyle.setProperty('right', 'auto', 'important');
-        panelStyle.setProperty('bottom', 'auto', 'important');
-        panelStyle.setProperty('width', `${rect.width}px`, 'important');
-        panelStyle.setProperty('min-width', '0', 'important');
-        panelStyle.setProperty('max-width', `${rect.width}px`, 'important');
-    };
-    const closePanel = () =>
-    {
-        panel.removeClass('open');
-        panel[0].style.cssText = '';
-        if (panel.parent().is('body'))
-            panelHome.append(panel);
-    };
-    trigger.on('click', (e) =>
-    {
-        e.stopPropagation();
-        const wasOpen = panel.hasClass('open');
-        $('.la-multi-select-panel.open').each(function ()
-        {
-            $(this).removeClass('open');
-        });
-        if (!wasOpen)
-        {
-            $('body').append(panel);
-            positionPanel();
-            panel.addClass('open');
-        }
-        else
-            closePanel();
-    });
-    panel.on('click', (e) => e.stopPropagation());
-    panel.find('input[type=checkbox]').on('change', updateTriggerLabel);
-    $(document).on('click.la-multiselect', closePanel);
-    updateTriggerLabel();
-}
-
-const CONSUMPTION_FILTER_MAP = {
-    onAttack: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onHit: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onMiss: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onPreDamage: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onDamage: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onTechAttack: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onTechHit: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
-    onMove: [],
-    onPreMove: [],
-    onInitActivation: ['cfilter-actionName'],
-    onActivation: ['cfilter-actionName'],
-    onInitEndActivation: ['cfilter-actionName'],
-    onEndActivation: ['cfilter-actionName'],
-    onPostActivation: ['cfilter-actionName'],
-    onPostEndActivation: ['cfilter-actionName'],
-    onDeploy: ['cfilter-itemLid', 'cfilter-itemId'],
-    onCheck: ['cfilter-check', 'cfilter-role'],
-    onPreStatusApplied: ['cfilter-statusId'],
-    onPreStatusRemoved: ['cfilter-statusId'],
-    onStatusApplied: ['cfilter-statusId'],
-    onStatusRemoved: ['cfilter-statusId']
-};
-
-/**
- * Generate inline trigger fields HTML for a given prefix (std/cust)
- */
-function triggerFieldsHtml(prefix, tokensHtml)
-{
-    return `
-        <div class="form-group">
-            <label>Auto-consume on:</label>
-            <div class="la-multi-select" id="${prefix}-trigger">
-                <button type="button" class="la-multi-select-trigger">— Select —</button>
-                <div class="la-multi-select-panel" id="${prefix}-trigger-panel">
-                    ${consumptionTriggerCheckboxesHtml()}
-                </div>
-            </div>
-        </div>
-        <div id="${prefix}-trigger-fields" style="display:none;">
-            <div class="form-group">
-                <label>Origin:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <select id="${prefix}-trigger-origin" style="flex:1;">
-                        <option value="">Same as Target</option>
-                        ${tokensHtml}
-                    </select>
-                    <button type="button" class="token-picker-btn" data-target="${prefix}-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                </div>
-            </div>
-            <div class="te-row-2col">
-                <div class="form-group cfilter-itemLid" style="display:none;">
-                    <label data-tooltip="${localize('LA.effectManager.tip.consumeItemLid')}">Item:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemLid" placeholder="${localize('LA.effectManager.ph.itemLidEg')}" style="flex:1;">
-                        <button type="button" class="find-lid-btn" data-target="${prefix}-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
-                    </div>
-                </div>
-                <div class="form-group cfilter-itemId" style="display:none;">
-                    <label data-tooltip="${localize('LA.effectManager.tip.consumeItemId')}">Item ID:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="${prefix}-filter-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
-                        <button type="button" class="item-picker-btn" data-target="${prefix}-filter-itemId" data-token-source="${prefix}-target" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                    </div>
-                </div>
-            </div>
-            <div class="form-group cfilter-actionName" style="display:none;">
-                <label data-tooltip="${localize('LA.effectManager.tip.consumeActionEg')}">Consume on action:</label>
-                <input type="text" id="${prefix}-filter-actionName" placeholder="${localize('LA.effectManager.ph.actionEg')}">
-            </div>
-            <div class="form-group cfilter-check" style="display:none;">
-                <label>Check:</label>
-                <input type="text" id="${prefix}-filter-checkType" placeholder="hull" style="width:50%;">
-            </div>
-            <div class="form-group cfilter-statusId" style="display:none;">
-                <label data-tooltip="${localize('LA.effectManager.tip.consumeStatus')}">Status:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <input type="text" id="${prefix}-filter-statusId" placeholder="${localize('LA.effectManager.ph.statusEg')}" style="flex:1;">
-                    <button type="button" class="status-picker-btn" data-target="${prefix}-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
-                </div>
-            </div>
-            <div class="form-group cfilter-role" style="display:none;">
-                <label data-tooltip="${localize('LA.effectManager.tip.consumeRoleOrigin')}">Consume as:</label>
-                <select id="${prefix}-filter-role" style="width:50%;">
-                    <option value="">Source</option>
-                    <option value="target">Target</option>
-                    <option value="any">Source or target</option>
-                </select>
-            </div>
-            ${codeFieldRow(`${prefix}-evaluate`, 'Evaluate', '(triggerType, triggerData, effectBearerToken, effect) => true')}
-        </div>
-    `;
-}
-
-/**
- * Setup trigger field toggle + item browser buttons for a given prefix
- */
-function setupTriggerUI(html, prefix)
-{
-    initLaMultiSelect(html, `${prefix}-trigger`);
-
-    const updateTriggerFilterFields = () =>
-    {
-        const triggers = $(`#${prefix}-trigger-panel input:checked`)
-            .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
-        const $fields = html.find(`#${prefix}-trigger-fields`);
-        $fields.find('.form-group[class*="cfilter-"]').hide();
-        if (triggers.length > 0)
-        {
-            $fields.show();
-            const classes = new Set(triggers.flatMap(trigger => CONSUMPTION_FILTER_MAP[trigger] ?? []));
-            classes.forEach(cls => $fields.find(`.${cls}`).show());
-        }
-        else
-            $fields.hide();
-        html.closest('.dialog').css('height', 'auto');
-    };
-    $(document).on('change.la-em-trigger', `#${prefix}-trigger-panel input[type=checkbox]`, updateTriggerFilterFields);
-
-    html.find(`#${prefix}-trigger-fields .find-lid-btn`).on('click', function (e)
-    {
-        e.preventDefault();
-        const targetId = $(this).data('target');
-        openItemBrowser(html.find(`#${targetId}`));
-    });
-
-    html.find(`#${prefix}-trigger-fields .item-picker-btn`).on('click', async function (e)
-    {
-        e.preventDefault();
-        const targetId = $(this).data('target');
-        const tokenSourceId = $(this).data('token-source');
-
-        let targetToken = null;
-        if (tokenSourceId)
-        {
-            const tokenId = html.find(`#${tokenSourceId}`).val();
-            targetToken = canvas.tokens.get(tokenId);
-        }
-        if (!targetToken)
-            targetToken = canvas.tokens.controlled[0];
-
-        if (!targetToken?.actor)
-        {
-            ui.notifications.warn(localize('LA.notify.pleaseSelectATargetTokenFirst'));
-            return;
-        }
-
-        const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
-        if (items.length === 0)
-        {
-            ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
-            return;
-        }
-
-        items.sort((a, b) =>
-        {
-            if (a.type !== b.type)
-                return a.type.localeCompare(b.type);
-            return a.name.localeCompare(b.name);
-        });
-
-        const buildItemHtml = (item) =>
-        {
-            const icon = item.img || "systems/lancer/assets/icons/white/generic_item.svg";
-            const displayType = item.system?.type ? `${item.type.toUpperCase()} - ${item.system.type.toUpperCase()}` : item.type.toUpperCase();
-            return `<div class="lancer-item-card actor-item-entry" data-id="${item.id}" style="margin-bottom:6px;padding:10px;cursor:pointer;display:flex;gap:10px;">
-                <div style="width:32px;height:32px;background:url('${icon}') no-repeat center/contain;flex-shrink:0;"></div>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-weight:bold;">${item.name}</div>
-                    <div style="font-size:0.85em;opacity:0.8;">[${displayType}]</div>
-                </div>
-            </div>`;
-        };
-
-        const pickerDialog = new Dialog({
-            title: localizeFormat('LA.effectManager.selectItemOn', { name: targetToken.name }),
-            content: `
-                <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
-                    <h1 class="lancer-dialog-title">Select Item on ${targetToken.name.toUpperCase()}</h1>
-                    <p class="lancer-dialog-subtitle">Choose which item to filter consumption by.</p>
-                </div>
-                <div style="height:350px;overflow-y:auto;padding:4px;border:1px solid var(--la-edge);background:var(--la-plate);border-radius:4px;">
-                    ${items.map(buildItemHtml).join('')}
-                </div>
-            `,
-            buttons: {
-                cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
-                    callback: () =>
-                    {} }
-            },
-            render: (htmlContent) =>
-            {
-                htmlContent.find('.actor-item-entry').on('click', (ev) =>
-                {
-                    const id = $(ev.currentTarget).data('id');
-                    html.find(`#${targetId}`).val(id).change();
-                    pickerDialog.close();
-                });
-            },
-            default: "cancel"
-        }, { width: 500, classes: ["lancer-dialog-base", "lancer-no-title"] });
-        pickerDialog.render(true);
-    });
-
-    html.find(`#${prefix}-trigger-fields .status-picker-btn`).on('click', function (e)
-    {
-        e.preventDefault();
-        const targetId = $(this).data('target');
-        openStatusPicker(html.find(`#${targetId}`));
-    });
-}
-
-/** Collect trigger/consumption config from form fields. */
-function getTriggerConfig(html, prefix)
-{
-    const triggers = html.find(`#${prefix}-trigger input:checked`)
-        .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
-    if (triggers.length === 0)
-        return null;
-
-    const consumption = {
-        trigger: triggers.length === 1 ? triggers[0] : triggers
-    };
-    const origin = html.find(`#${prefix}-trigger-origin`).val();
-    if (origin)
-        consumption.originId = origin;
-
-    const itemLid = html.find(`#${prefix}-filter-itemLid`).val()?.trim();
-    if (itemLid)
-        consumption.itemLid = itemLid;
-    const itemId = html.find(`#${prefix}-filter-itemId`).val()?.trim();
-    if (itemId)
-        consumption.itemId = itemId;
-    const actionName = html.find(`#${prefix}-filter-actionName`).val()?.trim();
-    if (actionName)
-        consumption.actionName = actionName;
-    const checkType = html.find(`#${prefix}-filter-checkType`).val()?.trim();
-    if (checkType)
-        consumption.checkType = checkType;
-    const statusId = html.find(`#${prefix}-filter-statusId`).val()?.trim();
-    if (statusId)
-        consumption.statusId = statusId;
-    consumption.role = String(html.find(`#${prefix}-filter-role`).val() || '') || 'source';
-    const evaluateSrc = String(html.find(`#${prefix}-evaluate-value`).val() || '').trim();
-    if (evaluateSrc)
-        consumption.evaluate = evaluateSrc;
-    return consumption;
-}
-
-async function modifyEffectStack(targetID, effectID, delta)
-{
-    const target = canvas.tokens.get(targetID);
-    if (!target)
-        return;
-
-    const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
-    if (customStatusApi)
-    {
-        await customStatusApi.modifyStack(target.actor, effectID, delta);
-
-        const effect = target.actor.effects.get(effectID);
-        if (effect)
-        {
-            const newStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
-            if (newStack > 1)
-            {
-                await effect.update(/** @type {any} */({
-                    "flags.statuscounter.visible": true
-                }));
-            }
-        }
-    }
-    else
-    {
-        const effect = target.actor.effects.get(effectID);
-        if (effect)
-        {
-            const currentStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
-            const newStack = currentStack + delta;
-            if (newStack <= 0)
-                await effect.delete();
-            else
-            {
-                await effect.update(/** @type {any} */({
-                    "flags.statuscounter.value": newStack,
-                    "flags.statuscounter.visible": newStack > 1
-                }));
-            }
-        }
-    }
-}
-
-async function pushRemoveEffect(targetID, effectID)
-{
-    // Supports token id (scene token), actor UUID (prototype), and item UUID (item-carried).
-    const { actor, item, token } = _resolveEmTarget(targetID);
-    const doc = item ?? (token ? token.actor : actor);
-    if (!doc)
-        return;
-
-    const canWrite = game.user.isGM || doc.isOwner;
-    if (canWrite)
-        await doc.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
-    else if (item || (actor && !token))
-    {
-        game.socket.emit('module.lancer-automations', {
-            action: "removeEffectFromDoc",
-            payload: {
-                docUuid: doc.uuid,
-                effectID
-            }
-        });
-    }
-    else
-    {
-        game.socket.emit('module.lancer-automations', {
-            action: "removeEffect",
-            payload: {
-                targetID,
-                effectID
-            }
-        });
-    }
-}
+import { localize, localizeFormat } from "../tools/string-utils.js";
+import { htmlToElement } from "../tools/dom-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
+import { updateManageList as renderManageList, updateManageTabCount as renderManageTabCount } from "./effect-manager-manage.js";
+import { buildEffectManagerContent, DAMAGE_CHANGE_TYPE_ALL } from "./effect-manager-template.js";
+import { IMMUNITY_FILTER_FIELDS, BONUS_FILTER_FIELDS, gatherBonusFormData } from "./effect-manager-bonus-data.js";
+export { openItemBrowser };
 
 async function fetchAvailableTags()
 {
@@ -1063,9 +134,8 @@ export async function executeEffectManager(options = {})
             + tokensHtml.replaceAll(' selected>', '>')
         : tokensHtml;
     // Origin selects: EACH_ORIGIN makes every target its own duration reference. Default when several targets.
-    const originsHtml = multiDefault
-        ? `<option value="${EACH_ORIGIN}" selected>Each Target</option>` + tokensHtml.replaceAll(' selected>', '>')
-        : `<option value="${EACH_ORIGIN}">Each Target</option>` + tokensHtml;
+    const originsHtml = `<optgroup label="Special"><option value="${ANY_TURN_ORIGIN}">Any</option><option value="${EACH_ORIGIN}"${multiDefault ? ' selected' : ''}>Each Target</option></optgroup>`
+        + `<optgroup label="Tokens">${multiDefault ? tokensHtml.replaceAll(' selected>', '>') : tokensHtml}</optgroup>`;
 
     let durations = [{
         label: 'end',
@@ -1086,7 +156,7 @@ export async function executeEffectManager(options = {})
         { label: 'roundStart', turns: null, rounded: 1, name: "Start of Round" },
         { label: 'encounter', turns: null, rounded: null, name: "End of Encounter" },
         { label: 'indefinite', turns: null, rounded: null, name: "Indefinite" },
-        { label: 'permanent',  turns: null, rounded: null, name: "Permanent" }
+        { label: 'permanent',  turns: null, rounded: null, name: "Permanent (kept through Full Repair)" }
     );
     const allDurations = [...durations];
 
@@ -1108,11 +178,11 @@ export async function executeEffectManager(options = {})
     const dmgTypeOptionsHtml = ['Kinetic', 'Explosive', 'Energy', 'Heat', 'Burn', 'Infection', 'Variable']
         .map(dmgType => `<option value="${dmgType}">${dmgType}</option>`).join('');
 
-    const statusEffectIconsHtml = [...CONFIG.statusEffects]
-        .sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name))
+    const statusEffectIconsHtml = /** @type {any[]} */ ([...CONFIG.statusEffects])
+        .sort((a, b) => (localize(a.name) || a.name).localeCompare(localize(b.name) || b.name))
         .map(statusEffect =>
         {
-            const label = game.i18n.localize(statusEffect.name) || statusEffect.name;
+            const label = localize(statusEffect.name) || statusEffect.name;
             return `
         <div class="bonus-immunity-effect-option" data-effect="${statusEffect.name}" data-name="${label}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:var(--la-plate); color:var(--la-ink); font-size:0.75em; min-width:0;">
             <img src="${statusEffect.img || statusEffect.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;">
@@ -1137,695 +207,21 @@ export async function executeEffectManager(options = {})
         </div>
     `).join('');
 
-    const content = `
-    <style>
-        .te-dialog { min-width: 560px; font-family: var(--font-primary); }
-        .te-tabs { display: flex; border-bottom: 3px solid var(--primary-color); margin-bottom: 8px; cursor: pointer; }
-        .te-tab { padding: 8px 14px; font-weight: 600; opacity: 0.5; font-size: 0.9em; transition: all 0.2s ease; color: var(--la-ink); border-bottom: 3px solid transparent; margin-bottom: -3px; }
-        .te-tab:hover { opacity: 0.8; }
-        .te-tab.active { opacity: 1; border-bottom-color: var(--primary-color); color: var(--la-accent); }
-        .te-content { display: none; padding: 8px 0; }
-        .te-content.active { display: block; }
-        .te-dialog .form-group { margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .te-dialog .form-group label { flex: 0 0 70px; font-size: 0.85em; white-space: nowrap; font-weight: 600; color: var(--la-ink); }
-        .te-dialog .form-group select,
-        .te-dialog .form-group input[type="text"],
-        .te-dialog .form-group input[type="number"] { flex: 1; height: 26px; font-size: 0.9em; background: color-mix(in srgb, var(--la-plate), var(--la-ink) 8%); border: 2px solid var(--la-edge); border-radius: 4px; color: var(--la-ink); padding: 0 6px; transition: border-color 0.2s ease; }
-        .te-dialog .form-group select:focus,
-        .te-dialog .form-group input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 4px color-mix(in srgb, var(--primary-color), transparent 70%); }
-        .te-dialog .form-group.two-col { display: grid; grid-template-columns: 70px 1fr 70px 1fr; gap: 5px; align-items: center; }
-        .te-dialog .form-group.two-col label { flex: unset; }
-        .te-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 5px; border-radius: 4px; border: 1px solid var(--la-edge); }
-        .te-icon-option { cursor: pointer; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--la-edge); border-radius: 4px; background: #1a1a1a; transition: all 0.2s; }
-        .te-icon-option img { object-fit: contain; pointer-events: none; }
-        .te-icon-option.selected { border: 2px solid var(--primary-color); box-shadow: 0 0 5px color-mix(in srgb, var(--primary-color), transparent 50%); }
-        .std-effect-option:hover, .bonus-immunity-effect-option:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)) !important; }
-        #std-effect-grid::-webkit-scrollbar,
-        #bonus-immunity-effects::-webkit-scrollbar,
-        .te-icon-grid::-webkit-scrollbar,
-        .te-effect-list::-webkit-scrollbar { width: 10px; }
-        #std-effect-grid::-webkit-scrollbar-track,
-        #bonus-immunity-effects::-webkit-scrollbar-track,
-        .te-icon-grid::-webkit-scrollbar-track,
-        .te-effect-list::-webkit-scrollbar-track { background: #1a1a1a; border-radius: 3px; }
-        #std-effect-grid::-webkit-scrollbar-thumb,
-        #bonus-immunity-effects::-webkit-scrollbar-thumb,
-        .te-icon-grid::-webkit-scrollbar-thumb,
-        .te-effect-list::-webkit-scrollbar-thumb { background: var(--primary-color); border-radius: 3px; border: 2px solid #1a1a1a; }
-        #std-effect-grid, #bonus-immunity-effects, .te-icon-grid, .te-effect-list { scrollbar-color: var(--primary-color) #1a1a1a; scrollbar-width: thin; }
-        .te-effect-list { max-height: 200px; overflow-y: auto; padding: 4px; margin-bottom: 8px; }
-        .te-effect-item { display: flex; align-items: center; justify-content: space-between; padding: 8px; background: var(--la-plate); border: 2px solid var(--la-edge); border-radius: 4px; margin-bottom: 6px; font-size: 0.9em; transition: all 0.2s ease; }
-        .te-effect-item:hover { border-color: var(--primary-color); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
-        .te-effect-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .te-delete-btn { color: var(--primary-color); cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: all 0.2s ease; }
-        .te-delete-btn:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); }
-        .te-btn-group { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-        .te-btn { background: var(--la-plate); border: 2px solid var(--la-edge); color: var(--la-ink); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; transition: all 0.2s ease; }
-        .te-btn-group .save-preset-btn, .te-btn-group .extract-code-btn { flex: 0 0 auto; width: auto; white-space: nowrap; }
-        .te-btn-group .apply-btn, .te-btn-group #bonus-add { flex: 1 1 auto; }
-        .te-btn:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); border-color: var(--primary-color); box-shadow: 0 2px 8px rgba(0,0,0,0.3); transform: translateY(-1px); }
-        .te-btn i { margin-right: 5px; color: var(--primary-color); }
-        .te-stack-ctrl { display: flex; gap: 4px; }
-        .te-stack-ctrl i { cursor: pointer; padding: 2px 4px; border-radius: 3px; transition: all 0.2s ease; color: var(--primary-color); }
-        .te-stack-ctrl i:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); }
-        .te-divider { border: none; border-top: 2px solid var(--primary-color); margin: 10px 0; }
-        .te-section-title { font-weight: 600; color: var(--la-accent); font-size: 13px; margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .te-section { font-weight: 700; color: var(--la-accent); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.6px; margin: 10px 0 4px; padding: 0 0 3px 2px; border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 35%, transparent); }
-        .te-section:first-child { margin-top: 0; }
-        .te-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .te-row-2col > .form-group { margin-bottom: 0; }
-        .te-advanced { margin-top: 8px; }
-        .te-advanced > summary { cursor: pointer; font-weight: 700; font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.6px; color: var(--la-ink-dim); padding: 5px 2px; border-top: 1px dashed var(--la-edge); user-select: none; list-style: none; }
-        .te-advanced > summary::before { content: "\\25B6"; display: inline-block; margin-right: 6px; transition: transform 0.15s ease; font-size: 0.7em; color: var(--primary-color); }
-        .te-advanced[open] > summary::before { transform: rotate(90deg); }
-        .te-advanced[open] > summary { color: var(--la-accent); border-top-color: var(--primary-color); }
-        .te-advanced > summary::-webkit-details-marker { display: none; }
-        .code-field-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; height: 26px; background: var(--la-plate); border: 1.5px solid var(--la-edge); border-radius: 13px; font-size: 0.82em; cursor: pointer; flex: 0 0 auto; transition: all 0.15s ease; color: var(--la-ink-dim); }
-        .code-field-badge:hover { border-color: var(--primary-color); background: color-mix(in srgb, var(--la-plate), var(--la-ink) 12%); }
-        .code-field-badge .code-field-dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; flex: 0 0 8px; }
-        .code-field-badge.has-value { border-color: #4a8a3a; background: #e6f3e0; color: #2d5a1f; font-weight: 600; }
-        .code-field-badge.has-value .code-field-dot { background: #4a8a3a; box-shadow: 0 0 4px rgba(74,138,58,0.5); }
-        .bonus-summary-pill { flex: 0 0 auto; padding: 2px 8px; background: color-mix(in srgb, var(--la-plate), #000 6%); border-radius: 10px; font-size: 0.72em; color: var(--la-ink-dim); font-weight: 600; text-align: center; min-width: 36px; }
-        .bonus-summary-pill.has-bonuses { background: #d6e8d2; color: #2d5a1f; }
-        .preset-bar { display: flex; gap: 6px; align-items: center; padding: 4px 6px; margin-bottom: 6px; background: rgba(0,0,0,0.04); border-radius: 4px; border: 1px dashed var(--la-edge); }
-        .preset-bar label { flex: 0 0 50px; font-size: 0.8em; font-weight: 600; color: var(--la-ink-dim); text-transform: uppercase; letter-spacing: 0.3px; }
-        .preset-bar select { flex: 1; height: 24px; font-size: 0.85em; }
-        .te-btn-icon { background: var(--la-plate); border: 1.5px solid var(--la-edge); border-radius: 4px; cursor: pointer; color: var(--primary-color); }
-        .te-btn-icon:hover { background: color-mix(in srgb, var(--primary-color) 18%, var(--la-plate)); border-color: var(--primary-color); }
-        .te-bonus-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--la-plate); border: 2px solid var(--la-edge); border-radius: 4px; margin-bottom: 4px; font-size: 0.9em; transition: all 0.2s ease; }
-        .te-bonus-item:hover { border-color: var(--primary-color); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
-    </style>
-    <div class="te-dialog lancer-dialog-base">
-        <div class="lancer-dialog-header">
-            <div class="lancer-dialog-title">Effect Manager</div>
-        </div>
-        <div class="te-tabs">
-            <div class="te-tab active" data-tab="standard">Standard</div>
-            ${hasCustomStatus ? '<div class="te-tab" data-tab="custom">Custom</div>' : ''}
-            <div class="te-tab" data-tab="bonus">Bonus</div>
-            <div class="te-tab" data-tab="manage">Manage <span id="manage-tab-count" style="font-size:0.75em; opacity:0.7;"></span></div>
-        </div>
-
-        <!-- STANDARD TAB -->
-        <div class="te-content active" id="tab-standard">
-            ${presetBarHtml('std', allPresets.standard)}
-            <div class="te-section">Effect</div>
-            <div class="form-group">
-                <label>Target:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <select id="std-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="std-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
-                    <span class="em-tier-slot" data-tab="std" style="display:none; align-self:center; margin-left:4px;">${tierGateControl(null, 'data-role="em-std"')}</span>
-                </div>
-            </div>
-            <div class="form-group" style="flex-direction: column; align-items: stretch; gap: 8px;">
-                <div style="display:flex; justify-content:space-between; align-items: center;">
-                    <label>Apply:</label>
-                    <div style="display:flex; gap:5px; align-items:center;">
-                        <span id="std-effect-label" style="font-weight:bold; color:var(--la-accent);">Bolster</span>
-                        <img id="std-effect-icon" src="" width="30" height="30" style="border:2px solid var(--primary-color); border-radius:4px; background:#1a1a1a; display:block; object-fit: contain; padding:2px;">
-                        x<input type="number" id="std-stack" value="1" min="1" style="width: 45px; height:30px; text-align:center;">
-                    </div>
-                </div>
-                <input type="hidden" id="std-effect" value="Bolster">
-                <input type="text" id="std-effect-search" placeholder="${localize('LA.common.searchEffects')}" style="height:24px; font-size:0.85em; padding:0 6px;">
-                <div id="std-effect-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:color-mix(in srgb, var(--la-plate), var(--la-ink) 7%); border-radius:4px; border:1px solid var(--la-edge);">
-                     ${[...CONFIG.statusEffects].sort((a, b) => (game.i18n.localize(a.name) || a.name).localeCompare(game.i18n.localize(b.name) || b.name)).map(statusEffect =>
-                        {
-                            const label = game.i18n.localize(statusEffect.name);
-                            return `
-                        <div class="std-effect-option" data-id="${statusEffect.name}" data-name="${label}" data-icon="${statusEffect.img || statusEffect.icon}" title="${label}" style="cursor:pointer; display:flex; align-items:center; gap:3px; padding:0 3px; border-radius:2px; border-left:3px solid transparent; background:var(--la-plate); color:var(--la-ink); font-size:0.75em; min-width:0;">
-                            <img src="${statusEffect.img || statusEffect.icon}" style="width:20px; height:20px; object-fit:contain; flex-shrink:0; background:#2a2a2a; border-radius:2px; padding:1px; pointer-events:none;" title="${label}">
-                            <span class="la-hud-clip" style="flex:1; overflow:hidden; min-width:0; pointer-events:none;"><span class="la-hud-pan" style="display:inline-block; white-space:nowrap; padding-right:6px;">${label}</span></span>
-                        </div>`;
-                        }).join('')}
-                </div>
-            </div>
-            <div class="te-section">Duration</div>
-            <div class="form-group">
-                <label>Until:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="std-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
-                    <span class="dur-opts dur-origin" style="flex-shrink:0;"> of </span>
-                    <div class="dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="std-origin" style="flex:1; min-width:0;">${originsHtml}</select>
-                        <button type="button" class="token-picker-btn" data-target="std-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                    </div>
-                    <span class="dur-opts dur-count" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
-                    <input type="number" id="std-turns" value="1" min="0" class="dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Note:</label>
-                <input type="text" id="std-note" placeholder="${localize('LA.common.optionalNote')}">
-            </div>
-            <div class="te-section">Consumption</div>
-            ${triggerFieldsHtml('std', tokensHtml)}
-            <div class="te-btn-group">
-                <button type="button" class="te-btn save-preset-btn" data-prefix="std"><i class="fas fa-bookmark"></i> Save Preset</button>
-                <button type="button" class="te-btn extract-code-btn" data-tab="standard" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
-                <button type="button" class="te-btn apply-btn" data-tab="standard"><i class="fas fa-check"></i> Apply</button>
-            </div>
-        </div>
-
-        <!-- CUSTOM TAB -->
-        ${hasCustomStatus ? `
-        <div class="te-content" id="tab-custom">
-            ${presetBarHtml('cust', allPresets.custom)}
-            <div class="te-section">Effect</div>
-            <div class="form-group two-col">
-                <label>Target:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <select id="cust-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="cust-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
-                    <span class="em-tier-slot" data-tab="cust" style="display:none; align-self:center; margin-left:4px;">${tierGateControl(null, 'data-role="em-cust"')}</span>
-                </div>
-                <label style="text-align:right; padding-right:5px;">Saved:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <img id="cust-saved-icon" src="" width="26" height="26" style="border:2px solid var(--la-edge); border-radius:4px; background:#1a1a1a; display:none; object-fit: contain;">
-                    <select id="cust-saved" style="flex:1;">
-                        <option value="">-- Select --</option>
-                        ${savedStatuses.map(s => `<option value="${s.name}" data-icon="${s.icon}">${s.name}</option>`).join('')}
-                    </select>
-                </div>
-            </div>
-            <div class="form-group two-col" style="grid-template-columns: 80px 1fr 60px 60px;">
-                <label>Name:</label>
-                <div style="display:flex; gap:4px; align-items:center; min-width:0; width:100%;">
-                    <input type="text" id="cust-name" placeholder="${localize('LA.effectManager.ph.statusName')}" style="flex:1; min-width:0;">
-                    <button type="button" class="save-status-btn" title="Save Status (add Name + Icon + Description to the Saved list)" style="flex:0 0 28px; width:28px; height:28px; padding:0; line-height:1;"><i class="fas fa-save"></i></button>
-                </div>
-                <label style="text-align:right; padding-right:5px;">Stack:</label>
-                <input type="number" id="cust-stack" value="1" min="1">
-            </div>
-            <div class="form-group">
-                <label>Icon:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <img id="cust-icon-preview" src="systems/lancer/assets/icons/white/d20-framed.svg" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid var(--la-edge); border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
-                    <input type="text" id="cust-icon" value="systems/lancer/assets/icons/white/d20-framed.svg" style="flex:1; min-width:0;">
-                    <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Description:</label>
-                <textarea id="cust-description" rows="2" placeholder="${localize('LA.effectManager.ph.statusDescription')}" style="flex:1; min-width:0; resize:vertical;"></textarea>
-            </div>
-            <div class="te-section">Duration</div>
-            <div class="form-group">
-                <label>Until:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="cust-duration" style="flex:0 0 110px;">${durationOptionsHtml}</select>
-                    <span class="dur-opts dur-origin" style="flex-shrink:0;"> of </span>
-                    <div class="dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="cust-origin" style="flex:1; min-width:0;">${originsHtml}</select>
-                        <button type="button" class="token-picker-btn" data-target="cust-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                    </div>
-                    <span class="dur-opts dur-count" style="margin-left:5px; flex-shrink:0; white-space:nowrap;">Turns:</span>
-                    <input type="number" id="cust-turns" value="1" min="0" class="dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Note:</label>
-                <input type="text" id="cust-note" placeholder="${localize('LA.common.optionalNote')}">
-            </div>
-            <div class="te-section">Consumption</div>
-            ${triggerFieldsHtml('cust', tokensHtml)}
-            <details class="te-advanced">
-                <summary>Advanced</summary>
-                ${codeFieldRow('cust-changes', 'Active Effect Changes', '[{"key":"system.armor","mode":2,"value":"1"}]')}
-            </details>
-            <div class="te-btn-group">
-                <button type="button" class="te-btn save-preset-btn" data-prefix="cust"><i class="fas fa-bookmark"></i> Save Preset</button>
-                <button type="button" class="te-btn extract-code-btn" data-tab="custom" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
-                <button type="button" class="te-btn apply-btn" data-tab="custom"><i class="fas fa-check"></i> Apply</button>
-            </div>
-        </div>
-        ` : ''}
-
-        <!-- MANAGE TAB -->
-        <div class="te-content" id="tab-manage">
-            <div class="form-group">
-                <label>Token:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <select id="manage-target" style="flex:1;">${tokensHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="manage-target" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                </div>
-            </div>
-            <details class="te-advanced" id="manage-presets">
-                <summary>Presets</summary>
-                <div id="manage-presets-list" style="display:flex; flex-direction:column; gap:3px; padding:4px 0;"></div>
-            </details>
-            <div class="te-effect-list" id="manage-list">
-                <p style="text-align:center">Loading...</p>
-            </div>
-            <div id="manage-bonus-list"></div>
-            <div class="te-btn-group">
-                <button type="button" class="te-btn manage-close"><i class="fas fa-times"></i> Close</button>
-            </div>
-        </div>
-
-        <!-- BONUS TAB -->
-        <div class="te-content" id="tab-bonus">
-            ${presetBarHtml('bonus', allPresets.bonus)}
-            <div class="form-group">
-                <label>Token:</label>
-                <div style="flex:1; display:flex; gap:3px;">
-                    <select id="bonus-target" style="flex:1;">${targetsHtml}</select>
-                    <button type="button" class="token-picker-btn" data-target="bonus-target" style="flex:0 0 28px; padding:0;" title="Pick Token (Shift-click to add)"><i class="fas fa-crosshairs"></i></button>
-                </div>
-                <span id="bonus-summary" class="bonus-summary-pill">—</span>
-                <span class="em-tier-slot" data-tab="bonus" style="display:none;">${tierGateControl(null, 'data-role="em-bonus"')}</span>
-            </div>
-            <div class="te-section">Add New Bonus</div>
-            <div class="form-group">
-                <label>Name:</label>
-                <input type="text" id="bonus-name" value="Test Bonus">
-            </div>
-            <div class="form-group">
-                <label>Icon:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <img id="bonus-icon-preview" src="" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid var(--la-edge); border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
-                    <input type="text" id="bonus-icon" placeholder="${localize('LA.effectManager.ph.iconAuto')}" style="flex:1; min-width:0;">
-                    <button type="button" class="file-picker" data-type="image" data-target="bonus-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
-                </div>
-            </div>
-            <div class="te-section">Duration</div>
-            <div class="form-group">
-                <label>Duration:</label>
-                <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <select id="bonus-duration" style="flex:0 0 120px !important; width:120px !important; max-width:120px !important;">${bonusDurationOptionsHtml}</select>
-                    <span class="bonus-dur-opts dur-origin" style="flex-shrink:0;"> of </span>
-                    <div class="bonus-dur-opts dur-origin" style="flex:0 0 130px; display:flex; gap:3px;">
-                        <select id="bonus-durOrigin" style="flex:1; min-width:0;">${originsHtml}</select>
-                        <button type="button" class="token-picker-btn" data-target="bonus-durOrigin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                    </div>
-                    <span class="bonus-dur-opts dur-count" style="margin-left:3px; flex-shrink:0; white-space:nowrap;">Turns:</span>
-                    <input type="number" id="bonus-durTurns" value="1" min="0" class="bonus-dur-opts" title="0 = next matching trigger (end/start of the current or next turn)" style="flex:0 0 50px; min-width:50px; max-width:50px;">
-                </div>
-            </div>
-            <div class="form-group" style="justify-content:flex-start;">
-                <label style="flex:0 0 70px;">Uses:</label>
-                <div style="display:flex; gap:4px; align-items:center;">
-                    <button type="button" class="bonus-uses-step" data-step="-1" title="Decrement" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                    <input type="number" id="bonus-uses" placeholder="${localize('LA.effectManager.ph.usesInfinite')}" min="1" style="flex:0 0 70px; min-width:70px; max-width:70px; text-align:center;">
-                    <button type="button" class="bonus-uses-step" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                    <label id="bonus-consume-usage-row" style="display:none; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;" data-tooltip="${localize('LA.effectManager.tip.consumeOnUsage')}">
-                        <input type="checkbox" id="bonus-consumeOnUsage" checked> Consume on usage
-                    </label>
-                    <label id="bonus-frequency-row" style="display:flex; align-items:center; gap:4px; margin-left:10px; white-space:nowrap;">
-                        Limit:
-                        <input type="number" id="bonus-frequency-count" value="1" min="1" style="display:none; flex:0 0 46px; min-width:46px; max-width:46px; text-align:center;">
-                        <select id="bonus-frequency" style="flex:0 0 auto; width:auto; min-width:90px;">
-                            <option value="">None</option>
-                            <option value="round">/round</option>
-                            <option value="turn">/turn</option>
-                            <option value="combat">/combat</option>
-                            <option value="mission">/mission</option>
-                        </select>
-                    </label>
-                </div>
-            </div>
-            <div class="te-section">Type</div>
-            <div style="display:flex; gap:10px; align-items:flex-start;">
-                <div class="form-group" style="flex:1; margin:0;">
-                    <label>Bonus Type:</label>
-                    <select id="bonus-type">
-                        <option value="stat">Stat</option>
-                        <option value="roll">Roll (Acc/Diff)</option>
-                        <option value="damage">Damage</option>
-                        <option value="tag">Tag</option>
-                        <option value="range">Range</option>
-                        <option value="immunity">Immunity</option>
-                        <option value="resistance">Resistance</option>
-                        <option value="vulnerability">Vulnerability</option>
-                        <option value="target_modifier">Target Modifier</option>
-                        <option value="reroll">Reroll</option>
-                        <option value="movement_extra">Movement Extra</option>
-                    </select>
-                </div>
-                <div class="form-group" style="flex:1; margin:0;">
-                    <label>Auto-consume on:</label>
-                    <div class="la-multi-select" id="bonus-trigger">
-                        <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel" id="bonus-trigger-panel">
-                            ${consumptionTriggerCheckboxesHtml()}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-trigger-fields" style="display:none;">
-                <div class="form-group">
-                    <label>Origin:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <select id="bonus-trigger-origin" style="flex:1;">
-                            <option value="">Same as Target</option>
-                            ${tokensHtml}
-                        </select>
-                        <button type="button" class="token-picker-btn" data-target="bonus-trigger-origin" style="flex:0 0 28px; padding:0;" title="Pick Token"><i class="fas fa-crosshairs"></i></button>
-                    </div>
-                </div>
-                <div class="te-row-2col">
-                    <div class="form-group bonus-filter-itemLid" style="display:none;">
-                        <label data-tooltip="${localize('LA.effectManager.tip.consumeItemLid')}">Item:</label>
-                        <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemLid" placeholder="${localize('LA.effectManager.ph.itemLidEg')}" style="flex:1;">
-                            <button type="button" class="find-lid-btn" data-target="bonus-filter-itemLid" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
-                        </div>
-                    </div>
-                    <div class="form-group bonus-filter-itemId" style="display:none;">
-                        <label data-tooltip="${localize('LA.effectManager.tip.consumeItemId')}">Item ID:</label>
-                        <div style="flex:1; display:flex; gap:3px;">
-                            <input type="text" id="bonus-filter-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
-                            <button type="button" class="item-picker-btn" data-target="bonus-filter-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-group bonus-filter-actionName" style="display:none;">
-                    <label data-tooltip="${localize('LA.effectManager.tip.consumeAction')}">Consume on action:</label>
-                    <input type="text" id="bonus-filter-actionName" placeholder="${localize('LA.effectManager.ph.actionEg')}">
-                </div>
-                <div class="form-group bonus-filter-statusId" style="display:none;">
-                    <label data-tooltip="${localize('LA.effectManager.tip.consumeStatus')}">Status:</label>
-                    <div style="flex:1; display:flex; gap:3px;">
-                        <input type="text" id="bonus-filter-statusId" placeholder="${localize('LA.effectManager.ph.statusEg')}" style="flex:1;">
-                        <button type="button" class="bonus-status-picker-btn" data-target="bonus-filter-statusId" style="flex:0 0 28px; padding:0;" title="Pick Status"><i class="fas fa-shield-alt"></i></button>
-                    </div>
-                </div>
-                <div class="form-group bonus-filter-role" style="display:none;">
-                    <label data-tooltip="${localize('LA.effectManager.tip.consumeRoleBearer')}">Consume as:</label>
-                    <select id="bonus-filter-role" style="width:50%;">
-                        <option value="">Source</option>
-                        <option value="target">Target</option>
-                        <option value="any">Source or target</option>
-                    </select>
-                </div>
-                <div class="form-group bonus-filter-distance" style="display:none;">
-                    <label>Min distance:</label>
-                    <input type="number" id="bonus-filter-minDistance" placeholder="0" min="0">
-                </div>
-                <div class="form-group bonus-filter-check" style="display:none;">
-                    <label>Check type:</label>
-                    <input type="text" id="bonus-filter-checkType" placeholder="${localize('LA.effectManager.ph.checkTypeEg')}">
-                </div>
-                <div class="form-group bonus-filter-checkValues" style="display:none;">
-                    <label>Above:</label>
-                    <input type="number" id="bonus-filter-checkAbove" placeholder="any" style="width:40%;">
-                    <label>Below:</label>
-                    <input type="number" id="bonus-filter-checkBelow" placeholder="any" style="width:40%;">
-                </div>
-            </div>
-            <div id="bonus-type-stat">
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <div class="form-group" style="flex:0 0 auto; margin:0; display:flex; gap:6px; align-items:center;">
-                        <label style="flex:0 0 auto;">Mode:</label>
-                        <select id="bonus-statMode" style="flex:0 0 auto; width:auto; min-width:90px;">
-                            ${STAT_BONUS_MODES.map(mode => `<option value="${mode.value}">${localize(mode.label)}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex:1; min-width:0; margin:0; display:flex; gap:6px; align-items:center;">
-                        <label style="flex:0 0 auto;">Stat:</label>
-                        <select id="bonus-stat" style="flex:1; min-width:0;">
-                            ${STAT_BONUS_GROUPS.map(group => `<optgroup label="${group.label}">${Object.entries(group.stats).map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</optgroup>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex:1; margin:0; display:flex; gap:6px; align-items:center; justify-content:flex-start;">
-                        <label style="flex:0 0 auto;">Value:</label>
-                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="-1" title="Decrement" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                        <input type="number" id="bonus-statVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; font-size:0.9em; border:2px solid var(--la-edge); border-radius:4px;">
-                        <button type="button" class="la-num-step" data-target="bonus-statVal" data-step="1" title="Increment" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-type-roll" style="display:none;">
-                <div style="display:flex; gap:10px; align-items:flex-start;">
-                    <div class="form-group" style="flex:1; min-width:0; margin:0;">
-                        <label>Bonus Roll Type:</label>
-                        <select id="bonus-rollType" style="min-width:0;">
-                            <option value="accuracy">Accuracy</option>
-                            <option value="difficulty">Difficulty</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex:1; margin:0; display:flex; gap:6px; align-items:center; justify-content:flex-start;">
-                        <label style="flex:0 0 auto;">Value:</label>
-                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="-1" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                        <input type="number" id="bonus-accDiffVal" value="1" min="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; font-size:0.9em; border:2px solid var(--la-edge); border-radius:4px;">
-                        <button type="button" class="la-num-step" data-target="bonus-accDiffVal" data-step="1" style="flex:0 0 28px; width:28px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-type-damage" style="display:none;">
-                <div class="form-group" style="justify-content:flex-start;">
-                    <label>Mode:</label>
-                    <select id="bonus-damageMode" style="flex:0.6;">
-                        ${DAMAGE_BONUS_MODES.map(mode => `<option value="${mode.value}">${localize(mode.label)}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group" id="bonus-damageScope-row" style="justify-content:flex-start; display:none;">
-                    <label>Scope:</label>
-                    <select id="bonus-damageScope" style="flex:0.6;">
-                        ${DAMAGE_CHANGE_TYPE_SCOPES.map(scope => `<option value="${scope.value}">${localize(scope.label)}</option>`).join('')}
-                    </select>
-                </div>
-                <div id="bonus-damageMode-warning" style="display:none; color:#c33; font-size:0.85em; margin: 4px 0 6px; padding: 4px 8px; background: rgba(204,51,51,0.08); border-left: 3px solid #c33;">
-                    Replace and Change Type apply globally to the weapon. Per-target selection will be ignored.
-                </div>
-                <div id="bonus-damage-list">
-                    <div class="bonus-damage-entry form-group" data-index="0">
-                        <select id="bonus-dmgFrom-0" class="bonus-damage-from" style="flex:1; display:none;">
-                            <option value="${DAMAGE_CHANGE_TYPE_ALL}">All Types</option>
-                            ${dmgTypeOptionsHtml}
-                        </select>
-                        <span class="bonus-damage-arrow" style="display:none; padding:0 4px;">→</span>
-                        <input type="text" id="bonus-dmgVal-0" value="1d6" placeholder="1d6" class="bonus-damage-val" style="flex:1;">
-                        <select id="bonus-dmgType-0" style="flex:1;">${dmgTypeOptionsHtml}</select>
-                        <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="0" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
-                    </div>
-                </div>
-                <div style="display:flex; gap:8px; margin-top:6px;">
-                    <button type="button" class="te-btn" id="bonus-add-dmg-entry" style="flex:1;"><i class="fas fa-plus"></i> Add Damage Entry</button>
-                </div>
-            </div>
-            <div id="bonus-type-tag" style="display:none;">
-                <div class="form-group">
-                    <label>Tag:</label>
-                    <select id="bonus-tagSelect">
-                        ${availableTags.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="form-group" style="justify-content:flex-start;">
-                    <label>Mode:</label>
-                    <select id="bonus-tagMode" style="flex:0.6;">
-                        <option value="add">Add Value</option>
-                        <option value="override">Override Value</option>
-                    </select>
-                    <label style="margin-left: 10px;">Value:</label>
-                    <button type="button" class="la-num-step" data-target="bonus-tagVal" data-step="-1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                    <input type="number" id="bonus-tagVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; border:2px solid var(--la-edge); border-radius:4px;">
-                    <button type="button" class="la-num-step" data-target="bonus-tagVal" data-step="1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                </div>
-                <div class="form-group" style="justify-content:flex-start;">
-                    <label style="width: auto; margin-right: 5px;">Remove Tag instead:</label>
-                    <input type="checkbox" id="bonus-removeTag" style="width: auto;">
-                </div>
-            </div>
-            <div id="bonus-type-range" style="display:none;">
-                <div class="form-group">
-                    <label>Range Type:</label>
-                    <select id="bonus-rangeType">
-                        <option value="Range">Range</option>
-                        <option value="Threat">Threat</option>
-                        <option value="Blast">Blast</option>
-                        <option value="Burst">Burst</option>
-                        <option value="Cone">Cone</option>
-                        <option value="Line">Line</option>
-                    </select>
-                </div>
-                <div class="form-group" style="justify-content:flex-start;">
-                    <label>Mode:</label>
-                    <select id="bonus-rangeMode" style="flex:0.6;">
-                        <option value="add">Add Value</option>
-                        <option value="override">Override Value</option>
-                        <option value="change">Change All Ranges</option>
-                    </select>
-                    <label style="margin-left: 10px;">Value:</label>
-                    <button type="button" class="la-num-step" data-target="bonus-rangeVal" data-step="-1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-minus"></i></button>
-                    <input type="number" id="bonus-rangeVal" value="1" style="flex:0 0 50px; min-width:50px; max-width:50px; text-align:center; height:30px; border:2px solid var(--la-edge); border-radius:4px;">
-                    <button type="button" class="la-num-step" data-target="bonus-rangeVal" data-step="1" style="flex:0 0 26px; padding:0; height:26px;"><i class="fas fa-plus"></i></button>
-                </div>
-            </div>
-            <div id="bonus-type-immunity" style="display:none;">
-                <div class="form-group">
-                    <label>Immunity Subtype:</label>
-                    <select id="bonus-immunity-subtype">
-                        <option value="effect">Effect</option>
-                        <option value="damage">Damage</option>
-                        <option value="crit">Critical Hit</option>
-                        <option value="hit">Hit</option>
-                        <option value="miss">Miss</option>
-                        <option value="elevation">Elevation</option>
-                        <option value="terrain">Terrain</option>
-                        <option value="obstacle">Obstacle (Phasing)</option>
-                        <option value="provoke">Provoke (Engagement &amp; Reactions)</option>
-                    </select>
-                </div>
-                <div id="bonus-immunity-effects-row">
-                    <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Status Effects:</label>
-                    <input type="text" id="bonus-immunity-effect-search" placeholder="${localize('LA.common.searchEffects')}" style="width:100%; height:24px; font-size:0.85em; padding:0 6px; margin-bottom:4px;">
-                    <div id="bonus-immunity-effects" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1px; max-height:180px; overflow-y:auto; padding:3px; background:color-mix(in srgb, var(--la-plate), var(--la-ink) 7%); border-radius:4px; border:1px solid var(--la-edge);">
-                        ${statusEffectIconsHtml}
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-immunity-damage-row" style="display:none;">
-                <label style="display:block; font-weight:600; font-size:0.85em; margin-bottom:4px;">Select Damage Types:</label>
-                <div class="te-icon-grid" id="bonus-immunity-damageTypes">
-                    ${damageTypeIconsHtml}
-                </div>
-            </div>
-            <div id="bonus-type-target_modifier" style="display:none;">
-                <div class="form-group">
-                    <label>Target Modifier:</label>
-                    <select id="bonus-target-modifier-subtype">
-                        <option value="invisible">Invisible (50% miss)</option>
-                        <option value="no_invisible">Not Invisible (ignore 50% miss)</option>
-                        <option value="no_cover">No Cover</option>
-                        <option value="soft_cover">Soft Cover</option>
-                        <option value="hard_cover">Hard Cover</option>
-                        <option value="ap">Armor Piercing (AP)</option>
-                        <option value="half_damage">Half Damage</option>
-                        <option value="paracausal">Cannot be Reduced</option>
-                        <option value="crit">Force Crit</option>
-                        <option value="hit">Force Hit</option>
-                        <option value="miss">Force Miss</option>
-                    </select>
-                </div>
-            </div>
-            <div id="bonus-type-reroll" style="display:none;">
-                <div class="form-group">
-                    <label>Subtype:</label>
-                    <select name="reroll-subtype" id="bonus-reroll-subtype">
-                        <option value="retry">Retry</option>
-                        <option value="highest">Highest</option>
-                        <option value="lowest">Lowest</option>
-                        <option value="choose">Choose</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Roll Types (empty = all):</label>
-                    <div class="la-multi-select" id="bonus-reroll-rollTypes">
-                        <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel" id="bonus-reroll-rollTypes-panel">
-                            <label><input type="checkbox" value="attackRoll"> Attack Roll</label>
-                            <label><input type="checkbox" value="techAttackRoll"> Tech Attack Roll</label>
-                            <label><input type="checkbox" value="damageRoll"> Damage Roll</label>
-                            <label><input type="checkbox" value="skillRoll"> Skill / Check / Save Roll</label>
-                            <label><input type="checkbox" value="structureRoll"> Structure Roll</label>
-                            <label><input type="checkbox" value="stressRoll"> Stress Roll</label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-type-movement_extra" style="display:none;">
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <div class="form-group" style="flex:1; margin:0;">
-                        <label>Applies to:</label>
-                        <select name="movement-extra-subtype" id="bonus-movement-extra-subtype">
-                            <option value="boost">Boost</option>
-                            <option value="standard">Standard Move</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex:0 0 auto; margin:0;">
-                        <label>Spaces:</label>
-                        <input type="number" id="bonus-movement-extra-val" value="1" style="width:60px; text-align:center;" title="Added to each Standard Move or Boost.">
-                    </div>
-                </div>
-            </div>
-            <div id="bonus-items-row" style="display:none;">
-                <div class="form-group" id="row-bonus-rollTypes-roll" style="display:none;">
-                    <label>Roll Type:</label>
-                    <div class="la-multi-select" id="bonus-rollTypes-roll">
-                        <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel" id="bonus-rollTypes-roll-panel">
-                            <label><input type="checkbox" value="all"> All Flows</label>
-                            <label><input type="checkbox" value="attack"> Weapon Attacks</label>
-                            <label><input type="checkbox" value="tech_attack"> Tech Attacks</label>
-                            <label><input type="checkbox" value="melee"> Melee Attacks</label>
-                            <label><input type="checkbox" value="ranged"> Ranged Attacks</label>
-                            <label><input type="checkbox" value="nexus"> Nexus Attacks</label>
-                            <label><input type="checkbox" value="tech"> Tech (Item Type)</label>
-                            <label><input type="checkbox" value="check"> Checks (All)</label>
-                            <label><input type="checkbox" value="hull"> Hull Check</label>
-                            <label><input type="checkbox" value="agility"> Agility Check</label>
-                            <label><input type="checkbox" value="systems"> Systems Check</label>
-                            <label><input type="checkbox" value="engineering"> Engineering Check</label>
-                            <label><input type="checkbox" value="grit"> Grit Check</label>
-                            <label><input type="checkbox" value="tier"> Tier Check (NPC)</label>
-                            <label><input type="checkbox" value="structure"> Structure Roll</label>
-                            <label><input type="checkbox" value="overheat"> Overheat Roll</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-group" id="row-bonus-rollTypes-damage" style="display:none;">
-                    <label>Damage Roll Type:</label>
-                    <div class="la-multi-select" id="bonus-rollTypes-damage">
-                        <button type="button" class="la-multi-select-trigger">— Select —</button>
-                        <div class="la-multi-select-panel" id="bonus-rollTypes-damage-panel">
-                            <label><input type="checkbox" value="all"> All Damage</label>
-                            <label><input type="checkbox" value="melee"> Melee Damage</label>
-                            <label><input type="checkbox" value="ranged"> Ranged Damage</label>
-                            <label><input type="checkbox" value="nexus"> Nexus Damage</label>
-                            <label><input type="checkbox" value="tech"> Tech Damage</label>
-                        </div>
-                    </div>
-                </div>
-                <details class="te-advanced">
-                    <summary>Filters</summary>
-                    <div class="te-row-2col">
-                        <div class="form-group" id="row-bonus-itemLids">
-                            <label data-tooltip="${localize('LA.effectManager.tip.applyItemLids')}">Items (LID):</label>
-                            <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-itemLids" placeholder="${localize('LA.effectManager.ph.itemLidsEg')}" style="flex:1;">
-                                <button type="button" class="find-lid-btn" data-target="bonus-itemLids" style="flex:0 0 28px; padding:0;" title="Find Item"><i class="fas fa-search"></i></button>
-                            </div>
-                        </div>
-                        <div class="form-group" id="row-bonus-itemId">
-                            <label data-tooltip="${localize('LA.effectManager.tip.applyItemId')}">Item ID:</label>
-                            <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-itemId" placeholder="${localize('LA.common.itemId')}" style="flex:1;">
-                                <button type="button" class="item-picker-btn" data-target="bonus-itemId" style="flex:0 0 28px; padding:0;" title="Select Item on Token"><i class="fas fa-box"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="te-row-2col" id="row-bonus-tokens">
-                        <div class="form-group">
-                            <label data-tooltip="${localize('LA.effectManager.tip.applyTokens')}">Tokens:</label>
-                            <div style="flex:1; display:flex; gap:3px;">
-                                <input type="text" id="bonus-applyTo" placeholder="${localize('LA.effectManager.ph.tokenIds')}" style="flex:1;">
-                                <button type="button" class="token-picker-btn" data-target="bonus-applyTo" data-count="-1" style="flex:0 0 28px; padding:0;" title="Select Tokens"><i class="fas fa-crosshairs"></i></button>
-                            </div>
-                        </div>
-                        <div class="form-group" style="justify-content:flex-start;">
-                            <label data-tooltip="${localize('LA.effectManager.tip.applyToTargetter')}" style="flex:0 0 auto; margin-right:6px;">Targetter:</label>
-                            <input type="checkbox" id="bonus-applyToTargetter" style="margin:0; width:min-content; flex:0 0 auto;">
-                        </div>
-                    </div>
-                </details>
-                <details class="te-advanced">
-                    <summary>Advanced</summary>
-                    ${codeFieldRow('bonus-condition', 'Condition', '(state, actor, data, context) => true')}
-                    ${codeFieldRow('bonus-applyToCondition', 'Apply-to Condition', '(target, state, reactorToken) => true')}
-                </details>
-            </div>
-            <div class="te-btn-group">
-                <button type="button" class="te-btn save-preset-btn" data-prefix="bonus"><i class="fas fa-bookmark"></i> Save Preset</button>
-                <button type="button" class="te-btn extract-code-btn" data-tab="bonus" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
-                <button type="button" class="te-btn" id="bonus-add"><i class="fas fa-plus-circle"></i> Add Bonus</button>
-            </div>
-            <hr class="te-divider">
-            <button type="button" class="te-btn" id="bonus-clear-all" style="width:100%; border-color:var(--primary-color);"><i class="fas fa-trash"></i> Clear All Bonuses</button>
-        </div>
-    </div>
-    `;
+    const content = buildEffectManagerContent({
+        hasCustomStatus,
+        allPresets,
+        targetsHtml,
+        tokensHtml,
+        originsHtml,
+        durationOptionsHtml,
+        bonusDurationOptionsHtml,
+        dmgTypeOptionsHtml,
+        statusEffectIconsHtml,
+        damageTypeIconsHtml,
+        savedStatuses,
+        availableTags,
+        STAT_BONUS_GROUPS,
+    });
 
     // White target mark, yellow tethered mark on every reference token, while the manager is open.
     const emMarks = createDurationMarks();
@@ -1891,10 +287,10 @@ export async function executeEffectManager(options = {})
             if (root && typeof ResizeObserver !== 'undefined' && !dlg._laResizeObserver)
             {
                 let lastScrollHeight = 0;
-                let raf = 0;
+                let rafId = 0;
                 const refit = () =>
                 {
-                    raf = 0;
+                    rafId = 0;
                     if (!dlg.element?.length)
                         return;
                     const currentHeight = root.scrollHeight;
@@ -1905,9 +301,9 @@ export async function executeEffectManager(options = {})
                 };
                 const resizeObserver = new ResizeObserver(() =>
                 {
-                    if (raf)
-                        cancelAnimationFrame(raf);
-                    raf = requestAnimationFrame(refit);
+                    if (rafId)
+                        cancelAnimationFrame(rafId);
+                    rafId = requestAnimationFrame(refit);
                 });
                 resizeObserver.observe(root);
                 dlg._laResizeObserver = resizeObserver;
@@ -1972,7 +368,7 @@ export async function executeEffectManager(options = {})
                 const prefix = String(this.id).replace('-target', '');
                 const $origin = html.find(TAB_ORIGIN_SELECT[prefix]);
                 const ids = _emTargetIds($(this).val());
-                if (ids.length > 1)
+                if (ids.length > 1 && String($origin.val()) !== ANY_TURN_ORIGIN)
                     $origin.val(EACH_ORIGIN).change();
                 else if (String($origin.val()) === EACH_ORIGIN)
                     $origin.val(ids[0] ?? '').change();
@@ -2086,11 +482,11 @@ export async function executeEffectManager(options = {})
                 _hideEffectTooltip();
                 if (!desc)
                     return;
-                const tip = $(`<div class="la-status-tooltip" style="position:fixed;z-index:9999;background:#1a1a1a;color:#eee;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:280px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);">
+                const tip = $(htmlToElement(`<div class="la-status-tooltip" style="position:fixed;z-index:9999;background:#1a1a1a;color:#eee;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:280px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);">
                     <div style="font-weight:bold;color:#fff;margin-bottom:4px;">${label}</div>
                     <div style="color:#bbb;line-height:1.4;">${desc}</div>
-                </div>`);
-                $('body').append(tip);
+                </div>`));
+                tip.appendTo(document.body);
                 const rect = anchor.getBoundingClientRect();
                 const tooltipHeight = tip.outerHeight() ?? 0;
                 const top = Math.min(rect.top, window.innerHeight - tooltipHeight - 8);
@@ -2237,6 +633,11 @@ export async function executeEffectManager(options = {})
                     const name = String($(this).data('name') ?? '').toLowerCase();
                     $(this).toggle(!query || name.includes(query));
                 });
+                html.find('.std-effect-group').each(function ()
+                {
+                    const options = html.find(`.std-effect-option[data-group="${$(this).data('group')}"]`).toArray();
+                    $(this).toggle(options.some(option => option.style.display !== 'none'));
+                });
             });
 
             html.find('.save-status-btn').click(async () =>
@@ -2304,7 +705,7 @@ export async function executeEffectManager(options = {})
                         content: '<p style="padding:6px 8px;">Preset name:</p><input type="text" id="preset-name-input" style="width:100%; padding:4px;">',
                         buttons: {
                             save: { icon: '<i class="fas fa-save"></i>', label: localize('LA.common.save'), callback: (dlgHtml) => resolve(String(dlgHtml.find('#preset-name-input').val() || '').trim()) },
-                            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel'), callback: () => resolve('') }
+                            cancel: cancelButton(() => resolve(''))
                         },
                         default: 'save',
                         close: () => resolve(''),
@@ -2325,7 +726,7 @@ export async function executeEffectManager(options = {})
                             content: `<p style="padding:6px 8px;">${localizeFormat('LA.effectManager.presetExists', { name })}</p>`,
                             buttons: {
                                 yes: { icon: '<i class="fas fa-check"></i>', label: localize('LA.effectManager.mode.overwrite'), callback: () => resolve(true) },
-                                no:  { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel'), callback: () => resolve(false) }
+                                no:  cancelButton(() => resolve(false))
                             },
                             default: 'yes',
                             close: () => resolve(false)
@@ -2454,7 +855,7 @@ export async function executeEffectManager(options = {})
                 if (tab === 'bonus')
                 {
                     const type = selectedBonusType();
-                    const { bonusData, addOptions, duration } = gatherBonusFormData(type);
+                    const { bonusData, addOptions, duration } = gatherBonusFormData(html, type);
                     const prunedBonus = pruneSnippet(bonusData);
                     if (duration === 'constant')
                         return `await api.addConstantBonus(reactorToken.actor, ${formatSnippet(prunedBonus)});`;
@@ -2462,7 +863,7 @@ export async function executeEffectManager(options = {})
                     return `await api.addGlobalBonus(reactorToken.actor, ${formatSnippet(prunedBonus)}, ${formatSnippet(options)});`;
                 }
                 const prefix = tab === 'standard' ? 'std' : 'cust';
-                const durationLabel = String(html.find(`#${prefix}-duration`).val());
+                const { label: durationLabel } = durationChoice(String(html.find(`#${prefix}-duration`).val()), String(html.find(`#${prefix}-origin`).val()));
                 const turnsRaw = Number.parseInt(String(html.find(`#${prefix}-turns`).val()));
                 const turns = Number.isNaN(turnsRaw) ? 1 : Math.max(0, turnsRaw);
                 const stack = Number.parseInt(String(html.find(`#${prefix}-stack`).val())) || 1;
@@ -2614,8 +1015,7 @@ export async function executeEffectManager(options = {})
                     const targetID = String(html.find('#std-target').val());
                     const effectName = html.find('#std-effect').val();
                     const stack = Number.parseInt(String(html.find('#std-stack').val())) || 1;
-                    const durationLabel = String(html.find('#std-duration').val());
-                    const originID = String(html.find('#std-origin').val());
+                    const { label: durationLabel, originID } = durationChoice(String(html.find('#std-duration').val()), String(html.find('#std-origin').val()));
                     const note = String(html.find('#std-note').val());
                     const turnsInputRaw = Number.parseInt(String(html.find('#std-turns').val()));
                     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
@@ -2669,7 +1069,7 @@ export async function executeEffectManager(options = {})
                             duration: { ...duration, overrideTurnOriginId: docOrigin },
                         };
                         if (doc.documentName === 'Item')
-                            await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
+                            await linkEffectToItem({ items: [doc], ...linkOpts }, { ...extraOptions, addedViaUI: true });
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
                         ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: effectName, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
@@ -2683,8 +1083,7 @@ export async function executeEffectManager(options = {})
                     const name = html.find('#cust-name').val();
                     const icon = html.find('#cust-icon').val();
                     const stack = Number.parseInt(String(html.find('#cust-stack').val())) || 1;
-                    const durationLabel = String(html.find('#cust-duration').val());
-                    const originID = String(html.find('#cust-origin').val());
+                    const { label: durationLabel, originID } = durationChoice(String(html.find('#cust-duration').val()), String(html.find('#cust-origin').val()));
                     const note = String(html.find('#cust-note').val());
                     const turnsInputRaw = Number.parseInt(String(html.find('#cust-turns').val()));
                     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
@@ -2767,7 +1166,7 @@ export async function executeEffectManager(options = {})
                             duration: { ...duration, overrideTurnOriginId: docOrigin },
                         };
                         if (doc.documentName === 'Item')
-                            await linkEffectToItem({ items: [doc], ...linkOpts }, extraOptions);
+                            await linkEffectToItem({ items: [doc], ...linkOpts }, { ...extraOptions, addedViaUI: true });
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
                         ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: name, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
@@ -2776,261 +1175,8 @@ export async function executeEffectManager(options = {})
                 }
             });
 
-            const renderBonusDetails = (bonus) =>
-            {
-                if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
-                    return `[${bonus.bonuses.map(getBonusDetailString).join(' | ')}]`;
-                return `(${getBonusDetailString(bonus)})`;
-            };
-
-            // Manage Tab. Templates are `disabled:true` by design; still show them so users can remove.
-            const isTemplateAE = (effect) =>
-            {
-                const laFlags = getLAFlags(effect);
-                return laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
-            };
-
-            const updateManageTabCount = () =>
-            {
-                const targetID = String(html.find('#manage-target').val());
-                const { actor } = _resolveEmTarget(targetID);
-                if (!actor)
-                {
-                    html.find('#manage-tab-count').text('');
-                    return;
-                }
-                const effectCount = actor.effects.filter(effect =>
-                    (isTemplateAE(effect) || !effect.disabled) && (effect.icon || effect.img) && !getLAFlag(effect,"linkedBonusId")
-                ).length;
-                const bonusCount = (getLAFlag(actor,"global_bonuses") || []).length
-                    + (getLAFlag(actor,"constant_bonuses") || []).length
-                    + (getLAFlag(actor,"bonusTemplates") || []).length
-                    + getV3DefenseRows(actor).length;
-                const total = effectCount + bonusCount;
-                html.find('#manage-tab-count').text(total > 0 ? `(${total})` : '');
-            };
-
-            const updateManageList = () =>
-            {
-                const targetID = String(html.find('#manage-target').val());
-                const { actor } = _resolveEmTarget(targetID);
-                const list = html.find('#manage-list');
-                list.empty();
-
-                if (!actor)
-                    return;
-
-                const effects = actor.effects.filter(effect =>
-                    (isTemplateAE(effect) || !effect.disabled) &&
-                    (effect.icon || effect.img) &&
-                    !getLAFlag(effect,"linkedBonusId")
-                );
-
-                if (effects.length === 0)
-                    list.html('<p style="text-align:center; color:var(--la-ink-dim)">No effects found.</p>');
-
-                effects.forEach(effect =>
-                {
-                    const dur = getLAFlag(effect,'duration') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'duration') : null);
-                    const consumption = getLAFlag(effect,'consumption');
-                    const stack = effect.flags?.statuscounter?.value ||
-                        effect.flags?.['temporary-custom-statuses']?.stack || 0;
-
-                    let durText = "Indefinite";
-                    if (getLAFlags(effect))
-                        durText = durationText(effect) || "Indefinite";
-                    else if (dur)
-                        durText = `${dur.label}, ${dur.turns}t`;
-
-                    let consumptionText = '';
-                    if (consumption?.trigger)
-                    {
-                        let triggerLabel = Array.isArray(consumption.trigger)
-                            ? consumption.trigger.join(', ')
-                            : consumption.trigger;
-                        if (consumption.itemId)
-                            triggerLabel += ` ID:${consumption.itemId}`;
-                        else if (consumption.itemLid)
-                            triggerLabel += ` ${consumption.itemLid}`;
-                        consumptionText = `<span style="font-size:0.75em; color:var(--la-accent); margin-left:4px;">[${triggerLabel}]</span>`;
-                    }
-
-                    const item = $(`
-                        <div class="te-effect-item">
-                            <div class="te-effect-info">
-                                <img src="${effect.img}" width="24" height="24" style="border:none; background:#1a1a1a; border-radius:3px; padding:1px; object-fit:contain;">
-                                <span>${effect.name}</span>
-                                <span style="font-size:0.8em; opacity:0.7; display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom;">(${escapeHtml(durText)})</span>
-                                ${consumptionText}
-                                ${stack > 0 ? `<span style="font-weight:bold; margin-left:4px;">x${stack}</span>` : ''}
-                            </div>
-                            <div style="display:flex; gap: 5px; align-items: center;">
-                                ${isTemplateAE(effect) && tierGateApplies(actor) ? tierGateControl(getLAFlag(effect,'tier'), `data-effect-id="${effect.id}"`) : ''}
-                                ${stack > 0 ? `
-                                <div class="te-stack-ctrl">
-                                    <i class="fas fa-minus stack-btn" data-action="dec"></i>
-                                    <i class="fas fa-plus stack-btn" data-action="inc"></i>
-                                </div>` : ''}
-                                <div class="te-delete-btn" title="Remove"><i class="fas fa-trash"></i></div>
-                            </div>
-                        </div>
-                    `);
-
-                    bindTierGate(item, async (tier) =>
-                    {
-                        if (tier)
-                            await setLAFlag(effect,'tier', tier);
-                        else
-                            await unsetLAFlag(effect,'tier');
-                    });
-
-                    item.find('.te-delete-btn').click(async () =>
-                    {
-                        await pushRemoveEffect(targetID, effect.id);
-                        setTimeout(updateManageList, 200);
-                    });
-
-                    item.find('.stack-btn').click(async (ev) =>
-                    {
-                        const action = $(ev.currentTarget).data('action');
-                        const delta = action === 'inc' ? 1 : -1;
-                        await modifyEffectStack(targetID, effect.id, delta);
-                        setTimeout(updateManageList, 200);
-                    });
-
-                    list.append(item);
-                });
-
-                const bonusList = html.find('#manage-bonus-list');
-                bonusList.empty();
-                const globalBonuses = getLAFlag(actor,"global_bonuses") || [];
-                const constantBonuses = getLAFlag(actor,"constant_bonuses") || [];
-                const bonusTemplates = getLAFlag(actor,"bonusTemplates") || [];
-                const allBonuses = [
-                    ...globalBonuses.map(bonus => ({ ...bonus, _kind: 'global' })),
-                    ...constantBonuses.map(bonus => ({ ...bonus, _kind: 'constant' })),
-                    ...bonusTemplates.map(template => ({ ...(template.bonusData || {}), _kind: 'template', _templateId: template.id, _addOptions: template.addOptions, uses: template.lastRuntimeUses ?? template.bonusData?.uses })),
-                    ...getV3DefenseRows(actor).map(({ bonus, off, inactive }) => ({ ...bonus, _kind: 'data', _off: off, _inactive: inactive }))
-                ];
-
-                updateManageTabCount();
-
-                if (allBonuses.length > 0)
-                {
-                    bonusList.append($('<p style="margin:8px 0 4px; font-weight:bold; border-top:1px solid var(--la-edge); padding-top:6px;">Bonuses</p>'));
-                    allBonuses.forEach(bonus =>
-                    {
-                        const details = renderBonusDetails(bonus);
-                        const lids = (bonus.itemLids && bonus.itemLids.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[${bonus.itemLids.join(', ')}]</span>` : '';
-                        const types = (bonus.rollTypes && bonus.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${bonus.rollTypes.join(', ')}]</span>` : '';
-                        const itemIdInfo = bonus.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${bonus.itemId}]</span>` : '';
-                        let kindLabel = '';
-                        if (bonus._kind === 'constant')
-                            kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(constant)</span>';
-                        else if (bonus._kind === 'template')
-                            kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(template)</span>';
-                        else if (bonus._kind === 'data')
-                            kindLabel = ' <span style="font-size:0.75em; color:#2a9d8f;">(data)</span>';
-                        const source = sourceName(bonus);
-                        const sourceLine = source
-                            ? `<span style="display:block; font-size:0.8em; color:var(--la-ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fas fa-link"></i> ${escapeHtml(source)}</span>`
-                            : '';
-                        const dataConditionLine = bonus.dataCondition
-                            ? `<span style="display:block; font-size:0.8em; color:${bonus._inactive ? 'var(--la-ink-dim)' : '#2a9d8f'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fas fa-code-branch"></i> ${escapeHtml(`while ${v3ConditionLabel(bonus.dataCondition)}`)}</span>`
-                            : '';
-                        const actionBtn = bonus._kind === 'data'
-                            ? `<div class="te-delete-btn manage-bonus-toggle-btn" title="${bonus._off ? 'Switch on' : 'Switch off'}" style="color:#2a9d8f;"><i class="fas ${bonus._off ? 'fa-eye-slash' : 'fa-eye'}"></i></div>`
-                            : `<div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>`;
-                        const condHint = getBonusConditionHint(bonus);
-                        const condLabel = condHint
-                            ? ' <span class="te-bonus-cond" style="font-size:0.75em; color:var(--la-accent); cursor:help;"><i class="fas fa-code-branch"></i> conditional</span>'
-                            : '';
-
-                        let usesInfo = '';
-                        const uses = getBonusUsesInfo(actor, bonus);
-                        if (uses)
-                        {
-                            usesInfo = ` <span style="color:var(--la-accent);">[${uses.label}]</span>`;
-                            if (uses.onUse)
-                                usesInfo += ' <span style="font-size:0.75em; color:var(--la-ink-dim);">[on-use]</span>';
-                        }
-
-                        const bonusRow = $(`
-                            <div class="te-bonus-item"${bonus._off || bonus._inactive ? ' style="opacity:0.5;"' : ''}>
-                                <span style="min-width:0;"><strong>${bonus.name}</strong>${kindLabel}${condLabel} ${details}${usesInfo}${lids}${itemIdInfo}${types}${sourceLine}${dataConditionLine}</span>
-                                ${tierGateApplies(actor) && bonus._kind !== 'data' ? tierGateControl(bonus.tier, `data-bonus-id="${bonus.id}"`) : ''}
-                                ${actionBtn}
-                            </div>
-                        `);
-                        bonusRow.find('.manage-bonus-toggle-btn').click(async () =>
-                        {
-                            await setV3DefenseOff(actor, bonus.id, !bonus._off);
-                            setTimeout(updateManageList, 200);
-                        });
-                        if (condHint)
-                            bonusRow.find('.te-bonus-cond').attr('title', condHint);
-
-                        bindTierGate(bonusRow, async (tier) =>
-                        {
-                            if (bonus._kind === 'template')
-                            {
-                                const templates = foundry.utils.deepClone(getLAFlag(actor,'bonusTemplates') || []);
-                                const record = templates.find((/** @type {any} */ tpl) => tpl.id === bonus._templateId);
-                                if (!record)
-                                    return;
-                                record.bonusData = record.bonusData ?? {};
-                                if (tier)
-                                    record.bonusData.tier = tier;
-                                else
-                                    delete record.bonusData.tier;
-                                await setLAFlag(actor,'bonusTemplates', templates);
-                                return;
-                            }
-                            const flagKey = bonus._kind === 'constant' ? 'constant_bonuses' : 'global_bonuses';
-                            const listCopy = foundry.utils.deepClone(getLAFlag(actor,flagKey) || []);
-                            const entry = listCopy.find((/** @type {any} */ stored) => stored.id === bonus.id);
-                            if (!entry)
-                                return;
-                            if (tier)
-                                entry.tier = tier;
-                            else
-                                delete entry.tier;
-                            await setLAFlag(actor,flagKey, listCopy);
-                        });
-
-                        bonusRow.find('.manage-bonus-remove-btn').click(async () =>
-                        {
-                            if (bonus._kind === 'template')
-                            {
-                                if (actor.documentName === 'Item')
-                                    await unlinkBonusFromItem({ items: [actor], templateId: bonus._templateId });
-                                else
-                                    await unlinkBonusFromActor({ actors: [actor], templateId: bonus._templateId });
-                            }
-                            else if (bonus._kind === 'constant')
-                                await removeConstantBonus(actor, bonus.id);
-                            else if (bonus.sourceItemUuid || bonus.sourceActorUuid)
-                            {
-                                const source = /** @type {any} */ (fromUuidSync(bonus.sourceItemUuid ?? bonus.sourceActorUuid));
-                                if (source?.documentName === 'Item')
-                                    await unlinkBonusFromItem({ items: [source], templateId: bonus.sourceTemplateId });
-                                else if (source?.documentName === 'Actor')
-                                    await unlinkBonusFromActor({ actors: [source], templateId: bonus.sourceTemplateId });
-                                else
-                                    await removeGlobalBonus(actor, bonus.id);
-                            }
-                            else
-                                await removeGlobalBonus(actor, bonus.id);
-                            setTimeout(updateManageList, 200);
-                        });
-
-                        bonusList.append(bonusRow);
-                    });
-                }
-
-                if (dialog.position)
-                    dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
-            };
+            const updateManageTabCount = () => renderManageTabCount(html);
+            const updateManageList = () => renderManageList(html, dialog);
 
             html.find('#manage-target').change(updateManageList);
             html.find('.te-tab[data-tab="manage"]').click(updateManageList);
@@ -3062,18 +1208,21 @@ export async function executeEffectManager(options = {})
 
             // Durations valid for item / prototype-actor targets (no round or encounter anchor on a template).
             const _durationsAllowedForDoc = new Set(['indefinite', 'permanent', 'constant', 'end', 'start']);
+            const _durationsAllowedForItem = new Set(['indefinite', 'constant']);
             const _constrainDurationDropdown = (targetSelector, durationSelector) =>
             {
                 const tid = String(html.find(targetSelector).val());
                 const { item, actor, token } = _resolveEmTarget(tid);
                 const isDoc = !!(item || (actor && !token));
+                const allowed = item ? _durationsAllowedForItem : _durationsAllowedForDoc;
                 const $sel = html.find(durationSelector);
                 if (!$sel.length)
                     return;
                 $sel.find('option').each((_i, el) =>
                 {
                     const opt = /** @type {HTMLOptionElement} */ (el);
-                    opt.disabled = isDoc && !_durationsAllowedForDoc.has(String(opt.value));
+                    opt.disabled = isDoc && !allowed.has(String(opt.value));
+                    opt.hidden = !!item && opt.disabled;
                 });
                 if (isDoc && $sel.find('option:selected').is(':disabled'))
                     $sel.val('indefinite').trigger('change');
@@ -3088,7 +1237,6 @@ export async function executeEffectManager(options = {})
             constrainCustDuration();
             html.find('#bonus-target').change(updateBonusList);
 
-            // Bonus duration toggle
             const toggleBonusDurOpts = () =>
             {
                 const val = html.find('#bonus-duration').val();
@@ -3135,8 +1283,7 @@ export async function executeEffectManager(options = {})
             initLaMultiSelect(html, 'bonus-trigger');
             $(document).off('change.la-em-bonus-trigger').on('change.la-em-bonus-trigger', '#bonus-trigger-panel input[type=checkbox]', function ()
             {
-                const triggers = $('#bonus-trigger-panel input:checked')
-                    .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+                const triggers = Array.from(document.querySelectorAll('#bonus-trigger-panel input:checked'), box => /** @type {HTMLInputElement} */ (box).value);
                 const $fields = html.find('#bonus-trigger-fields');
                 $fields.find('.form-group').hide();
                 if (triggers.length > 0)
@@ -3198,7 +1345,6 @@ export async function executeEffectManager(options = {})
             {
                 e.preventDefault();
                 const targetId = $(this).data('target');
-                const api = game.modules.get(MODULE_ID).api;
 
                 // trace token from bonus-applyTo or currently controlled
                 const applyToStr = String(html.find('#bonus-applyTo').val());
@@ -3218,7 +1364,7 @@ export async function executeEffectManager(options = {})
                     return;
                 }
 
-                const items = targetToken.actor.items.filter(i => !['skill', 'talent', 'core_bonus', 'integrated'].includes(i.type));
+                const items = targetToken.actor.items.filter(item => !['skill', 'talent', 'core_bonus', 'integrated'].includes(item.type));
                 if (items.length === 0)
                 {
                     ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
@@ -3245,7 +1391,7 @@ export async function executeEffectManager(options = {})
                     </div>`;
                 };
 
-                const dialog = new Dialog({
+                const itemPickerDialog = new Dialog({
                     title: localizeFormat('LA.effectManager.selectItemOn', { name: targetToken.name }),
                     content: `
                         <div class="lancer-dialog-header" style="margin:-8px -8px 10px -8px;">
@@ -3257,9 +1403,7 @@ export async function executeEffectManager(options = {})
                         </div>
                     `,
                     buttons: {
-                        cancel: { label: `<i class="fas fa-times"></i> ${localize('LA.common.cancel')}`,
-                            callback: () =>
-                            {} }
+                        cancel: cancelButton()
                     },
                     render: (htmlContent) =>
                     {
@@ -3267,7 +1411,7 @@ export async function executeEffectManager(options = {})
                         {
                             const el = $(ev.currentTarget);
                             html.find(`#${targetId}`).val(el.data('id')).change();
-                            dialog.close();
+                            itemPickerDialog.close();
                         });
                     },
                     default: "cancel"
@@ -3275,7 +1419,7 @@ export async function executeEffectManager(options = {})
                     width: 500,
                     classes: ["lancer-dialog-base", "lancer-item-browser-dialog", "lancer-no-title"]
                 });
-                dialog.render(true);
+                itemPickerDialog.render(true);
             });
 
             // Status picker button for bonus consumption filter
@@ -3286,247 +1430,13 @@ export async function executeEffectManager(options = {})
                 openStatusPicker(html.find(`#${targetId}`));
             });
 
-            const gatherBonusFormData = (type) =>
-            {
-                const targetID = String(html.find('#bonus-target').val());
-                const name = String(html.find('#bonus-name').val() || "Test Bonus");
-                const usesStr = String(html.find('#bonus-uses').val());
-                const uses = usesStr ? Number.parseInt(usesStr) : undefined;
-                const duration = html.find('#bonus-duration').val();
-                const durOrigin = html.find('#bonus-durOrigin').val();
-                const durTurnsRaw = Number.parseInt(String(html.find('#bonus-durTurns').val()));
-                const durTurns = Number.isNaN(durTurnsRaw) ? 1 : Math.max(0, durTurnsRaw);
-                const itemLidsStr = String(html.find('#bonus-itemLids').val());
-                const itemLids = itemLidsStr ? itemLidsStr.split(',').map(s => s.trim()).filter(s => s) : [];
-
-                let rollPanel = null;
-                if (type === 'accuracy' || type === 'difficulty')
-                    rollPanel = 'roll';
-                else if (type === 'damage')
-                    rollPanel = 'damage';
-                else if (type === 'immunity')
-                    rollPanel = IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')]?.rollTypes ?? null;
-                else if (type === 'resistance' || type === 'vulnerability')
-                    rollPanel = 'damage';
-                const rollTypes = rollPanel
-                    ? html.find(`#bonus-rollTypes-${rollPanel} input:checked`).map((_, el) => /** @type {HTMLInputElement} */ (el).value).get()
-                    : [];
-
-                const applyToStr = String(html.find('#bonus-applyTo').val());
-                const applyTo = applyToStr ? applyToStr.split(',').map(s => s.trim()).filter(s => s) : undefined;
-                const applyToTargetter = html.find('#bonus-applyToTargetter').is(':checked');
-                const itemId = String(html.find('#bonus-itemId').val())?.trim() || undefined;
-
-                const bonusData = {
-                    name,
-                    type,
-                    uses,
-                    itemLids,
-                    itemId,
-                    rollTypes,
-                    applyTo,
-                    applyToTargetter
-                };
-                const bonusTier = readTierGate(html.find('.la-tier-gate[data-role="em-bonus"]')[0]);
-                if (bonusTier)
-                    bonusData.tier = bonusTier;
-                const conditionSrc = String(html.find('#bonus-condition-value').val() || '').trim();
-                if (conditionSrc)
-                    bonusData.condition = '@@fn:' + conditionSrc;
-                const applyToConditionSrc = String(html.find('#bonus-applyToCondition-value').val() || '').trim();
-                if (applyToConditionSrc)
-                    bonusData.applyToCondition = '@@fn:' + applyToConditionSrc;
-
-                if (type === 'stat')
-                {
-                    bonusData.stat = html.find('#bonus-stat').val();
-                    bonusData.val = html.find('#bonus-statVal').val() || "1";
-                    bonusData.statMode = html.find('#bonus-statMode').val() || 'add';
-                }
-                else if (type === 'damage')
-                {
-                    const damageMode = html.find('#bonus-damageMode').val() || 'add';
-                    bonusData.damageMode = damageMode;
-                    if (damageMode === 'change_type')
-                        bonusData.damageScope = html.find('#bonus-damageScope').val() || 'base';
-                    const damageEntries = [];
-                    html.find('#bonus-damage-list .bonus-damage-entry').each(function ()
-                    {
-                        const idx = $(this).data('index');
-                        const dtype = $(this).find(`#bonus-dmgType-${idx}`).val();
-                        if (damageMode === 'change_type')
-                        {
-                            const from = $(this).find(`#bonus-dmgFrom-${idx}`).val() || DAMAGE_CHANGE_TYPE_ALL;
-                            damageEntries.push({ from, to: dtype });
-                        }
-                        else
-                        {
-                            const val = $(this).find(`#bonus-dmgVal-${idx}`).val() || "1d6";
-                            damageEntries.push({ val, type: dtype });
-                        }
-                    });
-                    if (damageEntries.length === 0)
-                    {
-                        bonusData.damage = damageMode === 'change_type'
-                            ? [{ from: DAMAGE_CHANGE_TYPE_ALL, to: 'Kinetic' }]
-                            : [{ val: "1d6", type: 'Kinetic' }];
-                    }
-                    else
-                        bonusData.damage = damageEntries;
-                    // non-add modes mutate the weapon's base damage; per-target doesn't apply
-                    if (damageMode !== 'add')
-                        bonusData.applyTo = undefined;
-                }
-                else if (type === 'tag')
-                {
-                    const selectEl = /** @type {HTMLSelectElement} */ (html.find('#bonus-tagSelect')[0]);
-                    bonusData.tagId = selectEl.options[selectEl.selectedIndex].value;
-                    bonusData.tagName = selectEl.options[selectEl.selectedIndex].text;
-                    bonusData.tagMode = html.find('#bonus-tagMode').val();
-                    bonusData.val = html.find('#bonus-tagVal').val() || "0";
-                    bonusData.removeTag = html.find('#bonus-removeTag').is(':checked');
-                }
-                else if (type === 'range')
-                {
-                    bonusData.rangeType = html.find('#bonus-rangeType').val();
-                    bonusData.rangeMode = html.find('#bonus-rangeMode').val();
-                    bonusData.val = html.find('#bonus-rangeVal').val() || "0";
-                }
-                else if (type === 'immunity')
-                {
-                    bonusData.subtype = html.find('#bonus-immunity-subtype').val();
-                    const allowed = IMMUNITY_FILTER_FIELDS[bonusData.subtype];
-                    if (allowed)
-                    {
-                        for (const field of ['rollTypes', 'itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
-                        {
-                            if (!allowed[field])
-                                delete bonusData[field];
-                        }
-                    }
-                    if (bonusData.subtype === 'effect')
-                    {
-                        bonusData.effects = [];
-                        html.find('.bonus-immunity-effect-option.selected').each(function()
-                        {
-                            bonusData.effects.push($(this).data('effect'));
-                        });
-                    }
-                    else if (bonusData.subtype === 'damage')
-                    {
-                        bonusData.damageTypes = [];
-                        html.find('.bonus-immunity-damage-option.selected').each(function()
-                        {
-                            bonusData.damageTypes.push($(this).data('type'));
-                        });
-                    }
-                }
-                else if (type === 'resistance' || type === 'vulnerability')
-                {
-                    for (const field of ['rollTypes', 'itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
-                    {
-                        if (!BONUS_FILTER_FIELDS[type][field])
-                            delete bonusData[field];
-                    }
-                    bonusData.damageTypes = [];
-                    html.find('.bonus-immunity-damage-option.selected').each(function()
-                    {
-                        bonusData.damageTypes.push($(this).data('type'));
-                    });
-                }
-                else if (type === 'target_modifier')
-                    bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
-                else if (type === 'movement_extra')
-                {
-                    bonusData.subtype = html.find('#bonus-movement-extra-subtype').val() || 'boost';
-                    bonusData.val = html.find('#bonus-movement-extra-val').val() || "1";
-                }
-                else if (type === 'reroll')
-                {
-                    for (const field of ['itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
-                    {
-                        if (!BONUS_FILTER_FIELDS.reroll[field])
-                            delete bonusData[field];
-                    }
-                    const list = $('#bonus-reroll-rollTypes input:checked').map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
-                    if (list.length > 0)
-                        bonusData.rollTypes = list;
-                    const sub = String(html.find('#bonus-reroll-subtype').val() ?? 'retry');
-                    bonusData.subtype = ['retry', 'highest', 'lowest', 'choose'].includes(sub) ? sub : 'retry';
-                }
-                else
-                    bonusData.val = html.find('#bonus-accDiffVal').val() || "1";
-
-                const addOptions = {
-                    duration,
-                    durationTurns: durTurns,
-                    origin: durOrigin,
-                    forcePrototype: typeof targetID === 'string' && targetID.includes('.'),
-                };
-                if (duration === 'roundEnd' || duration === 'roundStart')
-                    addOptions.durationRounds = durTurns;
-                const customIcon = String(html.find('#bonus-icon').val() || '').trim();
-                if (customIcon)
-                    addOptions.icon = customIcon;
-
-                const consumptionTriggers = html.find('#bonus-trigger input:checked')
-                    .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
-                if (consumptionTriggers.length > 0)
-                {
-                    const consumption = {
-                        trigger: consumptionTriggers.length === 1 ? consumptionTriggers[0] : consumptionTriggers
-                    };
-                    const consumptionOrigin = html.find('#bonus-trigger-origin').val();
-                    if (consumptionOrigin)
-                        consumption.originId = consumptionOrigin;
-                    const filterItemLid = String(html.find('#bonus-filter-itemLid').val())?.trim();
-                    if (filterItemLid)
-                        consumption.itemLid = filterItemLid;
-                    const filterItemId = String(html.find('#bonus-filter-itemId').val())?.trim();
-                    if (filterItemId)
-                        consumption.itemId = filterItemId;
-                    const filterActionName = String(html.find('#bonus-filter-actionName').val())?.trim();
-                    if (filterActionName)
-                        consumption.actionName = filterActionName;
-                    const filterMinDistance = String(html.find('#bonus-filter-minDistance').val());
-                    if (filterMinDistance)
-                        consumption.minDistance = Number.parseInt(filterMinDistance);
-                    const filterCheckType = String(html.find('#bonus-filter-checkType').val())?.trim();
-                    if (filterCheckType)
-                        consumption.checkType = filterCheckType;
-                    const filterCheckAbove = String(html.find('#bonus-filter-checkAbove').val());
-                    if (filterCheckAbove)
-                        consumption.checkAbove = Number.parseInt(filterCheckAbove);
-                    const filterCheckBelow = String(html.find('#bonus-filter-checkBelow').val());
-                    if (filterCheckBelow)
-                        consumption.checkBelow = Number.parseInt(filterCheckBelow);
-                    const filterStatusId = String(html.find('#bonus-filter-statusId').val())?.trim();
-                    if (filterStatusId)
-                        consumption.statusId = filterStatusId;
-                    consumption.role = String(html.find('#bonus-filter-role').val() || '') || 'source';
-                    addOptions.consumption = consumption;
-                }
-
-                if (supportsConsumeOnUsage(type, bonusData.subtype ?? null))
-                    bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
-                const frequency = String(html.find('#bonus-frequency').val() || '');
-                if (frequency)
-                {
-                    bonusData.frequency = frequency;
-                    const frequencyCount = Number.parseInt(String(html.find('#bonus-frequency-count').val() ?? '')) || 1;
-                    if (frequencyCount > 1)
-                        bonusData.frequencyCount = frequencyCount;
-                }
-                return { bonusData, addOptions, duration };
-            };
-
             const addBonusFromTab = async (type) =>
             {
                 const targetID = String(html.find('#bonus-target').val());
                 const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
                 if (!resolvedTargets.length)
                     return ui.notifications.error(localize('LA.notify.targetNotFound'));
-                const { bonusData, addOptions, duration } = gatherBonusFormData(type);
+                const { bonusData, addOptions, duration } = gatherBonusFormData(html, type);
                 const durOrigin = html.find('#bonus-durOrigin').val();
                 if (bonusData.uses === undefined && (addOptions.consumption || bonusData.consumeOnUsage === true))
                     ui.notifications.warn(localizeFormat('LA.notify.noUsesSet', { name: bonusData.name }));
@@ -3538,7 +1448,7 @@ export async function executeEffectManager(options = {})
                         ? { ...addOptions, origin: entry.token?.id ?? '' }
                         : addOptions;
                     if (targetIsItem)
-                        await linkBonusToItem({ items: [entry.item], bonusData, addOptions: entryOptions });
+                        await linkBonusToItem({ items: [entry.item], bonusData, addOptions: { ...entryOptions, addedViaUI: true } });
                     else if (targetIsPrototype)
                         await linkBonusToActor({ actors: [entry.actor], bonusData, addOptions: entryOptions });
                     else if (duration === 'constant')
@@ -3624,7 +1534,7 @@ export async function executeEffectManager(options = {})
             html.find('#bonus-type').on('change', function ()
             {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement_extra').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement_extra, #bonus-type-action_extra').hide();
                 html.find(`#bonus-type-${type}`).show();
                 syncDamageTypesRow();
                 updateConsumeUsageRow();
@@ -3710,7 +1620,7 @@ export async function executeEffectManager(options = {})
                 const idx = bonusDmgEntryCounter++;
                 const currentMode = html.find('#bonus-damageMode').val() || 'add';
                 const isChangeType = currentMode === 'change_type';
-                const newEntry = $(`
+                const newEntry = $(htmlToElement(`
                     <div class="bonus-damage-entry form-group" data-index="${idx}">
                         <select id="bonus-dmgFrom-${idx}" class="bonus-damage-from" style="flex:1; display:${isChangeType ? '' : 'none'};">
                             <option value="${DAMAGE_CHANGE_TYPE_ALL}">All Types</option>
@@ -3721,7 +1631,7 @@ export async function executeEffectManager(options = {})
                         <select id="bonus-dmgType-${idx}" style="flex:1;">${dmgTypeOptionsHtml}</select>
                         <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="${idx}" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
                     </div>
-                `);
+                `));
                 html.find('#bonus-damage-list').append(newEntry);
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });

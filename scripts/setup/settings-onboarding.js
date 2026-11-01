@@ -1,12 +1,21 @@
 // GM setup wizard: yes/no questions that flip the module's main settings, launched from the tour welcome dialog and re-runnable from the settings menu.
 
 import { isFCSActive, getFCSData, getFCSMode, setFCSForceBulk } from './fcs.js';
-import { getModuleSetting } from '../tools/settings-utils.js';
-import { localize } from '../tools/string-utils.js';
+import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
+import { localize, localizeFormat } from '../tools/string-utils.js';
 import { ReactionManager } from '../activations/reaction-manager.js';
+import { isExecutorGM } from '../tools/misc-tools.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const TEMPLATE = `modules/${MODULE_ID}/templates/settings-onboarding.html`;
+const SETTING_HOTBAR_SYNCED = 'systemHotbarHidden';
+const SETTING_GM_CLIENT_DEFAULTS = 'gmClientDefaults';
+let _freshWorld = false;
+
+export function isFreshWorld()
+{
+    return _freshWorld;
+}
 
 /**
  * @typedef {Object} OnbQuestion
@@ -19,12 +28,16 @@ const TEMPLATE = `modules/${MODULE_ID}/templates/settings-onboarding.html`;
  * @property {string} [sfxSub]
  * @property {{value:string,label:string}[]} [choices]
  * @property {(yes:boolean|string)=>Record<string, any>} [apply]
+ * @property {(yes:boolean|string)=>Record<string, any>} [extra]
  * @property {()=>boolean|string} [read]
  * @property {()=>boolean} [condition]
+ * @property {string} [needs]
  * @property {string} [warn]
  */
 
-/** @type {{id:string,label:string,icon:string,blurb:string,condition?:()=>boolean,questions:OnbQuestion[]}[]} */
+const _systemAutomation = (sub) => game.settings.get('lancer', 'automationOptions')?.[sub] !== false;
+
+/** @type {{id:string,label:string,icon:string,blurb:string,note?:string,condition?:()=>boolean,questions:OnbQuestion[]}[]} */
 const GROUPS = [
     {
         id: 'interface',
@@ -37,6 +50,7 @@ const GROUPS = [
                 label: 'LA.onboarding.tah-enabled.label',
                 explain: 'LA.onboarding.tah-enabled.explain',
                 keys: ['tahEnabled'],
+                extra: (yes) => ({ 'lancer.actionTracker': { showHotbar: !yes } }),
             },
             {
                 id: 'combat-carousel',
@@ -60,7 +74,9 @@ const GROUPS = [
                 id: 'tah-click-to-open',
                 label: 'LA.onboarding.tah-click-to-open.label',
                 explain: 'LA.onboarding.tah-click-to-open.explain',
-                keys: ['tah.clickToOpen'],
+                keys: ['tah.openMode'],
+                read: () => getModuleSetting('tah.openMode') === 'click',
+                apply: (yes) => ({ 'tah.openMode': yes ? 'click' : 'hover' }),
             },
             {
                 id: 'tah-keyboard-nav',
@@ -102,43 +118,51 @@ const GROUPS = [
                 keys: ['tokenStatHintEnabled'],
             },
             {
+                id: 'sys-floating-numbers',
+                label: 'LA.onboarding.sys-floating-numbers.label',
+                explain: 'LA.onboarding.sys-floating-numbers.explain',
+                module: 'lancer',
+                keys: ['floatingNumbers'],
+            },
+            {
                 id: 'stat-privacy',
                 label: 'LA.onboarding.stat-privacy.label',
                 explain: 'LA.onboarding.stat-privacy.explain',
                 kind: 'choice',
                 keys: ['statBarVisibilityOutOfCombat', 'statBarVisibilityInCombat', 'tokenStatHintHideCurrentOnScan'],
                 choices: [
+                    { value: 'all', label: 'LA.onboarding.stat-privacy.choices.all' },
                     { value: 'owner', label: 'LA.onboarding.stat-privacy.choices.owner' },
                     { value: 'scanned', label: 'LA.onboarding.stat-privacy.choices.scanned' },
                 ],
-                read: () => getModuleSetting('statBarVisibilityInCombat') === 'scanned' ? 'scanned' : 'owner',
-                apply: (value) => value === 'scanned'
-                    ? { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'scanned', tokenStatHintHideCurrentOnScan: false }
-                    : { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'owner', tokenStatHintHideCurrentOnScan: true },
-            },
-            {
-                id: 'reveal-without-scan',
-                label: 'LA.onboarding.reveal-without-scan.label',
-                explain: 'LA.onboarding.reveal-without-scan.explain',
-                keys: ['revealStatsWithoutScan'],
+                read: () =>
+                {
+                    const inCombat = getModuleSetting('statBarVisibilityInCombat');
+                    if (inCombat === 'scanned' || inCombat === 'all')
+                        return inCombat;
+                    return 'owner';
+                },
+                apply: (value) =>
+                {
+                    if (value === 'all')
+                        return { statBarVisibilityOutOfCombat: 'all', statBarVisibilityInCombat: 'all' };
+                    return value === 'scanned'
+                        ? { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'scanned', tokenStatHintHideCurrentOnScan: false }
+                        : { statBarVisibilityOutOfCombat: 'owner', statBarVisibilityInCombat: 'owner', tokenStatHintHideCurrentOnScan: true };
+                },
             },
             {
                 id: 'scan-reveal',
                 label: 'LA.onboarding.scan-reveal.label',
                 explain: 'LA.onboarding.scan-reveal.explain',
                 kind: 'choice',
-                keys: ['scanRevealPlayers', 'scanRevealAllies'],
+                keys: ['scanRevealMode'],
                 choices: [
-                    { value: 'none', label: 'LA.onboarding.scan-reveal.choices.none' },
+                    { value: 'nobody', label: 'LA.onboarding.scan-reveal.choices.nobody' },
                     { value: 'players', label: 'LA.onboarding.scan-reveal.choices.players' },
                     { value: 'allies', label: 'LA.onboarding.scan-reveal.choices.allies' },
+                    { value: 'everyone', label: 'LA.onboarding.scan-reveal.choices.everyone' },
                 ],
-                read: () => getModuleSetting('scanRevealAllies') ? 'allies'
-                    : (getModuleSetting('scanRevealPlayers') ? 'players' : 'none'),
-                apply: (value) => ({
-                    scanRevealPlayers: value !== 'none',
-                    scanRevealAllies: value === 'allies',
-                }),
             },
             {
                 id: 'effect-notifications',
@@ -237,6 +261,24 @@ const GROUPS = [
                 ],
                 condition: () => !!game.modules.get('lancer-style-library')?.active,
             },
+            {
+                id: 'sys-ui-theme',
+                label: 'LA.onboarding.sys-ui-theme.label',
+                explain: 'LA.onboarding.sys-ui-theme.explain',
+                kind: 'choice',
+                module: 'lancer',
+                keys: ['uiTheme'],
+                choices: ['gms', 'gmsDark', 'msmc', 'horus', 'ha', 'ssc', 'ipsn', 'gal'].map(value => ({ value, label: `lancer.uiTheme.${value}` })),
+            },
+            {
+                id: 'sys-pause-icon',
+                label: 'LA.onboarding.sys-pause-icon.label',
+                explain: 'LA.onboarding.sys-pause-icon.explain',
+                kind: 'choice',
+                module: 'lancer',
+                keys: ['pauseIcon'],
+                choices: ['gms', 'horus', 'ha', 'ssc', 'ips-n', 'albatross', 'aun', 'barony', 'horizon', 'ra', 'sparri', 'voladores'].map(value => ({ value, label: `lancer.pauseIcon.${value}` })),
+            },
         ],
     },
     {
@@ -249,13 +291,18 @@ const GROUPS = [
                 id: 'attack-targeting',
                 label: 'LA.onboarding.attack-targeting.label',
                 explain: 'LA.onboarding.attack-targeting.explain',
-                keys: ['enableAttackTargeting', 'enableDamageTargeting'],
+                keys: ['attackTargeting', 'enableDamageTargeting'],
+                read: () => getModuleSetting('attackTargeting') !== 'off',
+                apply: (yes) => ({ attackTargeting: yes ? 'picker' : 'off', enableDamageTargeting: yes }),
             },
             {
                 id: 'auto-start-targeting',
                 label: 'LA.onboarding.auto-start-targeting.label',
                 explain: 'LA.onboarding.auto-start-targeting.explain',
-                keys: ['autoStartTargetPicking'],
+                keys: ['attackTargeting'],
+                needs: 'attack-targeting',
+                read: () => getModuleSetting('attackTargeting') === 'auto',
+                apply: (yes) => ({ attackTargeting: yes ? 'auto' : 'picker' }),
             },
             {
                 id: 'stat-roll-targeting',
@@ -320,18 +367,6 @@ const GROUPS = [
                 keys: ['enableThrowFlow'],
             },
             {
-                id: 'auto-damage-roll',
-                label: 'LA.onboarding.auto-damage-roll.label',
-                explain: 'LA.onboarding.auto-damage-roll.explain',
-                keys: ['autoDamageRoll'],
-            },
-            {
-                id: 'auto-damage-apply',
-                label: 'LA.onboarding.auto-damage-apply.label',
-                explain: 'LA.onboarding.auto-damage-apply.explain',
-                keys: ['autoDamageApply'],
-            },
-            {
                 id: 'auto-struct-followup',
                 label: 'LA.onboarding.auto-struct-followup.label',
                 explain: 'LA.onboarding.auto-struct-followup.explain',
@@ -341,7 +376,10 @@ const GROUPS = [
                 id: 'auto-focus',
                 label: 'LA.onboarding.auto-focus.label',
                 explain: 'LA.onboarding.auto-focus.explain',
-                keys: ['autoFocusAttack', 'autoFocusDamage', 'autoFocusCheck', 'autoFocusActivation', 'autoFocusCards'],
+                keys: ['autoFocusEnabled'],
+                apply: (yes) => (yes
+                    ? { autoFocusEnabled: true, autoFocusAttack: true, autoFocusDamage: true, autoFocusCheck: true, autoFocusActivation: true, autoFocusCards: true }
+                    : { autoFocusEnabled: false }),
             },
         ],
     },
@@ -369,14 +407,15 @@ const GROUPS = [
                 label: 'LA.onboarding.climb-waypoints.label',
                 explain: 'LA.onboarding.climb-waypoints.explain',
                 keys: ['enableClimbWaypoints'],
+                needs: 'builtin-ruler',
             },
             {
                 id: 'terrain-elevation',
                 label: 'LA.onboarding.terrain-elevation.label',
                 explain: 'LA.onboarding.terrain-elevation.explain',
-                keys: ['disableAutoTerrainElevation', 'disableAutoElevationOnMeasure'],
-                read: () => !getModuleSetting('disableAutoTerrainElevation'),
-                apply: (yes) => ({ disableAutoTerrainElevation: !yes, disableAutoElevationOnMeasure: !yes }),
+                keys: ['terrainElevationMode'],
+                read: () => getModuleSetting('terrainElevationMode') !== 'off',
+                apply: (yes) => ({ terrainElevationMode: yes ? 'both' : 'off' }),
             },
             {
                 id: 'tactical-distance',
@@ -403,12 +442,14 @@ const GROUPS = [
                 label: 'LA.onboarding.ruler-per-step.label',
                 explain: 'LA.onboarding.ruler-per-step.explain',
                 keys: ['rulerPerStepRender'],
+                needs: 'builtin-ruler',
             },
             {
                 id: 'pathfind-drag',
                 label: 'LA.onboarding.pathfind-drag.label',
                 explain: 'LA.onboarding.pathfind-drag.explain',
                 keys: ['pathfindDragMovement'],
+                needs: 'builtin-ruler',
             },
             {
                 id: 'split-at-speed-tiers',
@@ -429,12 +470,6 @@ const GROUPS = [
                 ],
             },
             {
-                id: 'target-cursor',
-                label: 'LA.onboarding.target-cursor.label',
-                explain: 'LA.onboarding.target-cursor.explain',
-                keys: ['targetToolCursor'],
-            },
-            {
                 id: 'ruler-cursor',
                 label: 'LA.onboarding.ruler-cursor.label',
                 explain: 'LA.onboarding.ruler-cursor.explain',
@@ -445,6 +480,7 @@ const GROUPS = [
                 label: 'LA.onboarding.obstruction-step-over.label',
                 explain: 'LA.onboarding.obstruction-step-over.explain',
                 keys: ['enableObstructionStepOver', 'obstructionBlocksHuman', 'obstructionBlocksSpecialist', 'obstructionBlocksSquad', 'obstructionBlocksVehicle'],
+                needs: 'builtin-ruler',
             },
         ],
     },
@@ -453,6 +489,7 @@ const GROUPS = [
         label: 'LA.onboarding.movement-beta.label',
         icon: 'fas fa-flask',
         blurb: 'LA.onboarding.movement-beta.blurb',
+        note: 'LA.onboarding.movement-beta.note',
         questions: [
             {
                 id: 'overwatch-style',
@@ -495,13 +532,13 @@ const GROUPS = [
                 label: 'LA.onboarding.movement-cap.label',
                 explain: 'LA.onboarding.movement-cap.explain',
                 kind: 'choice',
-                keys: ['enableBoostOffer', 'enableMovementCapDetection'],
+                keys: ['enableBoostOffer'],
                 choices: [
-                    { value: 'no', label: 'LA.onboarding.movement-cap.choices.no' },
+                    { value: 'off', label: 'LA.onboarding.movement-cap.choices.off' },
+                    { value: 'stop', label: 'LA.onboarding.movement-cap.choices.stop' },
                     { value: 'yes', label: 'LA.onboarding.movement-cap.choices.yes' },
                     { value: 'auto', label: 'LA.onboarding.movement-cap.choices.auto' },
                 ],
-                apply: (value) => ({ enableMovementCapDetection: value !== 'no', enableBoostOffer: value }),
             },
             {
                 id: 'split-at-boundaries',
@@ -548,12 +585,39 @@ const GROUPS = [
                 explain: 'LA.onboarding.resist-self-heat.explain',
                 keys: ['resistSelfHeat'],
             },
+            {
+                id: 'sys-overcharge-heat',
+                label: 'LA.onboarding.sys-overcharge-heat.label',
+                explain: 'LA.onboarding.sys-overcharge-heat.explain',
+                module: 'lancer',
+                keys: ['automationOptions'],
+                read: () => _systemAutomation('overcharge_heat'),
+                apply: (yes) => ({ automationOptions: { overcharge_heat: yes } }),
+            },
+            {
+                id: 'sys-self-heat',
+                label: 'LA.onboarding.sys-self-heat.label',
+                explain: 'LA.onboarding.sys-self-heat.explain',
+                module: 'lancer',
+                keys: ['automationOptions'],
+                read: () => _systemAutomation('attack_self_heat'),
+                apply: (yes) => ({ automationOptions: { attack_self_heat: yes } }),
+            },
 
             {
                 id: 'per-round-tags',
                 label: 'LA.onboarding.per-round-tags.label',
                 explain: 'LA.onboarding.per-round-tags.explain',
                 keys: ['enablePerRoundTurnTags'],
+            },
+            {
+                id: 'sys-npc-recharge',
+                label: 'LA.onboarding.sys-npc-recharge.label',
+                explain: 'LA.onboarding.sys-npc-recharge.explain',
+                module: 'lancer',
+                keys: ['automationOptions'],
+                read: () => _systemAutomation('npc_recharge'),
+                apply: (yes) => ({ automationOptions: { npc_recharge: yes } }),
             },
         ],
     },
@@ -641,10 +705,25 @@ const GROUPS = [
                 keys: ['consumeReaction'],
             },
             {
+                id: 'sys-limited-loading',
+                label: 'LA.onboarding.sys-limited-loading.label',
+                explain: 'LA.onboarding.sys-limited-loading.explain',
+                module: 'lancer',
+                keys: ['automationOptions'],
+                read: () => _systemAutomation('limited_loading'),
+                apply: (yes) => ({ automationOptions: { limited_loading: yes } }),
+            },
+            {
                 id: 'link-manual-deploy',
                 label: 'LA.onboarding.link-manual-deploy.label',
                 explain: 'LA.onboarding.link-manual-deploy.explain',
                 keys: ['linkManualDeploy'],
+            },
+            {
+                id: 'deployable-art',
+                label: 'LA.onboarding.deployable-art.label',
+                explain: 'LA.onboarding.deployable-art.explain',
+                keys: ['defaultDeployableArt'],
             },
             {
                 id: 'lasossis-items',
@@ -663,6 +742,15 @@ const GROUPS = [
                     { value: 'system', label: 'LA.onboarding.scan-source.choices.system' },
                     { value: 'lancer-automations', label: 'LA.onboarding.scan-source.choices.lancer-automations' },
                 ],
+            },
+            {
+                id: 'sys-scan-output',
+                label: 'LA.onboarding.sys-scan-output.label',
+                explain: 'LA.onboarding.sys-scan-output.explain',
+                kind: 'choice',
+                module: 'lancer',
+                keys: ['scanOutputs'],
+                choices: ['both', 'chat', 'journal'].map(value => ({ value, label: `lancer.scanOutput.${value}` })),
             },
             {
                 id: 'scan-ownership',
@@ -700,7 +788,9 @@ const GROUPS = [
                 id: 'wreck-cinematics',
                 label: 'LA.onboarding.wreck-cinematics.label',
                 explain: 'LA.onboarding.wreck-cinematics.explain',
-                keys: ['enableWreckAnimation', 'enableWreckAudio'],
+                keys: ['enableWreckAnimation', 'wreckMasterVolume'],
+                read: () => !!getModuleSetting('enableWreckAnimation'),
+                apply: (yes) => ({ enableWreckAnimation: yes, wreckMasterVolume: yes ? 1 : 0 }),
                 condition: () => getModuleSetting('enableWrecks') !== false,
             },
             {
@@ -742,7 +832,8 @@ const RECOMMENDED = {
     'attack-targeting': true,
     'auto-start-targeting': true,
     'stat-roll-targeting': true,
-    'target-info': 'gm',
+    'target-info': 'all',
+    'sys-floating-numbers': true,
     'area-elevation-aware': true,
     'overlap-picker': true,
     'range-preview-attack-card': true,
@@ -758,7 +849,6 @@ const RECOMMENDED = {
     'pathfind-drag': true,
     'split-at-speed-tiers': true,
     'ctrl-ruler': 'tool',
-    'target-cursor': true,
     'ruler-cursor': true,
     'split-at-boundaries': true,
     'alt-struct': false,
@@ -769,7 +859,7 @@ const RECOMMENDED = {
     'per-round-tags': true,
     'lancer-vision': true,
     'lancer-los': true,
-    'detection-combat-only': true,
+    'detection-combat-only': false,
     'bulwark-los': true,
     'vision-from-edge': true,
     'auto-token-height': true,
@@ -778,8 +868,9 @@ const RECOMMENDED = {
     'consume-action': true,
     'consume-reaction': true,
     'link-manual-deploy': true,
+    'deployable-art': true,
     'lasossis-items': false,
-    'scan-ownership': 'group',
+    'scan-ownership': 'all',
     'battle-log': true,
     'wrecks': true,
     'wreck-cinematics': true,
@@ -790,24 +881,10 @@ const RECOMMENDED = {
 };
 
 const QUICK_IDS = new Set([
-    'prevent-wasd-movement',
-    'tah-keyboard-nav',
-    'tah-click-to-open',
-    'half-size-tokens',
-    'token-hud-buttons',
     'dialog-theme',
     'stat-privacy',
-    'reveal-without-scan',
-    'scan-reveal',
-    'effect-notifications',
-    'ppg-actions',
-    'infection-damage',
     'overwatch-style',
-    'engagement-block',
     'movement-cap',
-    'auto-damage-roll',
-    'auto-damage-apply',
-    'scan-source',
 ]);
 
 // Shown by default in the walk-through; the rest sits behind each group's "Show all" expander.
@@ -824,8 +901,6 @@ const ESSENTIAL_IDS = new Set([
     'target-info',
     'knockback-flow',
     'throw-flow',
-    'auto-damage-roll',
-    'auto-damage-apply',
     'builtin-ruler',
     'tactical-distance',
     'pathfind-drag',
@@ -880,14 +955,99 @@ function _currentValue(question)
         return !!ReactionManager.getGeneralReactions()[question.reaction.name]?.reactions?.[question.reaction.index]?.enabled;
     if (question.read)
         return question.read();
-    try
+    return getExternalSetting(_mod(question), question.keys?.[0], false);
+}
+
+function _answerOf(question)
+{
+    const current = _currentValue(question);
+    if (question.kind === 'choice' || question.kind === 'reactions')
+        return String(current);
+    return current ? 'yes' : 'no';
+}
+
+function _patchFor(question, answer)
+{
+    const arg = question.kind === 'choice' ? answer : (answer === true || answer === 'yes');
+    let patch;
+    if (question.apply)
+        patch = question.apply(arg);
+    else if (question.kind === 'choice')
+        patch = { [question.keys[0]]: arg };
+    else
+        patch = Object.fromEntries(question.keys.map(key => [key, arg]));
+    const out = new Map(Object.entries(patch).map(([key, value]) => [`${_mod(question)}.${key}`, value]));
+    for (const [fullKey, value] of Object.entries(question.extra?.(arg) ?? {}))
+        out.set(fullKey, value);
+    return out;
+}
+
+function _queueChange(changes, fullKey, value)
+{
+    const pending = changes.get(fullKey);
+    const partial = foundry.utils.getType(value) === 'Object' && foundry.utils.getType(pending) === 'Object';
+    changes.set(fullKey, partial ? { ...pending, ...value } : value);
+}
+
+function _withCurrent(prev, value)
+{
+    if (foundry.utils.getType(value) !== 'Object')
+        return value;
+    return { ...(prev?.toObject?.() ?? prev ?? {}), ...value };
+}
+
+function _sameSetting(prev, next)
+{
+    if (next && typeof next === 'object')
+        return foundry.utils.objectsEqual(prev?.toObject?.() ?? prev ?? {}, next);
+    return prev === next;
+}
+
+async function _seedRecommended()
+{
+    for (const question of _visibleQuestions())
     {
-        return game.settings.get(_mod(question), question.keys[0]);
+        const answer = RECOMMENDED[question.id];
+        if (answer === undefined || QUICK_IDS.has(question.id) || _mod(question) !== MODULE_ID)
+            continue;
+        if (question.kind === 'sfx' || question.kind === 'reactions' || question.reaction)
+            continue;
+        for (const [fullKey, value] of _patchFor(question, answer))
+        {
+            const key = fullKey.slice(MODULE_ID.length + 1);
+            if (!fullKey.startsWith(`${MODULE_ID}.`) || _reg(key)?.scope !== 'world' || getModuleSetting(key) === value)
+                continue;
+            await game.settings.set(MODULE_ID, key, value);
+        }
     }
-    catch
+}
+
+async function _applyGmClientDefaults()
+{
+    const defaults = getModuleSetting(SETTING_GM_CLIENT_DEFAULTS);
+    let needsReload = false;
+    for (const { key: fullKey, value } of (Array.isArray(defaults) ? defaults : []))
     {
-        return false;
+        const setting = game.settings.settings.get(fullKey);
+        if (setting?.scope !== 'client' || globalThis.localStorage.getItem(fullKey) !== null)
+            continue;
+        const dot = fullKey.indexOf('.');
+        await game.settings.set(fullKey.slice(0, dot), fullKey.slice(dot + 1), value);
+        needsReload ||= !!setting.requiresReload;
     }
+    if (needsReload)
+        ui.notifications.info(localize('LA.notify.gmClientDefaultsApplied'));
+}
+
+async function _hideSystemHotbarOnce()
+{
+    if (_freshWorld && getModuleSetting('tahEnabled'))
+    {
+        const tracker = game.settings.get('lancer', 'actionTracker');
+        if (tracker?.showHotbar !== false)
+            await game.settings.set('lancer', 'actionTracker', _withCurrent(tracker, { showHotbar: false }));
+    }
+    await game.settings.set(MODULE_ID, SETTING_HOTBAR_SYNCED, true);
 }
 
 // Every question on groups/questions whose condition currently passes.
@@ -919,6 +1079,7 @@ function _questionVM(question, fcs)
         explain: localize(question.explain),
         warn: localize(question.warn ?? null),
         advanced: !ESSENTIAL_IDS.has(question.id),
+        needs: question.needs ?? '',
         isChoice: question.kind === 'choice' || question.kind === 'reactions',
         choices: (question.kind === 'choice' || question.kind === 'reactions')
             ? (question.choices || []).map(choice => ({ value: choice.value, label: localize(choice.label), selected: choice.value === current }))
@@ -942,7 +1103,7 @@ function _valueLabel(questionEl, value)
         const option = select.querySelector(`option[value="${value}"]`);
         return option ? option.textContent.trim() : value;
     }
-    return value === 'yes' ? 'Yes' : 'No';
+    return localize(value === 'yes' ? 'LA.onboardingUi.yes' : 'LA.onboardingUi.no');
 }
 
 // Apply general-reaction enabled toggles: [{ name, index, enabled }] into the saved config.
@@ -1009,7 +1170,8 @@ export class SettingsOnboarding extends FormApplication
                 .map(question => _questionVM(question, fcs));
             if (!questions.length)
                 continue;
-            pages.push({ type: 'group', isGroup: true, id: group.id, label: localize(group.label), icon: group.icon, blurb: localize(group.blurb), questions, advCount: questions.filter(question => question.advanced).length });
+            const advCount = questions.filter(question => question.advanced).length;
+            pages.push({ type: 'group', isGroup: true, id: group.id, label: localize(group.label), icon: group.icon, blurb: localize(group.blurb), note: localize(group.note ?? ''), questions, advCount, moreLabel: localizeFormat('LA.onboardingUi.showAll', { count: advCount }) });
         }
         pages.push({ type: 'summary', isSummary: true });
 
@@ -1031,6 +1193,15 @@ export class SettingsOnboarding extends FormApplication
         super.activateListeners(html);
         const root = html[0] ?? html;
         this.bringToTop?.();
+        const syncNeeds = () =>
+        {
+            root.querySelectorAll('.la-onb-q[data-needs]').forEach(row =>
+            {
+                row.hidden = root.querySelector(`input[name="q.${row.dataset.needs}"]:checked`)?.value === 'no';
+            });
+        };
+        root.addEventListener('change', syncNeeds);
+        syncNeeds();
 
         root.querySelector('.la-onb-back')?.addEventListener('click', () => this._goto(this._step(-1)));
         root.querySelector('.la-onb-skip')?.addEventListener('click', () => this._onSkip());
@@ -1043,7 +1214,7 @@ export class SettingsOnboarding extends FormApplication
                     button.dataset.showLabel = button.innerHTML;
                 const expanded = button.dataset.expanded === '1';
                 button.dataset.expanded = expanded ? '' : '1';
-                button.innerHTML = expanded ? button.dataset.showLabel : '<i class="fas fa-chevron-up"></i> Hide advanced';
+                button.innerHTML = expanded ? button.dataset.showLabel : `<i class="fas fa-chevron-up"></i> ${localize('LA.onboardingUi.hideAdvanced')}`;
                 button.closest('.la-onb-page')?.querySelectorAll('.la-onb-q.la-onb-adv').forEach(row =>
                 {
                     row.style.display = expanded ? 'none' : '';
@@ -1097,8 +1268,8 @@ export class SettingsOnboarding extends FormApplication
         if (step)
         {
             step.textContent = this._quickPages
-                ? `Step ${this._quickPages.indexOf(this._page) + 1} of ${this._quickPages.length}`
-                : `Step ${this._page + 1} of ${pages.length}`;
+                ? localizeFormat('LA.onboardingUi.stepOf', { current: this._quickPages.indexOf(this._page) + 1, total: this._quickPages.length })
+                : localizeFormat('LA.onboardingUi.stepOf', { current: this._page + 1, total: pages.length });
         }
         const back = root.querySelector('.la-onb-back');
         if (back)
@@ -1107,8 +1278,8 @@ export class SettingsOnboarding extends FormApplication
         if (next)
         {
             next.innerHTML = this._page >= lastIndex
-                ? '<i class="fas fa-check"></i> Apply &amp; Continue'
-                : 'Next <i class="fas fa-arrow-right"></i>';
+                ? `<i class="fas fa-check"></i> ${localize('LA.onboardingUi.applyAmpContinue')}`
+                : `${localize('LA.onboardingUi.next')} <i class="fas fa-arrow-right"></i>`;
         }
         if (this._page >= lastIndex)
             this._buildSummary(root);
@@ -1119,7 +1290,9 @@ export class SettingsOnboarding extends FormApplication
         const list = root.querySelector('.la-onb-summary-list');
         if (!list)
             return;
+        const rowStyle = 'padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 12%, transparent);';
         const rows = [];
+        const alsoOn = [];
         root.querySelectorAll('.la-onb-q[data-qid]').forEach(questionEl =>
         {
             const original = questionEl.dataset.original;
@@ -1127,13 +1300,20 @@ export class SettingsOnboarding extends FormApplication
             const current = select
                 ? select.value
                 : questionEl.querySelector('input[type="radio"]:checked')?.value;
-            if (current === undefined || current === original)
+            if (current === undefined)
                 return;
-            rows.push(`<div style="padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 12%, transparent);">${questionEl.dataset.label} &nbsp;<b>${_valueLabel(questionEl, original)} &rarr; ${_valueLabel(questionEl, current)}</b></div>`);
+            if (current !== original)
+                rows.push(`<div style="${rowStyle}">${questionEl.dataset.label} &nbsp;<b>${_valueLabel(questionEl, original)} &rarr; ${_valueLabel(questionEl, current)}</b></div>`);
+            else if (!select && current === 'yes' && ESSENTIAL_IDS.has(questionEl.dataset.qid))
+                alsoOn.push(`<div style="${rowStyle}">${questionEl.dataset.label} &nbsp;<b>${_valueLabel(questionEl, current)}</b></div>`);
         });
-        list.innerHTML = rows.length
+        const changes = rows.length
             ? rows.join('')
-            : '<p style="opacity:0.7;">No changes.</p>';
+            : `<p style="opacity:0.7;">${localize('LA.onboardingUi.noChanges')}</p>`;
+        const onBlock = alsoOn.length
+            ? `<h3 style="margin:14px 0 4px; font-size:0.95em; border-bottom:1px solid var(--la-edge);">${localize('LA.onboardingUi.alsoOn')}</h3>${alsoOn.join('')}`
+            : '';
+        list.innerHTML = changes + onBlock;
     }
 
     _applyRecommended(root)
@@ -1206,35 +1386,19 @@ export class SettingsOnboarding extends FormApplication
             if (raw === undefined)
                 continue;
 
-            if (question.kind === 'sfx')
-                sfxDelta[question.sfxSub] = raw === 'yes';
-            else if (question.kind === 'reactions')
+            if (raw !== _answerOf(question))
             {
-                if (raw !== question.readCurrent())
+                if (question.kind === 'sfx')
+                    sfxDelta[question.sfxSub] = raw === 'yes';
+                else if (question.kind === 'reactions')
                     reactionToggles.push(...question.togglesFor(raw));
-            }
-            else if (question.kind === 'choice')
-            {
-                if (question.apply)
-                {
-                    for (const [key, value] of Object.entries(question.apply(/** @type {any} */ (raw))))
-                        changes.set(`${_mod(question)}.${key}`, value);
-                }
+                else if (question.reaction)
+                    reactionToggles.push({ name: question.reaction.name, index: question.reaction.index, enabled: raw === 'yes' });
                 else
-                    changes.set(`${_mod(question)}.${question.keys[0]}`, raw);
-            }
-            else if (question.reaction)
-            {
-                const yes = raw === 'yes';
-                if (yes !== _currentValue(question))
-                    reactionToggles.push({ name: question.reaction.name, index: question.reaction.index, enabled: yes });
-            }
-            else
-            {
-                const yes = raw === 'yes';
-                const patch = question.apply ? question.apply(yes) : Object.fromEntries(question.keys.map(key => [key, yes]));
-                for (const [key, value] of Object.entries(patch))
-                    changes.set(`${_mod(question)}.${key}`, value);
+                {
+                    for (const [fullKey, value] of _patchFor(question, raw))
+                        _queueChange(changes, fullKey, value);
+                }
             }
 
             if (fcs && _forceable(question))
@@ -1249,6 +1413,7 @@ export class SettingsOnboarding extends FormApplication
             }
         }
 
+        const clientAnswers = {};
         for (const [fullKey, value] of changes)
         {
             const setting = game.settings.settings.get(fullKey);
@@ -1271,18 +1436,30 @@ export class SettingsOnboarding extends FormApplication
             {
                 continue;
             }
-            if (prev === value)
+            const next = _withCurrent(prev, value);
+            if (_sameSetting(prev, next))
                 continue;
             if (setting.requiresReload)
                 this._needsReload = true;
             try
             {
-                await game.settings.set(mod, key, value);
+                await game.settings.set(mod, key, next);
+                if (setting.scope === 'client')
+                    clientAnswers[fullKey] = next;
             }
             catch (err)
             {
                 console.warn(`${MODULE_ID} | could not save ${fullKey}`, err);
             }
+        }
+
+        if (Object.keys(clientAnswers).length && game.user?.isGM)
+        {
+            const stored = Array.isArray(getModuleSetting(SETTING_GM_CLIENT_DEFAULTS)) ? getModuleSetting(SETTING_GM_CLIENT_DEFAULTS) : [];
+            const merged = new Map(stored.map(entry => [entry.key, entry.value]));
+            for (const [fullKey, value] of Object.entries(clientAnswers))
+                merged.set(fullKey, value);
+            await game.settings.set(MODULE_ID, SETTING_GM_CLIENT_DEFAULTS, [...merged].map(([key, value]) => ({ key, value })));
         }
 
         if (Object.keys(sfxDelta).length && game.user?.isGM)
@@ -1367,8 +1544,29 @@ export function registerOnboardingBootstrap()
         restricted: true,
     });
 
+    game.settings.register(MODULE_ID, SETTING_HOTBAR_SYNCED, {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+
+    game.settings.register(MODULE_ID, SETTING_GM_CLIENT_DEFAULTS, {
+        scope: 'world',
+        config: false,
+        type: Array,
+        default: [],
+    });
+
+    _freshWorld = !game.settings.storage.get('world')?.contents?.some(setting => setting.key?.startsWith(`${MODULE_ID}.`));
+
     Hooks.once('ready', () =>
     {
+        if (_freshWorld && isExecutorGM())
+            _seedRecommended().catch(err => console.warn(`${MODULE_ID} | seeding recommended settings failed`, err));
+        if (isExecutorGM() && !getModuleSetting(SETTING_HOTBAR_SYNCED))
+            _hideSystemHotbarOnce().catch(err => console.warn(`${MODULE_ID} | hiding the system hotbar failed`, err));
+        _applyGmClientDefaults().catch(err => console.warn(`${MODULE_ID} | applying the GM's client answers failed`, err));
         for (const group of GROUPS)
         {
             for (const question of group.questions)

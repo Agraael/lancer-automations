@@ -5,8 +5,22 @@ import { findActiveCombatForToken as _findActiveCombatForToken, findTelemetryCom
 import { isExecutorGM } from '../tools/misc-tools.js';
 
 const TRACKED = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss']);
+const _rollIds = new WeakMap();
 
 let _registered = false;
+
+function _rollIdOf(flowState)
+{
+    if (!flowState || typeof flowState !== 'object')
+        return null;
+    let rollId = _rollIds.get(flowState);
+    if (!rollId)
+    {
+        rollId = foundry.utils.randomID();
+        _rollIds.set(flowState, rollId);
+    }
+    return rollId;
+}
 
 function _targetTokenId(entry)
 {
@@ -69,6 +83,12 @@ function _onTrigger(triggerType, data)
         event.basic = true;
     if (pilotTokenId)
         event.pilotTokenId = pilotTokenId;
+    const rollId = _rollIdOf(data?.flowState);
+    if (rollId)
+        event.rollId = rollId;
+    const tapeId = data?.flowState?.la_extraData?.tapeId;
+    if (tapeId)
+        event.tapeId = tapeId;
 
     if (isExecutorGM())
         appendEvent(combat, attackerId, event);

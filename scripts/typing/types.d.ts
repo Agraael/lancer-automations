@@ -746,7 +746,7 @@ interface LancerAutomationsAPI {
         damage?: Array<{ type: string; val: any }>;
         [key: string]: any;
     }, options?: {
-        duration?: "indefinite" | "end" | "start" | "roundEnd" | "roundStart" | "encounter" | "permanent" | "constant";
+        duration?: "indefinite" | "end" | "start" | "anyTurnEnd" | "anyTurnStart" | "roundEnd" | "roundStart" | "encounter" | "permanent" | "constant";
         durationTurns?: number;
         durationRounds?: number;
         origin?: string | Token;
@@ -1094,7 +1094,7 @@ interface LancerAutomationsAPI {
 
     // Action / flow execution
     executeBarrage: typeof import("../tools/misc-tools.js").executeBarrage;
-    executeInvade(actorOrToken: any, bypassChoice?: any): Promise<void>;  // scripts/interactive/combat.js (+1)
+    executeInvade(actorOrToken: any, bypassChoice?: any): Promise<void>;  // scripts/tools/misc-tools.js
     executeItemActivation(item: any, options?: { path?: string; flowName?: string }, extraData?: object): Promise<{ completed: boolean; flow?: any }>;  // scripts/tools/misc-tools.js
     executeReactorExplosion: typeof import("../tools/misc-tools.js").executeReactorExplosion;
     executeReactorMeltdown: typeof import("../tools/misc-tools.js").executeReactorMeltdown;
@@ -1205,7 +1205,7 @@ interface Module {
 // Effect Flags
 
 interface DurationEntry {
-    label: "start" | "end" | "roundStart" | "roundEnd" | "encounter" | "indefinite" | "permanent";
+    label: "start" | "end" | "anyTurnStart" | "anyTurnEnd" | "roundStart" | "roundEnd" | "encounter" | "indefinite" | "permanent";
     turns?: number | null;
     round?: number | null;
     combatId?: string;

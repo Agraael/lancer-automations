@@ -1,21 +1,10 @@
 import { localize, localizeFormat, escapeHtml } from './string-utils.js';
+import { resolvePilot } from '../utils/lancer-token.js';
 
 const PATHS = { clocks: 'system.bond_state.clocks', burdens: 'system.bond_state.burdens' };
 const DEFAULT_SEGMENTS = 6;
 const MIN_SEGMENTS = 2;
 const MAX_SEGMENTS = 12;
-
-export function resolveClockPilot(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor ?? tokenOrActor;
-    if (!actor)
-        return null;
-    if (actor.type === 'pilot')
-        return actor;
-    if (actor.type === 'mech')
-        return actor.system?.pilot?.value ?? null;
-    return null;
-}
 
 export function pilotHasBond(pilot)
 {
@@ -131,7 +120,7 @@ function _listHtml(pilot, kind)
 /** @returns {Promise<void>} */
 export async function openClocksDialog(tokenOrActor)
 {
-    const pilot = resolveClockPilot(tokenOrActor);
+    const pilot = resolvePilot(tokenOrActor);
     if (!pilot)
     {
         ui.notifications.warn(localize('LA.notify.selectAPilotOrMechToken'));
@@ -216,7 +205,11 @@ export async function openClocksDialog(tokenOrActor)
                 const span = $(ev.currentTarget);
                 const index = Number(span.closest('.la-clock-row').data('index'));
                 const currentName = getCounters(pilot, kind)[index]?.name ?? '';
-                const input = $(`<input type="text" style="flex:1;min-width:0;font-size:0.88em;">`).val(currentName);
+                const inputEl = document.createElement('input');
+                inputEl.type = 'text';
+                inputEl.style.cssText = 'flex:1;min-width:0;font-size:0.88em;';
+                inputEl.value = currentName;
+                const input = $(inputEl);
                 span.replaceWith(input);
                 input.trigger('focus').trigger('select');
                 const commit = async () =>

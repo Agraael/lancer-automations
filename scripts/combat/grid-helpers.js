@@ -21,9 +21,9 @@ export function accDiffTargetToken(accDiffTarget)
 export function accDiffTargetInvisible(accDiffTarget, actor = null)
 {
     const plugin = accDiffTarget?.plugins?.invisibility;
-    const data = Number(plugin && typeof plugin === 'object' ? plugin.data : plugin);
-    if (Number.isFinite(data) && data !== 0)
-        return data > 0;
+    const invisibilityMode = Number(plugin && typeof plugin === 'object' ? plugin.data : plugin);
+    if (Number.isFinite(invisibilityMode) && invisibilityMode !== 0)
+        return invisibilityMode > 0;
     const resolved = actor ?? accDiffTargetToken(accDiffTarget)?.actor;
     return !!resolved?.statuses?.has?.('invisible');
 }
@@ -172,8 +172,8 @@ export function neighborKeys(key)
         const dirs = [[1, 0, -1], [0, 1, -1], [-1, 1, 0], [-1, 0, 1], [0, -1, 1], [1, -1, 0]];
         for (const [dq, dr, ds] of dirs)
         {
-            const neighborOff = grid.getOffset({ q: centerCube.q + dq, r: centerCube.r + dr, s: centerCube.s + ds });
-            keys.push(`${neighborOff.j},${neighborOff.i}`);
+            const neighborOffset = grid.getOffset({ q: centerCube.q + dq, r: centerCube.r + dr, s: centerCube.s + ds });
+            keys.push(`${neighborOffset.j},${neighborOffset.i}`);
         }
     }
     else
@@ -477,6 +477,34 @@ export function getOriginElevation(originOrToken)
     return 0;
 }
 
+function _canvasReachCap(originOffsets)
+{
+    const rect = canvas.dimensions?.rect;
+    if (!rect)
+        return Infinity;
+    const corners = [
+        pixelToOffset(rect.x, rect.y),
+        pixelToOffset(rect.x + rect.width, rect.y),
+        pixelToOffset(rect.x, rect.y + rect.height),
+        pixelToOffset(rect.x + rect.width, rect.y + rect.height),
+    ];
+    const hex = isHexGrid();
+    let farthest = 0;
+    for (const originOffset of originOffsets)
+    {
+        const originCube = hex ? offsetToCube(originOffset.col, originOffset.row) : null;
+        for (const corner of corners)
+        {
+            const dist = hex
+                ? cubeDistance(originCube, offsetToCube(corner.col, corner.row))
+                : Math.max(Math.abs(corner.col - originOffset.col), Math.abs(corner.row - originOffset.row));
+            if (dist > farthest)
+                farthest = dist;
+        }
+    }
+    return farthest + 1;
+}
+
 /**
  * Set of "col,row" keys reachable from `origin` within `range`. With combat elevation on,
  * filters out hexes where |hex_terrain_elev - origin_elev| > range.
@@ -493,6 +521,7 @@ export function getInRangeOffsets(origin, range, opts = {})
     const originOffsets = isPoint ? [pixelToOffset(origin.x, origin.y)] : getOccupiedOffsets(origin);
     const originElev = getOriginElevation(origin);
     const selfKeys = new Set(originOffsets.map(offset => `${offset.col},${offset.row}`));
+    const reach = Math.min(range, _canvasReachCap(originOffsets));
 
     const candidates = new Set();
     if (isHexGrid())
@@ -500,7 +529,7 @@ export function getInRangeOffsets(origin, range, opts = {})
         for (const originOffset of originOffsets)
         {
             const cube = offsetToCube(originOffset.col, originOffset.row);
-            for (const hexCube of getHexesInRange(cube, range))
+            for (const hexCube of getHexesInRange(cube, reach))
             {
                 const candidateOffset = cubeToOffset(hexCube);
                 candidates.add(`${candidateOffset.col},${candidateOffset.row}`);
@@ -511,11 +540,11 @@ export function getInRangeOffsets(origin, range, opts = {})
     {
         for (const originOffset of originOffsets)
         {
-            for (let dx = -range; dx <= range; dx++)
+            for (let dx = -reach; dx <= reach; dx++)
             {
-                for (let dy = -range; dy <= range; dy++)
+                for (let dy = -reach; dy <= reach; dy++)
                 {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) <= range)
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) <= reach)
                         candidates.add(`${originOffset.col + dx},${originOffset.row + dy}`);
                 }
             }
@@ -540,8 +569,8 @@ export function getInRangeOffsets(origin, range, opts = {})
             continue;
         const [col, row] = key.split(',').map(Number);
         const hexElev = getHexGroundElevation(col, row);
-        const elevAbove = Math.round((hexElev - originElev) / sceneDist);
-        if (elevAbove > range)
+        const elevDelta = Math.round((hexElev - originElev) / sceneDist);
+        if (elevDelta > range)
             continue;
         inRangeKeys.add(key);
     }

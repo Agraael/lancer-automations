@@ -53,6 +53,9 @@ declare const CodeMirror: any;
 
 // ─── libWrapper ───────────────────────────────────────────────────────────────
 declare const libWrapper: any;
+declare const TokenMagic: any;
+declare const ForceClientControls: any;
+declare const ForceClientSettings: any;
 
 // ─── Application augmentation ────────────────────────────────────────────────
 interface Application {

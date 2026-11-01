@@ -14,11 +14,12 @@
  */
 
 import { checkDamageResistances, checkDamageVulnerabilities, consumeResistanceUse, consumeVulnerabilityUse } from './genericBonuses.js';
-import { getModuleSetting } from '../tools/settings-utils.js';
+import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
 import { broadcastFloatTokenText } from '../tools/float-text.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { LANCER_ACTOR_TYPES } from '../utils/lancer-token.js';
 
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
 let _pendingInfection = null;
@@ -32,9 +33,8 @@ function _infectionEnabled()
 export function injectInfectionSchemaField()
 {
     const NumberField = foundry.data.fields.NumberField;
-    const actorKeys = ['mech', 'npc', 'deployable', 'pilot'];
     let injected = 0;
-    for (const key of actorKeys)
+    for (const key of LANCER_ACTOR_TYPES)
     {
         const model = CONFIG.Actor.dataModels?.[key];
         if (!model?.schema?.fields)
@@ -412,6 +412,11 @@ export function registerInfectionFlows(flowSteps, flows)
     flowSteps.set('lancer-automations:checkInfectionResult', checkInfectionResult);
     flowSteps.set('lancer-automations:clearInfectionOnStabilize', clearInfectionOnStabilize);
     flowSteps.set('lancer-automations:clearInfectionOnRepair', clearInfectionOnRepair);
+    flowSteps.set('lancer-automations:markInfectionTick', async (state) =>
+    {
+        state.la_extraData = { ...(state.la_extraData ?? {}), dotTick: 'infection' };
+        return true;
+    });
 
     flows.set('InfectionFlow', {
         name: 'Infection Check',
@@ -419,6 +424,7 @@ export function registerInfectionFlows(flowSteps, flows)
             'lancer-automations:initInfectionCheckData',
             'lancer-automations:rollInfectionCheck',
             'lancer-automations:checkInfectionResult',
+            'lancer-automations:markInfectionTick',
             'printDamageCard',
         ]
     });
@@ -474,14 +480,7 @@ export function initInfectionHooks()
         const token = actor.token?.object ?? actor.getActiveTokens?.()[0];
         if (!token || !canvas?.interface?.createScrollingText)
             return;
-        let showScroll = true;
-        try
-        {
-            showScroll = !!game.settings.get('lancer', 'floatingNumbers');
-        }
-        catch
-        { /* ignore */ }
-        if (!showScroll)
+        if (!getExternalSetting('lancer', 'floatingNumbers', true))
             return;
         canvas.interface.createScrollingText(token.center, `${delta > 0 ? '+' : ''}${delta} Infection`, {
             anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
@@ -624,6 +623,7 @@ export function initInfectionHooks()
                     updates['system.heat.value'] = actor.system.heat.value + finalInfection;
                 await actor.update(updates);
                 _pendingInfection = null;
+                Hooks.callAll('lancer-automations.battelog.dotAdded', { actor, kind: 'infection', amount: finalInfection, message: chatMessage });
             }, 100);
         }, { capture: false });
 

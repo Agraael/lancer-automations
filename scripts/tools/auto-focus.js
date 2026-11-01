@@ -17,7 +17,7 @@ const lastActivationFocus = new Map();
 function isFocusEnabled(focusKind)
 {
     const settingKey = SETTING_BY_KIND[focusKind];
-    if (!settingKey)
+    if (!settingKey || getModuleSetting('autoFocusEnabled') !== true)
         return false;
     return getModuleSetting(settingKey) === true;
 }

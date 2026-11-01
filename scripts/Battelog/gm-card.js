@@ -4,6 +4,7 @@ import { playTerminalIntro } from './intro-terminal.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { openBattleLogRecap } from './recap.js';
 import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 /** Open the GM card for a battle. */
 export function openBattleLogGMCard(battle)
@@ -90,7 +91,7 @@ export function openBattleLogGMCard(battle)
                 $list.empty();
                 state.extraLines.forEach((row, idx) =>
                 {
-                    const $rowEl = $(`
+                    const rowEl = htmlToElement(`
                         <div class="battelog-extra-row" data-idx="${idx}">
                             <input type="text" class="battelog-extra-label" placeholder="test" value="${_escape(row.label)}" />
                             <span class="battelog-extra-sep">:</span>
@@ -98,7 +99,7 @@ export function openBattleLogGMCard(battle)
                             <button type="button" class="battelog-extra-remove" title="Remove"><i class="fas fa-times"></i></button>
                         </div>
                     `);
-                    $list.append($rowEl);
+                    $list.append(rowEl);
                 });
                 // Foundry Dialogs pin height at render; nudge the popup to reflow.
                 dlg.setPosition({ height: 'auto' });

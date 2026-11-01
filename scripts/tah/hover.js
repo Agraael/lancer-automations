@@ -4,7 +4,8 @@
 import { getMaxWeaponReach_WithBonus, getActorMaxThreat, getMaxItemRanges_WithBonus, weaponPulseRange } from '../tools/misc-tools.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
-import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, getWeaponReachRange, weaponIgnoresLineOfSight } from '../tools/weapon-bonus-utils.js';
+import { isWeaponItem } from '../utils/lancer-token.js';
+import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, getWeaponReachRange, weaponIgnoresLineOfSight, thrownValue } from '../tools/weapon-bonus-utils.js';
 import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW } from '../interactive/canvas.js';
 import { resolveDeployRangeCount } from '../interactive/deployables.js';
 import { resolveGrantedActionRange } from '../interactive/action-overlays.js';
@@ -28,6 +29,15 @@ export function deactivateRangePreview(token)
         return;
     _rangePreviewOwnerByTokenId.delete(token.id);
     rangePulse.clear(hoverPulseOwner(token.id));
+}
+
+export function transferRangePreviewOwner(fromEl, toEl)
+{
+    for (const [tokenId, ownerEl] of _rangePreviewOwnerByTokenId)
+    {
+        if (ownerEl === fromEl)
+            _rangePreviewOwnerByTokenId.set(tokenId, toEl);
+    }
 }
 
 // Drop previews whose source row left the DOM (its column closed).
@@ -106,12 +116,6 @@ export async function getAttackRange(actionName, actor, item)
     return null;
 }
 
-/** @param {any} item */
-function isWeaponItem(item)
-{
-    return !!item && (String(item.type ?? '').includes('weapon') || item.system?.type === 'Weapon');
-}
-
 /**
  * Glow color matching the kind of range being previewed.
  * @param {string|undefined} category
@@ -173,8 +177,7 @@ export function getPreviewLosInfo(category, action, actor, item, profile)
 async function getItemMaxReach(item, actor)
 {
     const ranges = await getMaxItemRanges_WithBonus(item, actor);
-    const ALL_TYPES = ['Range', 'Line', 'Cone', 'Blast', 'Burst', 'Threat', 'Thrown', 'Deploy'];
-    return Math.max(0, ...ALL_TYPES.map(rangeType => ranges[rangeType] ?? 0));
+    return Math.max(weaponPulseRange(ranges), ranges.Deploy ?? 0);
 }
 
 async function computePreviewRange(category, action, actor, item, profile, deployLid)
@@ -186,11 +189,12 @@ async function computePreviewRange(category, action, actor, item, profile, deplo
     return grantName ? resolveGrantedActionRange(actor, grantName, base) : base;
 }
 
-function pulseRangeOf(rangeEntries)
+function pulseRangeOf(rangeEntries, tags = [])
 {
     const ranges = {};
     for (const { type, val: value } of rangeEntries)
         ranges[type] = Math.max(ranges[type] ?? 0, Number(value) || 0);
+    ranges.Thrown = Math.max(ranges.Thrown ?? 0, thrownValue(tags));
     const max = weaponPulseRange(ranges);
     return max > 0 ? Math.max(1, max) : null;
 }
@@ -212,7 +216,7 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
             return ownRange;
     }
     if (profile?.range?.length)
-        return pulseRangeOf(profile.range);
+        return pulseRangeOf(profile.range, profile.all_tags ?? profile.tags);
     const hudRange = resolveHudRange(item, actor);
     if (hudRange != null)
         return hudRange;

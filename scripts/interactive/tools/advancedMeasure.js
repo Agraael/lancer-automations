@@ -9,7 +9,7 @@ import { MODULE_ID } from "../../tools/constants.js";
 import {
     pointerToWorld, makeSafe, suppressTokenInteraction, addGraphicsBelowTokens, addGraphicsAboveTokens,
     destroyGraphics, paintSingleMarkCursor, gridLineWidth, TG, createMergedRangeHighlight, RANGE_GLOW,
-    createCtrlMarkIndicator, paintDashedFootprint,
+    createCtrlMarkIndicator,
     suppressEvent,
 } from "../canvas-helpers.js";
 import { isHexGrid, getHexCenter, pixelToOffset, drawHexAt, getOccupiedOffsets } from "../../combat/grid-helpers.js";
@@ -17,15 +17,20 @@ import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
 import { drawSightlines, clearSightlines } from "../../vision/sightlines.js";
-import { sightlineModeActive } from "../../movement/token-ruler.js";
-import { getActorMaxThreat, getWeaponProfiles_WithBonus, weaponPulseRange } from "../../tools/misc-tools.js";
-import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, weaponIgnoresLineOfSight } from "../../tools/weapon-bonus-utils.js";
+import { initGlobalCtrlRuler, showToolCursor, setCanvasCursorHidden, tokenDragActive, ctrlRulerMode, CTRL_RULER_HOLD_MS } from "./measureToolCursor.js";
+export { setPickerTargetCursor } from "./measureToolCursor.js";
+import { getActorMaxThreat, getWeaponProfiles_WithBonus } from "../../tools/misc-tools.js";
+import { getActorMaxReach_WithBonus, getActorReachBands_WithBonus, weaponIgnoresLineOfSight, getSensorRange_WithBonus, getWeaponReachRange } from "../../tools/weapon-bonus-utils.js";
 import { getWeapons } from "../deployables.js";
 import { weaponTypeIcon } from "../../tah/item-helpers.js";
 import { isActorRevealedToUser, getUnknownLabel } from "../../tah/tokenStatHint.js";
 import { setMeasureDistanceReference, setMeasureDistancePoint } from "../../movement/tactical-distance.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { getSettingEnabled } from "../../setup/settings-register.js";
+import { isTokenVisible } from "../../utils/lancer-token.js";
+import { isTypingTarget } from "../keybindings.js";
+import { injectStyles } from "./measureStyles.js";
+import { createSingleMarkStore } from "./measureMarkStore.js";
 
 let _open = false;
 let _controller = null;
@@ -34,7 +39,6 @@ let _singleCursor = null;
 let _singleHandlers = null;
 let _toolbarEl = null;
 let _observer = null;
-let _styleInjected = false;
 let _autoCloseInstalled = false;
 let _leaving = false;
 let _leaveCleanup = null;
@@ -43,8 +47,6 @@ let _suppressed = false;
 let _hudDepth = 0;
 let _cardActive = false;
 let _hotbarObserver = null;
-let _animateAreaControls = false;
-let _animateRangeParam = false;
 let _overToolbar = false;
 
 const _saved = {
@@ -88,6 +90,8 @@ function tokenAt(tx, ty)
 {
     return canvas.tokens.placeables.find(token =>
     {
+        if (!isTokenVisible(token))
+            return false;
         const bounds = token.bounds;
         return tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom;
     }) || null;
@@ -98,147 +102,6 @@ function ensureStore()
     if (!_saved.store)
         _saved.store = createPlacedShapeStore();
     return _saved.store;
-}
-
-// Marks reuse the gold breathing visual of placed attack-roll targets (target-shapes.js).
-function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn = () => false, drawTokens = true, dashed = false)
-{
-    const marks = [];
-    const gfx = new PIXI.Graphics();
-    if (above)
-        addGraphicsAboveTokens(gfx);
-    else
-        addGraphicsBelowTokens(gfx);
-    const keyOf = (mark) => mark.tokenId ?? `${mark.col},${mark.row}`;
-    const indexOf = (mark) => marks.findIndex(existing => keyOf(existing) === keyOf(mark));
-    const liveToken = (id) =>
-    {
-        for (const preview of canvas.tokens?.preview?.children ?? [])
-        {
-            if (preview?.document?.id === id)
-                return preview;
-        }
-        return canvas.tokens.get(id);
-    };
-    const drawGeom = (mark) =>
-    {
-        if (mark.tokenId)
-        {
-            if (!drawTokens)
-                return;
-            const token = liveToken(mark.tokenId);
-            if (!token)
-                return;
-            if (isHexGrid())
-            {
-                for (const offset of getOccupiedOffsets(token))
-                    drawHexAt(gfx, offset.col, offset.row);
-            }
-            else
-                gfx.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
-        }
-        else if (isHexGrid())
-            drawHexAt(gfx, mark.col, mark.row);
-        else
-        {
-            const center = getHexCenter(mark.col, mark.row);
-            gfx.drawRect(center.x - canvas.grid.size / 2, center.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
-        }
-    };
-    const markCells = (mark) =>
-    {
-        if (!mark.tokenId)
-            return [[mark.col, mark.row]];
-        if (!drawTokens)
-            return [];
-        const token = liveToken(mark.tokenId);
-        return token ? getOccupiedOffsets(token).map(offset => [offset.col, offset.row]) : [];
-    };
-    const drawDashed = () =>
-    {
-        const seen = new Set();
-        const cells = [];
-        for (const mark of marks)
-        {
-            for (const [col, row] of markCells(mark))
-            {
-                const key = `${col},${row}`;
-                if (!seen.has(key))
-                {
-                    seen.add(key);
-                    cells.push([col, row]);
-                }
-            }
-        }
-        paintDashedFootprint(gfx, cells, colorFn(marks[0]), { halo: haloFn(marks[0]) });
-    };
-    const tick = () =>
-    {
-        if (gfx.destroyed)
-        {
-            canvas.app.ticker.remove(tick);
-            return;
-        }
-        gfx.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
-        gfx.clear();
-        if (!marks.length)
-            return;
-        if (dashed)
-        {
-            drawDashed();
-            return;
-        }
-        gfx.lineStyle(gridLineWidth(7), 0x000000, 0.6);
-        for (const mark of marks)
-        {
-            if (haloFn(mark))
-                drawGeom(mark);
-        }
-        for (const mark of marks)
-        {
-            const color = colorFn(mark);
-            gfx.lineStyle(gridLineWidth(4), color, 0.85);
-            gfx.beginFill(color, 0.22);
-            drawGeom(mark);
-            gfx.endFill();
-        }
-    };
-    canvas.app.ticker.add(tick);
-    return {
-        marks,
-        has(mark)
-        {
-            return indexOf(mark) >= 0;
-        },
-        toggle(mark)
-        {
-            const index = indexOf(mark);
-            if (index >= 0)
-                marks.splice(index, 1);
-            else
-                marks.push(mark);
-        },
-        remove(mark)
-        {
-            const index = indexOf(mark);
-            if (index >= 0)
-                marks.splice(index, 1);
-        },
-        clear()
-        {
-            marks.length = 0;
-        },
-        setVisible(visible)
-        {
-            gfx.visible = visible;
-        },
-        destroy()
-        {
-            canvas.app.ticker.remove(tick);
-            destroyGraphics(gfx);
-            marks.length = 0;
-        },
-    };
 }
 
 function ensureMarkStore()
@@ -306,7 +169,7 @@ function markedTokens()
         if (!mark.tokenId)
             continue;
         const token = canvas.tokens.get(mark.tokenId);
-        if (isValidRef(token))
+        if (isValidRef(token) && isTokenVisible(token))
             out.push(token);
     }
     return out;
@@ -337,7 +200,7 @@ function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId 
     if (source === 'threat')
         return getActorMaxThreat(actor);
     if (source === 'sensor')
-        return actor.type === 'pilot' ? 5 : (actor.system?.sensor_range ?? 10);
+        return actor.type === 'pilot' ? 5 : getSensorRange_WithBonus(actor);
     // weapon is owner-only (loadout is yours to know); a scanned enemy falls back to max reach
     if (source === 'reach' || (source === 'weapon' && !token.isOwner))
         return getActorMaxReach_WithBonus(actor);
@@ -401,7 +264,7 @@ function weaponRangeMap(weapon, actor)
 
 function weaponMaxRange(weapon, actor)
 {
-    return weaponPulseRange(weaponRangeMap(weapon, actor));
+    return getWeaponReachRange(weapon, actor);
 }
 
 // Pinned marker auras: static outline, session-lived, several at once, tool-independent.
@@ -423,94 +286,13 @@ function _tokenHasPin(tokenId)
 }
 
 let _pinGroups = new Map();
-// Pinned ranges hold still at their built opacity, matching the contour lines.
-const PIN_ALPHA = 1;
-
-let _pinBreathTick = null;
-let _pinPixTick = null;
-
-const _pinPix = { rows: [], prevAlpha: null, sample: null };
-globalThis.laPinPix = (count = 240) =>
-{
-    const rows = _pinPix.rows.slice(-count);
-    console.table(rows);
-    return rows;
-};
-
-// Reads the composited pixel the GPU actually produced last frame.
-function _readPixel(worldX, worldY)
-{
-    const renderer = canvas.app?.renderer;
-    const gl = renderer?.gl;
-    if (!gl)
-        return null;
-    const global = canvas.stage.toGlobal({ x: worldX, y: worldY });
-    const resolution = renderer.resolution ?? 1;
-    const px = Math.round(global.x * resolution);
-    const py = Math.round(renderer.height - global.y * resolution);
-    if (px < 0 || py < 0 || px >= renderer.width || py >= renderer.height)
-        return null;
-    const buf = new Uint8Array(4);
-    const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
-    return { r: buf[0], g: buf[1], b: buf[2] };
-}
-
-function _syncPinBreath()
-{
-    if (_pinGroups.size && !_pinBreathTick)
-    {
-        _pinBreathTick = () =>
-        {
-            const alpha = PIN_ALPHA;
-            _pinPix.prevAlpha = alpha;
-            for (const pinHandle of _pinGroups.values())
-            {
-                for (const graphic of pinHandle.graphics ?? [])
-                {
-                    if (!graphic.destroyed)
-                        graphic.alpha = alpha;
-                }
-            }
-        };
-        canvas.app.ticker.add(_pinBreathTick);
-        // Runs after Application's render (LOW), so the drawing buffer still holds this frame.
-        _pinPixTick = () =>
-        {
-            if (!_pinPix.sample || _pinPix.prevAlpha === null)
-                return;
-            const rgb = _readPixel(_pinPix.sample.x, _pinPix.sample.y);
-            if (!rgb)
-                return;
-            _pinPix.rows.push({
-                alpha: Math.round(_pinPix.prevAlpha * 10000) / 10000,
-                r: rgb.r,
-                g: rgb.g,
-                b: rgb.b,
-            });
-            if (_pinPix.rows.length > 900)
-                _pinPix.rows.shift();
-        };
-        canvas.app.ticker.add(_pinPixTick, null, PIXI.UPDATE_PRIORITY.UTILITY);
-    }
-    else if (!_pinGroups.size && _pinBreathTick)
-    {
-        canvas?.app?.ticker?.remove(_pinBreathTick);
-        _pinBreathTick = null;
-        if (_pinPixTick)
-            canvas?.app?.ticker?.remove(_pinPixTick);
-        _pinPixTick = null;
-    }
-}
 
 // Re-insert pin graphics so the pulse, built later, cannot bury the coloured rings.
 function _raisePins()
 {
-    for (const destroy of _pinGroups.values())
+    for (const pinGroup of _pinGroups.values())
     {
-        for (const graphic of destroy.graphics ?? [])
+        for (const graphic of pinGroup.graphics ?? [])
         {
             if (!graphic.destroyed)
                 addGraphicsBelowTokens(graphic);
@@ -523,16 +305,25 @@ function _hidePins()
     for (const destroy of _pinGroups.values())
         destroy();
     _pinGroups = new Map();
-    _syncPinBreath();
 }
+
+function _syncPinFill()
+{
+    const visible = rangePulse.activeOwner() !== 'advanced-measure';
+    for (const graphic of _pinGroups.get('__fill')?.graphics ?? [])
+        graphic.visible = visible;
+}
+
+Hooks.on('lancer-automations.rangePulseChanged', () =>
+{
+    _syncPinFill();
+    _raisePins();
+});
 
 // Pins of the same source merge into one union region, pulse-style minus the wave.
 function _rebuildPinVisuals()
 {
     _hidePins();
-    _pinPix.sample = null;
-    if (!_open)
-        return;
     const bySource = new Map();
     for (const pin of _rangePins.values())
     {
@@ -542,12 +333,10 @@ function _rebuildPinVisuals()
         if (!bySource.has(pin.source))
             bySource.set(pin.source, []);
         bySource.get(pin.source).push({ token, range: pin.range, ...losInfoForToken(token, pin.range, pin.source) });
-        if (!_pinPix.sample)
-            _pinPix.sample = { x: token.center.x + canvas.grid.size, y: token.center.y };
     }
 
     const allEntries = [...bySource.values()].flat();
-    if (allEntries.length && !rangePulse.has('advanced-measure'))
+    if (allEntries.length)
     {
         _pinGroups.set('__fill', createMergedRangeHighlight(allEntries, {
             includeSelf: true,
@@ -569,8 +358,8 @@ function _rebuildPinVisuals()
             fadeInMs: 0,
         }));
     }
+    _syncPinFill();
     _raisePins();
-    _syncPinBreath();
 }
 
 function _destroyPin(key)
@@ -644,9 +433,9 @@ const RANGE_TYPE_ORDER = Object.keys(RANGE_TYPE_CCI);
 function weaponRangeHtml(ranges)
 {
     const parts = Object.entries(ranges)
-        .filter(([, val]) => val > 0)
+        .filter(([, distance]) => distance > 0)
         .sort(([typeA], [typeB]) => RANGE_TYPE_ORDER.indexOf(String(typeA).toLowerCase()) - RANGE_TYPE_ORDER.indexOf(String(typeB).toLowerCase()))
-        .map(([type, val]) => `<i class="cci ${RANGE_TYPE_CCI[String(type).toLowerCase()] ?? 'cci-range'}"></i>${val}`);
+        .map(([type, distance]) => `<i class="cci ${RANGE_TYPE_CCI[String(type).toLowerCase()] ?? 'cci-range'}"></i>${distance}`);
     return parts.join(' ');
 }
 
@@ -667,24 +456,16 @@ function rebuildPulse()
     }
     if (_suppressed || _saved.rangeSource === 'none' || !entries.length)
     {
-        const had = rangePulse.has('advanced-measure');
         rangePulse.clear('advanced-measure');
-        if (had)
-            _rebuildPinVisuals();
         return;
     }
     const glowColor = RANGE_GLOW[_saved.rangeSource] ?? RANGE_GLOW.manual;
     const signature = `${_saved.rangeSource}|` + entries.map(entry => entry.token ? `${entry.token.document.id}:${entry.range}:${entry.los === true}:${entry.freeRange ?? 0}` : `c:${entry.point.x},${entry.point.y}:${entry.range}`).sort().join('|');
-    const hadPulse = rangePulse.has('advanced-measure');
     rangePulse.set('advanced-measure', {
         priority: RANGE_PULSE_PRIORITY.MEASURE,
         signature,
         build: () => createMergedRangeHighlight(entries, { includeSelf: true, glowColor }),
     });
-    if (hadPulse)
-        _raisePins();
-    else
-        _rebuildPinVisuals();
 }
 
 // Tool-owned so it coexists with rangePulse; force=true recreates on turn/cap change.
@@ -726,7 +507,7 @@ function targetCells()
         if (mark.tokenId)
         {
             const token = canvas.tokens.get(mark.tokenId);
-            if (token)
+            if (token && isTokenVisible(token))
             {
                 for (const offset of getOccupiedOffsets(token))
                     out.push(`${offset.col},${offset.row}`);
@@ -743,6 +524,7 @@ function createShapeTokenMarker()
 {
     const gfx = new PIXI.Graphics();
     addGraphicsAboveTokens(gfx);
+    let lastKey = '';
     const tick = () =>
     {
         if (gfx.destroyed)
@@ -750,14 +532,24 @@ function createShapeTokenMarker()
             canvas.app.ticker.remove(tick);
             return;
         }
-        gfx.clear();
         const cells = new Set(_open && !_suppressed ? [...(_saved.store?.cells ?? []), ...targetCells()] : []);
         if (!cells.size)
+        {
+            if (lastKey)
+                gfx.clear();
+            lastKey = '';
             return;
+        }
         gfx.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+        const tokens = (canvas.tokens?.placeables ?? []).filter(isTokenVisible);
+        const key = `${[...cells].join(';')}|${tokens.map(token => `${token.id}:${token.document.x}:${token.document.y}:${token.document.width}:${token.document.height}`).join(';')}`;
+        if (key === lastKey)
+            return;
+        lastKey = key;
+        gfx.clear();
         gfx.lineStyle(gridLineWidth(4), TG.placed, 0.9);
         gfx.beginFill(TG.placed, 0.2);
-        for (const token of canvas.tokens?.placeables ?? [])
+        for (const token of tokens)
         {
             const offsets = getOccupiedOffsets(token);
             if (!offsets.some(offset => cells.has(`${offset.col},${offset.row}`)))
@@ -901,84 +693,6 @@ function updateDistanceLabels()
     setMeasureDistanceReference(off ? null : (getReferenceTokens()[0] ?? null));
 }
 
-// Screen-space cursor that follows the mouse, showing the matching scene-control tool's icon.
-let _toolCursorEl = null;
-let _toolCursorKind = null;
-let _toolCursorShown = false;
-
-function targetLaserIconUrl()
-{
-    const path = 'modules/lancer-automations/icons/cursors/targeting.svg';
-    return globalThis.foundry?.utils?.getRoute?.(path) ?? path;
-}
-
-function ensureToolCursorEl()
-{
-    if (_toolCursorEl)
-        return _toolCursorEl;
-    injectStyles();
-    const el = document.createElement('div');
-    el.className = 'la-mt-distance-cursor';
-    document.body.appendChild(el);
-    _toolCursorEl = el;
-    return el;
-}
-
-function positionToolCursor()
-{
-    if (!_toolCursorEl)
-        return;
-    _toolCursorEl.style.left = `${Math.round(_gLastClient.x)}px`;
-    _toolCursorEl.style.top = `${Math.round(_gLastClient.y)}px`;
-}
-
-// 'ruler' -> fa-ruler glyph (matches the Measure Distance tool); 'target' -> the target-laser icon.
-function setToolCursorKind(kind)
-{
-    if (kind === _toolCursorKind)
-        return;
-    _toolCursorKind = kind;
-    const icon = document.createElement('i');
-    if (kind === 'target')
-        icon.className = 'mdi mdi-target';
-    else
-        icon.className = kind === 'eye' ? 'fa-solid fa-eye' : 'fa-solid fa-ruler';
-    _toolCursorEl.classList.toggle('kind-ruler', kind !== 'target');
-    _toolCursorEl.replaceChildren(icon);
-}
-
-function showToolCursor(show, kind)
-{
-    _toolCursorShown = show;
-    if (!show)
-    {
-        if (_toolCursorEl)
-            _toolCursorEl.style.display = 'none';
-        return;
-    }
-    ensureToolCursorEl();
-    setToolCursorKind(kind);
-    positionToolCursor();
-    _toolCursorEl.style.display = 'block';
-}
-
-function setCanvasCursorHidden(hidden)
-{
-    const view = canvas.app?.view;
-    view?.classList?.toggle('la-mt-hide-cursor', hidden);
-}
-
-let _pickerCursorOn = false;
-export function setPickerTargetCursor(on)
-{
-    if (on === _pickerCursorOn)
-        return;
-    _pickerCursorOn = on;
-    const icon = on ? 'target' : desiredToolCursorIcon();
-    setCanvasCursorHidden(!!icon);
-    showToolCursor(!!icon, icon ?? 'ruler');
-}
-
 function activateRuler()
 {
     _prevTool = game.activeTool;
@@ -1001,66 +715,51 @@ function pushDistancePoint()
     }
 }
 
-const CTRL_RULER_KEY = 'ctrlRulerMode';
-const RULER_CURSOR_KEY = 'rulerToolCursor';
-const TARGET_CURSOR_KEY = 'targetToolCursor';
-const TOOLBAR_SCALE_KEY = 'advMeasureScale';
+const TOOLBAR_SCALE_KEY = 'tah.uiScale';
+Hooks.on(`${MODULE_ID}.uiScaleChanged`, (value) =>
+{
+    if (!_toolbarEl)
+        return;
+    _toolbarEl.style.setProperty('--la-mt-scale', String(Number(value) || 1));
+    pinBarLeft();
+});
 Hooks.once('init', () =>
 {
-    game.settings.register(MODULE_ID,TOOLBAR_SCALE_KEY, {
-        name: 'LA.settings.advMeasureScale.name',
-        hint: 'LA.settings.advMeasureScale.hint',
-        scope: 'client',
-        config: false,
-        type: Number,
-        default: 1,
-        range: { min: 0.6, max: 1.6, step: 0.05 },
-        onChange: (value) => _toolbarEl?.style.setProperty('--la-mt-scale', String(Number(value) || 1)),
-    });
-    game.settings.register(MODULE_ID,CTRL_RULER_KEY, {
-        scope: 'client',
-        config: false,
-        type: String,
-        choices: {
-            none: 'LA.settings.ctrlRulerMode.choices.none',
-            tool: 'LA.settings.ctrlRulerMode.choices.tool',
-            always: 'LA.settings.ctrlRulerMode.choices.always',
+    game.keybindings.register(MODULE_ID, 'advancedMeasureNextSource', {
+        name: 'LA.keybindings.advancedMeasureNextSource.name',
+        hint: 'LA.keybindings.advancedMeasureNextSource.hint',
+        editable: [{ key: 'KeyT' }],
+        onDown: () =>
+        {
+            if (!_open || _suppressed)
+                return false;
+            cycleRangeSource();
+            return true;
         },
-        default: 'tool',
-        onChange: () => refreshGlobalRulerDecoration(),
+        precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY,
     });
-    game.settings.register(MODULE_ID,RULER_CURSOR_KEY, {
-        scope: 'client',
-        config: false,
-        type: Boolean,
-        default: true,
-        onChange: () => refreshGlobalRulerDecoration(),
+    game.keybindings.register(MODULE_ID, 'advancedMeasureClear', {
+        name: 'LA.keybindings.advancedMeasureClear.name',
+        hint: 'LA.keybindings.advancedMeasureClear.hint',
+        editable: [{ key: 'KeyG', modifiers: ['SHIFT'] }],
+        onDown: () =>
+        {
+            if (!_open || _suppressed)
+                return false;
+            playUiSound('toggle');
+            clearPlacements();
+            return true;
+        },
+        precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL,
     });
-    game.settings.register(MODULE_ID,TARGET_CURSOR_KEY, {
-        scope: 'client',
-        config: false,
-        type: Boolean,
-        default: true,
-        onChange: () => refreshGlobalRulerDecoration(),
+    game.keybindings.register(MODULE_ID, 'advancedMeasureClose', {
+        name: 'LA.keybindings.advancedMeasureClose.name',
+        hint: 'LA.keybindings.advancedMeasureClose.hint',
+        uneditable: [{ key: 'Escape' }],
+        onDown: onMeasureEscape,
+        precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL,
     });
 });
-// While a token drag is live, Ctrl belongs to Foundry's waypoint placement.
-function tokenDragActive()
-{
-    return !!canvas.tokens?.preview?.children?.length;
-}
-function ctrlRulerMode()
-{
-    return getModuleSetting(CTRL_RULER_KEY, 'tool');
-}
-function targetCursorOn()
-{
-    return !!getModuleSetting(TARGET_CURSOR_KEY, true);
-}
-function rulerCursorOn()
-{
-    return !!getModuleSetting(RULER_CURSOR_KEY, true);
-}
 
 function cycleRangeSource()
 {
@@ -1072,60 +771,64 @@ function cycleRangeSource()
     playUiSound('toggle');
 }
 
-function _isTypingTarget(target)
+let _ctrlArmTimer = null;
+
+function cancelCtrlArm()
 {
-    return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || !!target?.isContentEditable;
+    clearTimeout(_ctrlArmTimer);
+    _ctrlArmTimer = null;
 }
 
-function onDistanceKey(event)
+function setCtrlDistance(on)
 {
-    if (event.type === 'keydown' && _open && !_suppressed && !event.repeat
-        && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
-        && !_isTypingTarget(event.target))
-    {
-        const key = String(event.key ?? '').toLowerCase();
-        if (key === 't')
-        {
-            event.preventDefault();
-            event.stopPropagation();
-            cycleRangeSource();
-            return;
-        }
-        if (key === 'g')
-        {
-            event.preventDefault();
-            event.stopPropagation();
-            playUiSound('toggle');
-            clearPlacements();
-            return;
-        }
-    }
-    if (event.key !== 'Control' || _suppressed)
+    if (on === _ctrlDistanceHeld)
         return;
-    // 'always' mode is handled by the global layer (works with the tool closed too).
-    if (ctrlRulerMode() !== 'tool' || !_open)
-        return;
-    const down = event.type === 'keydown';
-    if (down === _ctrlDistanceHeld)
-        return;
-    if (down && tokenDragActive())
-        return;
-    _ctrlDistanceHeld = down;
+    _ctrlDistanceHeld = on;
     playUiSound('toggle');
-    if (down)
+    if (on)
         activateRuler();
     else
         restoreTool();
-    setCanvasCursorHidden(down);
-    showToolCursor(down, 'ruler');
-    if (down)
+    setCanvasCursorHidden(on);
+    showToolCursor(on, 'ruler');
+    if (on)
         pushDistancePoint();
     else
         setMeasureDistancePoint(null);
 }
 
+function onDistanceKey(event)
+{
+    if (event.key !== 'Control')
+    {
+        if (event.type === 'keydown')
+            cancelCtrlArm();
+        return;
+    }
+    if (_suppressed)
+        return;
+    // 'always' mode is handled by the global layer (works with the tool closed too).
+    if (ctrlRulerMode() !== 'tool' || !_open)
+        return;
+    if (event.type === 'keyup')
+    {
+        cancelCtrlArm();
+        setCtrlDistance(false);
+        return;
+    }
+    if (event.repeat || _ctrlDistanceHeld || _ctrlArmTimer || tokenDragActive() || isTypingTarget(event.target))
+        return;
+    _ctrlArmTimer = setTimeout(() =>
+    {
+        _ctrlArmTimer = null;
+        if (_open && !_suppressed && !tokenDragActive())
+            setCtrlDistance(true);
+    }, CTRL_RULER_HOLD_MS);
+}
+
 function onDistanceBlur()
 {
+    cancelCtrlArm();
     if (!_ctrlDistanceHeld)
         return;
     _ctrlDistanceHeld = false;
@@ -1133,86 +836,6 @@ function onDistanceBlur()
     setCanvasCursorHidden(false);
     showToolCursor(false);
     setMeasureDistancePoint(null);
-}
-
-// Global layer: cursor icon+sound for ruler ('always' mode) and targeting, open or not.
-let _gCtrlHeld = false;
-let _gPrevTool = null;
-let _gDecoratedIcon = null;
-const _gLastClient = { x: 0, y: 0 };
-
-function desiredToolCursorIcon()
-{
-    if (game.activeTool === 'ruler' && rulerCursorOn())
-        return sightlineModeActive() ? 'eye' : 'ruler';
-    if (game.activeTool === 'target' && targetCursorOn())
-        return 'target';
-    return null;
-}
-
-function refreshGlobalRulerDecoration()
-{
-    const icon = desiredToolCursorIcon();
-    if (icon === _gDecoratedIcon)
-        return;
-    _gDecoratedIcon = icon;
-    playUiSound('toggle');
-    setCanvasCursorHidden(icon !== null);
-    showToolCursor(icon !== null, icon ?? 'ruler');
-}
-
-function onGlobalCtrlKey(event)
-{
-    if (event.key !== 'Control' || ctrlRulerMode() !== 'always')
-        return;
-    const down = event.type === 'keydown';
-    if (down === _gCtrlHeld)
-        return;
-    if (down && tokenDragActive())
-        return;
-    _gCtrlHeld = down;
-    if (down)
-    {
-        _gPrevTool = game.activeTool;
-        ui.controls?.activate({ tool: 'ruler' });
-    }
-    else
-    {
-        ui.controls?.activate({ tool: _gPrevTool || 'select' });
-        _gPrevTool = null;
-    }
-}
-
-function onGlobalCtrlBlur()
-{
-    if (!_gCtrlHeld)
-        return;
-    _gCtrlHeld = false;
-    ui.controls?.activate({ tool: _gPrevTool || 'select' });
-    _gPrevTool = null;
-}
-
-function onGlobalMove(event)
-{
-    _gLastClient.x = event.clientX;
-    _gLastClient.y = event.clientY;
-    if (_toolCursorShown)
-        positionToolCursor();
-}
-
-let _globalRulerInited = false;
-export function initGlobalCtrlRuler()
-{
-    if (_globalRulerInited)
-        return;
-    _globalRulerInited = true;
-    injectStyles();
-    document.addEventListener('keydown', onGlobalCtrlKey, true);
-    document.addEventListener('keyup', onGlobalCtrlKey, true);
-    document.addEventListener('mousemove', onGlobalMove, true);
-    window.addEventListener('blur', onGlobalCtrlBlur);
-    Hooks.on('activateSceneControls', () => refreshGlobalRulerDecoration());
-    Hooks.on('lancer-automations.sightlineModeChanged', () => refreshGlobalRulerDecoration());
 }
 
 // controlToken/hoverToken fire per-token; coalesce a burst into a single refresh.
@@ -1273,19 +896,25 @@ function isTypingInToolbar(event)
     return !!(_toolbarEl && event.target && _toolbarEl.contains(event.target));
 }
 
-// In Free mode Escape closes the tool; area/single handle their own Escape (return to Free).
-function onFreeEsc(event)
+// In Free mode Escape closes the tool once Foundry has nothing to dismiss; area/single handle their own Escape (return to Free).
+function onMeasureEscape(context)
 {
-    if (event.key !== 'Escape' || _suppressed || _saved.mode !== 'free' || isTypingInToolbar(event))
-        return;
-    suppressEvent(event);
-    closeAdvancedMeasure();
+    if (!_open || _suppressed || _saved.mode !== 'free' || context?.event?.defaultPrevented)
+        return false;
+    if (canvas.currentMouseManager || ui.menu?.rendered || ui.context?.element || foundry.nue?.Tour?.tourInProgress)
+        return false;
+    if (Object.keys(ui.windows ?? {}).length || [...foundry.applications.instances.values()].some(app => app.hasFrame && app.rendered))
+        return false;
+    if (_openMenu)
+        setOpenMenu(null);
+    else
+        closeAdvancedMeasure();
+    return true;
 }
 
 // Free mode has no capturing engine; Shift+wheel here bumps the manual radius (area mode owns Shift+wheel itself).
 function applyRangeSource(value)
 {
-    _animateRangeParam = value === 'manual' || value === 'weapon';
     _saved.rangeSource = value;
     _saved.pulseEnabled = value !== 'none';
     rebuildPulse();
@@ -1295,6 +924,8 @@ function applyRangeSource(value)
 
 function onFreeWheel(event)
 {
+    if (event.ctrlKey)
+        cancelCtrlArm();
     if (!_open || _suppressed || _saved.mode === 'area')
         return;
     if (event.shiftKey && _saved.mode === 'free' && _saved.rangeSource === 'manual')
@@ -1329,6 +960,7 @@ function startAreaMode()
         size: _saved.size,
         multiStack: true,
         highlightCaught: true,
+        visibleOnly: true,
         sound: () => !_overToolbar,
         resolveOnClick: false,
         placedStore: null,
@@ -1383,7 +1015,7 @@ function startSingleMode()
     {
         const { x, y } = pointerToWorld(event);
         // Marking is not targeting: no range check, never red.
-        paintSingleMarkCursor(cursorGfx, x, y);
+        paintSingleMarkCursor(cursorGfx, x, y, { tokens: canvas.tokens.placeables.filter(isTokenVisible) });
         if (!_overToolbar)
         {
             const cell = pixelToOffset(x, y);
@@ -1401,6 +1033,7 @@ function startSingleMode()
             playUiSound(wasPresent ? 'tokenUntarget' : 'tokenTarget');
         else
             playUiSound('targetingConfirm');
+        renderToolbar();
     });
     const onRight = safe((event) =>
     {
@@ -1411,10 +1044,11 @@ function startSingleMode()
             return;
         marks.remove(mark);
         playUiSound(token ? 'tokenUntarget' : 'targetingConfirm');
+        renderToolbar();
     });
     const onKey = safe((event) =>
     {
-        if (event.key === 'Escape' && !isTypingInToolbar(event))
+        if (event.key === 'Escape' && !isTypingInToolbar(event) && !isTypingTarget(event.target))
         {
             suppressEvent(event);
             escapeToFree();
@@ -1474,7 +1108,6 @@ function setMode(mode)
     {
         stopSingleMode();
         startAreaMode();
-        _animateAreaControls = true;
     }
     else
     {
@@ -1499,7 +1132,7 @@ function setManualRadius(value)
 }
 
 let _wheelRebuildTimer = null;
-const WHEEL_REBUILD_HOLD_MS = 15;
+const WHEEL_REBUILD_HOLD_MS = 120;
 
 // Every wheel tick would rebuild the pulse in full, so the number updates at once and the pulse waits for the wheel to stop.
 function setManualRadiusFromWheel(value)
@@ -1521,115 +1154,9 @@ function clearPlacements()
     _saved.store?.destroy();
     _saved.marks?.clear();
     _saved.whiteMarks?.clear();
-    clearRangePins();
-    _saved.rangeSource = 'none';
-    _saved.pulseEnabled = false;
-    _saved.movementReachEnabled = false;
-    _saved.tacticalLabels = false;
-    _saved.losEye = false;
-    clearSightlines('adv-measure');
     _controller?.redraw();
-    _emitStateChange();
+    refreshLosEye();
     onSelectionChange();
-}
-
-function injectStyles()
-{
-    if (_styleInjected)
-        return;
-    _styleInjected = true;
-    const style = document.createElement('style');
-    style.id = 'la-measure-toolbar-styles';
-    style.textContent = `
-        .la-mt-hide-cursor, .la-mt-hide-cursor * { cursor: none !important; }
-        .la-mt-distance-cursor { position: fixed; pointer-events: none; z-index: 100000; transform: translate(-50%, -50%); color: #ffffff; font-size: 22px; line-height: 1; display: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.9)); }
-        .la-mt-distance-cursor.kind-ruler { font-size: 16px; }
-        .la-mt-distance-cursor .la-mt-cursor-laser { width: 30px; height: 30px; display: block; }
-        #la-measure-toolbar { --la-mt-cut: 10px; position: fixed; left: 50%; bottom: 10px; z-index: 70; isolation: isolate; display: flex; align-items: center; gap: 8px; padding: 7px 16px; background: transparent; font-family: var(--font-primary, "Signika", sans-serif); color: var(--la-ink, #e8e8e8); font-size: 13px; opacity: 0; transform-origin: 50% 100%; transform: translateX(-50%) translateY(24px) scale(var(--la-mt-scale, 1)); transition: opacity 200ms ease-out, transform 240ms cubic-bezier(0.22, 1, 0.36, 1); }
-        #la-measure-toolbar::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--primary-color, #ff6400); clip-path: polygon(0 0, calc(100% - var(--la-mt-cut)) 0, 100% var(--la-mt-cut), 100% 100%, var(--la-mt-cut) 100%, 0 calc(100% - var(--la-mt-cut))); filter: drop-shadow(0 4px 14px rgba(0,0,0,0.55)); }
-        #la-measure-toolbar::after { content: ""; position: absolute; inset: 2px; z-index: -1; background: var(--la-plate, #e4dccd); clip-path: polygon(0 0, calc(100% - var(--la-mt-cut)) 0, 100% var(--la-mt-cut), 100% 100%, var(--la-mt-cut) 100%, 0 calc(100% - var(--la-mt-cut))); }
-        #la-measure-toolbar.la-show { opacity: 1; transform: translateX(-50%) translateY(0) scale(var(--la-mt-scale, 1)); }
-        #la-measure-toolbar.la-hide { opacity: 0; transform: translateX(-50%) translateY(24px) scale(var(--la-mt-scale, 1)); }
-        #la-measure-toolbar.la-mt-suppressed { opacity: 0.45; pointer-events: none; filter: grayscale(0.75); }
-        #la-measure-toolbar .la-mt-badge { display: flex; align-items: center; justify-content: center; background: var(--primary-color, #ff6400); color: var(--light-text, #fff); padding: 5px 9px; line-height: 1; }
-        #la-measure-toolbar .la-mt-badge-icon { width: 18px; height: 18px; display: block; border: none; object-fit: contain; }
-        #la-measure-toolbar button.lancer-action-btn { cursor: pointer; line-height: 1; padding: 6px 11px; margin: 0; min-height: 0; flex: 0 0 auto; }
-        #la-measure-toolbar button.la-mt-active { --la-line: var(--primary-color, #ff6400); --la-fill: var(--primary-color, #ff6400); color: var(--light-text, #fff) !important; }
-        @keyframes la-mt-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.5); } }
-        #la-measure-toolbar button.la-mt-pulse { animation: la-mt-pulse 1.1s ease-in-out infinite; }
-        #la-measure-toolbar .la-mt-group { display: flex; align-items: center; gap: 4px; }
-        #la-measure-toolbar .la-mt-sep { width: 1px; height: 22px; background: color-mix(in srgb, var(--primary-color, #ff6400), transparent 55%); }
-        #la-measure-toolbar .la-mt-toggles { display: flex; align-items: center; gap: 10px; font-size: 11px; }
-        #la-measure-toolbar .la-mt-toggles label { display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
-        #la-measure-toolbar .la-mt-toggles input[type=checkbox] { -webkit-appearance: auto; appearance: auto; accent-color: var(--primary-color, #ff6400); width: 14px; height: 14px; min-width: 0; min-height: 0; margin: 0; padding: 0; background: initial; border: initial; box-shadow: none; cursor: pointer; }
-        #la-measure-toolbar .la-mt-toggles input[type=checkbox]::before, #la-measure-toolbar .la-mt-toggles input[type=checkbox]::after { content: none; display: none; }
-        @keyframes la-mt-appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        #la-measure-toolbar .la-mt-appear { animation: la-mt-appear 160ms ease-out; }
-        #la-measure-toolbar input, #la-measure-toolbar select { -webkit-appearance: auto; appearance: auto; background: var(--la-raise, var(--la-plate, #e4dccd)); color: var(--la-ink, #e8e8e8); border: 1px solid var(--la-edge, #3a3a3a); border-radius: 0; padding: 2px 5px; font-family: var(--la-mono, ui-monospace, "Cascadia Mono", Consolas, monospace); font-size: 12px; }
-        #la-measure-toolbar select option { background: var(--la-plate, #e4dccd); color: var(--la-ink, #111); }
-        #la-measure-toolbar input:focus, #la-measure-toolbar select:focus { border-color: var(--primary-color, #ff6400); outline: none; }
-        #la-measure-toolbar input[type=number] { width: 46px; }
-        #la-measure-toolbar .la-mt-ref { display: flex; align-items: center; gap: 6px; max-width: 160px; }
-        #la-measure-toolbar .la-mt-ref img { width: 23px; height: 23px; object-fit: contain; border: 1px solid var(--la-edge, rgba(128,128,128,0.5)); background: #000; }
-        #la-measure-toolbar .la-mt-ref span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
-        #la-measure-toolbar .la-mt-ref-badge { font-weight: 700; font-size: 14px; color: var(--light-text, #fff); background: var(--primary-color, #ff6400); padding: 1px 5px; }
-        #la-measure-toolbar .la-mt-name { display: inline-block; width: 96px; max-width: 96px; overflow: hidden; white-space: nowrap; }
-        #la-measure-toolbar .la-mt-name-inner { display: inline-block; white-space: nowrap; will-change: transform; }
-        #la-measure-toolbar .la-mt-help { position: relative; width: 21px; height: 21px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--primary-color, #ff6400); border-radius: 50%; font-weight: 700; font-size: 13px; cursor: help; color: var(--la-accent); }
-        #la-measure-toolbar .la-mt-help-tip { display: none; position: absolute; bottom: 150%; left: 0; z-index: 71; background: var(--la-plate, rgba(15,15,17,0.98)); border: 1px solid var(--primary-color, #ff6400); padding: 10px 13px; font-size: 11.5px; color: var(--la-ink, #f2f2f2); width: max-content; max-width: 360px; box-shadow: 0 6px 20px rgba(0,0,0,0.7); }
-        #la-measure-toolbar .la-mt-help-tip .la-mt-help-row { line-height: 1.7; }
-        #la-measure-toolbar .la-mt-help-tip .la-mt-key { display: inline-block; margin: 0 2px; padding: 1px 5px; border-radius: 3px; background: var(--primary-color, #ff6400); color: var(--light-text, #fff); font-weight: 700; font-size: 10px; letter-spacing: 0.3px; box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
-        #la-measure-toolbar .la-mt-help:hover .la-mt-help-tip { display: block; }
-        #la-measure-toolbar .la-mt-icon-btn { padding: 6px 8px; display: inline-flex; align-items: center; justify-content: center; }
-        #la-measure-toolbar .la-mt-icon-btn i, #la-measure-toolbar .la-mt-dd-trigger i { font-size: 15px; line-height: 1; }
-        #la-measure-toolbar .la-mt-icon-btn i, #la-measure-toolbar .la-mt-dd-trigger i:not(.la-mt-dd-caret), #la-measure-toolbar .la-mt-dd-item i { color: var(--la-accent); }
-        #la-measure-toolbar .la-mt-svg-icon { display: inline-block; width: 15px; height: 15px; background-color: var(--la-accent); -webkit-mask: center / contain no-repeat; mask: center / contain no-repeat; }
-        #la-measure-toolbar .la-mt-dd-item .la-mt-svg-icon { width: 16px; }
-        #la-measure-toolbar button.la-mt-active .la-mt-svg-icon { background-color: var(--light-text, #fff) !important; }
-        #la-measure-toolbar .la-mt-dd { position: relative; display: inline-flex; }
-        #la-measure-toolbar .la-mt-dd-trigger { display: inline-flex; align-items: center; gap: 6px; }
-        #la-measure-toolbar .la-mt-dd-trigger span { font-family: var(--la-mono, ui-monospace, monospace); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #la-measure-toolbar .la-mt-dd-caret { font-size: 10px !important; opacity: 0.7; margin-left: 1px; }
-        #la-measure-toolbar button.la-mt-active i, #la-measure-toolbar button.la-mt-active svg { color: var(--light-text, #fff) !important; fill: var(--light-text, #fff) !important; }
-        #la-measure-toolbar .la-mt-hidden { display: none !important; }
-        #la-measure-toolbar .la-mt-dd-panel, #la-measure-toolbar .la-mt-pop { --pcut: 8px; isolation: isolate; background: transparent; border: none; box-shadow: none; }
-        #la-measure-toolbar .la-mt-dd-panel::before, #la-measure-toolbar .la-mt-pop::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--primary-color, #ff6400); clip-path: polygon(0 0, calc(100% - var(--pcut)) 0, 100% var(--pcut), 100% 100%, var(--pcut) 100%, 0 calc(100% - var(--pcut))); filter: drop-shadow(0 5px 16px rgba(0,0,0,0.5)); }
-        #la-measure-toolbar .la-mt-dd-panel::after, #la-measure-toolbar .la-mt-pop::after { content: ""; position: absolute; inset: 2px; z-index: -1; background: var(--la-plate, rgba(15,15,17,0.98)); clip-path: polygon(0 0, calc(100% - var(--pcut)) 0, 100% var(--pcut), 100% 100%, var(--pcut) 100%, 0 calc(100% - var(--pcut))); }
-        #la-measure-toolbar .la-mt-dd-panel { display: none; flex-direction: column; position: absolute; bottom: calc(100% + 7px); left: 0; z-index: 72; min-width: 148px; padding: 4px; }
-        #la-measure-toolbar .la-mt-dd-panel.open { display: flex; }
-        #la-measure-toolbar .la-mt-dd-item { display: flex; align-items: center; gap: 9px; padding: 6px 11px; background: transparent; border: none; border-radius: 0; color: var(--la-ink, #e8e8e8); font-family: var(--la-mono, ui-monospace, monospace); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; text-align: left; white-space: nowrap; }
-        #la-measure-toolbar .la-mt-dd-item i { width: 16px; text-align: center; font-size: 14px; }
-        #la-measure-toolbar .la-mt-dd-item:hover:not(:disabled) { background: color-mix(in srgb, var(--primary-color, #ff6400), transparent 80%); }
-        #la-measure-toolbar .la-mt-dd-item.active { background: var(--primary-color, #ff6400); color: var(--light-text, #fff); }
-        #la-measure-toolbar .la-mt-dd-item.active:hover:not(:disabled) { background: color-mix(in srgb, var(--primary-color, #ff6400), #000 18%); }
-        #la-measure-toolbar .la-mt-dd-item.active i { color: var(--light-text, #fff); }
-        #la-measure-toolbar .la-mt-dd-item.active .la-mt-svg-icon { background-color: var(--light-text, #fff); }
-        #la-measure-toolbar .la-mt-dd-item.active .la-hud-fav-mark { color: var(--light-text, #fff) !important; }
-        #la-measure-toolbar .la-mt-dd-entry { display: flex; align-items: stretch; }
-        #la-measure-toolbar .la-mt-dd-entry .la-mt-dd-item:not(.la-mt-dd-eye) { flex: 1 1 auto; }
-        #la-measure-toolbar .la-mt-dd-entry.active { background: var(--primary-color, #ff6400); }
-        #la-measure-toolbar .la-mt-dd-entry.active .la-mt-dd-item.active { background: transparent; }
-        #la-measure-toolbar .la-mt-dd-eye { flex: 0 0 auto; width: 32px; padding: 6px 0; justify-content: center; gap: 0; opacity: 0.7; }
-        #la-measure-toolbar .la-mt-dd-eye i { width: 13px; font-size: 12px; }
-        #la-measure-toolbar .la-mt-dd-eye:hover:not(:disabled) { opacity: 1; }
-        #la-measure-toolbar .la-mt-dd-eye-on { opacity: 1; }
-        #la-measure-toolbar .la-mt-dd-eye-on i { color: var(--la-accent) !important; }
-        #la-measure-toolbar .la-mt-dd-entry.active .la-mt-dd-eye i { color: var(--light-text, #fff) !important; }
-        #la-measure-toolbar .la-mt-dd-item.active .la-mt-weap-r { color: var(--light-text, #fff); }
-        #la-measure-toolbar .la-mt-dd-item:disabled { opacity: 0.4; cursor: default; }
-        #la-measure-toolbar .la-mt-weap-row { justify-content: flex-start; gap: 9px; }
-        #la-measure-toolbar .la-mt-weap-n { flex: 1 1 auto; }
-        #la-measure-toolbar .la-mt-weap-r { color: var(--la-accent); font-variant-numeric: tabular-nums; }
-        #la-measure-toolbar .la-mt-anchor { position: relative; }
-        #la-measure-toolbar .la-mt-pop { position: absolute; bottom: calc(100% + 10px); left: 50%; z-index: 72; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px; opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(8px); transition: opacity 160ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
-        #la-measure-toolbar .la-mt-pop .la-mt-icon-btn { padding: 3px 7px; }
-        #la-measure-toolbar .la-mt-pop.open { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
-        #la-measure-toolbar .la-mt-pop-row { display: flex; align-items: center; gap: 8px; }
-        #la-measure-toolbar .la-mt-pop-label { font-family: var(--la-mono, ui-monospace, monospace); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; min-width: 42px; }
-        #la-measure-toolbar .la-mt-pop-input { width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
-        #la-measure-toolbar .la-mt-pop-empty { font-size: 12px; opacity: 0.7; font-style: italic; }
-    `;
-    document.head.appendChild(style);
 }
 
 function makeButton(label, onClick)
@@ -1679,17 +1206,6 @@ function makeIconButton(iconClass, title, onClick)
     return button;
 }
 
-function makeParamPopover(animate)
-{
-    const pop = document.createElement('div');
-    pop.className = 'la-mt-pop';
-    if (animate)
-        requestAnimationFrame(() => pop.classList.add('open'));
-    else
-        pop.classList.add('open');
-    return pop;
-}
-
 // Labels are keys, not text: this runs at import time, before i18n is loaded.
 const RANGE_SOURCES = [
     { value: 'none', label: 'LA.measure.source.none', icon: 'systems/lancer/assets/icons/status_downandout.svg' },
@@ -1707,155 +1223,144 @@ const SHAPE_BUTTONS = [
     { pattern: 'line', label: 'LA.measure.shape.line', icon: 'cci cci-line' },
 ];
 
-function makeIconDropdown(current, items, onSelect, onContext = null, isPinned = null, losControl = null)
+function makeMenuColumn(iconClass, title, on, disabled, onClick)
 {
-    const starFor = new Map();
-    const refreshStars = () =>
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `la-mt-dd-item la-mt-dd-col${on ? ' la-mt-dd-col-on' : ''}`;
+    button.title = localize(title);
+    button.disabled = disabled;
+    const icon = document.createElement('i');
+    icon.className = iconClass;
+    button.appendChild(icon);
+    button.addEventListener('click', (event) =>
     {
-        for (const [value, star] of starFor)
-            star.style.display = isPinned?.(value) ? '' : 'none';
-    };
-    const eyeFor = new Map();
-    const refreshEyes = () =>
-    {
-        for (const [value, eye] of eyeFor)
-        {
-            const on = losControl.stateOf(value);
-            eye.className = `la-mt-dd-item la-mt-dd-eye${on ? ' la-mt-dd-eye-on' : ''}`;
-            eye.title = on ? 'Line of sight on' : 'Line of sight off';
-            eye.firstChild.className = on ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
-        }
-    };
+        suppressEvent(event);
+        playUiSound('toggle');
+        onClick();
+    });
+    return button;
+}
+
+function renderRangeDropdown(items)
+{
+    const open = _openMenu === 'range';
     const wrap = document.createElement('div');
     wrap.className = 'la-mt-dd';
-    const currentItem = items.find(item => item.value === current) ?? items[0];
+    wrap.dataset.menu = 'range';
+    const currentItem = items.find(item => item.value === _saved.rangeSource) ?? null;
     const trigger = document.createElement('button');
     trigger.type = 'button';
-    trigger.className = 'lancer-action-btn la-mt-dd-trigger';
-    if (current && current !== 'none')
-        markActive(trigger, false);
-    trigger.title = localize(currentItem.label);
-    const triggerLabel = document.createElement('span');
-    triggerLabel.textContent = localize(currentItem.label);
+    trigger.className = `lancer-action-btn la-mt-dd-trigger${currentItem ? '' : ' la-mt-placeholder'}`;
+    if (currentItem)
+        markActive(trigger);
+    const labelText = localize(currentItem?.label ?? 'LA.measure.range');
+    trigger.title = labelText;
+    const label = document.createElement('span');
+    label.className = 'la-mt-dd-label';
+    label.textContent = labelText;
+    trigger.append(makeIcon(currentItem?.icon ?? 'systems/lancer/assets/icons/range.svg'), label);
+    if (currentItem?.number)
+    {
+        const value = document.createElement('b');
+        value.className = 'la-mt-dd-val';
+        value.textContent = currentItem.number;
+        trigger.appendChild(value);
+    }
+    const pinCount = items.filter(item => item.pinned).length;
+    if (pinCount)
+    {
+        const pins = document.createElement('span');
+        pins.className = 'la-mt-dd-pins';
+        pins.textContent = `★${pinCount}`;
+        trigger.appendChild(pins);
+    }
     const caret = document.createElement('i');
     caret.className = 'fa-solid fa-caret-down la-mt-dd-caret';
-    trigger.append(makeIcon(currentItem.icon), triggerLabel, caret);
+    trigger.appendChild(caret);
+    trigger.addEventListener('mouseenter', () => playUiSound('statusHover'));
+    trigger.addEventListener('click', () =>
+    {
+        playUiSound('toggle');
+        setOpenMenu(open ? null : 'range');
+    });
     const panel = document.createElement('div');
-    panel.className = 'la-mt-dd-panel';
-
-    const siblingPops = () => Array.from(wrap.parentElement?.querySelectorAll('.la-mt-pop') ?? []);
-    const close = () =>
+    panel.className = `la-mt-dd-panel${open ? ' open' : ''}`;
+    if (open)
     {
-        panel.classList.remove('open');
-        for (const pop of siblingPops())
-            pop.classList.remove('la-mt-hidden');
-        document.removeEventListener('mousedown', onOutside, true);
-    };
-    function onOutside(event)
-    {
-        if (!wrap.isConnected)
+        const losColumn = getSettingEnabled('rangePulseLos');
+        for (const item of items)
         {
-            document.removeEventListener('mousedown', onOutside, true);
-            return;
-        }
-        if (!wrap.contains(event.target))
-            close();
-    }
-    for (const item of items)
-    {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'la-mt-dd-item';
-        row.disabled = !!item.disabled;
-        row.title = localize(item.label);
-        if (item.value === current)
-            row.classList.add('active');
-        const itemLabel = document.createElement('span');
-        itemLabel.textContent = localize(item.label);
-        row.append(makeIcon(item.icon), itemLabel);
-        if (isPinned)
-        {
-            const star = document.createElement('span');
-            star.className = 'la-hud-fav-mark';
-            star.textContent = '★';
-            star.style.display = isPinned(item.value) ? '' : 'none';
-            row.style.position = 'relative';
-            starFor.set(item.value, star);
-            row.appendChild(star);
-        }
-        row.addEventListener('mouseenter', () =>
-        {
-            if (!item.disabled)
-                playUiSound('statusHover');
-        });
-        row.addEventListener('click', () =>
-        {
-            if (item.disabled)
-                return;
-            playUiSound('toggle');
-            close();
-            onSelect(item.value);
-        });
-        if (onContext)
-        {
+            const active = item.value === _saved.rangeSource;
+            const entry = document.createElement('div');
+            entry.className = `la-mt-dd-entry${active ? ' active' : ''}`;
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = `la-mt-dd-item${active ? ' active' : ''}`;
+            row.disabled = item.disabled;
+            row.title = localize(item.label);
+            const name = document.createElement('span');
+            name.textContent = localize(item.label);
+            const number = document.createElement('b');
+            number.className = 'la-mt-dd-num';
+            number.textContent = item.number;
+            row.append(makeIcon(item.icon), name, number);
+            row.addEventListener('mouseenter', () =>
+            {
+                if (!item.disabled)
+                    playUiSound('statusHover');
+            });
+            row.addEventListener('click', () =>
+            {
+                if (item.disabled)
+                    return;
+                playUiSound('toggle');
+                setOpenMenu(null);
+                applyRangeSource(active ? 'none' : item.value);
+            });
             row.addEventListener('contextmenu', (event) =>
             {
                 suppressEvent(event);
                 if (item.disabled)
                     return;
                 playUiSound('toggle');
-                onContext(item.value);
-                refreshStars();
+                toggleSourcePin(item.value);
+                renderToolbar();
             });
-        }
-        // sibling button, never nested: the row button owns its whole hit area
-        if (losControl?.applies(item.value) && !item.disabled)
-        {
-            const entry = document.createElement('div');
-            entry.className = item.value === current ? 'la-mt-dd-entry active' : 'la-mt-dd-entry';
-            const eye = document.createElement('button');
-            eye.type = 'button';
-            eye.appendChild(document.createElement('i'));
-            eye.addEventListener('click', (event) =>
+            entry.appendChild(row);
+            // sibling button, never nested: the row button owns its whole hit area
+            entry.appendChild(makeMenuColumn('fa-solid fa-thumbtack', 'LA.measure.pin', item.pinned, item.disabled, () =>
             {
-                suppressEvent(event);
-                playUiSound('toggle');
-                losControl.cycle(item.value);
-                refreshEyes();
-            });
-            eyeFor.set(item.value, eye);
-            entry.append(row, eye);
+                toggleSourcePin(item.value);
+                renderToolbar();
+            }));
+            if (losColumn)
+            {
+                const sightOn = losStateFor(item.value);
+                entry.appendChild(makeMenuColumn(sightOn ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash', sightOn ? 'LA.measure.sightOn' : 'LA.measure.sightOff', sightOn, item.disabled, () =>
+                {
+                    toggleLosState(item.value);
+                    rebuildPulse();
+                    _emitStateChange();
+                    renderToolbar();
+                }));
+            }
             panel.appendChild(entry);
-            continue;
         }
-        panel.appendChild(row);
+        const foot = document.createElement('div');
+        foot.className = 'la-mt-dd-foot';
+        foot.textContent = localize('LA.measure.clickAgainOff');
+        panel.appendChild(foot);
     }
-    if (eyeFor.size)
-        refreshEyes();
-    trigger.addEventListener('mouseenter', () => playUiSound('statusHover'));
-    trigger.addEventListener('click', () =>
-    {
-        const willOpen = !panel.classList.contains('open');
-        playUiSound('toggle');
-        panel.classList.toggle('open', willOpen);
-        for (const pop of siblingPops())
-            pop.classList.toggle('la-mt-hidden', willOpen);
-        if (willOpen)
-            document.addEventListener('mousedown', onOutside, true);
-        else
-            document.removeEventListener('mousedown', onOutside, true);
-    });
     wrap.append(trigger, panel);
     return wrap;
 }
 
-function markActive(button, pulsing)
+function markActive(button)
 {
     button.classList.add('la-mt-active');
     // inline !important beats the library's layered .lancer-action-btn color:!important
     button.style.setProperty('color', 'var(--light-text, #fff)', 'important');
-    if (pulsing)
-        button.classList.add('la-mt-pulse');
 }
 
 function makeSep()
@@ -1872,11 +1377,120 @@ function sextantIconUrl()
     return globalThis.foundry?.utils?.getRoute?.(path) ?? path;
 }
 
+let _openMenu = null;
+let _menuOutside = null;
+
+function setOpenMenu(name)
+{
+    _openMenu = name;
+    if (_menuOutside)
+    {
+        document.removeEventListener('mousedown', _menuOutside, true);
+        _menuOutside = null;
+    }
+    if (name)
+    {
+        _menuOutside = (event) =>
+        {
+            if (!_toolbarEl?.querySelector(`[data-menu="${name}"]`)?.contains(event.target))
+                setOpenMenu(null);
+        };
+        document.addEventListener('mousedown', _menuOutside, true);
+    }
+    renderToolbar();
+}
+
+function keyLabel(action, fallback = '')
+{
+    try
+    {
+        const binding = game.keybindings.get(MODULE_ID, action)?.[0];
+        if (!binding?.key)
+            return fallback;
+        const key = binding.key.replace(/^Key/, '').replace(/^Digit/, '');
+        return [...(binding.modifiers ?? []), key].join('+');
+    }
+    catch
+    {
+        return fallback;
+    }
+}
+
+const HELP_ROWS = [
+    { group: 'LA.measure.help.group.place' },
+    { name: 'LA.measure.help.shapeButton', text: 'LA.measure.help.armShape' },
+    { kbd: 'LA.measure.help.key.click', text: 'LA.measure.help.dropShape' },
+    { kbd: 'LA.measure.help.key.shiftWheel', text: 'LA.measure.help.size' },
+    { kbd: 'LA.measure.help.key.ctrlWheel', text: 'LA.measure.help.turn' },
+    { bind: ['elevationDown', 'elevationUp'], text: 'LA.measure.help.height' },
+    { bind: ['lineTiltDown', 'lineTiltUp'], text: 'LA.measure.help.tilt' },
+    { bind: ['resetShape'], text: 'LA.measure.help.reset' },
+    { group: 'LA.measure.help.group.mark' },
+    { name: 'LA.measure.mark', text: 'LA.measure.help.markGold' },
+    { kbd: 'LA.measure.help.key.shiftClick', text: 'LA.measure.help.markShift' },
+    { name: 'LA.measure.help.markedToken', text: 'LA.measure.help.markedTokenText' },
+    { name: 'LA.measure.help.markedHex', text: 'LA.measure.help.markedHexText' },
+    { name: 'LA.measure.help.eye', text: 'LA.measure.help.eyeText' },
+    { group: 'LA.measure.help.group.range' },
+    { name: 'LA.measure.help.hoverSelect', text: 'LA.measure.help.measureFrom' },
+    { bind: ['advancedMeasureNextSource'], text: 'LA.measure.help.nextSource' },
+    { kbd: 'LA.measure.help.key.rightClick', text: 'LA.measure.help.pinSource' },
+    { group: 'LA.measure.help.group.bar' },
+    { kbd: 'LA.measure.help.key.holdCtrl', text: 'LA.measure.help.ruler' },
+    { bind: ['advancedMeasureClear'], text: 'LA.measure.help.clear' },
+    { kbd: 'LA.measure.help.key.esc', text: 'LA.measure.help.esc' },
+    { bind: ['advancedMeasure'], text: 'LA.measure.help.close' },
+];
+
+function renderHelpCard()
+{
+    const card = document.createElement('div');
+    const open = _openMenu === 'help';
+    card.className = `la-mt-helpcard${open ? ' open' : ''}`;
+    if (!open)
+        return card;
+    for (const row of HELP_ROWS)
+    {
+        if (row.group)
+        {
+            const heading = document.createElement('h5');
+            heading.textContent = localize(row.group);
+            card.appendChild(heading);
+            continue;
+        }
+        const line = document.createElement('div');
+        line.className = 'la-mt-help-row';
+        const cell = document.createElement(row.name ? 'b' : 'kbd');
+        if (row.bind)
+            cell.textContent = row.bind.map(action => keyLabel(action, '?')).join(' / ');
+        else
+            cell.textContent = localize(row.name ?? row.kbd);
+        const text = document.createElement('span');
+        text.textContent = localize(row.text);
+        line.append(cell, text);
+        card.appendChild(line);
+    }
+    const foot = document.createElement('div');
+    foot.className = 'la-mt-help-foot';
+    const note = document.createElement('span');
+    note.textContent = localize('LA.measure.help.keysFollow');
+    const tour = document.createElement('a');
+    tour.textContent = localize('LA.measure.help.tour');
+    tour.addEventListener('click', () =>
+    {
+        setOpenMenu(null);
+        import('../../setup/tour.js').then(module => module.startAdvMeasureTour());
+    });
+    foot.append(note, tour);
+    card.appendChild(foot);
+    return card;
+}
+
 function renderBadge()
 {
     const badge = document.createElement('span');
     badge.className = 'la-mt-badge';
-    badge.title = 'Advanced Measure';
+    badge.title = localize('LA.measure.advancedMeasureTool');
     const icon = document.createElement('img');
     icon.className = 'la-mt-badge-icon';
     icon.src = sextantIconUrl();
@@ -1885,56 +1499,25 @@ function renderBadge()
     return badge;
 }
 
-const HELP_LINES = [
-    'Shape / Target icons: click to arm, click again for free',
-    'No shape armed = free (move & drag tokens)',
-    '[[Shift+click]]: mark a token (targets it) or a hex (Manual range)',
-    '[[Ctrl]] (hold): measure distance (ruler)',
-    '[[Ctrl+wheel]]: rotate   [[Shift+wheel]]: size   [[Q/E]]: elevation',
-    '[[W/S]]: tilt line',
-    '[[Right-click]] also removes a target',
-    'Reference: hover or select an owned/scanned token',
-    'Range: pick a source (None = off, re-click = off)',
-    '[[T]]: next range source   [[G]]: clear all',
-    '[[Right-click]] a range source or a weapon: pin its outline (★, no pulse)',
-    'Move: movement reach in ruler speed tiers',
-    'Eye: line of sight to marks, or to your targets when nothing is marked',
-    '[[Escape]]: stop placing   [[Shift+R]]: close',
-];
-
-function buildHelpRow(line)
-{
-    const row = document.createElement('div');
-    row.className = 'la-mt-help-row';
-    for (const part of line.split(/(\[\[[^\]]+\]\])/))
-    {
-        if (!part)
-            continue;
-        const key = part.match(/^\[\[([^\]]+)\]\]$/);
-        if (key)
-        {
-            const kbd = document.createElement('span');
-            kbd.className = 'la-mt-key';
-            kbd.textContent = key[1];
-            row.appendChild(kbd);
-        }
-        else
-            row.appendChild(document.createTextNode(part));
-    }
-    return row;
-}
-
 function renderHelp()
 {
-    const help = document.createElement('div');
-    help.className = 'la-mt-help';
-    help.textContent = '?';
-    const tip = document.createElement('div');
-    tip.className = 'la-mt-help-tip';
-    for (const line of HELP_LINES)
-        tip.appendChild(buildHelpRow(line));
-    help.appendChild(tip);
-    return help;
+    const open = _openMenu === 'help';
+    const wrap = document.createElement('div');
+    wrap.className = 'la-mt-help-wrap';
+    wrap.dataset.menu = 'help';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `la-mt-help${open ? ' open' : ''}`;
+    button.title = localize('LA.measure.help.title');
+    button.textContent = '?';
+    button.addEventListener('mouseenter', () => playUiSound('statusHover'));
+    button.addEventListener('click', () =>
+    {
+        playUiSound('toggle');
+        setOpenMenu(open ? null : 'help');
+    });
+    wrap.append(button, renderHelpCard());
+    return wrap;
 }
 
 function makeScrollingName(text)
@@ -1991,30 +1574,51 @@ function renderControlledChip()
         return chip;
     }
     const first = tokens[0];
-    const img = document.createElement('img');
-    img.src = first.document.texture.src;
-    chip.appendChild(img);
+    for (const token of tokens.slice(0, 3))
+    {
+        const img = document.createElement('img');
+        img.src = token.document.texture.src;
+        chip.appendChild(img);
+    }
+    const text = document.createElement('span');
+    text.className = 'la-mt-ref-text';
+    let origin = 'marked';
+    if (_hoverToken && isValidRef(_hoverToken))
+        origin = 'hover';
+    else if (getControlled().some(isValidRef))
+        origin = 'selected';
+    const tag = document.createElement('b');
+    tag.className = `la-mt-ref-tag la-mt-ref-tag-${origin}`;
+    tag.textContent = localize(`LA.measure.refTag.${origin}`);
+    text.appendChild(tag);
     if (tokens.length > 1)
     {
+        chip.classList.add('la-mt-ref-multi');
         const badge = document.createElement('span');
         badge.className = 'la-mt-ref-badge';
         badge.textContent = `×${tokens.length}`;
-        chip.appendChild(badge);
+        text.appendChild(badge);
     }
     else if (isKnownToken(first))
-        chip.appendChild(makeScrollingName(first.name));
+        text.appendChild(makeScrollingName(first.name));
     else
-        chip.appendChild(makeUnknownName(first));
-    chip.title = 'Reference: the controlled token(s). Select tokens to change.';
+        text.appendChild(makeUnknownName(first));
+    chip.appendChild(text);
+    chip.title = localize('LA.measure.reference');
     chip.style.cursor = 'pointer';
-    chip.addEventListener('click', () => canvas.animatePan({ x: first.center.x, y: first.center.y }));
+    chip.addEventListener('click', () =>
+    {
+        const target = getReferenceTokens()[0];
+        if (target)
+            canvas.animatePan({ x: target.center.x, y: target.center.y });
+    });
     return chip;
 }
 
 function renderModeButtons()
 {
     const group = document.createElement('div');
-    group.className = 'la-mt-group la-mt-anchor';
+    group.className = 'la-mt-group la-mt-anchor la-mt-shapes';
     for (const { pattern, label, icon } of SHAPE_BUTTONS)
     {
         const active = _saved.mode === 'area' && _saved.pattern === pattern;
@@ -2035,16 +1639,16 @@ function renderModeButtons()
                 setMode('area');
         });
         if (active)
-            markActive(button, true);
+            markActive(button);
         group.appendChild(button);
     }
     const markOn = _saved.mode === 'single';
-    const single = makeIconButton('systems/lancer/assets/icons/reticule.svg', 'Target', () => setMode(markOn ? 'free' : 'single'));
+    const single = makeIconButton('systems/lancer/assets/icons/reticule.svg', 'LA.measure.mark', () => setMode(markOn ? 'free' : 'single'));
     if (markOn)
-        markActive(single, true);
+        markActive(single);
     group.appendChild(single);
-    if (_saved.mode === 'area')
-        group.appendChild(renderAreaParamPopover());
+    if (_saved.mode === 'area' && !_openMenu)
+        group.appendChild(renderAreaPopover());
     return group;
 }
 
@@ -2060,7 +1664,7 @@ function makeParamRow(labelText, value, min, max, onValue)
     input.className = 'la-mt-pop-input';
     input.min = String(min);
     input.max = String(max);
-    input.value = String(value);
+    input.setAttribute('value', String(value));
     const commit = next =>
     {
         const clamped = Math.max(min, Math.min(max, next));
@@ -2069,23 +1673,38 @@ function makeParamRow(labelText, value, min, max, onValue)
     };
     const current = () => Number.parseInt(input.value) || min;
     input.addEventListener('change', () => commit(current()));
-    const minus = makeIconButton('fa-solid fa-minus', 'Decrease', () => commit(current() - 1));
-    const plus = makeIconButton('fa-solid fa-plus', 'Increase', () => commit(current() + 1));
+    const minus = makeIconButton('fa-solid fa-minus', 'LA.measure.decrease', () => commit(current() - 1));
+    const plus = makeIconButton('fa-solid fa-plus', 'LA.measure.increase', () => commit(current() + 1));
     row.append(label, minus, input, plus);
     return { row };
 }
 
-function renderAreaParamPopover()
+let _popsShown = new Set();
+let _popsNext = new Set();
+let _weapScroll = { tokenId: null, top: 0 };
+
+function makePopover(kind, classes)
 {
-    const pop = makeParamPopover(_animateAreaControls);
-    _animateAreaControls = false;
-    const { row } = makeParamRow('Size', _saved.areaRange, 1, 99, next =>
+    const pop = document.createElement('div');
+    pop.className = `la-mt-pop ${classes}`;
+    if (!_popsShown.has(kind))
+    {
+        pop.classList.add('la-mt-appear');
+        setTimeout(() => pop.classList.remove('la-mt-appear'), 200);
+    }
+    _popsNext.add(kind);
+    return pop;
+}
+
+function renderAreaPopover()
+{
+    const pop = makePopover('area', 'la-mt-pop-end');
+    const { row } = makeParamRow(localize('LA.measure.size'), _saved.areaRange, 1, 99, next =>
     {
         _saved.areaRange = next;
         _controller?.setAreaRange(next);
     });
-    pop.appendChild(row);
-    pop.appendChild(renderToggleRow());
+    pop.append(row, renderToggleRow());
     return pop;
 }
 
@@ -2104,6 +1723,7 @@ function renderToggleRow()
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = cls;
+        checkbox.defaultChecked = checked;
         checkbox.checked = checked;
         checkbox.disabled = disabled;
         checkbox.addEventListener('change', () =>
@@ -2118,19 +1738,58 @@ function renderToggleRow()
         label.append(checkbox, span);
         wrap.appendChild(label);
     };
-    addToggle('la-tg-elev', 'Elev', 'Elevation aware', elevOn, false, value =>
+    addToggle('la-tg-elev', localize('LA.measure.toggle.elevation'), localize('LA.measure.toggle.elevationHint'), elevOn, false, value =>
     {
         _saved.elevationAware = value;
     });
-    addToggle('la-tg-autoelev', 'Auto', 'Auto elevation from terrain', _saved.autoElevation, !elevOn, value =>
+    addToggle('la-tg-autoelev', localize('LA.measure.toggle.terrain'), localize('LA.measure.toggle.terrainHint'), _saved.autoElevation, !elevOn, value =>
     {
         _saved.autoElevation = value;
     });
-    addToggle('la-tg-prop', 'Prop', 'Propagation: area spreads cell-to-cell', _saved.propagation, !elevOn, value =>
+    addToggle('la-tg-prop', localize('LA.measure.toggle.spread'), localize('LA.measure.toggle.spreadHint'), _saved.propagation, !elevOn, value =>
     {
         _saved.propagation = value;
     });
     return wrap;
+}
+
+function sourceValueText(refToken, source)
+{
+    if (source === 'manual')
+        return String(_saved.manualRadius);
+    if (!refToken)
+        return '';
+    if (!isKnownToken(refToken))
+        return '?';
+    const radius = computeRadiusForToken(refToken, source);
+    return radius === null || radius === undefined ? '?' : String(radius);
+}
+
+function sourcePinned(value)
+{
+    const tokens = getReferenceTokens();
+    return tokens.length > 0 && tokens.every(pinToken => hasRangePin(pinToken, value));
+}
+
+function toggleSourcePin(value)
+{
+    const tokens = getReferenceTokens();
+    if (!tokens.length)
+        return;
+    if (value === 'weapon')
+    {
+        const weapons = getWeapons(tokens[0]);
+        const weaponItemId = weapons.some(weapon => weapon.id === _saved.weaponItemId) ? _saved.weaponItemId : weapons[0]?.id;
+        if (weaponItemId)
+            toggleRangePin(tokens[0], 'weapon', { weaponItemId });
+        return;
+    }
+    const allPinned = tokens.every(pinToken => hasRangePin(pinToken, value));
+    for (const pinToken of tokens)
+    {
+        if (allPinned || !hasRangePin(pinToken, value))
+            toggleRangePin(pinToken, value);
+    }
 }
 
 function renderRangeControls()
@@ -2138,93 +1797,43 @@ function renderRangeControls()
     const controlled = getReferenceTokens();
     const refToken = controlled[0] ?? null;
     const group = document.createElement('div');
-    group.className = 'la-mt-group la-mt-anchor';
+    group.className = 'la-mt-group la-mt-anchor la-mt-range';
     // weapon is owner-only; a scanned enemy reference offers range/reach but not its weapon loadout
     const ownedRef = !!refToken?.isOwner;
     const hasWeapon = ownedRef ? getWeapons(refToken).length > 0 : false;
     const canResolve = value => value !== 'weapon' || (ownedRef && controlled.length === 1 && hasWeapon);
-    const items = RANGE_SOURCES.map(src => ({
-        value: src.value,
-        icon: src.icon,
-        label: src.value === 'weapon' && refToken && !hasWeapon ? 'LA.measure.source.weaponNone' : src.label,
-        disabled: !canResolve(src.value),
-    }));
-    const dropdown = makeIconDropdown(_saved.rangeSource, items, (value) => applyRangeSource(value === _saved.rangeSource && value !== 'none' ? 'none' : value), (value) =>
+    const items = RANGE_SOURCES.filter(src => src.value !== 'none').map(src =>
     {
-        if (value === 'weapon')
-        {
-            applyRangeSource('weapon');
-            return;
-        }
-        const tokens = getReferenceTokens();
-        if (!tokens.length)
-            return;
-        const allPinned = tokens.every(pinToken => hasRangePin(pinToken, value));
-        for (const pinToken of tokens)
-        {
-            if (allPinned || !hasRangePin(pinToken, value))
-                toggleRangePin(pinToken, value);
-        }
-    }, (value) =>
-    {
-        const tokens = getReferenceTokens();
-        return tokens.length > 0 && tokens.every(pinToken => hasRangePin(pinToken, value));
-    }, getSettingEnabled('rangePulseLos') ? {
-        applies: (value) => value !== 'none',
-        stateOf: losStateFor,
-        cycle: (value) =>
-        {
-            toggleLosState(value);
-            rebuildPulse();
-            _emitStateChange();
-        },
-    } : null);
-    group.appendChild(dropdown);
-
-    const statSource = _saved.rangeSource !== 'manual' && _saved.rangeSource !== 'none';
-    if (refToken && statSource && !isKnownToken(refToken))
-    {
-        group.appendChild(makeHorusText('?'));
-        return group;
-    }
-
-    if (refToken && statSource && canResolve(_saved.rangeSource))
-    {
-        const radiusLabel = document.createElement('span');
-        radiusLabel.textContent = `R ${computeRadiusForToken(refToken)}`;
-        radiusLabel.style.minWidth = '34px';
-        radiusLabel.style.textAlign = 'center';
-        group.appendChild(radiusLabel);
-    }
-
-    if (_saved.rangeSource === 'manual')
-        group.appendChild(renderManualPopover());
-    else if (_saved.rangeSource === 'weapon')
-        group.appendChild(renderWeaponPopover(refToken));
+        const disabled = !canResolve(src.value);
+        return {
+            value: src.value,
+            icon: src.icon,
+            label: src.value === 'weapon' && refToken && !hasWeapon ? 'LA.measure.source.weaponNone' : src.label,
+            disabled,
+            number: disabled ? '' : sourceValueText(refToken, src.value),
+            pinned: sourcePinned(src.value),
+        };
+    });
+    group.appendChild(renderRangeDropdown(items));
+    if (!_openMenu && (_saved.rangeSource === 'manual' || _saved.rangeSource === 'weapon'))
+        group.appendChild(renderRangePopover(refToken));
     return group;
 }
 
-function renderManualPopover()
+function renderRangePopover(refToken)
 {
-    const pop = makeParamPopover(_animateRangeParam);
-    _animateRangeParam = false;
-    const { row } = makeParamRow('Range', _saved.manualRadius, 0, 99, next =>
+    if (_saved.rangeSource === 'manual')
     {
-        _saved.manualRadius = next;
-        rebuildPulse();
-    });
-    pop.appendChild(row);
-    return pop;
-}
-
-function renderWeaponPopover(refToken)
-{
-    const pop = makeParamPopover(_animateRangeParam);
-    _animateRangeParam = false;
+        const pop = makePopover('manual', 'la-mt-pop-start');
+        const { row } = makeParamRow(localize('LA.measure.range'), _saved.manualRadius, 0, 99, next => setManualRadius(next));
+        pop.appendChild(row);
+        return pop;
+    }
+    const pop = makePopover('weapon', 'la-mt-pop-start la-mt-weap-pop');
     const weapons = refToken ? getWeapons(refToken) : [];
     if (!weapons.length)
     {
-        const empty = document.createElement('div');
+        const empty = document.createElement('span');
         empty.className = 'la-mt-pop-empty';
         empty.textContent = localize('LA.measure.noWeapons');
         pop.appendChild(empty);
@@ -2232,27 +1841,32 @@ function renderWeaponPopover(refToken)
     }
     if (!_saved.weaponItemId || !weapons.some(weapon => weapon.id === _saved.weaponItemId))
         _saved.weaponItemId = weapons[0].id;
-    const actor = refToken?.actor;
+    const actor = refToken.actor;
+    const list = document.createElement('div');
+    list.className = `la-mt-weap-scroll${weapons.length > 5 ? ' la-mt-weap-many' : ''}`;
+    list.dataset.tokenId = refToken.id;
+    list.addEventListener('scroll', () =>
+    {
+        _weapScroll = { tokenId: refToken.id, top: list.scrollTop };
+    });
     for (const weapon of weapons)
     {
         const row = document.createElement('button');
         row.type = 'button';
-        row.className = 'la-mt-dd-item la-mt-weap-row';
+        row.className = `la-mt-dd-item la-mt-weap-row${weapon.id === _saved.weaponItemId ? ' active' : ''}${weapon.system?.destroyed ? ' la-mt-weap-dead' : ''}`;
         row.title = weapon.name;
         const name = document.createElement('span');
         name.className = 'la-mt-weap-n';
         name.textContent = weapon.name;
-        const rng = document.createElement('span');
-        rng.className = 'la-mt-weap-r';
-        rng.innerHTML = weaponRangeHtml(weaponRangeMap(weapon, actor)) || `R ${weaponMaxRange(weapon, actor)}`;
-        const star = document.createElement('span');
-        star.className = 'la-hud-fav-mark';
-        star.textContent = '★';
-        star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
-        row.style.position = 'relative';
-        row.append(makeIcon(weaponTypeIcon(weapon)), name, rng, star);
-        if (_saved.weaponItemId === weapon.id)
-            row.classList.add('active');
+        const rangeEl = document.createElement('span');
+        rangeEl.className = 'la-mt-weap-r';
+        rangeEl.innerHTML = weaponRangeHtml(weaponRangeMap(weapon, actor)) || `R ${weaponMaxRange(weapon, actor)}`;
+        const pin = document.createElement('span');
+        pin.className = `la-mt-weap-pin${hasRangePin(refToken, 'weapon', weapon.id) ? ' on' : ''}`;
+        const pinIcon = document.createElement('i');
+        pinIcon.className = 'fa-solid fa-thumbtack';
+        pin.appendChild(pinIcon);
+        row.append(makeIcon(weaponTypeIcon(weapon)), name, rangeEl, pin);
         row.addEventListener('mouseenter', () => playUiSound('statusHover'));
         row.addEventListener('click', () =>
         {
@@ -2266,37 +1880,40 @@ function renderWeaponPopover(refToken)
             suppressEvent(event);
             playUiSound('toggle');
             toggleRangePin(refToken, 'weapon', { weaponItemId: weapon.id });
-            star.style.display = hasRangePin(refToken, 'weapon', weapon.id) ? '' : 'none';
+            renderToolbar();
         });
-        pop.appendChild(row);
+        list.appendChild(row);
     }
+    pop.appendChild(list);
     return pop;
 }
 
 function renderMoveToggle()
 {
-    const button = makeIconButton('fa-solid fa-person-running', 'Movement reach (speed tiers, terrain cost)', () =>
+    const rulerOn = isLancerRulerActive();
+    const button = makeIconButton('fa-solid fa-person-running', rulerOn ? 'LA.measure.move' : 'LA.measure.moveNeedsRuler', () =>
     {
         _saved.movementReachEnabled = !_saved.movementReachEnabled;
         rebuildMovementReach();
         renderToolbar();
         _emitStateChange();
     });
-    if (_saved.movementReachEnabled)
-        markActive(button, false);
+    button.disabled = !rulerOn;
+    if (_saved.movementReachEnabled && rulerOn)
+        markActive(button);
     return button;
 }
 
 function renderLabelsToggle()
 {
-    const button = makeIconButton('fa-solid fa-ruler-horizontal', 'Tactical distance labels', () =>
+    const button = makeIconButton('fa-solid fa-ruler-horizontal', 'LA.measure.labels', () =>
     {
         _saved.tacticalLabels = !_saved.tacticalLabels;
         updateDistanceLabels();
         renderToolbar();
     });
     if (_saved.tacticalLabels)
-        markActive(button, false);
+        markActive(button);
     return button;
 }
 
@@ -2361,26 +1978,37 @@ function _clusterGroundMarks(groundMarks)
     return clusters;
 }
 
-function refreshLosEye()
+let _losEyeSig = null;
+
+function refreshLosEye(force = false)
 {
-    clearSightlines('adv-measure');
-    if (!_open || !_saved.losEye)
+    const viewer = _open && _saved.losEye ? getReferenceTokens()[0] : null;
+    const markers = [...(_saved.whiteMarks?.marks ?? []), ...(_saved.marks?.marks ?? [])];
+    const sig = viewer
+        ? `${viewer.id}|${markers.map(mark => mark.tokenId ?? `${mark.col},${mark.row}`).sort().join(',')}|${[...(game.user?.targets ?? [])].map(token => token.id).sort().join(',')}`
+        : '';
+    if (!force && sig === _losEyeSig)
         return;
-    const viewer = getReferenceTokens()[0];
+    _losEyeSig = sig;
+    clearSightlines('adv-measure');
     if (!viewer)
         return;
     const targets = [];
     const groundMarks = [];
-    const markers = _saved.whiteMarks?.marks ?? [];
     // Markers when there are any, the user's targets otherwise.
     if (markers.length)
     {
+        const seen = new Set();
         for (const mark of markers)
         {
+            const key = mark.tokenId ?? `${mark.col},${mark.row}`;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
             if (mark.tokenId)
             {
                 const token = canvas.tokens.get(mark.tokenId);
-                if (token && token !== viewer)
+                if (token && token !== viewer && isTokenVisible(token))
                     targets.push(token);
             }
             else
@@ -2391,7 +2019,7 @@ function refreshLosEye()
     {
         for (const token of game.user?.targets ?? [])
         {
-            if (token !== viewer)
+            if (token !== viewer && isTokenVisible(token))
                 targets.push(token);
         }
     }
@@ -2413,6 +2041,11 @@ function onLosEyeTokenUpdate(tokenDoc, change)
 {
     if (!_saved.losEye || !['x', 'y', 'elevation', 'width', 'height'].some(key => key in change))
         return;
+    refreshLosEye(true);
+}
+
+function onLosEyeTargetChange()
+{
     refreshLosEye();
 }
 
@@ -2426,46 +2059,96 @@ function onLosEyeTokenRefresh(token, opts)
     _losEyeRefreshTimer = setTimeout(() =>
     {
         _losEyeRefreshTimer = null;
-        refreshLosEye();
+        refreshLosEye(true);
     }, 100);
 }
 
 function renderLosEyeToggle()
 {
-    const button = makeIconButton('fa-solid fa-eye', 'Line of sight to marks, or your targets', () =>
+    const button = makeIconButton('fa-solid fa-eye', 'LA.measure.eye', () =>
     {
         _saved.losEye = !_saved.losEye;
         refreshLosEye();
         renderToolbar();
     });
     if (_saved.losEye)
-        markActive(button, false);
+        markActive(button);
     return button;
+}
+
+function patchChildren(container, nodes)
+{
+    const current = Array.from(container.children);
+    nodes.forEach((node, index) =>
+    {
+        const existing = current[index];
+        if (!existing)
+            container.appendChild(node);
+        else if (existing.outerHTML !== node.outerHTML)
+            existing.replaceWith(node);
+    });
+    for (const extra of current.slice(nodes.length))
+        extra.remove();
 }
 
 function renderToolbar()
 {
     if (!_toolbarEl)
         return;
-    _toolbarEl.replaceChildren();
-    _toolbarEl.appendChild(renderBadge());
-    _toolbarEl.appendChild(makeSep());
-    _toolbarEl.appendChild(renderHelp());
-    _toolbarEl.appendChild(makeSep());
-    _toolbarEl.appendChild(renderControlledChip());
-    _toolbarEl.appendChild(makeSep());
-    _toolbarEl.appendChild(renderModeButtons());
-    _toolbarEl.appendChild(makeSep());
-    _toolbarEl.appendChild(renderRangeControls());
-    if (isLancerRulerActive())
-        _toolbarEl.appendChild(renderMoveToggle());
-    _toolbarEl.appendChild(renderLabelsToggle());
-    _toolbarEl.appendChild(renderLosEyeToggle());
-    _toolbarEl.appendChild(makeSep());
-    _toolbarEl.appendChild(makeButton('Clear', clearPlacements));
-    _toolbarEl.appendChild(makeButton('✕', () => closeAdvancedMeasure()));
+    patchChildren(_toolbarEl, [
+        renderBadge(),
+        makeSep(),
+        renderHelp(),
+        makeSep(),
+        renderControlledChip(),
+        makeSep(),
+        renderModeButtons(),
+        makeSep(),
+        renderRangeControls(),
+        renderMoveToggle(),
+        renderLabelsToggle(),
+        renderLosEyeToggle(),
+        makeSep(),
+        makeButton(localize('LA.measure.clear'), clearPlacements),
+        makeIconButton('fa-solid fa-xmark', 'LA.measure.close', () => closeAdvancedMeasure()),
+    ]);
+    _popsShown = _popsNext;
+    _popsNext = new Set();
+    const weapList = _toolbarEl.querySelector('.la-mt-weap-scroll');
+    if (weapList)
+    {
+        const active = weapList.querySelector('.active');
+        weapList.scrollTop = _weapScroll.tokenId === weapList.dataset.tokenId
+            ? _weapScroll.top
+            : Math.max(0, (active?.offsetTop ?? 0) + (active?.offsetHeight ?? 0) - weapList.clientHeight);
+    }
     _overToolbar = pointerOverToolbar();
+    clampBarToViewport();
     refreshLosEye();
+}
+
+function pinBarLeft()
+{
+    if (!_toolbarEl)
+        return;
+    const scale = Number(getComputedStyle(_toolbarEl).getPropertyValue('--la-mt-scale')) || 1;
+    const width = _toolbarEl.offsetWidth * scale;
+    _toolbarEl.style.left = `${Math.max(8, Math.round((window.innerWidth - width) / 2))}px`;
+}
+
+function clampBarToViewport()
+{
+    if (!_toolbarEl?.style.left)
+        return;
+    const overflow = _toolbarEl.getBoundingClientRect().right - (window.innerWidth - 8);
+    if (overflow > 0)
+        _toolbarEl.style.left = `${Math.max(8, Math.round(Number.parseFloat(_toolbarEl.style.left) - overflow))}px`;
+}
+
+function onWindowResize()
+{
+    onHotbarChange();
+    pinBarLeft();
 }
 
 // Sit just above the Foundry macro hotbar, tracking its collapse/expand/hide.
@@ -2536,6 +2219,7 @@ function buildToolbar()
     document.body.appendChild(_toolbarEl);
     renderToolbar();
     watchHotbar();
+    pinBarLeft();
     void _toolbarEl.offsetWidth;
     _toolbarEl.classList.add('la-show');
 }
@@ -2640,8 +2324,6 @@ function updateSuppressed()
 // Interactive cards (.la-info-card) are transient and never the measure toolbar (which is .lancer-hud).
 function installSuppressionWatcher()
 {
-    if (_observer)
-        return;
     if (!document.getElementById('la-measure-disabled-styles'))
     {
         const style = document.createElement('style');
@@ -2654,6 +2336,12 @@ function installSuppressionWatcher()
         `;
         document.head.appendChild(style);
     }
+}
+
+function startCardWatch()
+{
+    if (_observer)
+        return;
     _observer = new MutationObserver(() =>
     {
         const present = !!document.querySelector('.la-info-card');
@@ -2664,6 +2352,17 @@ function installSuppressionWatcher()
         }
     });
     _observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function stopCardWatch()
+{
+    _observer?.disconnect();
+    _observer = null;
+    if (_cardActive)
+    {
+        _cardActive = false;
+        updateSuppressed();
+    }
 }
 
 export function openAdvancedMeasure(options)
@@ -2681,6 +2380,7 @@ export function openAdvancedMeasure(options)
         try
         {
             _saved.elevationAware = !!getModuleSetting('tah.areaElevationAware');
+            _saved.propagation = !!getModuleSetting('areaSpread');
         }
         catch
         { /* setting not ready */ }
@@ -2701,7 +2401,6 @@ export function openAdvancedMeasure(options)
     else
         buildToolbar();
     watchHotbar();
-    document.addEventListener('keydown', onFreeEsc, true);
     document.addEventListener('wheel', onFreeWheel, { capture: true, passive: false });
     Hooks.on('controlToken', onSelectionChange);
     Hooks.on('hoverToken', onHoverToken);
@@ -2713,9 +2412,9 @@ export function openAdvancedMeasure(options)
     Hooks.on('deleteToken', onWhiteMarkTokenDeleted);
     Hooks.on('updateToken', onLosEyeTokenUpdate);
     Hooks.on('refreshToken', onLosEyeTokenRefresh);
-    Hooks.on('targetToken', refreshLosEye);
+    Hooks.on('targetToken', onLosEyeTargetChange);
     Hooks.on('updateItem', onProfileSwitched);
-    window.addEventListener('resize', onHotbarChange);
+    window.addEventListener('resize', onWindowResize);
     ensureWhiteMarkStore();
     const safeMark = makeSafe('advancedMeasureMark', () => closeAdvancedMeasure());
     _safeCtrlMove = safeMark(onCtrlMarkMove);
@@ -2732,6 +2431,7 @@ export function openAdvancedMeasure(options)
     _ctrlIndicator = createCtrlMarkIndicator({ queryMarked: ctrlQueryMarked });
     _shapeMarker = createShapeTokenMarker();
     // Opening during an attack/card is allowed; it just comes up disabled.
+    startCardWatch();
     _cardActive = !!document.querySelector('.la-info-card');
     _suppressed = _hudDepth > 0 || _cardActive;
     if (_suppressed)
@@ -2745,6 +2445,12 @@ export function openAdvancedMeasure(options)
         rebuildMovementReach();
         updateDistanceLabels();
     }
+    if (_saved.mode !== 'free' && !_suppressed)
+    {
+        const mode = _saved.mode;
+        _saved.mode = 'free';
+        setMode(mode);
+    }
     playUiSound('details');
     syncSceneControls();
     _emitStateChange();
@@ -2756,16 +2462,18 @@ export function closeAdvancedMeasure()
         return;
     _open = false;
     _overToolbar = false;
+    if (_openMenu)
+        setOpenMenu(null);
+    stopCardWatch();
     clearSightlines('adv-measure');
+    _losEyeSig = null;
     Hooks.off('updateToken', onLosEyeTokenUpdate);
     Hooks.off('refreshToken', onLosEyeTokenRefresh);
-    Hooks.off('targetToken', refreshLosEye);
+    Hooks.off('targetToken', onLosEyeTargetChange);
     clearTimeout(_losEyeRefreshTimer);
     _losEyeRefreshTimer = null;
     document.removeEventListener('pointermove', onClientPointerMove, { capture: true });
-    _hidePins();
     playUiSound('details');
-    document.removeEventListener('keydown', onFreeEsc, true);
     document.removeEventListener('wheel', onFreeWheel, { capture: true });
     Hooks.off('controlToken', onSelectionChange);
     Hooks.off('hoverToken', onHoverToken);
@@ -2776,7 +2484,7 @@ export function closeAdvancedMeasure()
     Hooks.off('deleteCombat', onCombatStateChange);
     Hooks.off('deleteToken', onWhiteMarkTokenDeleted);
     Hooks.off('updateItem', onProfileSwitched);
-    window.removeEventListener('resize', onHotbarChange);
+    window.removeEventListener('resize', onWindowResize);
     if (_safeCtrlMove)
         canvas.stage.off('pointermove', _safeCtrlMove);
     document.removeEventListener('pointerdown', _safeCtrlDown, true);
@@ -2865,13 +2573,21 @@ export async function setAdvancedMeasureState(patch)
     let changed = false;
     for (const [key, value] of Object.entries(patch))
     {
-        if (!_STATE_KEYS.has(key))
+        if (!_STATE_KEYS.has(key) || key === 'mode')
             continue;
         if (_saved[key] !== value)
         {
             _saved[key] = value;
             changed = true;
         }
+    }
+    if (Object.hasOwn(patch, 'mode') && patch.mode !== _saved.mode)
+    {
+        if (_open && !_suppressed)
+            setMode(patch.mode);
+        else
+            _saved.mode = patch.mode;
+        changed = true;
     }
     if (!changed)
         return;
@@ -2980,22 +2696,6 @@ function syncSceneControls()
         button.classList.toggle('active', active);
 }
 
-function measureShortcutLabel()
-{
-    try
-    {
-        const binding = game.keybindings.get(MODULE_ID,'advancedMeasure')?.[0];
-        if (!binding?.key)
-            return 'Shift + R';
-        const key = binding.key.replace(/^Key/, '').replace(/^Digit/, '');
-        return [...(binding.modifiers ?? []), key].join(' + ');
-    }
-    catch
-    {
-        return 'Shift + R';
-    }
-}
-
 // Adds toggle below ruler; handles v12 array and v13 record shapes; handler-driven to prevent active desync.
 Hooks.on('getSceneControlButtons', (controls) =>
 {
@@ -3017,8 +2717,8 @@ Hooks.on('getSceneControlButtons', (controls) =>
         toolclip: {
             heading: localize('LA.measure.advancedMeasureTool'),
             items: [
-                { paragraph: 'Measure with AoE shapes and targets, Shift+click to mark tokens/hexes, and pulse a range around the controlled token(s).' },
-                { heading: 'Toggle', reference: measureShortcutLabel() },
+                { paragraph: localize('LA.measure.toolclip') },
+                { heading: localize('LA.measure.toolclipToggle'), reference: keyLabel('advancedMeasure', 'Shift+R') },
             ],
         },
     };

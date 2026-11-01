@@ -1,3 +1,13 @@
+export const ANY_TURN_ORIGIN = '__any';
+export const ANY_TURN_LABEL = { start: 'anyTurnStart', end: 'anyTurnEnd' };
+
+export function durationChoice(label, originID)
+{
+    return originID === ANY_TURN_ORIGIN && ANY_TURN_LABEL[label]
+        ? { label: ANY_TURN_LABEL[label], originID: null }
+        : { label, originID };
+}
+
 // permanent/indefinite skip turns; otherwise adjust for whether it's origin's current turn.
 export function buildDuration(durationLabel, originID, turnsInput)
 {
@@ -65,7 +75,11 @@ export function currentTurnKey()
     if (!combat)
         return null;
     const combatant = /** @type {any} */ (combat.combatant);
+    return `${combat.id}:${combat.round}:${combatant?.id ?? combat.turn ?? 'none'}:${activationsUsed(combatant)}`;
+}
+
+export function activationsUsed(combatant)
+{
     const activations = combatant?.activations ?? combatant?.system?.activations;
-    const used = activations ? Math.max(0, (Number(activations.max) || 0) - (Number(activations.value) || 0)) : 0;
-    return `${combat.id}:${combat.round}:${combatant?.id ?? combat.turn ?? 'none'}:${used}`;
+    return activations ? Math.max(0, (Number(activations.max) || 0) - (Number(activations.value) || 0)) : 0;
 }

@@ -11,15 +11,15 @@ async function addVirtualMovement(token, cost)
 {
     const tokenDoc = token.document;
     const laHistory = getLAFlag(tokenDoc,'moveHistory') ?? { moves: [] };
-    const moves = laHistory.moves || [];
-    moves.push({
+    const moves = [...(laHistory.moves || []), {
         distanceMoved: cost,
         movementCost: cost,
         isDrag: true,
         isFreeMovement: false,
+        virtual: true,
         startPos: { x: tokenDoc.x, y: tokenDoc.y },
-    });
-    await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } });
+    }];
+    await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } }, /** @type {any} */ ({ laResetMoveCache: true }));
 }
 
 export async function applyStandingUp(token)
@@ -111,7 +111,7 @@ export async function executeFall(targetToken)
 {
     if (!targetToken)
     {
-        ui.notifications.error('lancer-automations | executeFall requires a target token.');
+        ui.notifications.error(localize('LA.notify.executeFallNeedsTarget'));
         return;
     }
 

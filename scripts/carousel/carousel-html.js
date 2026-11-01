@@ -1,15 +1,19 @@
 import { escapeHtml, localize, localizeFormat } from '../tools/string-utils.js';
 
 const SPENT_GLYPH = '#555555';
+const PIP_STEP_MS = 140;
+const PIP_PENDING = '#2b2b2b';
+const AMBIENT_BREATH_MS = 1600;
 
 const percent = (value, max) => (max > 0 ? Math.max(0, Math.min(1, value / max)) * 100 : 0);
+const ambientDelay = () => `animation-delay:-${Math.round(performance.now() % AMBIENT_BREATH_MS)}ms`;
 
 function tooltip(key)
 {
     return escapeHtml(localize(key));
 }
 
-function flashChunk(oldValue, newValue, max)
+function flashChunk(oldValue, newValue, max, kind = '')
 {
     if (oldValue === undefined || oldValue === newValue || max <= 0)
         return '';
@@ -17,21 +21,32 @@ function flashChunk(oldValue, newValue, max)
     const to = percent(Math.max(oldValue, newValue), max);
     if (to - from <= 0)
         return '';
-    return `<div class="lac-flash" style="left:${from}%;width:${to - from}%;transform-origin:${newValue < oldValue ? 'left' : 'right'}"></div>`;
+    return `<div class="lac-flash${kind ? ` k-${kind}` : ''}" style="left:${from}%;width:${to - from}%;transform-origin:${newValue < oldValue ? 'left' : 'right'}"></div>`;
 }
 
 function pipDots(pips, oldValue)
 {
     const low = oldValue === undefined ? pips.value : Math.min(oldValue, pips.value);
     const high = oldValue === undefined ? pips.value : Math.max(oldValue, pips.value);
+    const loss = oldValue !== undefined && pips.value < oldValue;
     let html = '';
     for (let slot = 0; slot < pips.max; slot++)
     {
         const lit = slot >= pips.max - pips.value;
         const flashed = slot >= pips.max - high && slot < pips.max - low;
-        html += `<i class="${lit ? 'on' : ''}${flashed ? ' fx-flash' : ''}"${lit ? ` style="background:${escapeHtml(pips.color)}"` : ''}></i>`;
+        let style = lit ? `background:${escapeHtml(pips.color)};` : '';
+        if (flashed)
+        {
+            const order = loss ? slot - (pips.max - high) : pips.max - low - 1 - slot;
+            style += `--d:${order * PIP_STEP_MS}ms;--pc:${loss ? escapeHtml(pips.color) : PIP_PENDING};`;
+        }
+        const flashClass = loss ? ' fx-flash' : ' fx-flash fx-gain';
+        html += `<i class="${lit ? 'on' : ''}${flashed ? flashClass : ''}"${style ? ` style="${style}"` : ''}></i>`;
     }
-    return `<span class="lac-dots">${html}</span>`;
+    const gained = oldValue !== undefined && pips.value > oldValue;
+    if (gained)
+        return `<span class="lac-dots fx-mend" style="--gc:${escapeHtml(pips.color)}">${html}</span>`;
+    return `<span class="lac-dots${loss ? ' fx-hit' : ''}">${html}</span>`;
 }
 
 function hpOverlays(model, bar, old)
@@ -45,9 +60,11 @@ function hpOverlays(model, bar, old)
     {
         const width = Math.min(percent(model.burn, max), fill);
         if (width > 0)
-            html += `<div class="lac-burn" style="left:${fill - width}%;width:${width}%"></div>`;
+            html += `<div class="lac-burn" style="left:${fill - width}%;width:${width}%;${ambientDelay()}"></div>`;
     }
-    return html + flashChunk(old.hp, bar.value, max) + flashChunk(old.overshield, model.overshield, max);
+    const hpKind = old.hp !== undefined && bar.value < old.hp ? 'hpLoss' : 'hpGain';
+    const osKind = old.overshield !== undefined && model.overshield < old.overshield ? 'osLoss' : 'osGain';
+    return html + flashChunk(old.hp, bar.value, max, hpKind) + flashChunk(old.overshield, model.overshield, max, osKind);
 }
 
 function heatOverlays(model, bar, old)
@@ -59,9 +76,12 @@ function heatOverlays(model, bar, old)
     {
         const width = Math.min(percent(model.infection, max), 100 - fill);
         if (width > 0)
-            html += `<div class="lac-inf" style="left:${fill}%;width:${width}%"></div>`;
+            html += `<div class="lac-inf" style="left:${fill}%;width:${width}%;${ambientDelay()}"></div>`;
     }
-    return html + flashChunk(old[bar.id], bar.value, max);
+    let heatKind = '';
+    if (bar.id === 'heat')
+        heatKind = old.heat !== undefined && bar.value > old.heat ? 'heatUp' : 'heatDown';
+    return html + flashChunk(old[bar.id], bar.value, max, heatKind);
 }
 
 function barLine(bar, overlays, className, style = '')
@@ -91,6 +111,9 @@ export function barHtml(card, old)
     const model = card.bar;
     if (!model)
         return '';
+    const lostArmor = Math.max(0, (old.armor ?? model.armor) - model.armor);
+    const gainedArmor = Math.max(0, model.armor - (old.armor ?? model.armor));
+    const armorSlots = model.armor + lostArmor;
     const rows = model.rows.map((row, index) =>
     {
         const pips = row.pips ? pipDots(row.pips, old[row.pips.id]) : (model.pipSlots ? '<span class="lac-dots"></span>' : '');
@@ -98,7 +121,11 @@ export function barHtml(card, old)
             return `<div class="lac-bar-row">${pips}</div>`;
         const isHp = row.bar.id === 'hp';
         const line = barLine(row.bar, isHp ? hpOverlays(model, row.bar, old) : heatOverlays(model, row.bar, old), isHp ? 'lac-hp' : 'lac-heat');
-        const armor = isHp && model.armor > 0 ? `<div class="lac-armor">${'<i></i>'.repeat(model.armor)}</div>` : '';
+        let armor = '';
+        if (isHp && armorSlots > 0)
+            armor = `<div class="lac-armor">${'<i></i>'.repeat(model.armor - gainedArmor)}${'<i class="fx-gain"></i>'.repeat(gainedArmor)}${'<i class="fx-crack"></i>'.repeat(lostArmor)}</div>`;
+        else if (armorSlots > 0)
+            armor = `<div class="lac-armor is-spacer">${'<i></i>'.repeat(armorSlots)}</div>`;
         return `<div class="lac-bar-row" data-row="${index}">${pips}${line}${armor}</div>`;
     }).join('');
     const extras = model.extras.map(line => `<div class="lac-bar-row lac-extras">${line.map(entry => extraEntry(entry, old)).join('')}</div>`).join('');
@@ -130,15 +157,36 @@ function reactionBolt(card, previous)
         return '';
     const fx = previous === undefined || previous === card.reaction ? '' : (card.reaction ? ' fx-refresh' : ' fx-spend');
     const label = card.reaction ? 'LA.carousel.reaction.available' : 'LA.carousel.reaction.used';
-    return `<i class="cci cci-reaction lac-react ${card.reaction ? 'is-up' : 'is-spent'}${fx}${card.flashOnly ? ' flash-only' : ''}" data-tooltip="${tooltip(label)}"></i>`;
+    const glyph = `<i class="cci cci-reaction lac-react ${card.reaction ? 'is-up' : 'is-spent'}${fx}${card.flashOnly ? ' flash-only' : ''}" data-tooltip="${tooltip(label)}"></i>`;
+    return fx === ' fx-spend' ? `<span class="lac-fxwrap">${glyph}<b class="lac-ring"></b></span>` : glyph;
 }
 
-function statusTile(status)
+function shakeClass(model, old)
+{
+    if (!model || !old)
+        return '';
+    const now = {};
+    for (const row of model.rows)
+    {
+        if (row.pips)
+            now[row.pips.id] = row.pips.value;
+        if (row.bar)
+            now[row.bar.id] = row.bar.value;
+    }
+    const dropped = id => old[id] !== undefined && now[id] !== undefined && now[id] < old[id];
+    if (dropped('structure') || dropped('stress'))
+        return 'fx-shake-l';
+    const heatUp = old.heat !== undefined && now.heat !== undefined && now.heat > old.heat;
+    const shieldLost = old.overshield !== undefined && model.overshield < old.overshield;
+    return dropped('hp') || heatUp || shieldLost ? 'fx-shake-s' : '';
+}
+
+function statusTile(status, index)
 {
     const badge = status.badge
         ? `<b class="lac-st-n" style="color:${status.badge.color}">${status.badge.count}${status.badge.uses ? `<small style="color:${status.badge.usesColor}">${status.badge.uses}</small>` : ''}</b>`
         : '';
-    return `<span class="lac-st"><img src="${escapeHtml(status.img)}" alt=""/>${badge}</span>`;
+    return `<span class="lac-st" data-st="${index}"><img src="${escapeHtml(status.img)}" alt=""/>${badge}</span>`;
 }
 
 function statusCap(size, active)
@@ -154,7 +202,7 @@ function statusRow(card, size)
     if (card.statuses.length <= cap)
         return card.statuses.map(statusTile).join('');
     const shown = card.statuses.slice(0, cap - 1).map(statusTile).join('');
-    return `${shown}<span class="lac-st lac-st-more">+${card.statuses.length - cap + 1}</span>`;
+    return `${shown}<span class="lac-st lac-st-more" data-more="${cap - 1}">+${card.statuses.length - cap + 1}</span>`;
 }
 
 function nameHtml(card)
@@ -189,6 +237,7 @@ export function slotHtml(card, lane, { size, started, old, oldReaction, justActi
         !card.event && !card.defeated && card.actsValue === 0 && !card.active ? 'is-spent' : '',
         card.hidden ? 'is-hidden' : '',
         justActivated ? 'fx-activate' : '',
+        shakeClass(card.bar, old),
     ].filter(Boolean).join(' ');
     const cardClasses = ['lac-card', card.active ? 'is-active' : '', card.defeated ? 'is-defeated' : ''].filter(Boolean).join(' ');
     return `<div class="${slotClasses}" data-id="${card.id}" data-combatant-id="${card.id}"${card.tokenId ? ` data-token-id="${card.tokenId}"` : ''} data-flip>`

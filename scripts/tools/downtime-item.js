@@ -1,5 +1,6 @@
 import { MODULE_ID } from './constants.js';
 import { localize, localizeFormat } from './string-utils.js';
+import { cancelButton } from './dialog-utils.js';
 export const DOWNTIME_TYPE = 'lancer-automations.downtime';
 export const DOWNTIME_PACK = 'la-downtime-activities';
 const DOWNTIME_ICON = 'systems/lancer/assets/icons/white/downtime.svg';
@@ -104,8 +105,8 @@ export async function ensureDowntimePack()
 
 function parseDowntimeList(text)
 {
-    const data = JSON.parse(text);
-    return Array.isArray(data) ? data : (Array.isArray(data?.actions) ? data.actions : []);
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.actions) ? parsed.actions : []);
 }
 
 function v2DowntimeItem(entry)
@@ -125,19 +126,19 @@ function v2DowntimeItem(entry)
 function v3DowntimeItem(entry)
 {
     const results = Array.isArray(entry.table?.results) ? entry.table.results : [];
-    const top = Math.max(0, ...results.map(result => Number(result.max) || 0));
+    const highestMax = Math.max(0, ...results.map(result => Number(result.max) || 0));
     const bands = results.length
         ? results.map(result =>
         {
             const min = Number(result.min) || 0;
             const max = Number(result.max) || 0;
-            if (max === top)
+            if (max === highestMax)
                 return { min, max: 100, short: `${min}+`, long: '', info: result.text ?? '' };
             return { min, max, short: min === max ? String(min) : `${min}-${max}`, long: '', info: result.text ?? '' };
         })
         : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
-    const prompt = entry.table?.detail ? `<p><b>${entry.table.detail}</b></p>` : '';
-    return { name: entry.name, lid: entry.id, description: `${entry.detail || entry.terse || ''}${prompt}`, bands };
+    const tableDetailHtml = entry.table?.detail ? `<p><b>${entry.table.detail}</b></p>` : '';
+    return { name: entry.name, lid: entry.id, description: `${entry.detail || entry.terse || ''}${tableDetailHtml}`, bands };
 }
 
 function downtimeItems(list)
@@ -288,7 +289,7 @@ export function openDowntimeImportDialog()
                     await importDowntimeActionsJson(text);
                 },
             },
-            cancel: { label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'import',
     }, { classes: ['lancer-dialog-base'], width: 460 }).render(true);

@@ -140,7 +140,7 @@ function _onStateTrigger(triggerType, data)
 
 async function _onUpdateItem(item, change)
 {
-    if (!game.users?.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
     if (change?.system?.destroyed !== true && change?.system?.cascading !== true)
         return;
@@ -167,6 +167,23 @@ async function _onUpdateItem(item, change)
         state: change.system.destroyed === true ? 'destroyed' : 'cascading',
         name: String(item.name ?? '').toUpperCase(),
     });
+}
+
+function _onUpdateActorDot(actor, change)
+{
+    if (!isExecutorGM())
+        return;
+    const kinds = ['burn', 'infection'].filter(kind => change?.system?.[kind] !== undefined);
+    if (!kinds.length)
+        return;
+    const tokenId = resolveEntryTokenId(actor);
+    if (!tokenId)
+        return;
+    const combat = findActiveCombatForToken(tokenId);
+    if (!combat)
+        return;
+    for (const kind of kinds)
+        appendEvent(combat, tokenId, { type: 'dot-change', round: combat.round ?? 0, turn: combat.turn ?? null, tokenId, kind, value: numOr(actor.system?.[kind]) });
 }
 
 export function forgetCombatState(combatId)
@@ -209,6 +226,17 @@ export function registerStateCapture()
         catch (err)
         {
             console.error('lancer-automations | battle-log gear-capture failed:', err);
+        }
+    });
+    Hooks.on('updateActor', (actor, change) =>
+    {
+        try
+        {
+            _onUpdateActorDot(actor, change);
+        }
+        catch (err)
+        {
+            console.error('lancer-automations | battle-log dot-capture failed:', err);
         }
     });
 }

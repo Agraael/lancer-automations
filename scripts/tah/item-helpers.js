@@ -2,14 +2,16 @@
 import { playUiSound } from './sound.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { corePowerState } from '../utils/lancer-token.js';
 // HUD item helpers: status badges, icons, col4 action/profile lists, and detail-popup pips.
 
 import { getItemActions } from '../interactive/deployables.js';
 import { laDetailPopup, laRenderActionDetail, laRenderWeaponProfile } from '../interactive/detail-renderers.js';
 import { getActivationIcon, executeProfileSwitch, executeSimpleActivation } from '../tools/misc-tools.js';
-import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerMissionLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getPerMissionLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, subHasLimits, FREQ_SPECS, isPerFrequencyEnabled } from '../combat/per-frequency-tags.js';
+import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerMissionLimit, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getPerMissionLimitFromSub, getSubUses, getSubUsed, patchSubUses, itemAllTags, actionSubKey, actorActionSubKey, subHasLimits, FREQ_SPECS, isPerFrequencyEnabled } from '../combat/per-frequency-tags.js';
 import { openExtraConfigDialog } from '../interactive/extra-config-dialog.js';
 import { localize, localizeFormat, escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 export { getActivationIcon } from '../tools/misc-tools.js';
 
 const ICON_PROFILE = 'systems/lancer/assets/icons/weapon_profile.svg';
@@ -31,7 +33,7 @@ export function actionDisplayName(item, action)
 }
 
 export const rechargeIcon = (/** @type {boolean} */ charged) =>
-    `<span class="mdi ${charged ? 'mdi-square-circle' : 'mdi-square-outline'}"></span>`;
+    `<span class="mdi ${charged ? 'mdi-square-circle is-ready' : 'mdi-square-outline is-off'}"></span>`;
 
 export function activationTheme(/** @type {string|null|undefined} */ activation)
 {
@@ -70,9 +72,9 @@ function resolveActionScope(item, action, subKey = null)
  * Availability status of a Lancer item or standalone action object, for HUD badge display.
  * Checks loading, recharge, limited uses, disabled, destroyed, and cascading.
  * @param {Item|object} itemOrAction
- * @returns {{ labelPrefix: string, badge: string|null, badgeColor: string, unavailable: boolean, disabled: boolean, destroyed: boolean, cascading: boolean }}
+ * @returns {{ labelPrefix: string, badge: string|null, badgeTone: string, unavailable: boolean, disabled: boolean, destroyed: boolean, cascading: boolean }}
  */
-export function getItemStatus(itemOrAction, extraAction = null, { subKey = null } = {})
+export function getItemStatus(itemOrAction, extraAction = null, { subKey = null, holder = null } = {})
 {
     const isItem = !!itemOrAction?.system;
     const sys = isItem ? itemOrAction.system : itemOrAction;
@@ -83,22 +85,22 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
     const destroyed = !!(sys.destroyed);
     const cascading = !!(sys.cascading);
     const parts = [];
-    let badgeColor = '#3a9e6e'; // green = ready
+    let badgeTone = 'ok';
 
     const pushLoaded = (loaded) =>
     {
         if (loaded === false)
         {
-            parts.push('⬡'); unavailable = true; badgeColor = '#c33';
+            parts.push('<span class="is-off">⬡</span>'); unavailable = true; badgeTone = 'bad';
         }
         else
-            parts.push('⬢');
+            parts.push('<span class="is-ready">⬢</span>');
     };
     const pushCharged = (charged) =>
     {
         if (charged === false)
         {
-            parts.push(rechargeIcon(false)); unavailable = true; badgeColor = '#c33';
+            parts.push(rechargeIcon(false)); unavailable = true; badgeTone = 'bad';
         }
         else
             parts.push(rechargeIcon(true));
@@ -117,10 +119,10 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         }
         if (current <= 0)
         {
-            unavailable = true; badgeColor = '#c33';
+            unavailable = true; badgeTone = 'bad';
         }
-        else if (current < max && badgeColor !== '#c33')
-            badgeColor = '#cc7700';
+        else if (current < max && badgeTone !== 'bad')
+            badgeTone = 'warn';
         parts.push(`${current}/${max}`);
     };
 
@@ -130,15 +132,15 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         const ready = max - Math.min(max, used);
         if (ready <= 0)
         {
-            unavailable = true; badgeColor = '#c33';
+            unavailable = true; badgeTone = 'bad';
         }
-        else if (ready < max && badgeColor !== '#c33')
-            badgeColor = '#cc7700';
+        else if (ready < max && badgeTone !== 'bad')
+            badgeTone = 'warn';
         const pips = [];
         for (let i = 0; i < max; i++)
         {
             const isReady = i < ready;
-            pips.push(`<span class="mdi ${isReady ? iconReady : iconConsumed}" style="color:${isReady ? '#3a9e6e' : '#c33'};"></span>`);
+            pips.push(`<span class="mdi ${isReady ? `${iconReady} is-ready` : `${iconConsumed} is-off`}"></span>`);
         }
         parts.push(pips.join(''));
     };
@@ -169,9 +171,14 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
             perScene = getPerSceneLimit(itemOrAction);
             perMission = getPerMissionLimit(itemOrAction);
         }
-        const freqUsed = (field) => freqKey && isItem
-            ? getSubUsed(itemOrAction, freqKey, field)
-            : Number(sys[field]?.value ?? 0);
+        const freqUsed = (field) =>
+        {
+            if (freqKey && isItem)
+                return getSubUsed(itemOrAction, freqKey, field);
+            if (holder && !isItem)
+                return getSubUsed(holder, actorActionSubKey(sys), field);
+            return Number(sys[field]?.value ?? 0);
+        };
         const limits = { uses_per_round: perRound, uses_per_turn: perTurn, uses_per_scene: perScene, uses_per_mission: perMission };
         for (const spec of FREQ_SPECS)
         {
@@ -190,7 +197,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null 
         pushUses(extraAction.uses);
 
     const badge = parts.length ? parts.join(' ') : null;
-    return { labelPrefix: '', badge, badgeColor, unavailable, disabled, destroyed, cascading };
+    return { labelPrefix: '', badge, badgeTone, unavailable, disabled, destroyed, cascading };
 }
 
 export function statusKindOf(status)
@@ -223,6 +230,7 @@ export function applyStripeStyle(row, stripe)
     row.data('restingBg', stripe.bg).data('restingBorder', stripe.border).data('hoverBg', stripe.hoverBg)
         .data('restingColor', stripe.color).data('hoverColor', stripe.hoverColor);
     row.css({ background: stripe.bg, borderLeftColor: stripe.border, color: stripe.color });
+    row.addClass('la-hud-striped');
     if (stripe.light)
         row.addClass('la-hud-spent');
     // Keep leading icon visible on dark stripes: flip whatever invert state laHudRenderIcon left.
@@ -236,13 +244,36 @@ export function applyStripeStyle(row, stripe)
     }
 }
 
-export function slideInCol(col, { duration = 140, guard = true } = {})
+export function markRightClick(element)
 {
+    element.addClass('la-hud-rclick').append('<span class="la-hud-ear"></span>');
+}
+
+export function slideInCol(col, { duration = 140, guard = true, silent = false } = {})
+{
+    if (silent)
+    {
+        col.stop(true).css({ opacity: '', marginLeft: '', pointerEvents: '' }).show();
+        return;
+    }
     col.stop(true).css({ opacity: 0, marginLeft: -10, ...(guard ? { pointerEvents: 'none' } : {}) }).show().animate({ opacity: 1, marginLeft: 0 }, duration, function()
     {
         if (guard)
             $(this).css('pointerEvents', '');
     });
+}
+
+export function capColumnItems(col, count)
+{
+    const maxItems = getModuleSetting('tah.maxColumnItems') ?? 0;
+    if (maxItems > 0 && count > maxItems)
+    {
+        const ROW_H = 32;
+        const LABEL_H = 22;
+        col.css({ maxHeight: `${LABEL_H + ROW_H * maxItems}px`, overflowY: 'auto' });
+    }
+    else
+        col.css({ maxHeight: '', overflowY: '' });
 }
 
 export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
@@ -462,7 +493,7 @@ export function laHudItemChildren(item, opts = {})
                 action,
                 icon: getActivationIcon(action),
                 badge: status.badge,
-                badgeColor: status.badgeColor,
+                badgeTone: status.badgeTone,
                 statusKind: statusKindOf(status),
                 onClick: onActivate ? () => onActivate(action, source) : null,
             };
@@ -545,15 +576,15 @@ function pickPipValue(pipIdx, current, max)
 
 function prependPipWrap(popup, cls = null)
 {
-    const wrap = $(`<div${cls ? ` class="${cls}"` : ''} style="${PIP_WRAP_STYLE}"></div>`);
+    const wrap = $(htmlToElement(`<div${cls ? ` class="${cls}"` : ''} style="${PIP_WRAP_STYLE}"></div>`));
     popup.children().last().prepend(wrap);
     return wrap;
 }
 
 function autoConsumeRow(item)
 {
-    const cfgRow = $(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
-    cfgRow.find('.la-ec-open').on('click', () => openExtraConfigDialog(item));
+    const cfgRow = htmlToElement(`<div style="display:flex;justify-content:flex-end;margin-bottom:2px;"><span class="la-ec-open" title="Auto-consume settings" style="cursor:pointer;font-size:0.68em;color:#888;text-transform:uppercase;letter-spacing:0.05em;"><i class="fas fa-sliders"></i> Auto-consume</span></div>`);
+    cfgRow.querySelector('.la-ec-open').addEventListener('click', () => openExtraConfigDialog(item));
     return cfgRow;
 }
 
@@ -578,26 +609,26 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
     if (hasLoading)
     {
         const loaded = state.loaded !== false;
-        const pip = $(`<span style="${PIP_STYLE}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`);
+        const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${loaded ? '#3a9e6e' : '#c33'};">${loaded ? '⬢' : '⬡'}</span>`));
         pip.on('click', async () =>
         {
             playUiSound('toggle');
             await patch({ loaded: !loaded });
             rebuild();
         });
-        wrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Loading${suffix}</span>`), pip));
+        wrap.append($(htmlToElement(`<div style="display:flex;align-items:center;gap:6px;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Loading${suffix}</span>`), pip));
     }
     if (hasRecharge)
     {
         const charged = state.charged !== false;
-        const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
+        const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`));
         pip.on('click', async () =>
         {
             playUiSound('toggle');
             await patch({ charged: !charged });
             rebuild();
         });
-        wrap.append($(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Charged${suffix}</span>`), pip));
+        wrap.append($(htmlToElement(`<div style="display:flex;align-items:center;gap:6px;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Charged${suffix}</span>`), pip));
     }
     if (!hasLimited || state.uses == null)
         return;
@@ -606,10 +637,10 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
     const max = isObj ? (state.uses.max ?? 0) : state.uses;
     if (!(max > 0))
         return;
-    const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Uses${suffix}</span>`));
+    const usesRow = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Uses${suffix}</span>`));
     for (let pipIdx = 1; pipIdx <= max; pipIdx++)
     {
-        const pip = $(`<span style="${PIP_STYLE}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`);
+        const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`));
         pip.on('click', async () =>
         {
             playUiSound('toggle');
@@ -628,7 +659,7 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
  * Does nothing if the item has none of those tags.
  * @param {any} item   Foundry Item document
  * @param {any} popup  jQuery popup element (from laDetailPopup)
- * @param {{ incDepth?: () => void, decDepth?: () => void, action?: any, subData?: any, subKey?: string }} [depthCallbacks]  optional HUD refresh-suppression hooks + optional extra action with recharge + optional sub-entry (trait/rank/core_system) to restrict per-freq detection + flag key for sub-scoped usage
+ * @param {{ action?: any, subData?: any, subKey?: string }} [depthCallbacks]  optional extra action with recharge + optional sub-entry (trait/rank/core_system) to restrict per-freq detection + flag key for sub-scoped usage
  */
 export function appendItemPips(item, popup, depthCallbacks)
 {
@@ -659,8 +690,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             : (item?.type === 'frame' ? 0 : getPerMissionLimit(item));
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
     const isCoreActive = !!action && item?.type === 'frame' && (
-        (item.system?.core_system?.active_actions ?? []).some(/** @type {any} */ candidate => candidate === action || candidate?.name === action?.name)
-        || action?.name === item.system?.core_system?.active_name
+        action?.name === item.system?.core_system?.active_name
         || action?.name === item.system?.core_system?.name
     );
     if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax && !perSceneMax && !perMissionMax && !isCoreActive)
@@ -704,11 +734,11 @@ export function appendItemPips(item, popup, depthCallbacks)
         const inCombat = !!game.combat?.started;
         const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) =>
         {
-            const usesRow = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">${label}</span>`));
+            const usesRow = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">${label}</span>`));
             for (let pipIdx = 1; pipIdx <= max; pipIdx++)
             {
                 const consumed = pipIdx <= used;
-                const pip = $(`<span style="${PIP_STYLE}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`);
+                const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${consumed ? '#c33' : '#3a9e6e'};"><span class="mdi ${consumed ? iconConsumed : iconReady}"></span></span>`));
                 pip.on('click', async () =>
                 {
                     playUiSound('toggle');
@@ -730,14 +760,14 @@ export function appendItemPips(item, popup, depthCallbacks)
         if (isCoreActive)
         {
             const actor = item.parent ?? item.actor;
-            const charged = (actor?.system?.core_energy ?? 0) > 0;
-            const row = $(`<div style="display:flex;align-items:center;gap:6px;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Core Power</span>`));
-            const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`);
+            const charged = corePowerState(actor).charged;
+            const row = $(htmlToElement(`<div style="display:flex;align-items:center;gap:6px;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Core Power</span>`));
+            const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};"><i class="mdi ${charged ? 'mdi-battery' : 'mdi-battery-off'}"></i></span>`));
             pip.on('click', async (ev) =>
             {
                 ev.stopPropagation();
                 playUiSound('toggle');
-                const live = (actor?.system?.core_energy ?? 0) > 0;
+                const live = corePowerState(actor).charged;
                 await actor?.update({ 'system.core_energy': live ? 0 : 1 });
                 rebuild();
             });
@@ -783,9 +813,9 @@ export function appendItemPips(item, popup, depthCallbacks)
             const extraActionEntry = (getLAFlag(item,'extraActions') || []).find(entry => entry.name === extraAction.name);
             const charged = extraActionEntry ? extraActionEntry.charged !== false : extraAction.charged !== false;
             extraActionWrap.find('.la-ea-recharge-row').remove();
-            const row = $(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`);
-            row.append($(`<span style="${PIP_LABEL_STYLE}">Charged</span>`));
-            const pip = $(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`);
+            const row = $(htmlToElement(`<div class="la-ea-recharge-row" style="display:flex;align-items:center;gap:6px;"></div>`));
+            row.append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Charged</span>`));
+            const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${charged ? '#3a9e6e' : '#c33'};font-size:1em;">${rechargeIcon(charged)}</span>`));
             pip.on('click', async () =>
             {
                 playUiSound('toggle');
@@ -812,19 +842,19 @@ export function appendBondPowerPips(bond, powerIdx, popup)
     const power = /** @type {any} */ (bond)?.system?.powers?.[powerIdx];
     if (!power?.uses || !(power.uses.max > 0))
         return;
-    const S_PIP = 'cursor:pointer;font-size:1.15em;line-height:1;padding:0 2px;';
+    const bondPipStyle = 'cursor:pointer;font-size:1.15em;line-height:1;padding:0 2px;';
     const wrap = prependPipWrap(popup);
-    const pipHolder = $(`<div></div>`);
+    const pipHolder = $(document.createElement('div'));
     wrap.append(pipHolder);
     const max = power.uses.max;
     const rebuild = (/** @type {number} */ value) =>
     {
         pipHolder.empty();
-        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">${escapeHtml(power.frequency || 'Uses')}</span>`));
+        const row = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">${escapeHtml(power.frequency || 'Uses')}</span>`));
         for (let slot = 1; slot <= max; slot++)
         {
             const filled = slot <= value;
-            const pip = $(`<span style="${S_PIP}color:${filled ? '#3a9e6e' : '#444'};"><i class="mdi ${filled ? 'mdi-calendar-today' : 'mdi-calendar-blank'}"></i></span>`);
+            const pip = $(htmlToElement(`<span style="${bondPipStyle}color:${filled ? '#3a9e6e' : '#444'};"><i class="mdi ${filled ? 'mdi-calendar-today' : 'mdi-calendar-blank'}"></i></span>`));
             const pipIdx = slot;
             pip.on('click', async () =>
             {
@@ -848,18 +878,18 @@ export function appendReservePips(group, popup)
     const total = group.length;
     const wrap = prependPipWrap(popup);
     wrap.append(autoConsumeRow(group[0]));
-    const pipHolder = $(`<div></div>`);
+    const pipHolder = $(document.createElement('div'));
     wrap.append(pipHolder);
     const rebuild = () =>
     {
         pipHolder.empty();
         const available = group.filter(copy => !copy.system?.used).length;
-        const row = $(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`).append($(`<span style="${PIP_LABEL_STYLE}">Uses</span>`));
+        const row = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Uses</span>`));
         for (let slot = 1; slot <= total; slot++)
         {
             const pipIdx = slot;
             const filled = pipIdx <= available;
-            const pip = $(`<span style="${PIP_STYLE}color:${filled ? '#3a9e6e' : '#444'};">${filled ? '⬢' : '⬡'}</span>`);
+            const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${filled ? '#3a9e6e' : '#444'};">${filled ? '⬢' : '⬡'}</span>`));
             pip.on('click', async () =>
             {
                 playUiSound('toggle');

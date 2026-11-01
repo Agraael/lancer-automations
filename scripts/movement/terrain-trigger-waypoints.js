@@ -532,7 +532,7 @@ Hooks.once('init', () =>
     game.settings.register(MODULE_ID, PATHFIND_DRAG_MOVEMENT, {
         scope: 'world',
         type: Boolean,
-        default: false,
+        default: true,
         config: false
     });
 });

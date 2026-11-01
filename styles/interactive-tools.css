@@ -617,6 +617,61 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     cursor: help;
 }
 
+#lancer-automations-config .la-opt-row .la-req-icon,
+#lancer-automations-config .la-compact-bool .la-req-icon {
+    display: none;
+}
+
+#lancer-automations-config .la-req-unmet:not(.la-req-grouped) .la-req-icon {
+    display: inline;
+}
+
+#lancer-automations-config .la-req-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#lancer-automations-config .la-req-line .la-req-icon {
+    margin-left: 0;
+    cursor: default;
+}
+
+#lancer-automations-config .la-compact-bool.la-req-unmet input {
+    opacity: 0.45;
+}
+
+#lancer-automations-config .la-compact-bool.la-req-unmet label {
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-req-hidden,
+.la-onb-q[hidden] {
+    display: none !important;
+}
+
+#lancer-automations-config .la-req-soft label {
+    color: var(--la-ink-dim);
+}
+
+#lancer-automations-config .la-req-soft .la-opt-control {
+    opacity: 0.6;
+}
+
+#lancer-automations-config .la-opt-row.la-nest {
+    position: relative;
+    padding-left: 36px;
+}
+
+#lancer-automations-config .la-opt-row.la-nest::before {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 0;
+    bottom: -1px;
+    border-left: 2px solid color-mix(in srgb, var(--la-config-signal), transparent 45%);
+}
+
 .la-config-form {
     display: flex;
     flex-direction: column;
@@ -770,6 +825,64 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     opacity: 0.9;
 }
 
+#lancer-automations-config .la-search-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    justify-self: center;
+    width: 100%;
+    max-width: 440px;
+    min-width: 0;
+}
+
+#lancer-automations-config .la-search-wrap .la-config-search {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#lancer-automations-config .la-wizard-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    height: 30px;
+    margin: 0;
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 0;
+    box-shadow: none;
+    color: #fff;
+    font-size: 0.85em;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-wizard-btn i {
+    margin: 0;
+    font-size: 0.9em;
+}
+
+#lancer-automations-config .la-page-head h1 .la-page-doc {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 2px;
+    color: var(--la-ink-dim);
+    text-decoration: none;
+    font-size: 0.62em;
+    cursor: pointer;
+}
+
+#lancer-automations-config .la-page-head h1 .la-page-doc i {
+    color: inherit;
+    font-size: 1em;
+}
+
 #lancer-automations-config .la-config-search .la-config-search-input {
     flex: 1;
     min-width: 0;
@@ -793,6 +906,15 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     letter-spacing: 0.04em;
     background: none;
     color: inherit;
+}
+
+#lancer-automations-config .la-config-search .la-new-filter {
+    font: 500 10.5px var(--la-config-mono);
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 #lancer-automations-config .la-config-search-clear {
@@ -1067,6 +1189,27 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     color: var(--la-ink-dim);
 }
 
+#lancer-automations-config .la-page-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#lancer-automations-config .la-page-tools .la-page-meta {
+    margin-right: 6px;
+}
+
+#lancer-automations-config .la-page-tools .la-chip {
+    width: 24px;
+    padding: 0;
+}
+
+#lancer-automations-config .la-page-tools .la-chip i {
+    margin: 0;
+    font-size: 11px;
+    color: inherit;
+}
+
 .la-strip {
     display: flex;
     flex-wrap: wrap;
@@ -1192,6 +1335,17 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     letter-spacing: 0;
     text-transform: none;
     color: color-mix(in srgb, var(--la-ink), var(--la-plate) 55%);
+}
+
+#lancer-automations-config .la-card-changed {
+    color: var(--la-config-text-accent);
+    font-weight: 700;
+}
+
+#lancer-automations-config .la-card-changed:not(:empty)::after {
+    content: ' / ';
+    color: color-mix(in srgb, var(--la-ink), var(--la-plate) 55%);
+    font-weight: 500;
 }
 
 #lancer-automations-config .la-card-body,
@@ -1350,6 +1504,49 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     color: var(--la-config-text-accent);
 }
 
+#lancer-automations-config .la-changed-dot,
+#lancer-automations-config .la-row-reset {
+    display: none;
+}
+
+#lancer-automations-config .la-changed .la-changed-dot {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--la-config-text-accent);
+}
+
+#lancer-automations-config .la-changed .la-row-reset {
+    width: 15px;
+    height: 15px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 10px;
+    color: var(--la-ink-dim);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#lancer-automations-config .la-row-reset:hover {
+    color: var(--la-config-text-accent);
+}
+
+#lancer-automations-config .la-changed:has([name]:disabled) .la-row-reset {
+    visibility: hidden;
+}
+
+#lancer-automations-config .la-row-tag {
+    display: inline-block;
+    flex-shrink: 0;
+    padding: 1px 5px;
+    border: 1px solid var(--la-edge);
+    font: 500 9.5px var(--la-config-mono);
+    letter-spacing: 0.08em;
+    color: var(--la-ink-dim);
+}
+
 #lancer-automations-config .la-opt-control {
     display: flex;
     align-items: center;
@@ -1408,7 +1605,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 }
 
 /* Action buttons reuse the library chamfer, the Save / Play ones are filled primary. */
-#lancer-automations-config .lancer-action-btn {
+#lancer-automations-config .lancer-action-btn,
+.la-welcome-tours .lancer-action-btn {
     --la-line: color-mix(in srgb, var(--la-accent, var(--primary-color)), transparent 40%);
     --la-fill: color-mix(in srgb, var(--la-plate, #e4dccd), var(--la-ink) 12%);
     color: var(--la-ink) !important;
@@ -1426,14 +1624,33 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     --la-line: var(--la-config-signal);
 }
 
-#lancer-automations-config .lancer-action-btn.la-primary {
+#lancer-automations-config .lancer-action-btn.la-primary,
+.la-welcome-tours .lancer-action-btn.la-primary {
     --la-line: var(--la-accent, var(--primary-color));
     --la-fill: var(--la-accent, var(--primary-color));
     color: #fff !important;
 }
 
-#lancer-automations-config .lancer-action-btn.la-primary i {
+#lancer-automations-config .lancer-action-btn.la-primary i,
+.la-welcome-tours .lancer-action-btn.la-primary i {
     color: inherit;
+}
+
+.la-changed-default-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+}
+
+.la-changed-default-name {
+    flex: 1;
+}
+
+.la-changed-default-values {
+    font: 500 11px var(--la-mono, monospace);
+    color: var(--la-ink-dim);
+    white-space: nowrap;
 }
 
 #lancer-automations-config .lancer-action-btn:disabled {
@@ -1465,12 +1682,44 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     visibility: hidden;
 }
 
+#lancer-automations-config .la-gm-tag.la-new-tag {
+    display: inline-block;
+    color: var(--la-config-text-accent);
+    border-color: currentColor;
+}
+
+#lancer-automations-config .la-new-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: var(--la-config-signal);
+    vertical-align: middle;
+}
+
 /* Compact toggle grids. */
 #lancer-automations-config .la-compact-bools {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 2px 10px;
     padding: 6px 14px 8px;
+}
+
+#lancer-automations-config .la-bulk {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#lancer-automations-config .la-bulk + .la-card-count {
+    margin-left: 4px;
+}
+
+#lancer-automations-config .la-bulk .la-chip {
+    height: 20px;
+    padding: 0 8px;
 }
 
 #lancer-automations-config .la-compact-bool {
@@ -1534,7 +1783,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 
 /* Keybinding and tour rows. */
 #lancer-automations-config .la-keybinding-row,
-#lancer-automations-config .la-tour-row {
+#lancer-automations-config .la-tour-row,
+.la-welcome-tours .la-tour-row {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -1544,7 +1794,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
 }
 
 #lancer-automations-config .la-keybinding-row:hover,
-#lancer-automations-config .la-tour-row:hover {
+#lancer-automations-config .la-tour-row:hover,
+.la-welcome-tours .la-tour-row:hover {
     background: color-mix(in srgb, var(--la-accent, var(--primary-color)) 8%, transparent);
 }
 
@@ -1553,12 +1804,14 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     border-bottom: 0;
 }
 
-#lancer-automations-config .la-kb-text {
+#lancer-automations-config .la-kb-text,
+.la-welcome-tours .la-kb-text {
     flex: 1;
     min-width: 0;
 }
 
-#lancer-automations-config .la-kb-name {
+#lancer-automations-config .la-kb-name,
+.la-welcome-tours .la-kb-name {
     font-weight: bold;
     font-size: 0.9em;
     color: var(--la-ink);
@@ -1572,9 +1825,10 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     margin-top: 1px;
 }
 
-#lancer-automations-config .la-tour-steps {
+#lancer-automations-config .la-tour-steps,
+.la-welcome-tours .la-tour-steps {
     margin-left: 6px;
-    font: 400 11px var(--la-config-mono);
+    font: 400 11px var(--la-config-mono, var(--la-mono, monospace));
     color: var(--la-ink-dim);
 }
 
@@ -1633,7 +1887,8 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     cursor: pointer;
 }
 
-#lancer-automations-config .la-tour-play {
+#lancer-automations-config .la-tour-play,
+.la-welcome-tours .la-tour-play {
     height: 26px;
     flex: 0 0 auto;
     width: auto;
@@ -1715,6 +1970,15 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     font: 500 11px var(--la-config-mono);
     letter-spacing: 0.02em;
     color: var(--la-ink-dim);
+}
+
+.la-config-footer .la-fcs-legend {
+    white-space: nowrap;
+}
+
+.la-config-footer .la-fcs-legend i {
+    margin: 0 2px 0 4px;
+    font-size: 10px;
 }
 
 #lancer-automations-config .la-config-footer .la-config-save {
@@ -3214,11 +3478,6 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     color: #00aaff;
 }
 
-.lancer-sw-stack--uses {
-    border-color: #6a4a9a;
-    color: #c39bff;
-}
-
 .lancer-sw-uses {
     position: absolute;
     right: -16px;
@@ -3402,6 +3661,12 @@ form[id^="accdiff"] .lancer-header input,
     color: #00aaff;
     font-weight: bold;
 }
+.la-status-tooltip-value {
+    font-weight: bold;
+}
+.la-status-tooltip-core {
+    color: #fff;
+}
 
 .la-status-tooltip-bonus {
     color: #00aaff;
@@ -3425,6 +3690,12 @@ form[id^="accdiff"] .lancer-header input,
     margin-top: 3px;
     color: #9c968d;
     font-style: italic;
+}
+
+.la-status-tooltip-meta {
+    margin-top: 3px;
+    color: #8b8b90;
+    font-size: 0.92em;
 }
 
 .la-status-tooltip-cond {

@@ -2,6 +2,8 @@
 
 import { getLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
+import { resolvePilot } from '../utils/lancer-token.js';
 
 export const FLAG_PORTRAIT_MODE = 'tahPortraitMode';
 export const FLAG_PORTRAIT_IMG = 'tahPortraitImg';
@@ -64,8 +66,7 @@ function withPilotSubstitution(actor, tokenDoc)
 {
     if (actor?.type !== 'mech' || !usePilotArt(tokenDoc))
         return actor;
-    const pilot = actor.system?.pilot;
-    return pilot?.status === 'resolved' ? (pilot.value ?? actor) : actor;
+    return resolvePilot(actor) ?? actor;
 }
 
 /**
@@ -220,12 +221,15 @@ export function buildPortrait(token, actor, onMeasured, drawHeight)
     const knownRatio = _ratioCache.get(src) ?? DEFAULT_RATIO;
     const knownTrim = trimOn ? _trimCache.get(src) : null;
     const width = Math.round(height / knownRatio);
-    const el = $('<div class="la-hud-portrait"></div>');
+    const el = $(htmlToElement('<div class="la-hud-portrait"></div>'));
     el.css({ width: `${width}px`, height: `${height}px` });
     const isVideo = foundry.helpers.media.VideoHelper.hasVideoExtension(src);
-    const img = isVideo
-        ? $('<video>').prop({ autoplay: true, muted: true, loop: true, playsInline: true })
-        : $('<img>').attr('alt', '');
+    const media = document.createElement(isVideo ? 'video' : 'img');
+    if (isVideo)
+        Object.assign(media, { autoplay: true, muted: true, loop: true, playsInline: true });
+    else
+        media.setAttribute('alt', '');
+    const img = $(media);
     img.attr('src', src);
     if (knownTrim)
         applyTrim(el, img, knownTrim, knownRatio, height);
@@ -273,7 +277,7 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
 {
     const fullHeight = portraitHeight();
     const smallHeight = Math.round(fullHeight * RAIL_SMALL_RATIO);
-    const rail = $('<div class="la-hud-portrait-rail"></div>');
+    const rail = $(htmlToElement('<div class="la-hud-portrait-rail"></div>'));
     const ordered = [...pilots].sort((first, second) =>
         Number(second.uuid === activeUuid) - Number(first.uuid === activeUuid));
 
@@ -284,7 +288,7 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
         const built = buildPortrait(null, pilot, isActive ? onMeasured : null, isActive ? fullHeight : smallHeight);
         if (!built)
             continue;
-        const slot = $('<div class="la-hud-rail-slot"></div>');
+        const slot = $(htmlToElement('<div class="la-hud-rail-slot"></div>'));
         slot.append(built.el);
         if (isActive)
         {
@@ -295,7 +299,10 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
         else
         {
             slot.attr({ 'data-uuid': pilot.uuid, title: pilot.name });
-            slot.append($('<span class="la-hud-rail-name"></span>').text(pilot.name));
+            const nameEl = document.createElement('span');
+            nameEl.className = 'la-hud-rail-name';
+            nameEl.textContent = pilot.name;
+            slot.append(nameEl);
         }
         slot.on('click', (event) =>
         {

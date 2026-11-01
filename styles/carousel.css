@@ -564,7 +564,8 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     gap: 2px;
     padding-top: 1px;
     opacity: 0;
-    transition: opacity 0.15s ease-out;
+    transform: translateY(3px);
+    transition: opacity 0.12s ease-out, transform 0.12s ease-out;
 }
 
 #la-carousel .lac-slot.is-active > .lac-bar,
@@ -575,6 +576,8 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
 #la-carousel .lac-slot.bar-peek > .lac-bar,
 #la-carousel.alt-peek .lac-slot.alt-ok > .lac-bar {
     opacity: 1;
+    transform: none;
+    transition-duration: 0.18s;
 }
 
 #la-carousel .lac-slot:not(.bar-peek) > .lac-bar.flash-only,
@@ -602,6 +605,10 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     background: #333;
 }
 
+#la-carousel .lac-dots i {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
 #la-carousel .lac-segs {
     display: flex;
     gap: 1px;
@@ -619,10 +626,6 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     overflow: hidden;
     background: rgba(34, 34, 34, 0.9);
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
-}
-
-#la-carousel .lac-line.lac-heat {
-    height: 3px;
 }
 
 #la-carousel .lac-extras {
@@ -661,7 +664,7 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     top: 0;
     bottom: 0;
     box-sizing: border-box;
-    animation: lac-pulse 0.9s ease-in-out infinite;
+    animation: lac-breath 1.6s ease-in-out infinite;
 }
 
 #la-carousel .lac-burn {
@@ -700,8 +703,14 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     background: #c8c8c8;
 }
 
-@keyframes lac-pulse {
-    0%, 100% { opacity: 0.45; }
+#la-carousel .lac-armor.is-spacer {
+    visibility: hidden;
+    height: 0;
+    padding-block: 0;
+}
+
+@keyframes lac-breath {
+    0%, 100% { opacity: 0.6; }
     50% { opacity: 1; }
 }
 
@@ -723,13 +732,189 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     to { transform: scaleX(0); }
 }
 
-#la-carousel .lac-dots i.fx-flash::after,
+#la-carousel .lac-flash.k-hpLoss,
+#la-carousel .lac-flash.k-osLoss {
+    background: #ff7b6b;
+}
+
+#la-carousel .lac-flash.k-hpGain {
+    background: #c8ffd0;
+}
+
+#la-carousel .lac-flash.k-osGain {
+    background: #bfe4ff;
+}
+
+#la-carousel .lac-flash.k-heatUp {
+    background: #ffd27a;
+}
+
+#la-carousel .lac-flash.k-heatDown {
+    background: #a8dcff;
+}
+
 #la-carousel .lac-segs i.fx-flash::after {
     content: "";
     position: absolute;
     inset: 0;
     background: #fff;
     animation: lac-fade-out var(--lac-flash-shrink) cubic-bezier(0.215, 0.61, 0.355, 1) var(--lac-flash-hold) forwards;
+}
+
+#la-carousel .lac-dots {
+    position: relative;
+}
+
+#la-carousel .lac-dots i.fx-flash::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--pc);
+    animation: lac-hide 0s linear var(--d, 0ms) forwards;
+}
+
+#la-carousel .lac-dots i.fx-flash::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    opacity: 0;
+    animation: lac-pip-flash calc(var(--lac-flash-hold) + var(--lac-flash-shrink)) cubic-bezier(0.215, 0.61, 0.355, 1) var(--d, 0ms) forwards;
+}
+
+@keyframes lac-hide {
+    to { visibility: hidden; }
+}
+
+@keyframes lac-pip-flash {
+    0%, 16% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+#la-carousel .lac-dots.fx-hit::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background: #ff3b30;
+    opacity: 0;
+    pointer-events: none;
+    animation: lac-hit 0.35s ease-out;
+}
+
+@keyframes lac-hit {
+    from { opacity: 0.5; }
+    to { opacity: 0; }
+}
+
+#la-carousel .lac-dots.fx-mend::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background: var(--gc);
+    opacity: 0;
+    pointer-events: none;
+    animation: lac-hit 0.4s ease-out;
+}
+
+#la-carousel .lac-dots i.fx-gain::after {
+    background: var(--gc);
+    animation: lac-pip-gain 0.5s ease-out var(--d, 0ms) forwards;
+}
+
+@keyframes lac-pip-gain {
+    0% { opacity: 1; background: #fff; transform: scale(1); box-shadow: 0 0 4px var(--gc); }
+    22% { transform: scale(1.3); }
+    60% { opacity: 1; background: var(--gc); transform: scale(1); }
+    100% { opacity: 0; box-shadow: 0 0 0 transparent; }
+}
+
+#la-carousel .lac-armor i.fx-gain {
+    animation: lac-armor-gain 0.3s ease-out;
+}
+
+@keyframes lac-armor-gain {
+    from { background: #fff; }
+}
+
+#la-carousel .lac-slot.fx-shake-s {
+    animation: lac-shake-s 0.16s linear;
+}
+
+#la-carousel .lac-slot.fx-shake-l {
+    animation: lac-shake-l 0.35s linear;
+}
+
+@keyframes lac-shake-s {
+    25% { transform: translateX(1.5px); }
+    50% { transform: translateX(-1.2px); }
+    75% { transform: translateX(0.6px); }
+}
+
+@keyframes lac-shake-l {
+    12% { transform: translateX(5px); }
+    25% { transform: translateX(-4.5px); }
+    40% { transform: translateX(3.5px); }
+    55% { transform: translateX(-2.5px); }
+    70% { transform: translateX(1.5px); }
+    85% { transform: translateX(-0.6px); }
+}
+
+#la-carousel .lac-fxwrap {
+    position: relative;
+    display: inline-flex;
+    margin-left: 2px;
+}
+
+#la-carousel .lac-fxwrap > .lac-react {
+    margin-left: 0;
+}
+
+#la-carousel .lac-ring {
+    position: absolute;
+    inset: 0;
+    border: 1.5px solid #c38cf0;
+    pointer-events: none;
+    opacity: 0;
+    animation: lac-ring 0.52s ease-out;
+}
+
+@keyframes lac-ring {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(2.6); }
+}
+
+#la-carousel .lac-armor i.fx-crack {
+    position: relative;
+    background: transparent;
+}
+
+#la-carousel .lac-armor i.fx-crack::before,
+#la-carousel .lac-armor i.fx-crack::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 1px;
+    height: 50%;
+    background: #c8c8c8;
+    animation: lac-crack-l 0.45s ease-out forwards;
+}
+
+#la-carousel .lac-armor i.fx-crack::before {
+    top: 0;
+}
+
+#la-carousel .lac-armor i.fx-crack::after {
+    left: 1px;
+    bottom: 0;
+    animation-name: lac-crack-r;
+}
+
+@keyframes lac-crack-l {
+    to { transform: translate(-1.5px, 2px); opacity: 0; }
+}
+
+@keyframes lac-crack-r {
+    to { transform: translate(1.5px, 2px); opacity: 0; }
 }
 
 @keyframes lac-fade-out {
@@ -746,13 +931,14 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
 }
 
 #la-carousel .lac-react.fx-refresh {
-    animation: lac-bolt-up 0.7s ease-out;
+    animation: lac-bolt-up 0.5s ease-out;
 }
 
 @keyframes lac-bolt-up {
-    0% { transform: scale(0.3); opacity: 0; }
-    60% { transform: scale(1.35); opacity: 1; }
-    100% { transform: scale(1); }
+    0% { color: #fff; transform: scale(1); filter: drop-shadow(0 0 0 #be51ed); }
+    22% { transform: scale(1.3); filter: drop-shadow(0 0 4px #be51ed); }
+    60% { transform: scale(1); }
+    100% { filter: drop-shadow(0 0 0 transparent); }
 }
 
 #la-carousel .lac-head-acts .cci.fx-burn {
@@ -862,7 +1048,11 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     #la-carousel .lac-head-acts .cci.fx-burn,
     #la-carousel .lac-head.fx-sweep::after,
     #la-carousel .lac-edge i,
-    #la-carousel .horus--subtle {
+    #la-carousel .horus--subtle,
+    #la-carousel .lac-slot.fx-shake-s,
+    #la-carousel .lac-slot.fx-shake-l,
+    #la-carousel .lac-dots.fx-mend::after,
+    #la-carousel .lac-ring {
         animation: none;
     }
 
@@ -877,8 +1067,11 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     }
 
     #la-carousel .lac-flash,
+    #la-carousel .lac-dots i.fx-flash::before,
     #la-carousel .lac-dots i.fx-flash::after,
-    #la-carousel .lac-segs i.fx-flash::after {
+    #la-carousel .lac-segs i.fx-flash::after,
+    #la-carousel .lac-armor i.fx-crack::before,
+    #la-carousel .lac-armor i.fx-crack::after {
         display: none;
     }
 

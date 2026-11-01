@@ -35,9 +35,9 @@ Every one has its own toggle under **Visual effects**, all under a single master
 
 <img align="right" src="../img/fs-lowquality.png" width="45%"/>
 
-**Low-quality mode** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions. The glow and bloom filters they normally use are GPU-hungry.
+**Low-Quality Status FX** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions. The glow and bloom filters they normally use are GPU-hungry.
 
-**Remove statuses on death** clears a token's statuses when its structure hits 0.
+**Remove Statuses on Death** clears a token's statuses when its structure hits 0.
 
 <br clear="right"/>
 
@@ -53,7 +53,7 @@ Some statuses are applied straight from the actor's numbers: the danger-zone ove
 
 <img align="right" src="../img/fs-guardian.png" width="45%"/>
 
-Corner marks are drawn on the footprint of tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only, or off.
+Corner marks are drawn on the footprint of tokens with **Guardian** or **Bulwark**. **`guardianBulwarkAuraMode`** sets it to always on, combat-only (default), or off.
 
 <br clear="right"/>
 
@@ -65,7 +65,7 @@ Corner marks are drawn on the footprint of tokens with **Guardian** or **Bulwark
 
 Two cues make height readable from straight above: one drawn on the tokens, one on the terrain.
 
-**Token ground shadow** (**`tokenGroundShadow`**, off by default) casts each token's own silhouette on the ground, thrown further and blurred softer the higher it stands. A token resting on whatever is beneath it casts nothing, so a shadow always means "this is above the ground it sits on". Solid terrain counts as ground, so a mech standing on a plateau casts none until it leaves it. **`tokenGroundShadowThrow`** (9) is the pixels of offset per grid cell of elevation on a grid of 100, and **`tokenGroundShadowOpacity`** (0.55) its strength.
+**Ground shadow strength** (**`tokenGroundShadowOpacity`**, default 0 = off) casts each token's own silhouette on the ground, thrown further and blurred softer the higher it stands. A token resting on whatever is beneath it casts nothing, so a shadow always means "this is above the ground it sits on". Solid terrain counts as ground, so a mech standing on a plateau casts none until it leaves it. **Ground shadow distance** (**`tokenGroundShadowThrow`**, 9) is the pixels of offset per grid cell of elevation on a grid of 100.
 
 On the terrain side, [my Terrain Height Tools fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools) adds **Tanaka contours** (**`terrainTanaka`**), which draw every drop as a highlight where it faces the light and a shadow where it faces away, and **drop shading** (**`terrainDropBand`**), which shades the ground beside a drop, reaching further the further it falls. Both are off by default and both are marked experimental there.
 

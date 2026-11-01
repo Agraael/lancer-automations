@@ -126,3 +126,94 @@ export function openFavoritePopup(x, y, currentWheel, { onEnter = null, onLeave 
         onLeave,
     });
 }
+
+export function collectFavorites(categories, wheel = 0)
+{
+    const favs = wheel ? favoriteKeys(wheel) : Array.from({ length: WHEEL_COUNT }, (_, index) => favoriteKeys(index + 1)).flat();
+    if (!favs.length)
+        return [];
+    const favSet = new Set(favs);
+    const results = [];
+    const seen = new Set();
+    const migrations = new Map();
+    const walk = (items, catLabel) =>
+    {
+        for (const item of (items ?? []))
+        {
+            if (item.isSectionLabel)
+                continue;
+            if (item.onClick)
+            {
+                const key = favKeyOf(item);
+                const legacy = key && !favSet.has(key) ? legacyFavKeyOf(item) : null;
+                const matched = key && (favSet.has(key) || (legacy && legacy !== key && favSet.has(legacy)));
+                if (matched && !seen.has(key))
+                {
+                    seen.add(key);
+                    if (legacy && legacy !== key && favSet.has(legacy))
+                        migrations.set(legacy, key);
+                    results.push({ ...item, _catLabel: catLabel, favKey: key });
+                }
+            }
+            if (item.getChildren)
+                walk(item.getChildren(), catLabel);
+        }
+    };
+    for (const cat of (categories ?? []))
+    {
+        if (cat.isStatusPanel)
+            continue;
+        walk(cat.getItems?.(), cat.label);
+    }
+    migrateFavoriteKeys(migrations);
+    return results;
+}
+
+export function applyFavMark(row, wheel = 1)
+{
+    row.css({ position: 'relative' });
+    row.find('.la-hud-fav-mark').remove();
+    row.append(favMarkHtml(wheel));
+    // Striped rows are dark, the default dark star vanishes on them.
+    if (row.data('restingBg') && !row.hasClass('la-hud-spent'))
+        row.find('.la-hud-fav-mark').css('color', '#fff');
+}
+
+export function clearFavMark(row)
+{
+    row.find('.la-hud-fav-mark').remove();
+}
+
+export function favKeyOf(item)
+{
+    if (item?.favKey)
+        return item.favKey;
+    const sourceUuid = item?.hoverData?.item?.uuid;
+    if (sourceUuid)
+    {
+        // Rows for an action ON the item key separately from the item row itself.
+        const actionName = item.hoverData.action?.name;
+        return actionName ? `${sourceUuid}|${actionName}` : sourceUuid;
+    }
+    return item?.stableKey ?? item?.onRightClick?.favId ?? item?.labelHtml ?? item?.label ?? null;
+}
+
+export function legacyFavKeyOf(item)
+{
+    if (item?.favKey || item?.hoverData?.item?.uuid)
+        return favKeyOf(item);
+    return item?.labelHtml ?? item?.label ?? null;
+}
+
+export function favoriteWheelOf(item)
+{
+    const key = favKeyOf(item);
+    const wheel = favoriteWheel(key);
+    const legacy = wheel ? null : legacyFavKeyOf(item);
+    if (!legacy || legacy === key)
+        return wheel;
+    const legacyWheel = favoriteWheel(legacy);
+    if (legacyWheel)
+        migrateFavoriteKeys(new Map([[legacy, key]]));
+    return legacyWheel;
+}

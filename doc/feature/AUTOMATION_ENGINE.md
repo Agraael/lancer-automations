@@ -224,7 +224,7 @@ The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where 
 
 ## The personal activation set
 
-Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section. The toggle stays locked until **LaSossis Additional statuses and effects** (`additionalStatuses`) is on, since the set applies those statuses.
+Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section. The toggle stays locked until **Extra Lancer Statuses** (`additionalStatuses`) is on, since the set applies those statuses.
 
 > [!NOTE]
 > This is **my own stuff, not part of the core module**. It's literally the automations I built for my own games (my NPCs, my items), shared as-is. It isn't a complete or general library, and it won't automate your content. Treat it as a set of examples to learn from, not something to rely on.

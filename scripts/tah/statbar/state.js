@@ -13,10 +13,21 @@ export function setAltHeld(held)
     _altHeld = held;
 }
 
+let _originalDrawBars = null;
+export function getOriginalDrawBars()
+{
+    return _originalDrawBars;
+}
+export function setOriginalDrawBars(fn)
+{
+    _originalDrawBars = fn;
+}
+
 export const _lastValues = new Map();
 export const _flashingTokens = new Set();
 export const _fadeState = new Map();
 export const _overlayHubs = new Map();
+export const _countFrom = new Map();
 
 // Overlay on canvas.tokens; hubs render above all tokens.
 let _hubOverlay = null;

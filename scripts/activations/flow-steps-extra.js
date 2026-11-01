@@ -20,7 +20,7 @@ export async function throwChoiceStep(state)
 
     const profile = item.system?.active_profile;
     const tags = profile?.all_tags || item.system?.tags || [];
-    const thrownTag = tags.find(t => t.lid === "tg_thrown" || t.id === "tg_thrown");
+    const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
     if (!thrownTag)
         return true;
 
@@ -28,8 +28,8 @@ export async function throwChoiceStep(state)
     const activeProfileIdx = item.system?.selected_profile_index ?? 0;
     const activeProfileWithBonus = getWeaponProfiles_WithBonus(item, state.actor)?.[activeProfileIdx];
     const weaponRanges = (activeProfileWithBonus?.range ?? profile?.all_range ?? profile?.range ?? item.system?.range ?? [])
-        .filter(r => r.type !== "Thrown")
-        .map(r => `${r.type} ${r.val}`)
+        .filter(range => range.type !== "Thrown")
+        .map(range => `${range.type} ${range.val}`)
         .join(", ") || "—";
 
     let isThrow = false;
@@ -304,9 +304,9 @@ async function _playLwfxRangedDefault(actor, context)
     const MacroCls = CONFIG.Macro?.documentClass ?? globalThis.Macro;
     if (!MacroCls)
         return;
-    const tempMacro = new MacroCls(macro.toObject());
-    tempMacro.flags['lancer-weapon-fx'] = {
-        ...(tempMacro.flags['lancer-weapon-fx'] ?? {}),
+    const macroClone = new MacroCls(macro.toObject());
+    macroClone.flags['lancer-weapon-fx'] = {
+        ...(macroClone.flags['lancer-weapon-fx'] ?? {}),
         flowInfo: {
             sourceToken: context.sourceToken,
             macroUuid: macro.uuid,
@@ -315,9 +315,9 @@ async function _playLwfxRangedDefault(actor, context)
             targetsCrit: context.targetsCrit,
         },
     };
-    tempMacro.ownership.default = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+    macroClone.ownership.default = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
     _forceNextLwfxFor(actor);
-    await tempMacro.execute({ actor: context.sourceToken?.actor, token: context.sourceToken });
+    await macroClone.execute({ actor: context.sourceToken?.actor, token: context.sourceToken });
 }
 
 // Item-less basic melee attack vs a target more than 1 grid away: play lwfx's ranged default instead of its melee one.

@@ -6,17 +6,15 @@ Where the settings on this page live:
 
 | Setting | Key | Where |
 |:--|:--|:--|
-| **Movement Cap Detection** | `enableMovementCapDetection` | Combat & Movement → Movement & Boost |
-| **Boost & Move Offer** | `enableBoostOffer` | Combat & Movement → Movement & Boost |
+| **Over speed** | `enableBoostOffer` | Combat & Movement → Movement & Boost |
 | **Pathfind Drag Movement** | `pathfindDragMovement` | Ruler & Measures → Lancer Automations Ruler |
 | **Split Movement at Trigger Boundaries** | `splitMovementAtTriggerBoundaries` | Ruler & Measures → Lancer Automations Ruler |
-| **Debug: Path Hex Calculation** | `debugPathHexCalculation` | Debug → Debug Toggles |
-| **Debug: Movement** | `debugMovement` | no UI row, console only |
+| **Movement** | `debugMovement` | Debug → Debug Toggles |
 
-Most of this page needs **Enable Lancer Automations Ruler** (`enableBuiltinSpeedProvider`) on. See [Movement](./MOVEMENT.md).
+Most of this page needs **Lancer ruler** (`enableBuiltinSpeedProvider`) on. See [Movement](./MOVEMENT.md).
 
 > [!WARNING]
-> The movement cap and the boost offer (the first section below) are **beta**. They change how dragging a token behaves in combat, so test them before relying on them. The rest of the page is not beta.
+> The over-speed check (the first section below) is **beta**. It changes how dragging a token behaves in combat, so test it before relying on it. The rest of the page is not beta.
 
 ---
 
@@ -24,15 +22,16 @@ Most of this page needs **Enable Lancer Automations Ruler** (`enableBuiltinSpeed
 
 <img align="right" src="../img/mv-boost-offer.png" width="45%"/>
 
-**Movement Cap Detection** (`enableMovementCapDetection`) cancels a drag that would take a combatant past its movement cap. The cap is not a snapshot taken at combat start: it is re-derived on every read from the token's current speed, its statuses (prone halves it, slow removes the boost legs, stunned and friends zero it) and any standing movement bonuses, so a mid-turn speed change moves it. What resets on a turn change is the per-turn legs, not the cap itself.
+**Over speed** (`enableBoostOffer`) decides what happens to a drag that would take a combatant past its movement cap. The cap is not a snapshot taken at combat start: it is re-derived on every read from the token's current speed, its statuses (prone halves it, slow removes the boost legs, stunned and friends zero it) and any standing movement bonuses, so a mid-turn speed change moves it. What resets on a turn change is the per-turn legs, not the cap itself.
 
-**Boost & Move Offer** (`enableBoostOffer`) is a three-way choice, **No** by default:
+It has four choices, **Off** by default:
 
-- **No** - no offer.
-- **Yes, ask first** - an over-cap drag pops a card instead of just being cancelled.
-- **Automatic, no prompt** - the same, minus the card: the first option is accepted after a short delay.
+- **Off** - no check.
+- **Stop** - the drag is cancelled.
+- **Ask to Boost** - an over-cap drag pops a card instead of just being cancelled.
+- **Auto Boost** - the same, minus the card: the first option is accepted after a short delay.
 
-The offer does not need cap detection on. Either setting alone arms the over-cap check. The card offers:
+The card offers:
 
 - **Boost & Move** - when one Boost would cover the overage. It moves up to the cap, fires the Boost action, then moves the rest.
 - **Overcharge & Boost & Move** - for mechs (or NPCs with an Overcharge feature) when one Boost isn't enough but two are. It moves, Boosts, Overcharges, Boosts again, then finishes the move. When the cap is already spent, it starts straight at the Boost.
@@ -47,7 +46,7 @@ If neither is enough, the move is rejected with a reminder to hold the free-move
 
 **Pathfind Drag Movement** (`pathfindDragMovement`) routes a dragged token around hostile bodies and tall terrain instead of straight through them. A live overlay shows how far it can still reach as you drag.
 
-It is off by default, and the settings row only unlocks with both **Enable Lancer Automations Ruler** (`enableBuiltinSpeedProvider`) and **Per-step Ruler Path** (`rulerPerStepRender`) on. Press **X** to flip it for the current session while it is on.
+It is on by default, and the settings row only shows with both **Lancer ruler** (`enableBuiltinSpeedProvider`) and **Per-step Ruler Path** (`rulerPerStepRender`) on. Press **X** to flip it for the current session while it is on.
 
 ---
 
@@ -69,8 +68,7 @@ Every move records the exact grid cells it passes through, which interception an
 
 ## Debug
 
-- **Debug: Path Hex Calculation** (`debugPathHexCalculation`), in the **Debug** tab, draws those path cells on the canvas for a few seconds.
-- **Debug: Movement** (`debugMovement`) logs the per-cell cost calculation and draws terrain/climb/penalty overlays during a move. It has no settings row: set it from the console with `game.settings.set('lancer-automations', 'debugMovement', true)`. Do not confuse it with the **Debug Movement** keybind of the same name in the Control tab, which is the B hold that makes one move skip automation.
+- **Movement** (`debugMovement`, Debug tab) draws those path cells and the terrain/climb/penalty overlays during a move, and logs the per-cell cost. Do not confuse it with the **Debug Movement** keybind of the same name in the Control tab, which is the B hold that makes one move skip automation.
 
 ---
 

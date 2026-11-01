@@ -8,6 +8,7 @@ import { rangePulse, RANGE_PULSE_PRIORITY, RANGE_GLOW, createChanceLabel } from 
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { targetInfoAllowed, haseSuccessChance, contestWinChance } from '../activations/targeting-ui.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
+import { formulaBounds } from '../tools/roll-utils.js';
 
 const PANEL_ID = 'la-uplink-panel';
 const LIVE_TICK_MS = 400;
@@ -26,28 +27,6 @@ let _lastRenderKey = null;
 let _hoveredControl = null;
 let _chanceHandles = [];
 const _seenRolls = new Set();
-const _formulaBounds = new Map();
-
-function formulaBounds(formula)
-{
-    let bounds = _formulaBounds.get(formula);
-    if (!bounds)
-    {
-        try
-        {
-            bounds = {
-                min: Number(new Roll(formula).evaluateSync({ minimize: true }).total) || 0,
-                max: Number(new Roll(formula).evaluateSync({ maximize: true }).total) || 0
-            };
-        }
-        catch
-        {
-            bounds = { min: 0, max: 0 };
-        }
-        _formulaBounds.set(formula, bounds);
-    }
-    return bounds;
-}
 
 function selectedSnapshot()
 {

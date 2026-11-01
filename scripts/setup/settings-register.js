@@ -11,17 +11,15 @@ export function getSettingEnabled(key)
 }
 
 /**
- * Boost offer mode, normalising the boolean this setting used to store.
- * @returns {'no' | 'yes' | 'auto'}
+ * Over-speed mode, normalising the boolean and the 'no' this setting used to store.
+ * @returns {'off' | 'stop' | 'yes' | 'auto'}
  */
 export function getBoostOfferMode()
 {
-    const raw = getModuleSetting('enableBoostOffer', false);
+    const raw = getModuleSetting('enableBoostOffer', 'off');
     if (raw === true)
         return 'yes';
-    if (raw === false)
-        return 'no';
-    return raw === 'yes' || raw === 'auto' ? raw : 'no';
+    return raw === 'stop' || raw === 'yes' || raw === 'auto' ? raw : 'off';
 }
 
 export function registerSettings()
@@ -61,7 +59,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'qolAdvisoryShown', {
@@ -76,6 +74,13 @@ export function registerSettings()
         config: false,
         type: Array,
         default: []
+    });
+
+    game.settings.register(MODULE_ID,'reactionEditorBandFolded', {
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: false
     });
 
     game.settings.register(MODULE_ID,'consumeAction', {
@@ -93,7 +98,16 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
+    });
+
+    game.settings.register(MODULE_ID,'autoFocusEnabled', {
+        name: 'LA.settings.autoFocusEnabled.name',
+        hint: 'LA.settings.autoFocusEnabled.hint',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoFocusDuration', {
@@ -112,7 +126,7 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoFocusAttack', {
@@ -121,7 +135,7 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoFocusDamage', {
@@ -130,7 +144,7 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoFocusCheck', {
@@ -139,7 +153,7 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoFocusActivation', {
@@ -148,7 +162,7 @@ export function registerSettings()
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'showBonusHudButton', {
@@ -202,7 +216,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
@@ -213,7 +227,7 @@ export function registerSettings()
         config: false,
         type: Number,
         range: { min: 0.5, max: 2, step: 0.05 },
-        default: 1.15,
+        default: 1.35,
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
@@ -224,7 +238,7 @@ export function registerSettings()
         config: false,
         type: Number,
         range: { min: 0, max: 4, step: 0.1 },
-        default: 0,
+        default: 0.5,
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
@@ -235,13 +249,22 @@ export function registerSettings()
         config: false,
         type: Number,
         range: { min: 0, max: 360, step: 5 },
-        default: 135,
+        default: 125,
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ redrawEffects: true }))
     });
 
     game.settings.register(MODULE_ID,'statusIconHover', {
         name: 'LA.settings.statusIconHover.name',
         hint: 'LA.settings.statusIconHover.hint',
+        scope: 'client',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register(MODULE_ID,'shortStatusTexts', {
+        name: 'LA.settings.shortStatusTexts.name',
+        hint: 'LA.settings.shortStatusTexts.hint',
         scope: 'client',
         config: false,
         type: Boolean,
@@ -321,7 +344,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         requiresReload: true
     });
 
@@ -350,7 +373,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoDamageRoll', {
@@ -359,7 +382,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoDamageApply', {
@@ -368,7 +391,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'autoStructFollowup', {
@@ -377,7 +400,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'enableKnockbackFlow', {
@@ -386,7 +409,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'enableThrowFlow', {
@@ -395,7 +418,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'statRollTargeting', {
@@ -404,7 +427,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'uplinkEnabled', {
@@ -448,13 +471,18 @@ export function registerSettings()
         default: true
     });
 
-    game.settings.register(MODULE_ID,'enableAttackTargeting', {
-        name: 'LA.settings.enableAttackTargeting.name',
-        hint: 'LA.settings.enableAttackTargeting.hint',
+    game.settings.register(MODULE_ID,'attackTargeting', {
+        name: 'LA.settings.attackTargeting.name',
+        hint: 'LA.settings.attackTargeting.hint',
         scope: 'world',
         config: false,
-        type: Boolean,
-        default: true
+        type: String,
+        choices: {
+            off: 'LA.settings.attackTargeting.choices.off',
+            picker: 'LA.settings.attackTargeting.choices.picker',
+            auto: 'LA.settings.attackTargeting.choices.auto',
+        },
+        default: 'auto'
     });
 
     game.settings.register(MODULE_ID,'enableDamageTargeting', {
@@ -486,12 +514,13 @@ export function registerSettings()
             gm: 'LA.settings.targetInfoDisplay.choices.gm',
             all: 'LA.settings.targetInfoDisplay.choices.all',
         },
-        default: 'gm'
+        default: 'all'
     });
 
-    game.settings.register(MODULE_ID,'autoStartTargetPicking', {
-        name: 'LA.settings.autoStartTargetPicking.name',
-        hint: 'LA.settings.autoStartTargetPicking.hint',
+
+    game.settings.register(MODULE_ID,'areaSpread', {
+        name: 'LA.settings.areaSpread.name',
+        hint: 'LA.settings.areaSpread.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -516,15 +545,6 @@ export function registerSettings()
         default: false
     });
 
-    game.settings.register(MODULE_ID,'enableMovementCapDetection', {
-        name: 'LA.settings.enableMovementCapDetection.name',
-        hint: 'LA.settings.enableMovementCapDetection.hint',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false
-    });
-
     game.settings.register(MODULE_ID,'enableBoostOffer', {
         name: 'LA.settings.enableBoostOffer.name',
         hint: 'LA.settings.enableBoostOffer.hint',
@@ -532,25 +552,16 @@ export function registerSettings()
         config: false,
         type: String,
         choices: {
-            no: 'LA.settings.enableBoostOffer.choices.no',
+            off: 'LA.settings.enableBoostOffer.choices.off',
+            stop: 'LA.settings.enableBoostOffer.choices.stop',
             yes: 'LA.settings.enableBoostOffer.choices.yes',
             auto: 'LA.settings.enableBoostOffer.choices.auto',
         },
-        default: 'no'
+        default: 'off'
     });
 
     const refreshShadows = () => import('../fx/token-ground-shadow.js')
         .then(module => module.refreshAllGroundShadows());
-
-    game.settings.register(MODULE_ID,'tokenGroundShadow', {
-        name: 'LA.settings.tokenGroundShadow.name',
-        hint: 'LA.settings.tokenGroundShadow.hint',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false,
-        onChange: refreshShadows
-    });
 
     game.settings.register(MODULE_ID,'tokenGroundShadowThrow', {
         name: 'LA.settings.tokenGroundShadowThrow.name',
@@ -569,8 +580,8 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Number,
-        range: { min: 0.05, max: 1, step: 0.05 },
-        default: 0.55,
+        range: { min: 0, max: 1, step: 0.05 },
+        default: 0,
         onChange: refreshShadows
     });
 
@@ -601,7 +612,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
     });
 
     // Vision
@@ -642,7 +653,7 @@ export function registerSettings()
         config: false,
         type: Number,
         range: { min: 1, max: 4, step: 0.25 },
-        default: 1
+        default: 1.25
     });
 
     game.settings.register(MODULE_ID,'rangePulseLos', {
@@ -651,7 +662,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'rangePulseSpeed', {
@@ -777,14 +788,6 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
-    game.settings.register(MODULE_ID,'enableWreckAudio', {
-        name: 'LA.settings.enableWreckAudio.name',
-        hint: 'LA.settings.enableWreckAudio.hint',
-        scope: 'client',
-        config: false,
-        type: Boolean,
-        default: true,
-    });
     game.settings.register(MODULE_ID,'squadLostOnDeath', {
         name: 'LA.settings.squadLostOnDeath.name',
         hint: 'LA.settings.squadLostOnDeath.hint',
@@ -802,6 +805,7 @@ export function registerSettings()
         default: '',
     });
     game.settings.register(MODULE_ID,'guardianBulwarkAuraMode', {
+        name: 'LA.settingsMenus.guardianBulwarkAuraMode.label',
         scope: 'world',
         config: false,
         type: String,
@@ -810,7 +814,7 @@ export function registerSettings()
             combat: 'LA.settings.guardianBulwarkAuraMode.choices.combat',
             always: 'LA.settings.guardianBulwarkAuraMode.choices.always',
         },
-        default: 'always',
+        default: 'combat',
         onChange: () => canvas?.tokens?.placeables.forEach(token => token.renderFlags.set({ refreshState: true }))
     });
     game.settings.register(MODULE_ID,'syncActorImgToToken', {
@@ -846,23 +850,19 @@ export function registerSettings()
         },
         default: 'all',
     });
-    game.settings.register(MODULE_ID,'revealStatsWithoutScan', {
+    game.settings.register(MODULE_ID,'scanRevealMode', {
+        name: 'LA.settings.scanRevealMode.name',
+        hint: 'LA.settings.scanRevealMode.hint',
         scope: 'world',
         config: false,
-        type: Boolean,
-        default: false,
-    });
-    game.settings.register(MODULE_ID,'scanRevealAllies', {
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false,
-    });
-    game.settings.register(MODULE_ID,'scanRevealPlayers', {
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: true,
+        type: String,
+        choices: {
+            nobody: 'LA.settings.scanRevealMode.choices.nobody',
+            players: 'LA.settings.scanRevealMode.choices.players',
+            allies: 'LA.settings.scanRevealMode.choices.allies',
+            everyone: 'LA.settings.scanRevealMode.choices.everyone',
+        },
+        default: 'allies',
     });
     game.settings.register(MODULE_ID,'wreckMasterVolume', {
         name: 'LA.settings.wreckMasterVolume.name',
@@ -893,7 +893,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
     });
     game.settings.register(MODULE_ID,'autoTokenHeightVehicleSquad', {
         scope: 'world',
@@ -902,15 +902,6 @@ export function registerSettings()
         default: false,
     });
     // Debug
-
-    game.settings.register(MODULE_ID,'debugPathHexCalculation', {
-        name: 'LA.settings.debugPathHexCalculation.name',
-        hint: 'LA.settings.debugPathHexCalculation.hint',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: false
-    });
 
     game.settings.register(MODULE_ID,'debugMovement', {
         name: 'LA.settings.debugMovement.name',
@@ -971,7 +962,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
         onChange: (value, _options, userId) => onDeployableArtToggled(value, userId)
     });
 
@@ -997,7 +988,7 @@ export function registerSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
 
     game.settings.register(MODULE_ID,'enableObstructionStepOver', {

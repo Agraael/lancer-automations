@@ -1,7 +1,7 @@
-import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus, mutateDamageWithBonus, mutatesBaseDamage, getConstantBonuses, getGlobalBonuses } from "../bonuses/genericBonuses.js";
+import { flattenBonuses, isBonusApplicable, applyTagBonus, mutateRangeWithBonus, mutateDamageWithBonus, mutatesBaseDamage, getConstantBonuses, getGlobalBonuses, getV3DataBonuses } from "../bonuses/genericBonuses.js";
 import { getLAFlag } from "./flag-utils.js";
+import { isWeaponItem } from "../utils/lancer-token.js";
 
-const REACH_RANGE_TYPES = new Set(["Range", "Threat", "Line", "Burst", "Cone"]);
 const AREA_RANGE_TYPES = ["Blast", "Burst", "Cone", "Line"];
 
 /** Returns the base { tags, range } for an item, handling mech_weapon profiles. Both arrays are shallow-cloned. */
@@ -60,14 +60,7 @@ function _resolveWeaponsAndActor(input)
 
 function _getActorWeapons(actor)
 {
-    return (actor?.items ?? []).filter(item =>
-    {
-        if (item.system?.destroyed)
-            return false;
-        return item.type === "mech_weapon" ||
-            item.type === "pilot_weapon" ||
-            (item.type === "npc_feature" && item.system?.type === "Weapon");
-    });
+    return (actor?.items ?? []).filter(item => !item.system?.destroyed && isWeaponItem(item));
 }
 
 /** Applies tag and range bonuses from actor onto the given arrays (mutates in-place). */
@@ -77,7 +70,8 @@ function _applyItemBonuses(item, actor, tags, range)
         return;
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(actor),
-        ...getConstantBonuses(actor)
+        ...getConstantBonuses(actor),
+        ...getV3DataBonuses(actor, ['tag', 'range']).map(row => row.bonus)
     ]);
     const flowTags = new Set(["all", "attack"]);
     const state = { actor, item, data: { tags, range } };
@@ -114,7 +108,8 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
             const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
             const bonuses = flattenBonuses([
                 ...getGlobalBonuses(resolvedActor),
-                ...getConstantBonuses(resolvedActor)
+                ...getConstantBonuses(resolvedActor),
+                ...getV3DataBonuses(resolvedActor, ['range']).map(row => row.bonus)
             ]);
             const flowTags = new Set(["all", "attack"]);
             for (const bonus of bonuses)
@@ -153,7 +148,8 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
     const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(resolvedActor),
-        ...getConstantBonuses(resolvedActor)
+        ...getConstantBonuses(resolvedActor),
+        ...getV3DataBonuses(resolvedActor, ['range']).map(row => row.bonus)
     ]);
     const flowTags = new Set(["all", "attack"]);
     for (const bonus of bonuses)
@@ -250,64 +246,29 @@ export function getSensorRange_WithBonus(input)
     return Number(range.find(entry => entry.type === "Sensor")?.val) || base;
 }
 
-/** Max reach across all weapons of the input; counts Range/Threat/Line/Burst/Cone (not Blast) plus tg_thrown.
+/** Max reach across all weapons of the input, same rule as getActorMaxReach_WithBonus.
  * @returns {Promise<number>}
  */
 export async function getMaxWeaponReach_WithBonus(input)
 {
-    const { weapons, actor } = _resolveWeaponsAndActor(input);
-    let max = 0;
-    for (const weapon of weapons)
-    {
-        const { tags, range } = _getItemBaseData(weapon);
-        await _applyItemBonuses(weapon, actor, tags, range);
-        for (const rangeEntry of range)
-        {
-            if (REACH_RANGE_TYPES.has(rangeEntry.type))
-            {
-                const rangeValue = Number.parseInt(rangeEntry.val) || 0;
-                if (rangeValue > max)
-                    max = rangeValue;
-            }
-        }
-        const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
-        if (thrownTag)
-        {
-            const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
-            if (throwVal > max)
-                max = throwVal;
-        }
-    }
-    return max;
+    return getActorMaxReach_WithBonus(input);
 }
 
-/** Max range per type for any item: base range, per-action ranges, tg_thrown ("Thrown"), deployRange flag ("Deploy").
- * @returns {Promise<Record<string, number>>}
- */
-export async function getMaxItemRanges_WithBonus(item, actor)
+export function thrownValue(tags)
 {
-    if (!item)
-        return {};
-    const resolvedActor = actor ?? item.parent ?? null;
+    const thrownTag = (tags ?? []).find(tag => tag?.lid === "tg_thrown" || tag?.id === "tg_thrown");
+    return thrownTag ? (Number.parseInt(thrownTag.val || thrownTag.num_val) || 0) : 0;
+}
 
+function _itemRangeMap(item, actor)
+{
     const { tags, range: baseRange } = _getItemBaseData(item);
     const actionRanges = (item.system?.actions ?? []).flatMap(action => (action.range ?? []).map(rangeEntry => ({ ...rangeEntry })));
     const allRanges = [...baseRange, ...actionRanges];
-
-    await _applyItemBonuses(item, resolvedActor, tags, allRanges);
-
-    const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
-    if (thrownTag)
-    {
-        const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
-        if (throwVal > 0)
-            allRanges.push({ type: "Thrown", val: throwVal });
-    }
-
-    const deployRange = getLAFlag(item,"deployRange");
-    if (deployRange)
-        allRanges.push({ type: "Deploy", val: deployRange });
-
+    _applyItemBonuses(item, actor, tags, allRanges);
+    const throwVal = thrownValue(tags);
+    if (throwVal > 0)
+        allRanges.push({ type: "Thrown", val: throwVal });
     const maxPerType = {};
     for (const rangeEntry of allRanges)
     {
@@ -318,52 +279,47 @@ export async function getMaxItemRanges_WithBonus(item, actor)
     return maxPerType;
 }
 
-/** Furthest a weapon reaches on activation: additive when Range co-exists with a shape (Blast full, Cone/Line minus 1), else max of range entries. */
+/** Max range per type for any item: base range, per-action ranges, tg_thrown ("Thrown"), deployRange flag ("Deploy").
+ * @returns {Promise<Record<string, number>>}
+ */
+export async function getMaxItemRanges_WithBonus(item, actor)
+{
+    if (!item)
+        return {};
+    const maxPerType = _itemRangeMap(item, actor ?? item.parent ?? null);
+    const deployRange = Number.parseInt(getLAFlag(item,"deployRange")) || 0;
+    if (deployRange > (maxPerType.Deploy ?? 0))
+        maxPerType.Deploy = deployRange;
+    return maxPerType;
+}
+
+/** Furthest a weapon reaches on activation, by weaponPulseRange's rule. */
 export function getWeaponReachRange(item, actor)
 {
     if (!item)
         return 0;
-    const resolvedActor = actor ?? item.parent ?? null;
-    const { tags, range: baseRange } = _getItemBaseData(item);
-    const actionRanges = (item.system?.actions ?? []).flatMap(action => (action.range ?? []).map(rangeEntry => ({ ...rangeEntry })));
-    const allRanges = [...baseRange, ...actionRanges];
-    _applyItemBonuses(item, resolvedActor, tags, allRanges);
-    const thrownTag = tags.find(tag => tag.lid === "tg_thrown" || tag.id === "tg_thrown");
-    if (thrownTag)
-    {
-        const throwVal = Number.parseInt(thrownTag.val || thrownTag.num_val) || 0;
-        if (throwVal > 0)
-            allRanges.push({ type: "Thrown", val: throwVal });
-    }
-    const maxPerType = {};
-    for (const rangeEntry of allRanges)
-    {
-        const rangeValue = Number.parseInt(rangeEntry.val) || 0;
-        if (rangeValue > 0 && (maxPerType[rangeEntry.type] === undefined || rangeValue > maxPerType[rangeEntry.type]))
-            maxPerType[rangeEntry.type] = rangeValue;
-    }
-    const range  = maxPerType.Range  ?? 0;
-    const threat = maxPerType.Threat ?? 0;
-    const blast  = maxPerType.Blast  ?? 0;
-    const cone   = maxPerType.Cone   ?? 0;
-    const line   = maxPerType.Line   ?? 0;
-    const burst  = maxPerType.Burst  ?? 0;
-    const thrown = maxPerType.Thrown ?? 0;
-    if (range > 0 && blast > 0)
-        return range + blast;
-    if (range > 0 && cone  > 0)
-        return range + cone  - 1;
-    if (range > 0 && line  > 0)
-        return range + line  - 1;
-    return Math.max(range, threat, blast, cone, line, burst, thrown);
+    return weaponPulseRange(_itemRangeMap(item, actor ?? item.parent ?? null));
 }
 
-// Pulse reach: base (Range/Threat) + AoE shape it can drop. `ranges` is a { type: maxVal } map.
+// Reach from a { type: maxVal } map: only Range moves a shape's origin, so only Range adds the shape size.
 export function weaponPulseRange(ranges)
 {
-    const base = Math.max(0, ranges.Range ?? 0, ranges.Threat ?? 0, ranges.Sensor ?? 0);
+    const range = ranges.Range ?? 0;
     const shape = Math.max(0, ranges.Blast ?? 0, ranges.Cone ?? 0, ranges.Line ?? 0, ranges.Burst ?? 0);
-    return base + shape;
+    return Math.max(range > 0 && shape > 0 ? range + shape : 0, range, ranges.Threat ?? 0, ranges.Thrown ?? 0, ranges.Sensor ?? 0, shape);
+}
+
+export function shapeSpecFromRanges(ranges)
+{
+    const entries = (ranges ?? [])
+        .map(/** @type {any} */ (entry) => ({ type: String(entry?.type ?? ''), val: Number(entry?.val) || 0 }))
+        .filter(entry => entry.val > 0);
+    const maxOf = (...types) => Math.max(0, ...entries.filter(entry => types.includes(entry.type)).map(entry => entry.val));
+    const area = entries.find(entry => AREA_RANGE_TYPES.includes(entry.type));
+    if (area)
+        return { pattern: area.type.toLowerCase(), size: area.val, range: maxOf('Range') };
+    const reach = maxOf('Range', 'Threat');
+    return reach > 0 ? { pattern: 'target', size: 1, range: reach } : null;
 }
 
 /** Actor-wide max reach across all weapons. */

@@ -1,3 +1,5 @@
+import { localize } from './string-utils.js';
+
 const STATUS_ALIASES = { slowed: 'slow', lock_on: 'lockon', 'lock on': 'lockon', danger_zone: 'dangerzone', down_and_out: 'downandout', shut_down: 'shutdown' };
 const ALL_TYPES = ['mech', 'pilot', 'npc'];
 
@@ -6,7 +8,7 @@ function systemValue(path)
     return actor => path.split('.').reduce((node, key) => node?.[key], actor?.system);
 }
 
-function pilotOf(actor)
+export function pilotOf(actor)
 {
     const ref = actor?.system?.pilot;
     if (ref?.value?.system)
@@ -51,7 +53,7 @@ export function v3ConditionLabel(expression)
         if (SPECIAL_LABELS[key])
             return SPECIAL_LABELS[key];
         const status = CONFIG.statusEffects?.find(effect => effect.id === normalizeV3StatusId(key));
-        return status?.name ? game.i18n.localize(status.name) : name.trim();
+        return status?.name ? localize(status.name) : name.trim();
     }).trim();
 }
 

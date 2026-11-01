@@ -17,11 +17,13 @@ import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
 import { noteActivation } from '../movement/move-tracking.js';
-import { recordAction } from '../tah/action-tape.js';
+import { recordAction, noteTriggerResults } from '../tah/action-tape.js';
+import { captureAppliedEffects, flowChanges } from '../tah/tape-changes.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { recordRollSnapshot } from '../uplink/snapshots.js';
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { trackerSnapshot } from '../combat/action-extras.js';
 // Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
 function checkAttribution(state)
 {
@@ -78,14 +80,17 @@ export async function onAttackStep(state)
 
     if (token && !state.la_extraData?.tapeRecorded)
     {
-        const verb = state.la_extraData?.tapeAction ?? null;
-        await recordAction(token, {
-            name: verb?.name ?? actionData.title,
-            activation: verb?.activation ?? state.data?.action?.activation ?? 'Quick',
+        const tapeAction = state.la_extraData?.tapeAction ?? null;
+        const tapeId = await recordAction(token, {
+            name: tapeAction?.name ?? actionData.title,
+            activation: tapeAction?.activation ?? state.data?.action?.activation ?? 'Quick',
             item: weapon,
             type: 'attack',
-            icon: weapon ? weaponTypeIcon(weapon) : 'mdi mdi-target'
+            icon: weapon ? weaponTypeIcon(weapon) : 'mdi mdi-target',
+            tracker: state.la_extraData?.reactionTracker ?? null
         });
+        if (tapeId)
+            state.injectFlowExtraData({ tapeId });
     }
 
     await handleTrigger('onAttack', {
@@ -288,6 +293,13 @@ export async function assertDamageTargetsStep(state)
 }
 
 const AREA_PATTERNS = new Set(['blast', 'burst', 'cone', 'line']);
+const TAG_ACTIVATIONS = {
+    "tg_quick_action": "Quick",
+    "tg_full_action": "Full",
+    "tg_reaction": "Reaction",
+    "tg_protocol": "Protocol",
+    "tg_free_action": "Free"
+};
 
 function isAoeDamage(state)
 {
@@ -305,7 +317,6 @@ export async function onDamageStep(state)
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const weapon = item;
 
-    const damageResults = state.data?.damage_results || [];
     const targets = state.data?.targets || [];
     broadcastFocus('damage', [token, ...targets.map(targetInfo => targetInfo.target)]);
     recordRollSnapshot('damage', state);
@@ -480,14 +491,17 @@ export async function onTechAttackStep(state)
 
     if (token && !state.la_extraData?.tapeRecorded)
     {
-        await recordAction(token, {
+        const tapeId = await recordAction(token, {
             name: actionData.title,
             activation: actionData.isInvade
                 ? 'Invade'
                 : (state.data?.action?.activation
                     ?? (techItem?.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')),
-            item: techItem
+            item: techItem,
+            ...(state.la_extraData?.freeUse ? { type: 'free' } : {})
         });
+        if (tapeId)
+            state.injectFlowExtraData({ tapeId });
     }
 
     await handleTrigger('onTechAttack', {
@@ -614,7 +628,7 @@ function _relaunchIgnore(state)
         const flowClass = game.lancer?.flows?.get?.(state.name);
         if (!flowClass)
         {
-            ui.notifications.error(`lancer-automations | Unknown flow type "${state.name}". Cannot re-launch.`);
+            ui.notifications.error(localizeFormat('LA.notify.unknownFlowType', { name: state.name }));
             return;
         }
         try
@@ -932,20 +946,20 @@ export async function onActivationStep(state)
     actionName = actionName.replace(/^[A-Z][A-Z ]+ :: /, '');
 
     // Normalize built-in flows that have no item and use actor-prefixed titles
-    const flowClass = state.name ?? '';
-    if (flowClass === 'OverchargeFlow')
+    const flowName = state.name ?? '';
+    if (flowName === 'OverchargeFlow')
     {
         actionType = 'Protocol';
         actionName = 'Overcharge';
     }
-    else if (flowClass === 'StabilizeFlow')
+    else if (flowName === 'StabilizeFlow')
     {
         actionType = 'Full';
         actionName = 'Stabilize';
     }
-    else if (flowClass === 'TalentFlow' && state.data?.rank?.name)
+    else if (flowName === 'TalentFlow' && state.data?.rank?.name)
         actionName = state.data.rank.name;
-    else if (flowClass === 'BondPowerFlow')
+    else if (flowName === 'BondPowerFlow')
         actionName = state.item?.system?.powers?.[state.data?.powerIndex]?.name ?? actionName;
 
     if (state.la_extraData?.endActivation && item?.name)
@@ -954,19 +968,11 @@ export async function onActivationStep(state)
     const tags = state.data?.tags || item?.system?.tags || [];
     if (!state.data?.action?.activation && Array.isArray(tags))
     {
-        const tagMap = {
-            "tg_quick_action": "Quick",
-            "tg_full_action": "Full",
-            "tg_reaction": "Reaction",
-            "tg_protocol": "Protocol",
-            "tg_free_action": "Free"
-        };
-
         for (const tag of tags)
         {
-            if (tag.lid && tagMap[tag.lid])
+            if (tag.lid && TAG_ACTIVATIONS[tag.lid])
             {
-                actionType = tagMap[tag.lid];
+                actionType = TAG_ACTIVATIONS[tag.lid];
                 break;
             }
         }
@@ -986,23 +992,36 @@ export async function onActivationStep(state)
     };
 
     let reactionJustConsumed = false;
-    if (actionType === 'Reaction' && token?.actor && getModuleSetting('consumeReaction'))
+    let tracker = null;
+    if (actionType === 'Reaction' && token?.actor && !state.la_extraData?.freeUse && getModuleSetting('consumeReaction'))
     {
+        const before = trackerSnapshot(token.actor);
         if (state.la_extraData?.reactionConsumed)
+        {
             reactionJustConsumed = true;
+            tracker = state.la_extraData.reactionTracker ?? null;
+        }
         else if (await consumeReaction(token))
+        {
             reactionJustConsumed = true;
+            tracker = { before, after: trackerSnapshot(token.actor) };
+        }
         else
             ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token.name }));
     }
 
     const isEndActivation = !!state.la_extraData?.endActivation;
+    const chipId = foundry.utils.randomID();
 
     if (token)
-        noteActivation(token, actionName, isEndActivation);
+        noteActivation(token, actionName, isEndActivation, chipId);
 
     if (token && !isEndActivation)
-        await recordAction(token, { name: actionName, activation: actionType, item, deployable });
+    {
+        const tapeId = await recordAction(token, { id: chipId, name: actionName, activation: actionType, item, deployable, tracker, boost: actionName === 'Boost', changes: flowChanges({ state }, state.actor), ...(state.la_extraData?.freeUse ? { type: 'free' } : {}) });
+        if (tapeId)
+            state.injectFlowExtraData({ tapeId });
+    }
 
     const payload = {
         triggeringToken: token,
@@ -1016,7 +1035,20 @@ export async function onActivationStep(state)
         extraData: state.la_extraData ?? {},
         flowState: state
     };
-    const results = await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', payload);
+    const trackerBefore = { ...(token?.actor?.system?.action_tracker ?? {}) };
+    const stopCapture = captureAppliedEffects(isEndActivation ? null : state.la_extraData?.tapeId ?? null);
+    let results;
+    let captured = { applied: [], removed: [] };
+    try
+    {
+        results = await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', payload);
+    }
+    finally
+    {
+        captured = stopCapture();
+    }
+    if (token && !isEndActivation && state.la_extraData?.tapeId)
+        await noteTriggerResults(token, state.la_extraData.tapeId, trackerBefore, captured.applied, captured.removed);
     await handleTrigger(isEndActivation ? 'onPostEndActivation' : 'onPostActivation', { ...payload, results });
 
     // Gated on the overlay flag, not action.laCombat, so extras don't double-roll; deployables keep their actions on the actor.
@@ -1117,18 +1149,11 @@ export async function onInitActivationStep(state)
     const tags = state.data?.tags || item?.system?.tags || [];
     if (!state.data?.action?.activation && Array.isArray(tags))
     {
-        const tagMap = {
-            "tg_quick_action": "Quick",
-            "tg_full_action": "Full",
-            "tg_reaction": "Reaction",
-            "tg_protocol": "Protocol",
-            "tg_free_action": "Free"
-        };
         for (const tag of tags)
         {
-            if (tag.lid && tagMap[tag.lid])
+            if (tag.lid && TAG_ACTIVATIONS[tag.lid])
             {
-                actionType = tagMap[tag.lid];
+                actionType = TAG_ACTIVATIONS[tag.lid];
                 break;
             }
         }

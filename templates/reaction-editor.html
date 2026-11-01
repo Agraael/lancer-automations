@@ -129,6 +129,8 @@
         </div>
     </details>
 
+    <details class="code-section la-band-fold" {{#if bandOpen}}open{{/if}}>
+        <summary class="code-section-header">{{localize "LA.reactionEditor.triggers"}} <span class="la-fold-digest"></span></summary>
     <div class="la-band">
         <div class="panel-section la-triggers-panel">
             <div class="la-panel-bar">
@@ -136,25 +138,30 @@
                 <span class="trigger-selected-count"></span>
             </div>
             <div class="trigger-groups-container">
-                {{#each triggers}}
-                <div class="trigger-group">
-                    <div class="trigger-group-header" data-group="{{@index}}">
+                {{#each triggerPairs}}
+                <div class="trigger-pair">
+                    {{#each this}}
+                    <div class="trigger-group-header" data-group="{{this.index}}">
                         <i class="fas fa-caret-down trigger-group-caret"></i>
                         <span>{{this.label}}</span>
                         <span class="trigger-group-count"></span>
                     </div>
-                    <div class="trigger-group-body" data-group="{{@index}}">
-                        {{#each this.items}}
-                        <label class="checkbox trigger-item" title="{{lookup ../../triggerHelp this.key}}">
-                            <input type="checkbox" name="trigger.{{this.key}}" {{#if this.checked}}checked{{/if}}>
-                            <span class="trigger-label">{{this.key}}</span>
-                            {{#if this.cx}}<b class="tmk tmk-cx" title="Exposes cancel / change functions"></b>{{/if}}
-                            {{#if this.tg}}<b class="tmk tmk-tg" title="Carries targets"></b>{{/if}}
-                            {{#if this.sm}}<b class="tmk tmk-sm" title="Allows Only On Source Match"></b>{{/if}}
-                        </label>
-                        {{/each}}
-                    </div>
+                    {{/each}}
                 </div>
+                {{#each this}}
+                <div class="trigger-group-body" data-group="{{this.index}}">
+                    <span class="trigger-group-body-label">{{this.label}}</span>
+                    {{#each this.items}}
+                    <label class="checkbox trigger-item" title="{{lookup @root.triggerHelp this.key}}">
+                        <input type="checkbox" name="trigger.{{this.key}}" {{#if this.checked}}checked{{/if}}>
+                        <span class="trigger-label">{{this.key}}</span>
+                        {{#if this.cx}}<b class="tmk tmk-cx" title="Exposes cancel / change functions"></b>{{/if}}
+                        {{#if this.tg}}<b class="tmk tmk-tg" title="Carries targets"></b>{{/if}}
+                        {{#if this.sm}}<b class="tmk tmk-sm" title="Allows Only On Source Match"></b>{{/if}}
+                    </label>
+                    {{/each}}
+                </div>
+                {{/each}}
                 {{/each}}
             </div>
             <div class="la-custom-triggers">
@@ -170,10 +177,9 @@
             </div>
         </div>
 
-        <div class="la-eligibility">
-            <div class="panel-section">
+        <div class="la-eligibility panel-section">
                 <h4 class="la-subhead">{{localize "LA.reactionEditor.whoReacts"}}</h4>
-                <div class="options-grid">
+                <div class="la-cells">
                     <label class="checkbox" title="Allow token to react to its own trigger">
                         <input type="checkbox" name="triggerSelf" {{#if triggerSelf}}checked{{/if}}>
                         <span>{{localize "LA.reactionEditor.reactToSelf"}}</span>
@@ -197,8 +203,9 @@
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.disposition"}} <span class="la-subhead-note">{{localize "LA.reactionEditor.nonePickedMeansNoFilter"}}</span></h4>
-                <div class="disposition-grid">
+                <h4 class="la-subhead">{{localize "LA.reactionEditor.disposition"}}</h4>
+                <div class="la-span">
+                <div class="la-chip-cells">
                     <label class="la-chip la-chip-friendly">
                         <input type="checkbox" name="dispositionFilter.friendly" {{#if
                             dispositionFilter.friendly}}checked{{/if}}>
@@ -220,11 +227,32 @@
                         <span>{{localize "LA.reactionEditor.secret"}}</span>
                     </label>
                 </div>
-            </div>
+                <p class="la-row-note">{{localize "LA.reactionEditor.nonePickedMeansNoFilter"}}</p>
+                </div>
 
-            <div class="panel-section">
+                <div class="la-runs-on" style="{{#unless runsOnApplies}}display:none{{/unless}}">
+                    <h4 class="la-subhead">{{localize "LA.reactionEditor.runsOn"}}</h4>
+                    <div class="la-span">
+                    <div class="la-chip-cells">
+                        <label class="la-chip">
+                            <input type="radio" name="runsOn" value="mech" {{#if (eq runsOn "mech")}}checked{{/if}}>
+                            <span>{{localize "LA.reactionEditor.runsOnMech"}}</span>
+                        </label>
+                        <label class="la-chip">
+                            <input type="radio" name="runsOn" value="pilot" {{#if (eq runsOn "pilot")}}checked{{/if}}>
+                            <span>{{localize "LA.reactionEditor.runsOnPilot"}}</span>
+                        </label>
+                        <label class="la-chip">
+                            <input type="radio" name="runsOn" value="both" {{#if (eq runsOn "both")}}checked{{/if}}>
+                            <span>{{localize "LA.reactionEditor.runsOnBoth"}}</span>
+                        </label>
+                    </div>
+                    <p class="la-row-note">{{localize "LA.reactionEditor.runsOnNote"}} <a title="{{localize "LA.reactionEditor.runsOnHint"}}" class="la-help"><i class="fas fa-question-circle"></i></a></p>
+                    </div>
+                </div>
+
                 <h4 class="la-subhead">{{localize "LA.reactionEditor.preconditions"}}</h4>
-                <div class="options-grid">
+                <div class="la-cells">
                     <label class="checkbox" id="checkReactionContainer"
                         title="Block activation if the token has no reaction available. Independent of the declared Action Type.">
                         <input type="checkbox" name="checkReaction" id="checkReaction" {{#if checkReaction}}checked{{/if}}>
@@ -242,8 +270,8 @@
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.execution"}}</h4>
-                <div class="options-grid">
+                <h4 class="la-subhead">{{localize "LA.reactionEditor.execution"}}</h4>
+                <div class="la-cells">
                     <label class="checkbox" title="Auto-activate without showing popup">
                         <input type="checkbox" name="autoActivate" {{#if autoActivate}}checked{{/if}}>
                         <span>{{localize "LA.reactionEditor.autoActivate"}}</span>
@@ -257,8 +285,8 @@
                     </label>
                 </div>
 
-                <h4 class="la-subhead la-subhead-spaced">{{localize "LA.reactionEditor.declaredType"}}</h4>
-                <div class="la-row-even">
+                <h4 class="la-subhead">{{localize "LA.reactionEditor.declaredType"}}</h4>
+                <div class="la-span la-type-cells">
                     <div>
                         <label>{{localize "LA.reactionEditor.actionType"}} <a
                                 title="Display only. On general activations, 'Reaction' can spend the token's reaction (module setting 'Consume Reaction on Activation')."
@@ -279,18 +307,12 @@
                         </select>
                     </div>
                 </div>
-                <p class="notes">{{localize "LA.reactionEditor.displayOnlySeeTheHelpIcons"}}</p>
-            </div>
         </div>
     </div>
-
-    <div class="la-reference-bar">
-        <a id="open-api-ref"><i class="fas fa-code"></i> {{localize "LA.reactionEditor.functionReference"}}</a>
-        <a id="open-trigger-ref"><i class="fas fa-book"></i> {{localize "LA.reactionEditor.triggerDataReference"}}</a>
-    </div>
+    </details>
 
     <details class="code-section" open>
-        <summary class="code-section-header">{{localize "LA.reactionEditor.evaluateFunction"}} <a class="expand-editor" data-target="evaluate"
+        <summary class="code-section-header">{{localize "LA.reactionEditor.evaluateFunction"}} <span class="la-ref-inline"><a id="open-api-ref"><i class="fas fa-code"></i> {{localize "LA.reactionEditor.functionReference"}}</a><a id="open-trigger-ref"><i class="fas fa-book"></i> {{localize "LA.reactionEditor.triggerDataReference"}}</a></span><a class="expand-editor" data-target="evaluate"
                 title="Expand Editor"><i class="fas fa-expand"></i></a></summary>
         <div class="form-group stacked">
             <div class="form-fields">
@@ -666,12 +688,43 @@
         white-space: pre;
     }
 
+    .la-band-fold {
+        margin-top: 10px;
+    }
+
     .la-band {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 318px);
+        grid-template-columns: minmax(0, 1fr) minmax(420px, max-content);
         gap: 12px;
-        align-items: start;
-        margin: 10px 0;
+        align-items: stretch;
+        padding: 0 8px 8px;
+    }
+
+    .la-fold-digest {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin-left: 8px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--la-ink-dim);
+    }
+
+    .la-band-fold[open] .la-fold-digest {
+        display: none;
+    }
+
+    #reaction-editor .la-fold-digest code {
+        background: none;
+        padding: 0;
+        font-size: 10.5px;
+    }
+
+    .la-fold-digest .la-sep {
+        margin: 0 6px;
+        opacity: 0.6;
     }
 
     .panel-section {
@@ -682,6 +735,8 @@
     }
 
     .la-triggers-panel {
+        display: flex;
+        flex-direction: column;
         padding: 0;
         background: var(--la-raise);
     }
@@ -709,7 +764,8 @@
     }
 
     .trigger-groups-container {
-        height: 300px;
+        flex: 1 1 0;
+        min-height: 180px;
         overflow-y: auto;
         padding: 3px 5px 6px;
     }
@@ -739,7 +795,10 @@
         padding: 3px 8px;
     }
 
-    .trigger-group {
+    .trigger-pair {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 10px;
         margin-bottom: 2px;
     }
 
@@ -758,6 +817,13 @@
         user-select: none;
     }
 
+    .trigger-group-header > span:not(.trigger-group-count) {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
     .trigger-group-header:hover {
         background: color-mix(in srgb, var(--la-accent), transparent 92%);
     }
@@ -767,11 +833,11 @@
         font-size: 0.9em;
     }
 
-    .trigger-group.collapsed .trigger-group-caret {
+    .trigger-group-header.collapsed .trigger-group-caret {
         transform: rotate(-90deg);
     }
 
-    .trigger-group.collapsed .trigger-group-body {
+    .trigger-group-body.collapsed {
         display: none;
     }
 
@@ -785,7 +851,16 @@
         display: flex;
         flex-wrap: wrap;
         gap: 4px;
-        padding: 4px 0 5px 12px;
+        padding: 2px 0 6px 12px;
+    }
+
+    .trigger-group-body-label {
+        flex: 0 0 100%;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--la-ink-dim);
     }
 
     #reaction-editor label.checkbox.trigger-item {
@@ -880,9 +955,71 @@
     }
 
     .la-eligibility {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
         gap: 8px;
+        align-items: start;
+        align-content: start;
+    }
+
+    .la-eligibility .la-subhead {
+        grid-column: 1;
+        margin: 0;
+        padding-top: 5px;
+        white-space: nowrap;
+    }
+
+    .la-runs-on {
+        display: contents;
+    }
+
+    .la-cells {
+        grid-column: 2;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px 8px;
+    }
+
+    #reaction-editor .la-cells label.checkbox > span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .la-span {
+        grid-column: 2;
+    }
+
+    .la-chip-cells {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    #reaction-editor .la-chip-cells label.la-chip {
+        justify-content: center;
+    }
+
+    .la-row-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 3px 0 0;
+        font-family: monospace;
+        font-size: 9.5px;
+        color: var(--la-ink-dim);
+    }
+
+    .la-type-cells {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        contain: inline-size;
+    }
+
+    .la-type-cells label {
+        display: block;
+        margin-bottom: 2px;
     }
 
     .la-subhead {
@@ -895,22 +1032,6 @@
         font-weight: 600;
     }
 
-    .la-subhead-spaced {
-        margin-top: 9px;
-    }
-
-    .la-subhead-note {
-        text-transform: none;
-        letter-spacing: 0;
-        opacity: 0.85;
-    }
-
-    .options-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 4px 8px;
-    }
-
     #reaction-editor label.checkbox {
         display: flex;
         align-items: center;
@@ -919,12 +1040,6 @@
         padding: 0;
         font-size: 12px;
         font-weight: 400;
-    }
-
-    .disposition-grid {
-        display: flex;
-        gap: 4px;
-        flex-wrap: wrap;
     }
 
     #reaction-editor label.la-chip {
@@ -987,18 +1102,22 @@
         cursor: help;
     }
 
-    .la-reference-bar {
+    .la-ref-inline {
+        margin-left: auto;
         display: flex;
         gap: 14px;
-        justify-content: flex-end;
         font-size: 11px;
-        margin-bottom: 5px;
+        font-weight: 400;
     }
 
-    .la-reference-bar a {
+    .la-ref-inline a {
         color: var(--la-accent);
         cursor: pointer;
         text-decoration: none;
+    }
+
+    .code-section .la-ref-inline + .expand-editor {
+        margin-left: 10px;
     }
 
     .la-warn {

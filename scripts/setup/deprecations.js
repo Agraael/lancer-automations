@@ -25,11 +25,17 @@ function* savedReactions()
             yield { label: `general ${name}`, reaction };
 }
 
-/** True when any user-authored code field on the reaction mentions the token. */
-function reactionCodeMentions(reaction, token)
+function* savedStartupScripts()
+{
+    for (const script of ReactionManager.getStartupScripts())
+        yield { label: `startup script ${script?.name || 'unnamed'}`, code: typeof script?.code === 'string' ? script.code : '' };
+}
+
+/** True when any user-authored code field on the reaction matches the pattern. */
+function reactionCodeMentions(reaction, pattern)
 {
     return !!reaction && typeof reaction === 'object'
-        && Object.values(reaction).some(value => typeof value === 'string' && value.includes(token));
+        && Object.values(reaction).some(value => typeof value === 'string' && pattern.test(value));
 }
 
 /** @type {DeprecationCheck} */
@@ -44,18 +50,17 @@ const endActivationCheck = {
 
         for (const { label, reaction } of savedReactions())
         {
-            if (!reactionCodeMentions(reaction, 'endActivation'))
+            if (!reactionCodeMentions(reaction, /endActivation/))
                 continue;
             const triggers = Array.isArray(reaction.triggers) ? reaction.triggers : [];
             if (!triggers.some(trigger => endTriggers.includes(trigger)))
                 hits.push(label);
         }
 
-        for (const script of ReactionManager.getStartupScripts())
+        for (const { label, code } of savedStartupScripts())
         {
-            const code = typeof script?.code === 'string' ? script.code : '';
             if (code.includes('endActivation') && !endTriggers.some(trigger => code.includes(trigger)))
-                hits.push(`startup script ${script?.name || 'unnamed'}`);
+                hits.push(label);
         }
 
         return hits;
@@ -76,15 +81,14 @@ const involuntaryMoveCheck = {
         {
             const triggers = Array.isArray(reaction?.triggers) ? reaction.triggers : [];
             if (triggers.some(trigger => INVOLUNTARY_TRIGGERS.includes(trigger))
-                && Object.values(reaction).some(value => typeof value === 'string' && LEGACY_INVOLUNTARY_FIELDS.test(value)))
+                && reactionCodeMentions(reaction, LEGACY_INVOLUNTARY_FIELDS))
                 hits.push(label);
         }
 
-        for (const script of ReactionManager.getStartupScripts())
+        for (const { label, code } of savedStartupScripts())
         {
-            const code = typeof script?.code === 'string' ? script.code : '';
             if (code.includes('InvoluntaryMove') && LEGACY_INVOLUNTARY_FIELDS.test(code))
-                hits.push(`startup script ${script?.name || 'unnamed'}`);
+                hits.push(label);
         }
 
         return hits;
@@ -103,14 +107,14 @@ const defenseSubtypeCheck = {
         const hits = [];
         for (const { label, reaction } of savedReactions())
         {
-            if (Object.values(reaction ?? {}).some(value => typeof value === 'string' && LEGACY_DEFENSE_CODE.test(value)))
+            if (reactionCodeMentions(reaction, LEGACY_DEFENSE_CODE))
                 hits.push(label);
         }
 
-        for (const script of ReactionManager.getStartupScripts())
+        for (const { label, code } of savedStartupScripts())
         {
-            if (typeof script?.code === 'string' && LEGACY_DEFENSE_CODE.test(script.code))
-                hits.push(`startup script ${script?.name || 'unnamed'}`);
+            if (LEGACY_DEFENSE_CODE.test(code))
+                hits.push(label);
         }
 
         for (const macro of game.macros ?? [])

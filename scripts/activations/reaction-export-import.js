@@ -1,8 +1,9 @@
 /*global FormApplication, Dialog, $, game, ui, saveDataToFile */
 
 import { ReactionManager, clearScriptCache } from "./reaction-manager.js";
-import { getModuleSetting } from "../tools/settings-utils.js";
+import { getModuleSetting, getExternalSetting } from "../tools/settings-utils.js";
 import { escapeHtml as esc, localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 
 export class ReactionExport extends FormApplication
 {
@@ -77,10 +78,7 @@ export class ReactionImport extends FormApplication
                         }
                     }
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel")
-                }
+                cancel: cancelButton()
             },
             default: "next"
         }, { width: 400, classes: ['lancer-dialog-base'] }).render(true);
@@ -88,7 +86,7 @@ export class ReactionImport extends FormApplication
     }
 }
 
-function fmtVal(value)
+function formatValue(value)
 {
     if (value === null || value === undefined)
         return '<em>—</em>';
@@ -131,10 +129,10 @@ function openImportSummary(data)
             <span>${esc(name)}</span>
         </label>`);
 
-    const startupRows = startupScripts.map((s, i) =>
+    const startupRows = startupScripts.map((script, index) =>
     {
-        const key = s?.id ?? s?.name ?? String(i);
-        const label = s?.name ?? key;
+        const key = script?.id ?? script?.name ?? String(index);
+        const label = script?.name ?? key;
         return `<label style="display:flex;align-items:center;gap:6px;font-size:0.88em;">
             <input type="checkbox" class="la-imp-pick" data-section="startupScripts" data-key="${esc(key)}" checked>
             <span>${esc(label)}</span>
@@ -147,7 +145,7 @@ function openImportSummary(data)
         return `<label style="display:flex;align-items:center;gap:6px;font-size:0.85em;${same ? 'opacity:0.55;' : ''}">
             <input type="checkbox" class="la-imp-pick" data-section="${sec}" data-key="${esc(key)}" ${same ? '' : 'checked'}>
             <code style="font-size:0.95em;">${esc(key)}</code>
-            <span style="margin-left:auto;color:#888;">${fmtVal(current)} → ${fmtVal(imported)}</span>
+            <span style="margin-left:auto;color:#888;">${formatValue(current)} → ${formatValue(imported)}</span>
         </label>`;
     };
 
@@ -167,17 +165,7 @@ function openImportSummary(data)
             return '';
         const mod = composite.slice(0, dot);
         const key = composite.slice(dot + 1);
-        const current = (() =>
-        {
-            try
-            {
-                return game.settings.get(mod, key);
-            }
-            catch
-            {
-                return undefined;
-            }
-        })();
+        const current = getExternalSetting(mod, key);
         return settingRow('externalSettings', composite, current, externalSettings[composite]);
     });
 
@@ -238,7 +226,7 @@ function openImportSummary(data)
                     await ReactionManager.applyImportSelection(data, selection);
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
+            cancel: cancelButton()
         },
         default: "import",
         render: (html) =>
@@ -276,17 +264,17 @@ function openImportSummary(data)
 const PACK_TYPE = 'lancer-automations-pack';
 
 // Defaults hold code as live functions; JSON drops those, so stringify (engine recompiles on import).
-function _serializeFns(value)
+function _serializeFunctions(value)
 {
     if (typeof value === 'function')
         return value.toString();
     if (Array.isArray(value))
-        return value.map(_serializeFns);
+        return value.map(_serializeFunctions);
     if (value && typeof value === 'object')
     {
         const out = {};
         for (const [k, v] of Object.entries(value))
-            out[k] = _serializeFns(v);
+            out[k] = _serializeFunctions(v);
         return out;
     }
     return value;
@@ -390,7 +378,7 @@ function _collectPackSelection(html, itemReactions, generalReactions, startupScr
             generals[key] = generalReactions[key];
         else if (sec === 'startupScripts')
         {
-            const script = startupScripts.find(sc => (sc.id ?? sc.name ?? '') === key);
+            const script = startupScripts.find(entry => (entry.id ?? entry.name ?? '') === key);
             if (script)
                 startups.push(script);
         }
@@ -407,10 +395,10 @@ export function openPackExport()
     // Group activations the way the manager does: user folders first, then category, then Unfiled.
     const folders = ReactionManager.getFolders() || [];
     const keyToFolder = new Map();
-    for (const f of folders)
+    for (const folder of folders)
     {
-        for (const k of (f.items || []))
-            keyToFolder.set(k, f.name);
+        for (const key of (folder.items || []))
+            keyToFolder.set(key, folder.name);
     }
 
     const entries = [];
@@ -428,18 +416,18 @@ export function openPackExport()
 
     const order = [];
     const seen = new Set();
-    for (const f of folders)
+    for (const folder of folders)
     {
-        if (!seen.has(f.name))
+        if (!seen.has(folder.name))
         {
-            order.push(f.name); seen.add(f.name);
+            order.push(folder.name); seen.add(folder.name);
         }
     }
-    for (const g of [...new Set(entries.map(e => e.group))].sort((a, b) => a.localeCompare(b)))
+    for (const group of [...new Set(entries.map(entry => entry.group))].sort((left, right) => left.localeCompare(right)))
     {
-        if (!seen.has(g) && g !== 'Unfiled')
+        if (!seen.has(group) && group !== 'Unfiled')
         {
-            order.push(g); seen.add(g);
+            order.push(group); seen.add(group);
         }
     }
     order.push('Unfiled');
@@ -481,7 +469,7 @@ export function openPackExport()
                         ui.notifications.warn(localize('LA.notify.nothingSelectedToExport'));
                         return;
                     }
-                    const pack = ReactionManager.stripWorkshopIds(_serializeFns({
+                    const pack = ReactionManager.stripWorkshopIds(_serializeFunctions({
                         type: PACK_TYPE,
                         version: 1,
                         name,
@@ -495,7 +483,7 @@ export function openPackExport()
                     ui.notifications.info(localizeFormat('LA.notify.exportedPack', { name }));
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
+            cancel: cancelButton()
         },
         default: "export",
         render: (html) => wirePackSelectAll(html)
@@ -541,7 +529,7 @@ export function openPackImport(onDone)
                     }
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
+            cancel: cancelButton()
         },
         default: "next"
     }, { width: 400, classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
@@ -594,7 +582,7 @@ function openPackImportSummary(data, onDone)
                         onDone();
                 }
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel") }
+            cancel: cancelButton()
         },
         default: "import",
         render: (html) => wirePackSelectAll(html)
@@ -606,10 +594,10 @@ function _uniqueFolderName(base)
     const names = new Set(ReactionManager.getFolders().map(f => f.name));
     if (!names.has(base))
         return base;
-    let n = 2;
-    while (names.has(`${base} (${n})`))
-        n++;
-    return `${base} (${n})`;
+    let suffix = 2;
+    while (names.has(`${base} (${suffix})`))
+        suffix++;
+    return `${base} (${suffix})`;
 }
 
 // Returns the folder name to use, or null if the user cancels at the clash prompt.
@@ -625,7 +613,7 @@ async function _resolveFolderName(name)
             buttons: {
                 merge: { icon: '<i class="fas fa-folder-open"></i>', label: localize("LA.reactionImport.mergeIntoFolder"), callback: () => resolve(name) },
                 fresh: { icon: '<i class="fas fa-folder-plus"></i>', label: localize("LA.reactionImport.newFolder"), callback: () => resolve(_uniqueFolderName(name)) },
-                cancel: { icon: '<i class="fas fa-times"></i>', label: localize("LA.common.cancel"), callback: () => resolve(null) }
+                cancel: cancelButton(() => resolve(null))
             },
             default: "merge"
         }, { classes: ['lancer-automations-dialog', 'lancer-dialog-base'] }).render(true);
@@ -676,15 +664,15 @@ async function applyPackImport(packName, itemReactions, generalReactions, startu
     {
         const current = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
         const seen = new Set(current.flatMap(s => [s.id, s.name].filter(Boolean)));
-        for (const s of startupScripts)
+        for (const script of startupScripts)
         {
-            if ((s.id && seen.has(s.id)) || (s.name && seen.has(s.name)))
+            if ((script.id && seen.has(script.id)) || (script.name && seen.has(script.name)))
                 continue;
-            current.push({ ...s, builtin: false });
-            if (s.id)
-                seen.add(s.id);
-            if (s.name)
-                seen.add(s.name);
+            current.push({ ...script, builtin: false });
+            if (script.id)
+                seen.add(script.id);
+            if (script.name)
+                seen.add(script.name);
             addedStartups++;
         }
         await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, current);

@@ -299,7 +299,7 @@ function _renderForm(inner, { finish, later, interval })
 
         const stored = await _storeWish(msg.value.trim());
         if (!stored)
-            ui.notifications.warn('Could not send your message. Thanks anyway.');
+            ui.notifications.warn(localize('LA.notify.seasonalMessageFailed'));
         await _markYear(SENT_SETTING, 'birthday');
         document.querySelector('.la-bday-btn')?.remove();
     };

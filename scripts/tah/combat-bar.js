@@ -1,23 +1,27 @@
 /* global game, canvas, $ */
 
-import { revertMovement, clearMovementHistory } from '../interactive/combat.js';
-import { modifyAction } from '../tools/misc-tools.js';
+import { clearMovementHistory } from '../interactive/combat.js';
+import { modifyAction, restoreAction } from '../tools/action-economy.js';
 import { activateCombatantSocket, deactivateCombatantSocket, modifyCombatantActivationsSocket } from '../socket.js';
 import { playUiSound } from './sound.js';
 import { localize } from '../tools/string-utils.js';
-import { TAPE_COLORS, combatantFor } from './action-tape.js';
+import { htmlToElement } from '../tools/dom-utils.js';
+import { TAPE_COLORS, combatantFor, revertLastAction } from './action-tape.js';
+import { getMovementUsage } from '../movement/move-tracking.js';
+import { actionCounts, extrasClearUpdate } from '../combat/action-extras.js';
+import { getExternalSetting } from '../tools/settings-utils.js';
 
 const ACTION_DEFS = [
-    { key: 'protocol', icon: 'cci cci-protocol',                        label: 'LA.action.protocol' },
-    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', label: 'LA.action.move',     isMove: true },
-    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  label: 'LA.action.full' },
-    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  label: 'LA.action.quick' },
-    { key: 'reaction', icon: 'cci cci-reaction',                         label: 'LA.action.reaction' },
+    { key: 'protocol', icon: 'cci cci-protocol',                        label: 'LA.actionEconomy.protocol' },
+    { key: 'move',     icon: 'mdi mdi-arrow-right-bold-hexagon-outline', label: 'LA.actionEconomy.move',     isMove: true },
+    { key: 'full',     icon: 'mdi mdi-hexagon-slice-6',                  label: 'LA.actionEconomy.full' },
+    { key: 'quick',    icon: 'mdi mdi-hexagon-slice-3',                  label: 'LA.actionEconomy.quick' },
+    { key: 'reaction', icon: 'cci cci-reaction',                         label: 'LA.actionEconomy.reaction' },
 ];
 
 function toolBtn(icon, title, onClick, cls = '')
 {
-    const btn = $(`<span${cls ? ` class="${cls}"` : ''} style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="${title}"><i class="${icon}"></i></span>`);
+    const btn = $(htmlToElement(`<span${cls ? ` class="${cls}"` : ''} style="cursor:pointer;font-size:1.1em;line-height:1;display:flex;align-items:center;color:#888;transition:color 0.15s;" title="${title}"><i class="${icon}"></i></span>`));
     btn.on('mouseenter', () =>
     {
         playUiSound('statusHover'); btn.css('color', '#fff');
@@ -33,14 +37,7 @@ function _canMod(actor)
         return true;
     if (actor?.isOwner)
         return true;
-    try
-    {
-        return game.settings.get(game.system.id, 'actionTracker')?.allowPlayers ?? false;
-    }
-    catch
-    {
-        return false;
-    }
+    return getExternalSetting(game.system.id, 'actionTracker')?.allowPlayers ?? false;
 }
 
 /**
@@ -77,7 +74,7 @@ export function buildCombatBar(actor, token)
         `;
         document.head.appendChild(style);
     }
-    const bar = $(`<div id="la-combat-bar" style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:#111;border-left:3px solid var(--primary-color);min-height:30px;box-sizing:border-box;width:max-content;"></div>`);
+    const bar = $(htmlToElement(`<div id="la-combat-bar"></div>`));
 
     // Activation diamonds + end turn
     // When it's this token's turn, one spent slot becomes the end-turn icon
@@ -92,7 +89,7 @@ export function buildCombatBar(actor, token)
         if (!filled && isMyTurn && !endTurnPlaced)
         {
             endTurnPlaced = true;
-            const endBtn = $(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:var(--primary-color);transition:filter 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`);
+            const endBtn = $(htmlToElement(`<span class="la-end-turn" style="cursor:pointer;font-size:1.3em;line-height:1;color:var(--primary-color);transition:filter 0.15s;" title="End Turn"><i class="cci cci-deactivate"></i></span>`));
             endBtn.on('mouseenter', () =>
             {
                 playUiSound('statusHover'); endBtn.css('filter', 'brightness(1.6)');
@@ -112,7 +109,7 @@ export function buildCombatBar(actor, token)
             continue;
         }
 
-        const diamond = $(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:filter 0.1s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`);
+        const diamond = $(htmlToElement(`<span class="la-activation-pip" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;color:${filled ? 'var(--primary-color)' : '#555'};opacity:${filled ? 1 : 0.4};transition:filter 0.1s, opacity 0.15s;" title="${filled ? 'Activate (start turn)' : 'Right-click to restore'}"><i class="cci cci-activate"></i></span>`));
         diamond.on('mouseenter', () =>
         {
             playUiSound('statusHover'); diamond.css({ filter: 'brightness(1.6)', opacity: 1 });
@@ -137,29 +134,44 @@ export function buildCombatBar(actor, token)
     }
 
     // Separator
-    bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
+    bar.append(htmlToElement(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
 
     // Action icons
+    const counts = actionCounts(actor);
     for (const def of ACTION_DEFS)
     {
         const actionValue = actions[def.key];
-        const isAvailable = def.isMove ? (actionValue > 0) : !!actionValue;
-        const tooltip = def.isMove
-            ? `${localize(def.label)}: ${actionValue ?? 0}`
-            : `${localize(def.label)}: ${localize(isAvailable ? 'LA.action.available' : 'LA.action.spent')}`;
+        const usage = def.isMove && isMyTurn ? getMovementUsage(token) : null;
+        const moveLeft = usage ? Math.max(0, usage.cap - usage.used) : null;
+        const count = counts[def.key];
+        const isAvailable = moveLeft !== null ? moveLeft > 0 : (def.isMove ? (actionValue > 0) : (count !== undefined ? count > 0 : !!actionValue));
+        const state = def.isMove
+            ? `${localize(def.label)}: ${moveLeft ?? actionValue ?? 0}`
+            : `${localize(def.label)}: ${localize(isAvailable ? 'LA.actionEconomy.available' : 'LA.actionEconomy.spent')}`;
+        const tooltip = `${state}. ${localize(count === undefined ? 'LA.actionEconomy.restoreHint' : 'LA.actionEconomy.addHint')}`;
 
-        const icon = $(`<span class="la-action-icon" data-action="${def.key}" style="cursor:${canClick ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? TAPE_COLORS[def.key] : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;" title="${tooltip}"><i class="${def.icon}"></i></span>`);
+        const clickable = canClick && moveLeft === null;
+        const countPip = count > 0 ? `<span class="la-action-count">${count}</span>` : '';
+        const moveStarted = !!usage && usage.used > usage.legStart && moveLeft > 0;
+        const moveFill = moveStarted ? `--la-move-left:${Math.round((moveLeft / (usage.cap - usage.legStart)) * 100)}%;` : '';
+        const icon = $(htmlToElement(`<span class="la-action-icon${moveStarted ? ' la-move-started' : ''}" data-action="${def.key}" style="cursor:${clickable ? 'pointer' : 'default'};font-size:1.3em;line-height:1;display:flex;align-items:center;color:${isAvailable ? TAPE_COLORS[def.key] : '#555'};opacity:${isAvailable ? 1 : 0.35};transition:filter 0.1s, opacity 0.15s;${moveFill}" title="${tooltip}"><i class="${def.icon}"></i>${countPip}</span>`));
         icon.on('mouseenter', () =>
         {
             playUiSound('statusHover'); icon.css({ filter: 'brightness(1.6)', opacity: 1 });
         });
         icon.on('mouseleave', () => icon.css({ filter: '', opacity: isAvailable ? 1 : 0.35 }));
 
-        if (canClick)
+        if (clickable)
         {
             icon.on('click', async () =>
             {
-                await modifyAction(actor, def.key, !!actionValue);
+                if (isAvailable)
+                    await modifyAction(actor, def.key, true);
+            });
+            icon.on('contextmenu', async (event) =>
+            {
+                event.preventDefault();
+                await restoreAction(actor, def.key);
             });
         }
         bar.append(icon);
@@ -168,7 +180,7 @@ export function buildCombatBar(actor, token)
     // Reset button
     if (canClick)
     {
-        bar.append($(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
+        bar.append(htmlToElement(`<span style="border-left:1px solid #555;height:20px;margin:0 3px;"></span>`));
         bar.append(toolBtn('mdi mdi-restore', 'Reset Actions', async () =>
         {
             const speed = actor.system?.speed ?? 0;
@@ -179,14 +191,14 @@ export function buildCombatBar(actor, token)
                     full: true,
                     quick: true,
                     reaction: true,
-                } }
-            });
+                } },
+                ...extrasClearUpdate()
+            }, /** @type {any} */ ({ laActionExtras: true }));
         }, 'la-action-reset'));
 
-        // Revert last movement
-        bar.append(toolBtn('fas fa-step-backward', 'Revert Last Move', async () =>
+        bar.append(toolBtn('fas fa-step-backward', 'Revert Last Action', async () =>
         {
-            await revertMovement(token);
+            await revertLastAction(token);
         }));
 
         // Clear movement history

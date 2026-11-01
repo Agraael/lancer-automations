@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
 
 // FilterVentColumn: heat shear across the upper chassis with a plume climbing off the silhouette above it.
 // No alpha early-out: the plume lives where the sprite is not.
@@ -16,14 +16,7 @@ uniform float plumeStrength;
 uniform float bodyGlow;
 uniform vec3 hotColor;
 uniform vec3 plumeColor;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_VNOISE}
@@ -65,41 +58,14 @@ void main()
 }
 `;
 
-export class FilterVentColumn extends PIXI.Filter
+export class FilterVentColumn extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, ventColumnFragment);
-
-        this.uniforms.hotColor = new Float32Array([1.0, 0.55, 0.23]);
-        this.uniforms.plumeColor = new Float32Array([1.0, 0.81, 0.60]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterVentColumn.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(ventColumnFragment, params, {
+            hotColor: new Float32Array([1.0, 0.55, 0.23]),
+            plumeColor: new Float32Array([1.0, 0.81, 0.60]),
+        });
     }
 
     get warpFreq()
@@ -181,15 +147,6 @@ export class FilterVentColumn extends PIXI.Filter
     set plumeColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.plumeColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

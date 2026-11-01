@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
+import { LaCustomFilter, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
 
 // FilterThermalSplit: ridged noise draws seams across the plating, drifting slowly and blooming as they open.
 
@@ -73,42 +73,15 @@ void main()
 }
 `;
 
-export class FilterThermalSplit extends PIXI.Filter
+export class FilterThermalSplit extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, thermalSplitFragment);
-
-        this.uniforms.hotColor = new Float32Array([1.0, 0.10, 0.0]);
-        this.uniforms.charColor = new Float32Array([0.16, 0.08, 0.06]);
-        this.uniforms.coreColor = new Float32Array([1.0, 0.96, 0.87]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterThermalSplit.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(thermalSplitFragment, params, {
+            hotColor: new Float32Array([1.0, 0.10, 0.0]),
+            charColor: new Float32Array([0.16, 0.08, 0.06]),
+            coreColor: new Float32Array([1.0, 0.96, 0.87]),
+        });
     }
 
     get crackScale()
@@ -253,15 +226,6 @@ export class FilterThermalSplit extends PIXI.Filter
     set charColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.charColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

@@ -13,7 +13,7 @@ import { MODULE_ID } from '../tools/constants.js';
 const RULER_ENABLED = 'enableBuiltinSpeedProvider';
 const CLIMB_WAYPOINTS_ENABLED = 'enableClimbWaypoints';
 const SPLIT_AT_TRIGGER_BOUNDARIES = 'splitMovementAtTriggerBoundaries';
-const DISABLE_AUTO_TERRAIN_ELEVATION = 'disableAutoTerrainElevation';
+const TERRAIN_ELEVATION_MODE = 'terrainElevationMode';
 const THT_ID = 'terrain-height-tools';
 const THT_IGNORE_FLAG = 'ignoreAutoElevation';
 const LA_DISABLE_AUTO_TERRAIN_FLAG = 'disableAutoTerrainElevation';
@@ -28,25 +28,26 @@ Hooks.once('init', () =>
     game.settings.register(MODULE_ID, CLIMB_WAYPOINTS_ENABLED, {
         scope: 'world',
         type: Boolean,
-        default: false,
+        default: true,
         config: false
     });
     game.settings.register(MODULE_ID, SPLIT_AT_TRIGGER_BOUNDARIES, {
         scope: 'world',
         type: Boolean,
-        default: false,
+        default: true,
         config: false
     });
-    game.settings.register(MODULE_ID, DISABLE_AUTO_TERRAIN_ELEVATION, {
+    game.settings.register(MODULE_ID, TERRAIN_ELEVATION_MODE, {
+        name: 'LA.settings.terrainElevationMode.name',
+        hint: 'LA.settings.terrainElevationMode.hint',
         scope: 'world',
-        type: Boolean,
-        default: false,
-        config: false
-    });
-    game.settings.register(MODULE_ID, 'disableAutoElevationOnMeasure', {
-        scope: 'world',
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: {
+            both: 'LA.settings.terrainElevationMode.choices.both',
+            move: 'LA.settings.terrainElevationMode.choices.move',
+            off: 'LA.settings.terrainElevationMode.choices.off',
+        },
+        default: 'both',
         config: false
     });
 });
@@ -157,7 +158,7 @@ function shouldAutoElevate(tokenDoc, { ruler: _ruler = true } = {})
 {
     if (!isEnabled())
         return false;
-    if (getModuleSetting(DISABLE_AUTO_TERRAIN_ELEVATION))
+    if (getModuleSetting(TERRAIN_ELEVATION_MODE) === 'off')
         return false;
     // getFlag throws on a scope whose module isn't active; gate the THT lookup.
     if (game.modules.get(THT_ID)?.active && tokenDoc.getFlag?.(THT_ID, THT_IGNORE_FLAG))

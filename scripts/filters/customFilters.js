@@ -50,6 +50,29 @@ export {
     FilterSliceTear
 };
 
+const LA_FILTERS = {
+    fracture: FilterFracture,
+    chains: FilterChains,
+    chromaRot: FilterChromaRot,
+    openSeams: FilterOpenSeams,
+    trackingGhost: FilterTrackingGhost,
+    seamBeat: FilterSeamBeat,
+    doubleShell: FilterDoubleShell,
+    ventColumn: FilterVentColumn,
+    guidingLight: FilterGuidingLight,
+    ablativeCrust: FilterAblativeCrust,
+    noDrift: FilterNoDrift,
+    shatterSeams: FilterShatterSeams,
+    thermalSplit: FilterThermalSplit,
+    slicePlane: FilterSlicePlane,
+    overflowWrap: FilterOverflowWrap,
+    errorCorrection: FilterErrorCorrection,
+    coldSoak: FilterColdSoak,
+    ricochetLip: FilterRicochetLip,
+    convectionChurn: FilterConvectionChurn,
+    sliceTear: FilterSliceTear,
+};
+
 let FilterType = null;
 
 // Register the LA custom filters on both TMFX FilterType objects (source + minified bundle, found by shape), at init because TokenMagic rebuilds from flags on the first canvasReady.
@@ -75,26 +98,7 @@ Hooks.once('init', async () =>
         console.warn('lancer-automations | TokenMagic FilterType export not found; custom filters disabled.');
         return;
     }
-    FilterType.fracture = FilterFracture;
-    FilterType.chains = FilterChains;
-    FilterType.chromaRot = FilterChromaRot;
-    FilterType.openSeams = FilterOpenSeams;
-    FilterType.trackingGhost = FilterTrackingGhost;
-    FilterType.seamBeat = FilterSeamBeat;
-    FilterType.doubleShell = FilterDoubleShell;
-    FilterType.ventColumn = FilterVentColumn;
-    FilterType.guidingLight = FilterGuidingLight;
-    FilterType.ablativeCrust = FilterAblativeCrust;
-    FilterType.noDrift = FilterNoDrift;
-    FilterType.shatterSeams = FilterShatterSeams;
-    FilterType.thermalSplit = FilterThermalSplit;
-    FilterType.slicePlane = FilterSlicePlane;
-    FilterType.overflowWrap = FilterOverflowWrap;
-    FilterType.errorCorrection = FilterErrorCorrection;
-    FilterType.coldSoak = FilterColdSoak;
-    FilterType.ricochetLip = FilterRicochetLip;
-    FilterType.convectionChurn = FilterConvectionChurn;
-    FilterType.sliceTear = FilterSliceTear;
+    Object.assign(FilterType, LA_FILTERS);
     console.log('lancer-automations | Registered custom filters on source FilterType');
 
     // 2) Bundle-internal patch: scan bundle module exports for the FilterType by shape (stock keys).
@@ -142,26 +146,7 @@ Hooks.once('init', async () =>
         }
         if (bundleFT && bundleFT !== FilterType)
         {
-            bundleFT.fracture = FilterFracture;
-            bundleFT.chains = FilterChains;
-            bundleFT.chromaRot = FilterChromaRot;
-            bundleFT.openSeams = FilterOpenSeams;
-            bundleFT.trackingGhost = FilterTrackingGhost;
-            bundleFT.seamBeat = FilterSeamBeat;
-            bundleFT.doubleShell = FilterDoubleShell;
-            bundleFT.ventColumn = FilterVentColumn;
-            bundleFT.guidingLight = FilterGuidingLight;
-            bundleFT.ablativeCrust = FilterAblativeCrust;
-            bundleFT.noDrift = FilterNoDrift;
-            bundleFT.shatterSeams = FilterShatterSeams;
-            bundleFT.thermalSplit = FilterThermalSplit;
-            bundleFT.slicePlane = FilterSlicePlane;
-            bundleFT.overflowWrap = FilterOverflowWrap;
-            bundleFT.errorCorrection = FilterErrorCorrection;
-            bundleFT.coldSoak = FilterColdSoak;
-            bundleFT.ricochetLip = FilterRicochetLip;
-            bundleFT.convectionChurn = FilterConvectionChurn;
-            bundleFT.sliceTear = FilterSliceTear;
+            Object.assign(bundleFT, LA_FILTERS);
             console.log('lancer-automations | Registered custom filters on bundle FilterType');
         }
     }

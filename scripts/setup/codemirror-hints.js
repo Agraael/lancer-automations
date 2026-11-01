@@ -2,6 +2,7 @@
 
 import { AUTO_API_MANIFEST, AUTO_OPTION_SCHEMAS, AUTO_DOC_INDEX, AUTO_DOC_REF, AUTO_DOC_PARAMS } from '../../tools/codemirror-hints-data.generated.js';
 import { MODULE_ID } from '../tools/constants.js';
+import { escapeHtml as _escapeHtml } from '../tools/string-utils.js';
 
 const HAND_SIGNATURE_OVERRIDES = {
 };
@@ -343,7 +344,7 @@ const HAND_OPTION_SCHEMAS = {
         ['bonus_damage', 'object[]'],
     ],
     'addGlobalBonus.options': [
-        ['duration', '"end" | "start" | "roundEnd" | "roundStart" | "encounter" | "indefinite" | "permanent" | "constant"'],
+        ['duration', '"end" | "start" | "anyTurnEnd" | "anyTurnStart" | "roundEnd" | "roundStart" | "encounter" | "indefinite" | "permanent" | "constant"'],
         ['durationTurns', 'number'],
         ['durationRounds', 'number'],
         ['origin', 'Token | string'],
@@ -758,11 +759,6 @@ function _hideTooltip()
     _tooltipEl = null;
 }
 
-function _escapeHtml(str)
-{
-    return String(str ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-}
-
 export function apiDocUrl(name)
 {
     const entry = AUTO_DOC_INDEX[name];
@@ -820,9 +816,9 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
         return (eq >= 0 ? argStr.slice(0, eq) : argStr).trim();
     }));
     if (docRows)
-        for (const [pname, ptype, pdflt] of docRows)
+        for (const [pname, ptype, paramDefault] of docRows)
             if (positionalNames.has(pname))
-                paramByName.set(pname, { name: pname, type: ptype, desc: pdflt && pdflt !== 'required' ? `default: ${pdflt}` : '' });
+                paramByName.set(pname, { name: pname, type: ptype, desc: paramDefault && paramDefault !== 'required' ? `default: ${paramDefault}` : '' });
     let body;
     if (!fullArgs || fullArgs === '()' || fullArgs === '(...)')
         body = `<div class="la-hint-tt-paren">${fullArgs || '()'}</div>`;
@@ -1070,7 +1066,7 @@ function _hint(cm, kind)
     const wordMatch = before.match(/(\w+)$/);
     const prefix = wordMatch ? wordMatch[1] : '';
     const params = PARAMS_BY_KIND[kind] ?? [];
-    const list = _filter(params.map((p) => ({ name: p })), prefix);
+    const list = _filter(params.map((paramName) => ({ name: paramName })), prefix);
     if (!list.length)
         return null;
     return _attachTooltipEvents({
@@ -1097,21 +1093,21 @@ function _ensureExtraAddons()
         return Promise.resolve(false);
     const load = (src) => new Promise((resolve) =>
     {
-        const s = document.createElement('script');
-        s.src = src;
-        s.async = false;
-        s.onload = () => resolve(true);
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = false;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
     });
     const loadCss = (href) =>
     {
         if (document.querySelector(`link[href="${href}"]`))
             return;
-        const l = document.createElement('link');
-        l.rel = 'stylesheet';
-        l.href = href;
-        document.head.appendChild(l);
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        document.head.appendChild(link);
     };
     loadCss('/modules/_CodeMirror/addon/dialog/dialog.css');
     loadCss('/modules/_CodeMirror/addon/fold/foldgutter.css');
@@ -1280,9 +1276,4 @@ function _ensureLancerArgStyle()
     const style = document.createElement('style');
     style.textContent = '.CodeMirror .cm-la-arg { color: #e8a020; font-weight: 600; }';
     document.head.appendChild(style);
-}
-
-export function refreshLancerHintCache()
-{
-    _apiCache = null;
 }

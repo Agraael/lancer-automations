@@ -1,6 +1,6 @@
 // Casts each token's own silhouette on the ground, thrown further the higher it stands.
 
-import { getModuleSetting } from '../tools/settings-utils.js';
+import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
 import { getMaxGroundHeightUnderToken } from '../combat/terrain-utils.js';
 
 const THT_ID = 'terrain-height-tools';
@@ -20,23 +20,19 @@ const shadows = new Map();
 
 function isEnabled()
 {
-    return !!getModuleSetting('tokenGroundShadow');
+    return Number(getModuleSetting('tokenGroundShadowOpacity')) > 0;
 }
 
 /** Compass bearing the light comes from, shared with Terrain Height Tools when it is there. */
 function lightDirection()
 {
     let bearing = FALLBACK_BEARING;
-    try
+    if (game.modules.get(THT_ID)?.active)
     {
-        if (game.modules.get(THT_ID)?.active)
-        {
-            const angle = game.settings.get(THT_ID, 'terrainExtrusionSunAngle');
-            bearing = typeof angle === 'number' ? angle : FALLBACK_BEARING;
-        }
+        // THT without the fork does not register it
+        const angle = getExternalSetting(THT_ID, 'terrainExtrusionSunAngle');
+        bearing = typeof angle === 'number' ? angle : FALLBACK_BEARING;
     }
-    catch
-    { /* THT without the fork does not register it */ }
 
     const radians = (bearing * Math.PI) / 180;
     return { x: -Math.sin(radians), y: Math.cos(radians) };
@@ -116,7 +112,7 @@ export function refreshGroundShadow(token)
     shadow.width = Math.abs(mesh.width);
     shadow.height = Math.abs(mesh.height);
     shadow.rotation = mesh.rotation;
-    shadow.alpha = (getModuleSetting('tokenGroundShadowOpacity') ?? 0.55) * (token.mesh?.alpha ?? 1);
+    shadow.alpha = (getModuleSetting('tokenGroundShadowOpacity') ?? 0) * (token.mesh?.alpha ?? 1);
     shadow.position.set(
         mesh.position.x - (light.x * throwBy),
         mesh.position.y - (light.y * throwBy));

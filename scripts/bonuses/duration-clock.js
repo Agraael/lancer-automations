@@ -2,10 +2,13 @@ import { getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 import { effectStack } from './flagged-effects.js';
+import { ANY_TURN_LABEL } from './duration-builders.js';
 
-const TURN_LABELS = new Set(['start', 'end']);
+const ORIGIN_TURN_LABELS = new Set(['start', 'end']);
+export const ANY_TURN_LABELS = new Set(Object.values(ANY_TURN_LABEL));
+const TURN_LABELS = new Set([...ORIGIN_TURN_LABELS, ...ANY_TURN_LABELS]);
 const ROUND_LABELS = new Set(['roundStart', 'roundEnd']);
-const COMBAT_BOUND_LABELS = new Set(['encounter', 'start', 'end', 'roundStart', 'roundEnd']);
+const COMBAT_BOUND_LABELS = new Set(['encounter', ...TURN_LABELS, 'roundStart', 'roundEnd']);
 
 let _clock = Promise.resolve();
 
@@ -194,7 +197,9 @@ export function tickTurnEntries(effect, triggerLabel, triggeringTokenId)
         return Promise.resolve();
     return rewriteEntries(effect, entry =>
     {
-        if (entry.label !== triggerLabel || entry.originID !== triggeringTokenId)
+        const ticks = entry.label === ANY_TURN_LABEL[triggerLabel]
+            || (entry.label === triggerLabel && entry.originID === triggeringTokenId);
+        if (!ticks)
             return entry;
         const turns = Number(entry.turns);
         if (!Number.isFinite(turns))
@@ -231,7 +236,7 @@ export async function processOriginDeparture(combat, tokenId)
         return;
     await rewriteSceneEntries(combat.scene ?? canvas.scene, entry =>
     {
-        if (!TURN_LABELS.has(entry.label) || entry.originID !== tokenId)
+        if (!ORIGIN_TURN_LABELS.has(entry.label) || entry.originID !== tokenId)
             return entry;
         return { label: 'roundEnd', round: combat.round ?? 0, combatId: combat.id, originID: entry.originID, stack: entryStack(entry) };
     });

@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
 
 // FilterColdSoak: a cold front creeps up the chassis, draining colour and leaving frost in the thick parts.
 
@@ -10,14 +10,7 @@ uniform float frontPeriod;
 uniform float depth;
 uniform vec3 coldColor;
 uniform vec3 frostColor;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_VNOISE}
@@ -70,41 +63,14 @@ void main()
 }
 `;
 
-export class FilterColdSoak extends PIXI.Filter
+export class FilterColdSoak extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, coldSoakFragment);
-
-        this.uniforms.coldColor = new Float32Array([0.22, 0.25, 0.30]);
-        this.uniforms.frostColor = new Float32Array([0.62, 0.77, 0.85]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterColdSoak.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(coldSoakFragment, params, {
+            coldColor: new Float32Array([0.22, 0.25, 0.30]),
+            frostColor: new Float32Array([0.62, 0.77, 0.85]),
+        });
     }
 
     get frontPeriod()
@@ -141,15 +107,6 @@ export class FilterColdSoak extends PIXI.Filter
     set frostColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.frostColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

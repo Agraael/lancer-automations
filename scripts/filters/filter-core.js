@@ -35,6 +35,17 @@ void main(void)
 }
 `;
 
+// mediump matches customVertex2D, since a precision mismatch on a shared uniform fails to link.
+export const GLSL_FILTER_INPUTS = `
+uniform float opacity;
+uniform mediump vec4 inputSize;
+uniform mediump vec4 outputFrame;
+uniform vec4 inputClamp;
+uniform sampler2D uSampler;
+
+varying vec2 vTextureCoord;
+varying vec2 vFilterCoord;`;
+
 // GLSL helpers shared by the effect shaders. Interpolate them, never retype: the constants must match to the digit.
 export const GLSL_HASH1 = `
 float hash1(vec2 p) {
@@ -59,6 +70,28 @@ float vnoise(vec2 p) {
     float c = hash1(i + vec2(0.0, 1.0));
     float d = hash1(i + vec2(1.0, 1.0));
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}`;
+
+export const GLSL_BLENDER_VEC3 = `
+vec4 blenderVec3(int blend, vec4 fColv4, vec4 sColv4)
+{
+    vec3 fCol = vec3(fColv4);
+    vec3 sCol = vec3(sColv4);
+    if      (blend == 1)  { fCol = fCol * sCol; }
+    else if (blend == 2)  { fCol = (1. - (1. - fCol) * (1. - sCol)); }
+    else if (blend == 3)  { fCol = min(fCol, sCol); }
+    else if (blend == 4)  { fCol = max(fCol, sCol); }
+    else if (blend == 5)  { fCol = abs(fCol - sCol); }
+    else if (blend == 6)  { fCol = 1. - abs(1. - fCol - sCol); }
+    else if (blend == 7)  { fCol = fCol + sCol - (2. * fCol * sCol); }
+    else if (blend == 8)  { fCol = all(lessThanEqual(fCol, vec3(0.5))) ? (2. * fCol * sCol) : (1. - 2. * (1. - fCol) * (1. - sCol)); }
+    else if (blend == 9)  { fCol = all(lessThanEqual(sCol, vec3(0.5))) ? (2. * fCol * sCol) : (1. - 2. * (1. - fCol) * (1. - sCol)); }
+    else if (blend == 10) { fCol = all(lessThanEqual(sCol, vec3(0.5))) ? (2. * fCol * sCol + fCol * fCol * (1. - 2. * sCol)) : sqrt(fCol) * (2. * sCol - 1.) + (2. * fCol) * (1. - sCol); }
+    else if (blend == 11) { fCol = fCol / (1.0 - sCol); }
+    else if (blend == 12) { fCol = 1.0 - (1.0 - fCol) / sCol; }
+    else if (blend == 13) { fCol = fCol + sCol; }
+    else                  { fCol = fCol + sCol; }
+    return vec4(fCol, 1.0);
 }`;
 
 // Compass bearing in degrees to the unit vector the shaders read as dirV.
@@ -143,4 +176,50 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
     }
 
     filterManager.applyFilter(filter, input, output, clear);
+}
+
+export class LaCustomFilter extends PIXI.Filter
+{
+    constructor(fragment, params, uniforms = {}, timeSpeed = 1.0)
+    {
+        super(customVertex2D, fragment);
+
+        Object.assign(this.uniforms, uniforms);
+        this.uniforms.filterMatrix = new PIXI.Matrix();
+        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
+
+        Object.assign(this, /** @type {any} */ (this.constructor).defaults);
+
+        this._timeSpeed = params?.timeSpeed ?? timeSpeed;
+        this._lastTime = performance.now();
+
+        this.zOrder = 200;
+        this.animated = {};
+        this.setTMParams(params);
+        if (!this.dummy)
+            this.normalizeTMParams();
+    }
+
+    apply(filterManager, input, output, clear)
+    {
+        applyCustomFilter(this, filterManager, input, output, clear);
+    }
+
+    get time()
+    {
+        return this.uniforms.time;
+    }
+    set time(value)
+    {
+        this.uniforms.time = value;
+    }
+
+    get opacity()
+    {
+        return this.uniforms.opacity;
+    }
+    set opacity(value)
+    {
+        this.uniforms.opacity = value;
+    }
 }

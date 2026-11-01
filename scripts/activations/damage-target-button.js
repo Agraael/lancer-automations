@@ -8,30 +8,10 @@ import {
 } from '../interactive/canvas.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed } from './targeting-ui.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { laInstallRollCardHeader } from './roll-card-header.js';
-
-const _formulaBounds = new Map();
-function formulaBounds(formula)
-{
-    let bounds = _formulaBounds.get(formula);
-    if (!bounds)
-    {
-        try
-        {
-            bounds = {
-                min: Number(new Roll(formula).evaluateSync({ minimize: true }).total) || 0,
-                max: Number(new Roll(formula).evaluateSync({ maximize: true }).total) || 0,
-            };
-        }
-        catch
-        {
-            bounds = { min: 0, max: 0 };
-        }
-        _formulaBounds.set(formula, bounds);
-    }
-    return bounds;
-}
+import { formulaBounds } from '../tools/roll-utils.js';
 
 // Damage min-max label on targets (the damage counterpart of the attack hit-%). Lazy: for
 // weapon flows state.data.damage stays empty until the HUD closes, so read the live HUD rows.
@@ -104,7 +84,7 @@ function seedTargetsFromHitResults(state)
 
 function damageForm()
 {
-    const $form = $('form#damage-hud');
+    const $form = $(document.querySelector('form#damage-hud'));
     return $form.length ? $form : null;
 }
 
@@ -118,9 +98,9 @@ async function injectButton(state, $form)
 
     const headerCls = $form.find('h4.damage-hud-section').first().attr('class')
         || 'damage-hud-section lancer-border-primary';
-    const $section = $(`<div class="accdiff-grid__section la-targeting-section la-damage-targeting" style="border-top:1px solid var(--primary-color,#991e2a);margin-top:6px;padding-top:2px;">
+    const $section = $(htmlToElement(`<div class="accdiff-grid__section la-targeting-section la-damage-targeting" style="border-top:1px solid var(--primary-color,#991e2a);margin-top:6px;padding-top:2px;">
         <h4 class="${headerCls}" style="justify-content: center;">Targeting</h4>
-        <div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>`);
+        <div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>`));
     const $targets = $form.find('.damage-hud-targets').first();
     const $footer = $form.find('.lancer-hud-buttons').first();
     if ($targets.length)
@@ -212,6 +192,7 @@ export function registerDamageTargetButton()
             {
                 if (active)
                 {
+                    state.__laHudClosed = true;
                     try
                     {
                         attackerMark?.destroy();

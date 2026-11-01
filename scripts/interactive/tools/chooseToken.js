@@ -5,7 +5,6 @@ import {
     drawHexAt, getOccupiedOffsets,
     getMinGridDistance,
     getInRangeOffsets, isPositionInRange, neighborKeys,
-    cubeRound,
 } from "../../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 import { getModuleSetting } from "../../tools/settings-utils.js";
@@ -22,7 +21,7 @@ import {
     suppressEvent, showOverlapStackPicker,
     teardownRangePulse,
 } from "../canvas-helpers.js";
-import { computeArea } from "../area-geometry.js";
+import { computeArea, rotationStepsFor } from "../area-geometry.js";
 import { keyCodesFor } from "../keybindings.js";
 import { broadcastToolPresence, clearToolPresence } from "../presence.js";
 import { isFriendly, isHostile } from "../../combat/overwatch.js";
@@ -84,11 +83,6 @@ export function chooseToken(casterToken, options = {})
         const isConeMode = pattern === 'cone';
         const isLineMode = pattern === 'line';
         const isAreaMode = isBlastMode || isBurstMode || isConeMode || isLineMode;
-        // Cone rotation is an int step count (1 wheel tick = 1 step); 12 steps per turn covers every hex-aligned + off-axis facing.
-        const CONE_STEPS_PER_TURN = 12;
-        const CONE_STEP_DEG = 360 / CONE_STEPS_PER_TURN;
-        // Lateral max = 0.5 * forward, matching Foundry's MeasuredTemplate 53.13° cone.
-        const CONE_HALF_SLOPE = 0.5;
         if (isAreaMode && (!areaRange || areaRange < 1))
         {
             console.error(`lancer-automations | chooseToken | pattern="${pattern}" requires areaRange >= 1`);
@@ -104,7 +98,9 @@ export function chooseToken(casterToken, options = {})
             ? true
             : !!optAutoElevation;
         // Spread the area cell-to-cell from its origin; tall terrain blocks it. Needs elevationAware.
-        let propagation = !!optPropagation;
+        let propagation = (optPropagation === null || optPropagation === undefined)
+            ? !!getModuleSetting('areaSpread')
+            : !!optPropagation;
         let losOn = (optLos === null || optLos === undefined) ? true : !!optLos;
 
         let selectionOnly = !!selection;
@@ -120,24 +116,8 @@ export function chooseToken(casterToken, options = {})
         let pendingRotation = 0;
         // Live line tilt (W/S): end-elevation delta. Frozen per placement like rotation.
         let pendingTilt = 0;
-        // Cone: 12 angular steps; line: endpoint ring (6×length hex, 8×length sq), a distinct facing per tick, finer than cone.
-        const lineRadius = Math.max(1, Math.round(Number(areaRange) || 1));
-        const rotationModulus = isLineMode ? (isHexGrid() ? 6 : 8) * lineRadius : CONE_STEPS_PER_TURN;
+        const rotationModulus = rotationStepsFor(pattern, areaRange);
 
-        // Lancer vertical hex count: max of actor.system.size + doc dims; 0.5 special-cased; else ceil to integer → 1.
-        const tokenVerticalSize = (token) =>
-        {
-            const actorSize = Number(token?.actor?.system?.size ?? 0);
-            const docW = Number(token?.document?.width ?? token?.w ?? 0) || 0;
-            const docH = Number(token?.document?.height ?? token?.h ?? 0) || 0;
-            const raw = Math.max(actorSize, docW, docH, 0);
-            if (!raw)
-                return 1;
-            if (raw <= 0.5)
-                return 0.5;
-            return Math.max(1, Math.ceil(raw));
-        };
-        const verticalOverlap = (aBot, aTop, bBot, bTop) => aBot < bTop && bBot < aTop;
         const groundAtCenter = (centerPt) =>
         {
             const terrainAPI = globalThis.terrainHeightTools;
@@ -177,11 +157,6 @@ export function chooseToken(casterToken, options = {})
         // Gate keepConnected on the runtime toggles; seeds default to the area's origin cell.
         const propagate = (affected, seeds) =>
             (elevationAware && propagation) ? keepConnected(affected, seeds) : affected;
-        const originSeed = (pt) =>
-        {
-            const offset = pixelToOffset(pt.x, pt.y);
-            return [`${offset.col},${offset.row}`];
-        };
 
         const setPickerRangePulse = () =>
         {
@@ -464,31 +439,6 @@ export function chooseToken(casterToken, options = {})
             }
             return out;
         };
-        // Tokens whose footprint hits `affected` and whose height span overlaps [lo, hi].
-        const catchTokens = (affected, lo, hi, skipId = null) =>
-        {
-            const caught = [];
-            for (const token of canvas.tokens.placeables)
-            {
-                if (skipId && token.id === skipId)
-                    continue;
-                if (token.document.hidden && !game.user.isGM)
-                    continue;
-                if (!includeSelf && casterToken && token.id === casterToken.id)
-                    continue;
-                if (!getOccupiedOffsets(token).some(offset => affected.has(`${offset.col},${offset.row}`)))
-                    continue;
-                if (elevationAware)
-                {
-                    const tokenElev = Number(token.document?.elevation) || 0;
-                    if (!verticalOverlap(lo, hi, tokenElev, tokenElev + tokenVerticalSize(token)))
-                        continue;
-                }
-                caught.push(token);
-            }
-            return caught;
-        };
-
         // Shared geometry (area-geometry.js). ctx carries the runtime toggles + token filters.
         const aoeCtx = () => ({ elevationAware, propagation, includeHidden: game.user.isGM, includeSelf, casterToken });
         const tokensInBlast = (centerPt, radius, areaElev = 0) =>
@@ -497,262 +447,6 @@ export function chooseToken(casterToken, options = {})
         // Burst: centered on a HOST token, symmetric [tokenElev - radius, tokenElev + radius].
         const tokensInBurst = (hostToken, radius) =>
             computeArea({ pattern: 'burst', hostToken, areaRange: radius }, aoeCtx());
-
-        // Hex cone (matches Foundry MeasuredTemplate): forward > 0, cubeDist <= range, |lateral| <= 0.5*forward; square = 60° wedge.
-        const tokensInCone = (centerPt, radius, areaElev, rotation) =>
-        {
-            const areaTop = areaElev + radius;
-            let affected = new Set();
-
-            if (isHexGrid())
-            {
-                /** @type {any} */
-                const grid = canvas.grid;
-                const srcOff = pixelToOffset(centerPt.x, centerPt.y);
-                const cursorCube = grid.getCube({ i: srcOff.row, j: srcOff.col });
-                const dirDeg = (Number(rotation) || 0) * CONE_STEP_DEG;
-
-                // Off-axis (aim not a multiple of 60°): first cone cell sits at distance 2, so add 1 to effRadius.
-                const offAxis = (((dirDeg % 60) + 60) % 60) > 1e-9;
-                const effRadius = offAxis ? radius + 1 : radius;
-
-                const angleRad = dirDeg * Math.PI / 180;
-                const forwardX = Math.cos(angleRad), forwardY = Math.sin(angleRad);
-                const lateralX = -Math.sin(angleRad), lateralY = Math.cos(angleRad);
-                const searchRadius = Math.ceil(effRadius) + 1;
-
-                // Cone offsets relative to origin (0,0,0).
-                const coneOffsets = [];
-                for (let q = -searchRadius; q <= searchRadius; q++)
-                {
-                    for (let r = -searchRadius; r <= searchRadius; r++)
-                    {
-                        const s = -q - r;
-                        if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > searchRadius)
-                            continue;
-                        const x = q + 0.5 * r;
-                        const y = (Math.sqrt(3) / 2) * r;
-                        const forward = x * forwardX + y * forwardY;
-                        const lateral = x * lateralX + y * lateralY;
-                        const cubeDist = (Math.abs(q) + Math.abs(r) + Math.abs(s)) / 2;
-                        if (forward <= 1e-9 || cubeDist > effRadius + 1e-9)
-                            continue;
-                        if (Math.abs(lateral) > CONE_HALF_SLOPE * forward + 1e-9)
-                            continue;
-                        coneOffsets.push({ q, r, s, cubeDist, forward });
-                    }
-                }
-
-                if (coneOffsets.length)
-                {
-                    // Nearest cell (tie-break: most forward) is the one that lands on the cursor.
-                    let nearest = coneOffsets[0];
-                    for (const coneOffset of coneOffsets)
-                    {
-                        if (coneOffset.cubeDist < nearest.cubeDist || (coneOffset.cubeDist === nearest.cubeDist && coneOffset.forward > nearest.forward))
-                            nearest = coneOffset;
-                    }
-                    // Shift the whole cone so `nearest` sits on the cursor cell.
-                    for (const coneOffset of coneOffsets)
-                    {
-                        const cellOffset = grid.getOffset({
-                            q: cursorCube.q + (coneOffset.q - nearest.q),
-                            r: cursorCube.r + (coneOffset.r - nearest.r),
-                            s: cursorCube.s + (coneOffset.s - nearest.s),
-                        });
-                        const cellCol = cellOffset.j, cellRow = cellOffset.i;
-                        if (terrainBlocks(cellCol, cellRow, areaTop))
-                            continue;
-                        affected.add(`${cellCol},${cellRow}`);
-                    }
-                }
-            }
-            else
-            {
-                // Square grid: 60° angular wedge with discrete 30° snap rotation.
-                const TAU = 2 * Math.PI;
-                const HALF_ANGLE = Math.PI / 6;
-                const rotRad = (Number(rotation) || 0) * (CONE_STEP_DEG * Math.PI / 180);
-                const raw = elevationAware
-                    ? getInRangeOffsets({ x: centerPt.x, y: centerPt.y, elevation: areaElev }, radius, { includeSelf: false, elevationAware: true })
-                    : getInRangeOffsets({ x: centerPt.x, y: centerPt.y }, radius, { includeSelf: false, elevationAware: false });
-                for (const key of raw)
-                {
-                    const [col, row] = key.split(',').map(Number);
-                    if (terrainBlocks(col, row, areaTop))
-                        continue;
-                    const cellCenter = getHexCenter(col, row);
-                    const ang = Math.atan2(cellCenter.y - centerPt.y, cellCenter.x - centerPt.x);
-                    let d = (ang - rotRad) % TAU;
-                    if (d > Math.PI)
-                        d -= TAU;
-                    else if (d < -Math.PI)
-                        d += TAU;
-                    if (Math.abs(d) > HALF_ANGLE)
-                        continue;
-                    affected.add(key);
-                }
-            }
-
-            affected = propagate(affected, originSeed(centerPt));
-            return { caught: catchTokens(affected, areaElev, areaTop), affected };
-        };
-
-        // Hex line drawing (Red Blob Games): cube lerp + cube_round → a clean 1-wide path.
-        const cubeDistance = (fromCube, toCube) => (Math.abs(fromCube.q - toCube.q) + Math.abs(fromCube.r - toCube.r) + Math.abs(fromCube.s - toCube.s)) / 2;
-        const cubeLineDraw = (fromCube, toCube) =>
-        {
-            const steps = Math.max(1, cubeDistance(fromCube, toCube));
-            const out = [];
-            for (let stepIndex = 0; stepIndex <= steps; stepIndex++)
-            {
-                const frac = stepIndex / steps;
-                // epsilon nudge keeps samples off cell boundaries so rounding stays consistent
-                out.push(cubeRound(
-                    fromCube.q + (toCube.q - fromCube.q) * frac + 1e-6,
-                    fromCube.r + (toCube.r - fromCube.r) * frac + 2e-6,
-                    fromCube.s + (toCube.s - fromCube.s) * frac - 3e-6,
-                ));
-            }
-            return out;
-        };
-        const LINE_CUBE_DIRS = [
-            { q: 1, r: 0, s: -1 }, { q: 1, r: -1, s: 0 }, { q: 0, r: -1, s: 1 },
-            { q: -1, r: 0, s: 1 }, { q: -1, r: 1, s: 0 }, { q: 0, r: 1, s: -1 },
-        ];
-        const cubeRing = (center, radius) =>
-        {
-            if (radius <= 0)
-                return [{ ...center }];
-            const out = [];
-            let hex = {
-                q: center.q + LINE_CUBE_DIRS[4].q * radius,
-                r: center.r + LINE_CUBE_DIRS[4].r * radius,
-                s: center.s + LINE_CUBE_DIRS[4].s * radius,
-            };
-            for (let i = 0; i < 6; i++)
-            {
-                for (let j = 0; j < radius; j++)
-                {
-                    out.push(hex);
-                    hex = { q: hex.q + LINE_CUBE_DIRS[i].q, r: hex.r + LINE_CUBE_DIRS[i].r, s: hex.s + LINE_CUBE_DIRS[i].s };
-                }
-            }
-            return out;
-        };
-        const squareRing = (origin, radius) =>
-        {
-            const out = [];
-            for (let dc = -radius; dc < radius; dc++)
-                out.push({ col: origin.col + dc, row: origin.row - radius });
-            for (let dr = -radius; dr < radius; dr++)
-                out.push({ col: origin.col + radius, row: origin.row + dr });
-            for (let dc = radius; dc > -radius; dc--)
-                out.push({ col: origin.col + dc, row: origin.row + radius });
-            for (let dr = radius; dr > -radius; dr--)
-                out.push({ col: origin.col - radius, row: origin.row + dr });
-            return out;
-        };
-        const bresenham = (x0, y0, x1, y1) =>
-        {
-            const pts = [];
-            const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-            const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-            let err = dx - dy, x = x0, y = y0;
-            for (;;)
-            {
-                pts.push({ col: x, row: y });
-                if (x === x1 && y === y1)
-                    break;
-                const e2 = 2 * err;
-                if (e2 > -dy)
-                {
-                    err -= dy; x += sx;
-                }
-                if (e2 < dx)
-                {
-                    err += dx; y += sy;
-                }
-            }
-            return pts;
-        };
-        // Whole-cell perpendicular offsets for width-n (1→[0], 2→[0,1], 3→[-1,0,1]); half-cell offsets don't round reliably.
-        const widthOffsets = (width) =>
-        {
-            const lo = -Math.floor((width - 1) / 2);
-            return Array.from({ length: width }, (_, i) => lo + i);
-        };
-
-        // Endpoint candidates around the origin at `radius` cells: one per rotation tick.
-        const lineRing = (originOff, radius) =>
-        {
-            if (isHexGrid())
-            {
-                /** @type {any} */
-                const grid = canvas.grid;
-                const originCube = grid.getCube({ i: originOff.row, j: originOff.col });
-                return cubeRing(originCube, radius).map(cube =>
-                {
-                    const cellOffset = grid.getOffset(cube); return { col: cellOffset.j, row: cellOffset.i };
-                });
-            }
-            return squareRing(originOff, radius);
-        };
-
-        // "col,row" keys for a clean line A→B, widened to `size` cells perpendicular.
-        const lineCells = (fromOffset, toOffset, size) =>
-        {
-            /** @type {any} */
-            const grid = canvas.grid;
-            const out = new Set();
-            const fromPx = getHexCenter(fromOffset.col, fromOffset.row);
-            const toPx = getHexCenter(toOffset.col, toOffset.row);
-            const dirX = toPx.x - fromPx.x, dirY = toPx.y - fromPx.y;
-            const dirLen = Math.hypot(dirX, dirY) || 1;
-            const perpX = -dirY / dirLen, perpY = dirX / dirLen;
-            const pitch = grid.size;
-            for (const widthStep of widthOffsets(Math.max(1, Math.round(size))))
-            {
-                const fromShifted = pixelToOffset(fromPx.x + perpX * widthStep * pitch, fromPx.y + perpY * widthStep * pitch);
-                const toShifted = pixelToOffset(toPx.x + perpX * widthStep * pitch, toPx.y + perpY * widthStep * pitch);
-                if (isHexGrid())
-                {
-                    const fromCube = grid.getCube({ i: fromShifted.row, j: fromShifted.col });
-                    const toCube = grid.getCube({ i: toShifted.row, j: toShifted.col });
-                    for (const cube of cubeLineDraw(fromCube, toCube))
-                    {
-                        const cellOffset = grid.getOffset(cube); out.add(`${cellOffset.j},${cellOffset.i}`);
-                    }
-                }
-                else
-                {
-                    for (const point of bresenham(fromShifted.col, fromShifted.row, toShifted.col, toShifted.row))
-                        out.add(`${point.col},${point.row}`);
-                }
-            }
-            return out;
-        };
-
-        // `size` is both the line's perpendicular width and (with elevationAware) its vertical height.
-        const tokensInLine = (centerPt, length, areaElev, rotation, size) =>
-        {
-            const areaTop = areaElev + size;
-            let affected = new Set();
-
-            const radius = Math.max(1, Math.round(length));
-            const srcOff = pixelToOffset(centerPt.x, centerPt.y);
-            const ring = lineRing(srcOff, radius);
-            const endOff = ring[((Math.round(rotation) % ring.length) + ring.length) % ring.length];
-            for (const key of lineCells(srcOff, endOff, size))
-            {
-                const [col, row] = key.split(',').map(Number);
-                if (!terrainBlocks(col, row, areaTop))
-                    affected.add(key);
-            }
-
-            affected = propagate(affected, originSeed(centerPt));
-            return { caught: catchTokens(affected, areaElev, areaTop), affected };
-        };
 
         // caught/affected for a placement. tilt only matters for line; frozen placements pass theirs.
         const computeAreaFor = (center, elevation, rotation, tilt = pendingTilt) => computeArea({
@@ -1608,6 +1302,8 @@ export function chooseToken(casterToken, options = {})
         const bumpConeRotation = (step) =>
         {
             const modulus = rotationModulus;
+            if (modulus <= 0)
+                return;
             pendingRotation = ((pendingRotation + step) % modulus + modulus) % modulus;
             refreshConeCursor();
             playUiSound('targeting');
@@ -1685,7 +1381,7 @@ export function chooseToken(casterToken, options = {})
         if (!isBlastMode && preSelected.length > 0)
         {
             if (preSelected.length > count)
-                ui.notifications.warn(`chooseToken: ${preSelected.length} pre-selected tokens but count is ${count}; only the first ${count} will be used.`);
+                ui.notifications.warn(localizeFormat('LA.notify.chooseTokenPreselectedOverflow', { selected: preSelected.length, count }));
             for (const token of preSelected.slice(0, count))
             {
                 if (!selectedTokens.has(token))

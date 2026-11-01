@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1 } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1 } from '../filter-core.js';
 
 // FilterAblativeCrust: angular plates that build and shed just outside the contour, each on its own clock.
 // No alpha early-out: the crust lives in the free ring outside the sprite.
@@ -16,14 +16,7 @@ uniform float grainScale;
 uniform float lipStrength;
 uniform vec3 crustColor;
 uniform vec3 coreColor;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 
@@ -90,41 +83,14 @@ void main()
 }
 `;
 
-export class FilterAblativeCrust extends PIXI.Filter
+export class FilterAblativeCrust extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, ablativeCrustFragment);
-
-        this.uniforms.crustColor = new Float32Array([0.79, 0.66, 0.51]);
-        this.uniforms.coreColor = new Float32Array([1.0, 0.85, 0.63]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterAblativeCrust.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(ablativeCrustFragment, params, {
+            crustColor: new Float32Array([0.79, 0.66, 0.51]),
+            coreColor: new Float32Array([1.0, 0.85, 0.63]),
+        });
     }
 
     get crustWidth()
@@ -206,15 +172,6 @@ export class FilterAblativeCrust extends PIXI.Filter
     set coreColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.coreColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

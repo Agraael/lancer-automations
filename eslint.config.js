@@ -55,6 +55,7 @@ export default defineConfig([
                 PreciseText: "readonly",
                 Handlebars: "readonly",
                 Ray: "readonly",
+                ClipperLib: "readonly",
 
                 // lancer-automations startup scripts
                 api: "readonly",
@@ -62,6 +63,8 @@ export default defineConfig([
                 // Common module globals
                 libWrapper: "readonly",
                 ForceClientControls: "readonly",
+                ForceClientSettings: "readonly",
+                CodeMirror: "readonly",
                 Sequencer: "readonly",
                 Sequence: "readonly",
                 MidiQOL: "readonly",

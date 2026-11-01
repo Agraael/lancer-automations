@@ -67,8 +67,6 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const reactionConfig = lid ? ReactionManager.getReactions(lid) : null;
         const reactionEntry = reaction || reactionConfig?.reactions?.[0];
 
-        const actionType = reactionEntry?.actionType || (reactionEntry?.isReaction !== false ? "Reaction" : "Free Action");
-
         const activationType = reactionEntry?.activationType || "flow";
         const activationMode = reactionEntry?.activationMode || "instead";
 
@@ -150,8 +148,8 @@ export function activateReaction(triggerType, triggerData, token, item, activati
         const registryEntry = ReactionManager.getGeneralReaction(activationName);
         const generalReaction = (registryEntry && !Array.isArray(registryEntry.reactions)) ? registryEntry : (reaction || registryEntry);
 
-        const isReactionTypeResult = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
-        const actionType = generalReaction?.actionType || (isReactionTypeResult ? "Reaction" : "Free Action");
+        const isReactionType = generalReaction?.actionType ? (generalReaction.actionType === "Reaction") : (generalReaction?.isReaction !== false);
+        const actionType = generalReaction?.actionType || (isReactionType ? "Reaction" : "Free Action");
 
         const activationType = generalReaction?.activationType || "flow";
         const activationMode = generalReaction?.activationMode || "after";
@@ -197,13 +195,19 @@ export function activateReaction(triggerType, triggerData, token, item, activati
             await game.modules.get(MODULE_ID).api.executeSimpleActivation(actor, flowData);
         };
 
+        const wouldRecurse = ACTIVATION_TRIGGERS.has(triggerType) && triggerData?.actionName === activationName;
+
         if (activationType === "none")
         { /* empty */ }
         else if (activationType === "flow")
+        {
+            if (wouldRecurse)
+                return;
             return showChatActivation();
+        }
         else if (activationType === "macro" || activationType === "code")
         {
-            if (activationMode === "instead")
+            if (activationMode === "instead" || wouldRecurse)
                 return executeCustomActivation();
             else
             {
@@ -265,7 +269,6 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 
     let triggerText = "";
     let effectText = "";
-    let activationPath = null;
     let panelActivationName = "Unknown";
     let isReactionType = true;
     let actionType = "Reaction";
@@ -274,7 +277,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
     if (isGeneral)
     {
         panelActivationName = reactionData.reactionName;
-        const generalReaction = ReactionManager.getGeneralReaction(reactionData.reactionName) ?? reactionData.reaction ?? null;
+        const generalReaction = reactionData.reaction ?? ReactionManager.getGeneralReaction(reactionData.reactionName) ?? null;
 
         if (generalReaction?.onlyOnSourceMatch && triggerData?.actionData)
         {
@@ -337,16 +340,12 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
 
             if (rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit)
                 effectText = rootSystem.effect || rootSystem.on_hit || rootSystem.on_crit;
-
-            activationPath = null;
         }
         else if (typeof resolvedData === 'object' && resolvedData !== null)
         {
             triggerText = resolvedData.trigger || resolvedData.description || "";
 
             effectText = resolvedData.effect || resolvedData.on_hit || resolvedData.on_crit || resolvedData.detail || rootSystem?.effect || rootSystem?.on_hit || rootSystem?.on_crit || "";
-
-            activationPath = reactionPath.startsWith("system.") ? reactionPath : `system.${reactionPath}`;
         }
         else
         {
@@ -433,8 +432,8 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
         "><i class="fas fa-bolt"></i> ACTIVATE</button>
     </div>`;
 
-    $('body').append(html);
-    activeDetailPanel = $('#reaction-detail-panel');
+    document.body.insertAdjacentHTML('beforeend', html);
+    activeDetailPanel = $(document.querySelector('#reaction-detail-panel'));
 
     const mainDialog = mainDialogEl.closest('.dialog');
     if (mainDialog.length)
@@ -476,7 +475,7 @@ function showDetailPanel(token, item, mainDialogEl, popupData, reactionData = nu
             reaction = specificReaction || reactionConfig?.reactions?.[0];
         }
         else
-            reaction = ReactionManager.getGeneralReaction(panelActivationName) ?? reactionData?.reaction ?? null;
+            reaction = reactionData?.reaction ?? ReactionManager.getGeneralReaction(panelActivationName) ?? null;
 
         await activateReaction(popupData.triggerType, triggerData, token, item, panelActivationName, reaction, isGeneral);
 
@@ -498,11 +497,11 @@ function pruneExhaustedReactors()
     const dialogEl = activeReactionDialog?.element;
     if (!dialogEl?.length)
         return;
-    for (const item of dialogEl.find('.lancer-list-item').toArray())
+    for (const rowEl of dialogEl.find('.lancer-list-item').toArray())
     {
-        const reactor = reactorsById.get(item.dataset.tokenId);
+        const reactor = reactorsById.get(rowEl.dataset.tokenId);
         if (reactor && !hasReactionAvailable(reactor.actor ?? reactor))
-            item.remove();
+            rowEl.remove();
     }
     if (!dialogEl.find('.lancer-list-item').length)
         activeReactionDialog.close();
@@ -569,7 +568,6 @@ function renderReactionDialog(popupData)
     for (const [tokenId, tokenEntry] of byToken)
     {
         const token = tokenEntry.token;
-        const reactionCount = Number(token.actor?.system?.action_tracker?.reaction || 0);
 
         let reactionList = "";
         for (const reaction of tokenEntry.reactions)
@@ -577,7 +575,6 @@ function renderReactionDialog(popupData)
             const isGeneral = reaction.isGeneral || false;
             const isActionBased = isGeneral && reaction.reaction?.onlyOnSourceMatch;
             const itemId = reaction.item?.id || '';
-            const itemName = isGeneral ? 'General' : reaction.itemName;
 
             let icon = 'fa-eye';
             let iconColor = '#cc3333';

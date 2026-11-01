@@ -87,7 +87,7 @@ window.toggleLancerZDA = async function ()
     const controlled = canvas.tokens.controlled;
     if (!controlled.length)
     {
-        ui.notifications.warn('No tokens selected.');
+        ui.notifications.warn(game.i18n.localize('LA.notify.noTokensSelected'));
         return;
     }
     for (const token of controlled)

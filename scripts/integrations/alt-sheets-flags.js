@@ -45,13 +45,13 @@ export function listFlags(actor)
     const map = actor?.getFlag?.(ID, key);
     if (!map || typeof map !== 'object')
         return [];
-    const out = [];
+    const flagList = [];
     for (const [id, flag] of Object.entries(map))
     {
         if (!flag || typeof flag !== 'object')
             continue;
         const content = flag.content ?? {};
-        out.push({
+        flagList.push({
             id,
             name: flag.name ?? '',
             contentType: flag.contentType ?? 'value',
@@ -66,7 +66,7 @@ export function listFlags(actor)
             maxPath: `flags.${ID}.${key}.${id}.content.max`,
         });
     }
-    return out;
+    return flagList;
 }
 
 export function listFractionFlags(actor)
@@ -195,7 +195,7 @@ export function barLinkChanged(changes)
 }
 
 // Inject a "Show in Token Bar" toggle onto each fraction flag in the alt-sheet Custom tab.
-// Cloned from the sidebar-toggle row so it matches the sheet's styling; renderActorSheet re-runs it.
+// Cloned from the sidebar-toggle row so it matches the sheet's styling. renderActorSheet re-runs it.
 export function injectBarToggles(app, html)
 {
     if (!isActive())
@@ -231,5 +231,3 @@ export function injectBarToggles(app, html)
         sidebarRow.insertAdjacentElement('afterend', row);
     });
 }
-
-export { ID as ALT_SHEETS_ID, FLAG_KEYS };

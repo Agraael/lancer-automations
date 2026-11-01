@@ -8,6 +8,7 @@ import { bindConsumeStatusToggles } from '../interactive/extra-config.js';
 import { appendItemPips } from './item-helpers.js';
 import { canMarkCascading, isItemCascading, setItemCascading } from '../setup/lancer-modif.js';
 import { localize } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 import { getV3ChipRows } from '../tools/v3-data.js';
 
 const LA_DIRECT_AUTOMATED = new Set([
@@ -88,14 +89,16 @@ export function v3ActionPath(item, action)
     return null;
 }
 
-export function withV3Chips(html, item, scope = null)
+function v3RowsFor(item, scope)
 {
-    const rows = item?.documentName === 'Item' ? getV3ChipRows(item).filter(row => v3InScope(row.placement, scope)) : [];
+    return item?.documentName === 'Item' ? getV3ChipRows(item).filter(row => v3InScope(row.placement, scope)) : [];
+}
+
+export function withV3Chips(html, item, scope = null, rows = v3RowsFor(item, scope))
+{
     if (!rows.length)
         return html;
-    const template = document.createElement('template');
-    template.innerHTML = `<div>${html || ''}</div>`;
-    const root = template.content.firstElementChild;
+    const root = htmlToElement(`<div>${html || ''}</div>`);
     for (const row of rows)
     {
         const anchor = v3Anchor(root, row.placement);
@@ -117,7 +120,7 @@ export function withV3Chips(html, item, scope = null)
  */
 export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse })
 {
-    $('body').append(popup);
+    popup.appendTo(document.body);
     let uiScale = 1;
     uiScale = Number(getModuleSetting('tah.uiScale')) || 1;
     if (uiScale !== 1)
@@ -145,7 +148,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
         const bridgeWidth = finalLeft - anchorRight;
         if (bridgeWidth > 0)
         {
-            const bridge = $('<div class="la-hud-popup-bridge">').css({
+            const bridge = $(htmlToElement('<div class="la-hud-popup-bridge"></div>')).css({
                 position: 'fixed',
                 left: anchorRight,
                 top: Math.max(10, popupTop),
@@ -155,7 +158,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
                 pointerEvents: 'all',
             });
             bridge.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
-            $('body').append(bridge);
+            bridge.appendTo(document.body);
             const observer = new MutationObserver(() =>
             {
                 if (!document.contains(popup[0]))
@@ -196,12 +199,13 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
     }
     existing.remove();
     const chipScope = v3Scope === undefined ? (skipExtras ? false : null) : v3Scope;
-    let composedBody = chipScope === false ? bodyHtml : withV3Chips(bodyHtml, item, chipScope);
+    const chipRows = chipScope === false ? [] : v3RowsFor(item, chipScope);
+    let composedBody = chipScope === false ? bodyHtml : withV3Chips(bodyHtml, item, chipScope, chipRows);
     if (item && !skipExtras)
     {
         try
         {
-            const extrasHtml = await laRenderItemExtras(item);
+            const extrasHtml = await laRenderItemExtras(item, { attachments: !chipRows.some(row => row.la) });
             if (extrasHtml)
                 composedBody = (composedBody || '') + extrasHtml;
         }
@@ -234,14 +238,14 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
     const closeBtn = popup.find('.la-detail-close');
     const headerBtns = [];
     if (item && hasAutomation(item))
-        headerBtns.push($(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`));
+        headerBtns.push($(htmlToElement(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`)));
     // Disable/Destroy toggles for items that support them
     if (item?.system && item.update)
     {
         if ('disabled' in item.system)
         {
             const isDisabled = !!item.system.disabled;
-            const disableBtn = $(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${isDisabled ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDisabled ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`);
+            const disableBtn = $(htmlToElement(`<span class="la-popup-disable" style="cursor:pointer;font-size:0.85em;color:${isDisabled ? '#e8a020' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDisabled ? 'Enable' : 'Disable'}"><i class="fas fa-ban"></i></span>`));
             disableBtn.on('click', async () =>
             {
                 playUiSound('toggle');
@@ -257,7 +261,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
         {
             const cascadeTitle = (/** @type {boolean} */ cascading) => localize(cascading ? 'LA.lancerModif.markNotCascading' : 'LA.lancerModif.markCascading');
             const isCascading = isItemCascading(item);
-            const cascadeBtn = $(`<span class="la-popup-cascade" style="cursor:pointer;font-size:0.85em;color:${isCascading ? '#a855f7' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${cascadeTitle(isCascading)}"><i class="la-cascading-icon"></i></span>`);
+            const cascadeBtn = $(htmlToElement(`<span class="la-popup-cascade" style="cursor:pointer;font-size:0.85em;color:${isCascading ? '#a855f7' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${cascadeTitle(isCascading)}"><i class="la-cascading-icon"></i></span>`));
             cascadeBtn.on('click', async () =>
             {
                 playUiSound('toggle');
@@ -272,7 +276,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
         if ('destroyed' in item.system)
         {
             const isDestroyed = !!item.system.destroyed;
-            const destroyBtn = $(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${isDestroyed ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDestroyed ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`);
+            const destroyBtn = $(htmlToElement(`<span class="la-popup-destroy" style="cursor:pointer;font-size:0.85em;color:${isDestroyed ? '#c33' : '#666'};padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.06);" title="${isDestroyed ? 'Repair' : 'Destroy'}"><i class="fas fa-skull-crossbones"></i></span>`));
             destroyBtn.on('click', async () =>
             {
                 playUiSound('toggle');
@@ -284,6 +288,18 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             });
             headerBtns.push(destroyBtn);
         }
+    }
+    const runAction = row?.data?.('laRunAction');
+    if (runAction && row.data('laFreeUse'))
+    {
+        const freeBtn = $(htmlToElement(`<span class="la-detail-attack la-detail-free" title="${localize('LA.tokenHud.useFree')}"><i class="cci cci-free-action"></i></span>`));
+        freeBtn.on('click', (ev) =>
+        {
+            ev.stopPropagation();
+            closeBtn.trigger('click');
+            runAction(null, { free: true });
+        });
+        headerBtns.push(freeBtn);
     }
     if (headerBtns.length)
     {

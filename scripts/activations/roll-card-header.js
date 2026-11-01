@@ -1,4 +1,5 @@
 import { escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { getMaxItemRanges_WithBonus } from '../tools/weapon-bonus-utils.js';
 
@@ -105,12 +106,12 @@ function syncHeader(state, $form, kind, item)
     $head.addClass('b3-head');
     if (kind === 'damage' && item)
         maskIcon($head.children('i.cci-large-beam').first(), weaponTypeIcon(item));
-    const data = kind === 'damage' ? state.data?.damage_hud_data : state.data?.acc_diff;
+    const hudData = kind === 'damage' ? state.data?.damage_hud_data : state.data?.acc_diff;
     const actor = state.actor;
     const tokenDoc = actor?.token ?? actor?.getActiveTokens?.()?.[0]?.document ?? null;
     const name = tokenDoc?.name || actor?.name || '';
     const img = tokenDoc?.texture?.src || actor?.img || '';
-    const html = `<span class="b3-title">${escapeHtml(data?.title ?? state.data?.title ?? '')}</span><span class="b3-who">${img ? `<img src="${escapeHtml(img)}" alt="">` : ''}${escapeHtml(name)}</span>`;
+    const html = `<span class="b3-title">${escapeHtml(hudData?.title ?? state.data?.title ?? '')}</span><span class="b3-who">${img ? `<img src="${escapeHtml(img)}" alt="">` : ''}${escapeHtml(name)}</span>`;
     if ($head.data('laSig') === html)
         return;
     $head.children('.b3-title, .b3-who').remove();
@@ -129,7 +130,7 @@ function syncLiveLine(state, $form, kind, nativeRanges)
     }
     if (!$line.length)
     {
-        $line = $('<div class="b3-profile"></div>');
+        $line = $(htmlToElement('<div class="b3-profile"></div>'));
         const $body = $form.children('.lancer-hud-body').first();
         if ($body.length)
             $body.before($line);

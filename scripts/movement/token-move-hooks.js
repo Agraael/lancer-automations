@@ -288,7 +288,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
 
         handleTokenMove(token, change, options, userId);
 
-        if (getModuleSetting('debugPathHexCalculation') && moveInfo.pathHexes.length > 0)
+        if (getModuleSetting('debugMovement') && moveInfo.pathHexes.length > 0)
         {
             try
             {
@@ -326,7 +326,7 @@ Hooks.on('updateToken', async function(document, change, options, userId)
     {
         const moveHistory = _moveHistoryCache.get(document.id) ?? getLAFlag(document,'moveHistory');
         const lastEntry = moveHistory?.moves?.at(-1);
-        if (lastEntry && !lastEntry.movementId)
+        if (lastEntry && !lastEntry.movementId && !lastEntry.virtual)
         {
             lastEntry.movementId = moveId;
             _moveHistoryCache.set(document.id, moveHistory);

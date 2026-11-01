@@ -7,6 +7,7 @@ import {
 
 import { drawMovementTrace } from "./canvas.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 import { laDetailPopup, laRenderTextSection, laRenderActions, laRenderTags } from "./detail-renderers.js";
 
 // GM-controlled choice cards
@@ -43,7 +44,7 @@ export function _bindItemChip(cardEl, item)
     cardEl.find('[data-role="item-chip"]').on('click', function (e)
     {
         e.stopPropagation();
-        const existing = $('.la-item-chip-popup');
+        const existing = $(document.querySelectorAll('.la-item-chip-popup'));
         if (existing.length)
         {
             _closeChipPopup(existing);
@@ -59,7 +60,7 @@ export function _bindItemChip(cardEl, item)
         const theme = themeMap[item.type] ?? 'default';
         const subtitle = (item.type ?? '').replaceAll('_', ' ').toUpperCase();
         const popup = laDetailPopup('la-item-chip-popup', item.name ?? '', subtitle, bodyHtml, theme);
-        $('body').append(popup);
+        popup.appendTo(document.body);
         const cardOffset = cardEl.offset() ?? { left: 0, top: 0 };
         const cardW = cardEl.outerWidth() ?? 200;
         const chipOffset = $(this).offset() ?? { left: 0, top: 0 };
@@ -211,10 +212,10 @@ export function startChoiceCard(options = {})
             if (gmId)
                 activeTargets.push(gmId);
             const fallbackName = activeTargets.length > 0 ? (game.users.get(activeTargets[0])?.name ?? activeTargets[0]) : 'local user';
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — ${fallbackName} will handle the choice instead.`);
+            ui.notifications.warn(localizeFormat('LA.notify.choiceRecipientOfflineFallback', { names: offlineNames, fallback: fallbackName }));
         }
         else
-            ui.notifications.warn(`lancer-automations | "${offlineNames}" offline — removed from choice recipients.`);
+            ui.notifications.warn(localizeFormat('LA.notify.choiceRecipientOfflineRemoved', { names: offlineNames }));
     }
 
     // If targets were specified but all gone, fall back to GM.
@@ -958,7 +959,7 @@ export function startVoteCard(options = {})
                 const tieButtons = /** @type {Record<string,any>} */ ({});
                 for (const i of winners)
                     tieButtons[`choice_${i}`] = { label: choices[i].text, callback: () => i };
-                tieButtons.cancel = { label: localize("LA.common.cancel"), callback: () => null };
+                tieButtons.cancel = cancelButton(() => null);
                 const tiedNames = winners.map(i => `<b>${choices[i].text}</b>`).join(', ');
                 const picked = await Dialog.wait({
                     title: localize('LA.dialogTitle.voteTie'),

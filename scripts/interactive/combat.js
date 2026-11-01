@@ -3,6 +3,7 @@
 import { startChoiceCard, startVoteCard } from "./network.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { isWhiteSvgIcon } from "./cards.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
@@ -143,10 +144,11 @@ export async function revertMovement(token, destination = null)
     if (sourceHistory.length > 0)
     {
         const currentPos = { x: token.document.x, y: token.document.y };
+        const movementId = sourceHistory.at(-1)?.movementId ?? null;
         const isClean = await revertLastMovement(token);
         const newPos = { x: token.document.x, y: token.document.y };
         const dist = getDist(currentPos, newPos);
-        game.modules.get(MODULE_ID)?.api?.undoMoveData(token.id, dist);
+        await /** @type {any} */ (game.modules.get(MODULE_ID))?.api?.undoMoveData(token.id, dist, movementId);
         return isClean;
     }
 
@@ -183,8 +185,10 @@ export async function clearMovementHistory(tokens, revert = false)
         {
             while (true)
             {
+                const before = token.document._source?._movementHistory?.length ?? 0;
                 const isClean = await revertMovement(token);
-                if (isClean)
+                const after = token.document._source?._movementHistory?.length ?? 0;
+                if (isClean || after >= before)
                     break;
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
@@ -192,6 +196,7 @@ export async function clearMovementHistory(tokens, revert = false)
 
         await clearTokenMovementHistory(token);
         lancerAutomations?.api?.clearMoveData?.(token.document.id);
+        Hooks.callAll('lancer-automations.movementHistoryCleared', token);
     }
     const tokenNames = tokenList.map(token => token.name).join(", ");
     ui.notifications.info(localizeFormat('LA.notify.movementHistoryCleared', { names: tokenNames }));
@@ -432,7 +437,7 @@ export async function openChoiceMenu()
                     ui.notifications.info(localizeFormat('LA.notify.sentCardToUsers', { count: selectedUserIds.length }));
                 }
             },
-            cancel: { label: localize("LA.common.cancel") }
+            cancel: cancelButton()
         },
         default: "send",
         render: (html) =>
@@ -499,11 +504,7 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
                 label: localize("LA.common.confirm"),
                 callback: () => resolve(Array.from(selectedIndices).map(idx => choices[idx].item))
             },
-            cancel: {
-                icon: '<i class="fas fa-times"></i>',
-                label: localize("LA.common.cancel"),
-                callback: () => resolve(null)
-            }
+            cancel: cancelButton(() => resolve(null))
         },
         default: "confirm",
         render: (html) =>
@@ -651,7 +652,6 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const hasWeapon = weaponData.length > 0;
             // A mount is destroyed only if ALL weapons are destroyed
             const allDestroyed = hasWeapon && weaponData.every(weapon => weapon.destroyed);
-            // selectable needs every weapon to pass the filter, none destroyed, and at least one present
             const allFitFilter = weaponData.every(weapon => weapon.fitsFilter);
 
             return {
@@ -771,10 +771,10 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                     statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
                 }
 
-                const sizeTypeArr = [weapon.size, weapon.type].filter(Boolean);
+                const sizeTypeParts = [weapon.size, weapon.type].filter(Boolean);
                 let typeText = "";
-                if (sizeTypeArr.length > 0)
-                    typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeArr.join(' ')}</span>`;
+                if (sizeTypeParts.length > 0)
+                    typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeParts.join(' ')}</span>`;
 
                 if (weapon.profileName)
                     typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${weapon.profileName})</span>`;
@@ -860,7 +860,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             selectionValidator,
             onContextMenu: (choice, html) =>
             {
-                $('.la-weapon-detail-popup').remove();
+                document.querySelectorAll('.la-weapon-detail-popup').forEach(node => node.remove());
                 if (!choice.weaponDetails?.length)
                     return;
 
@@ -907,9 +907,9 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
 
     if (isMech)
     {
-        for (const s of (actor.system?.loadout?.systems ?? []))
+        for (const slot of (actor.system?.loadout?.systems ?? []))
         {
-            const item = s?.value;
+            const item = slot?.value;
             if (!item)
                 continue;
             const sys = item.system;
@@ -1048,7 +1048,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             selectionValidator,
             onContextMenu: (choice, html) =>
             {
-                $('.la-system-detail-popup').remove();
+                document.querySelectorAll('.la-system-detail-popup').forEach(node => node.remove());
                 if (!choice.effect && !choice.tags?.length && !choice.actions?.length && !choice.deployableActors?.length)
                     return;
 
@@ -1083,7 +1083,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
 
     if (actor.type !== 'npc')
     {
-        ui.notifications.warn("choseTrait: only NPC actors are supported.");
+        ui.notifications.warn(localize('LA.notify.choseTraitNpcOnly'));
         return null;
     }
 
@@ -1163,7 +1163,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
             selectionValidator,
             onContextMenu: (choice, html) =>
             {
-                $('.la-trait-detail-popup').remove();
+                document.querySelectorAll('.la-trait-detail-popup').forEach(node => node.remove());
                 if (!choice.effect && !choice.tags?.length && !choice.actions?.length)
                     return;
 
@@ -1277,11 +1277,7 @@ export async function chooseInvade(actorOrToken)
                             resolve(null);
                     }
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel"),
-                    callback: () => resolve(null)
-                }
+                cancel: cancelButton(() => resolve(null))
             },
             default: "confirm",
             render: (html) =>
@@ -1292,7 +1288,7 @@ export async function chooseInvade(actorOrToken)
 
                 const _showInvadeDetailPopup = (inv) =>
                 {
-                    $('.la-invade-detail-popup').remove();
+                    document.querySelectorAll('.la-invade-detail-popup').forEach(node => node.remove());
                     const bodyHtml = laRenderTextSection('EFFECT', inv.detail, '#e65100')
                         + laRenderTags(inv.tags);
                     const popup = laDetailPopup('la-invade-detail-popup', inv.name, inv.sourceItemName, bodyHtml, 'weapon');
@@ -1325,53 +1321,4 @@ export async function chooseInvade(actorOrToken)
         });
         dialog.render(true);
     });
-}
-
-/**
- * Prompts the user to choose an invade then fires TechAttackFlow.
- * @param {Actor|Token} actorOrToken
- * @returns {Promise<void>}
- */
-export async function executeInvade(actorOrToken, bypassChoice = null)
-{
-    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
-    if (!actor)
-        return;
-
-    const selected = bypassChoice ?? await chooseInvade(actor);
-    if (!selected)
-        return;
-
-    const TechAttackFlow = game.lancer?.flows?.get("TechAttackFlow");
-    if (!TechAttackFlow)
-    {
-        ui.notifications.error(localize('LA.notify.techattackflowNotFoundInGameLancerFlows'));
-        return;
-    }
-
-    if (selected.isFragmentSignal)
-    {
-        const flow = new TechAttackFlow(actor.uuid, {
-            title: selected.name,
-            invade: true,
-            effect: selected.detail,
-            attack_type: "Tech"
-        });
-        await flow.begin();
-    }
-    else
-    {
-        // TechAttackFlow only accepts actors and system/npc_feature items; weapons are invalid
-        const isWeapon = /** @type {any} */ (selected.item)?.type?.includes('weapon');
-        const uuid = (!isWeapon && selected.item?.uuid) ? selected.item.uuid : actor.uuid;
-        const flow = new TechAttackFlow(uuid, {
-            title: selected.name,
-            invade: true,
-            attack_type: "Tech",
-            action: selected.action,
-            effect: selected.detail,
-            tags: selected.tags
-        });
-        await flow.begin();
-    }
 }

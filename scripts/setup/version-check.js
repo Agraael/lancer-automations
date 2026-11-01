@@ -1,7 +1,5 @@
 /*global game, console, fetch, Dialog, foundry, window */
 
-import { localize, localizeFormat } from '../tools/string-utils.js';
-
 export async function getPendingUpdate(moduleId)
 {
     if (!game.user.isGM)
@@ -79,66 +77,4 @@ export async function getPendingUpdate(moduleId)
         console.error(`${moduleId} | Version check failed:`, error);
         return null;
     }
-}
-
-export async function checkModuleUpdate(moduleId)
-{
-    const pending = await getPendingUpdate(moduleId);
-    if (!pending)
-        return;
-    showUpdateDialog(pending.module, pending.newVersion, pending.releaseNotes);
-}
-
-function showUpdateDialog(module, newVersion, releaseNotes = "")
-{
-    let notesHtml = "";
-    if (releaseNotes)
-    {
-        const converter = new window.showdown.Converter();
-        const htmlNotes = converter.makeHtml(releaseNotes);
-        notesHtml = `
-            <div class="lancer-action-buttons" style="margin: 10px 0 5px 0;">
-                <span class="lancer-section-title">RELEASE NOTES</span>
-            </div>
-            <div class="form-group lancer-item-details" style="max-height: 250px; overflow-y: auto; padding: 10px; border: 2px solid #999; border-radius: 4px; background: rgba(0,0,0,0.05);">
-                ${htmlNotes}
-            </div>
-        `;
-    }
-
-    const dialogContent = `
-        <div class="lancer-dialog-header">
-            <h2 class="lancer-dialog-title">Update Available</h2>
-            <p class="lancer-dialog-subtitle">${module.title}</p>
-        </div>
-        <div class="form-group" style="padding: 10px;">
-            <p>A new version of <b>${module.title}</b> is available: <span class="lancer-text-red">v${newVersion}</span> (Current: v${module.version})</p>
-            <p>You can update it via the Foundry VTT Module Manager.</p>
-            <p style="margin-top: 8px;">If you like this module or my other work, you can support me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener"><b>Ko-fi</b></a>. Updates and previews land there too.</p>
-        </div>
-        ${notesHtml}
-    `;
-
-    new Dialog({
-        title: localizeFormat('LA.dialogTitle.moduleUpdate', { name: module.title }),
-        content: dialogContent,
-        buttons: {
-            dismiss: {
-                icon: '<i class="fas fa-times"></i>',
-                label: localize("LA.common.dismiss"),
-                callback: () =>
-                {
-                    game.settings.set(module.id, 'lastNotifiedVersion', newVersion);
-                }
-            },
-            later: {
-                icon: '<i class="fas fa-clock"></i>',
-                label: localize("LA.versionCheck.remindMeLater")
-            }
-        },
-        default: "dismiss"
-    }, {
-        classes: ["lancer-dialog-base", "lancer-no-title"],
-        width: 500
-    }).render(true);
 }

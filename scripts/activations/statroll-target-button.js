@@ -6,6 +6,7 @@ import {
 } from '../interactive/canvas.js';
 import { createTokenTether } from '../interactive/canvas-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 import { deriveSaveDc } from '../tools/misc-tools.js';
 import { hoverSightlines, clearHoverSightlines } from '../vision/sightlines.js';
 import { targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, haseSuccessChance, contestWinChance, injectWhenReady, chanceLabelsOn } from './targeting-ui.js';
@@ -30,7 +31,7 @@ function rollerLiveChance(state)
                 return UNKNOWN_CHANCE;
             return oppActor ? contestWinChance(state.actor, skill, oppActor, contest.stat, { netAcc }) : null;
         }
-        const preId = state.la_extraData?.targetTokenId;
+        const seededTokenId = state.la_extraData?.targetTokenId;
         let hovered = isSingleTargetPickerActive() ? canvas.tokens?.hover : null;
         if (hovered && hovered.actor === state.actor)
             hovered = null;
@@ -39,8 +40,8 @@ function rollerLiveChance(state)
             return UNKNOWN_CHANCE;
         let dc = 10;
         if (chosen)
-            dc = (!hovered && preId && chosen.id === preId) ? (Number(state.la_extraData?.targetVal) || deriveTargetVal(chosen)) : deriveTargetVal(chosen);
-        else if (!preId)
+            dc = (!hovered && seededTokenId && chosen.id === seededTokenId) ? (Number(state.la_extraData?.targetVal) || deriveTargetVal(chosen)) : deriveTargetVal(chosen);
+        else if (!seededTokenId)
             dc = Number(state.la_extraData?.targetVal) || 10;
         return haseSuccessChance(state.actor, skill, dc, { netAcc, applyStatuses: false });
     };
@@ -70,7 +71,7 @@ function applySaveTitle(state, targetVal)
 // The stat-roll HUD shares form[id^="accdiff"] with the attack HUD; the inner body div tells them apart.
 function statRollForm()
 {
-    const $form = $('form[id^="accdiff"]');
+    const $form = $(document.querySelectorAll('form[id^="accdiff"]'));
     if (!$form.length || !$form.find('#hase-accdiff-dialog').length)
         return null;
     return $form;
@@ -87,7 +88,7 @@ function injectButton(state, $form)
     let $row = $form.find('.accdiff-ranges').first();
     if (!$row.length)
     {
-        const $section = $('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>');
+        const $section = $(htmlToElement('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>'));
         const $footer = $form.find('.accdiff-footer').first();
         if ($footer.length)
             $footer.before($section);
@@ -97,7 +98,7 @@ function injectButton(state, $form)
     }
 
     const caster = () => state.actor?.getActiveTokens?.()[0] ?? null;
-    const $btn = $('<button class="range-button la-statroll-target-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> SAVE</button>');
+    const $btn = $(htmlToElement('<button class="range-button la-statroll-target-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> SAVE</button>'));
     $btn.on('click', async (ev) =>
     {
         ev.preventDefault();
@@ -156,8 +157,8 @@ function keepSaveTargetsNeutral(state)
 // Show only the explicit pre-seeded API target; otherwise start clean so a stray target isn't taken as the check target.
 function seedSingleTarget(state)
 {
-    const preId = state.la_extraData?.targetTokenId;
-    const seededToken = preId ? canvas.tokens.get(preId) : null;
+    const seededTokenId = state.la_extraData?.targetTokenId;
+    const seededToken = seededTokenId ? canvas.tokens.get(seededTokenId) : null;
     if (seededToken)
         seededToken.setTarget(true, { releaseOthers: true });
     else
@@ -185,7 +186,7 @@ export function registerStatRollTargetButton()
             {
                 return getModuleSetting('statRollTargeting') || !!state.la_extraData?.forceTargeting;
             })();
-            const preId = active ? state.la_extraData?.targetTokenId : null;
+            const seededTokenId = active ? state.la_extraData?.targetTokenId : null;
             const seeded = { tokenId: state.la_extraData?.targetTokenId, val: state.la_extraData?.targetVal, title: state.data?.title };
             let rollerMark = null;
             let rollerChance = null;
@@ -200,13 +201,13 @@ export function registerStatRollTargetButton()
                     return;
                 state.la_extraData = state.la_extraData || {};
                 const chosen = Array.from(game.user.targets ?? [])[0] ?? null;
-                if (chosen && !(preId && chosen.id === preId))
+                if (chosen && !(seededTokenId && chosen.id === seededTokenId))
                 {
                     state.la_extraData.targetTokenId = chosen.id;
                     state.la_extraData.targetVal = deriveTargetVal(chosen);
                     applySaveTitle(state, state.la_extraData.targetVal);
                 }
-                else if (!chosen && preId)
+                else if (!chosen && seededTokenId)
                 {
                     delete state.la_extraData.targetTokenId;
                     state.la_extraData.targetVal = 10;
@@ -276,14 +277,14 @@ export function registerStatRollTargetButton()
                     {
                         const chosen = Array.from(game.user.targets ?? [])[0] ?? null;
                         state.la_extraData = state.la_extraData || {};
-                        if (chosen && !(preId && chosen.id === preId))
+                        if (chosen && !(seededTokenId && chosen.id === seededTokenId))
                         {
                             // new/changed pick: derive difficulty here (an untouched pre-seed keeps executeStatRoll's value)
                             state.la_extraData.targetTokenId = chosen.id;
                             state.la_extraData.targetVal = deriveTargetVal(chosen);
                             applySaveTitle(state, state.la_extraData.targetVal);
                         }
-                        else if (!chosen && preId)
+                        else if (!chosen && seededTokenId)
                         {
                             // user cleared the pre-seeded token target; a caller-set numeric difficulty is left untouched
                             delete state.la_extraData.targetTokenId;

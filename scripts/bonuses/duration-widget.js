@@ -2,7 +2,7 @@ import { TG, createTokenTether } from '../interactive/canvas-helpers.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { createTokenMark } from '../interactive/target-shapes.js';
 import { localize } from '../tools/string-utils.js';
-import { buildDuration, untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey } from './duration-builders.js';
+import { buildDuration, untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey, durationChoice, ANY_TURN_ORIGIN } from './duration-builders.js';
 
 export { buildDuration, untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter, currentTurnKey };
 
@@ -24,11 +24,12 @@ export function durationOptionsHtml()
 
 export function originOptionsHtml(selfTokenId)
 {
-    return canvas.tokens.placeables.map(token =>
+    const tokensHtml = canvas.tokens.placeables.map(token =>
     {
         const isSelf = token.id === selfTokenId;
         return `<option value="${token.id}" ${isSelf ? 'selected' : ''}>${token.name}${isSelf ? ' (self)' : ''}</option>`;
     }).join('');
+    return `<optgroup label="Special"><option value="${ANY_TURN_ORIGIN}">Any</option></optgroup><optgroup label="Tokens">${tokensHtml}</optgroup>`;
 }
 
 export function durationFieldsHtml(prefix, selfTokenId)
@@ -95,8 +96,7 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
 // Same read/adjust logic as the Effect Manager apply (effectManager.js standard tab).
 export function getDurationConfig($root, prefix)
 {
-    const durationLabel = String($root.find(`#${prefix}-duration`).val());
-    const originID = String($root.find(`#${prefix}-origin`).val());
+    const { label: durationLabel, originID } = durationChoice(String($root.find(`#${prefix}-duration`).val()), String($root.find(`#${prefix}-origin`).val()));
     const turnsInputRaw = Number.parseInt(String($root.find(`#${prefix}-turns`).val()));
     const turnsInput = Number.isNaN(turnsInputRaw) ? 1 : Math.max(0, turnsInputRaw);
     return { duration: buildDuration(durationLabel, originID, turnsInput), originID };

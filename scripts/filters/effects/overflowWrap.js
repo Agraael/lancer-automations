@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter } from '../filter-core.js';
+import { LaCustomFilter } from '../filter-core.js';
 
 // FilterOverflowWrap: banding that crawls down the chassis, phase-shifted by local brightness so it wraps the shape.
 
@@ -41,40 +41,11 @@ void main()
 }
 `;
 
-export class FilterOverflowWrap extends PIXI.Filter
+export class FilterOverflowWrap extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, overflowWrapFragment);
-
-        this.uniforms.lineColor = new Float32Array([0.62, 0.62, 0.62]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterOverflowWrap.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(overflowWrapFragment, params, { lineColor: new Float32Array([0.62, 0.62, 0.62]) });
     }
 
     get period()
@@ -111,15 +82,6 @@ export class FilterOverflowWrap extends PIXI.Filter
     set lineColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.lineColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

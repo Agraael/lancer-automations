@@ -11,6 +11,7 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { localize } from '../tools/string-utils.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 import * as customFilterClasses from '../filters/customFilters.js';
+import { isDangerZoneHeat, VALUE_STATUS_PATHS } from '../utils/lancer-token.js';
 const SETTING_FX_CONFIG = 'statusFXConfig';
 
 // Effect definitions
@@ -68,7 +69,6 @@ const FX_DEFAULTS = {
     damageImpactFX:   true,
 };
 
-// One ordered list feeds both the config window and the settings menu, so a new key cannot be missed on one.
 export const STATUS_FX_KEYS = [
     'dangerZone', 'burn', 'overshield', 'cascading', 'invisible', 'hidden', 'brace', 'jammed',
     'intangible', 'infection', 'exposed', 'falling', 'dazed', 'stunned', 'impaired', 'vulnerable',
@@ -138,109 +138,11 @@ function isFXEnabled(key)
     return getConfig()[`fx_${key}`] ?? false;
 }
 
-function isAutoEnabled(key)
+export function isAutoEnabled(key)
 {
     if (!isMasterEnabled())
         return false;
     return getConfig()[`auto_${key}`] ?? false;
-}
-
-// Config Window (FormApplication)
-
-export class StatusFXConfig extends FormApplication
-{
-    static get defaultOptions()
-    {
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            id: 'la-statusfx-config',
-            title: localize('LA.statusFx.windowTitle'),
-            template: `modules/${MODULE_ID}/templates/statusfx-config.html`,
-            width: 500,
-            closeOnSubmit: true,
-        });
-    }
-
-    getData()
-    {
-        const config = getConfig();
-        const additionalStatuses = getModuleSetting('additionalStatuses', true);
-        const hasWeaponFX = !!game.modules.get('lancer-weapon-fx')?.active;
-        return {
-            master: config.master,
-            lowQuality: !!config.lowQuality,
-            additionalStatuses,
-            actionFX: config.actionFX !== false,
-            hasWeaponFX,
-            fxEffects: STATUS_FX_KEYS.map(key => ({
-                key,
-                label: localize(`LA.settingsMenus.statusFx.fx_${key}.label`),
-                enabled: config[`fx_${key}`],
-            })),
-            autoStatuses: [
-                { key: 'dangerZone',  label: localize('LA.settingsMenus.statusFx.auto_dangerZone.label'), enabled: config.auto_dangerZone },
-                { key: 'burn',        label: localize('LA.settingsMenus.statusFx.auto_burn.label'), enabled: config.auto_burn },
-                { key: 'overshield',  label: localize('LA.settingsMenus.statusFx.auto_overshield.label'), enabled: config.auto_overshield },
-                { key: 'infection',   label: localize('LA.settingsMenus.statusFx.auto_infection.label'), enabled: config.auto_infection },
-                { key: 'cascading',   label: localize('LA.settingsMenus.statusFx.auto_cascading.label'), enabled: config.auto_cascading },
-            ],
-            removeStatusesOnDeath: config.removeStatusesOnDeath ?? false
-        };
-    }
-
-    async _updateObject(_event, formData)
-    {
-        const config = getConfig();
-        for (const [key, value] of Object.entries(formData))
-        {
-            // additionalStatuses is saved separately below
-            if (key === 'additionalStatuses')
-                continue;
-            config[key] = value;
-        }
-        await game.settings.set(MODULE_ID, SETTING_FX_CONFIG, config);
-
-        // additionalStatuses is its own world setting, not part of statusFXConfig
-        if ('additionalStatuses' in formData)
-        {
-            try
-            {
-                await game.settings.set(MODULE_ID, 'additionalStatuses', !!formData.additionalStatuses);
-            }
-            catch (e)
-            {
-                console.warn(`${MODULE_ID} | Could not save additionalStatuses setting`, e);
-            }
-        }
-
-        ui.notifications.info(localize('LA.notify.statusfxConfigurationSaved'));
-
-        if (config.actionFX !== false && !game.modules.get('jb2a_patreon')?.active)
-            ui.notifications.warn(localize('LA.notify.someActionFxUseJb2aPatreonAssets'));
-
-        try
-        {
-            /** @type {any} */
-            const dialogOpts = {
-                id: 'reload-world-confirm',
-                modal: true,
-                rejectClose: false,
-                window: { title: 'SETTINGS.ReloadPromptTitle' },
-                position: { width: 400 },
-                content: `<p>${game.i18n.localize('SETTINGS.ReloadPromptBody')}</p>`,
-            };
-            const reload = await foundry.applications.api.DialogV2.confirm(dialogOpts);
-            if (reload)
-            {
-                if (game.user.can('SETTINGS_MODIFY'))
-                    game.socket.emit('reload');
-                foundry.utils.debouncedReload();
-            }
-        }
-        catch (e)
-        {
-            console.warn(`${MODULE_ID} | reload-confirm dialog failed`, e);
-        }
-    }
 }
 
 // Settings registration
@@ -1325,7 +1227,7 @@ async function autoStatusDangerZone(actor)
     const heat = actor.system?.heat;
     if (!heat)
         return;
-    await actor.toggleStatusEffect('dangerzone', { active: heat.value / heat.max >= 0.5 });
+    await actor.toggleStatusEffect('dangerzone', { active: isDangerZoneHeat(heat.value, heat.max) });
 }
 
 async function autoStatusBurn(actor)
@@ -1385,7 +1287,13 @@ async function setCoreActiveField(actor, active)
     await actor.update({ 'system.core_active': active });
 }
 
-async function corePowerOff(actor)
+export async function corePowerOn(actor)
+{
+    await autoStatusCorePowerOn(actor);
+    await setCoreActiveField(actor, true);
+}
+
+export async function corePowerOff(actor)
 {
     await autoStatusCorePowerOff(actor);
     await setCoreActiveField(actor, false);
@@ -1413,13 +1321,30 @@ function onCreateActiveEffect(document, _change, _userId)
     reconcileStatusFX(document.parent);
 }
 
-function onDeleteActiveEffect(document, _change, _userId)
+async function clearValueOfRemovedStatus(effect)
+{
+    const actor = effect.parent;
+    if (actor?.documentName !== 'Actor')
+        return;
+    const update = {};
+    for (const [statusId, path] of Object.entries(VALUE_STATUS_PATHS))
+    {
+        if (effect.statuses?.has(statusId) && isAutoEnabled(statusId) && (Number(foundry.utils.getProperty(actor, path)) || 0) > 0)
+            update[path] = 0;
+    }
+    if (Object.keys(update).length)
+        await actor.update(update);
+}
+
+function onDeleteActiveEffect(document, _change, userId)
 {
     if (!isMasterEnabled())
         return;
     if (_isTemplateAE(document))
         return;
     reconcileStatusFX(document.parent);
+    if (game.userId === userId)
+        clearValueOfRemovedStatus(document);
 }
 
 function onUpdateActor(actor, change, _options, userId)
@@ -1434,8 +1359,6 @@ function onUpdateActor(actor, change, _options, userId)
         autoStatusOvershield(actor);
     if (change.system?.infection !== undefined)
         autoStatusInfection(actor);
-    if (change.system?.structure?.value !== undefined)
-        removeStatusesOnDeath(actor);
 }
 
 async function removeStatusesOnDeath(actor)
@@ -1688,6 +1611,11 @@ async function _reapplyCustomFiltersAfterLoad()
 
 export function initStatusFX()
 {
+    Hooks.on('updateActor', (actor, change, _options, userId) =>
+    {
+        if (game.userId === userId && /** @type {any} */ (change).system?.structure?.value !== undefined)
+            removeStatusesOnDeath(actor);
+    });
     if (!isMasterEnabled())
         return;
 
@@ -1729,8 +1657,7 @@ Hooks.once('lancer.registerFlows', (steps, flows) =>
 {
     steps.set('addCorePowerSE', async ({ actor }) =>
     {
-        await autoStatusCorePowerOn(actor);
-        await setCoreActiveField(actor, true);
+        await corePowerOn(actor);
         return true;
     });
     flows.get('CoreActiveFlow')?.insertStepAfter('consumeCorePower', 'addCorePowerSE');

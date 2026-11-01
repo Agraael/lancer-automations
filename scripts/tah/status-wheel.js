@@ -2,12 +2,12 @@ import { openRadialWheel, closeRadialWheel, isRadialWheelOpen, refreshRadialWhee
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { laHudRenderIcon } from './item-helpers.js';
-import { applyEffectsToTokens, effectStack, roundBadgeColor } from '../bonuses/flagged-effects.js';
+import { applyEffectsToTokens, effectStack, roundBadgeColor, statusBadge, isUsageEffect, isCustomStatusEffect } from '../bonuses/flagged-effects.js';
 import { remainingRounds } from '../bonuses/duration-clock.js';
-import { removeGlobalBonus, removeConstantBonus, getBonusIcon, isBonusRemovalPending, getV3DefenseRows, setV3DefenseOff } from '../bonuses/genericBonuses.js';
+import { removeGlobalBonus, removeConstantBonus, getBonusIcon, isBonusRemovalPending, getV3DefenseRows, setItemBonusOff, isItemBonusOff, linkedBonusOf, itemAttachmentOrigin } from '../bonuses/genericBonuses.js';
 import { getBonusConditionLines, getBonusFrequencyLabel, hasLambdaGate } from '../bonuses/bonus-condition.js';
 import { isPermanentEffect, confirmPermanentRemoval, setEffectStack } from './status-panel.js';
-import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns, sourceName } from '../bonuses/status-tooltip.js';
+import { effectTooltipData, bonusText, showStatusTooltip, moveStatusTooltip, remainingTurns, sourceName, statusConfigText } from '../bonuses/status-tooltip.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { localize } from '../tools/string-utils.js';
@@ -26,6 +26,7 @@ const CONSTANT_BG = '#f2b47a';
 const CONSTANT_BORDER = '#8a4310';
 const DATA_BG = '#a8dcd1';
 const DATA_BORDER = '#1d6b62';
+const KIND_BORDER = { data: DATA_BORDER, constant: CONSTANT_BORDER, bonus: BONUS_BORDER };
 
 let _openToken = null;
 let _page = 1;
@@ -53,8 +54,7 @@ function effectsForStatus(actor, statusId)
 
 function effectsForCustom(actor, name)
 {
-    return liveEffects(actor).filter(effect =>
-        effect.getFlag?.('temporary-custom-statuses', 'originalName') === name || effect.name === name);
+    return liveEffects(actor).filter(effect => isCustomStatusEffect(effect, name));
 }
 
 // Usage, as the purple token badge: stacks summed across the effects.
@@ -105,7 +105,7 @@ function collectEntries(actor)
             kind: 'status',
             key: `status:${status.id}`,
             status,
-            name: game.i18n.localize(status.name ?? status.id),
+            name: localize(status.name ?? status.id),
             icon: status.icon ?? status.img ?? '',
             favorite: favorites.has(status.id),
             effects,
@@ -118,6 +118,8 @@ function collectEntries(actor)
         if (!effect.getFlag?.('temporary-custom-statuses', 'isCustom'))
             continue;
         const name = effect.getFlag('temporary-custom-statuses', 'originalName') || effect.name;
+        if (!isCustomStatusEffect(effect, name))
+            continue;
         if (!customs.has(name))
             customs.set(name, { kind: 'custom', key: `custom:${name}`, name, icon: effect.img ?? '', effects: [] });
         customs.get(name).effects.push(effect);
@@ -138,12 +140,13 @@ function collectEntries(actor)
             icon: bonus.icon || getBonusIcon(bonus),
             bonus,
             effects: [],
+            off: isItemBonusOff(actor, bonus),
         });
     }
 
     for (const entry of entries)
     {
-        entry.active = entry.kind === 'bonus' || entry.effects.length > 0;
+        entry.active = entry.kind === 'bonus' ? !entry.off : entry.effects.length > 0;
         entry.permanent = isPermanentEffect(entry.effects);
     }
     entries.sort((a, b) => (entryRank(a) - entryRank(b)) || a.name.localeCompare(b.name));
@@ -161,21 +164,23 @@ function constantEntries(actor)
             icon: bonus.icon || getBonusIcon(bonus),
             bonus,
             effects: [],
-            active: true,
+            active: !isItemBonusOff(actor, bonus),
+            off: isItemBonusOff(actor, bonus),
             permanent: false,
         }))
         .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name))
         .concat(getV3DefenseRows(actor)
-            .map(({ bonus, off, inactive }) => ({
+            .map(({ bonus, off, inactive, replaced }) => ({
                 kind: 'data',
                 key: `data:${bonus.id}`,
                 name: bonus.name ?? 'Bonus',
                 icon: getBonusIcon(bonus),
                 bonus,
                 effects: [],
-                active: !off && !inactive,
+                active: !off && !inactive && !replaced,
                 off,
                 inactive,
+                replaced,
                 permanent: false,
             }))
             .sort((/** @type {any} */ a, /** @type {any} */ b) => a.name.localeCompare(b.name)));
@@ -265,15 +270,25 @@ async function onRightClick(tokens, entry)
 {
     if (isBonusEntry(entry))
     {
+        if (entry.replaced)
+            return;
         for (const token of tokens)
         {
-            if (entry.kind === 'data')
-                await setV3DefenseOff(token.actor, entry.bonus.id, !entry.off);
+            if (entry.kind === 'data' || entry.bonus?.sourceItemUuid)
+                await setItemBonusOff(token.actor, entry.bonus.id, !entry.off);
             else if (entry.kind === 'constant')
                 await removeConstantBonus(token.actor, entry.bonus.id);
             else
                 await removeGlobalBonus(token.actor, entry.bonus.id);
         }
+        return;
+    }
+    const itemBonuses = entry.effects.map(effect => ({ actor: effect.parent, bonus: linkedBonusOf(effect.parent, effect) }))
+        .filter(linked => linked.bonus?.sourceItemUuid);
+    if (itemBonuses.length && itemBonuses.length === entry.effects.length)
+    {
+        for (const linked of itemBonuses)
+            await setItemBonusOff(linked.actor, linked.bonus.id, true);
         return;
     }
     if (!entry.effects.length)
@@ -295,11 +310,11 @@ function iconHtml(icon)
 function styleFor(entry)
 {
     if (entry.kind === 'data')
-        return entry.off || entry.inactive ? null : { bg: DATA_BG, border: DATA_BORDER };
+        return entry.off || entry.inactive || entry.replaced ? null : { bg: DATA_BG, border: DATA_BORDER };
     if (entry.kind === 'constant')
-        return { bg: CONSTANT_BG, border: CONSTANT_BORDER };
+        return entry.off ? null : { bg: CONSTANT_BG, border: CONSTANT_BORDER };
     if (entry.kind === 'bonus')
-        return { bg: BONUS_BG, border: BONUS_BORDER };
+        return entry.off ? null : { bg: BONUS_BG, border: BONUS_BORDER };
     if (!entry.active)
         return null;
     return entry.permanent
@@ -324,7 +339,9 @@ function tooltipData(entry, actor)
             name: entry.name,
             bonus: bonusText(entry.bonus, actor),
             source: sourceName(entry.bonus),
+            origin: itemAttachmentOrigin(entry.bonus),
             off: !!entry.off,
+            replaced: !!entry.replaced,
             condition: entry.bonus?.dataCondition ? `while ${v3ConditionLabel(entry.bonus.dataCondition)}` : '',
             conditionMet: !entry.inactive,
             frequency: getBonusFrequencyLabel(entry.bonus),
@@ -334,8 +351,7 @@ function tooltipData(entry, actor)
     if (entry.effects.length)
         return effectTooltipData(actor, entry.effects[0]);
     // Starred but not applied: only the status config has anything to say.
-    const description = entry.status?.description ? game.i18n.localize(entry.status.description) : '';
-    return { name: entry.name, description };
+    return { name: entry.name, description: statusConfigText(entry.status) };
 }
 
 function buildWheelItem(entry, tokens)
@@ -361,14 +377,13 @@ function buildWheelItem(entry, tokens)
                 const color = roundBadgeColor();
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns" style="color:${color}; border-color:color-mix(in srgb, ${color} 55%, #000);">${rounds}</span>`);
             }
-            // same split as the token badge: blue instances, purple usage beside it or in its place
-            if (instances > 1)
-                el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack">${instances}</span>`);
-            if (uses > instances)
+            // the token badge's own rule and colours
+            const badge = statusBadge({ instances, uses, usage: entry.effects.some(isUsageEffect) });
+            if (badge)
             {
-                el.insertAdjacentHTML('beforeend', instances > 1
-                    ? `<span class="lancer-sw-uses">${uses}</span>`
-                    : `<span class="lancer-sw-stack lancer-sw-stack--uses">${uses}</span>`);
+                el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack" style="color:${badge.color}; border-color:color-mix(in srgb, ${badge.color} 55%, #000);">${badge.count}</span>`);
+                if (badge.uses !== null)
+                    el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-uses" style="color:${badge.usesColor}; border-color:color-mix(in srgb, ${badge.usesColor} 55%, #000);">${badge.uses}</span>`);
             }
             el.onmouseenter = () =>
             {
@@ -385,10 +400,10 @@ function buildWheelItem(entry, tokens)
         },
         styleButton: (el) =>
         {
-            const dashed = entry.kind === 'data' && entry.off;
-            const unmet = entry.kind === 'data' && !entry.off && entry.inactive;
+            const dashed = !!entry.off || !!entry.replaced;
+            const unmet = entry.kind === 'data' && !dashed && entry.inactive;
             el.style.borderStyle = dashed ? 'dashed' : '';
-            el.style.borderColor = dashed || unmet ? DATA_BORDER : '';
+            el.style.borderColor = dashed || unmet ? (KIND_BORDER[entry.kind] ?? DATA_BORDER) : '';
             const style = styleFor(entry);
             if (!style)
                 return;

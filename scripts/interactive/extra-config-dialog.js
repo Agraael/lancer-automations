@@ -2,7 +2,7 @@
 
 import {
     CANONICAL_TYPES, RESOURCE_LABELS, CONSUME_ON_MODES,
-    _hasResource, _detectResources, _subResources,
+    _detectResources, _subResources,
     getAutoConsumeDisabled,
     setItemAutoConsumeDisabled,
     setItemAutoConsumeDisabledAll,
@@ -12,9 +12,10 @@ import {
     setConsumeOn,
 } from './extra-config.js';
 import { itemActionSubs, detectHitGatedScopes } from '../combat/per-frequency-tags.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml } from '../tools/string-utils.js';
 import { getExtraDeployableOpts, setExtraDeployableOpts, getDeployableInfoSync, isPrimaryActionHidden, setHidePrimaryAction } from './deployables.js';
 import { tierGateControl, bindTierGate, tierGateApplies } from './tier-gate.js';
+import { isWeaponItem } from '../utils/lancer-token.js';
 
 const TYPE_DESCRIPTIONS = {
     uses:        'Limited N - decrement uses on activation.',
@@ -29,16 +30,11 @@ const TYPE_DESCRIPTIONS = {
 const CONSUME_ON_LABELS = { auto: 'Auto', activation: 'On attack', hit: 'On hit' };
 const PER_X_TYPES = new Set(['perTurn', 'perRound', 'perScene', 'perMission']);
 
-function isWeaponItem(item)
-{
-    return ['mech_weapon', 'pilot_weapon'].includes(item.type) || (item.type === 'npc_feature' && item.system?.type === 'Weapon');
-}
-
 export function openExtraConfigDialog(item)
 {
     if (!item || item.documentName !== 'Item')
     {
-        ui.notifications.warn('openExtraConfigDialog: not a valid Item');
+        ui.notifications.warn(localize('LA.notify.extraConfigInvalidItem'));
         return;
     }
 
@@ -112,8 +108,8 @@ export function openExtraConfigDialog(item)
         {
             const info = getDeployableInfoSync(lid, item.actor) || {};
             const name = info.name || lid;
-            const safeImg = String(info.img || 'icons/svg/hazard.svg').replaceAll('"', '&quot;');
-            const safeLid = String(lid).replaceAll('"', '&quot;');
+            const safeImg = escapeHtml(info.img || 'icons/svg/hazard.svg');
+            const safeLid = escapeHtml(lid);
             const opts = getExtraDeployableOpts(item, lid) || {};
             return `
                 <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--la-edge);" title="${safeLid}">

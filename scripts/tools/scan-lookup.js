@@ -3,6 +3,7 @@ import { getLAFlag } from './flag-utils.js';
 import { isFriendly } from '../combat/overwatch.js';
 
 const SCAN_NAME_RE = /^SCAN:\s/i;
+export const DATALINKED_STATUS = 'datalinked';
 
 function _observes(entry, user, allowGm)
 {
@@ -34,10 +35,9 @@ export function getScanJournalsForActor(actor, options = {})
     return out;
 }
 
-// World override: treat everything as scanned, for tables that don't play with hidden stats.
-function _revealWithoutScan()
+function _scanRevealMode()
 {
-    return !!getModuleSetting('revealStatsWithoutScan');
+    return getModuleSetting('scanRevealMode', 'allies');
 }
 
 // Ally: friendly (token-factions aware) to a token `user` owns on the scene.
@@ -53,16 +53,24 @@ export function isActorAllyOfUser(actor, user)
     return tokens.some(token => owned.some(own => own.id !== token.id && isFriendly(own, token)));
 }
 
+export function isScannedByAll(actor)
+{
+    return !!getLAFlag(actor,'scannedByAll') || !!actor?.statuses?.has(DATALINKED_STATUS);
+}
+
 // World rules: everyone, player-owned tokens, or allies count as scanned without a scan.
 export function isActorScannedForUser(actor, user)
 {
     if (!actor || !user)
         return false;
-    if (_revealWithoutScan())
+    if (isScannedByAll(actor))
         return true;
-    if (actor.hasPlayerOwner && getModuleSetting('scanRevealPlayers'))
+    const mode = _scanRevealMode();
+    if (mode === 'everyone')
+        return true;
+    if (actor.hasPlayerOwner && (mode === 'players' || mode === 'allies'))
         return true;
     if (getScanJournalsForActor(actor, { user }).length > 0)
         return true;
-    return getModuleSetting('scanRevealAllies') && isActorAllyOfUser(actor, user);
+    return mode === 'allies' && isActorAllyOfUser(actor, user);
 }

@@ -1,6 +1,7 @@
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 const SETTING_BLINDED_VISION = 'blindedSetsVision';
 const FLAG_CLAMPED = 'blindedClampedSight';
 const STATUS_ID = 'blinded';
@@ -30,9 +31,9 @@ function blindRange()
 // Darkvision and light perception, alongside sight.range. Nothing else is touched.
 const SIGHT_MODES = new Set(['basicSight', 'lightPerception']);
 
-function overRange(mode, target)
+function overRange(mode, rangeLimit)
 {
-    return SIGHT_MODES.has(mode.id) && mode.enabled !== false && (mode.range === null || mode.range > target);
+    return SIGHT_MODES.has(mode.id) && mode.enabled !== false && (mode.range === null || mode.range > rangeLimit);
 }
 
 // range null is Foundry's unlimited; built from source data, prepared ranges are Infinity.
@@ -50,14 +51,14 @@ async function applyBlindSight(token)
     const doc = token?.document ?? token;
     if (!doc?.sight?.enabled)
         return;
-    const target = blindRange();
-    const marked = getLAFlag(doc,FLAG_CLAMPED) !== undefined;
-    if (marked && doc.sight.range === target && !(doc.detectionModes ?? []).some(mode => overRange(mode, target)))
+    const rangeLimit = blindRange();
+    const isClamped = getLAFlag(doc,FLAG_CLAMPED) !== undefined;
+    if (isClamped && doc.sight.range === rangeLimit && !(doc.detectionModes ?? []).some(mode => overRange(mode, rangeLimit)))
         return;
     await doc.update({
         [`flags.${MODULE_ID}.${FLAG_CLAMPED}`]: true,
-        'sight.range': target,
-        detectionModes: retunedModes(doc, target),
+        'sight.range': rangeLimit,
+        detectionModes: retunedModes(doc, rangeLimit),
     });
 }
 
@@ -98,12 +99,6 @@ async function reconcileAll()
         await reconcileToken(token);
 }
 
-// GM-only writer: token documents are world data, and every client would otherwise race the same update.
-function writer()
-{
-    return game.user?.isGM && game.users.activeGM?.id === game.user.id;
-}
-
 export function initBlindedVision()
 {
     game.settings.register(MODULE_ID, SETTING_BLINDED_VISION, {
@@ -115,14 +110,14 @@ export function initBlindedVision()
         default: true,
         onChange: () =>
         {
-            if (writer())
+            if (isExecutorGM())
                 reconcileAll();
         },
     });
 
     const onEffectChange = (document) =>
     {
-        if (!writer() || !document?.parent?.documentName)
+        if (!isExecutorGM() || !document?.parent?.documentName)
             return;
         if (!document.statuses?.has?.(STATUS_ID))
             return;
@@ -133,12 +128,12 @@ export function initBlindedVision()
 
     Hooks.on('canvasReady', () =>
     {
-        if (writer())
+        if (isExecutorGM())
             reconcileAll();
     });
     Hooks.on('createToken', (tokenDoc) =>
     {
-        if (writer())
+        if (isExecutorGM())
             reconcileToken(canvas.tokens?.get(tokenDoc.id));
     });
 }

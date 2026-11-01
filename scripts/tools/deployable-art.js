@@ -2,6 +2,7 @@ import { MODULE_ID } from './constants.js';
 import { getModuleSetting } from './settings-utils.js';
 import { getLAFlags } from './flag-utils.js';
 import { localize, localizeFormat } from './string-utils.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 
 const ART_ROOT = `modules/${MODULE_ID}/assets/tokens`;
 const IMAGE_FILE = /\.(png|webp|jpe?g|gif|svg|avif)$/i;
@@ -172,6 +173,11 @@ export async function onDeployableArtToggled(enabled, userId)
 {
     if (userId !== game.userId || !game.user.isGM)
         return;
+    if (enabled)
+        await scanDeployableArt();
+    const buildChanges = enabled ? deployableArtChanges : deployableArtRevertChanges;
+    if (!game.actors.some(actor => buildChanges(actor)))
+        return;
     const confirmed = await foundry.applications.api.DialogV2.confirm(/** @type {any} */ ({
         modal: true,
         rejectClose: false,
@@ -181,20 +187,15 @@ export async function onDeployableArtToggled(enabled, userId)
     }));
     if (!confirmed)
         return;
-    if (enabled)
-    {
-        await scanDeployableArt();
-        const count = await updateWorldDeployables(deployableArtChanges);
-        ui.notifications.info(localizeFormat('LA.deployableArt.applied', { count }));
-        return;
-    }
-    const count = await updateWorldDeployables(deployableArtRevertChanges);
-    ui.notifications.info(localizeFormat('LA.deployableArt.reverted', { count }));
+    const count = await updateWorldDeployables(buildChanges);
+    ui.notifications.info(enabled
+        ? localizeFormat('LA.deployableArt.applied', { count })
+        : localizeFormat('LA.deployableArt.reverted', { count }));
 }
 
 Hooks.once('ready', () =>
 {
-    if (game.users.activeGM?.isSelf)
+    if (isExecutorGM())
         scanDeployableArt();
 });
 

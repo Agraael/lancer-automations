@@ -6,18 +6,29 @@ import {
     isLancerActor as isLancerCombatant,
     isTokenInCombat,
     isTokenVisible,
+    corePowerState,
+    corePowerDisplay,
+    shortOverchargeTerm,
+    isDangerZoneHeat,
+    rankParts,
+    hasReaction,
 } from '../utils/lancer-token.js';
 import { FLAG_EXTRAS, _resolveExtraBarValues } from './tokenStatBar.js';
 import { REF_GRID_SIZE } from './statbar/config.js';
 import { getTokenDispositionInfo } from '../tools/misc-tools.js';
-import { isActorScannedForUser, isActorAllyOfUser } from '../tools/scan-lookup.js';
+import { isActorScannedForUser, isActorAllyOfUser, isScannedByAll, DATALINKED_STATUS } from '../tools/scan-lookup.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { overchargeColor, REPAIR_COLOR_CSS, haseValueColor, cssHex, hpColorCss, heatColorCss, dangerHeatColorCss, pilotStressColorCss } from '../tools/color-utils.js';
+import { EFFECT_TILE_CSS, effectTileEntries, effectTilesHtml } from './effect-tiles.js';
+import { HASE_CHIP_CSS, statPipsHtml } from '../tools/hase-chip.js';
+import { reactionCounts } from '../combat/action-extras.js';
 const SETTING_ENABLED = 'tokenStatHintEnabled';
 const SETTING_DELAY_MS = 'tokenStatHintDelayMs';
 const SETTING_SCALE = 'tokenStatHintScale';
-const SETTING_SCALE_WITH_ZOOM = 'tokenStatHintScaleWithZoom';
+const SETTING_PLACEMENT = 'tokenStatHintPlacement';
+const SETTING_EFFECTS_MODE = 'tokenStatHintEffectsMode';
 const SETTING_SHOW_CONTROLLED = 'tokenStatHintShowForControlled';
 const SETTING_COMBAT_ONLY = 'tokenStatHintCombatOnly';
 const SETTING_LABEL_MODE = 'tokenStatHintLabelMode';
@@ -46,10 +57,14 @@ const ICON = {
 
 const ANCHOR_GAP = 12;
 const SLIDE_OFFSET = 28;
+const DOCK_MARGIN = 8;
+const PLATE_NAME_MIN_PX = 11;
+const PLATE_PAN_DELAY_MS = 700;
+const PLATE_PAN_HOLD_MS = 1000;
 const SCAN_MEMO_MS = 1000;
 
 const SCANNED_MEMO = new Map();
-const SCAN_SETTING_KEYS = new Set(['revealStatsWithoutScan', 'scanRevealPlayers', 'scanRevealAllies'].map(key => `${MODULE_ID}.${key}`));
+const SCAN_SETTING_KEYS = new Set(['scanRevealMode'].map(key => `${MODULE_ID}.${key}`));
 
 let _popupEl = null;
 let _animEl = null;
@@ -75,11 +90,22 @@ function getDelayMs()
     const raw = Number(getModuleSetting(SETTING_DELAY_MS));
     return Number.isFinite(raw) && raw >= 0 ? raw : 500;
 }
+function isDocked()
+{
+    return getModuleSetting(SETTING_PLACEMENT, 'docked') === 'docked';
+}
+function syncDockedClass()
+{
+    const docked = isEnabled() === true && isDocked();
+    document.body.classList.toggle('la-stat-docked', docked);
+    if (docked)
+        ensureStyleSheet();
+}
 function getHintScale()
 {
     const raw = Number(getModuleSetting(SETTING_SCALE));
     const userScale = Number.isFinite(raw) && raw > 0 ? raw : 1;
-    if (!getModuleSetting(SETTING_SCALE_WITH_ZOOM))
+    if (getModuleSetting(SETTING_PLACEMENT, 'docked') !== 'zoom')
         return userScale;
     const zoom = canvas?.stage?.scale?.x || 1;
     const gridPx = canvas?.dimensions?.size ?? REF_GRID_SIZE;
@@ -140,7 +166,7 @@ function isScannedByUser(actor, user)
 {
     if (!actor || !user)
         return false;
-    if (getLAFlag(actor,'scannedByAll'))
+    if (isScannedByAll(actor))
         return true;
     const key = `${actor.uuid}|${user.id}`;
     const memo = SCANNED_MEMO.get(key);
@@ -190,7 +216,7 @@ function hasObserverAccess(actor)
 // Scan-only or unknown with the hide-current option on. Player tokens and allies show like observed ones unless hidden too.
 function masksCurrentStats(actor, mode, tokenDoc)
 {
-    if (mode === 'gm')
+    if (mode === 'gm' || actor?.statuses?.has(DATALINKED_STATUS))
         return false;
     if (mode === 'scanned' && hasObserverAccess(actor))
         return false;
@@ -232,6 +258,7 @@ function effectiveHpMax(actor)
 export function getStatsForActor(actor)
 {
     const sys = actor?.system ?? {};
+    const reactions = reactionCounts(actor);
     return {
         type: actor.type,
         hpVal: sys.hp?.value ?? 0,
@@ -253,11 +280,11 @@ export function getStatsForActor(actor)
         save: sys.save ?? 0,
         sensors: sys.sensor_range ?? 0,
         speed: sys.speed ?? 0,
-        reaction: sys.action_tracker?.reaction === true,
+        reaction: reactions.left,
+        reactionText: reactions.text,
         overcharge: sys.overcharge ?? 0,
         ocSequence: sys.overcharge_sequence ?? null,
-        coreEnergy: sys.core_energy,
-        coreActive: sys.core_active === true,
+        core: corePowerState(actor),
         hasRepairs: sys.repairs != null,
         repairs: sys.repairs?.value ?? 0,
         repairsMax: sys.repairs?.max ?? 0,
@@ -270,64 +297,13 @@ export function getStatsForActor(actor)
     };
 }
 
-function lerp(a, b, t)
-{
-    return a + (b - a) * t;
-}
-function rgbToHex(r, g, b)
-{
-    const toHex = channel => Math.round(Math.max(0, Math.min(255, channel))).toString(16).padStart(2, '0');
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-function hpColorCss(val, max)
-{
-    if (max <= 0)
-        return '#cccccc';
-    const t = Math.max(0, Math.min(1, val / max));
-    if (t < 0.5)
-    {
-        const bandT = t * 2;
-        return rgbToHex(lerp(244, 255, bandT), lerp(67, 215, bandT), lerp(54, 0, bandT));
-    }
-    const bandT = (t - 0.5) * 2;
-    return rgbToHex(lerp(255, 76, bandT), lerp(215, 175, bandT), lerp(0, 80, bandT));
-}
-function heatColorCss(val, max)
-{
-    if (max <= 0)
-        return '#888888';
-    const t = Math.max(0, Math.min(1, val / max));
-    if (t < 1 / 3)
-    {
-        const bandT = t * 3;
-        return rgbToHex(lerp(136, 255, bandT), lerp(136, 215, bandT), lerp(136, 0, bandT));
-    }
-    if (t < 2 / 3)
-    {
-        const bandT = (t - 1 / 3) * 3;
-        return rgbToHex(255, lerp(215, 140, bandT), 0);
-    }
-    const bandT = (t - 2 / 3) * 3;
-    return rgbToHex(lerp(255, 244, bandT), lerp(140, 67, bandT), lerp(0, 54, bandT));
-}
 function ocColorCss(value, max)
 {
     if (max <= 0)
         return '#cccccc';
-    const t = Math.min(1, value / max);
-    return rgbToHex(lerp(204, 244, t), lerp(170, 67, t), lerp(50, 54, t));
+    return cssHex(overchargeColor(value, max));
 }
-function corePowerColor(energy, active)
-{
-    if (energy > 0)
-        return active ? '#a855f7' : '#3a9e6e';
-    return '#c33';
-}
-function signed(num)
-{
-    return num >= 0 ? `+${num}` : `${num}`;
-}
-import { escapeHtml as esc } from "../tools/string-utils.js";
+import { escapeHtml as esc, signedNumber as signed } from "../tools/string-utils.js";
 
 function svgIcon(url, color = '#fff')
 {
@@ -348,6 +324,10 @@ function mdi(name, color)
 function cell(iconHtml, value, color = '#ddd')
 {
     return `<span class="la-stat-hint-cell">${iconHtml}<span class="la-stat-hint-val" style="color:${esc(color)};">${esc(value)}</span></span>`;
+}
+function haseChipCell(letter, value, chipClass = '')
+{
+    return cell(`<i class="la-hase-chip${chipClass}">${letter}</i>`, signed(value), haseValueColor(value));
 }
 
 function getActorSubtitleText(actor)
@@ -405,32 +385,13 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
     const isUnknown = (mode === 'unknown-stable' || mode === 'unknown-damaged');
 
     let label = displayName(token.document, actor);
-    let tierBadge = '';
+    const rank = rankParts(actor);
+    const tierBadge = rank ? `<span class="la-stat-hint-tier">${rank.kind}${rank.value}</span>` : '';
 
     if (isUnknown)
     {
         label = unknownName(tokenDoc);
-        let unknownTier = '';
-        if (!hideClassWhenUnknown(tokenDoc))
-        {
-            if (isNpc)
-            {
-                const tier = Number(actor.system?.tier) || 1;
-                unknownTier = `<span class="la-stat-hint-tier">T${tier}</span>`;
-            }
-            else if (actor?.type === 'pilot')
-            {
-                const ll = Number(actor.system?.level) || 0;
-                unknownTier = `<span class="la-stat-hint-tier">LL${ll}</span>`;
-            }
-            else if (actor?.type === 'mech')
-            {
-                const pilot = actor.system?.pilot?.value;
-                const ll = pilot ? (Number(pilot.system?.level) || 0) : null;
-                if (ll !== null)
-                    unknownTier = `<span class="la-stat-hint-tier">LL${ll}</span>`;
-            }
-        }
+        const unknownTier = hideClassWhenUnknown(tokenDoc) ? '' : tierBadge;
         let unknownSub = '';
         let unknownInline = '';
         const subText = getActorSubtitleText(actor);
@@ -447,23 +408,9 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
     let subtitle = '';
     if (isNpc)
     {
-        const tier = Number(actor.system?.tier) || 1;
-        tierBadge = `<span class="la-stat-hint-tier">T${tier}</span>`;
         const subText = getActorSubtitleText(actor);
         if (subText)
             subtitle = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
-    }
-    else if (actor?.type === 'pilot')
-    {
-        const ll = Number(actor.system?.level) || 0;
-        tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
-    }
-    else if (actor?.type === 'mech')
-    {
-        const pilot = actor.system?.pilot?.value;
-        const ll = pilot ? (Number(pilot.system?.level) || 0) : null;
-        if (ll !== null)
-            tierBadge = `<span class="la-stat-hint-tier">LL${ll}</span>`;
     }
     let titleExtra = '';
     if (actor?.type === 'mech')
@@ -482,7 +429,6 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
     const rows = [];
 
     const dimColor = '#555';
-    const maskColor = '#888';
     const isMechOrNpc = stats.type === 'mech' || stats.type === 'npc';
 
     {
@@ -512,7 +458,7 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
 
     {
         const parts = [];
-        if (stats.stressMax > 0)
+        if (stats.stressMax > 0 && stats.heatMax > 0)
         {
             parts.push(cell(cciIcon('cci-reactor', '#e07830'),
                 `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
@@ -543,7 +489,7 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
             const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
             const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
             parts.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
-                maskCurrent ? '?' : (stats.reaction ? '1' : '0'), reactionColor));
+                maskCurrent ? '?' : stats.reactionText, reactionColor));
         }
         if (parts.length)
             rows.push(parts.join(''));
@@ -571,23 +517,22 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
             : [];
         if (ocSeq.length > 0)
         {
-            const ocLabel = maskCurrent ? '?' : (ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
+            const ocLabel = maskCurrent ? '?' : shortOverchargeTerm(ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
             const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
             parts.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
         if (stats.hasRepairs)
         {
-            const repairsColor = maskCurrent ? '#66cc66' : (stats.repairs > 0 ? '#66cc66' : '#555');
+            const repairsColor = maskCurrent ? REPAIR_COLOR_CSS : (stats.repairs > 0 ? REPAIR_COLOR_CSS : '#555');
             const repairsLabel = maskCurrent
                 ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
                 : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
             parts.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
         }
-        if (stats.coreEnergy != null)
+        if (stats.core.hasCore)
         {
-            const corePwrColor = maskCurrent ? corePowerColor(1, false) : corePowerColor(stats.coreEnergy, stats.coreActive);
-            const label = maskCurrent ? '?' : (stats.coreEnergy > 0 ? (stats.coreActive ? 'ON' : '✓') : '✗');
-            parts.push(cell(svgIcon(ICON.corePwr), label, corePwrColor));
+            const coreShown = corePowerDisplay(maskCurrent ? { charged: true, active: false } : stats.core);
+            parts.push(cell(svgIcon(ICON.corePwr), maskCurrent ? '?' : coreShown.label, coreShown.color));
         }
         rows.push(parts.join(''));
     }
@@ -620,7 +565,7 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
     const hpFull = stats.hpNominalMax || stats.hpMax;
     const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
     vitals.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
-    if (stats.stressMax > 0)
+    if (stats.stressMax > 0 && stats.heatMax > 0)
         vitals.push(cell(cciIcon('cci-reactor', '#e07830'), `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
     if (stats.heatMax > 0)
     {
@@ -644,7 +589,7 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
         const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
         const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
         vitals.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
-            maskCurrent ? '?' : (stats.reaction ? '1' : '0'), reactionColor));
+            maskCurrent ? '?' : stats.reactionText, reactionColor));
     }
 
     const sheet = [
@@ -662,13 +607,13 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
             : [];
         if (ocSeq.length > 0)
         {
-            const ocLabel = maskCurrent ? '?' : (ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
+            const ocLabel = maskCurrent ? '?' : shortOverchargeTerm(ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
             const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
             sheet.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
         if (stats.hasRepairs)
         {
-            const repairsColor = maskCurrent ? '#66cc66' : (stats.repairs > 0 ? '#66cc66' : '#555');
+            const repairsColor = maskCurrent ? REPAIR_COLOR_CSS : (stats.repairs > 0 ? REPAIR_COLOR_CSS : '#555');
             const repairsLabel = maskCurrent
                 ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
                 : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
@@ -680,14 +625,14 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
     if (showHase)
     {
         const parts = [
-            cell(glyph('H', '#fff', 13), signed(sys.hull ?? 0)),
-            cell(glyph('A', '#fff', 13), signed(sys.agi ?? 0)),
-            cell(glyph('S', '#fff', 13), signed(sys.sys ?? 0)),
-            cell(glyph('E', '#fff', 13), signed(sys.eng ?? 0)),
+            haseChipCell('H', sys.hull ?? 0),
+            haseChipCell('A', sys.agi ?? 0),
+            haseChipCell('S', sys.sys ?? 0),
+            haseChipCell('E', sys.eng ?? 0),
         ];
         // The battle log has no fourth line, so grit rides inline there.
         if (stats.type === 'mech' && omitCombatState)
-            parts.push(cell(glyph('G', '#ffaa55', 13), signed(sys.grit ?? 0)));
+            parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
         haseHtml = `<div class="la-stat-hint-hase${omitCombatState ? ' la-inline' : ''}">${parts.join('')}</div>`;
     }
 
@@ -696,12 +641,11 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
     {
         const parts = [];
         if (showHase)
-            parts.push(cell(glyph('G', '#ffaa55', 13), signed(sys.grit ?? 0)));
-        if (stats.coreEnergy != null)
+            parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
+        if (stats.core.hasCore)
         {
-            const corePwrColor = maskCurrent ? corePowerColor(1, false) : corePowerColor(stats.coreEnergy, stats.coreActive);
-            const coreLabel = maskCurrent ? '?' : (stats.coreEnergy > 0 ? (stats.coreActive ? 'ON' : '✓') : '✗');
-            parts.push(cell(svgIcon(ICON.corePwr), coreLabel, corePwrColor));
+            const coreShown = corePowerDisplay(maskCurrent ? { charged: true, active: false } : stats.core);
+            parts.push(cell(svgIcon(ICON.corePwr), maskCurrent ? '?' : coreShown.label, coreShown.color));
         }
         if (parts.length)
             extraLineHtml = `<div class="la-stat-hint-extraline">${parts.join('')}</div>`;
@@ -745,7 +689,7 @@ function buildDamagedRowsHtml(actor, stats, { maskCurrent = false } = {})
     }
     {
         const parts = [];
-        if (stats.stressMax > 0)
+        if (stats.stressMax > 0 && stats.heatMax > 0)
         {
             parts.push(cell(cciIcon('cci-reactor', '#e07830'),
                 `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
@@ -778,10 +722,9 @@ export function ensureStyleSheet()
     z-index: 99;
     font-family: var(--font-primary, "Signika", Arial, sans-serif);
     user-select: none;
-    transform-origin: var(--la-hint-origin, 0% 50%);
-    transform: scale(var(--la-hint-scale, 1));
 }
 .la-stat-hint-anim {
+    zoom: var(--la-hint-scale, 1);
     box-sizing: border-box;
     background: #666;
     padding: 1px;
@@ -993,6 +936,158 @@ export function ensureStyleSheet()
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+.la-stat-plate {
+    --la-chip-w: 34px;
+    --la-chip-cut: calc(var(--la-chip-w) * 0.32);
+}
+.la-stat-plate .la-hud-token-name {
+    flex: 1 1 auto;
+    min-width: 150px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+}
+.la-stat-plate-namefit {
+    display: block;
+    width: max-content;
+    max-width: 260px;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    white-space: nowrap;
+}
+.la-stat-plate-namebox {
+    contain: inline-size;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 1px 8px;
+}
+.la-stat-plate-nm {
+    min-width: 0;
+    max-width: 100%;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.la-stat-plate-nm.la-panning {
+    text-overflow: clip;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+}
+.la-stat-plate-nm.la-panning > span {
+    display: inline-block;
+    padding-right: 14px;
+}
+.la-stat-plate-sub {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #8a8a8a;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.la-stat-plate-unknown {
+    color: #e50000;
+    opacity: 0.85;
+}
+.la-stat-plate-stats {
+    background: #111;
+    padding: 2px 6px 2px 5px;
+    font-size: 0.97em;
+    color: #888;
+    display: flex;
+    align-items: stretch;
+}
+.la-stat-plate-pair {
+    gap: 6px;
+}
+.la-stat-plate-def {
+    background: #111;
+    border-top: 1px solid #262626;
+    padding: 3px 8px 4px 6px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: #aaa;
+    font-size: 0.92em;
+    white-space: nowrap;
+}
+.la-stat-plate-def span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.la-stat-plate-def img {
+    width: 1.3em;
+    height: 1.3em;
+    border: none;
+    background: none;
+}
+.la-stat-plate-hase {
+    gap: 9px;
+}
+${HASE_CHIP_CSS}
+.la-stat-plate-fx {
+    background: #111;
+    border-top: 1px solid #262626;
+    padding: 5px 6px;
+}
+${EFFECT_TILE_CSS}
+.la-stat-plate-extras {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 12px;
+}
+.la-stat-plate-extra {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12.5px;
+    white-space: nowrap;
+}
+body.la-stat-docked #tht_terrainStackViewer {
+    --header-height: 22px;
+    background: #666;
+    padding: 1px;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+body.la-stat-docked #tht_terrainStackViewer > .window-header {
+    gap: 7px;
+    padding: 0 12px 0 8px;
+    background: #1a1a1a;
+    border: none;
+    border-left: 4px solid #4a4a4a;
+    color: #cfcfcf;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+body.la-stat-docked #tht_terrainStackViewer > .window-header .window-title {
+    color: #cfcfcf;
+}
+body.la-stat-docked #tht_terrainStackViewer > .window-header .window-icon {
+    color: #8f8f8f;
+}
+body.la-stat-docked #tht_terrainStackViewer > .window-content {
+    background: #111;
+    border-left: 4px solid #4a4a4a;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+body.la-stat-dock-open #tht_terrainStackViewer {
+    transform: translateY(calc(-1 * var(--la-stat-dock-lift, 0px)));
+}
 `;
     const el = document.createElement('style');
     el.id = 'la-stat-hint-styles';
@@ -1001,7 +1096,7 @@ export function ensureStyleSheet()
 }
 
 // User-defined extra bars; empty string when none are visible.
-function buildExtrasHintHtml(token, actor, maskCurrent = false)
+function buildExtrasHintHtml(token, actor, maskCurrent = false, compact = false)
 {
     const tokenDoc = token?.document;
     if (!tokenDoc || !actor)
@@ -1026,13 +1121,187 @@ function buildExtrasHintHtml(token, actor, maskCurrent = false)
         const labelHtml = extra.showLabelInHint && extra.label
             ? `<span class="la-stat-hint-extra-label">${esc(extra.label)}</span>`
             : '';
+        const valueHtml = `<span class="la-stat-hint-extra-val" style="color:${esc(color)};">${masked ? `?/${max}` : `${value}/${max}`}</span>`;
+        if (compact)
+            return `<span class="la-stat-plate-extra">${iconHtml}${valueHtml}${labelHtml}</span>`;
         return `<div class="la-stat-hint-extra-row">
             ${iconHtml}
-            <span class="la-stat-hint-extra-val" style="color:${esc(color)};">${masked ? `?/${max}` : `${value}/${max}`}</span>
+            ${valueHtml}
             ${labelHtml}
         </div>`;
     }).join('');
+    if (compact)
+        return `<div class="la-stat-plate-fx"><div class="la-stat-plate-extras">${rows}</div></div>`;
     return `<div class="la-stat-hint-extras"><div class="la-stat-hint-sep"></div>${rows}</div>`;
+}
+
+function plateEffectsHtml(actor)
+{
+    const entries = effectTileEntries(actor);
+    if (!entries.length)
+        return '';
+    const names = getModuleSetting(SETTING_EFFECTS_MODE) === 'names';
+    return `<div class="la-stat-plate-fx">${effectTilesHtml(entries, { names })}</div>`;
+}
+
+function plateCell(color, iconClass, value, extraClass = '')
+{
+    return `<span class="la-stats-cell${extraClass ? ` ${extraClass}` : ''}" style="color:${esc(color)};"><span class="la-stats-glyph"><i class="${iconClass}"></i></span><span class="la-stats-val">${esc(String(value))}</span></span>`;
+}
+
+function plateHeatColor(val, max)
+{
+    if (val >= max)
+        return '#ff5a4e';
+    if (!isDangerZoneHeat(val, max))
+        return heatColorCss(val, max);
+    return dangerHeatColorCss(val, max);
+}
+
+function plateBandHtml(token, unknown)
+{
+    const actor = token.actor;
+    const tokenDoc = token.document;
+    const hideClass = unknown && hideClassWhenUnknown(tokenDoc);
+    const rank = hideClass ? null : rankParts(actor);
+    const chip = rank ? `<span class="la-hud-token-rank"><span class="la-hud-rank-kind">${rank.kind}</span><span class="la-hud-rank-num">${rank.value}</span></span>` : '';
+    const ownSide = actor?.type === 'pilot' || actor?.type === 'mech';
+    const label = unknown ? unknownName(tokenDoc, actor) : displayName(tokenDoc, actor);
+    const nameClass = unknown && !ownSide && getLabelMode() === LABEL_SCAN ? ' class="la-stat-plate-nm la-stat-plate-unknown"' : ' class="la-stat-plate-nm"';
+    const subText = hideClass ? '' : getActorSubtitleText(actor);
+    const sub = subText ? `<span class="la-stat-plate-sub">${esc(subText)}</span>` : '';
+    const nameText = esc(String(label).toUpperCase());
+    return `<div class="la-hud-token-title">${chip}<span class="la-hud-token-name"><span class="la-stat-plate-namefit" aria-hidden="true">${nameText}</span><span class="la-stat-plate-namebox"><span${nameClass}><span>${nameText}</span></span>${sub}</span></span></div>`;
+}
+
+function plateStatsHtml(actor, stats, unknown, mask)
+{
+    const SEP = '<span class="la-stats-sep">│</span>';
+    const EMPTY = '<span></span>';
+    const showStress = stats.stressMax > 0 && stats.heatMax > 0;
+    const cols = [];
+    if (stats.structMax > 0 || showStress)
+    {
+        cols.push({
+            top: stats.structMax > 0 ? statPipsHtml('cci-structure', stats.structVal, stats.structMax, '#e8d060') : '',
+            bottom: showStress ? statPipsHtml('cci-reactor', stats.stressVal, stats.stressMax, '#e07830') : '',
+        });
+    }
+    const overshield = stats.overshield > 0 ? plateCell('#60a5fa', 'mdi mdi-hexagon-multiple-outline', stats.overshield) : '';
+    const withShield = (hpHtml) => [hpHtml, overshield].filter(Boolean).join(SEP);
+    if (unknown)
+    {
+        const hpLost = !mask && stats.hpNominalMax > 0 && stats.hpVal < stats.hpNominalMax;
+        const heatUp = !mask && stats.heatMax > 0 && stats.heatVal > 0;
+        const top = withShield(hpLost ? plateCell('#d74242', 'mdi mdi-heart', `-${stats.hpNominalMax - stats.hpVal}`) : '');
+        cols.push({
+            top: top ? `<span class="la-stats-group">${top}</span>` : '',
+            bottom: heatUp ? plateCell('#ff8a00', 'cci cci-heat', `+${stats.heatVal}`) : '',
+            anchor: heatUp,
+        });
+    }
+    else
+    {
+        const hpFull = stats.hpNominalMax || stats.hpMax;
+        const hpColor = mask ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
+        const hpCritical = !mask && hpFull > 0 && stats.hpVal * 10 <= hpFull;
+        const hp = plateCell(hpColor, 'mdi mdi-heart', mask ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpCritical ? 'la-stats-critical' : '');
+        let bottom = '';
+        if (stats.heatMax > 0)
+        {
+            const danger = !mask && isDangerZoneHeat(stats.heatVal, stats.heatMax);
+            const atMax = !mask && stats.heatVal >= stats.heatMax;
+            const heatClass = atMax ? 'la-stats-critical' : (danger ? 'la-stats-heat--danger' : '');
+            const heatColor = mask ? heatColorCss(0, stats.heatMax) : plateHeatColor(stats.heatVal, stats.heatMax);
+            bottom = plateCell(heatColor, danger ? 'cci cci-status-danger-zone' : 'cci cci-heat', mask ? `?/${stats.heatMax}` : `${stats.heatVal}/${stats.heatMax}`, heatClass);
+        }
+        else if (stats.type === 'pilot' && stats.pilotStressMax > 0)
+            bottom = plateCell(pilotStressColorCss(stats.pilotStressVal, stats.pilotStressMax), 'mdi mdi-brain', `${stats.pilotStressVal}/${stats.pilotStressMax}`);
+        cols.push({ top: `<span class="la-stats-group">${withShield(hp)}</span>`, bottom, anchor: !!bottom });
+        if (stats.type === 'mech' && typeof stats.ocSequence === 'string')
+        {
+            const ocSeq = stats.ocSequence.split(',').map(step => step.trim());
+            const ocMax = Math.max(1, ocSeq.length - 1);
+            const ocLabel = mask ? '?' : shortOverchargeTerm(ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
+            const ocColor = mask ? ocColorCss(0, ocMax) : ocColorCss(stats.overcharge, ocMax);
+            const repairsNow = mask ? '?' : stats.repairs;
+            const repairsLabel = stats.repairsMax > 0 ? `${repairsNow}/${stats.repairsMax}` : repairsNow;
+            cols.push({
+                top: stats.hasRepairs ? plateCell(mask || stats.repairs > 0 ? REPAIR_COLOR_CSS : '#aaa', 'cci cci-repair', repairsLabel) : '',
+                bottom: plateCell(ocColor, 'cci cci-overcharge', ocLabel),
+                anchor: true,
+            });
+        }
+        if (stats.type === 'pilot' && stats.hasBond && stats.pilotXpMax > 0)
+        {
+            const xpColor = mask || stats.pilotXpVal > 0 ? _bondXpColor(actor) : '#888';
+            cols.push({ top: '', bottom: plateCell(xpColor, 'mdi mdi-head-cog-outline', mask ? `?/${stats.pilotXpMax}` : `${stats.pilotXpVal}/${stats.pilotXpMax}`), anchor: true });
+        }
+        const speed = stats.type !== 'deployable' ? plateCell('#aaa', 'mdi mdi-arrow-right-bold-hexagon-outline', stats.speed, 'la-stats-move') : '';
+        const reaction = hasReaction(actor) ? plateCell(mask || stats.reaction ? '#a855f7' : '#aaa', 'cci cci-reaction', mask ? '?' : stats.reactionText, 'la-stats-reaction') : '';
+        if (speed || reaction)
+            cols.push({ top: speed, bottom: reaction });
+    }
+    const burn = isBurnEnabled() && stats.burn > 0 ? plateCell('#d74242', 'cci cci-burn', stats.burn) : '';
+    const infection = isInfectionEnabled() && stats.infection > 0 ? plateCell('#1a8a3a', 'mdi mdi-biohazard', stats.infection) : '';
+    if (burn || infection)
+        cols.push({ top: burn, bottom: infection });
+    const live = cols.filter(col => col.top || col.bottom);
+    if (!live.length)
+        return '';
+    const folded = !live.some(col => col.anchor);
+    const topRow = [];
+    const bottomRow = [];
+    live.forEach((col, index) =>
+    {
+        if (folded)
+        {
+            if (index > 0)
+                topRow.push(SEP);
+            const parts = [col.top, col.bottom].filter(Boolean);
+            topRow.push(parts.length > 1 ? `<span class="la-stats-group la-stat-plate-pair">${parts.join('')}</span>` : parts[0]);
+            return;
+        }
+        if (index > 0)
+        {
+            topRow.push(col.top ? SEP : EMPTY);
+            bottomRow.push(col.bottom ? SEP : EMPTY);
+        }
+        topRow.push(col.top || EMPTY);
+        bottomRow.push(col.bottom || EMPTY);
+    });
+    const cells = folded ? topRow : [...topRow, ...bottomRow];
+    return `<div class="la-stat-plate-stats"><div class="la-stats-grid" style="grid-template-columns:repeat(${topRow.length},auto);">${cells.join('')}</div></div>`;
+}
+
+function plateDefenseHtml(stats, mask)
+{
+    const type = stats.type;
+    const stat = (url, value) => `<span><img src="${url}" alt="">${esc(String(value))}</span>`;
+    const parts = [stat(ICON.armor, stats.armor), stat(ICON.evasion, stats.evasion), stat(ICON.edef, stats.edef)];
+    if (type === 'mech')
+        parts.push(stat(ICON.techAtk, signed(stats.techAtk)));
+    if (type !== 'pilot')
+        parts.push(stat(ICON.save, stats.save));
+    if (type === 'mech' || type === 'npc')
+        parts.push(stat(ICON.sensors, stats.sensors));
+    if (type === 'mech' && stats.core.hasCore)
+    {
+        const shown = corePowerDisplay(mask ? { charged: true, active: false } : stats.core);
+        parts.push(`<span style="color:${shown.color};"><img src="${ICON.corePwr}" alt="">${mask ? '?' : shown.label}</span>`);
+    }
+    return `<div class="la-stat-plate-def">${parts.join('')}</div>`;
+}
+
+function plateHaseHtml(actor, stats)
+{
+    if (getModuleSetting(SETTING_SHOW_HASE) !== true || (stats.type !== 'mech' && stats.type !== 'npc'))
+        return '';
+    const sys = actor?.system ?? {};
+    const parts = [haseChipCell('H', sys.hull ?? 0), haseChipCell('A', sys.agi ?? 0), haseChipCell('S', sys.sys ?? 0), haseChipCell('E', sys.eng ?? 0)];
+    if (stats.type === 'mech')
+        parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
+    return `<div class="la-stat-plate-def la-stat-plate-hase">${parts.join('')}</div>`;
 }
 
 function buildPopupDom(token)
@@ -1062,7 +1331,15 @@ function buildPopupDom(token)
         headerHtml = buildHeaderHtml(token, 'unknown-damaged');
         rowsHtml = `<div class="la-stat-hint-rows">${buildDamagedRowsHtml(actor, stats, { maskCurrent })}</div>`;
     }
-    const extrasHtml = buildExtrasHintHtml(token, actor, maskCurrent);
+    let bodyClass = 'la-stat-hint-body';
+    if (isDocked())
+    {
+        const unknown = viewMode === 'unknown';
+        headerHtml = plateBandHtml(token, unknown);
+        rowsHtml = plateStatsHtml(actor, stats, unknown, maskCurrent) + (unknown ? '' : plateDefenseHtml(stats, maskCurrent) + plateHaseHtml(actor, stats)) + plateEffectsHtml(actor);
+        bodyClass += ' la-stat-plate';
+    }
+    const extrasHtml = buildExtrasHintHtml(token, actor, maskCurrent, isDocked());
 
     const popup = document.createElement('div');
     popup.className = 'la-stat-hint-popup';
@@ -1072,7 +1349,7 @@ function buildPopupDom(token)
     const stripeHtml = disp
         ? `<div class="la-stat-hint-stripe" style="background:${esc(disp.color)};" title="${esc(disp.label)}"></div>`
         : '';
-    anim.innerHTML = `<div class="la-stat-hint-inner">${stripeHtml}<div class="la-stat-hint-body">${headerHtml}${rowsHtml}${extrasHtml}</div></div>`;
+    anim.innerHTML = `<div class="la-stat-hint-inner">${stripeHtml}<div class="${bodyClass}">${headerHtml}${rowsHtml}${extrasHtml}</div></div>`;
     popup.appendChild(anim);
     popup.dataset.viewMode = viewMode;
     popup.dataset.tokenId = token.id;
@@ -1164,31 +1441,79 @@ function computePlaceRight(token, popupScreenW)
     return true;
 }
 
+function liftTerrainViewer()
+{
+    const body = document.body;
+    const viewer = document.getElementById('tht_terrainStackViewer');
+    if (!_popupEl || !viewer || !isDocked())
+    {
+        body.classList.remove('la-stat-dock-open');
+        return;
+    }
+    const viewerRect = viewer.getBoundingClientRect();
+    const transform = getComputedStyle(viewer).transform;
+    const shift = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0;
+    const naturalBottom = viewerRect.height > 0 ? viewerRect.bottom - shift : (document.getElementById('players')?.getBoundingClientRect().top ?? 0);
+    const lift = Math.max(0, Math.ceil(naturalBottom - _popupEl.getBoundingClientRect().top + 6));
+    body.style.setProperty('--la-stat-dock-lift', `${lift}px`);
+    body.classList.toggle('la-stat-dock-open', lift > 0);
+}
+
+function placeDocked()
+{
+    const playersRect = document.getElementById('players')?.getBoundingClientRect();
+    const left = playersRect?.width ? playersRect.left : DOCK_MARGIN;
+    let bottom = playersRect?.height ? playersRect.bottom : window.innerHeight - DOCK_MARGIN;
+    const measureBar = document.getElementById('la-measure-toolbar');
+    if (measureBar?.classList.contains('la-show'))
+    {
+        const barRect = measureBar.getBoundingClientRect();
+        const dockRight = left + (_popupEl.offsetWidth || 0);
+        if (left < barRect.right && dockRight > barRect.left)
+            bottom = Math.min(bottom, barRect.top - DOCK_MARGIN);
+    }
+    const pixelRatio = window.devicePixelRatio || 1;
+    const snap = (value) => Math.round(value * pixelRatio) / pixelRatio;
+    _popupEl.style.left = `${snap(left)}px`;
+    _popupEl.style.top = `${snap(bottom - (_popupEl.offsetHeight || 0))}px`;
+    _popupEl.style.setProperty('--la-hint-slide-from', `${-SLIDE_OFFSET}px`);
+    liftTerrainViewer();
+}
+
+function scaledPopupWidth(fallback)
+{
+    _popupEl.style.setProperty('--la-hint-scale', String(getHintScale()));
+    return _popupEl.offsetWidth || fallback;
+}
+
 function applyPosition(token)
 {
     if (!_popupEl || !token || token.destroyed)
         return;
+    const hintScale = getHintScale();
+    _popupEl.style.setProperty('--la-hint-scale', String(hintScale));
+    if (isDocked())
+    {
+        placeDocked();
+        return;
+    }
     const rect = tokenScreenRect(token);
     const anchorX = _placeRight ? rect.right : rect.left;
     const anchorY = rect.cy;
-    const hintScale = getHintScale();
     const popupW = _popupEl.offsetWidth || 0;
     const popupH = _popupEl.offsetHeight || 0;
     if (_placeRight)
     {
         _popupEl.style.left = `${anchorX + ANCHOR_GAP * hintScale}px`;
         _popupEl.style.top = `${anchorY - popupH / 2}px`;
-        _popupEl.style.setProperty('--la-hint-origin', '0% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${SLIDE_OFFSET}px`);
     }
     else
     {
         _popupEl.style.left = `${anchorX - ANCHOR_GAP * hintScale - popupW}px`;
         _popupEl.style.top = `${anchorY - popupH / 2}px`;
-        _popupEl.style.setProperty('--la-hint-origin', '100% 50%');
         _popupEl.style.setProperty('--la-hint-slide-from', `${-SLIDE_OFFSET}px`);
     }
-    _popupEl.style.setProperty('--la-hint-scale', String(hintScale));
 }
 
 function clearDelay()
@@ -1226,6 +1551,7 @@ function destroyPopup()
 {
     clearOutTimer();
     _stopTahWatch();
+    document.body.classList.remove('la-stat-dock-open');
     if (_popupEl && _popupEl.parentNode)
         _popupEl.parentNode.removeChild(_popupEl);
     _popupEl = null;
@@ -1303,16 +1629,20 @@ function showFor(token)
     _animEl = built.anim;
     document.body.appendChild(_popupEl);
     _currentToken = token;
+    fitPlateName();
 
-    const popW = _popupEl.offsetWidth || 200;
-    _placeRight = computePlaceRight(token, popW * getHintScale());
+    _placeRight = computePlaceRight(token, scaledPopupWidth(200));
     applyPosition(token);
+    _animEl.style.transition = 'none';
+    void _animEl.offsetWidth;
+    _animEl.style.transition = '';
 
     _state = 'in';
     playUiSound('details');
     _startTahWatch();
     void _animEl.offsetWidth;
     _animEl.classList.add('la-show');
+    panPlateName();
     setTimeout(() =>
     {
         if (_state === 'in')
@@ -1369,6 +1699,7 @@ function animateOut(done)
         done?.(); return;
     }
     _animEl.classList.remove('la-show');
+    document.body.classList.remove('la-stat-dock-open');
     _outTimer = setTimeout(() =>
     {
         _outTimer = null;
@@ -1407,6 +1738,45 @@ function endHover(token)
     });
 }
 
+function fitPlateName()
+{
+    const name = _popupEl?.querySelector('.la-stat-plate-nm');
+    if (!(name instanceof HTMLElement))
+        return;
+    let size = parseFloat(getComputedStyle(name).fontSize);
+    while (name.scrollWidth > name.clientWidth && size > PLATE_NAME_MIN_PX)
+    {
+        size = Math.max(PLATE_NAME_MIN_PX, size - 0.5);
+        name.style.fontSize = `${size}px`;
+    }
+}
+
+function panPlateName()
+{
+    const name = _popupEl?.querySelector('.la-stat-plate-nm');
+    const text = name?.firstElementChild;
+    if (!(name instanceof HTMLElement) || !(text instanceof HTMLElement) || name.scrollWidth <= name.clientWidth)
+        return;
+    name.classList.add('la-panning');
+    const overflow = text.offsetWidth - name.clientWidth;
+    if (overflow <= 0)
+    {
+        name.classList.remove('la-panning');
+        return;
+    }
+    const travel = Math.min(2000, Math.max(500, overflow * 20));
+    const total = PLATE_PAN_DELAY_MS + travel + PLATE_PAN_HOLD_MS;
+    const pan = text.animate([
+        { transform: 'translateX(0)', offset: 0 },
+        { transform: 'translateX(0)', offset: PLATE_PAN_DELAY_MS / total },
+        { transform: `translateX(${-overflow}px)`, offset: (PLATE_PAN_DELAY_MS + travel) / total },
+        { transform: `translateX(${-overflow}px)`, offset: 1 },
+    ], { duration: total, iterations: 1, easing: 'linear' });
+    pan.finished
+        .catch(() => null)
+        .then(() => name.classList.remove('la-panning'));
+}
+
 function rebuildIfVisible(actor)
 {
     if (!actor || _state !== 'visible' || !_popupEl || !_currentTokenId)
@@ -1422,13 +1792,13 @@ function rebuildIfVisible(actor)
     _popupEl.innerHTML = '';
     _popupEl.appendChild(built.anim);
     _animEl = built.anim;
+    fitPlateName();
     if (wasShown)
     {
         void _animEl.offsetWidth;
         _animEl.classList.add('la-show');
     }
-    const popW = _popupEl.offsetWidth || 200;
-    _placeRight = computePlaceRight(token, popW * getHintScale());
+    _placeRight = computePlaceRight(token, scaledPopupWidth(200));
     applyPosition(token);
 }
 
@@ -1438,7 +1808,8 @@ export function registerTokenStatHintSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
+        onChange: () => syncDockedClass(),
     });
     game.settings.register(MODULE_ID, SETTING_DELAY_MS, {
         scope: 'world',
@@ -1459,16 +1830,31 @@ export function registerTokenStatHintSettings()
                 applyPosition(_currentToken);
         },
     });
-    game.settings.register(MODULE_ID, SETTING_SCALE_WITH_ZOOM, {
-        scope: 'world',
+    game.settings.register(MODULE_ID, SETTING_PLACEMENT, {
+        name: 'LA.settings.tokenStatHintPlacement.name',
+        hint: 'LA.settings.tokenStatHintPlacement.hint',
+        scope: 'client',
         config: false,
-        type: Boolean,
-        default: false,
+        type: String,
+        choices: {
+            token: 'LA.settings.tokenStatHintPlacement.choices.token',
+            zoom: 'LA.settings.tokenStatHintPlacement.choices.zoom',
+            docked: 'LA.settings.tokenStatHintPlacement.choices.docked',
+        },
+        default: 'docked',
         onChange: () =>
         {
-            if (_currentToken)
-                applyPosition(_currentToken);
+            forceHide();
+            syncDockedClass();
         },
+    });
+    game.settings.register(MODULE_ID, SETTING_EFFECTS_MODE, {
+        scope: 'client',
+        config: false,
+        type: String,
+        default: 'names',
+        choices: { icons: 'Icons', names: 'Names' },
+        onChange: () => forceHide(),
     });
     game.settings.register(MODULE_ID, SETTING_SHOW_CONTROLLED, {
         scope: 'world',
@@ -1520,18 +1906,19 @@ export function registerTokenStatHintSettings()
         scope: 'world',
         config: false,
         type: Boolean,
-        default: true,
+        default: false,
     });
     game.settings.register(MODULE_ID, SETTING_SHOW_HASE, {
         scope: 'world',
         config: false,
         type: Boolean,
-        default: false,
+        default: true,
     });
 }
 
 export function initTokenStatHint()
 {
+    syncDockedClass();
     Hooks.on('hoverToken', (token, hovered) =>
     {
         if (!token?.actor)
@@ -1579,24 +1966,21 @@ export function initTokenStatHint()
         {
             if (!_popupEl || !_currentToken)
                 return;
-            const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
+            _placeRight = computePlaceRight(_currentToken, scaledPopupWidth(0));
             applyPosition(_currentToken);
         });
         Hooks.on('collapseSidebar', () =>
         {
             if (!_popupEl || !_currentToken)
                 return;
-            const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
+            _placeRight = computePlaceRight(_currentToken, scaledPopupWidth(0));
             applyPosition(_currentToken);
         });
         Hooks.on('renderSidebar', () =>
         {
             if (!_popupEl || !_currentToken)
                 return;
-            const popW = _popupEl.offsetWidth || 0;
-            _placeRight = computePlaceRight(_currentToken, popW * getHintScale());
+            _placeRight = computePlaceRight(_currentToken, scaledPopupWidth(0));
             applyPosition(_currentToken);
         });
     }
@@ -1610,6 +1994,14 @@ export function initTokenStatHint()
                 return;
             rebuildIfVisible(actor);
         });
+        for (const hook of /** @type {const} */ (['createActiveEffect', 'updateActiveEffect', 'deleteActiveEffect']))
+        {
+            Hooks.on(hook, (effect) =>
+            {
+                if (isEnabled() && (isDocked() || effect?.statuses?.has(DATALINKED_STATUS)))
+                    rebuildIfVisible(effect?.parent);
+            });
+        }
         for (const hook of /** @type {const} */ (['createJournalEntry', 'updateJournalEntry', 'deleteJournalEntry']))
             Hooks.on(hook, () => SCANNED_MEMO.clear());
         for (const hook of /** @type {const} */ (['createSetting', 'updateSetting', 'deleteSetting']))

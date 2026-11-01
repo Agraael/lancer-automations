@@ -4,6 +4,7 @@ import { playUiSound } from './sound.js';
 import { getLAFlags } from '../tools/flag-utils.js';
 import { HudPanel } from './hud-panel.js';
 import { localize, escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 /** Pull every visible scan journal entry. */
 function _collectVisibleScans()
@@ -41,15 +42,15 @@ export class GlossaryPanel extends HudPanel
 
         const scans = _collectVisibleScans();
 
-        const panel = $(`<div class="la-hud-panel la-hud-glossary-panel"></div>`);
+        const panel = $(htmlToElement(`<div class="la-hud-panel la-hud-glossary-panel"></div>`));
         panel.append(`<div class="la-hud-col-label">Glossary &middot; Scanned Units</div>`);
 
-        const searchWrap = $(`<div class="la-hud-panel-search"><input type="text" placeholder="${localize('LA.common.searchByName')}"></div>`);
+        const searchWrap = $(htmlToElement(`<div class="la-hud-panel-search"><input type="text" placeholder="${localize('LA.common.searchByName')}"></div>`));
         const search = searchWrap.find('input');
         panel.append(searchWrap);
 
-        const list = $(`<div class="la-hud-glossary-list"></div>`);
-        const empty = $(`<div class="la-hud-glossary-empty">No scans visible to you yet.</div>`);
+        const list = $(htmlToElement(`<div class="la-hud-glossary-list"></div>`));
+        const empty = $(htmlToElement(`<div class="la-hud-glossary-empty">No scans visible to you yet.</div>`));
 
         const renderRows = (filter) =>
         {
@@ -65,14 +66,14 @@ export class GlossaryPanel extends HudPanel
             }
             for (const s of filtered)
             {
-                const row = $(`<div class="la-glossary-row">
+                const row = $(htmlToElement(`<div class="la-glossary-row">
                     <img class="la-glossary-row__img" src="${escapeHtml(s.img)}" alt="">
                     <div class="la-glossary-row__body">
                         <span class="la-hud-clip"><span class="la-hud-pan la-glossary-row__name">${escapeHtml(s.name)}</span></span>
                         <span class="la-glossary-row__sub">${s.scanIndex ? `SCAN ${escapeHtml(s.scanIndex)}` : escapeHtml(s.displayName)}</span>
                     </div>
                     <i class="fas fa-book-open la-glossary-row__icon"></i>
-                </div>`);
+                </div>`));
                 row.on('mouseenter', () =>
                 {
                     this._cancelCollapse();
@@ -118,6 +119,7 @@ export class GlossaryPanel extends HudPanel
         panel.append(list);
 
         this._mount(panel, anchorRow, { clampSize: true });
-        setTimeout(() => search.trigger('focus'), 50);
+        if (!this._silent)
+            setTimeout(() => search.trigger('focus'), 50);
     }
 }

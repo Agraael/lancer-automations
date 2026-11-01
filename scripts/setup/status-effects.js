@@ -247,6 +247,12 @@ Hooks.on('lancer.statusesReady', () =>
             { key: "system.statuses.core_power_active", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     },
+    {
+        id: "datalinked",
+        name: "Datalinked",
+        img: "modules/lancer-automations/icons/satellite-communication.svg",
+        description: localize('LA.status.datalinked.description')
+    },
     //these effect also exist in prototype-pattern-groups-data-1.16.0.lcp
     {
         id: "dazed",

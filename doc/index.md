@@ -140,7 +140,7 @@ Every feature has its toggles here, and a handful of buttons open dedicated tool
 There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting has an inline hint.
 
 > [!TIP]
-> Go through the settings before your first session and set a baseline. The module is largely opt-in. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
+> Go through the settings before your first session and set a baseline. Most features are on out of the box. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
 
 ### Export & Import
 

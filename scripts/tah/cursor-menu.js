@@ -1,4 +1,5 @@
 import { playUiSound } from './sound.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 const MENU_CLASS = 'la-menu-popup';
 
@@ -29,8 +30,8 @@ export function openCursorMenu({ head = '', rows = [], x = null, y = null, onEnt
 {
     return new Promise((resolve) =>
     {
-        $(`.${MENU_CLASS}`).remove();
-        const popup = $(`<div class="${MENU_CLASS}"></div>`);
+        document.querySelectorAll(`.${MENU_CLASS}`).forEach(node => node.remove());
+        const popup = $(htmlToElement(`<div class="${MENU_CLASS}"></div>`));
         let settled = false;
         const close = (result) =>
         {
@@ -63,7 +64,7 @@ export function openCursorMenu({ head = '', rows = [], x = null, y = null, onEnt
         for (const row of rows)
         {
             const glyph = row.glyph ? `<span class="la-menu-popup-glyph">${row.glyph}</span>` : '';
-            const rowEl = $(`<div class="la-menu-popup-row ${row.cls ?? ''}">${glyph}${row.label}</div>`);
+            const rowEl = $(htmlToElement(`<div class="la-menu-popup-row ${row.cls ?? ''}">${glyph}${row.label}</div>`));
             rowEl.on('mouseenter', () => playUiSound('statusHover'));
             rowEl.on('mousedown', (ev) => ev.preventDefault());
             rowEl.on('click', (ev) =>
@@ -77,7 +78,7 @@ export function openCursorMenu({ head = '', rows = [], x = null, y = null, onEnt
 
         popup.on('mouseenter', () => onEnter?.());
         popup.on('mouseleave', () => onLeave?.());
-        $('body').append(popup);
+        popup.appendTo(document.body);
         // The cursor still has to cross the gap to reach it, so hold the column from the start.
         onEnter?.();
         const anchorX = x ?? _cursor.x;

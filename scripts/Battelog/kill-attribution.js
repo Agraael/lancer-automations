@@ -7,6 +7,35 @@ const BUCKET_TEAM = {
     secrets: 'secret',
 };
 
+export function matchUndoneDamage(events)
+{
+    const undone = new Map();
+    const damageByTarget = new Map();
+    for (const ev of [...events].sort((lhs, rhs) => (lhs.seq ?? 0) - (rhs.seq ?? 0)))
+    {
+        if (ev.type === 'damage' && !ev.dotCredit)
+        {
+            if (!damageByTarget.has(ev.targetId))
+                damageByTarget.set(ev.targetId, []);
+            damageByTarget.get(ev.targetId).push(ev);
+        }
+        else if (ev.type === 'damage-undo' && !ev.matched)
+        {
+            const candidates = damageByTarget.get(ev.targetId) ?? [];
+            for (let idx = candidates.length - 1; idx >= 0; idx--)
+            {
+                const damage = candidates[idx];
+                if ((damage.hpLanded ?? 0) !== (ev.hpRestored ?? 0) || (damage.overshieldAbsorbed ?? 0) !== (ev.overshieldRestored ?? 0))
+                    continue;
+                undone.set(ev, damage);
+                candidates.splice(idx, 1);
+                break;
+            }
+        }
+    }
+    return undone;
+}
+
 export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = null)
 {
     const allLogs = [];
@@ -26,7 +55,7 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = nul
         : [];
     const cutoffSeq = meltdownSeqs.length ? Math.max(...meltdownSeqs) : Infinity;
     const contributions = [];
-    const undoes = [];
+    const undoneDamage = new Set(matchUndoneDamage(allLogs.flatMap(log => log.events)).values());
     const add = (id, round, seq, pilot = false) =>
     {
         if (!id || id === victimTokenId || (sideOf.get(id) ?? 'player') === victimSide || (seq ?? 0) > cutoffSeq)
@@ -40,9 +69,10 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = nul
             if (ev.round > cutoffRound)
                 continue;
             if (ev.type === 'damage' && ev.targetId === victimTokenId)
-                add(ev.byId, ev.round, ev.seq, !!ev.pilotTokenId);
-            else if (ev.type === 'damage-undo' && ev.targetId === victimTokenId && ev.byId !== victimTokenId)
-                undoes.push({ id: ev.byId, round: ev.round });
+            {
+                if (!undoneDamage.has(ev))
+                    add(ev.byId, ev.round, ev.seq, !!ev.pilotTokenId);
+            }
             else if (ev.type === 'attack' && ev.byId !== victimTokenId)
             {
                 for (const target of ev.targets ?? [])
@@ -54,12 +84,6 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = nul
             else if (ev.type === 'action' && ev.category === 'save' && ev.byId === victimTokenId && ev.forcedBy)
                 add(ev.forcedBy, ev.round, ev.seq);
         }
-    }
-    for (const undo of undoes)
-    {
-        const idx = contributions.findIndex(entry => entry.id === undo.id && entry.round <= undo.round);
-        if (idx >= 0)
-            contributions.splice(idx, 1);
     }
     if (contributions.length === 0)
         return { killerId: null, killerTeam: 'unknown', assistIds: [], killerIsPilot: false, pilotAssistIds: [] };

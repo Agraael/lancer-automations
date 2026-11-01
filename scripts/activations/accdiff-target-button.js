@@ -7,6 +7,7 @@ import {
 } from '../interactive/canvas.js';
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { accDiffTargetInvisible } from '../combat/grid-helpers.js';
@@ -81,11 +82,13 @@ function swapHeaderIcon(state, $form)
     });
 }
 
+const attackTargetingOn = () => getModuleSetting('attackTargeting', 'auto') !== 'off';
+
 async function injectButton(state, $form)
 {
-    if (!getModuleSetting('enableAttackTargeting', true))
+    if (!attackTargetingOn())
         return;
-    $form = $form || $('form[id^="accdiff"]');
+    $form = $form || $(document.querySelectorAll('form[id^="accdiff"]'));
     if (!$form.length)
         return;
     if ($form.find('.la-accdiff-target-button').length)
@@ -103,7 +106,7 @@ async function injectButton(state, $form)
 
     if (!$row.length)
     {
-        const $section = $('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>');
+        const $section = $(htmlToElement('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>'));
         const $footer = $form.find('.accdiff-footer').first();
         if ($footer.length)
             $footer.before($section);
@@ -141,11 +144,11 @@ export function registerAccDiffTargetButton()
             let attackerMark = null;
             try
             {
-                injectWhenReady(state, () => $('form[id^="accdiff"]'), injectButton, 'targeting');
-                injectWhenReady(state, () => $('form[id^="accdiff"]'), swapHeaderIcon, 'weapon header icon');
-                injectWhenReady(state, () => $('form[id^="accdiff"]'), laInstallRollCardTags, 'roll card tags');
-                injectWhenReady(state, () => $('form[id^="accdiff"]'), laInstallRollCardHeader, 'roll card header');
-                if (getModuleSetting('enableAttackTargeting'))
+                injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), injectButton, 'targeting');
+                injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), swapHeaderIcon, 'weapon header icon');
+                injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), laInstallRollCardTags, 'roll card tags');
+                injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), laInstallRollCardHeader, 'roll card header');
+                if (attackTargetingOn())
                 {
                     const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
                     beginTargetSession(buildHitChanceFor(state), attackerToken); // shapes + live hit-% + distances
@@ -158,6 +161,7 @@ export function registerAccDiffTargetButton()
             }
             const hudResult = await original(state, options);
             // HUD closed (roll or cancel): stop the picker + drop shapes
+            state.__laHudClosed = true;
             try
             {
                 attackerMark?.destroy();
@@ -180,7 +184,7 @@ export function registerAccDiffTargetButton()
         // postFlow fires after roll; weapon-fx snapshots flow-state, so clearing here is safe.
         const clearTargetsAfterRoll = () =>
         {
-            if (!getModuleSetting('enableAttackTargeting'))
+            if (!attackTargetingOn())
                 return;
             if (!getModuleSetting('clearTargetsAfterRoll'))
                 return;

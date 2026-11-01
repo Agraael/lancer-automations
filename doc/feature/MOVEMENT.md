@@ -18,11 +18,11 @@ Lancer Automations ships its own token and canvas ruler, built around Lancer's s
 
 <img align="right" src="../img/mv-ruler.png" width="45%"/>
 
-Turn on **Enable Lancer Automations Ruler** (`enableBuiltinSpeedProvider`) and reload. It conflicts with the standalone lancer-speed-provider module: with both active, the compatibility check offers to disable my ruler, so uninstall or disable lancer-speed-provider if you want to keep mine.
+**Lancer ruler** (`enableBuiltinSpeedProvider`) is on by default. Changing it needs a reload. It conflicts with the standalone lancer-speed-provider module: with both active, the compatibility check offers to disable my ruler, so uninstall or disable lancer-speed-provider if you want to keep mine.
 
 While you drag a token, the ruler shows the **movement cost** and colors the path by **speed tier**: standard, boost, and over-boost (mechs with Overcharge, or NPCs with Limitless). Free and forced moves get their own colors. All five colors are set in **Ruler Colors**, in the **Colors** tab.
 
-Each waypoint label shows the running cost, the delta from your last click, an ↑/↓ elevation change, and a ⚠ marker on cells that cross difficult terrain. Turn on **Per-step Ruler Path** (`rulerPerStepRender`) to draw the path through each grid cell instead of a straight line.
+Each waypoint label shows the running cost, the delta from your last click, an ↑/↓ elevation change, and a ⚠ marker on cells that cross difficult terrain. **Per-step Ruler Path** (`rulerPerStepRender`, on by default) draws the path through each grid cell instead of a straight line.
 
 Status effects shape the tiers: **prone** halves speed, **slow** removes boost and over-boost, and **stunned**, **immobilized**, **shut down**, **down and out** or **dazed** stop movement entirely.
 
@@ -34,17 +34,31 @@ Status effects shape the tiers: **prone** halves speed, **slow** removes boost a
 
 ## How movement cost is figured
 
-**What you pay for.** Every step bills its horizontal distance plus its vertical distance, plus the worst difficult-terrain penalty on the cells it crosses. Climbing adds a surcharge on top of that vertical distance. **Difficult terrain** penalties are read from Terrain Height Tools, Grid-Aware Auras, TemplateMacro zones, and Foundry region *Modify Movement Cost* behaviors.
+Each step costs:
 
-Then it depends on the movement type:
+- its **horizontal** distance,
+- its **vertical** distance,
+- the worst **difficult-terrain** penalty on the cells it crosses (from Terrain Height Tools, Grid-Aware Auras, TemplateMacro zones, or Foundry region *Modify Movement Cost* behaviors).
 
-- **Walking** pays the climb surcharge: the first grid unit of a climb is free, every unit after it costs one extra. The vertical distance is billed either way, so a 3-unit climb costs 3 for the height and 2 for the surcharge, 5 in total. Flying, the climber status, and an elevation-immunity bonus all remove the surcharge.
-- **Flying** measures against the highest terrain it crosses and holds altitude over dips. No climb surcharge.
-- **Jumping** one cell across, rising no more than the token's SIZE (its Lancer size stat, in grid units), is a legal jump: it bills double the horizontal distance, the ascent is free, there is no climb surcharge, and only the landing cell's terrain penalty counts. A jump that goes further or higher is not legal and bills exactly like walking. Pathfinding and reach colors use the same pricing.
-- **Obstructions** (**Step Over Low Walls**, `enableObstructionStepOver`, on by default) apply to tokens of SIZE 2 and larger: the token stands on the lowest hex under its body, and terrain under it rising less than its SIZE never lifts or bills it. Passing over is free, but a move that ends on that terrain leaves the token standing on top. Terrain SIZE or taller mounts as usual. Only Ground mode uses the rule, so flying always mounts. SIZE 1 tokens and pilots always mount. The **No Step-over** toggles below it pick the NPC templates that always mount too: vehicles, squads, humans, and specialists by default. The `noObstructionPass` flag opts any token out. Both settings are in **Ruler & Measures → Lancer Automations Ruler**.
-- Gridless scenes are supported, sampling penalties along the line.
+By movement type:
 
-Elevation also feeds combat range checks (overwatch, engagement, range) if you enable **Count Elevation in Combat Distance** (`count3DDistance`), in **Combat & Movement → Movement & Boost**.
+- **Walking** adds a climb surcharge: the first unit of a climb is free, each unit after it costs 1 more. A 3-unit climb costs 5 (3 height + 2 surcharge). Flying, the climber status and an elevation immunity bonus remove the surcharge.
+- **Flying** follows the highest terrain it crosses and holds altitude over dips. No surcharge.
+- **Jumping** one cell across, rising no more than the token's SIZE, costs double the horizontal distance. The climb is free and only the landing cell's terrain counts. A longer or higher jump costs the same as walking.
+
+Pathfinding and reach colors use the same costs. Gridless scenes work too, sampling penalties along the line.
+
+### Low walls
+
+With **Step Over Low Walls** (`enableObstructionStepOver`, on by default), a SIZE 2+ token stands on the lowest hex under its body:
+
+- Terrain under it lower than its SIZE doesn't lift it or cost anything to cross.
+- Ending a move on that terrain puts the token on top.
+- Terrain as tall as its SIZE or taller is climbed as usual.
+
+It only applies in Ground mode. Flying tokens, SIZE 1 tokens and pilots always climb. The **No Step-over** toggles add NPC templates that always climb too (vehicles, squads, humans and specialists by default), and the `noObstructionPass` flag opts out any token. Both are in **Ruler & Measures → Lancer Automations Ruler**.
+
+Elevation also feeds combat range checks (overwatch, engagement, range) through **Count Elevation in Combat Distance** (`count3DDistance`, on by default), in **Combat & Movement → Movement & Boost**.
 
 The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras) and [Terrain Height Tools](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools), plus my [TemplateMacro](https://github.com/Agraael/templatemacro): set difficult terrain by painting it with THT, dropping a GAA aura, or placing a TemplateMacro zone, and the ruler bills the penalty as you cross it.
 
@@ -65,11 +79,11 @@ With Terrain Height Tools, the token also **auto-elevates** as you drag, on drop
 
 Press **Z** to swap them for the session. The badge on the last waypoint shows which one is active. You can turn auto-elevation off three ways:
 
-- **Globally** - **Disable Auto-elevation from Terrain** (`disableAutoTerrainElevation`).
-- **Measure ruler only** - **Disable Auto-elevation on Measure**.
+- **Globally** - **Terrain auto-elevation** (`terrainElevationMode`) set to **Off**.
+- **Measure ruler only** - the same setting set to **Move only**.
 - **One token** - its own **`disableAutoTerrainElevation`** flag, or Terrain Height Tools' own `ignoreAutoElevation`.
 
-**Auto-insert Climb Waypoints** (`enableClimbWaypoints`) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb. Fly only splits where it rises.
+**Auto-insert Climb Waypoints** (`enableClimbWaypoints`, on by default) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb. Fly only splits where it rises.
 
 <br clear="right"/>
 
@@ -130,4 +144,4 @@ History clears on combat start. Two extra world settings clear it at the end of 
 | **Split Movement at Speed Tiers** | Split a drag into sub-movements where the ruler speed tier changes. |
 | **Tactical Label Position** | Draws the distance label above or below the token. Defaults to below. |
 | **Minimum Label Zoom Scale** | Below this zoom level the label keeps a constant screen size. 0 = disabled. |
-| **Elevation Step (label)** | Round the label elevation delta to the nearest multiple of this. Ignored on gridless scenes. |
+| **Elevation rounding** | Round the label elevation delta to the nearest multiple of this. Ignored on gridless scenes. |

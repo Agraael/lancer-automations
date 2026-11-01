@@ -5,15 +5,16 @@ import { getDesiredWallHeight } from '../tools/token-height.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
+import { SNAPSHOT_STEP, flowChanges } from '../tah/tape-changes.js';
+import { recordAction } from '../tah/action-tape.js';
+import { isLancerActor } from '../utils/lancer-token.js';
 
 // Lancer system patches applied at init/ready, without editing the system bundle.
 
 // Schema extension: add `disabled` field to item data models
 
-/**
- * Inject `disabled` BooleanField into item schemas. Must be called during `init`.
- * Without this, `item.update({'system.disabled': true})` is silently ignored.
- */
+/** Inject a `disabled` BooleanField into item schemas during `init`, otherwise `system.disabled` updates are silently ignored. */
 export function injectDisabledSchemaField()
 {
     const BooleanField = foundry.data.fields.BooleanField;
@@ -168,7 +169,7 @@ async function snapshotPermanentEffects(state)
         .map(effect =>
         {
             const effectData = effect.toObject();
-            delete effectData.flags?.[MODULE_ID]?.repairKeep;
+            delete getLAFlags(effectData)?.repairKeep;
             const kept = durationEntries(effect).filter(entry => entry.label === 'permanent');
             const stack = Math.min(effectStack(effect), kept.reduce((total, entry) => total + (Number(entry.stack) || 1), 0));
             foundry.utils.setProperty(effectData, `flags.${MODULE_ID}.durationEntries`, kept);
@@ -195,7 +196,7 @@ async function restorePermanentEffects(state)
         await actor.createEmbeddedDocuments('ActiveEffect', missing, { keepId: true });
     for (const effectData of missing)
     {
-        const statDirect = effectData.flags?.[MODULE_ID]?.statDirect;
+        const statDirect = getLAFlags(effectData)?.statDirect;
         if (!statDirect?.key)
             continue;
         const current = Number(foundry.utils.getProperty(actor, statDirect.key)) || 0;
@@ -551,8 +552,8 @@ function _injectAmmoDisplay(jHtml, actor)
         if (item?.type !== 'mech_system')
             return;
 
-        const ammoArr = item.system?.ammo;
-        if (!ammoArr?.length)
+        const ammoList = item.system?.ammo;
+        if (!ammoList?.length)
             return;
 
         if ($(this).find('.la-ammo-display').length)
@@ -567,9 +568,9 @@ function _injectAmmoDisplay(jHtml, actor)
         const iconClass = _ammoActivationIcon(activation);
 
         let entries = '';
-        for (let i = 0; i < ammoArr.length; i++)
+        for (let i = 0; i < ammoList.length; i++)
         {
-            const ammo = ammoArr[i];
+            const ammo = ammoList[i];
             if (!ammo.name)
                 continue;
             const cost = ammo.cost ?? 1;
@@ -641,8 +642,8 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
         if (item?.type !== 'mech_system')
             return;
 
-        const ammoArr = item.system?.ammo;
-        if (!ammoArr?.length)
+        const ammoList = item.system?.ammo;
+        if (!ammoList?.length)
             return;
 
         if ($(this).find('.la-ammo-display').length)
@@ -666,9 +667,9 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
         }[activation] || 'la-bckg-action--free';
 
         let entries = '';
-        for (let i = 0; i < ammoArr.length; i++)
+        for (let i = 0; i < ammoList.length; i++)
         {
-            const ammo = ammoArr[i];
+            const ammo = ammoList[i];
             if (!ammo.name)
                 continue;
             const cost = ammo.cost ?? 1;
@@ -689,13 +690,13 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
                 </div>`;
         }
 
-        const $ammo = $(`
+        const $ammo = $(htmlToElement(`
             <div class="la-ammo-display la-effectbox la-bckg-card la-brdr-repcap -widthfull -fontsizemedium-bordersround-ltb">
                 <span class="la-effectbox__span clipped-bot la-bckg-primary la-text-header -fontsizesmall">AMMO</span>
                 <div class="la-flexcol -widthfull" style="padding:4px 8px;">
                     ${entries}
                 </div>
-            </div>`);
+            </div>`));
 
         $ammo.find('.la-ammo-use').on('click', function (ev)
         {
@@ -887,6 +888,15 @@ async function printAmmoCard(state)
     return true;
 }
 
+async function recordAmmoChip(state)
+{
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens?.()?.[0];
+    if (token)
+        await recordAction(token, { name: state.data.ammoName, activation: 'Free', icon: 'cci cci-ammo', item: state.item, changes: flowChanges({ state }, actor) });
+    return true;
+}
+
 export function registerUseAmmoFlow(flowSteps, flows)
 {
     flowSteps.set('lancer-automations:initUseAmmoData', initUseAmmoData);
@@ -895,16 +905,19 @@ export function registerUseAmmoFlow(flowSteps, flows)
     flowSteps.set('lancer-automations:checkAmmoItemLimited', checkAmmoItemLimited);
     flowSteps.set('lancer-automations:deductAmmoCost', deductAmmoCost);
     flowSteps.set('lancer-automations:printAmmoCard', printAmmoCard);
+    flowSteps.set('lancer-automations:recordAmmoChip', recordAmmoChip);
 
     flows.set('UseAmmoFlow', {
         name: 'Use Ammo',
         steps: [
             'lancer-automations:initUseAmmoData',
+            SNAPSHOT_STEP,
             'lancer-automations:checkAmmoItemDestroyed',
             'lancer-automations:checkAmmoItemDisabled',
             'lancer-automations:checkAmmoItemLimited',
             'lancer-automations:deductAmmoCost',
-            'lancer-automations:printAmmoCard'
+            'lancer-automations:printAmmoCard',
+            'lancer-automations:recordAmmoChip'
         ]
     });
 }
@@ -972,7 +985,7 @@ export async function patchStatRollCardTemplate()
     const path = 'systems/lancer/templates/chat/stat-roll-card.hbs';
     try
     {
-        let src = await fetch(path).then(r => r.text());
+        let src = await fetch(path).then(response => response.text());
         if (src.includes('embedButtons'))
             return; // already patched
         src = src.replace(
@@ -992,13 +1005,13 @@ export async function patchStatRollCardTemplate()
 // gen-control data attrs are handled by Lancer's sheet listeners.
 function _buildAmmoEditorHTML(item)
 {
-    const ammoArr = item.system?.ammo ?? [];
+    const ammoList = item.system?.ammo ?? [];
     const path = 'system.ammo';
 
     let ammoDetail = '';
-    for (let i = 0; i < ammoArr.length; i++)
+    for (let i = 0; i < ammoList.length; i++)
     {
-        const ammo = ammoArr[i];
+        const ammo = ammoList[i];
         ammoDetail += `
         <div class="card clipped" style="margin: 5px; padding: 10px; background: rgba(0,0,0,0.2);">
           <div class="flexrow" style="align-items: center; margin-bottom: 5px;">
@@ -1130,14 +1143,10 @@ const SYSTEM_FLOW_TYPES = new Set([
     'FullRepairFlow', 'OverheatFlow', 'StructureFlow', 'CascadeFlow',
     'SecondaryStructureFlow', 'BasicFlowType', 'dismembermentDamage',
     'secondary_structure', 'cascade',
-    // Add other system-native flow types here as needed
+    // Add other system-native flow types here
 ]);
 
-/**
- * Intercepts .flow-button clicks for module-registered flows that the system
- * doesn't know about (it only handles hardcoded types). Uses capture phase
- * to fire before the system's handler.
- */
+/** Intercepts .flow-button clicks for module-registered flows the system doesn't know, in the capture phase so it runs before the system's handler. */
 export function initCustomFlowDispatch()
 {
     document.body.addEventListener('click', (ev) =>
@@ -1212,9 +1221,7 @@ export function initCustomFlowDispatch()
     }, { capture: true });
 }
 
-/**
- * Call via API: game.modules.get(MODULE_ID).api.repairLCPData()
- */
+/** Call via API: game.modules.get(MODULE_ID).api.repairLCPData() */
 export async function repairLCPData()
 {
     if (!game.user.isGM)
@@ -1284,10 +1291,10 @@ export async function repairLCPData()
         const _lockedRe = /locked compendium/i;
         ui.notifications.error = (msg, opts) =>
         {
-            const s = typeof msg === 'string' ? msg : String(msg ?? '');
-            if (_lockedRe.test(s))
+            const msgStr = typeof msg === 'string' ? msg : String(msg ?? '');
+            if (_lockedRe.test(msgStr))
             {
-                console.warn('lancer-automations | suppressed:', s);
+                console.warn('lancer-automations | suppressed:', msgStr);
                 return null;
             }
             return _origError(msg, opts);
@@ -1678,8 +1685,6 @@ export const ItemDisabledAPI = {
     isDisableable,
 };
 
-const _HEIGHT_TARGET_TYPES = new Set(['mech', 'npc', 'pilot', 'deployable']);
-
 // On placement: auto-set wall-height tokenHeight, unless the prototype carries a manual non-zero value.
 Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
 {
@@ -1690,7 +1695,7 @@ Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
     if (!getModuleSetting('autoTokenHeight'))
         return;
     const actor = tokenDoc.actor;
-    if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type))
+    if (!isLancerActor(actor))
         return;
     if (Number(tokenDoc.flags?.['wall-height']?.tokenHeight ?? 0) !== 0)
         return;
@@ -1719,7 +1724,7 @@ export async function syncAllTokenHeights()
     const protoUpdates = [];
     for (const actor of game.actors)
     {
-        if (!_HEIGHT_TARGET_TYPES.has(actor.type))
+        if (!isLancerActor(actor))
         {
             protoSkipped++;
             continue;
@@ -1759,7 +1764,7 @@ export async function syncAllTokenHeights()
         for (const tokenDoc of scene.tokens)
         {
             const actor = /** @type {any} */ (tokenDoc).actor;
-            if (!actor || !_HEIGHT_TARGET_TYPES.has(actor.type))
+            if (!isLancerActor(actor))
             {
                 sceneSkipped++;
                 continue;

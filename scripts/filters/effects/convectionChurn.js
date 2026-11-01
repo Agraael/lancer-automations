@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_VNOISE } from '../filter-core.js';
 
 // FilterConvectionChurn: domain-warped noise drags the plating upward in circulation cells, so the
 // chassis reads as liquid turning over rather than solid metal.
@@ -16,14 +16,7 @@ uniform float rimGlow;
 uniform vec3 hotColor;
 uniform vec3 coolColor;
 uniform vec3 rimColor;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_VNOISE}
@@ -79,42 +72,15 @@ void main()
 }
 `;
 
-export class FilterConvectionChurn extends PIXI.Filter
+export class FilterConvectionChurn extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, convectionChurnFragment);
-
-        this.uniforms.hotColor = new Float32Array([1.0, 0.54, 0.12]);
-        this.uniforms.coolColor = new Float32Array([0.29, 0.16, 0.11]);
-        this.uniforms.rimColor = new Float32Array([1.0, 0.75, 0.42]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterConvectionChurn.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(convectionChurnFragment, params, {
+            hotColor: new Float32Array([1.0, 0.54, 0.12]),
+            coolColor: new Float32Array([0.29, 0.16, 0.11]),
+            rimColor: new Float32Array([1.0, 0.75, 0.42]),
+        });
     }
 
     get churnScale()
@@ -196,15 +162,6 @@ export class FilterConvectionChurn extends PIXI.Filter
     set rimColor(value)
     {
         new PIXI.Color(value).toRgbArray(this.uniforms.rimColor);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

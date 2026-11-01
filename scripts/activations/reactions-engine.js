@@ -1,7 +1,7 @@
 import { ReactionManager, stringToFunction, stringToAsyncFunction, ACTIVATION_TRIGGERS, BUILT_IN_TRIGGERS } from "./reaction-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
-import { MODULE_ID } from "../tools/constants.js";
+import { MODULE_ID, PILOT_LINKED_ITEM_TYPES, RUNS_ON_CHOICES } from "../tools/constants.js";
 import { displayReactionPopup, activateReaction } from "./reactions-ui.js";
 import { runInFlowBody } from "./flow-queue.js";
 import { getTokenOwnerUserId, startWaitCard } from "../interactive/index.js";
@@ -13,6 +13,7 @@ import { awaitPendingAck } from "../socket.js";
 import { isEnvironmentActor } from "../tools/template-actors.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { trackerSnapshot } from '../combat/action-extras.js';
 let reactionDebounceTimer = null;
 let reactionQueue = [];
 const REACTION_DEBOUNCE_MS = 100;
@@ -26,7 +27,24 @@ const TOKENLESS_TRIGGERS = new Set(['onRoundStart', 'onRoundEnd']);
 // Custom triggers are fired on purpose by their caller, who owns the combat gating.
 const firesRegardlessOfCombat = triggerType => COMBAT_INHERENT_TRIGGERS.has(triggerType) || !BUILT_IN_TRIGGERS.has(triggerType);
 const REACTION_ITEM_TYPES = new Set(["frame", "mech_system", "mech_weapon", "weapon_mod", "npc_feature", "pilot_gear", "talent", "bond"]);
+const PILOT_LINKED_TYPES = new Set(PILOT_LINKED_ITEM_TYPES);
+const RUNS_ON_VALUES = new Set(RUNS_ON_CHOICES);
 const sceneReactorMode = reaction => reaction.sceneReactor || 'off';
+
+export function isPilotToken(tokenOrActor)
+{
+    return (/** @type {any} */ (tokenOrActor)?.actor ?? tokenOrActor)?.type === 'pilot';
+}
+
+export function reactionRunsOnToken(reaction, token, item)
+{
+    if (!PILOT_LINKED_TYPES.has(item?.type))
+        return true;
+    const runsOn = RUNS_ON_VALUES.has(reaction?.runsOn) ? reaction.runsOn : 'mech';
+    if (runsOn === 'both')
+        return true;
+    return (runsOn === 'pilot') === isPilotToken(token);
+}
 const onViewedScene = reaction => !reaction.sceneId || reaction.sceneId === canvas.scene?.id;
 
 Hooks.on('lancer-automations.clearCaches', () =>
@@ -106,7 +124,7 @@ export function getReactionItems(token)
 
         if (pilot)
         {
-            const pilotItems = pilot.items.filter(item => REACTION_ITEM_TYPES.has(item.type));
+            const pilotItems = pilot.items.filter(item => PILOT_LINKED_TYPES.has(item.type));
             items = items.concat(pilotItems);
         }
     }
@@ -153,21 +171,6 @@ export function getReactionItems(token)
         items = items.concat([actorSurrogate(baseActor.uuid)]);
 
     return items;
-}
-
-function getCombatTokens()
-{
-    if (!game.combat)
-        return [];
-
-    return canvas.tokens.placeables.filter(token =>
-    {
-        if (!token.inCombat)
-            return false;
-        if (!token.actor)
-            return false;
-        return true;
-    });
 }
 
 function getAllSceneTokens()
@@ -247,6 +250,8 @@ async function _checkOnInitReactionsBody(token, filterItem = null)
                 continue;
             if (!reaction.onInit)
                 continue;
+            if (!reactionRunsOnToken(reaction, token, item))
+                continue;
 
             const reactionPath = reaction.reactionPath || "";
             if (!isItemAvailable(item, reactionPath))
@@ -314,6 +319,8 @@ export async function checkOnMessageReactions(token, itemLid, reactionPath, acti
                 if ((reaction.reactionPath || "") !== (reactionPath || ""))
                     continue;
                 if (!reaction.onMessage)
+                    continue;
+                if (!reactionRunsOnToken(reaction, token, item))
                     continue;
                 try
                 {
@@ -521,8 +528,8 @@ function getFlatGeneralReactions()
     {
         if (Array.isArray(entry.reactions))
         {
-            for (const subReaction of entry.reactions)
-                cachedFlatGeneralReactions.push([reactionName, { ...subReaction, enabled: subReaction.enabled ?? entry.enabled }]);
+            entry.reactions.forEach((subReaction, subIndex) =>
+                cachedFlatGeneralReactions.push([reactionName, { ...subReaction, enabled: subReaction.enabled ?? entry.enabled, _subIndex: subIndex }]));
         }
         else
             cachedFlatGeneralReactions.push([reactionName, entry]);
@@ -586,7 +593,7 @@ async function _beginFlow(flowName, target, options = {}, extraData = {})
     const FlowClass = game.lancer.flows.get(flowName);
     if (!FlowClass)
     {
-        ui.notifications.warn(`lancer-automations | Flow "${flowName}" not found.`);
+        ui.notifications.warn(localizeFormat('LA.notify.flowNotFoundPrefixed', { name: flowName }));
         return null;
     }
     const flow = new FlowClass(target, options);
@@ -653,12 +660,14 @@ export function _buildStartRelatedFlow(token, item, reaction, activationName, ex
     {
         if (_spendsReactionOnStart(reaction) && !extraData?.reactionConsumed)
         {
+            const before = trackerSnapshot(token?.actor);
             if (!(await consumeReaction(token)))
             {
                 ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token?.name ?? '?' }));
                 return false;
             }
-            extraData = { ...extraData, reactionConsumed: true };
+            const after = trackerSnapshot(token?.actor);
+            extraData = { ...extraData, reactionConsumed: true, reactionTracker: { before, after } };
         }
         if (item)
         {
@@ -689,12 +698,12 @@ export function _buildStartRelatedFlow(token, item, reaction, activationName, ex
         const actor = token?.actor;
         if (!actor)
         {
-            ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
+            ui.notifications.warn(localize('LA.notify.startRelatedFlowNoActor'));
             return;
         }
         const actionType = reaction?.actionType || 'Reaction';
         if (['Automatic', 'Other'].includes(actionType))
-            ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" will be launched but may not behave as expected.`);
+            ui.notifications.warn(localizeFormat('LA.notify.startRelatedFlowMayMisbehave', { type: actionType }));
         const name = activationName || 'Unknown';
         return executeSimpleActivation(actor, {
             title: name,
@@ -777,7 +786,7 @@ function _warnReactionConfigOnce(key, message)
     if (_laConfigWarnedSet.has(key))
         return;
     _laConfigWarnedSet.add(key);
-    ui.notifications.warn(`lancer-automations | ${message}`);
+    ui.notifications.warn(localizeFormat('LA.notify.prefixedWarning', { message }));
     console.warn(`lancer-automations | ${message}`);
 }
 
@@ -938,6 +947,11 @@ async function checkReactions(triggerType, data)
                 if (reaction.enabled === false)
                 {
                     dbgAuto('skip:', token.name, item.name, lid, 'reaction disabled');
+                    continue;
+                }
+                if (!reactionRunsOnToken(reaction, token, item))
+                {
+                    dbgAuto('skip:', token.name, item.name, lid, 'runs on', reaction.runsOn ?? 'mech');
                     continue;
                 }
 
@@ -1487,6 +1501,7 @@ async function checkReactions(triggerType, data)
                                 reactionName: entry.reactionName,
                                 itemName: entry.itemName,
                                 isGeneral: entry.isGeneral,
+                                subIndex: entry.isGeneral ? entry.reaction?._subIndex : undefined,
                                 triggerData: serializeTriggerData(entry.triggerData)
                             }))
                         };
@@ -1590,7 +1605,7 @@ export async function processEffectConsumption(triggerType, data)
         {
             const consumption = getLAFlags(effect)?.consumption;
             const trigger = consumption?.trigger;
-            if (!trigger)
+            if (!trigger || effect.disabled)
                 return false;
             return Array.isArray(trigger) ? trigger.includes(triggerType) : trigger === triggerType;
         });
@@ -1663,7 +1678,7 @@ export async function processEffectConsumption(triggerType, data)
     await Promise.all(consumptionPromises);
 }
 
-const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation', 'onEndActivation', 'onStatusApplied']);
+const _BATTLELOG_TELEMETRY_TRIGGERS = new Set(['onHit', 'onMiss', 'onTechHit', 'onTechMiss', 'onStructure', 'onStress', 'onDestroyed', 'onCheck', 'onActivation', 'onEndActivation', 'onStatusApplied', 'onDeploy']);
 
 export async function handleTrigger(triggerType, data)
 {
@@ -1700,7 +1715,7 @@ export async function dispatchCustomTrigger(name, data = {})
     const triggerType = typeof name === 'string' ? name.trim() : '';
     if (!triggerType || BUILT_IN_TRIGGERS.has(triggerType) || triggerType.startsWith('onInit'))
     {
-        ui.notifications.warn(`lancer-automations | dispatchCustomTrigger: "${name}" is not a valid custom trigger name.`);
+        ui.notifications.warn(localizeFormat('LA.notify.invalidCustomTrigger', { name }));
         return;
     }
     return handleTrigger(triggerType, (data && typeof data === 'object') ? data : {});
@@ -1737,12 +1752,12 @@ async function _handleTriggerBody(triggerType, data)
                 const actionType = actionData.action?.activation ?? actionData.type;
                 if (!actionType || ['Automatic', 'Other'].includes(actionType))
                 {
-                    ui.notifications.warn(`lancer-automations | startRelatedFlow: action type "${actionType}" cannot be re-launched as a flow.`);
+                    ui.notifications.warn(localizeFormat('LA.notify.startRelatedFlowCannotRelaunch', { type: actionType }));
                     return;
                 }
                 if (!actor)
                 {
-                    ui.notifications.warn('lancer-automations | startRelatedFlow: no actor found.');
+                    ui.notifications.warn(localize('LA.notify.startRelatedFlowNoActor'));
                     return;
                 }
                 return executeSimpleActivation(actor, {
@@ -1753,7 +1768,7 @@ async function _handleTriggerBody(triggerType, data)
                 });
             }
 
-            ui.notifications.warn('lancer-automations | startRelatedFlow: no item or action data available for this trigger.');
+            ui.notifications.warn(localize('LA.notify.startRelatedFlowNoData'));
         };
 
         const reactionsPromise = checkReactions(triggerType, data);

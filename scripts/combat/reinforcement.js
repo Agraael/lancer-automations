@@ -2,6 +2,7 @@
 
 import { getLAFlag, setLAFlag } from "../tools/flag-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { cancelButton } from "../tools/dialog-utils.js";
 import { isExecutorGM } from "../tools/misc-tools.js";
 
 export async function delayedTokenAppearance()
@@ -50,11 +51,7 @@ export async function delayedTokenAppearance()
                         resolve(parsedRounds);
                     }
                 },
-                cancel: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: localize("LA.common.cancel"),
-                    callback: () => resolve(null)
-                }
+                cancel: cancelButton(() => resolve(null))
             },
             default: "ok"
         }, {classes: ['lancer-dialog-base'] }).render(true);
@@ -142,7 +139,6 @@ export function initDelayedAppearanceHook()
 {
     Hooks.on("updateCombat", async (combat, changed, _options, _userId) =>
     {
-        // Only for GM and when round changes
         if (!isExecutorGM())
             return;
         if (!changed.round)
@@ -267,7 +263,6 @@ export function initDelayedAppearanceHook()
                 await originalToken.update({ hidden: false });
         }
 
-        // Process NPCs that were NOT selected - delete both placeholder and original token
         const notSelected = appearing.filter(appearance => !(Array.isArray(selectedToAppear) ? selectedToAppear : []).includes(appearance));
         for (let appearance of notSelected)
         {
@@ -296,7 +291,3 @@ export function initDelayedAppearanceHook()
         await setLAFlag(combat,"delayedAppearances", remaining);
     });
 }
-
-export const DelayedReinforcementAPI = {
-    delayedTokenAppearance
-};

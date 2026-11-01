@@ -2,6 +2,7 @@
 
 import { HudPanel } from './hud-panel.js';
 import { escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 function relTime(/** @type {number} */ timestamp)
 {
@@ -42,12 +43,11 @@ export class LogPanel extends HudPanel
             .slice(-40)
             .reverse();
 
-        const panel = $(`<div class="la-hud-panel la-hud-log-panel"></div>`);
+        const panel = $(htmlToElement(`<div class="la-hud-panel la-hud-log-panel"></div>`));
 
-        const header = $(`<div class="la-hud-col-label">Log · ${escapeHtml(token?.name ?? actor.name)}</div>`);
-        panel.append(header);
+        panel.append(htmlToElement(`<div class="la-hud-col-label">Log · ${escapeHtml(token?.name ?? actor.name)}</div>`));
 
-        const list = $(`<div class="la-hud-log-list"></div>`);
+        const list = $(htmlToElement(`<div class="la-hud-log-list"></div>`));
 
         if (!messages.length)
             list.append(`<div class="la-log-empty">No log entries.</div>`);
@@ -61,23 +61,15 @@ export class LogPanel extends HudPanel
                 const name = headerEl?.textContent?.trim() ?? 'Action';
                 const time = relTime(msg.timestamp);
 
-                const row = $(`<div class="la-log-row">` +
+                const row = $(htmlToElement(`<div class="la-log-row">` +
                     `<div class="la-log-row__head">` +
                     `<span class="la-log-row__name">${escapeHtml(name)}</span>` +
                     `<span class="la-log-row__time">${time}</span>` +
                     `</div>` +
                     `<div class="la-log-content">${msg.content}</div>` +
-                    `</div>`);
+                    `</div>`));
 
-                row.on('mouseenter', () =>
-                {
-                    this._cancelCollapse();
-                    row.css('background', '#ffe0e0');
-                });
-                row.on('mouseleave', () =>
-                {
-                    row.css('background', '');
-                });
+                row.on('mouseenter', () => this._cancelCollapse());
                 row.on('click', (ev) =>
                 {
                     ev.stopPropagation();

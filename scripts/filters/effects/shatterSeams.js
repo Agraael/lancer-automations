@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
 
 // FilterShatterSeams: openSeams on Voronoi plates instead of a square grid, so the shards are irregular.
 // jitter 0 collapses the sites back onto the grid and gives you squares again.
@@ -20,14 +20,7 @@ uniform vec2 lightDir;
 uniform vec3 lipColor;
 uniform float lipGain;
 uniform float lipW;
-uniform float opacity;
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_HASH2}
@@ -115,43 +108,16 @@ void main()
 }
 `;
 
-export class FilterShatterSeams extends PIXI.Filter
+export class FilterShatterSeams extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, shatterSeamsFragment);
-
-        this.uniforms.seamColor = new Float32Array([1.0, 0.0, 0.07]);
-        this.uniforms.seamCore = new Float32Array([1.0, 0.58, 0.50]);
-        this.uniforms.lipColor = new Float32Array([1.0, 0.93, 0.86]);
-        this.uniforms.lightDir = new Float32Array([0.707, -0.707]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterShatterSeams.defaults);
-
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(shatterSeamsFragment, params, {
+            seamColor: new Float32Array([1.0, 0.0, 0.07]),
+            seamCore: new Float32Array([1.0, 0.58, 0.50]),
+            lipColor: new Float32Array([1.0, 0.93, 0.86]),
+            lightDir: new Float32Array([0.707, -0.707]),
+        });
     }
 
     get blocks()
@@ -273,15 +239,6 @@ export class FilterShatterSeams extends PIXI.Filter
         const radians = (value * Math.PI) / 180;
         this.uniforms.lightDir[0] = -Math.sin(radians);
         this.uniforms.lightDir[1] = Math.cos(radians);
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

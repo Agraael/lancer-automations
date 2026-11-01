@@ -33,3 +33,9 @@ export function escapeHtml(value)
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 }
+
+export function signedNumber(value)
+{
+    const amount = Number(value) || 0;
+    return amount >= 0 ? `+${amount}` : `${amount}`;
+}

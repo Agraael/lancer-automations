@@ -8,9 +8,10 @@
 
 import { getActivationIcon } from '../tools/misc-tools.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
-import { damageBonusScope, normalizeBonusShape } from '../bonuses/genericBonuses.js';
+import { damageBonusScope, normalizeBonusShape, statBonusValueText } from '../bonuses/genericBonuses.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
 import { localize, escapeHtml } from '../tools/string-utils.js';
+import { htmlToElement } from '../tools/dom-utils.js';
 
 function activationChipContent(action)
 {
@@ -94,7 +95,7 @@ export function laBindPopupBehavior(popup)
  */
 export function laPositionPopup(popup, html)
 {
-    $('body').append(popup);
+    popup.appendTo(document.body);
     const dlg = html.closest('.app');
     const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
     const dlgWidth = dlg.outerWidth() ?? 480;
@@ -352,7 +353,7 @@ export function laRenderItemBonusTemplates(item)
  * @param {any} item
  * @returns {Promise<string>}
  */
-export async function laRenderItemExtras(item)
+export async function laRenderItemExtras(item, { attachments = true } = {})
 {
     if (!item)
         return '';
@@ -437,8 +438,11 @@ export async function laRenderItemExtras(item)
         }
     }
 
-    html += laRenderItemStatusTemplates(item);
-    html += laRenderItemBonusTemplates(item);
+    if (attachments)
+    {
+        html += laRenderItemStatusTemplates(item);
+        html += laRenderItemBonusTemplates(item);
+    }
 
     return html;
 }
@@ -564,12 +568,12 @@ function laRenderBonusList(bonuses)
             return `Accuracy +${bonus.val}`;
         if (kind === 'difficulty')
             return `Difficulty +${bonus.val}`;
+        if (kind === 'flat')
+            return `Flat ${statBonusValueText({ val: bonus.val })}`;
         if (kind === 'stat')
         {
             const name = (bonus.stat ?? bonus.id ?? '').split('.').pop() || kind;
-            if ((bonus.statMode || 'add') === 'replace')
-                return `${name} = ${bonus.val}`;
-            return `${name} ${Number.parseInt(bonus.val) >= 0 ? '+' : ''}${bonus.val}`;
+            return `${name} ${statBonusValueText(bonus)}`;
         }
         if (kind === 'damage')
         {
@@ -594,7 +598,9 @@ function laRenderBonusList(bonuses)
             return body;
         }
         if (kind === 'tag')
-            return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : 'Add'} Tag: ${bonus.tagName}${bonus.val ? ` ${bonus.val}` : ''}`;
+            return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : bonus.tagMode === 'at_least' ? 'At least' : 'Add'} Tag: ${bonus.tagName}${bonus.val ? ` ${bonus.val}` : ''}`;
+        if (kind === 'range' && bonus.rangeMode === 'at_least')
+            return `At least ${bonus.rangeType} ${bonus.val}`;
         if (kind === 'range')
         {
             // Lancer system format: range_types map + optional weapon_types/weapon_sizes filters
@@ -863,7 +869,7 @@ export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weap
     const themeColors = THEMES[theme] ?? THEMES.default;
     const displayTitle = title.toLowerCase().replaceAll(/\b\w/g, letter => letter.toUpperCase())
         .replace(/^[ivxl]+(?=:)/i, numeral => numeral.toUpperCase());
-    return $(`
+    return $(htmlToElement(`
         <div class="${cssClass}" style="position:fixed;z-index:10000;background:#181818;border:1px solid ${themeColors.border};border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
             <div style="background:linear-gradient(90deg,${themeColors.gradFrom},${themeColors.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${themeColors.headerBorder};border-radius:4px 4px 0 0;">
                 <div>
@@ -873,5 +879,5 @@ export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weap
                 <span class="la-detail-close" style="cursor:pointer;color:#aaa;font-size:0.95em;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.05);">✕</span>
             </div>
             <div style="padding:10px 12px;overflow-y:auto;max-height:400px;">${bodyHtml}</div>
-        </div>`);
+        </div>`));
 }

@@ -40,9 +40,52 @@ export function getFCSMode(fullKey, fcs)
 // Refresh FCS's in-memory map so a lock applies without a reload.
 function _livePatch(forced)
 {
-    const FCS = /** @type {any} */ (globalThis).ForceClientSettings;
+    const FCS = typeof ForceClientSettings === 'undefined' ? null : /** @type {any} */ (ForceClientSettings);
     if (FCS?.forced)
         FCS.forced = new Map(Object.entries(forced));
+}
+
+function _ownValue(fullKey, setting)
+{
+    const raw = globalThis.localStorage.getItem(fullKey);
+    if (raw === null)
+        return setting.default;
+    try
+    {
+        return JSON.parse(raw);
+    }
+    catch
+    {
+        return raw;
+    }
+}
+
+async function _storeForcedValue(fullKey)
+{
+    const setting = game.settings.settings.get(/** @type {any} */ (fullKey));
+    if (!setting)
+        return;
+    const forcedKey = `_${fullKey}`;
+    if (!game.settings.settings.has(/** @type {any} */ (`force-client-settings.${forcedKey}`)))
+    {
+        const data = /** @type {any} */ ({ ...setting, scope: 'world', config: false, onChange: null });
+        if (data.type instanceof foundry.data.fields.DataField)
+            data.type = Object.assign(Object.create(Object.getPrototypeOf(data.type)), data.type);
+        game.settings.register(/** @type {any} */ ('force-client-settings'), forcedKey, data);
+    }
+    await game.settings.set(/** @type {any} */ ('force-client-settings'), forcedKey, _ownValue(fullKey, setting));
+}
+
+export async function repairFCSForcedValues(fcs)
+{
+    if (!game.user?.isGM || !fcs)
+        return;
+    const world = game.settings.storage.get('world');
+    for (const fullKey of fcs.forced.keys())
+    {
+        if (!world?.getSetting(`force-client-settings._${fullKey}`))
+            await _storeForcedValue(fullKey);
+    }
 }
 
 /**
@@ -53,16 +96,7 @@ function _livePatch(forced)
  */
 export async function setFCSForce(fullKey, mode, fcs)
 {
-    if (!game.user?.isGM || !fcs)
-        return;
-    const forced = Object.fromEntries(fcs.forced);
-    if (mode === 'open')
-        delete forced[fullKey];
-    else
-        forced[fullKey] = { mode };
-    await game.settings.set('force-client-settings', 'forced', forced);
-    fcs.forced = new Map(Object.entries(forced));
-    _livePatch(forced);
+    await setFCSForceBulk([{ fullKey, mode }], fcs);
 }
 
 /**
@@ -78,9 +112,12 @@ export async function setFCSForceBulk(entries, fcs)
     for (const { fullKey, mode } of entries)
     {
         if (mode === 'open')
+        {
             delete forced[fullKey];
-        else
-            forced[fullKey] = { mode };
+            continue;
+        }
+        await _storeForcedValue(fullKey);
+        forced[fullKey] = { mode };
     }
     await game.settings.set('force-client-settings', 'forced', forced);
     fcs.forced = new Map(Object.entries(forced));

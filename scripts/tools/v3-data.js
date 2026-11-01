@@ -1,5 +1,10 @@
 import { untilEndOfTurn, untilStartOfTurn, untilEndOfRound, untilStartOfRound, untilEndOfEncounter } from '../bonuses/duration-builders.js';
-import { normalizeV3StatusId } from './v3-condition.js';
+import { normalizeV3StatusId, pilotOf, v3ConditionLabel } from './v3-condition.js';
+import { getLAFlag } from './flag-utils.js';
+import { MODULE_ID } from './constants.js';
+import { isWeaponItem } from '../utils/lancer-token.js';
+import { setItemFlag, unsetItemFlag } from '../socket.js';
+import { EXTRA_ACTION_KINDS } from '../combat/action-extras.js';
 
 const NPC_IMPORT_ID = "lancer-npc-import";
 const RESIST_DAMAGE_TYPES = ['burn', 'energy', 'explosive', 'heat', 'kinetic'];
@@ -8,6 +13,23 @@ const NON_PASSIVE_SEGMENTS = new Set(['actions', 'sub_actions', 'active_actions'
 const CORE_PASSIVE_KEYS = new Set(['passive_effects', 'active_effects', 'passive_bonuses', 'active_bonuses']);
 const FREQUENCY_PERIODS = { round: 'round', turn: 'turn', scene: 'combat', encounter: 'combat', mission: 'mission' };
 const DEFENSE_BONUS_IDS = new Set(['immunity', 'resistance']);
+const PILOT_EQUIPMENT_TYPES = new Set(['pilot_gear', 'pilot_armor', 'pilot_weapon']);
+const MECH_READS_PILOT_TYPES = new Set(['talent', 'core_bonus', 'reserve', ...PILOT_EQUIPMENT_TYPES]);
+const SKILLS = ['hull', 'agility', 'systems', 'engineering'];
+const ACCURACY_ROLL_TYPES = {
+    attack: ['attack'],
+    ranged: ['ranged', 'nexus'],
+    melee: ['melee'],
+    tech_attack: ['tech_attack'],
+    grapple: ['grapple'],
+    ram: ['ram'],
+    save: ['save'],
+    check: [...SKILLS, 'grit'].map(skill => `${skill}_check`),
+    ...Object.fromEntries(SKILLS.flatMap(skill => [[skill, [skill]], [`${skill}_check`, [`${skill}_check`]], [`${skill}_save`, [`${skill}_save`]]]))
+};
+const WEAPON_FILTERS = { weapon_types: 'weaponTypes', weapon_sizes: 'weaponSizes', range_types: 'weaponRangeTypes', damage_types: 'weaponDamageTypes' };
+const WEAPON_HOOK_PATH = /^(profiles\.\d+\.)?on_(hit|crit|attack|miss)(\.\d+)?$/;
+const HOOK_HIT_TYPES = { on_hit: 'hit', on_crit: 'crit', on_attack: 'hit', on_miss: 'miss' };
 
 export function getV3Data(item, options = {})
 {
@@ -111,6 +133,67 @@ function bonusRecordDefenses(record)
     return bonuses;
 }
 
+function recordFilters(record)
+{
+    return Object.fromEntries(Object.entries(WEAPON_FILTERS)
+        .filter(([field]) => Array.isArray(record[field]) && record[field].length)
+        .map(([field, key]) => [key, record[field]]));
+}
+
+function recordAccuracyBonus(record)
+{
+    const rollTypes = ACCURACY_ROLL_TYPES[String(record.id ?? '').toLowerCase()];
+    const net = (Number(record.accuracy) || 0) - (Number(record.difficulty) || 0);
+    if (!rollTypes || !net)
+        return null;
+    return { type: net > 0 ? 'accuracy' : 'difficulty', val: Math.abs(net), rollTypes, ...recordFilters(record) };
+}
+
+function recordStatMode(record)
+{
+    if (record.overwrite && record.replace)
+        return 'replace';
+    if (record.replace)
+        return 'replace_base';
+    return record.overwrite ? 'overwrite' : 'add';
+}
+
+function minRangeTypes(record)
+{
+    const listed = Array.isArray(record.range_types) && record.range_types.length ? record.range_types : ['Range', 'Threat'];
+    return listed.map(type => String(type).charAt(0).toUpperCase() + String(type).slice(1).toLowerCase());
+}
+
+const VALUE_BONUS_BUILDERS = {
+    threat: record => ({ type: 'range', rangeType: 'Threat', rangeMode: record.replace ? 'override' : 'add' }),
+    knockback: () => ({ type: 'tag', tagId: 'tg_knockback', tagName: 'Knockback', tagMode: 'add' }),
+    thrown: () => ({ type: 'tag', tagId: 'tg_thrown', tagName: 'Thrown', tagMode: 'at_least' }),
+    min_range: record => minRangeTypes(record).map(rangeType => ({ type: 'range', rangeType, rangeMode: 'at_least' })),
+    boost: () => ({ type: 'movement_extra', subtype: 'boost' }),
+    attack: () => ({ type: 'flat', rollTypes: ['ranged', 'melee', 'nexus'] }),
+    grapple: () => ({ type: 'flat', rollTypes: ['grapple'] }),
+    ram: () => ({ type: 'flat', rollTypes: ['ram'] }),
+    activations: record => ({ type: 'stat', stat: 'system.activations', statMode: recordStatMode(record) }),
+    heat_cap: record => ({ type: 'stat', stat: 'system.heat.max', statMode: recordStatMode(record) }),
+    extra_action: record =>
+    {
+        const kind = String(record.val).trim().toLowerCase();
+        return EXTRA_ACTION_KINDS.includes(kind) ? { type: 'action_extra', subtype: kind, val: 1 } : [];
+    }
+};
+
+function recordValueBonuses(record)
+{
+    const id = String(record.id ?? '').toLowerCase();
+    const build = VALUE_BONUS_BUILDERS[id];
+    if (!build || record.val === undefined || record.val === null || record.val === '')
+        return [];
+    const filters = recordFilters(record);
+    if (id === 'min_range')
+        delete filters.weaponRangeTypes;
+    return [build(record)].flat().map(bonus => ({ val: record.val, ...bonus, ...filters }));
+}
+
 function frequencyFields(frequency)
 {
     const period = FREQUENCY_PERIODS[frequency?.per];
@@ -121,27 +204,81 @@ function frequencyFields(frequency)
 
 function isPassiveBonusEntry(entry)
 {
-    return !entry.activation && !entry.save && !entry.attack && isPassiveLocation(entry.path);
+    return isPassiveLocation(entry.path);
 }
 
-function buildRow(item, entry, bonuses, { idSuffix = '', condition = null, duration = null } = {})
+function isPilotSide(item, entry)
+{
+    if (entry.pilot)
+        return true;
+    if (entry.mech)
+        return false;
+    return PILOT_EQUIPMENT_TYPES.has(item.type);
+}
+
+function ownerName(item, path)
+{
+    const [first, second] = String(path ?? '').split('.');
+    const system = item.system ?? {};
+    if (['traits', 'ranks', 'actions'].includes(first) && /^\d+$/.test(second ?? ''))
+        return system[first]?.[Number(second)]?.name ?? null;
+    if (first !== 'core_system')
+        return null;
+    const core = system.core_system ?? {};
+    return (String(second ?? '').startsWith('passive') ? core.passive_name : core.active_name) || core.name || null;
+}
+
+function buildRow(item, entry, bonuses, { idSuffix = '', condition = null, duration = null, bonusRecord = false } = {})
 {
     const id = `v3_${item.id}_${entry.path ? entry.path.replace(/\./g, '_') : 'root'}${idSuffix}`;
-    const name = entry.name || item.name;
+    const name = entry.name || ownerName(item, entry.path) || item.name;
     const dataSource = { uuid: item.uuid, name: item.name };
     const extra = { ...frequencyFields(entry.frequency), ...(condition ? { dataCondition: condition } : {}) };
     const bonus = bonuses.length === 1 ? { id, name, ...bonuses[0], ...extra, dataSource } : { id, name, type: 'multi', bonuses, ...extra, dataSource };
-    return { bonus, path: entry.path, condition, duration, reactionPath: String(entry.path ?? '').replace(/\.(\d+)/g, '[$1]') };
+    return { bonus, path: entry.path, condition, duration, reactionPath: String(entry.path ?? '').replace(/\.(\d+)/g, '[$1]'), pilotSide: isPilotSide(item, entry), bonusRecord };
 }
 
-const _defenseCache = new WeakMap();
+function bonusDamageScope(item, entry)
+{
+    if (entry.condition || entry.activation || entry.save || entry.attack)
+        return null;
+    const weapon = isWeaponItem(item);
+    if (WEAPON_HOOK_PATH.test(entry.path))
+        return weapon ? { itemId: item.id, hitType: HOOK_HIT_TYPES[entry.hook] } : null;
+    return isPassiveLocation(entry.path) ? { itemId: weapon ? item.id : null, hitType: null } : null;
+}
 
-export function v3DefenseBonuses(item)
+function damageBonusRows(item, entry)
+{
+    const scope = entry.bonusDamage?.length ? bonusDamageScope(item, entry) : null;
+    if (!scope)
+        return [];
+    return entry.bonusDamage.flatMap(record =>
+    {
+        const hitType = record.hitType ?? scope.hitType;
+        if (hitType === 'miss')
+            return [];
+        const bonus = {
+            type: 'damage',
+            damageMode: 'add',
+            damage: [{ val: String(record.val), type: record.type ?? null }],
+            ...(scope.itemId ? { itemId: scope.itemId } : {}),
+            ...(record.weaponTypes?.length ? { weaponTypes: record.weaponTypes } : {}),
+            ...(record.weaponSizes?.length ? { weaponSizes: record.weaponSizes } : {}),
+            ...(hitType === 'crit' ? { critOnly: true } : { defaultOff: true })
+        };
+        return [buildRow(item, entry, [bonus], { idSuffix: `_d${record.index}`, duration: entry.duration ?? null })];
+    });
+}
+
+const _rowCache = new WeakMap();
+
+export function v3DataRows(item)
 {
     const entries = item?.flags?.[NPC_IMPORT_ID]?.v3?.entries;
-    if (!Array.isArray(entries))
+    if (!Array.isArray(entries) || !(/** @type {any} */ (game.modules.get(NPC_IMPORT_ID))?.api?.getV3Data))
         return [];
-    const cached = _defenseCache.get(entries);
+    const cached = _rowCache.get(entries);
     if (cached)
         return cached;
     const built = [];
@@ -154,30 +291,43 @@ export function v3DefenseBonuses(item)
             if (bonuses.length)
                 built.push(buildRow(item, entry, bonuses, { duration: entry.duration ?? recordDuration }));
         }
+        built.push(...damageBonusRows(item, entry));
         if (!isPassiveBonusEntry(entry))
             continue;
         for (const { record, index } of v3EntryBonusRecords(entry))
         {
-            if (!DEFENSE_BONUS_IDS.has(record.id))
-                continue;
-            const bonuses = bonusRecordDefenses(record);
+            const rowOptions = { condition: record.condition ?? null, duration: entry.duration ?? null, bonusRecord: true };
+            const bonuses = DEFENSE_BONUS_IDS.has(record.id) ? bonusRecordDefenses(record) : [recordAccuracyBonus(record)].filter(Boolean);
             if (bonuses.length)
-                built.push(buildRow(item, entry, bonuses, { idSuffix: `_b${index}`, condition: record.condition ?? null, duration: entry.duration ?? null }));
+                built.push(buildRow(item, entry, bonuses, { idSuffix: `_b${index}`, ...rowOptions }));
+            recordValueBonuses(record).forEach((valueBonus, valueIndex) =>
+                built.push(buildRow(item, entry, [valueBonus], { idSuffix: `_b${index}v${valueIndex || ''}`, ...rowOptions })));
         }
     }
-    _defenseCache.set(entries, built);
+    _rowCache.set(entries, built);
     return built;
+}
+
+function actorReadsRow(actorType, row)
+{
+    if (actorType === 'pilot')
+        return row.pilotSide && !row.bonusRecord;
+    return actorType !== 'mech' || !row.pilotSide;
+}
+
+export function v3ActorRows(actor)
+{
+    const pilot = actor?.type === 'mech' ? pilotOf(actor) : null;
+    const pilotItems = [...(pilot?.items ?? [])].filter(item => MECH_READS_PILOT_TYPES.has(item.type));
+    return [...(actor?.items ?? []), ...pilotItems].flatMap(item => v3DataRows(item)
+        .filter(row => actorReadsRow(actor.type, row))
+        .map(row => ({ item, row })));
 }
 
 function v3EntryBonusRecords(entry)
 {
     return (entry.bonuses ?? []).map((record, index) => ({ record, index }))
         .filter(({ record }) => record && typeof record === 'object' && (!entry.condition || record.condition));
-}
-
-export function v3BonusRecords(item)
-{
-    return getV3Data(item).flatMap(entry => v3EntryBonusRecords(entry).map(({ record, index }) => ({ record, entry, path: entry.path, index, condition: record.condition ?? null })));
 }
 
 export function v3BonusDurationOptions(duration, token)
@@ -191,6 +341,56 @@ export function v3BonusDurationOptions(duration, token)
     return { duration: 'encounter' };
 }
 
+const REPLACED_FLAG = 'v3Replaced';
+
+function v3PathKey(path)
+{
+    return path === 'root' ? '' : String(path ?? '');
+}
+
+export function isV3DataReplaced(item, path)
+{
+    const target = v3PathKey(path);
+    const replaced = getLAFlag(item, REPLACED_FLAG);
+    return Array.isArray(replaced) && replaced.some(entry => entry === target || (entry !== '' && target.startsWith(`${entry}.`)));
+}
+
+export async function replaceV3Data(item, paths)
+{
+    if (!item?.setFlag)
+        return;
+    if (paths === undefined || paths === null)
+    {
+        console.warn('lancer-automations | replaceV3Data: no path given');
+        return;
+    }
+    const current = getLAFlag(item, REPLACED_FLAG) ?? [];
+    const next = [...new Set([...current, ...[paths].flat().map(v3PathKey)])];
+    if (next.length !== current.length)
+        await setItemFlag(item, MODULE_ID, REPLACED_FLAG, next);
+}
+
+export async function restoreV3Data(item, paths)
+{
+    if (!item?.setFlag)
+        return;
+    const current = getLAFlag(item, REPLACED_FLAG) ?? [];
+    if (paths === undefined)
+    {
+        if (current.length)
+            await unsetItemFlag(item, MODULE_ID, REPLACED_FLAG);
+        return;
+    }
+    const removed = new Set([paths].flat().map(v3PathKey));
+    const next = current.filter(entry => !removed.has(entry));
+    if (next.length !== current.length)
+        await setItemFlag(item, MODULE_ID, REPLACED_FLAG, next);
+}
+
 export const V3DataAPI = {
-    getV3Data
+    getV3Data,
+    v3ConditionLabel,
+    replaceV3Data,
+    restoreV3Data,
+    isV3DataReplaced
 };

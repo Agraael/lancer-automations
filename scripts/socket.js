@@ -1,6 +1,7 @@
 /* global game, canvas, fromUuid, ui, Dialog, HTMLVideoElement */
 
 import { displayReactionPopup, closeReactionPopupFromRemote } from './activations/reactions-ui.js';
+import { ReactionManager } from './activations/reaction-manager.js';
 import {
     applyKnockbackMoves, startChoiceCard,
     showUserIdControlledChoiceCard, resolveGMChoiceCard,
@@ -20,8 +21,7 @@ import { setEffect, setEffectOnDoc, removeEffectsByName, consumeEffectCharge } f
 import { performGMInputScan, performSystemScan, showSystemScanDialog } from './tools/scan.js';
 import { preLoadImageForAll } from './tools/wreck.js';
 import { executeStatRoll, getItemLID, isExecutorGM } from './tools/misc-tools.js';
-import { MODULE_ID } from './tools/constants.js';
-import { setLAFlag } from './tools/flag-utils.js';
+import { applyTapeOp } from './tah/tape-store.js';
 import { openDowntimeSummary, showDowntimeJournalPopup } from './tools/downtime.js';
 import { playTerminalIntro } from './Battelog/intro-terminal.js';
 import { openBattleLogRecap } from './Battelog/recap.js';
@@ -240,6 +240,7 @@ const HANDLERS = {
                 reactionName: reaction.reactionName,
                 itemName: reaction.itemName,
                 isGeneral: reaction.isGeneral,
+                reaction: reaction.isGeneral ? ReactionManager.getGeneralReaction(reaction.reactionName)?.reactions?.[reaction.subIndex] : undefined,
                 triggerData: deserializeTriggerData(reaction.triggerData),
             });
         }
@@ -254,7 +255,7 @@ const HANDLERS = {
 
     showDowntimeSummary: async (payload) =>
     {
-        if (game.users.activeGM?.id !== game.user.id)
+        if (!isExecutorGM())
             return;
         openDowntimeSummary(payload.pilotName, payload.summaryContent, payload.journalTemplate, payload.requestingUserId);
     },
@@ -631,6 +632,24 @@ const HANDLERS = {
     },
     updateActorSystemAck: ({ requestId }) => resolveAck(requestId),
 
+    createActorEffects: async (payload) =>
+    {
+        if (!isExecutorGM())
+            return;
+        try
+        {
+            const parent = await fromUuid(payload.uuid);
+            if (parent?.createEmbeddedDocuments && payload.effects?.length)
+                await parent.createEmbeddedDocuments('ActiveEffect', payload.effects);
+        }
+        catch (e)
+        {
+            console.warn('lancer-automations | createActorEffects GM-side failed:', e);
+        }
+        emitAck('createActorEffectsAck', payload.requestId);
+    },
+    createActorEffectsAck: ({ requestId }) => resolveAck(requestId),
+
     combatAction: async (payload) =>
     {
         if (!isExecutorGM())
@@ -650,11 +669,11 @@ const HANDLERS = {
                     if (combatant)
                         await /** @type {any} */ (combatant).modifyCurrentActivations(payload.delta);
                 }
-                else if (payload.method === 'writeActionTape')
+                else if (payload.method === 'tapeOp')
                 {
                     const combatant = combat.combatants.get(payload.combatantId);
                     if (combatant)
-                        await setLAFlag(combatant, 'actionTape', payload.entries);
+                        await applyTapeOp(combatant, payload.op);
                 }
             }
         }

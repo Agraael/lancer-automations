@@ -14,7 +14,8 @@ import {
 } from "./canvas-helpers.js";
 import { computeArea, rotationStepsFor } from "./area-geometry.js";
 import { playUiSound, playTargetingMove } from "../tah/sound.js";
-import { keyCodesFor } from "./keybindings.js";
+import { eventMatchesKeybind, isTypingTarget } from "./keybindings.js";
+import { isTokenVisible } from "../utils/lancer-token.js";
 
 function elevText(elevation)
 {
@@ -194,16 +195,18 @@ export function createPlacedShapeStore()
             ensureContainer();
             const nodes = drawShapeNodes(result);
             const shapeLabels = buildAreaLabels(result);
-            shapes.push({ cells: [...result.affected], labels: shapeLabels, nodes });
+            const originOffset = result.labelPt ? pixelToOffset(result.labelPt.x, result.labelPt.y) : null;
+            const origin = originOffset ? `${originOffset.col},${originOffset.row}` : null;
+            shapes.push({ cells: [...result.affected], origin, labels: shapeLabels, nodes });
             rebuildMirrors();
             return shapeLabels;
         },
-        // Remove the most-recent placed shape whose footprint includes cellKey ("col,row").
+        // Remove the most-recent placed shape whose footprint or origin is cellKey ("col,row").
         removeAt(cellKey)
         {
             for (let index = shapes.length - 1; index >= 0; index--)
             {
-                if (!shapes[index].cells.includes(cellKey))
+                if (!shapes[index].cells.includes(cellKey) && shapes[index].origin !== cellKey)
                     continue;
                 const [removed] = shapes.splice(index, 1);
                 for (const node of removed.nodes)
@@ -251,6 +254,7 @@ export function createShapePlacement(options = {})
         casterToken = null,
         includeSelf = true,
         includeHidden = true,
+        visibleOnly = false,
         getToggles = () => ({ elevationAware: true, autoElevation: true, propagation: true }),
         multiStack = true,
         highlightCaught = true,
@@ -302,7 +306,7 @@ export function createShapePlacement(options = {})
     });
 
     const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
-    const plus = createMultiPlusIndicator();
+    const plus = multiStack && resolveOnClick ? createMultiPlusIndicator() : null;
     const selectHighlight = new PIXI.Graphics();
     canvas.stage.addChild(selectHighlight).eventMode = 'none';
     const elevLabel = makeText('', {
@@ -333,6 +337,7 @@ export function createShapePlacement(options = {})
             elevationAware: !!toggles.elevationAware,
             propagation: !!toggles.propagation,
             includeHidden: includeHidden && game.user.isGM,
+            visibleOnly,
             includeSelf,
             casterToken,
         };
@@ -350,6 +355,8 @@ export function createShapePlacement(options = {})
     const tokenUnderCursor = (tx, ty) => canvas.tokens.placeables.find(placeable =>
     {
         if (placeable.document.hidden && !(includeHidden && game.user.isGM))
+            return false;
+        if (visibleOnly && !isTokenVisible(placeable))
             return false;
         if (!includeSelf && casterToken && placeable.id === casterToken.id)
             return false;
@@ -447,7 +454,7 @@ export function createShapePlacement(options = {})
             return;
         disposed = true;
         disposeCursorPreview();
-        plus.dispose();
+        plus?.dispose();
         destroyGraphics(selectHighlight);
         destroyGraphics(elevLabel);
         clearCellLabels();
@@ -477,7 +484,7 @@ export function createShapePlacement(options = {})
         const { x: tx, y: ty } = pointerToWorld(event);
         lastCursor = { x: tx, y: ty };
         drawAt(tx, ty);
-        plus.move(multiStack && isShiftDown(event), tx, ty);
+        plus?.move(isShiftDown(event), tx, ty);
         if (soundOn())
         {
             const offset = pixelToOffset(tx, ty);
@@ -525,6 +532,8 @@ export function createShapePlacement(options = {})
     let lastRotTime = 0;
     const wheelHandler = (event) =>
     {
+        if (event.target?.id !== 'board')
+            return;
         if (onResize && event.shiftKey)
         {
             event.preventDefault();
@@ -533,10 +542,12 @@ export function createShapePlacement(options = {})
             playSound('targeting');
             return;
         }
-        if (!isAimed || !event.ctrlKey)
+        if (!(game.keyboard?.isModifierActive?.('CONTROL') ?? event.ctrlKey))
             return;
         event.preventDefault();
         event.stopPropagation();
+        if (!isAimed)
+            return;
         const direction = event.deltaY > 0 ? 1 : -1;
         const now = event.timeStamp || 0;
         if (direction === lastRotDir && (now - lastRotTime) < ROT_RESET_MS)
@@ -550,14 +561,9 @@ export function createShapePlacement(options = {})
         bumpRotation(direction * step);
     };
 
-    const ascendKeys = keyCodesFor('elevationUp');
-    const descendKeys = keyCodesFor('elevationDown');
-    const tiltUpKeys = keyCodesFor('lineTiltUp');
-    const tiltDownKeys = keyCodesFor('lineTiltDown');
-    const resetKeys = keyCodesFor('resetShape');
     const keyHandler = (event) =>
     {
-        if (shouldIgnoreKey(event))
+        if (shouldIgnoreKey(event) || isTypingTarget(event.target))
             return;
         if (event.key === 'Escape')
         {
@@ -566,7 +572,7 @@ export function createShapePlacement(options = {})
             onCancel();
             return;
         }
-        if (resetKeys.has(event.code))
+        if (eventMatchesKeybind(event, 'resetShape'))
         {
             suppressEvent(event);
             pendingElevOffset = 0;
@@ -577,21 +583,22 @@ export function createShapePlacement(options = {})
             playSound('targeting');
             return;
         }
-        if (pattern === 'line' && (tiltUpKeys.has(event.code) || tiltDownKeys.has(event.code)))
+        const tiltUp = eventMatchesKeybind(event, 'lineTiltUp');
+        if (pattern === 'line' && (tiltUp || eventMatchesKeybind(event, 'lineTiltDown')))
         {
             suppressEvent(event);
             if (ctx().elevationAware)
             {
-                pendingTilt += tiltUpKeys.has(event.code) ? 1 : -1;
+                pendingTilt += tiltUp ? 1 : -1;
                 refresh();
                 playSound('targeting');
             }
             return;
         }
         let step = 0;
-        if (ascendKeys.has(event.code))
+        if (eventMatchesKeybind(event, 'elevationUp'))
             step = 1;
-        else if (descendKeys.has(event.code))
+        else if (eventMatchesKeybind(event, 'elevationDown'))
             step = -1;
         if (step === 0)
             return;

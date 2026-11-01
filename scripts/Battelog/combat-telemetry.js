@@ -26,6 +26,15 @@
  * @property {ActionCategory} category
  * @property {string} name                    hull|agi|sys|eng for saves and checks; label otherwise
  * @property {boolean} success
+ * @property {string} [tapeId]
+ */
+
+/**
+ * @typedef {Object} ActionUndoEvent
+ * @property {'action-undo'} type
+ * @property {number} round
+ * @property {string} byId
+ * @property {string} tapeId
  */
 
 /**
@@ -38,6 +47,8 @@
  * @property {string} weaponName
  * @property {'Ranged'|'Melee'|'Tech'|null} [attackType]
  * @property {boolean} [basic]                true for BASIC ATTACK / BASIC TECH (not a real weapon)
+ * @property {string} [rollId]                shared by the hit and miss events of one roll
+ * @property {string} [tapeId]
  * @property {Array<{targetId: string, hit: boolean, defense: 'evasion'|'edef', crit?: boolean, roll?: number}>} targets
  */
 
@@ -53,6 +64,8 @@
  * @property {number} overshieldAbsorbed
  * @property {number} armorAbsorbed
  * @property {boolean} [manual]               GM edit detected at tick, not a damage card
+ * @property {'burn'|'infection'} [dotTick]
+ * @property {boolean} [dotCredit]
  */
 
 /**
@@ -64,6 +77,31 @@
  * @property {string} targetId
  * @property {number} hpRestored
  * @property {number} overshieldRestored
+ * @property {number} [burnRemoved]
+ * @property {number} [infectionRemoved]
+ * @property {boolean} [matched]
+ * @property {string|null} [undoneById]
+ * @property {string|null} [undonePilotTokenId]
+ */
+
+/**
+ * @typedef {Object} DotAddedEvent
+ * @property {'dot-added'} type
+ * @property {number} round
+ * @property {string|null} byId
+ * @property {string} targetId
+ * @property {'burn'|'infection'} kind
+ * @property {number} amount
+ * @property {string} [pilotTokenId]
+ */
+
+/**
+ * @typedef {Object} DotChangeEvent
+ * @property {'dot-change'} type
+ * @property {number} round
+ * @property {string} tokenId
+ * @property {'burn'|'infection'} kind
+ * @property {number} value
  */
 
 /**
@@ -138,10 +176,33 @@
  */
 
 /**
+ * @typedef {Object} StatusEvent
+ * @property {'status'} type
+ * @property {number} round
+ * @property {string} byId
+ * @property {string} targetId
+ * @property {string} statusId
+ * @property {string} [tapeId]
+ */
+
+/**
+ * @typedef {Object} DeployEvent
+ * @property {'deploy'} type
+ * @property {number} round
+ * @property {string} byId
+ * @property {number} count
+ * @property {string} name
+ * @property {string} [tapeId]
+ */
+
+/**
  * @typedef {ActionEvent
+ *   | ActionUndoEvent
  *   | AttackEvent
  *   | DamageEvent
  *   | DamageUndoEvent
+ *   | DotAddedEvent
+ *   | DotChangeEvent
  *   | MoveEvent
  *   | StatTickEvent
  *   | StructureLossEvent
@@ -149,6 +210,8 @@
  *   | GearLostEvent
  *   | DestroyedEvent
  *   | MeltdownEvent
+ *   | StatusEvent
+ *   | DeployEvent
  * } TelemetryEvent
  */
 
@@ -172,8 +235,6 @@
  * @property {CombatantLog[]} [secrets]
  */
 
-export const ACTION_CATEGORIES = /** @type {ActionCategory[]} */ (['skill', 'check', 'save', 'defensive', 'utility']);
-export const DAMAGE_TYPES = /** @type {DamageType[]} */ (['kinetic', 'energy', 'explosive', 'variable', 'heat', 'burn', 'infection']);
 export const DOT_TYPES = /** @type {DamageType[]} */ (['burn', 'infection']);
 export const SAVE_KINDS = /** @type {const} */ (['hull', 'agi', 'sys', 'eng']);
-export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed', 'meltdown'];
+export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'action-undo', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed', 'meltdown', 'status', 'deploy', 'dot-added', 'dot-change'];

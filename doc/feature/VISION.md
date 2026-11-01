@@ -32,7 +32,7 @@ From code, [`hasLineOfSight`](../API_SPATIAL.md#line-of-sight) runs the same tes
 2. Give the scene walls. No walls, nothing blocks. Place them by hand, generate them with [Terrain Height Tools](https://github.com/Wibble199/FoundryVTT-Terrain-Height-Tools), or use the auto wall generation in [my fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools).
 3. Decide which walls count. By default LA reads walls that block Sight **and** any wall flagged **Blocks LA Line of Sight**. **`lancerLosFlagOnly`** narrows that to flagged walls only, so you can wall a map for gameplay without blocking vision and light. See [LA-only walls](#la-only-walls).
 4. Pick a height rule. **`lancerLosHeightRule`** is either **Discrete**, which follows the size rules, or **Trigonometric**, which follows the real sightline so peeks over walls fade with distance. It changes results more than anything else here.
-5. Check the result with **`lancerLosDebug`**, which draws every tested sightline from the controlled tokens. It's heavy, leave it off in play.
+5. Check the result with **Line of sight debug overlay** (**`lancerLosDebug`**, Debug tab), which draws every tested sightline from the controlled tokens. It's heavy, leave it off in play.
 
 ---
 
@@ -68,7 +68,7 @@ Icons along a line mark what it crosses: terrain (THT), auras (Grid Aware Auras)
 
 ## Range pulse line of sight
 
-**`rangePulseLos`** clips every range pulse (targeting, pickers, deploy, zones, Advanced Measure, hover previews) to what its origin token can see, with the same wall rules as Lancer line of sight. Arcing / Seeking weapons stay unclipped. Each pulse gets a **Line of sight** toggle, and the interactive tools take a `los` option.
+**`rangePulseLos`** (on by default) clips every range pulse (targeting, pickers, deploy, zones, Advanced Measure, hover previews) to what its origin token can see, with the same wall rules as Lancer line of sight. Arcing / Seeking weapons stay unclipped. Each pulse gets a **Line of sight** toggle, and the interactive tools take a `los` option.
 
 ---
 
@@ -78,7 +78,7 @@ Icons along a line mark what it crosses: terrain (THT), auras (Grid Aware Auras)
 
 Experimental. Vanilla Foundry checks line of sight from a token's center. **`visionFromEdgeEnabled`** instead samples it from points around the token's perimeter, so a large token can see and be seen around a corner. A per-token override lives in the Token Config Vision tab.
 
-Tune it with the **Sample Density** (`visionFromEdgeSampleMode`), which has six choices: 4 (corners only), 8 (corners + edge midpoints), 16 (dense perimeter), **Token shape corners (recommended)** (the default), Token shape corners x2, and Adaptive. The **Sample Offset (px)** (`visionFromEdgeSampleOffset`) moves the points off the token edge, from -50 to 50, positive outsets and negative insets. **`visionFromEdgeDebug`** draws the sample points on the canvas. With Wall Height, the samples respect elevation barriers.
+Tune it with the **Sample Density** (`visionFromEdgeSampleMode`), which has six choices: 4 (corners only), 8 (corners + edge midpoints), 16 (dense perimeter), **Token shape corners (recommended)** (the default), Token shape corners x2, and Adaptive. The **Sample Offset (px)** (`visionFromEdgeSampleOffset`) moves the points off the token edge, from -50 to 50, positive outsets and negative insets. **Vision From Edge Overlay** (**`visionFromEdgeDebug`**, Debug tab) draws the sample points on the canvas. With Wall Height, the samples respect elevation barriers.
 
 <br clear="right"/>
 
@@ -98,7 +98,7 @@ With **Wall Height** installed it's elevation-aware: the blocking edge sits slig
 
 ## Token height (Wall Height)
 
-For the elevation-aware blocking above to work, tokens need a height. **Auto Token Height (Wall Height)** (`autoTokenHeight`, in the Vision tab under **Token Height (Wall Height)**) sets each token's Wall-Height height to its size, so it peeks over walls and tokens of its own size.
+For the elevation-aware blocking above to work, tokens need a height. **Auto Token Height (Wall Height)** (`autoTokenHeight`, on by default, in the Vision tab under **Token Height (Wall Height)**) sets each token's Wall-Height height to its size, so it peeks over walls and tokens of its own size.
 
 **Vehicle & Squad Height Adjustments** (`autoTokenHeightVehicleSquad`) lowers that for vehicles and squads (my own interpretation of their heights, not an official rule), and the **Apply Token Heights to All Actors** button writes it onto every existing actor and token at once.
 
@@ -113,7 +113,7 @@ Two detection modes, auto-added to tokens on creation (`lancerVisionAutoAdd`):
 - **Sensors** - blue scanlines, ranged to the actor's `sensor_range`, a precise read of who's on sensors.
 - **Battlefield Awareness** - a fuzzy yellow silhouette at infinite range, for "you know something's there."
 
-When both could see a target, **Sensors win**. Both are limited to combat out of the box (**Sensor: Combat Only** / **Awareness: Combat Only**, `lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`, on by default), and either can read its range from the token's detection-mode entry (`...UseModeRange`).
+When both could see a target, **Sensors win**. Either can be limited to combat (**Sensor: Combat Only** / **Awareness: Combat Only**, `lancerSensorCombatOnly` / `lancerAwarenessCombatOnly`, off by default), and either can read its range from the token's detection-mode entry (`...UseModeRange`).
 
 A per-token **Detection Visual** (Token Config **L.A** tab) sets how a token reads: **Default**, **Simple Object**, **Visible**, or **Ignore** - any non-default also turns Sensors off for it.
 
@@ -133,7 +133,7 @@ The sweep rides the contour in every style. Per-token **Detection Visual** still
 
 ## Drag vision
 
-While a token is dragged, its vision can be shrunk so you don't reveal new map as you move. **`dragVisionMultiplier`** sets how much (1 = full, 0 = none), read as a ratio of the current radius or a flat range depending on **`dragVisionMode`**.
+While a token is dragged, its vision can be shrunk so you don't reveal new map as you move. **`dragVisionMode`** picks how: **Full** (default) keeps it, **Scaled** multiplies the radius by **`dragVisionMultiplier`** (1 = full, 0 = none), and **Capped** uses it as a flat range.
 
 ---
 

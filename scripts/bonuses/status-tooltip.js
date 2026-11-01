@@ -1,22 +1,31 @@
 // Shared status tooltip. The canvas icon hover and the status wheel render the same markup so an
 // effect reads identically wherever it is hovered.
-import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo } from './genericBonuses.js';
+import { getGlobalBonuses, getBonusDetailString, getBonusUsesInfo, itemAttachmentOrigin, attachmentOrigin, getBonusIcon } from './genericBonuses.js';
 import { linkedBonusConditionLines, linkedBonusFrequencyLabel, linkedBonusHasLambdaGate } from './bonus-condition.js';
 import { getLAFlags } from '../tools/flag-utils.js';
-import { effectStack, isUsageEffect, roundBadgeColor } from './flagged-effects.js';
-import { durationEntries, roundsLeft } from './duration-clock.js';
+import { effectStack, isUsageEffect, roundBadgeColor, iconGroupOf } from './flagged-effects.js';
+import { durationEntries, roundsLeft, ANY_TURN_LABELS } from './duration-clock.js';
 import { localize, escapeHtml } from '../tools/string-utils.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { VALUE_STATUS_PATHS } from '../utils/lancer-token.js';
+
+const VALUE_STATUS_COLORS = { burn: '#d74242', overshield: '#60a5fa', infection: '#1a8a3a' };
 
 /**
  * @typedef {Object} StatusTooltipData
  * @property {string} name
  * @property {number} [count]
+ * @property {number|null} [value] - Current Burn, Overshield or Infection.
+ * @property {string} [valueColor]
+ * @property {string} [core] - Name of the frame's core power.
  * @property {string} [duration]
  * @property {string} [bonus]
  * @property {string} [frequency] - How often the bonus may apply, empty when unlimited.
  * @property {string[]} [conditional] - Gate lines of the linked bonus, non-empty means gated.
  * @property {string} [source] - Name of the item or actor it comes from.
+ * @property {'hand'|'automation'|'unknown'|null} [origin]
  * @property {boolean} [off] - A data bonus switched off on this token.
+ * @property {boolean} [replaced]
  * @property {string} [condition]
  * @property {boolean} [conditionMet]
  * @property {string} [description] - Trusted HTML, comes from effect/status config.
@@ -30,7 +39,7 @@ function bestTurnEntry(effect)
     let best = null;
     for (const entry of durationEntries(effect))
     {
-        if ((entry.label === 'end' || entry.label === 'start') && Number(entry.turns) > 0)
+        if ((entry.label === 'end' || entry.label === 'start' || ANY_TURN_LABELS.has(entry.label)) && Number(entry.turns) > 0)
         {
             if (!best || Number(entry.turns) < best.turns)
                 best = { label: entry.label, turns: Number(entry.turns) };
@@ -48,13 +57,12 @@ export function remainingTurns(effect)
 /** Same value the blue token badge draws: the stack total, or the instance count for charge carriers. */
 export function instanceCount(actor, effect)
 {
-    const name = effect?.name;
-    if (!actor || !name)
+    if (!actor || !effect?.name)
         return 0;
-    const sameName = [...actor.effects].filter(entry => !entry.disabled && entry.name === name);
-    if (sameName.some(isUsageEffect))
-        return sameName.length;
-    return sameName.reduce((total, entry) => total + effectStack(entry), 0);
+    const group = iconGroupOf(actor, effect);
+    if (group.some(isUsageEffect))
+        return group.length;
+    return group.reduce((total, entry) => total + effectStack(entry), 0);
 }
 
 function plural(count, word)
@@ -88,6 +96,12 @@ function durationLine(entry, holderIds)
         const count = Number.isFinite(turns) ? ` (${plural(turns, 'turn')})` : '';
         const own = !entry.originID || holderIds.has(entry.originID);
         return { text: `${entry.label === 'end' ? 'End' : 'Start'} of ${own ? 'own turn' : 'turn'}${count}`, whose: own ? null : tokenName(entry.originID), round: false };
+    }
+    if (ANY_TURN_LABELS.has(entry.label))
+    {
+        const turns = Number(entry.turns);
+        const count = Number.isFinite(turns) ? ` (${plural(turns, 'turn')})` : '';
+        return { text: `${entry.label === 'anyTurnEnd' ? 'End' : 'Start'} of any turn${count}`, whose: null, round: false };
     }
     if (entry.label === 'roundEnd' || entry.label === 'roundStart')
     {
@@ -144,7 +158,7 @@ export function durationHtml(effect)
 
 /**
  * Detail line for the global bonus an effect is linked to, empty when it is not linked to one.
- * Uses are summed across the same-name effects that collapse into one icon.
+ * Uses are summed across the effects that collapse into one icon.
  */
 export function linkedBonusText(actor, effect)
 {
@@ -165,10 +179,8 @@ function _collapsedUses(actor, effect, bonus, bonuses)
         return base;
     let remaining = 0;
     let max = 0;
-    for (const entry of actor.effects)
+    for (const entry of iconGroupOf(actor, effect))
     {
-        if (entry.disabled || entry.name !== effect.name)
-            continue;
         const linked = bonuses.find(candidate => candidate.id === getLAFlags(entry)?.linkedBonusId);
         if (linked?.uses === undefined)
             continue;
@@ -191,6 +203,27 @@ export function bonusText(bonus, actor = null, uses = getBonusUsesInfo(actor, bo
     return `${detail} <span class="la-status-tooltip-uses">[${uses.label}]</span>${uses.onUse ? ' [on-use]' : ''}`;
 }
 
+const ATTACHMENT_OWNERS = { mech: 'mech', pilot: 'pilot', npc: 'NPC', deployable: 'deployable' };
+const ORIGIN_LINES = { hand: 'Added by hand.', automation: 'Added by automation.' };
+
+export function itemAttachmentChips(item)
+{
+    if (item?.documentName !== 'Item')
+        return [];
+    const owner = ATTACHMENT_OWNERS[item.parent?.type] ?? 'actor';
+    const bonuses = /** @type {any[]} */ (getLAFlags(item)?.bonusTemplates ?? []).map(template =>
+    {
+        const bonus = template.bonusData ?? {};
+        const icon = bonus.icon || getBonusIcon(bonus);
+        const text = bonusText(bonus, null, null);
+        return { kind: 'bonus', origin: attachmentOrigin(template.addOptions?.addedViaUI), ...(String(icon).includes('/') ? { img: icon } : { icon }), title: bonus.name || text, text, tip: `${escapeHtml(text)}.` };
+    });
+    const statuses = /** @type {any[]} */ ([...(item.effects ?? [])])
+        .filter(effect => getLAFlags(effect)?.isItemTemplate === true)
+        .map(effect => ({ kind: 'status', origin: attachmentOrigin(getLAFlags(effect)?.addedViaUI), img: effect.img, title: effect.name, text: effect.name, tip: `On the ${owner} while this item is.` }));
+    return [...bonuses, ...statuses];
+}
+
 export function sourceName(record)
 {
     if (record?.dataSource?.name)
@@ -200,9 +233,32 @@ export function sourceName(record)
     return uuid ? (/** @type {any} */ (fromUuidSync(uuid))?.name ?? '') : '';
 }
 
+function laStatusTextKey(id)
+{
+    const own = `LA.status.${id}.description`;
+    if (game.i18n.has(own))
+        return own;
+    const short = `LA.statusShort.${id}`;
+    return getModuleSetting('shortStatusTexts') && game.i18n.has(short) ? short : '';
+}
+
+export function statusConfigText(status)
+{
+    const key = laStatusTextKey(status?.id);
+    if (key)
+        return localize(key);
+    return status?.description ? localize(status.description) : '';
+}
+
 /** Effect description, falling back to the status config it carries. */
 export function descriptionHtml(effect)
 {
+    for (const id of effect?.statuses ?? [])
+    {
+        const key = laStatusTextKey(id);
+        if (key)
+            return localize(key);
+    }
     // Foundry copies the CONFIG description onto the effect when it is applied, so an
     // applied effect carries whatever CONFIG held, key included.
     if (effect?.description)
@@ -211,9 +267,22 @@ export function descriptionHtml(effect)
     {
         const config = CONFIG.statusEffects.find(entry => entry.id === id);
         if (config?.description)
-            return game.i18n.localize(config.description);
+            return localize(config.description);
     }
     return '';
+}
+
+function valueStatusId(effect)
+{
+    return Object.keys(VALUE_STATUS_PATHS).find(statusId => effect?.statuses?.has(statusId)) ?? null;
+}
+
+function corePowerName(actor, effect)
+{
+    if (!effect?.statuses?.has('core_power_active'))
+        return '';
+    const core = actor?.system?.loadout?.frame?.value?.system?.core_system;
+    return core?.active_name || core?.name || '';
 }
 
 /**
@@ -223,14 +292,19 @@ export function descriptionHtml(effect)
  */
 export function effectTooltipData(actor, effect)
 {
+    const valueId = valueStatusId(effect);
     return {
         name: effect?.name ?? '',
         count: instanceCount(actor, effect),
+        value: valueId ? Number(foundry.utils.getProperty(actor, VALUE_STATUS_PATHS[valueId])) || 0 : null,
+        valueColor: valueId ? VALUE_STATUS_COLORS[valueId] : undefined,
+        core: corePowerName(actor, effect),
         duration: durationHtml(effect),
         bonus: linkedBonusText(actor, effect),
         frequency: linkedBonusFrequencyLabel(actor, effect),
         conditional: linkedBonusHasLambdaGate(actor, effect) ? linkedBonusConditionLines(actor, effect) : [],
         source: sourceName(effect),
+        origin: itemAttachmentOrigin(effect),
         description: descriptionHtml(effect)
     };
 }
@@ -245,16 +319,23 @@ export function showStatusTooltip(data)
     const el = document.createElement('div');
     el.classList.add('la-status-tooltip');
     const count = data.count > 1 ? ` <span class="la-status-tooltip-count">&times;${data.count}</span>` : '';
-    const parts = [`<div class="la-status-tooltip-name">${data.name ?? ''}${count}</div>`];
+    const value = data.value != null ? ` <span class="la-status-tooltip-value" style="color:${data.valueColor};">${data.value}</span>` : '';
+    const parts = [`<div class="la-status-tooltip-name">${data.name ?? ''}${value}${count}</div>`];
+    if (data.core)
+        parts.push(`<div class="la-status-tooltip-core">${escapeHtml(data.core)}</div>`);
     if (data.duration)
         parts.push(`<div class="la-status-tooltip-duration">${data.duration}</div>`);
     if (data.bonus)
         parts.push(`<div class="la-status-tooltip-bonus">${data.bonus}</div>`);
     if (data.source)
         parts.push(`<div class="la-status-tooltip-source"><i class="fas fa-link"></i> ${escapeHtml(data.source)}</div>`);
+    if (ORIGIN_LINES[data.origin])
+        parts.push(`<div class="la-status-tooltip-meta">${ORIGIN_LINES[data.origin]}</div>`);
     if (data.condition)
         parts.push(`<div class="la-status-tooltip-cond${data.conditionMet ? '' : ' la-status-tooltip-cond--unmet'}"><i class="fas fa-code-branch"></i> ${escapeHtml(data.condition)}${data.conditionMet ? '' : ' · not met'}</div>`);
-    if (data.off)
+    if (data.replaced)
+        parts.push('<div class="la-status-tooltip-meta">Replaced by automation.</div>');
+    else if (data.off)
         parts.push('<div class="la-status-tooltip-off">Switched off. Right-click to turn it back on.</div>');
     if (data.frequency)
         parts.push(`<div class="la-status-tooltip-cond"><i class="fas fa-rotate-left"></i> ${data.frequency}</div>`);

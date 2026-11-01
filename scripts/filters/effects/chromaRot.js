@@ -1,4 +1,4 @@
-import { customVertex2D, applyCustomFilter, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
+import { LaCustomFilter, GLSL_FILTER_INPUTS, GLSL_HASH1, GLSL_HASH2 } from '../filter-core.js';
 
 // FilterChromaRot: the luma plane stays sharp while the colour decays into mis-registered grey blocks.
 
@@ -18,16 +18,7 @@ uniform float stepRate;
 uniform float lockPeriod;
 uniform float lockWidth;
 uniform float rollPeriod;
-uniform float opacity;
-// mediump on purpose: customVertex2D is a mediump shader, and a precision mismatch on a uniform
-// shared between stages fails to link.
-uniform mediump vec4 inputSize;
-uniform mediump vec4 outputFrame;
-uniform vec4 inputClamp;
-uniform sampler2D uSampler;
-
-varying vec2 vTextureCoord;
-varying vec2 vFilterCoord;
+${GLSL_FILTER_INPUTS}
 
 ${GLSL_HASH1}
 ${GLSL_HASH2}
@@ -86,41 +77,12 @@ void main()
 }
 `;
 
-export class FilterChromaRot extends PIXI.Filter
+export class FilterChromaRot extends LaCustomFilter
 {
     constructor(params)
     {
-        super(customVertex2D, chromaRotFragment);
-
-        this.uniforms.color = new Float32Array([1.0, 1.0, 1.0]);
-        this.uniforms.filterMatrix = new PIXI.Matrix();
-        this.uniforms.filterMatrixInverse = new PIXI.Matrix();
-
-        Object.assign(this, FilterChromaRot.defaults);
-
         // 1.0, so stepRate and the two periods below are in real seconds.
-        this._timeSpeed = params?.timeSpeed ?? 1.0;
-        this._lastTime = performance.now();
-
-        this.zOrder = 200;
-        this.animated = {};
-        this.setTMParams(params);
-        if (!this.dummy)
-            this.normalizeTMParams();
-    }
-
-    apply(filterManager, input, output, clear)
-    {
-        applyCustomFilter(this, filterManager, input, output, clear);
-    }
-
-    get time()
-    {
-        return this.uniforms.time;
-    }
-    set time(value)
-    {
-        this.uniforms.time = value;
+        super(chromaRotFragment, params, { color: new Float32Array([1.0, 1.0, 1.0]) }, 1.0);
     }
 
     get color()
@@ -220,15 +182,6 @@ export class FilterChromaRot extends PIXI.Filter
     set rollPeriod(value)
     {
         this.uniforms.rollPeriod = value;
-    }
-
-    get opacity()
-    {
-        return this.uniforms.opacity;
-    }
-    set opacity(value)
-    {
-        this.uniforms.opacity = value;
     }
 }
 

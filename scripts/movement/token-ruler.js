@@ -13,11 +13,14 @@ import { drawSightlines, clearSightlines } from '../vision/sightlines.js';
 import { tokenAtPoint } from '../combat/grid-helpers.js';
 import { localize } from '../tools/string-utils.js';
 import { laTokenHeight } from '../tools/token-height.js';
+import { mixColor } from '../tools/color-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const ENABLED = 'enableBuiltinSpeedProvider';
 const PER_STEP_RENDER = 'rulerPerStepRender';
 const MEASURE_SNAP_CENTER = 'measureRulerSnapToCenter';
+const LABEL_SCALE = 'rulerLabelScale';
+const LABEL_MIN_ZOOM = 'rulerLabelMinZoomScale';
 const LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-waypoint-label.hbs`;
 const MEASURE_LABEL_TEMPLATE = `modules/${MODULE_ID}/templates/lancer-measure-label.hbs`;
 // Path hexes running under an overhang fade, so the terrain above still reads
@@ -289,7 +292,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
     _clearLayer(layer)
     {
         if (layer && !layer.destroyed)
-            layer.removeChildren().forEach(c => c.destroy({ children: true }));
+            layer.removeChildren().forEach(child => child.destroy({ children: true }));
     }
 
     _destroyLayer(key)
@@ -348,13 +351,6 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
         const outline = this._configureOutline?.() ?? { thickness: 1, color: 0x000000 };
         const outlineThickness = outline.thickness ?? 1;
         const outlineColor = outline.color ?? 0x000000;
-
-        const lerpColor = (fromColor, toColor, t) =>
-        {
-            const fromR = (fromColor >> 16) & 0xff, fromG = (fromColor >> 8) & 0xff, fromB = fromColor & 0xff;
-            const toR = (toColor >> 16) & 0xff, toG = (toColor >> 8) & 0xff, toB = toColor & 0xff;
-            return ((Math.round(fromR + (toR - fromR) * t) << 16) | (Math.round(fromG + (toG - fromG) * t) << 8) | Math.round(fromB + (toB - fromB) * t));
-        };
 
 
         const validSegs = (segLines ?? []).filter(segLine => (Array.isArray(segLine.centroids) && segLine.centroids.length >= 2) || segLine.isBlink);
@@ -547,7 +543,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                                 {
                                     const spanLen = cumLens[segIdx] - cumLens[segIdx - 1];
                                     const localFrac = spanLen > 0 ? Math.max(0, Math.min(1, (pathDist - cumLens[segIdx - 1]) / spanLen)) : 1;
-                                    return lerpColor(hopPts[segIdx - 1].color, hopPts[segIdx].color, localFrac);
+                                    return mixColor(hopPts[segIdx - 1].color, hopPts[segIdx].color, localFrac);
                                 }
                             }
                             return landing.color;
@@ -732,7 +728,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                                 const t = k / lerpSteps;
                                 const x = segStart.x + (segEnd.x - segStart.x) * t;
                                 const y = segStart.y + (segEnd.y - segStart.y) * t;
-                                const col = lerpColor(segStart.color, segEnd.color, (k - 0.5) / lerpSteps);
+                                const col = mixColor(segStart.color, segEnd.color, (k - 0.5) / lerpSteps);
                                 if (col !== currentColor)
                                 {
                                     innerG.lineStyle({ ...lineOpts, color: col });
@@ -752,7 +748,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                     const rampInfo = segInfo && (segInfo.centroids?.length ?? 0) < 2 ? segInfo : null;
                     const colorAtFrac = (frac) => rampInfo
                         ? patternColorAtFrac(rampInfo, frac)
-                        : lerpColor(segStart.color, segEnd.color, frac);
+                        : mixColor(segStart.color, segEnd.color, frac);
                     const dirX = deltaX / segDist;
                     const dirY = deltaY / segDist;
                     if (pattern === 'dots')
@@ -850,11 +846,11 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
                 strokeThickness: Math.max(3, Math.round(fontSize * 0.2)),
                 align: 'center'
             });
-            for (const c of terrainCells)
+            for (const terrainCell of terrainCells)
             {
                 const text = new foundry.canvas.containers.PreciseText('⚠', warnStyle);
                 text.anchor.set(0.5, 0.5);
-                text.position.set(c.x, c.y);
+                text.position.set(terrainCell.x, terrainCell.y);
                 _applyIsoCounter(text);
                 textLayer.addChild(text);
             }
@@ -868,7 +864,7 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             return null;
         const laApi = game.modules.get(MODULE_ID)?.api;
         const moves = laApi?.getMoveDataList?.(this.token.document.id) ?? [];
-        return moves.find(m => m.movementId === waypoint.movementId) || null;
+        return moves.find(move => move.movementId === waypoint.movementId) || null;
     }
 
     // Sums regular move costs up to this waypoint; free moves contribute 0, matching the cap exclusion.
@@ -943,10 +939,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
             const dragDelta = Math.max(0, Number(waypoint.measurement?.cost ?? 0) - passedCost);
             total = prior + dragDelta;
         }
-        for (const r of ranges)
+        for (const range of ranges)
         {
-            if (total <= r.max + 1e-9)
-                return r;
+            if (total <= range.max + 1e-9)
+                return range;
         }
         return null; // over max
     }
@@ -1063,10 +1059,10 @@ class LancerTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler
         const ranges = getSpeedRanges(this.token);
         if (!ranges.length)
             return null;
-        for (const r of ranges)
+        for (const range of ranges)
         {
-            if (totalDist <= r.max + 1e-9)
-                return r.color;
+            if (totalDist <= range.max + 1e-9)
+                return range.color;
         }
         return 0x000000;
     }
@@ -1286,8 +1282,7 @@ import { thtGroundAt as _thtGroundAt } from './movement-utils.js';
 
 function _measureTerrainElevDisabled()
 {
-    return !!getModuleSetting('disableAutoElevationOnMeasure')
-        || !!getModuleSetting('disableAutoTerrainElevation');
+    return getModuleSetting('terrainElevationMode', 'both') !== 'both';
 }
 
 const LOS_KEY = 'ruler-los';
@@ -1441,8 +1436,8 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
         const end = this.path?.at?.(-1);
         if (!end)
             return;
-        const off = canvas.grid.getOffset(end);
-        const key = `${off.i},${off.j}`;
+        const offset = canvas.grid.getOffset(end);
+        const key = `${offset.i},${offset.j}`;
         if (key === this._laLastCell)
             return;
         if (this._laLastCell !== undefined)
@@ -1558,6 +1553,24 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
     }
 }
 
+function _applyLabelScale(value)
+{
+    document.documentElement.style.setProperty('--la-ruler-label-scale', String(Number(value) || 1));
+}
+
+function _applyLabelZoomBoost()
+{
+    const el = document.getElementById('measurement');
+    if (!el || !canvas?.ready)
+        return;
+    const minZoom = Number(getModuleSetting(LABEL_MIN_ZOOM)) || 0;
+    const zoom = canvas.stage?.scale?.x || 1;
+    const gridScale = (canvas.dimensions?.size ?? 100) / 100;
+    const value = String(minZoom > 0 ? Math.max(1, minZoom / (gridScale * zoom)) : 1);
+    if (el.style.getPropertyValue('--la-ruler-zoom-boost') !== value)
+        el.style.setProperty('--la-ruler-zoom-boost', value);
+}
+
 Hooks.once('init', () =>
 {
     CONFIG.Token.rulerClass = LancerTokenRuler;
@@ -1566,13 +1579,30 @@ Hooks.once('init', () =>
         scope: 'client',
         config: false,
         type: Boolean,
-        default: false
+        default: true
     });
     game.settings.register(MODULE_ID, MEASURE_SNAP_CENTER, {
         scope: 'client',
         config: false,
         type: Boolean,
         default: true
+    });
+    game.settings.register(MODULE_ID, LABEL_SCALE, {
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0.5, max: 2, step: 0.05 },
+        onChange: value => _applyLabelScale(value)
+    });
+    _applyLabelScale(getModuleSetting(LABEL_SCALE));
+    game.settings.register(MODULE_ID, LABEL_MIN_ZOOM, {
+        scope: 'client',
+        config: false,
+        type: Number,
+        default: 1,
+        range: { min: 0, max: 2, step: 0.1 },
+        onChange: () => _applyLabelZoomBoost()
     });
     game.keybindings.register(MODULE_ID, 'sightlineRuler', {
         name: 'LA.keybindings.sightlineRuler.name',
@@ -1592,9 +1622,12 @@ Hooks.once('init', () =>
     });
 });
 
+Hooks.on('canvasPan', () => _applyLabelZoomBoost());
+
 // HUD only realigns on canvas.pan(); without this kick, waypoint labels stay at the previous scene's offsets after a swap.
 Hooks.on('canvasReady', () =>
 {
+    _applyLabelZoomBoost();
     try
     {
         canvas.hud?.align();

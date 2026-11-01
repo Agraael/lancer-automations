@@ -4,6 +4,8 @@ import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { localize } from '../tools/string-utils.js';
 import { ISO_SETTINGS, isIsoPerspectiveActive, isGrapeIsoActive } from './iso-settings.js';
+import { isFreshWorld } from './settings-onboarding.js';
+import { afterFirstRun } from './first-run-queue.js';
 
 /**
  * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
@@ -336,6 +338,7 @@ function getConflictRules()
         {
             id: 'tht-los-vs-la-ruler',
             label: 'LA.compat.tht-los-vs-la-ruler.label',
+            freshWorldSilent: true,
             check()
             {
                 if (!game.modules.get('terrain-height-tools')?.active)
@@ -376,6 +379,24 @@ function getConflictRules()
                 return !!game.modules.get('statuscounter')?.active;
             }
         },
+
+        ...[
+            ['lancer-attacks-off', 'attacks'],
+            ['lancer-structure-off', 'structure'],
+            ['lancer-token-size-off', 'token_size'],
+        ].map(([id, option]) => ({
+            id,
+            label: `LA.compat.${id}.label`,
+            check()
+            {
+                return game.settings.get(game.system.id, 'automationOptions')?.[option] === false;
+            },
+            async fix()
+            {
+                const current = game.settings.get(game.system.id, 'automationOptions');
+                await game.settings.set(game.system.id, 'automationOptions', { ...(current?.toObject?.() ?? current), [option]: true });
+            },
+        })),
     ];
 }
 
@@ -415,7 +436,10 @@ export function checkCompatibility()
     showQolAdvisoryOnce();
 
     const rules = getConflictRules();
-    const detected = rules.filter(rule => rule.check());
+    const silent = isFreshWorld() ? rules.filter(rule => rule.freshWorldSilent && rule.check()) : [];
+    for (const rule of silent)
+        rule.fix().catch(err => console.warn(`${MODULE_ID} | Compatibility: silent fix failed for ${rule.id}`, err));
+    const detected = rules.filter(rule => !silent.includes(rule) && rule.check());
 
     const conflicts = detected.filter(rule => typeof rule.fix === 'function');
     const seen = /** @type {string[]} */ (getModuleSetting('compatWarningsShown') || []);
@@ -432,11 +456,11 @@ export function checkCompatibility()
     ).join('');
 
     const conflictHtml = conflicts.length
-        ? `<p style="margin-bottom:8px;">The following conflicts were detected between <b>Lancer Automations</b> and other modules:</p>
+        ? `<p style="margin-bottom:8px;">The following conflicts were detected between <b>Lancer Automations</b> and the Lancer system or other modules:</p>
             <ul style="margin:8px 0; padding-left:20px; list-style:none;">${listHtml(conflicts, '#ff6400')}</ul>
             <hr>
-            <p><b>Auto-fix</b> will disable the conflicting settings in the other modules and reload Foundry.</p>
-            <p style="font-size:0.85em; opacity:0.7;">You can re-enable them later in the respective module settings if needed.</p>`
+            <p><b>Auto-fix</b> will change the settings listed above and reload Foundry.</p>
+            <p style="font-size:0.85em; opacity:0.7;">You can change them back later in the respective settings if needed.</p>`
         : '';
 
     const warningHtml = warnings.length
@@ -483,10 +507,10 @@ export function checkCompatibility()
         }
     };
 
-    new Dialog({
+    afterFirstRun().then(() => new Dialog({
         title: conflicts.length ? 'Lancer Automations - Compatibility Issues' : 'Lancer Automations - Compatibility Notes',
         content: conflictHtml + (conflictHtml && warningHtml ? '<hr>' : '') + warningHtml,
         buttons: conflicts.length ? fixButtons : okButton,
         default: conflicts.length ? 'fix' : 'ok'
-    }).render(true);
+    }).render(true));
 }

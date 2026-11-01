@@ -5,7 +5,7 @@
 
 import { AWARDS } from './awards.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { attributeKill } from './kill-attribution.js';
+import { attributeKill, matchUndoneDamage } from './kill-attribution.js';
 import { localize } from '../tools/string-utils.js';
 import { tfGetTeam, tfGetTeams } from '../tools/token-factions-utils.js';
 import { getRelativeDisposition } from '../combat/overwatch.js';
@@ -17,6 +17,10 @@ const ACCENT_PALETTE = [
 ];
 const FALLBACK_IMG = 'icons/svg/mystery-man.svg';
 const TOP_ACTION_EXCLUDE = new Set(['SKIRMISH', 'BARRAGE', 'FIGHT']);
+const BIG_TEMPLATES = new Set(['ELITE', 'ULTRA', 'VETERAN']);
+const LOG_BUCKETS = ['players', 'hostiles', 'friendlies', 'neutrals', 'secrets'];
+const DOT_KINDS = ['burn', 'infection'];
+const DOT_PAIR_WINDOW = 25;
 
 /**
  * @param {import('./combat-telemetry.js').CombatTelemetry} recorded
@@ -24,7 +28,7 @@ const TOP_ACTION_EXCLUDE = new Set(['SKIRMISH', 'BARRAGE', 'FIGHT']);
  */
 export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = null } = {})
 {
-    const telemetry = _teamBuckets(recorded);
+    const telemetry = _creditDotTicks(_dropUndoneDamage(_dropUndoneActions(_teamBuckets(recorded))));
     const turnAxis = _buildTurnAxis(telemetry);
     const players = telemetry.players.map((log, idx) =>
     {
@@ -100,11 +104,15 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
             firstKill = h;
     }
     const squadKillers = new Set(players.filter(player => player.destroyed && player.destroyedBy).map(player => player.destroyedBy));
+    const bigTargets = new Set(hostiles
+        .filter(hostile => hostile.size >= 3 || hostile.templates.some(name => BIG_TEMPLATES.has(name)))
+        .map(hostile => hostile.tokenId));
     for (const p of players)
     {
         if (firstKill?.killedBy === p.tokenId)
             p.firstBlood = 1;
         p.avengerKills = hostiles.filter(hostile => hostile.killedBy === p.tokenId && squadKillers.has(hostile.tokenId)).length;
+        p.bigGameDmg = bigTargets.size ? _damageTo(telemetry, p.tokenId, bigTargets) : 0;
     }
 
     const rounds = Array.from({ length: telemetry.roundCount }, (_, i) => i + 1);
@@ -245,13 +253,18 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const perRoundActions = new Map();
     for (const ev of events)
     {
-        if (ev.type === 'action' && ev.byId === log.tokenId)
+        if (ev.type === 'action' && ev.byId === log.tokenId && ev.activation && ev.activation !== 'Reaction')
             perRoundActions.set(ev.round, (perRoundActions.get(ev.round) ?? 0) + 1);
     }
     const maxActionsInTurn = Math.max(0, ...perRoundActions.values());
 
     const reactionsUsed = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.activation === 'Reaction').length;
-    const scans = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.success && /scan/i.test(ev.name ?? '')).length;
+    const overcharges = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.name === 'OVERCHARGE').length;
+    const statusesInflicted = events.filter(ev => ev.type === 'status' && ev.byId === log.tokenId && ev.targetId !== log.tokenId).length;
+    const deploysPlaced = events.reduce((sum, ev) => sum + (ev.type === 'deploy' && ev.byId === log.tokenId ? (ev.count ?? 0) : 0), 0);
+    const failedSavesForced = _allLogs(telemetry).reduce((sum, combatantLog) => sum + combatantLog.events
+        .filter(ev => ev.type === 'action' && ev.category === 'save' && ev.forcedBy === log.tokenId && !ev.success).length, 0);
+    const scans = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.success && ev.name === 'SCAN').length;
     const maxHit = Math.max(0, ...events
         .filter(ev => ev.type === 'damage' && ev.byId === log.tokenId && ev.targetId !== log.tokenId)
         .map(ev => (ev.hpLanded ?? 0) + (ev.overshieldAbsorbed ?? 0) + (ev.armorAbsorbed ?? 0)));
@@ -361,13 +374,19 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         moves: events.reduce((n, ev) => n + (ev.type === 'move' && !ev.knockback && ev.byId === log.tokenId ? (ev.distance ?? 0) : 0), 0),
         maxActionsInTurn,
         reactionsUsed,
+        overcharges,
+        statusesInflicted,
+        deploysPlaced,
+        failedSavesForced,
         scans,
         maxHit,
         redlineRounds,
         maxTargetsOneRound,
         survivorScore,
         survivorLabel,
-        destroyedBy: destroyedEv?.killerId ?? null,
+        destroyedBy: destroyedEv
+            ? attributeKill(telemetry, log.tokenId, destroyedEv.round, destroyedEv.cause ?? null).killerId ?? destroyedEv.killerId ?? null
+            : null,
         // Filled in by attribution pass.
         kills: 0,
         assists: 0,
@@ -575,7 +594,7 @@ function _buildBreakdown(events, telemetry, byId)
                     mitigatedOutArmor      += ev.armorAbsorbed ?? 0;
                     mitigatedOutOvershield += ev.overshieldAbsorbed ?? 0;
                 }
-                if (ev.targetId === byId)
+                if (ev.targetId === byId && !ev.dotCredit)
                 {
                     for (const d of (ev.damages ?? []))
                         dmgInByType.set(d.type, (dmgInByType.get(d.type) ?? 0) + (d.amount ?? 0));
@@ -674,14 +693,259 @@ function _buildBreakdown(events, telemetry, byId)
 function _attackCountsByCategory(events, byId, category)
 {
     const counts = new Map();
+    const countedRolls = new Set();
     for (const ev of events)
     {
         if (ev.type !== 'attack' || ev.byId !== byId || ev.category !== category)
             continue;
+        if (ev.rollId)
+        {
+            if (countedRolls.has(ev.rollId))
+                continue;
+            countedRolls.add(ev.rollId);
+        }
         const name = ev.weaponName ?? '-';
         counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     return [...counts.entries()].map(([k, n]) => ({ k, n }));
+}
+
+function _allLogs(telemetry)
+{
+    return [
+        ...telemetry.players,
+        ...telemetry.hostiles,
+        ...(telemetry.friendlies ?? []),
+        ...(telemetry.neutrals ?? []),
+        ...(telemetry.secrets ?? []),
+    ];
+}
+
+function _damageTo(telemetry, byId, targetIds)
+{
+    let total = 0;
+    for (const combatantLog of _allLogs(telemetry))
+    {
+        for (const ev of combatantLog.events)
+        {
+            if (ev.type === 'damage' && ev.byId === byId && targetIds.has(ev.targetId))
+                total += (ev.damages ?? []).reduce((sum, instance) => sum + (instance.amount ?? 0), 0);
+        }
+    }
+    return total;
+}
+
+function _mapLogs(telemetry, rewrite)
+{
+    const out = { ...telemetry };
+    for (const bucket of LOG_BUCKETS)
+    {
+        if (Array.isArray(telemetry[bucket]))
+            out[bucket] = telemetry[bucket].map(rewrite);
+    }
+    return out;
+}
+
+function _dropUndoneActions(telemetry)
+{
+    const undone = new Set(_allLogs(telemetry).flatMap(log => log.events)
+        .filter(ev => ev.type === 'action-undo' && ev.tapeId)
+        .map(ev => ev.tapeId));
+    if (!undone.size)
+        return telemetry;
+    return _mapLogs(telemetry, log => ({
+        ...log,
+        events: log.events.filter(ev => !(ev.tapeId && undone.has(ev.tapeId))),
+    }));
+}
+
+function _dropUndoneDamage(telemetry)
+{
+    const undone = matchUndoneDamage(_allLogs(telemetry).flatMap(log => log.events));
+    if (!undone.size)
+        return telemetry;
+    const dropped = new Set(undone.values());
+    return _mapLogs(telemetry, log => ({
+        ...log,
+        events: log.events
+            .filter(ev => !dropped.has(ev))
+            .map(ev =>
+            {
+                const damage = undone.get(ev);
+                return damage
+                    ? { ...ev, matched: true, undoneById: damage.byId ?? null, undonePilotTokenId: damage.pilotTokenId ?? null }
+                    : ev;
+            }),
+    }));
+}
+
+function _creditDotTicks(telemetry)
+{
+    const logs = _allLogs(telemetry);
+    const events = logs.flatMap(log => log.events).sort((lhs, rhs) => (lhs.seq ?? 0) - (rhs.seq ?? 0));
+    if (!events.some(ev => ev.type === 'damage' && ev.dotTick))
+        return telemetry;
+    const seqGap = (lhs, rhs) => Math.abs((lhs.seq ?? 0) - (rhs.seq ?? 0));
+    const claims = new Map();
+    const addClaim = (key, claim) =>
+    {
+        if (!claims.has(key))
+            claims.set(key, []);
+        claims.get(key).push(claim);
+    };
+    for (const ev of events)
+    {
+        if (ev.type === 'dot-added' && ev.amount > 0)
+        {
+            addClaim(`${ev.targetId}|${ev.kind}|add`, {
+                ev,
+                left: ev.amount,
+                byId: ev.byId && ev.byId !== ev.targetId ? ev.byId : null,
+                pilotTokenId: ev.pilotTokenId ?? null,
+            });
+        }
+        else if (ev.type === 'damage-undo' && ev.matched)
+        {
+            for (const kind of DOT_KINDS)
+            {
+                if (!(ev[`${kind}Removed`] > 0))
+                    continue;
+                addClaim(`${ev.targetId}|${kind}|remove`, {
+                    ev,
+                    left: ev[`${kind}Removed`],
+                    byId: ev.undoneById && ev.undoneById !== ev.targetId ? ev.undoneById : null,
+                    pilotTokenId: ev.undonePilotTokenId ?? null,
+                });
+            }
+        }
+    }
+    const nearbyClaims = (key, ev, amount) => (claims.get(key) ?? [])
+        .filter(claim => claim.left > 0 && claim.ev.round === ev.round && seqGap(claim.ev, ev) <= DOT_PAIR_WINDOW)
+        .sort((lhs, rhs) => Number(rhs.left === amount) - Number(lhs.left === amount) || seqGap(lhs.ev, ev) - seqGap(rhs.ev, ev));
+
+    const ledgers = new Map();
+    const shareKey = (byId, pilotTokenId) => `${byId ?? ''}|${pilotTokenId ?? ''}`;
+    const totalOf = ledger => [...ledger.values()].reduce((sum, share) => sum + share.amount, 0);
+    const observe = (targetId, kind, value, ev) =>
+    {
+        const key = `${targetId}|${kind}`;
+        if (!ledgers.has(key))
+            ledgers.set(key, new Map());
+        const ledger = ledgers.get(key);
+        const total = totalOf(ledger);
+        if (value <= 0)
+        {
+            ledger.clear();
+            return;
+        }
+        if (value > total)
+        {
+            let left = value - total;
+            for (const claim of nearbyClaims(`${key}|add`, ev, left))
+            {
+                const take = Math.min(left, claim.left);
+                const id = shareKey(claim.byId, claim.pilotTokenId);
+                if (!ledger.has(id))
+                    ledger.set(id, { byId: claim.byId, pilotTokenId: claim.pilotTokenId, amount: 0 });
+                ledger.get(id).amount += take;
+                claim.left -= take;
+                left -= take;
+                if (left <= 0)
+                    break;
+            }
+            if (left > 0)
+            {
+                const unknown = shareKey(null, null);
+                if (!ledger.has(unknown))
+                    ledger.set(unknown, { byId: null, pilotTokenId: null, amount: 0 });
+                ledger.get(unknown).amount += left;
+            }
+            return;
+        }
+        let left = total - value;
+        for (const claim of nearbyClaims(`${key}|remove`, ev, left))
+        {
+            const share = ledger.get(shareKey(claim.byId, claim.pilotTokenId));
+            const take = Math.min(left, claim.left, share?.amount ?? 0);
+            claim.left = 0;
+            if (share)
+                share.amount -= take;
+            left -= take;
+            if (left <= 0)
+                break;
+        }
+        if (left > 0)
+        {
+            const factor = value / (value + left);
+            for (const share of ledger.values())
+                share.amount *= factor;
+        }
+    };
+
+    const logIds = new Set(logs.map(log => log.tokenId));
+    const extras = new Map();
+    const credit = (ev) =>
+    {
+        const ledger = ledgers.get(`${ev.targetId}|${ev.dotTick}`);
+        const tickAmount = (ev.damages ?? []).reduce((sum, damage) => sum + (damage.amount ?? 0), 0);
+        const total = ledger ? totalOf(ledger) : 0;
+        if (tickAmount <= 0 || total <= 0)
+            return;
+        const scale = tickAmount / Math.max(tickAmount, total);
+        const portions = [...ledger.values()]
+            .filter(share => share.amount > 0)
+            .map(share => ({ share, exact: share.amount * scale, whole: Math.floor(share.amount * scale) }));
+        let spare = Math.round(portions.reduce((sum, portion) => sum + portion.exact, 0))
+            - portions.reduce((sum, portion) => sum + portion.whole, 0);
+        for (const portion of [...portions].sort((lhs, rhs) => (rhs.exact - rhs.whole) - (lhs.exact - lhs.whole)))
+        {
+            if (spare <= 0)
+                break;
+            portion.whole++;
+            spare--;
+        }
+        const credited = portions
+            .filter(portion => portion.share.byId && portion.whole > 0)
+            .sort((lhs, rhs) => lhs.whole - rhs.whole || lhs.exact - rhs.exact);
+        credited.forEach((portion, rank) =>
+        {
+            const hostId = logIds.has(portion.share.byId) ? portion.share.byId : ev.targetId;
+            if (!extras.has(hostId))
+                extras.set(hostId, []);
+            extras.get(hostId).push({
+                type: 'damage',
+                round: ev.round,
+                turn: ev.turn ?? null,
+                byId: portion.share.byId,
+                targetId: ev.targetId,
+                damages: [{ type: ev.dotTick, amount: portion.whole }],
+                seq: (ev.seq ?? 0) + (rank + 1) / (credited.length + 1),
+                dotCredit: true,
+                ...(portion.share.pilotTokenId ? { pilotTokenId: portion.share.pilotTokenId } : {}),
+            });
+        });
+    };
+
+    for (const ev of events)
+    {
+        if (ev.type === 'stat-tick')
+        {
+            for (const kind of DOT_KINDS)
+            {
+                if (typeof ev[kind] === 'number')
+                    observe(ev.tokenId, kind, ev[kind], ev);
+            }
+        }
+        else if (ev.type === 'dot-change' && DOT_KINDS.includes(ev.kind))
+            observe(ev.tokenId, ev.kind, ev.value ?? 0, ev);
+        else if (ev.type === 'damage' && ev.dotTick && !ev.dotCredit)
+            credit(ev);
+    }
+    if (!extras.size)
+        return telemetry;
+    return _mapLogs(telemetry, log => (extras.has(log.tokenId)
+        ? { ...log, events: [...log.events, ...extras.get(log.tokenId)].sort((lhs, rhs) => (lhs.seq ?? 0) - (rhs.seq ?? 0)) }
+        : log));
 }
 
 function _attackNameCounts(events, filter, nameOf)
@@ -767,6 +1031,8 @@ function _accuracySplit(events, byId, haseAcc)
                 techShots++;
                 if (t.hit)
                     techHits++;
+                if (t.crit)
+                    crits++;
             }
             else if (isMelee)
             {
@@ -995,19 +1261,11 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
                     for (const d of (ev.damages ?? []))
                         addToBucket(dealtBucket, d.type, d.amount ?? 0);
                 }
-                if (ev.targetId === log.tokenId && matches(ev.byId))
+                if (ev.targetId === log.tokenId && matches(ev.byId) && !(ev.dotCredit && matches(log.tokenId)))
                 {
                     for (const d of (ev.damages ?? []))
                         addToBucket(takenBucket, d.type, d.amount ?? 0);
                 }
-            }
-            else if (ev.type === 'damage-undo')
-            {
-                const reverted = (ev.hpRestored ?? 0) + (ev.overshieldRestored ?? 0);
-                if (ev.byId === log.tokenId && ev.targetId !== log.tokenId && matches(ev.targetId))
-                    dealtBucket.physical = Math.max(0, dealtBucket.physical - reverted);
-                if (ev.targetId === log.tokenId && matches(ev.byId))
-                    takenBucket.physical = Math.max(0, takenBucket.physical - reverted);
             }
         }
     }
@@ -1090,38 +1348,42 @@ function _buildAwards(players, mvpId)
     };
     for (const award of AWARDS)
     {
-        let topPlayer = null;
-        let topValue = -Infinity;
-        const eligible = [];
-        for (const p of players)
-        {
-            const statValue = award.stat(p);
-            if (statValue >= award.minValue)
-                eligible.push(p);
-            if (statValue > topValue)
-            {
-                topValue = statValue;
-                topPlayer = p;
-            }
-        }
-        if (!topPlayer || topValue < award.minValue)
+        const ranked = players
+            .map(player => ({ player, value: award.stat(player) }))
+            .filter(entry => entry.value >= award.minValue)
+            .sort((lhs, rhs) => rhs.value - lhs.value);
+        if (!ranked.length)
             continue;
+        const [top, runnerUp] = ranked;
         awards.push({
             key: award.key,
-            holder: topPlayer.id,
+            holder: top.player.id,
             label: localize(award.label),
             icon: award.icon,
-            stat: award.format(topValue, topPlayer),
+            stat: award.format(top.value, top.player),
             sub: localize(award.description),
         });
         const weight = award.weight ?? 1;
-        addPoints(topPlayer.id, weight);
-        // Runners-up that cleared the bar still count toward MVP, one point below the holder.
-        for (const p of eligible)
+        addPoints(top.player.id, weight);
+        if (award.secondDescription)
         {
-            if (p.id !== topPlayer.id)
-                addPoints(p.id, weight - 1);
+            if (!runnerUp)
+                continue;
+            awards.push({
+                key: award.key,
+                holder: runnerUp.player.id,
+                label: localize(award.label),
+                icon: award.icon,
+                stat: award.format(runnerUp.value, runnerUp.player),
+                sub: localize(award.secondDescription),
+                second: true,
+            });
+            addPoints(runnerUp.player.id, weight / 2);
+            continue;
         }
+        // Runners-up that cleared the bar still count toward MVP, one point below the holder.
+        for (const entry of ranked.slice(1))
+            addPoints(entry.player.id, weight - 1);
     }
 
     for (const p of players)
@@ -1234,12 +1496,6 @@ function _asNum(v, fallback)
 {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
-}
-
-function _asStr(v, fallback)
-{
-    const s = String(v ?? '').trim();
-    return s || fallback;
 }
 
 function _slug(str)

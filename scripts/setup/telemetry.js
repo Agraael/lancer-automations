@@ -1,6 +1,7 @@
 import { getSupabase } from "./supabase-client.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
+import { queueFirstRun } from "./first-run-queue.js";
 
 import { MODULE_ID } from '../tools/constants.js';
 const INSTALL_ID_SETTING = "dataInstallId";
@@ -108,13 +109,13 @@ async function _showFirstLaunchPopup()
             title: localize('LA.dialogTitle.lancerAutomations'),
             content: `
                 <div class="lancer-dialog-header">
-                    <div class="lancer-dialog-title">Hi there!</div>
+                    <div class="lancer-dialog-title">${localize('LA.telemetry.consent.title')}</div>
                 </div>
                 <div style="padding: 8px 10px; line-height: 1.5;">
-                    <p>I'd love to know roughly how many people use this module. If you're up for it, just pick the role you usually play.</p>
-                    <p>What gets sent: a random ID generated here, your module version, and your Foundry language. That's it.</p>
-                    <p>Already counted somewhere else (another world or another machine)? Pick <em>"I'm already counted"</em> so you're not double-counted.</p>
-                    <p>You can change your mind anytime in module settings.</p>
+                    <p>${localize('LA.telemetry.consent.intro')}</p>
+                    <p>${localize('LA.telemetry.consent.whatSent')}</p>
+                    <p>${localize('LA.telemetry.consent.alreadyCounted')}</p>
+                    <p>${localize('LA.telemetry.consent.changeMind')}</p>
                 </div>
             `,
             buttons: {
@@ -184,7 +185,7 @@ async function _handleStartup()
         return;
     }
 
-    await _runFirstLaunch();
+    await queueFirstRun(() => _runFirstLaunch());
 }
 
 class ConsentMenu extends FormApplication

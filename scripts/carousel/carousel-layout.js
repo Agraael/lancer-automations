@@ -1,3 +1,5 @@
+import { htmlToElement } from '../tools/dom-utils.js';
+
 const FLIP_MS = 200;
 const ENTER_MS = 1000;
 const ENTER_STAGGER_MS = 250;
@@ -9,13 +11,6 @@ const _pendingScroll = new WeakMap();
 let _edgeFrame = null;
 
 export const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function htmlToElement(html)
-{
-    const template = document.createElement('template');
-    template.innerHTML = html.trim();
-    return template.content.firstElementChild;
-}
 
 function placeAfter(parent, element, previous)
 {

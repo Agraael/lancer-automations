@@ -1,16 +1,5 @@
 import { localize, localizeFormat } from './string-utils.js';
-
-function _resolvePilot(tokenOrActor)
-{
-    const actor = tokenOrActor?.actor ?? tokenOrActor;
-    if (!actor)
-        return null;
-    if (actor.type === 'pilot')
-        return actor;
-    if (actor.type === 'mech')
-        return actor.system?.pilot?.value ?? null;
-    return null;
-}
+import { resolvePilot } from '../utils/lancer-token.js';
 
 const _ORG_TYPES = ['Military', 'Scientific', 'Academic', 'Criminal', 'Humanitarian', 'Industrial', 'Entertainment', 'Political'];
 const _PROJECT_REQS = ['Quality materials', 'Specific knowledge or techniques', 'Specialized tools', 'A good workspace'];
@@ -55,7 +44,7 @@ async function _fetchReservesByType()
 /** @returns {Promise<void>} */
 export async function openAddReserveDialog(tokenOrActor)
 {
-    const pilot = _resolvePilot(tokenOrActor);
+    const pilot = resolvePilot(tokenOrActor);
     if (!pilot)
     {
         ui.notifications.warn(localize('LA.notify.selectAPilotOrMechToken')); return;

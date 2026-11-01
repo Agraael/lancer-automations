@@ -18,7 +18,7 @@ const REACTION_FIELDS = [
     'isReaction', 'actionType', 'frequency', 'checkReaction', 'requireCanProvoke', 'checkUsage',
     'autoActivate', 'awaitActivationCompletion', 'onlyOnSourceMatch', 'activationType', 'activationMode',
     'activationMacro', 'activationCode', 'onInit', 'onMessage', 'triggerSelf', 'triggerOther',
-    'outOfCombat', 'dispositionFilter', 'triggerTarget', 'triggerEnvironment', 'sceneReactor', 'sceneId'
+    'outOfCombat', 'dispositionFilter', 'triggerTarget', 'triggerEnvironment', 'sceneReactor', 'sceneId', 'runsOn'
 ];
 
 const STATS_VIEW = 'workshop_stats';

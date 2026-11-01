@@ -38,6 +38,19 @@ export class HudPanel
             this.open(this._anchor);
     }
 
+    openSilent(anchorRow)
+    {
+        this._silent = true;
+        try
+        {
+            /** @type {any} */ (this).open(anchorRow);
+        }
+        finally
+        {
+            this._silent = false;
+        }
+    }
+
     _resetPanel(anchorRow)
     {
         if (this._panel)
@@ -96,7 +109,10 @@ export class HudPanel
         }
 
         panel.on('mouseleave', this._scheduleCollapse).on('mouseenter', this._cancelCollapse);
-        panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
+        if (this._silent)
+            panel.css({ opacity: '', marginLeft: '' });
+        else
+            panel.css({ opacity: 0, marginLeft: -10 }).animate({ opacity: 1, marginLeft: 0 }, 150);
         this._panel = panel;
     }
 }

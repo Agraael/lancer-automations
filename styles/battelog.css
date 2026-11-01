@@ -3887,6 +3887,20 @@ button.battelog-pcol-flip-btn.battelog-pcol-portrait-mfr:focus-visible {
     letter-spacing: 0.3px;
 }
 
+.battelog-pcol-medal:not(.is-mvp):not(.is-kia) > i.battelog-award-second-icon,
+.battelog-pcol-medal-tip-title .battelog-award-second-icon,
+.battelog-tip-k .battelog-award-second-icon {
+    color: #9aa6b3;
+}
+
+.battelog-award-second-tag {
+    font-family: var(--bl-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: #9aa6b3;
+}
+
 /* Squad-best crown marker + info-circle tip mark on labels. */
 .battelog-pcol-crown {
     font-size: 9px;

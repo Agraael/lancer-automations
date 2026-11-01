@@ -7,10 +7,12 @@ import {
     measureGridDistance, pixelToOffset, isPositionInRange
 } from "./grid-helpers.js";
 import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js";
+import { tfGetDisposition } from "../tools/token-factions-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { hasLineOfSight } from "../vision/lancerDetectionModes.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { actorActionSpent } from "./per-frequency-tags.js";
 
 export { getMinGridDistance };
 
@@ -19,9 +21,9 @@ const isThreatAura = (aura) => THREAT_AURA_NAMES.has(aura.config.name);
 
 function getDispositionData(tokenA, tokenB)
 {
-    const tokenFactions = game.modules.get("token-factions")?.api;
-    if (tokenFactions && typeof tokenFactions.getDisposition === 'function')
-        return tokenFactions.getDisposition(tokenA, tokenB);
+    const factionDisposition = tfGetDisposition(tokenA, tokenB);
+    if (factionDisposition !== null)
+        return factionDisposition;
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
     const dispA = tokenA.document.disposition;
     const dispB = tokenB.document.disposition;
@@ -57,6 +59,11 @@ export function getRelativeDisposition(viewer, other)
     return getDispositionData(viewer, other) ?? null;
 }
 
+export function isOverwatchSpent(tokenOrActor)
+{
+    return actorActionSpent(tokenOrActor?.actor ?? tokenOrActor, { name: 'Overwatch' });
+}
+
 /** @returns {boolean} */
 export function checkOverwatchCondition(reactor, mover, startPos)
 {
@@ -66,7 +73,7 @@ export function checkOverwatchCondition(reactor, mover, startPos)
     if (!isHostile(reactor, mover))
         return false;
 
-    if (!hasReactionAvailable(reactor))
+    if (!hasReactionAvailable(reactor) || isOverwatchSpent(reactor))
         return false;
 
     const losEnabled = getModuleSetting('lancerLos') === true;
@@ -104,19 +111,19 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
     const auraLayer = canvas.gaaAuraLayer;
     const manager = auraLayer?._auraManager;
 
-    const potentialReactors = canvas.tokens.placeables.filter(t =>
+    const potentialReactors = canvas.tokens.placeables.filter(token =>
     {
-        if (t.id === movedToken.id)
+        if (token.id === movedToken.id)
             return false;
-        if (!t.actor)
+        if (!token.actor)
             return false;
-        if (!t.isOwner)
-            return false;
-
-        if (!hasReactionAvailable(t))
+        if (!token.isOwner)
             return false;
 
-        return isHostile(t, movedToken);
+        if (!hasReactionAvailable(token) || isOverwatchSpent(token))
+            return false;
+
+        return isHostile(token, movedToken);
     });
 
     const triggeredReactors = [];
@@ -162,7 +169,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
 
         for (const reactor of triggeredReactors)
         {
-            const owners = game.users.filter(u => u.active && reactor.document.testUserPermission(u, "OWNER"));
+            const owners = game.users.filter(user => user.active && reactor.document.testUserPermission(user, "OWNER"));
             for (const user of owners)
             {
                 if (!ownerMap[user.id])
@@ -283,10 +290,10 @@ export async function drawThreatDebug(token)
 
     const footprintOffsets = getOccupiedOffsets(token);
 
-    const footprintCubes = footprintOffsets.map(o => ({
-        ...offsetToCube(o.col, o.row),
-        col: o.col,
-        row: o.row
+    const footprintCubes = footprintOffsets.map(offset => ({
+        ...offsetToCube(offset.col, offset.row),
+        col: offset.col,
+        row: offset.row
     }));
 
     const threatHexSet = new Set();
@@ -321,16 +328,16 @@ export async function drawThreatDebug(token)
     canvas.controls.debug.lineStyle(3, 0xFF0000, 1);
     canvas.controls.debug.beginFill(0xFF0000, 0.25);
 
-    for (const fp of footprintCubes)
-        drawHexAt(canvas.controls.debug, fp.col, fp.row);
+    for (const footprintCube of footprintCubes)
+        drawHexAt(canvas.controls.debug, footprintCube.col, footprintCube.row);
 
     canvas.controls.debug.endFill();
 
     canvas.controls.debug.lineStyle(0);
     canvas.controls.debug.beginFill(0xFF0000, 1);
-    for (const fp of footprintCubes)
+    for (const footprintCube of footprintCubes)
     {
-        const center = getHexCenter(fp.col, fp.row);
+        const center = getHexCenter(footprintCube.col, footprintCube.row);
         canvas.controls.debug.drawCircle(center.x, center.y, 5);
     }
     canvas.controls.debug.endFill();
@@ -677,11 +684,11 @@ export async function updateAllEngagements(options = {})
 
     const excludeId = options.excludeTokenId;
     const allTokens = excludeId
-        ? canvas.tokens.placeables.filter(t => t.id !== excludeId)
+        ? canvas.tokens.placeables.filter(token => token.id !== excludeId)
         : canvas.tokens.placeables;
 
     const currentlyEngaged = new Set(
-        allTokens.filter(t => !!api.findEffectOnToken(t, "engaged")).map(t => t.id)
+        allTokens.filter(token => !!api.findEffectOnToken(token, "engaged")).map(token => token.id)
     );
 
     const shouldBeEngaged = new Set();

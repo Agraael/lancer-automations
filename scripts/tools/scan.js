@@ -3,6 +3,7 @@
 import * as actionFX from '../fx/actionFX.js';
 import { getModuleSetting } from './settings-utils.js';
 import { localize, localizeFormat } from './string-utils.js';
+import { cancelButton } from './dialog-utils.js';
 import { getLAFlags } from './flag-utils.js';
 import { MODULE_ID } from './constants.js';
 import { getStatIcon, getTierIcon } from './scan-icons.js';
@@ -568,7 +569,7 @@ export async function performSystemScan(target, createJournal = false, customNam
     const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
     if (!Flow)
     {
-        ui.notifications.error('lancer-automations: ScanFlow not registered.');
+        ui.notifications.error(localize('LA.notify.scanFlowNotRegistered'));
         return;
     }
     const flow = new Flow(actor.uuid, { target });
@@ -594,7 +595,7 @@ export async function createScanJournalEntry(target, customName = '', ownership 
     const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
     if (!Flow)
     {
-        ui.notifications.error('lancer-automations: ScanFlow not registered.');
+        ui.notifications.error(localize('LA.notify.scanFlowNotRegistered'));
         return null;
     }
     const flow = new Flow(actor.uuid, { target });
@@ -925,7 +926,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                     });
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'submit',
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 520 }).render(true);
@@ -1003,7 +1004,7 @@ export async function showSystemScanDialog(targets)
                         await performSystemScan(target, createJournal && game.user.isGM, customName, ownership);
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'scan',
         render: (html) =>
@@ -1170,7 +1171,7 @@ export async function executeScanOnActivation(reactorToken)
                     }
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'scan',
         render: (html) =>
@@ -1291,7 +1292,7 @@ export async function executeGenerateScan(targetsArg)
                     }
                 },
             },
-            cancel: { icon: '<i class="fas fa-times"></i>', label: localize('LA.common.cancel') },
+            cancel: cancelButton(),
         },
         default: 'ok',
         render: (html) =>
