@@ -1636,15 +1636,26 @@ details.la-scan-collapsible[open]>.la-scan-card-details {
     color: inherit;
 }
 
-.la-changed-default-row {
-    display: flex;
+.lancer-automations-dialog .la-changed-defaults {
+    display: grid;
+    grid-template-columns: max-content minmax(0, max-content) max-content 1fr;
+    column-gap: 8px;
+}
+
+.lancer-automations-dialog .la-changed-defaults > p {
+    grid-column: 1 / -1;
+}
+
+.lancer-automations-dialog .la-changed-defaults .la-changed-default-row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
     align-items: center;
-    gap: 8px;
     padding: 3px 0;
 }
 
 .la-changed-default-name {
-    flex: 1;
+    min-width: 0;
 }
 
 .la-changed-default-values {

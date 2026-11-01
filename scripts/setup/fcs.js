@@ -37,10 +37,15 @@ export function getFCSMode(fullKey, fcs)
     return fcs?.forced?.get(fullKey)?.mode ?? 'open';
 }
 
+function _fcsClass()
+{
+    return typeof ForceClientSettings === 'undefined' ? null : /** @type {any} */ (ForceClientSettings);
+}
+
 // Refresh FCS's in-memory map so a lock applies without a reload.
 function _livePatch(forced)
 {
-    const FCS = typeof ForceClientSettings === 'undefined' ? null : /** @type {any} */ (ForceClientSettings);
+    const FCS = _fcsClass();
     if (FCS?.forced)
         FCS.forced = new Map(Object.entries(forced));
 }
@@ -134,4 +139,13 @@ export async function toggleFCSForce(fullKey, fcs)
     const cur = getFCSMode(fullKey, fcs);
     const next = { open: 'soft', soft: 'hard', hard: 'open' }[cur];
     await setFCSForce(fullKey, next, fcs);
+}
+
+/** @param {string} fullKey "<module>.<key>" */
+export async function toggleFCSClientUnlock(fullKey)
+{
+    const FCS = _fcsClass();
+    if (FCS?.forced.get(fullKey)?.mode !== 'soft')
+        return;
+    await (FCS.unlocked.has(fullKey) ? FCS.lockSetting(fullKey) : FCS.unlockSetting(fullKey));
 }

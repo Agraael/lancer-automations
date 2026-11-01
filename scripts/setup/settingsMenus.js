@@ -6,7 +6,7 @@ import { _extNamespaceActive, _visibleTabs, _groupSections, _dropEmptySections, 
 import { bindKeybindingEditor, bindConfigSearch } from './settings-listeners.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
-import { getFCSData, repairFCSForcedValues, setFCSForceBulk, toggleFCSForce } from './fcs.js';
+import { getFCSData, repairFCSForcedValues, setFCSForceBulk, toggleFCSClientUnlock, toggleFCSForce } from './fcs.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 import { getFCCData, getFCCModeKey, toggleFCCForce } from './fcc.js';
 import { isFreshWorld, runSettingsOnboarding } from './settings-onboarding.js';
@@ -105,6 +105,24 @@ function _injectFCSLocks(html, fields, _app)
         if (['hard-client', 'soft-client'].includes(modeKey))
             $input.prop('disabled', true);
     }
+}
+
+/** @param {any} $html @param {string} fullKey @param {boolean} locked */
+function _showEffectiveValue($html, fullKey, locked)
+{
+    const moduleId = fullKey.slice(0, fullKey.indexOf('.'));
+    const key = fullKey.slice(moduleId.length + 1);
+    const input = $html.find(`[name="${moduleId === MODULE_ID ? key : `__ext.${fullKey}`}"]`)[0];
+    if (!input)
+        return;
+    const value = game.settings.get(/** @type {any} */ (moduleId), /** @type {any} */ (key));
+    input.disabled = locked;
+    if (input.type === 'checkbox')
+        input.checked = !!value;
+    else
+        input.value = String(value ?? '');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /** @param {any} $row @param {string} modeKey */
@@ -746,27 +764,28 @@ export class LancerAutomationsConfig extends FormApplication
             this.render(true);
         });
         // Delegated so the lock keeps working after the search filter rebuilds a label's HTML.
-        $html.off('click.laFcsLock').on('click.laFcsLock', '.la-fcs-lock', async function (/** @type {any} */ ev)
+        $html.off('click.laFcsLock').on('click.laFcsLock', '.la-fcs-lock', async (/** @type {any} */ ev) =>
         {
             ev.preventDefault();
             const fcsData = getFCSData();
             if (!fcsData)
                 return;
-            const isGM = game.user?.isGM;
-            const $icon = $(this);
+            const isGM = !!game.user?.isGM;
+            const $icon = $(ev.currentTarget);
             const lockKey = $icon.attr('data-settings-key');
             if (!lockKey)
                 return;
-            await toggleFCSForce(lockKey, fcsData);
-            let resolved = fcsData.forced.get(lockKey)?.mode ?? 'open';
-            if ((resolved === 'soft' || isGM) && fcsData.unlocked.has(lockKey))
+            await (isGM ? toggleFCSForce(lockKey, fcsData) : toggleFCSClientUnlock(lockKey));
+            const lockData = isGM ? fcsData : (getFCSData() ?? fcsData);
+            let resolved = lockData.forced.get(lockKey)?.mode ?? 'open';
+            if ((resolved === 'soft' || isGM) && lockData.unlocked.has(lockKey))
                 resolved = 'unlocked';
             const newModeKey = resolved + (isGM ? '-gm' : '-client');
             const newIcon = _FCS_ICONS[newModeKey] ?? 'fa-lock-keyhole-open';
             $icon.attr('class', `fas ${newIcon} la-fcs-lock`);
             $icon.prop('title', localize(`FORCECLIENTSETTINGS.ui.${newModeKey}-hint`));
-            const inputName = lockKey.startsWith(`${MODULE_ID}.`) ? lockKey.slice(MODULE_ID.length + 1) : `__ext.${lockKey}`;
-            $html.find(`[name="${inputName}"]`).prop('disabled', ['hard-client', 'soft-client'].includes(newModeKey));
+            if (!isGM)
+                _showEffectiveValue($html, lockKey, ['hard-client', 'soft-client'].includes(newModeKey));
             // drop the search cache for this label so a re-search re-stashes the new icon
             $icon.closest('label').removeData('la-orig');
         });
