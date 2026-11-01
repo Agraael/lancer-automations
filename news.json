@@ -9,7 +9,10 @@
                 "<p style='padding: 8px 10px; background: rgba(192,57,43,0.15); border-left: 4px solid #c0392b; border-radius: 2px;'><b style='color: #c0392b; font-size: 1.15em;'><i class='fas fa-triangle-exclamation'></i> WARNING</b><br>This update cleaned up and refactored the settings, so <b>BE SURE to make a backup first before updating</b>.<br>After updating, you'll get a popup with the settings whose default changed, and you pick which ones to switch. The settings window now also shows where your settings are different from the default.</p>",
                 "<p>Reactions refresh every turn again, and per turn and per round limits now count the right way (per turn is any turn). It took a bit longer than planned, sorry about that.</p>",
                 "<p>Also new: <b>action tape undo</b>, statuses and bonuses on the <b>TAH</b>, a reworked <b>stat bar</b>, a docked <b>stat hint</b>, the <b>Action Extra</b> bonus type, <b>v3 LCP</b> bonuses and new <b>Battle Log</b> awards.</p>"
-            ]
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-5-4-174044789",
+            "linkLabel": "Lancer Automations 4.5.4 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
         },
         {
             "id": "2026-10-28-reaction-refresh",
