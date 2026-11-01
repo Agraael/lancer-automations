@@ -1251,17 +1251,28 @@
     filter: brightness(1.6) drop-shadow(0 0 3px currentColor);
 }
 
+.la-hud-row:has(> .la-free-mark) {
+    position: relative;
+}
+
 .la-hud-row .la-free-mark {
-    margin-left: auto;
-    flex: none;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
     padding: 1px 4px;
     border-radius: 2px;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.85);
     color: #4ed6b8;
     font-size: 0.62em;
     font-weight: 700;
     letter-spacing: 1px;
     line-height: 1.2;
+}
+
+.la-hud-row .la-free-mark.la-attack-mark {
+    color: #ff6b6b;
 }
 
 .la-detail-attack.la-detail-free:hover {

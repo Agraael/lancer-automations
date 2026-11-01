@@ -70,6 +70,7 @@ function closeCol(col, duration = 90)
 
 const KB_MODIFIER_CODES = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
 const FREE_USE_KINDS = new Set(['quick', 'full', 'reaction']);
+const PLAIN_ATTACK_CUE = 'attack';
 const PANEL_SCROLL = '.la-hud-glossary-list, .la-hud-log-list, .la-hud-bond-body';
 
 // Profile switches from anywhere (TAH row, popup dot, sheet) refresh an open weapon popup in place.
@@ -420,6 +421,12 @@ export class LancerHUD
         const hover = this._spendHover;
         if (!hover)
             return;
+        if (hover.kind === PLAIN_ATTACK_CUE)
+        {
+            if (isForceFreeMovement())
+                hover.row.append(`<span class="la-free-mark la-attack-mark">${escapeHtml(localize('LA.tokenHud.attackMark'))}</span>`);
+            return;
+        }
         if (isForceFreeMovement() && FREE_USE_KINDS.has(hover.kind))
         {
             hover.row.append(`<span class="la-free-mark">${escapeHtml(localize('LA.tokenHud.freeMark'))}</span>`);
@@ -1724,11 +1731,12 @@ export class LancerHUD
             if (item.onClick)
             {
                 const spendKind = activationSpendKind(item.spendActivation ?? item.activation ?? item.hoverData?.action?.activation ?? null);
-                if (spendKind)
+                const cueKind = spendKind ?? (item.noRowClick ? PLAIN_ATTACK_CUE : null);
+                if (cueKind)
                 {
                     row.on('mouseenter', () =>
                     {
-                        this._spendHover = { row, kind: spendKind };
+                        this._spendHover = { row, kind: cueKind };
                         this._paintSpendCue();
                     });
                     row.on('mouseleave', () =>
@@ -1790,6 +1798,16 @@ export class LancerHUD
                 row.data('laFreeUse', FREE_USE_KINDS.has(spendKind));
                 if (!item.noRowClick)
                     row.on('click', runAction);
+                else
+                {
+                    row.on('click', (event) =>
+                    {
+                        if (!isForceFreeMovement())
+                            return;
+                        event.stopImmediatePropagation();
+                        runAction(event);
+                    });
+                }
             }
             if (item.onRightClick)
             {

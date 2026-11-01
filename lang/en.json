@@ -909,7 +909,7 @@
         "name": "Debug Movement (hold)"
       },
       "freeMovement": {
-        "hint": "While held, the next move (drag-drop or from code) does not consume the movement cap and ignores terrain penalty, and an action clicked in the TAH spends no action.",
+        "hint": "While held, the next move (drag-drop or from code) does not consume the movement cap and ignores terrain penalty, and an action clicked in the TAH spends no action. A weapon clicked in the TAH rolls a plain attack.",
         "name": "Free Move / Action (hold)"
       },
       "movementWheel": {
@@ -5062,6 +5062,7 @@
       "addEffect": "Add Effect",
       "addExtra": "Add Extra",
       "attack": "Attack",
+      "attackMark": "Atk",
       "clearAllHead": "Clear {count} effects from {name}?",
       "clearAllPermanent": "{count} permanent",
       "clearSearch": "Clear search",
