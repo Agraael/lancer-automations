@@ -666,6 +666,7 @@ const STATUSES_FIELDS = [
     { key: 'actionBadgeItemName', type: 'boolean', label: 'LA.settingsMenus.actionBadgeItemName.label', hint: 'LA.settingsMenus.actionBadgeItemName.hint', nested: true, hideUnmet: true, requires: '_sfx.actionFX' },
     { type: 'statusFx', sub: 'rollResultFX', label: 'LA.settingsMenus.statusFx.rollResultFX.label', hint: 'LA.settingsMenus.statusFx.rollResultFX.hint' },
     { type: 'statusFx', sub: 'damageImpactFX', label: 'LA.settingsMenus.statusFx.damageImpactFX.label', hint: 'LA.settingsMenus.statusFx.damageImpactFX.hint' },
+    { type: 'statusFx', sub: 'reactorExplosionFX', label: 'LA.settingsMenus.statusFx.reactorExplosionFX.label', hint: 'LA.settingsMenus.statusFx.reactorExplosionFX.hint' },
     { type: 'statusFx', sub: 'removeStatusesOnDeath', label: 'LA.settingsMenus.statusFx.removeStatusesOnDeath.label', hint: 'LA.settingsMenus.statusFx.removeStatusesOnDeath.hint' },
 
     { type: 'section', label: 'LA.settingsMenus.section.visualEffects.label', collapsible: true, collapsed: true },

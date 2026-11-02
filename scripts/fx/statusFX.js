@@ -67,6 +67,7 @@ const FX_DEFAULTS = {
     rollResultFX:     true,
     // Damage-type impacts on the target
     damageImpactFX:   true,
+    reactorExplosionFX: true,
 };
 
 export const STATUS_FX_KEYS = [
@@ -112,6 +113,18 @@ export function isDamageImpactFXEnabled()
     try
     {
         return getConfig().damageImpactFX !== false;
+    }
+    catch
+    {
+        return true;
+    }
+}
+
+export function isReactorExplosionFXEnabled()
+{
+    try
+    {
+        return getConfig().reactorExplosionFX !== false;
     }
     catch
     {

@@ -7,6 +7,7 @@ import { tfGetTeam, tfGetTeams } from "./token-factions-utils.js";
 import { chooseInvade, getTokenOwnerUserId, startWaitCard, chooseToken } from "../interactive/index.js";
 import { findItemByLid } from "../interactive/deployables.js";
 import { playSelfDestructFX, playContestedOutcomeFX, playMineDetonationFX } from "../fx/actionFX.js";
+import { isReactorExplosionFXEnabled } from "../fx/statusFX.js";
 import { awaitPendingAck } from "../socket.js";
 import { afterFx } from "../activations/after-fx.js";
 import { redirectNextLwfxSource } from "../activations/flow-steps-extra.js";
@@ -1269,6 +1270,7 @@ export async function executeReactorExplosion(token)
     const caught = await chooseToken(token, {
         pattern: "burst",
         areaRange: 2,
+        count: -1,
         includeSelf: true,
         allowEmptyConfirm: true,
         title: localize('LA.dialogTitle.reactorExplosionCaps'),
@@ -1285,6 +1287,12 @@ export async function executeReactorExplosion(token)
         const { completed } = await executeDamageRoll(token, caught, "4d6", "Explosive", "REACTOR EXPLOSION");
         if (!completed)
             return;
+    }
+
+    if (!isReactorExplosionFXEnabled() || typeof Sequencer === 'undefined')
+    {
+        await token.document.delete({ laCause: 'reactor' });
+        return;
     }
 
     const BASE_SCALE = 0.2;

@@ -4249,6 +4249,10 @@
           "hint": "Status glows and auto icons. Needs reload.",
           "label": "Status Visual Effects"
         },
+        "reactorExplosionFX": {
+          "hint": "Flash, shockwave, screen shake and scorch marks when a reactor explodes.",
+          "label": "Reactor Explosion FX"
+        },
         "removeStatusesOnDeath": {
           "hint": "Clears statuses when structure hits 0.",
           "label": "Remove Statuses on Death"
