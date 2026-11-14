@@ -2,6 +2,17 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-11-14-no-update-this-week",
+            "date": "2026-11-14",
+            "title": "No update this week",
+            "body": [
+                "<p>Sorry, no update this week. I'm cooking a bit more this time, some new stuff and reworks I've been planning. A few previews are on Patreon.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/la-4-8-0-little-175277017",
+            "linkLabel": "LA 4.8.0 preview",
+            "linkNote": "Images on Patreon"
+        },
+        {
             "id": "2026-11-01-lancer-4-5-4",
             "date": "2026-11-01",
             "title": "Lancer Automations 4.5.4",
@@ -337,7 +348,7 @@
             "title": "Where to reach me",
             "body": [
                 "<p>Hi there. There are a lot of you using this module, but not a lot of bug reports or feature requests come back. Not that I'm wishing for more, I just want to make sure you know where to find me.</p>",
-                "<p>The most common spot is <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">my channel on the Lancer Discord</a>. If you support me on <a href=\"https://www.patreon.com/cw/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a>, you can DM me directly. There aren't that many of you yet, so it stays manageable.</p>"
+                "<p>The most common spot is <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">my channel on the Lancer Discord</a>. If you support me on <a href=\"https://www.patreon.com/c/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a>, you can DM me directly. There aren't that many of you yet, so it stays manageable.</p>"
             ]
         }
     ]
