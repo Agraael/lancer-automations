@@ -40,6 +40,7 @@ export function gatherBonusFormData(html, type)
         rollPanel = IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')]?.rollTypes ?? null;
     else if (type === 'resistance' || type === 'vulnerability')
         rollPanel = 'damage';
+
     const rollTypes = rollPanel
         ? html.find(`#bonus-rollTypes-${rollPanel} input:checked`).map((_, el) => /** @type {HTMLInputElement} */ (el).value).get()
         : [];
@@ -59,12 +60,15 @@ export function gatherBonusFormData(html, type)
         applyTo,
         applyToTargetter
     };
+
     const bonusTier = readTierGate(html.find('.la-tier-gate[data-role="em-bonus"]')[0]);
     if (bonusTier)
         bonusData.tier = bonusTier;
+
     const conditionSrc = String(html.find('#bonus-condition-value').val() || '').trim();
     if (conditionSrc)
         bonusData.condition = '@@fn:' + conditionSrc;
+
     const applyToConditionSrc = String(html.find('#bonus-applyToCondition-value').val() || '').trim();
     if (applyToConditionSrc)
         bonusData.applyToCondition = '@@fn:' + applyToConditionSrc;
@@ -81,11 +85,13 @@ export function gatherBonusFormData(html, type)
         bonusData.damageMode = damageMode;
         if (damageMode === 'change_type')
             bonusData.damageScope = html.find('#bonus-damageScope').val() || 'base';
+
         const damageEntries = [];
         html.find('#bonus-damage-list .bonus-damage-entry').each(function ()
         {
             const idx = $(this).data('index');
             const damageType = $(this).find(`#bonus-dmgType-${idx}`).val();
+
             if (damageMode === 'change_type')
             {
                 const from = $(this).find(`#bonus-dmgFrom-${idx}`).val() || DAMAGE_CHANGE_TYPE_ALL;
@@ -128,6 +134,7 @@ export function gatherBonusFormData(html, type)
     {
         bonusData.subtype = html.find('#bonus-immunity-subtype').val();
         const allowed = IMMUNITY_FILTER_FIELDS[bonusData.subtype];
+
         if (allowed)
         {
             for (const field of ['rollTypes', 'itemLids', 'itemId', 'applyTo', 'applyToTargetter', 'condition', 'applyToCondition'])
@@ -136,6 +143,7 @@ export function gatherBonusFormData(html, type)
                     delete bonusData[field];
             }
         }
+
         if (bonusData.subtype === 'effect')
         {
             bonusData.effects = [];
@@ -160,6 +168,7 @@ export function gatherBonusFormData(html, type)
             if (!BONUS_FILTER_FIELDS[type][field])
                 delete bonusData[field];
         }
+
         bonusData.damageTypes = [];
         html.find('.bonus-immunity-damage-option.selected').each(function()
         {
@@ -168,6 +177,8 @@ export function gatherBonusFormData(html, type)
     }
     else if (type === 'target_modifier')
         bonusData.subtype = html.find('#bonus-target-modifier-subtype').val();
+    else if (type === 'movement')
+        bonusData.subtype = html.find('#bonus-movement-subtype').val() || 'climber';
     else if (type === 'movement_extra')
     {
         bonusData.subtype = html.find('#bonus-movement-extra-subtype').val() || 'boost';
@@ -185,9 +196,11 @@ export function gatherBonusFormData(html, type)
             if (!BONUS_FILTER_FIELDS.reroll[field])
                 delete bonusData[field];
         }
+
         const list = Array.from(document.querySelectorAll('#bonus-reroll-rollTypes input:checked'), box => /** @type {HTMLInputElement} */ (box).value);
         if (list.length > 0)
             bonusData.rollTypes = list;
+
         const sub = String(html.find('#bonus-reroll-subtype').val() ?? 'retry');
         bonusData.subtype = ['retry', 'highest', 'lowest', 'choose'].includes(sub) ? sub : 'retry';
     }
@@ -200,43 +213,55 @@ export function gatherBonusFormData(html, type)
         origin: durOrigin,
         forcePrototype: typeof targetID === 'string' && targetID.includes('.'),
     };
+
     if (duration === 'roundEnd' || duration === 'roundStart')
         addOptions.durationRounds = durTurns;
+
     const customIcon = String(html.find('#bonus-icon').val() || '').trim();
     if (customIcon)
         addOptions.icon = customIcon;
 
     const consumptionTriggers = html.find('#bonus-trigger input:checked')
         .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+
     if (consumptionTriggers.length > 0)
     {
         const consumption = {
             trigger: consumptionTriggers.length === 1 ? consumptionTriggers[0] : consumptionTriggers
         };
+
         const consumptionOrigin = html.find('#bonus-trigger-origin').val();
         if (consumptionOrigin)
             consumption.originId = consumptionOrigin;
+
         const filterItemLid = String(html.find('#bonus-filter-itemLid').val())?.trim();
         if (filterItemLid)
             consumption.itemLid = filterItemLid;
+
         const filterItemId = String(html.find('#bonus-filter-itemId').val())?.trim();
         if (filterItemId)
             consumption.itemId = filterItemId;
+
         const filterActionName = String(html.find('#bonus-filter-actionName').val())?.trim();
         if (filterActionName)
             consumption.actionName = filterActionName;
+
         const filterMinDistance = String(html.find('#bonus-filter-minDistance').val());
         if (filterMinDistance)
             consumption.minDistance = Number.parseInt(filterMinDistance);
+
         const filterCheckType = String(html.find('#bonus-filter-checkType').val())?.trim();
         if (filterCheckType)
             consumption.checkType = filterCheckType;
+
         const filterCheckAbove = String(html.find('#bonus-filter-checkAbove').val());
         if (filterCheckAbove)
             consumption.checkAbove = Number.parseInt(filterCheckAbove);
+
         const filterCheckBelow = String(html.find('#bonus-filter-checkBelow').val());
         if (filterCheckBelow)
             consumption.checkBelow = Number.parseInt(filterCheckBelow);
+
         const filterStatusId = String(html.find('#bonus-filter-statusId').val())?.trim();
         if (filterStatusId)
             consumption.statusId = filterStatusId;
@@ -246,7 +271,9 @@ export function gatherBonusFormData(html, type)
 
     if (supportsConsumeOnUsage(type, bonusData.subtype ?? null))
         bonusData.consumeOnUsage = html.find('#bonus-consumeOnUsage').is(':checked');
+
     const frequency = String(html.find('#bonus-frequency').val() || '');
+
     if (frequency)
     {
         bonusData.frequency = frequency;
@@ -254,5 +281,6 @@ export function gatherBonusFormData(html, type)
         if (frequencyCount > 1)
             bonusData.frequencyCount = frequencyCount;
     }
+
     return { bonusData, addOptions, duration };
 }

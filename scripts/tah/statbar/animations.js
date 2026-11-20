@@ -10,8 +10,9 @@ import { _lastValues, _flashingTokens, _fadeState, _overlayHubs, _countFrom } fr
 import { isEnabled, statBarDisabled, passesVisibilityMode, shouldShowBars } from './rules.js';
 import { _resolveExtraBarVisibility } from './extras.js';
 import { getEffectiveMax, snapshotValues } from './model.js';
-import { getModuleSetting, getExternalSetting } from '../../tools/settings-utils.js';
+import { getModuleSetting } from '../../tools/settings-utils.js';
 import { floatTokenText } from '../../tools/float-text.js';
+import { signedNumber } from '../../tools/string-utils.js';
 import { mixColor, overchargeColor, REPAIR_COLOR } from '../../tools/color-utils.js';
 import { getLAFlag } from '../../tools/flag-utils.js';
 
@@ -25,27 +26,35 @@ export function refreshVisibleLancerTokens(cascade = false)
         clearTimeout(timer);
     _cascadeTimers = [];
     const reveal = [];
+
     for (const tok of canvas.tokens.placeables)
     {
         if (!isLancerCombatant(tok.actor))
             continue;
         if (!_overlayHubs.has(tok.id))
             continue;
+
         const show = shouldShowBars(tok);
         if (cascade && show && (_getFadeTarget(tok)?.alpha ?? 0) < 1 && !_reduceMotion())
+        {
+            _overlayHubs.get(tok.id).barsShown = true;
             reveal.push(tok);
+        }
         else
             fadeBars(tok, show ? 1 : 0);
     }
+
     reveal.sort((left, right) => left.center.x - right.center.x);
     reveal.forEach((tok, order) =>
     {
         const delayMs = Math.min(CASCADE_MAX_MS, order * CASCADE_STEP_MS);
+
         if (delayMs <= 0)
         {
             fadeBars(tok, 1);
             return;
         }
+
         _cascadeTimers.push(setTimeout(() =>
         {
             if (!tok.destroyed && shouldShowBars(tok))
@@ -67,14 +76,22 @@ export function fadeBars(token, targetAlpha)
     const target = _getFadeTarget(token);
     if (!target)
         return;
+
     const id = token.id;
     const cur = _fadeState.get(id);
+    const shownEntry = _overlayHubs.get(id);
+
+    if (shownEntry)
+        shownEntry.barsShown = targetAlpha > 0;
+
     if (cur && cur.target === targetAlpha)
         return;
     if (cur)
         canvas.app.ticker.remove(cur.tick);
+
     const startAlpha = target.alpha ?? 1;
     const startHub = _overlayHubs.get(id)?.hub;
+
     if (startAlpha === targetAlpha)
     {
         _fadeState.delete(id);
@@ -82,15 +99,19 @@ export function fadeBars(token, targetAlpha)
             startHub.pivot.y = 0;
         return;
     }
+
     const reduce = _reduceMotion();
     const showing = targetAlpha > startAlpha;
     let duration = 150;
+
     if (!reduce)
         duration = showing ? APPEAR_MS : HIDE_MS;
+
     const rowHeight = _overlayHubs.get(id)?.rowHeight ?? 0;
     const pivotNow = startHub && !startHub.destroyed ? startHub.pivot.y : 0;
     let pivotFrom = pivotNow;
     let pivotTo = pivotNow;
+
     if (showing)
     {
         if (startAlpha <= 0)
@@ -99,23 +120,27 @@ export function fadeBars(token, targetAlpha)
     }
     else if (startAlpha >= 1)
         pivotTo = -rowHeight * HIDE_DROP;
+
     const startTime = performance.now();
 
     const tick = () =>
     {
         const fadeTarget = _getFadeTarget(token);
+
         if (!fadeTarget || token.destroyed)
         {
             canvas.app.ticker.remove(tick);
             _fadeState.delete(id);
             return;
         }
+
         const progress = Math.min(1, (performance.now() - startTime) / duration);
         const eased = 1 - Math.pow(1 - progress, 3);
         fadeTarget.alpha = startAlpha + (targetAlpha - startAlpha) * eased;
         const hub = _overlayHubs.get(id)?.hub;
         if (hub && !hub.destroyed)
             hub.pivot.y = reduce || progress >= 1 ? 0 : pivotFrom + (pivotTo - pivotFrom) * eased;
+
         if (progress >= 1)
         {
             canvas.app.ticker.remove(tick);
@@ -137,6 +162,7 @@ function runFlashAnimation(token, name, drawAt, delayMs = 0)
     parent.addChild(flashGfx);
 
     const flashStart = performance.now();
+
     const tick = () =>
     {
         if (!flashGfx || flashGfx.destroyed)
@@ -144,28 +170,35 @@ function runFlashAnimation(token, name, drawAt, delayMs = 0)
             canvas.app.ticker.remove(tick);
             return;
         }
+
         const elapsed = performance.now() - flashStart - delayMs;
         flashGfx.clear();
+
         if (elapsed < 0)
         {
             drawAt(flashGfx, -1);
             return;
         }
+
         if (elapsed < FLASH_HOLD_MS)
         {
             drawAt(flashGfx, 0);
             return;
         }
+
         const progress = Math.min(1, (elapsed - FLASH_HOLD_MS) / FLASH_SHRINK_MS);
+
         if (progress >= 1)
         {
             flashGfx.destroy();
             canvas.app.ticker.remove(tick);
             return;
         }
+
         const eased = 1 - Math.pow(1 - progress, 3);
         drawAt(flashGfx, eased);
     };
+
     canvas.app.ticker.add(tick);
 }
 
@@ -174,10 +207,12 @@ function runTimedOverlay(token, name, durationMs, draw)
     const entry = _overlayHubs.get(token.id);
     if (!entry?.hub)
         return;
+
     const gfx = new PIXI.Graphics();
     gfx.name = name;
     entry.hub.addChild(gfx);
     const start = performance.now();
+
     const tick = () =>
     {
         if (gfx.destroyed)
@@ -185,16 +220,20 @@ function runTimedOverlay(token, name, durationMs, draw)
             canvas.app.ticker.remove(tick);
             return;
         }
+
         const elapsed = performance.now() - start;
         gfx.clear();
+
         if (elapsed >= durationMs)
         {
             gfx.destroy();
             canvas.app.ticker.remove(tick);
             return;
         }
+
         draw(gfx, elapsed, _overlayHubs.get(token.id)?.boxScale ?? 1);
     };
+
     canvas.app.ticker.add(tick);
     tick();
 }
@@ -205,23 +244,28 @@ function _startJolt(token, ampFactor, durationMs)
 {
     if (_reduceMotion())
         return;
+
     const running = _joltTickers.get(token.id);
     if (running && running.ampFactor > ampFactor && performance.now() < running.end)
         return;
     _stopJolt(token.id);
     const start = performance.now();
+
     const tick = () =>
     {
         const entry = _overlayHubs.get(token.id);
         const elapsed = performance.now() - start;
+
         if (token.destroyed || elapsed >= durationMs)
         {
             _stopJolt(token.id);
             return;
         }
+
         if (entry?.hub && !entry.hub.destroyed)
             entry.hub.pivot.x = Math.sin(elapsed / 18) * entry.rowHeight * ampFactor * (1 - elapsed / durationMs);
     };
+
     _joltTickers.set(token.id, { tick, ampFactor, end: start + durationMs });
     canvas.app.ticker.add(tick);
 }
@@ -251,24 +295,30 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (!visibleIds.has(barId))
             return;
+
         const rowIdx = barId === 'hp' ? 0 : 1;
+
         const hostMax = barId === 'pilotStress'
             ? Math.max(token.actor?.system?.bond_state?.stress?.max ?? 8, oldVal, newVal)
             : Math.max(getEffectiveMax(token.actor, barId), oldVal, newVal);
+
         if (hostMax <= 0)
             return;
+
         const barX = rightColX + 1;
         const barW = rightColW - 2;
         const rowY = startY + rowIdx * (rowHeight + rowGap) + 1;
         const rowH = rowHeight - 2;
 
-        const minVal = Math.min(oldVal, newVal);
+        const minVal = Math.max(0, Math.min(oldVal, newVal));
         const maxVal = Math.max(oldVal, newVal);
         const isDamage = newVal < oldVal;
         const initialFlashX = barX + (minVal / hostMax) * barW;
         const initialFlashW = ((maxVal - minVal) / hostMax) * barW;
+
         if (initialFlashW <= 0)
             return;
+
         let chunkColor = 0xffffff;
         if (barId === 'hp')
             chunkColor = isDamage ? 0xff7b6b : 0xc8ffd0;
@@ -279,9 +329,11 @@ function spawnFlash(token, barId, oldVal, newVal)
         runFlashAnimation(token, `la-flash-${barId}`, (gfx, eased) =>
         {
             const remainingW = initialFlashW * (1 - eased);
+
             const drawX = isDamage
                 ? initialFlashX
                 : initialFlashX + (initialFlashW - remainingW);
+
             gfx.beginFill(chunkColor, 1);
             gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
@@ -293,12 +345,16 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (!visibleIds.has(barId))
             return;
+
         const rowIdx = barId === 'structure' ? 0 : 1;
+
         const pipMax = barId === 'structure'
             ? (token.actor?.system?.structure?.max ?? 0)
             : (token.actor?.system?.stress?.max ?? 0);
+
         if (pipMax <= 0)
             return;
+
         const chromeScale = geom.chromeScale ?? 1;
         const rowY = startY + rowIdx * (rowHeight + rowGap);
         const pipY = rowY + chromeScale;
@@ -308,11 +364,14 @@ function spawnFlash(token, barId, oldVal, newVal)
         const newEmpty = pipMax - Math.max(0, Math.min(pipMax, newVal));
         const startIdx = Math.min(oldEmpty, newEmpty);
         const endIdx = Math.max(oldEmpty, newEmpty);
+
         if (endIdx <= startIdx)
             return;
+
         const isDamage = newVal < oldVal;
         const pipColor = barId === 'structure' ? 0xffd633 : 0xff8822;
         const stagger = !_reduceMotion();
+
         if (!isDamage)
         {
             if (stagger)
@@ -324,14 +383,17 @@ function spawnFlash(token, barId, oldVal, newVal)
                     gfx.endFill();
                 });
             }
+
             for (let pipIdx = startIdx; pipIdx < endIdx; pipIdx++)
             {
                 const pipX = layoutOffsetX + chromeScale + pipIdx * (pipSegW + chromeScale);
                 const delayMs = stagger ? (endIdx - 1 - pipIdx) * PIP_STEP_MS : 0;
                 _gainLight(token, `la-flash-${barId}-${pipIdx}`, _boxPoints(0, pipX, pipY, pipSegW, pipH), pipColor, true, delayMs, false);
             }
+
             return;
         }
+
         _startJolt(token, 0.46, 350);
         runTimedOverlay(token, `la-flash-${barId}-hit`, 350, (gfx, elapsed) =>
         {
@@ -339,6 +401,7 @@ function spawnFlash(token, barId, oldVal, newVal)
             gfx.drawRect(layoutOffsetX, rowY, pipColW, rowHeight);
             gfx.endFill();
         });
+
         for (let pipIdx = startIdx; pipIdx < endIdx; pipIdx++)
         {
             const order = pipIdx - startIdx;
@@ -352,12 +415,14 @@ function spawnFlash(token, barId, oldVal, newVal)
                     gfx.endFill();
                     return;
                 }
+
                 const remainingW = pipSegW * (1 - eased);
                 gfx.beginFill(0xffffff, 1);
                 gfx.drawRect(pipX + (pipSegW - remainingW), pipY, remainingW, pipH);
                 gfx.endFill();
             }, stagger ? order * PIP_STEP_MS : 0);
         }
+
         return;
     }
 
@@ -365,19 +430,22 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (!visibleIds.has('hp'))
             return;
+
         const hpMax = Math.max(getEffectiveMax(token.actor, 'hp'), oldVal, newVal);
         if (hpMax <= 0)
             return;
+
         const barX = rightColX + 1;
         const barW = rightColW - 2;
         const rowY = startY + 1;
         const rowH = rowHeight - 2;
 
-        const minVal = Math.min(oldVal, newVal);
+        const minVal = Math.max(0, Math.min(oldVal, newVal));
         const maxVal = Math.max(oldVal, newVal);
         const isDamage = newVal < oldVal;
         const initialFlashX = barX + (minVal / hpMax) * barW;
         const initialFlashW = ((maxVal - minVal) / hpMax) * barW;
+
         if (initialFlashW <= 0)
             return;
         if (isDamage)
@@ -385,9 +453,11 @@ function spawnFlash(token, barId, oldVal, newVal)
         runFlashAnimation(token, `la-flash-${barId}`, (gfx, eased) =>
         {
             const remainingW = initialFlashW * (1 - eased);
+
             const drawX = isDamage
                 ? initialFlashX
                 : initialFlashX + (initialFlashW - remainingW);
+
             gfx.beginFill(isDamage ? 0xff7b6b : 0xbfe4ff, 1);
             gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
@@ -400,12 +470,15 @@ function spawnFlash(token, barId, oldVal, newVal)
         const hostId = barId === 'burn' ? 'hp' : 'heat';
         if (!visibleIds.has(hostId))
             return;
+
         const hostMax = Math.max(getEffectiveMax(token.actor, hostId), oldVal, newVal);
         if (hostMax <= 0)
             return;
+
         const hostVal = barId === 'burn'
             ? (token.actor?.system?.hp?.value ?? 0)
             : (token.actor?.system?.heat?.value ?? 0);
+
         const rowIdx = barId === 'burn' ? 0 : 1;
         const barX = rightColX + 1;
         const barW = rightColW - 2;
@@ -417,6 +490,7 @@ function spawnFlash(token, barId, oldVal, newVal)
 
         let flashStartX;
         let flashW;
+
         if (barId === 'burn')
         {
             const oldEdge = barX + Math.max(0, fillPx - (oldVal / hostMax) * barW);
@@ -431,6 +505,7 @@ function spawnFlash(token, barId, oldVal, newVal)
             flashStartX = Math.min(oldEdge, newEdge);
             flashW = Math.abs(newEdge - oldEdge);
         }
+
         if (flashW <= 0)
             return;
 
@@ -441,6 +516,7 @@ function spawnFlash(token, barId, oldVal, newVal)
             const remainingW = initialFlashW * (1 - eased);
             // Reversed vs host bar.
             let drawX;
+
             if (barId === 'burn')
             {
                 drawX = isReduction
@@ -453,6 +529,7 @@ function spawnFlash(token, barId, oldVal, newVal)
                     ? initialFlashX
                     : initialFlashX + (initialFlashW - remainingW);
             }
+
             gfx.beginFill(0xffffff, 1);
             gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
@@ -468,6 +545,7 @@ function spawnFlash(token, barId, oldVal, newVal)
         const reactionX = geom.reactionX ?? -reactionExtension;
         const total = geom.reactionTotal;
         const slotBox = slot => _boxPoints(0, reactionX + chromeScale + slot * (geom.tickW + geom.tickGap), startY + chromeScale, geom.tickW, rowHeight - 2 * chromeScale);
+
         if (barId === 'reactionGain')
         {
             const stagger = !_reduceMotion();
@@ -475,6 +553,7 @@ function spawnFlash(token, barId, oldVal, newVal)
                 _gainLight(token, `la-flash-reaction-${slot}`, slotBox(slot), 0x9944cc, true, stagger ? (total - oldVal - 1 - slot) * PIP_STEP_MS : 0);
             return;
         }
+
         for (let slot = Math.max(0, total - oldVal); slot < Math.min(total, total - newVal); slot++)
             _spendPop(token, `la-flash-reaction-${slot}`, slotBox(slot), 0xc38cf0, ringW, true);
         return;
@@ -484,6 +563,7 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (indicatorW <= 0)
             return;
+
         const reactionX = geom.reactionX ?? -reactionExtension;
         _spendPop(token, 'la-flash-reaction', _boxPoints(0, reactionX, startY, indicatorW, rowHeight), 0xc38cf0, ringW, true);
         return;
@@ -493,6 +573,7 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (indicatorW <= 0)
             return;
+
         const reactionX = geom.reactionX ?? -reactionExtension;
         _gainLight(token, 'la-flash-reaction', _boxPoints(0, reactionX + chromeScale, startY + chromeScale, indicatorW - 2 * chromeScale, rowHeight - 2 * chromeScale), 0x9944cc, true);
         return;
@@ -510,12 +591,15 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (geom.coreCenterX == null)
             return;
+
         const points = _diamondPoints(0, geom.coreCenterX, geom.coreCenterY, rowHeight / 2);
+
         if (barId === 'coreOn')
         {
             _spendPop(token, 'la-flash-core', points, 0xffffff, ringW, true);
             return;
         }
+
         const inner = _diamondPoints(0, geom.coreCenterX, geom.coreCenterY, rowHeight / 2 - chromeScale * 1.1);
         runTimedOverlay(token, 'la-flash-core', 300, (gfx, elapsed, boxScale) =>
         {
@@ -530,8 +614,10 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (geom.armorOriginX == null)
             return;
+
         const reduce = _reduceMotion();
         const innerH = rowHeight - 2 * chromeScale;
+
         if (newVal > oldVal)
         {
             for (let tickIdx = Math.max(0, oldVal); tickIdx < Math.min(8, newVal); tickIdx++)
@@ -539,8 +625,10 @@ function spawnFlash(token, barId, oldVal, newVal)
                 const tickX = geom.armorGap + chromeScale + tickIdx * (geom.tickW + geom.tickGap);
                 _gainLight(token, `la-flash-armor-${tickIdx}`, _boxPoints(geom.armorOriginX, tickX, startY + chromeScale, geom.tickW, innerH), 0xc8c8c8, false);
             }
+
             return;
         }
+
         for (let tickIdx = Math.max(0, newVal); tickIdx < oldVal; tickIdx++)
         {
             const tickX = geom.armorGap + chromeScale + tickIdx * (geom.tickW + geom.tickGap);
@@ -556,6 +644,7 @@ function spawnFlash(token, barId, oldVal, newVal)
                 gfx.endFill();
             });
         }
+
         return;
     }
 
@@ -563,9 +652,11 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (geom.ocOriginX == null || !geom.ocSteps)
             return;
+
         const reduce = _reduceMotion();
         const innerH = rowHeight - 2 * chromeScale;
         const blockW = geom.ocSteps * geom.tickW + (geom.ocSteps - 1) * geom.tickGap + 2 * chromeScale;
+
         if (newVal < oldVal)
         {
             if (!reduce)
@@ -577,7 +668,9 @@ function spawnFlash(token, barId, oldVal, newVal)
                     gfx.lineStyle(0);
                 });
             }
+
             const lastIdx = Math.min(geom.ocSteps, oldVal) - 1;
+
             for (let tickIdx = Math.max(0, newVal); tickIdx <= lastIdx; tickIdx++)
             {
                 const delayMs = reduce ? 0 : (lastIdx - tickIdx) * PIP_STEP_MS;
@@ -588,6 +681,7 @@ function spawnFlash(token, barId, oldVal, newVal)
                 {
                     const local = elapsed - delayMs;
                     let tickColor = litColor;
+
                     if (local >= 0 && reduce)
                         tickColor = mixColor(litColor, 0x262626, local / 300);
                     else if (local >= 0)
@@ -597,16 +691,20 @@ function spawnFlash(token, barId, oldVal, newVal)
                     gfx.endFill();
                 });
             }
+
             return;
         }
+
         const tickIdx = Math.min(geom.ocSteps, newVal) - 1;
         if (tickIdx < 0)
             return;
+
         const tickX = geom.ocGap + chromeScale + tickIdx * (geom.tickW + geom.tickGap);
         const tickColor = overchargeColor(tickIdx + 1, geom.ocSteps);
         runTimedOverlay(token, 'la-flash-overcharge', reduce ? 250 : 500, (gfx, elapsed, boxScale) =>
         {
             const px = localX => geom.ocOriginX + localX * boxScale;
+
             if (reduce)
             {
                 gfx.beginFill(0xffffff, 1 - elapsed / 250);
@@ -614,9 +712,11 @@ function spawnFlash(token, barId, oldVal, newVal)
                 gfx.endFill();
                 return;
             }
+
             gfx.lineStyle(ringW, 0xff8c50, 0.9 * (1 - elapsed / 500));
             gfx.drawRect(px(geom.ocGap), geom.heatRowY, blockW * boxScale, rowHeight);
             gfx.lineStyle(0);
+
             if (elapsed < 120)
             {
                 gfx.beginFill(0xffffff, 1);
@@ -638,16 +738,20 @@ function spawnFlash(token, barId, oldVal, newVal)
     {
         if (geom.gaugeX == null || !geom.repairsMax)
             return;
+
         if (newVal > oldVal)
         {
             const stagger = !_reduceMotion();
+
             for (let segIdx = Math.max(0, oldVal); segIdx < Math.min(geom.repairsMax, newVal); segIdx++)
             {
                 const seg = _gaugeSegment(geom, segIdx);
                 _gainLight(token, `la-flash-repair-${segIdx}`, _boxPoints(0, seg.x, seg.y, seg.w, seg.h), REPAIR_COLOR, true, stagger ? (segIdx - oldVal) * PIP_STEP_MS : 0);
             }
+
             return;
         }
+
         const segIdx = Math.max(0, Math.min(geom.repairsMax - 1, oldVal - 1));
         const seg = _gaugeSegment(geom, segIdx);
         _spendPop(token, 'la-flash-repair', _boxPoints(0, seg.x, seg.y, seg.w, seg.h), REPAIR_COLOR, ringW, false);
@@ -692,6 +796,7 @@ function _gainLight(token, name, points, color, loud, delayMs = 0, fixed = true)
     {
         const scaleX = fixed ? boxScale : 1;
         const local = elapsed - delayMs;
+
         if (local < 0)
         {
             gfx.beginFill(0x2b2b2b, 1);
@@ -699,6 +804,7 @@ function _gainLight(token, name, points, color, loud, delayMs = 0, fixed = true)
             gfx.endFill();
             return;
         }
+
         if (swell)
         {
             const fade = 1 - local / 500;
@@ -709,8 +815,10 @@ function _gainLight(token, name, points, color, loud, delayMs = 0, fixed = true)
             gfx.drawPolygon(points(1.4, scaleX));
             gfx.endFill();
         }
+
         if (local >= 300)
             return;
+
         let scale = 1;
         if (swell)
             scale = local < 110 ? 1 + 0.3 * (local / 110) : 1.3 - 0.3 * _easeOut((local - 110) / 150);
@@ -735,6 +843,7 @@ function _spendPop(token, name, points, ringColor, ringW, punch)
             gfx.endFill();
             return;
         }
+
         if (elapsed < flashMs)
         {
             const scale = !punch ? 1 : (elapsed < 110 ? 1 + 0.35 * (elapsed / 110) : 1.35 - 0.35 * _easeOut((elapsed - 110) / 150));
@@ -742,6 +851,7 @@ function _spendPop(token, name, points, ringColor, ringW, punch)
             gfx.drawPolygon(points(scale, boxScale));
             gfx.endFill();
         }
+
         const ringProgress = elapsed / ringMs;
         gfx.lineStyle(ringW, ringColor, 1 - ringProgress);
         gfx.drawPolygon(points(1 + ringGrow * _easeOut(ringProgress), boxScale));
@@ -754,34 +864,24 @@ function fireExtraFeedback(token, entryId, oldVal, newVal)
 {
     if (oldVal === newVal)
         return;
+
     try
     {
         const extras = getLAFlag(token.document, FLAG_EXTRAS) ?? [];
         const entry = extras.find(/** @type {any} */ extra => extra?.id === entryId);
+
         if (!entry?.audioTextFeedback)
             return;
+
         const canSee = _resolveExtraBarVisibility(/** @type {any} */ (token).actor, entry);
         const delta = newVal - oldVal;
         const label = entry.label || 'Stat';
-        const text = canSee ? `${delta > 0 ? '+' : ''}${delta} ${label}` : '???';
-        if (canvas?.interface?.createScrollingText)
-        {
-            const showScroll = !!getExternalSetting('lancer', 'floatingNumbers', true);
-            if (showScroll)
-            {
-                const primary = canSee ? (entry.color?.stops?.[0] ?? '#ffffff') : '#888888';
-                const floatsUp = entry.autoKey === 'bondXp' ? delta > 0 : delta < 0;
-                canvas.interface.createScrollingText(token.center, text, {
-                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    direction: floatsUp ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    fontSize: 28,
-                    fill: primary,
-                    stroke: 0,
-                    strokeThickness: 4,
-                    jitter: 0.25,
-                });
-            }
-        }
+        const text = canSee ? `${signedNumber(delta)} ${label}` : '???';
+
+        const primary = canSee ? (entry.color?.stops?.[0] ?? '#ffffff') : '#888888';
+        const floatsUp = entry.autoKey === 'bondXp' ? delta > 0 : delta < 0;
+        floatTokenText(token, text, primary, floatsUp ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM);
+
         playStatsSound('generic_stat');
     }
     catch
@@ -794,11 +894,14 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
     const geom = token._laBarsGeom;
     if (!geom || !Array.isArray(geom.extras) || oldVal === newVal)
         return;
+
     let barGeom = null;
     let lineY = 0;
+
     for (const line of geom.extras)
     {
         const found = line.entries.find(/** @type {any} */ entryGeom => entryGeom.entryId === entryId);
+
         if (found)
         {
             barGeom = found;
@@ -806,6 +909,7 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
             break;
         }
     }
+
     if (!barGeom)
         return;
 
@@ -825,20 +929,25 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
         // LTR fill: changed pips sit between min(old,new) and max(old,new) from the left.
         const minVal = Math.max(0, Math.min(pipMax, Math.min(oldVal, newVal)));
         const maxVal = Math.max(0, Math.min(pipMax, Math.max(oldVal, newVal)));
+
         if (maxVal <= minVal)
             return;
+
         const flashStartX = colX + 1 + minVal * (pipSegW + pipGapPx);
         const flashEndX = colX + 1 + maxVal * (pipSegW + pipGapPx) - pipGapPx;
         const initialFlashW = flashEndX - flashStartX;
+
         if (initialFlashW <= 0)
             return;
         runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) =>
         {
             const remainingW = initialFlashW * (1 - eased);
+
             // Damage: pips drain from the right → flash shrinks from the left.
             const drawX = isDamage
                 ? flashStartX
                 : flashStartX + (initialFlashW - remainingW);
+
             gfx.beginFill(0xffffff, 1);
             gfx.drawRect(drawX, rowY, remainingW, rowH);
             gfx.endFill();
@@ -852,18 +961,21 @@ function spawnFlashExtra(token, entryId, oldVal, newVal)
     const barW = barGeom.w - 2;
     const rowY = lineY + 1;
     const rowH = rowHeight - 2;
-    const minVal = Math.min(oldVal, newVal);
+    const minVal = Math.max(0, Math.min(oldVal, newVal));
     const maxVal = Math.max(oldVal, newVal);
     const initialFlashX = barX + (minVal / hostMax) * barW;
     const initialFlashW = ((maxVal - minVal) / hostMax) * barW;
+
     if (initialFlashW <= 0)
         return;
     runFlashAnimation(token, `la-flash-extra-${entryId}`, (gfx, eased) =>
     {
         const remainingW = initialFlashW * (1 - eased);
+
         const drawX = isDamage
             ? initialFlashX
             : initialFlashX + (initialFlashW - remainingW);
+
         gfx.beginFill(0xffffff, 1);
         gfx.drawRect(drawX, rowY, remainingW, rowH);
         gfx.endFill();
@@ -903,8 +1015,15 @@ export function scheduleFlashFade(tok)
     Hooks.callAll('lancer-automations.statBarFlash', tok.id, true);
     const fadeTarget = _getFadeTarget(tok);
     const revealed = !getModuleSetting(SETTING_FLASH_FOLLOWS_VIS) || passesVisibilityMode(tok, isTokenInCombat(tok));
+
     if (fadeTarget && revealed)
         fadeTarget.alpha = 1;
+
+    const flashEntry = _overlayHubs.get(tok.id);
+
+    if (flashEntry)
+        flashEntry.barsShown = shouldShowBars(tok);
+
     setTimeout(() =>
     {
         _flashingTokens.delete(tok.id);
@@ -922,15 +1041,18 @@ export function flashChangedExtras(tok, prev, next)
     const prevExtras = prev.extras ?? {};
     const nextExtras = next.extras ?? {};
     let flashed = false;
+
     for (const extraId of Object.keys(nextExtras))
     {
         const oldVal = prevExtras[extraId];
+
         if (oldVal !== undefined && oldVal !== nextExtras[extraId])
         {
             spawnFlashExtra(tok, extraId, oldVal, nextExtras[extraId]);
             flashed = true;
         }
     }
+
     return flashed;
 }
 
@@ -942,6 +1064,7 @@ export function animateActorChanges(actor)
     {
         const prev = _lastValues.get(tok.id) ?? { extras: {} };
         const next = snapshotValues(actor, tok.document);
+
         if (prev.hp !== next.hp || prev.heat !== next.heat || prev.pilotStress !== next.pilotStress)
             _countFrom.set(tok.id, { hp: prev.hp, heat: prev.heat, pilotStress: prev.pilotStress, at: performance.now() });
 
@@ -957,6 +1080,7 @@ export function animateActorChanges(actor)
 
         let flashed = false;
         const FLASH_BARS = ['hp', 'heat', 'structure', 'stress', 'pilotStress', 'overshield', 'burn', 'infection'];
+
         for (const id of FLASH_BARS)
         {
             if (prev[id] !== undefined && prev[id] !== next[id])
@@ -965,65 +1089,53 @@ export function animateActorChanges(actor)
                 flashed = true;
             }
         }
+
         // Path-bound extras: their value updates when the actor changes.
         if (flashChangedExtras(tok, prev, next))
             flashed = true;
+
         // Pilot stress delta floats over the token like other damages.
-        if (prev.pilotStress !== undefined && prev.pilotStress !== next.pilotStress
-            && actor.type === 'pilot' && canvas?.interface?.createScrollingText)
+        if (prev.pilotStress !== undefined && prev.pilotStress !== next.pilotStress && actor.type === 'pilot')
         {
-            const showScroll = !!getExternalSetting('lancer', 'floatingNumbers', true);
-            if (showScroll)
-            {
-                const delta = next.pilotStress - prev.pilotStress;
-                canvas.interface.createScrollingText(tok.center, `${delta > 0 ? '+' : ''}${delta} Stress`, {
-                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
-                    fontSize: 28,
-                    fill: '0xd9b800',
-                    stroke: 0,
-                    strokeThickness: 4,
-                    jitter: 0.25,
-                });
-            }
+            const delta = next.pilotStress - prev.pilotStress;
+            floatTokenText(tok, `${signedNumber(delta)} Stress`, '0xd9b800',
+                delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP);
         }
+
         // Bond XP delta; skipped when the auto-injected XP bar already emits its own feedback.
-        if (prev.bondXp !== undefined && prev.bondXp !== next.bondXp
-            && actor.type === 'pilot' && canvas?.interface?.createScrollingText)
+        if (prev.bondXp !== undefined && prev.bondXp !== next.bondXp && actor.type === 'pilot')
         {
-            const showScroll = !!getExternalSetting('lancer', 'floatingNumbers', true);
             const extras = getLAFlag(tok.document,FLAG_EXTRAS) ?? [];
             const barCoversIt = extras.some(/** @type {any} */ extra => extra?.autoKey === 'bondXp' && extra.audioTextFeedback);
-            if (showScroll && !barCoversIt)
+
+            if (!barCoversIt)
             {
                 const delta = next.bondXp - prev.bondXp;
-                canvas.interface.createScrollingText(tok.center, `${delta > 0 ? '+' : ''}${delta} XP`, {
-                    anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                    fontSize: 28,
-                    fill: '0x00b8d4',
-                    stroke: 0,
-                    strokeThickness: 4,
-                    jitter: 0.25,
-                });
+                floatTokenText(tok, `${signedNumber(delta)} XP`, '0x00b8d4',
+                    delta > 0 ? CONST.TEXT_ANCHOR_POINTS.TOP : CONST.TEXT_ANCHOR_POINTS.BOTTOM);
             }
         }
+
         // Clock and burden segments float by name, since the bar has no track for them.
         if (prev.clocks && next.clocks)
         {
             let clockChanged = false;
+
             for (const [lid, entry] of Object.entries(next.clocks))
             {
                 const before = prev.clocks[lid];
                 if (!before || before.value === entry.value)
                     continue;
+
                 const delta = entry.value - before.value;
-                floatTokenText(tok, `${entry.name || '?'} ${delta > 0 ? '+' : ''}${delta}`, entry.burden ? 0xc33333 : 0x3a9e6e);
+                floatTokenText(tok, `${entry.name || '?'} ${signedNumber(delta)}`, entry.burden ? 0xc33333 : 0x3a9e6e);
                 clockChanged = true;
             }
+
             if (clockChanged)
                 playStatsSound('generic_stat');
         }
+
         // Reaction: only a spend reveals the bars, not the turn reset.
         if (next.reaction < prev.reaction)
         {
@@ -1032,27 +1144,33 @@ export function animateActorChanges(actor)
         }
         else if (next.reaction > prev.reaction)
             spawnFlash(tok, 'reactionGain', prev.reaction, next.reaction);
+
         if (prev.armor !== undefined && next.armor !== prev.armor)
         {
             spawnFlash(tok, 'armor', prev.armor, next.armor);
             flashed = true;
         }
+
         if (prev.repairs !== undefined && next.repairs !== prev.repairs)
         {
             spawnFlash(tok, 'repair', prev.repairs, next.repairs);
             flashed = true;
         }
+
         if (prev.overcharge !== undefined && next.overcharge !== prev.overcharge)
         {
             spawnFlash(tok, 'overcharge', prev.overcharge, next.overcharge);
             flashed = true;
         }
+
         const coreRegained = prev.coreCharged === false && next.coreCharged && !next.coreActive;
+
         if (prev.coreActive !== undefined && prev.coreActive !== next.coreActive && !coreRegained)
         {
             spawnFlash(tok, next.coreActive ? 'coreOn' : 'coreOff', 0, 1);
             flashed = true;
         }
+
         if (coreRegained)
         {
             spawnFlash(tok, 'coreCharge', 0, 1);

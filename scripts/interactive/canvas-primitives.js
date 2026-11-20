@@ -1,13 +1,14 @@
 import { isHexGrid, getHexCenter, drawHexAt } from "../combat/grid-helpers.js";
 import { getIsoProvider } from "../setup/iso-settings.js";
+import { gridScale } from "../tools/canvas-utils.js";
 
 /** Unparent + destroy a PIXI display object (containers destroy their children too). Safe with null/undefined. */
 export function destroyGraphics(graphic)
 {
+    if (graphic?.labelLayer)
+        destroyGraphics(graphic.labelLayer);
     if (!graphic || graphic.destroyed)
         return;
-    if (graphic.labelLayer)
-        destroyGraphics(graphic.labelLayer);
     if (graphic.parent)
         graphic.parent.removeChild(graphic);
     graphic.destroy({ children: true });
@@ -36,10 +37,12 @@ export function addGraphicsAboveTokens(graphic)
 export function _paintCells(graphics, cells, { gridSize = canvas.grid.size } = {})
 {
     const hex = isHexGrid();
+
     for (const cell of cells)
     {
         const col = typeof cell === 'string' ? Number(cell.split(',')[0]) : cell.col;
         const row = typeof cell === 'string' ? Number(cell.split(',')[1]) : cell.row;
+
         if (hex)
             drawHexAt(graphics, col, row);
         else
@@ -53,22 +56,25 @@ export function _paintCells(graphics, cells, { gridSize = canvas.grid.size } = {
 /** World-space stroke width scaled to the grid (calibrated on a 100px grid), min 1px. */
 export function gridLineWidth(base = 2)
 {
-    return Math.max(1, base * canvas.grid.size / 100);
+    return Math.max(1, base * gridScale());
 }
 
 export function drawDashedEdges(graphic, edges, dash, gap, phase)
 {
     const step = dash + gap;
     const offset = ((phase % step) + step) % step;
+
     for (const [from, to] of edges)
     {
         const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
         const ux = (to.x - from.x) / len;
         const uy = (to.y - from.y) / len;
+
         for (let pos = -offset; pos < len; pos += step)
         {
             const start = Math.max(0, pos);
             const end = Math.min(pos + dash, len);
+
             if (end <= start)
                 continue;
             graphic.moveTo(from.x + ux * start, from.y + uy * start);
@@ -80,13 +86,15 @@ export function drawDashedEdges(graphic, edges, dash, gap, phase)
 export function paintWithHalo(graphic, drawGeometry, { color = 0xffffff, lineWidth = 2, lineAlpha = 0.8, fillColor = null, fillAlpha = 0 } = {})
 {
     const stroke = gridLineWidth(lineWidth);
-    const halo = stroke + Math.max(1, 2 * canvas.grid.size / 100);
+    const halo = stroke + Math.max(1, 2 * gridScale());
+
     if (lineAlpha > 0)
     {
         graphic.lineStyle(halo, 0x000000, lineAlpha);
         drawGeometry(graphic);
         graphic.lineStyle(stroke, color, lineAlpha);
     }
+
     if (fillAlpha > 0)
         graphic.beginFill(fillColor ?? color, fillAlpha);
     drawGeometry(graphic);
@@ -103,17 +111,41 @@ export function gridTextResolution()
     return Math.min(10, dpr * factor * 1.5);
 }
 
+const _liveTexts = new Set();
+let _lastTextResolution = null;
+
+Hooks.on('canvasPan', () =>
+{
+    const resolution = Math.round(gridTextResolution() * 4) / 4;
+    if (resolution === _lastTextResolution)
+        return;
+    _lastTextResolution = resolution;
+
+    for (const pixiText of _liveTexts)
+        pixiText.resolution = resolution;
+});
+
+Hooks.on('canvasTearDown', () =>
+{
+    _liveTexts.clear();
+    _lastTextResolution = null;
+});
+
 /** PIXI.Text with zoom-aware resolution (crisp when zoomed in on small grids). */
 export function makeText(text, style)
 {
     const pixiText = new PIXI.Text(text, style);
     pixiText.resolution = gridTextResolution();
+    _liveTexts.add(pixiText);
+    pixiText.once('destroyed', () => _liveTexts.delete(pixiText));
     const iso = getIsoProvider();
+
     if (iso)
     {
         pixiText.rotation = iso.reverseRotation;
         pixiText.skew.set(iso.reverseSkewX, iso.reverseSkewY);
         pixiText.scale.set(iso.counterScale, 1 / iso.counterScale);
     }
+
     return pixiText;
 }

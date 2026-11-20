@@ -10,14 +10,21 @@ const FLOW_KINDS = {
     WeaponAttackFlow: 'attack',
     TechAttackFlow: 'tech',
     StatRollFlow: 'hase',
-    DamageRollFlow: 'damage'
+    DamageRollFlow: 'damage',
+    StructureFlow: 'struct',
+    OverheatFlow: 'stress'
 };
-const SLOT_OF = { attack: 'attack', tech: 'attack', hase: 'hase', damage: 'damage' };
+
+const SLOT_OF = { attack: 'attack', tech: 'attack', hase: 'hase', damage: 'damage', struct: 'struct', stress: 'stress' };
+
 const SLOT_SELECTOR = {
     attack: 'form[id^="accdiff"] #attack-accdiff-dialog',
     hase: 'form[id^="accdiff"] #hase-accdiff-dialog',
-    damage: '#damage-hud'
+    damage: '#damage-hud',
+    struct: 'form#structstress .lancer-header > i.cci-structure',
+    stress: 'form#structstress .lancer-header > i.cci-reactor'
 };
+
 const HASE_STATS = new Set(['HULL', 'AGI', 'SYS', 'ENG']);
 const WATCH_MS = 150;
 const NEVER_SHOWN_DROP_MS = 5000;
@@ -97,9 +104,11 @@ function watchTick()
 {
     let changed = false;
     _streamCounter++;
+
     for (const [slot, entry] of _slots)
     {
         const present = slotVisible(slot);
+
         if (!entry.visible && present)
         {
             entry.visible = true;
@@ -124,6 +133,7 @@ function watchTick()
         {
             _slots.delete(slot);
         }
+
         if (entry.visible && _streamCounter % STREAM_EVERY_TICKS === 0)
         {
             const snapshot = captureSnapshot(entry.kind, entry.state);
@@ -131,6 +141,7 @@ function watchTick()
                 emit('uplinkRollSnapshot', { rollId: entry.id, snapshot });
         }
     }
+
     stopWatchIfIdle();
     if (changed)
         notify();
@@ -142,6 +153,7 @@ export async function uplinkHudOpenStep(state)
     try
     {
         const kind = FLOW_KINDS[state.name];
+
         if (kind && !game.user?.isGM && getSettingEnabled('uplinkEnabled'))
         {
             const slot = SLOT_OF[kind];
@@ -166,6 +178,7 @@ export async function uplinkHudOpenStep(state)
     {
         console.warn('lancer-automations | uplink live register failed', err);
     }
+
     return true;
 }
 
@@ -181,6 +194,7 @@ export function resolveLiveRoll(state)
                 notify();
         }
     }
+
     stopWatchIfIdle();
 }
 
@@ -193,6 +207,7 @@ export function getLiveRolls()
 function sweepRemote()
 {
     let changed = false;
+
     for (const [rollId, entry] of _remote)
     {
         if (Date.now() - entry.lastSeen > REMOTE_STALE_MS)
@@ -201,11 +216,13 @@ function sweepRemote()
             changed = true;
         }
     }
+
     if (_remote.size === 0 && _remoteSweep !== null)
     {
         clearInterval(_remoteSweep);
         _remoteSweep = null;
     }
+
     if (changed)
         notify();
 }
@@ -233,9 +250,11 @@ export function onUplinkRollSnapshot(payload)
 {
     if (!game.user?.isGM || !payload?.rollId)
         return;
+
     const snapshot = payload.snapshot;
     let entry = _remote.get(payload.rollId);
     const isNew = !entry && !!snapshot;
+
     if (isNew)
     {
         entry = {
@@ -252,6 +271,7 @@ export function onUplinkRollSnapshot(payload)
         _remote.set(payload.rollId, entry);
         _remoteSweep ??= setInterval(sweepRemote, REMOTE_SWEEP_MS);
     }
+
     if (!entry)
         return;
     entry.snapshot = snapshot ?? entry.snapshot;

@@ -11,7 +11,9 @@ import "./movement/movement-actions.js";
 import "./movement/movement-wheel.js";
 import "./tah/action-wheel.js";
 import "./tah/status-wheel.js";
+import "./clocks/panel.js";
 import "./interactive/overlap-picker.js";
+import "./interactive/deployable-settings.js";
 import "./movement/history.js";
 import "./movement/keybindings.js";
 import './filters/customFilters.js';
@@ -48,7 +50,15 @@ import {
 } from "./combat/grid-helpers.js";
 import { TerrainAPI } from "./combat/terrain-utils.js";
 import { laTokenHeight, laTokenGameplayHeight } from "./tools/token-height.js";
-import { initDelayedAppearanceHook, delayedTokenAppearance } from "./combat/reinforcement.js";
+import { isSolidToken, solidTokenTopAt } from "./movement/ground.js";
+import { initReinforcements, scheduleReinforcement, getReinforcements, removeReinforcement, updateReinforcement, landReinforcements } from "./combat/reinforcements.js";
+import { initReinforcementMarkers } from "./combat/reinforcement-markers.js";
+import { initReinforcementSelect } from "./combat/reinforcement-select.js";
+import { initReinforcementBar, toggleReinforcementBar } from "./combat/reinforcement-bar.js";
+import { initGrappleTether } from "./combat/grapple-tether.js";
+import { initLeaveBattlefield, toggleLeaving } from "./combat/leave-battlefield.js";
+import { initLeavingRings } from "./fx/leaving-rings.js";
+import { initArrivalFx } from "./fx/arrival-fx.js";
 import { injectPerFrequencySchemaFields, registerPerFrequencyFlowSteps, initPerFrequencyHooks, onRenderActorSheetPerFrequency, resetPerFrequencyAtTurnStart } from "./combat/per-frequency-tags.js";
 import { initActionExtras, resetActionExtras, expireSlotExtras } from "./combat/action-extras.js";
 
@@ -56,7 +66,7 @@ import { initActionExtras, resetActionExtras, expireSlotExtras } from "./combat/
 import { initVisionFromEdge } from "./vision/visionFromEdge.js";
 import { initTokenBlocksVision } from "./vision/tokenBlocksVision.js";
 import { initLaWallLos } from "./vision/laWallLos.js";
-import { initTrigVisionSweep } from "./vision/trigVisionSweep.js";
+import { initRayVision } from "./vision/rayVision.js";
 import { initSightlines } from "./vision/sightlines.js";
 import { initBlindedVision } from "./vision/blindedVision.js";
 import { initLancerDetectionModes, hasLineOfSight } from "./vision/lancerDetectionModes.js";
@@ -82,18 +92,24 @@ import { ExtraConfigAPI, getAutoConsumeDisabled } from "./interactive/extra-conf
 import { openExtrasDialog } from "./interactive/extras-dialog.js";
 import { openExtraConfigDialog } from "./interactive/extra-config-dialog.js";
 import { getActorActions, sweepStaleGrants } from "./interactive/deployables.js";
+import { deployablesOf, movesOnItsOwn } from "./interactive/deployable-owner.js";
 
 // Activations
-import { ReactionManager, stringToAsyncFunction, ReactionConfig } from "./activations/reaction-manager.js";
+import { AutomationManager, stringToAsyncFunction, AutomationConfig } from "./activations/automation-manager.js";
 import { runDeprecationScans } from "./setup/deprecations.js";
-import { ReactionsAPI } from "./activations/reactions-registry.js";
+import { AutomationsAPI } from "./activations/automation-registry.js";
+import { AutomationPresetsAPI } from "./activations/automation-presets.js";
 import { registerUndoSnapshotStep } from "./tah/tape-changes.js";
 import { registerModuleFlows, registerFlowStatePersistence,
     bindChatMessageStateInterceptor,
     forceTechHUDStep
 } from "./activations/flows.js";
 import { registerRerollFlowSteps } from "./activations/reroll.js";
+import { registerInvadeFlowSteps } from "./activations/invade-flow.js";
+import { registerDiceFirstFlowSteps } from "./activations/dice-first.js";
+import { registerPrepareFlow, usePrepared } from "./activations/prepare-flow.js";
 import { bindAfterFxDrain } from "./activations/after-fx.js";
+import { playWeaponFxDefault, loadLwfxKnownIds } from "./weapon-fx/index.js";
 import { registerAccDiffTargetButton } from "./activations/accdiff-target-button.js";
 import { registerStatRollTargetButton } from "./activations/statroll-target-button.js";
 import { registerDamageTargetButton } from "./activations/damage-target-button.js";
@@ -124,14 +140,16 @@ import {
     wrapFreeUseCard,
     bonusDamageMutateStep
 } from "./activations/flow-wraps.js";
+import { vulnerableApplyStep } from "./bonuses/vulnerable-consume.js";
+import { variableSetOnceStep, variableResolveStep } from "./bonuses/variable-damage.js";
 import {
-    getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow,
-    handleTrigger, dispatchCustomTrigger, deserializeTriggerData, checkOnInitReactions,
-    processEffectConsumption, isPilotToken
-} from "./activations/reactions-engine.js";
-export { getReactionItems, checkOnMessageReactions, _buildStartRelatedFlow, handleTrigger, dispatchCustomTrigger, deserializeTriggerData };
+    getAutomationItems, checkOnMessageAutomations, _buildStartRelatedFlow,
+    handleTrigger, dispatchCustomTrigger, deserializeTriggerData, serializeTriggerData, withReactorFunctions, checkOnInitAutomations,
+    processEffectConsumption, isPilotToken, makeSceneReactor
+} from "./activations/automation-engine.js";
+export { getAutomationItems, checkOnMessageAutomations, _buildStartRelatedFlow, handleTrigger, dispatchCustomTrigger, deserializeTriggerData, serializeTriggerData, withReactorFunctions, makeSceneReactor };
 import {
-    throwChoiceStep, syncThrowToAccDiffStep,
+    syncThrowToAccDiffStep,
     syncAccDiffToThrowStep, throwDeployStep, knockbackInjectStep, knockbackDamageStep,
     playInlineAttackFX, playThrowFXIfNeeded, playBasicRangedFXIfNeeded, pullInjectedTagsFromAttack, applyFxItemStub,
     _actorSuppressId, _lwfxSuppressActors, _lwfxForceActors, _lwfxSourceRedirects
@@ -195,6 +213,7 @@ import { registerStatusFXSettings, initStatusFX } from "./fx/statusFX.js";
 import * as actionFX from "./fx/actionFX.js";
 import { installJb2aHooks } from "./fx/jb2a-fallback.js";
 import { initDestroyedMeshGuard } from "./fx/destroyedMeshGuard.js";
+import { initCombatBoosterMarkerGuard } from "./fx/combatBoosterMarkerGuard.js";
 
 // Tools
 import { CompendiumToolsAPI } from "./tools/compendium-tools.js";
@@ -209,6 +228,7 @@ import { FlagsAPI, getLAFlag, getLAFlags } from "./tools/flag-utils.js";
 import { LAAuras, AurasAPI } from "./tools/aura.js";
 import { preWreck, canvasReadyWreck, tileHUDButton, initWreckTokenConfig } from "./tools/wreck.js";
 import { isTemplateActor, TemplateActorsAPI } from "./tools/template-actors.js";
+import { WorldClocksAPI } from "./tools/world-clocks.js";
 import { initAutoFocus, registerCardFocusFlags } from "./tools/auto-focus.js";
 import { dedupeWorldSettings } from "./setup/settings-dedupe.js";
 
@@ -222,7 +242,7 @@ import { registerIsoSettings, getIsoProvider, isoLabelTransform } from "./setup/
 import { checkCompatibility } from "./setup/checkCompatibility.js";
 
 // Socket
-import { initSocket, setTokenFlag, unsetTokenFlag } from "./socket.js";
+import { initSocket, setTokenFlag, unsetTokenFlag, asOwner } from "./socket.js";
 export { socketRequestWithAck, setTokenFlag, unsetTokenFlag } from "./socket.js";
 
 // Utils
@@ -240,6 +260,8 @@ import {
 
 // Integrations / Alt-struct / Tests
 import { injectBarToggles } from "./integrations/alt-sheets-flags.js";
+import { injectNpcDeployables } from "./interactive/npc-sheet-deployables.js";
+import { injectSheetClockPins, repaintSheetClockPins } from "./interactive/sheet-clock-pins.js";
 import { reapplyIsometricTileTab } from "./integrations/isometric-tile-tab.js";
 import { registerAltStructFlowSteps, initAltStructReady } from "./alt-struct/index.js";
 import { CardStackTests } from "../tests/card-stack.js";
@@ -258,6 +280,7 @@ initLancerDetectionModes();
 let deployableConnectionsGraphic = null;
 let _hoverConnectionToken = null;
 let _hoverConnectionTicker = null;
+let _hoverConnectionLinks = { deployables: [], partners: [] };
 let _dashOffset = 0;
 
 function _drawDashedLine(graphics, x1, y1, x2, y2, dashLength = 8, spaceLength = 14, offset = 0)
@@ -265,22 +288,27 @@ function _drawDashedLine(graphics, x1, y1, x2, y2, dashLength = 8, spaceLength =
     const deltaX = x2 - x1;
     const deltaY = y2 - y1;
     const dist = Math.hypot(deltaX, deltaY);
+
     if (dist <= 0)
         return;
+
     const unitX = deltaX / dist;
     const unitY = deltaY / dist;
     const period = dashLength + spaceLength;
     const norm = ((offset % period) + period) % period;
     let traveled = -norm;
+
     while (traveled < dist)
     {
         const dashStart = Math.max(0, traveled);
         const dashEnd = Math.min(dist, traveled + dashLength);
+
         if (dashEnd > dashStart)
         {
             graphics.moveTo(x1 + unitX * dashStart, y1 + unitY * dashStart);
             graphics.lineTo(x1 + unitX * dashEnd, y1 + unitY * dashEnd);
         }
+
         traveled += period;
     }
 }
@@ -297,6 +325,7 @@ function patchHalfSizeTokens()
     docClass.prototype._preCreate = async function (...[data, options, user])
     {
         const self = /** @type {any} */ (this);
+
         if (isLancerActor(self.actor)
             && game.settings.get(game.system.id, 'automationOptions')?.token_size
             && !self.getFlag(game.system.id, 'manual_token_size'))
@@ -305,6 +334,7 @@ function patchHalfSizeTokens()
             const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : 1;
             /** @type {Record<string, number>} */
             const updates = { width: newSize, height: newSize };
+
             // hex bbox isn't square; pointy and flat orientations need different offsets
             if (newSize < 1 && canvas?.grid)
             {
@@ -315,14 +345,18 @@ function patchHalfSizeTokens()
                 const isFlat = (gridType === 4 || gridType === 5);
                 const bboxWidth = isFlat ? gridSize * HEX_ASPECT : gridSize;
                 const bboxHeight = isPointy ? gridSize * HEX_ASPECT : gridSize;
+
                 const cellCenter = canvas.grid.getCenterPoint
                     ? canvas.grid.getCenterPoint({ x: self.x + bboxWidth / 2, y: self.y + bboxHeight / 2 })
                     : { x: self.x + gridSize / 2, y: self.y + gridSize / 2 };
+
                 updates.x = cellCenter.x - (newSize * bboxWidth) / 2;
                 updates.y = cellCenter.y - (newSize * bboxHeight) / 2;
             }
+
             self.updateSource(updates);
         }
+
         // skip Lancer's _preCreate (it has Math.max(1))
         const grandparent = /** @type {any} */ (TokenDocument.prototype);
         return grandparent._preCreate.call(this, data, options, user);
@@ -334,12 +368,14 @@ function patchHalfSizeTokens()
         const grandparent = /** @type {any} */ (TokenDocument.prototype);
         grandparent._onRelatedUpdate.call(this, update, options);
         const self = /** @type {any} */ (this);
+
         if (isLancerActor(self.actor)
             && game.settings.get(game.system.id, 'automationOptions')?.token_size
             && !self.getFlag(game.system.id, 'manual_token_size'))
         {
             const rawSize = self.actor?.system?.size;
             const newSize = typeof rawSize === 'number' && rawSize > 0 ? rawSize : undefined;
+
             if (self.isOwner && self.id && newSize !== undefined
                 && (self.width !== newSize || self.height !== newSize))
 
@@ -379,12 +415,15 @@ function insertModuleFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:knockbackInject', knockbackInjectStep);
     flowSteps.set('lancer-automations:knockbackDamage', knockbackDamageStep);
     flowSteps.set('lancer-automations:noBonusDmgInject', noBonusDmgInjectStep);
+    flowSteps.set('lancer-automations:vulnerableApply', vulnerableApplyStep);
+    flowSteps.set('lancer-automations:variableSetOnce', variableSetOnceStep);
+    flowSteps.set('lancer-automations:variableResolve', variableResolveStep);
     flowSteps.set('lancer-automations:pullInjectedTagsFromAttack', pullInjectedTagsFromAttack);
     flowSteps.set('lancer-automations:stubBasicAttackItemForFx', playInlineAttackFX);
     flowSteps.set('lancer-automations:applyFxItemStub', applyFxItemStub);
     flowSteps.set('lancer-automations:playThrowFXIfNeeded', playThrowFXIfNeeded);
     flowSteps.set('lancer-automations:playBasicRangedFXIfNeeded', playBasicRangedFXIfNeeded);
-    flowSteps.set('lancer-automations:throwChoice', throwChoiceStep);
+    flowSteps.set('lancer-automations:playWeaponFxDefault', playWeaponFxDefault);
     flowSteps.set('lancer-automations:throwDeploy', throwDeployStep);
     flowSteps.set('lancer-automations:syncThrowToAccDiff', syncThrowToAccDiffStep);
     flowSteps.set('lancer-automations:syncAccDiffToThrow', syncAccDiffToThrowStep);
@@ -417,7 +456,6 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('StatRollFlow')?.insertStepBefore('showStatRollHUD', 'lancer-automations:uplinkHudOpen');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:uplinkHudOpen');
 
-    flows.get('WeaponAttackFlow')?.insertStepBefore('initAttackData', 'lancer-automations:throwChoice');
     // mirror LA's throw choice into v3's native thrown flag (so the HUD opens with it ticked)
     flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:onInitAttack', 'lancer-automations:syncThrowToAccDiff');
     // mirror back: if the user ticks Thrown in the HUD, drive LA's throwDeploy step
@@ -435,28 +473,37 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:stubBasicAttackItemForFx', 'lancer-automations:playThrowFXIfNeeded');
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:playThrowFXIfNeeded', 'lancer-automations:applyFxItemStub');
     flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:applyFxItemStub', 'lancer-automations:playBasicRangedFXIfNeeded');
+    flows.get('BasicAttackFlow')?.insertStepAfter('lancer-automations:applyFxItemStub', 'lancer-automations:playWeaponFxDefault');
     flows.get('WeaponAttackFlow')?.insertStepAfter('printAttackCard', 'lancer-automations:playThrowFXIfNeeded');
+    flows.get('WeaponAttackFlow')?.insertStepAfter('lancer-automations:playThrowFXIfNeeded', 'lancer-automations:playWeaponFxDefault');
 
     flows.get('TechAttackFlow')?.insertStepAfter('showAttackHUD', 'lancer-automations:onTechAttack');
     flows.get('TechAttackFlow')?.insertStepAfter('rollAttacks', 'lancer-automations:onTechHitMiss');
 
     // anchor onDamage/knockbackDamage after whichever of crit/normal actually ran
     const damageFlow = flows.get('DamageRollFlow');
+
     if (damageFlow?.steps)
     {
         const critIdx = damageFlow.steps.indexOf('rollCritDamage');
         const normIdx = damageFlow.steps.indexOf('rollNormalDamage');
         const anchorIdx = Math.max(critIdx, normIdx);
+
         if (anchorIdx >= 0)
             damageFlow.steps.splice(anchorIdx + 1, 0, 'lancer-automations:onDamage', 'lancer-automations:knockbackDamage');
+
         // rollReliable is the step that copies the HUD's bonus rows into the flow state.
         const reliableIdx = damageFlow.steps.indexOf('rollReliable');
         if (reliableIdx >= 0)
             damageFlow.steps.splice(reliableIdx + 1, 0, 'lancer-automations:bonusDamageMutate');
     }
+
     flows.get('DamageRollFlow')?.insertStepBefore('setDamageTags', 'lancer-automations:pullInjectedTagsFromAttack');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:knockbackInject');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:noBonusDmgInject');
+    flows.get('DamageRollFlow')?.insertStepAfter('showDamageHUD', 'lancer-automations:vulnerableApply');
+    flows.get('DamageRollFlow')?.insertStepAfter('showDamageHUD', 'lancer-automations:variableResolve');
+    flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:variableSetOnce');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:onPreDamage');
     flows.get('DamageRollFlow')?.insertStepBefore('showDamageHUD', 'lancer-automations:assertDamageTargets');
     for (const flowName of ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow'])
@@ -483,6 +530,8 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('StructureFlow')?.insertStepAfter('rollStructureTable', 'lancer-automations:onStructure');
     flows.get('OverheatFlow')?.insertStepBefore('preOverheatRollChecks', 'lancer-automations:onPreStress');
     flows.get('OverheatFlow')?.insertStepAfter('rollOverheatTable', 'lancer-automations:onStress');
+    flows.get('StructureFlow')?.insertStepBefore('preStructureRollChecks', 'lancer-automations:uplinkHudOpen');
+    flows.get('OverheatFlow')?.insertStepBefore('preOverheatRollChecks', 'lancer-automations:uplinkHudOpen');
 
     flows.get('StatRollFlow')?.insertStepBefore('lancer-automations:genericAccuracyStepStatRoll', 'lancer-automations:onInitCheck');
     flows.get('StatRollFlow')?.insertStepBefore('rollCheck', 'lancer-automations:stunnedAutoFail');
@@ -501,7 +550,8 @@ function insertModuleFlowSteps(flowSteps, flows)
     flows.get('ActivationFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
     flows.get('CoreActiveFlow')?.insertStepAfter('initActivationData', 'lancer-automations:onInitActivation');
     flows.get('SystemFlow')?.insertStepAfter('initSystemUseData', 'lancer-automations:onInitActivation');
-    flows.get('TalentFlow')?.insertStepAfter('printTalentCard', 'lancer-automations:onInitActivation');
+    flows.get('TalentFlow')?.insertStepBefore('printTalentCard', 'lancer-automations:onInitActivation');
+    flows.get('BondPowerFlow')?.insertStepAfter('initPowerData', 'lancer-automations:onInitActivation');
     flows.get('SimpleActivationFlow')?.insertStepBefore('printActionUseCard', 'lancer-automations:onInitActivation');
     // Overcharge/Stabilize have no init step; put it at the start so they stay cancellable
     flows.get('OverchargeFlow')?.insertStepBefore('initOverchargeData', 'lancer-automations:onInitActivation');
@@ -566,8 +616,8 @@ Hooks.on('init', () =>
     registerFlowStatePersistence();
     registerCardFocusFlags();
 
-    initVisionFromEdge(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
-    initTrigVisionSweep(); // Trig height rule for the rendered sweep: low walls block again past the peek range
+    initVisionFromEdge();
+    initRayVision(); // Lancer-style vision: spawn perimeter vision sources for flagged tokens
     initTokenBlocksVision(); // Per-token "Blocks Line of Sight" flag + Bulwark status auto-blocking
     initLaWallLos(); // Per-wall "Blocks LA Line of Sight" flag: LA-only mirror edges
     initSightlines(); // B1 sightline rays + attack-card hover takeover from THT
@@ -577,14 +627,17 @@ Hooks.on('init', () =>
     initDragOriginSources();
     initDeltaStatusGuard();
     initDestroyedMeshGuard();
+    initCombatBoosterMarkerGuard();
     injectDisabledSchemaField();
     injectDisabledCSS(); // Item Disabled system
     injectInfectionSchemaField();
+
     if (getModuleSetting('enableInfectionDamageIntegration'))
     {
         injectInfectionDamageType(); // Add "Infection" to DamageField choices
         injectInfectionCSS(); // Infection damage icon + color
     }
+
     injectPerFrequencySchemaFields();
     patchStatRollCardTemplate();
 
@@ -596,11 +649,13 @@ Hooks.on('init', () =>
         onDown: () =>
         {
             const token = canvas.tokens?.controlled[0];
+
             if (!token)
             {
                 ui.notifications.warn(localize('LA.notify.pleaseSelectATokenFirst'));
                 return;
             }
+
             openResetMovementDialog(token);
         },
         precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
@@ -636,17 +691,20 @@ function wrapAutoConsumeOptOut(flowSteps)
         const item = state?.item;
         if (!item)
             return original.call(this, state);
+
         const disabled = getAutoConsumeDisabled(item);
         if (!disabled.size)
             return original.call(this, state);
 
         let captured = null;
         const realUpdate = item.update.bind(item);
+
         item.update = async (data) =>
         {
             captured = data;
             return item;
         };
+
         try
         {
             await original.call(this, state);
@@ -655,8 +713,10 @@ function wrapAutoConsumeOptOut(flowSteps)
         {
             item.update = realUpdate;
         }
+
         if (!captured?.system)
             return true;
+
         const sys = { ...captured.system };
         if (disabled.has('uses'))
             delete sys.uses;
@@ -666,6 +726,7 @@ function wrapAutoConsumeOptOut(flowSteps)
             delete sys.charged;
         if (disabled.has('reserveUsed'))
             delete sys.used;
+
         if (Object.keys(sys).length)
         {
             try
@@ -677,6 +738,7 @@ function wrapAutoConsumeOptOut(flowSteps)
                 console.warn('lancer-automations | auto-consume filtered update failed:', err);
             }
         }
+
         return true;
     });
 }
@@ -685,6 +747,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) =>
 {
     flowSteps.set('renderStabilizePrompt', laStabilizePrompt);
     flowSteps.set('lancer-automations:stabilizeExtras', laStabilizeExtras);
+
     try
     {
         flows.get('StabilizeFlow')?.insertStepAfter('applyStabilizeUpdates', 'lancer-automations:stabilizeExtras');
@@ -693,6 +756,7 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) =>
     {
         console.warn('lancer-automations | could not insert stabilizeExtras step:', e);
     }
+
     registerModuleFlows(flowSteps, flows);
     registerUndoSnapshotStep(flowSteps, flows);
     insertModuleFlowSteps(flowSteps, flows);
@@ -705,6 +769,9 @@ Hooks.on("lancer.registerFlows", (flowSteps, flows) =>
     registerInfectionFlows(flowSteps, flows); // Infection flow + stabilize/repair clearing
     registerBonusFrequencyFlowSteps(flowSteps, flows);
     registerRerollFlowSteps(flowSteps, flows); // onRoll trigger + reroll/changeRoll
+    registerInvadeFlowSteps(flowSteps, flows);
+    registerDiceFirstFlowSteps(flowSteps, flows);
+    registerPrepareFlow(flowSteps, flows);
     registerScanFlowSteps(flowSteps, flows); // Override v3's printScanCard + post-process journal
 });
 
@@ -714,23 +781,29 @@ function patchFromUuidSyncForCompendiumActors()
 {
     if (typeof globalThis.fromUuidSync !== 'function')
         return;
+
     const original = /** @type {any} */ (globalThis.fromUuidSync);
     if (original._laCompendiumPatched)
         return;
+
     const patched = function (uuid, ...rest)
     {
         const result = original.call(this, uuid, ...rest);
         if (result || typeof uuid !== 'string' || !/^Actor\.[A-Za-z0-9]+$/.test(uuid))
             return result;
+
         const id = uuid.split('.').pop();
+
         for (const pack of game.packs?.filter(pack => pack.documentName === 'Actor') ?? [])
         {
             const doc = pack.get?.(id);
             if (doc)
                 return doc;
         }
+
         return result;
     };
+
     patched._laCompendiumPatched = true;
     globalThis.fromUuidSync = patched;
 }
@@ -741,6 +814,7 @@ Hooks.once('ready', async () =>
     installJb2aHooks();
     actionFX.registerSequencerPresets();
     actionFX.registerWeaponFxAboveTokens();
+    loadLwfxKnownIds();
     initAltStructReady();
     patchFromUuidSyncForCompendiumActors();
 
@@ -785,6 +859,7 @@ Hooks.once('ready', async () =>
                 const result = wrapped(position);
                 if (!(this instanceof hudNs.TokenHUD))
                     return result;
+
                 try
                 {
                     if (!getModuleSetting('tokenStatBar'))
@@ -794,20 +869,24 @@ Hooks.once('ready', async () =>
                 {
                     return result;
                 }
+
                 const dims = /** @type {any} */ (canvas.dimensions);
                 const uiScale = dims?.uiScale ?? 1;
                 const gridSize = dims?.size ?? 100;
                 const minSize = gridSize / uiScale;
+
                 if (result.width < minSize)
                 {
                     result.left -= ((minSize - result.width) / 2) * uiScale;
                     result.width = minSize;
                 }
+
                 if (result.height < minSize)
                 {
                     result.top -= ((minSize - result.height) / 2) * uiScale;
                     result.height = minSize;
                 }
+
                 return result;
             }, 'WRAPPER');
         }
@@ -847,11 +926,14 @@ Hooks.once('ready', async () =>
             const actor = item.parent;
             if (!actor || item._laBaseDamageSwapped)
                 return null;
+
             const state = { actor, item, data: {} };
+
             const bonuses = [
                 ...flattenBonuses(getGlobalBonuses(actor)),
                 ...getConstantBonuses(actor)
             ].filter(bonus => bonus?.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, _ATTACK_TAGS, state));
+
             return bonuses.length ? bonuses : null;
         }
 
@@ -873,18 +955,22 @@ Hooks.once('ready', async () =>
             const actor = item.parent;
             if (!actor)
                 return null;
+
             const state = { actor, item, data: {} };
+
             const bonuses = [
                 ...flattenBonuses(getGlobalBonuses(actor)),
                 ...getConstantBonuses(actor),
                 ...getV3DataBonuses(actor, ['range']).map(row => row.bonus)
             ].filter(bonus => bonus?.type === 'range' && isBonusApplicable(bonus, _ATTACK_TAGS, state));
+
             return bonuses.length ? bonuses : null;
         }
 
         function _applyRangeBonusesToArray(baseRange, bonuses)
         {
             const range = baseRange.map(rangeEntry => Object.assign(Object.create(Object.getPrototypeOf(rangeEntry)), rangeEntry));
+
             for (const bonus of bonuses)
             {
                 const rangeType = bonus.rangeType;
@@ -892,6 +978,7 @@ Hooks.once('ready', async () =>
                 const isOverride = rangeMode === 'override';
                 const isChange = rangeMode === 'change';
                 const amount = Number.parseInt(bonus.val) || 0;
+
                 if (isChange)
                 {
                     const RangeClass = range[0]?.constructor;
@@ -904,6 +991,7 @@ Hooks.once('ready', async () =>
                 else
                 {
                     const existingIdx = range.findIndex(rangeEntry => rangeEntry.type === rangeType);
+
                     if (existingIdx !== -1)
                     {
                         const entry = range[existingIdx];
@@ -920,6 +1008,7 @@ Hooks.once('ready', async () =>
                     }
                 }
             }
+
             return range;
         }
 
@@ -928,8 +1017,10 @@ Hooks.once('ready', async () =>
             {
                 const result = wrapped.call(this);
                 const rangeBonuses = _getRangeBonuses(this);
+
                 if (rangeBonuses)
                     result.range = _applyRangeBonusesToArray(result.range, rangeBonuses);
+
                 const damageBonuses = Array.isArray(result.damage) && result.damage.length ? _getBaseDamageBonuses(this) : null;
                 if (damageBonuses)
                     result.damage = _applyDamageBonusesToArray(result.damage, damageBonuses, this.parent, this);
@@ -942,6 +1033,7 @@ Hooks.once('ready', async () =>
             {
                 if (!_getRangeBonuses(this))
                     return wrapped.call(this, types);
+
                 const filter = new Set(types);
                 return this.currentProfile().range.filter(rangeEntry => filter.has(rangeEntry.type));
             }, 'MIXED');
@@ -950,10 +1042,12 @@ Hooks.once('ready', async () =>
             function (wrapped, ...args)
             {
                 const data = wrapped(...args);
+
                 if (this.isPreview)
                 {
                     const value = getModuleSetting('dragVisionMultiplier');
                     const mode = getModuleSetting('dragVisionMode', 'full');
+
                     if (mode === 'flat' && value > 0)
                     {
                         const px = this.getLightRadius(value);
@@ -966,6 +1060,7 @@ Hooks.once('ready', async () =>
                         data.lightRadius *= value;
                     }
                 }
+
                 return data;
             }, 'WRAPPER');
 
@@ -976,17 +1071,21 @@ Hooks.once('ready', async () =>
                 try
                 {
                     const flowInfo = this.getFlag?.('lancer-weapon-fx', 'flowInfo');
+
                     if (flowInfo || this.pack?.startsWith?.('lancer-weapon-fx.'))
                     {
                         const TaggedSequence = actionFX._lwfxTaggedSequence();
                         const scope = args[0] ?? (args[0] = {});
+
                         if (TaggedSequence && scope.Sequence === undefined)
                             scope.Sequence = TaggedSequence;
                     }
+
                     if (flowInfo)
                     {
                         const id = _actorSuppressId(flowInfo.sourceToken)
                             ?? _actorSuppressId(flowInfo.sourceToken?.document);
+
                         if (id && _lwfxForceActors.has(id))
                             _lwfxForceActors.delete(id);
                         else if (id && _lwfxSuppressActors.has(id))
@@ -994,7 +1093,9 @@ Hooks.once('ready', async () =>
                             _lwfxSuppressActors.delete(id);
                             return;
                         }
+
                         const redirectSource = id ? _lwfxSourceRedirects.get(id) : null;
+
                         if (redirectSource && !redirectSource.destroyed)
                         {
                             _lwfxSourceRedirects.delete(id);
@@ -1004,6 +1105,7 @@ Hooks.once('ready', async () =>
                 }
                 catch
                 { /* fall through */ }
+
                 return wrapped.call(this, ...args);
             }, 'MIXED');
     }
@@ -1033,49 +1135,74 @@ function _redrawHoverConnections()
         return;
     if (!getModuleSetting('showDeployableLines'))
         return;
-    const sourceUuid = token.actor?.uuid;
+
+    deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
+
+    for (const linked of _hoverConnectionLinks.deployables)
+    {
+        if (!linked.destroyed)
+            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, linked.center.x, linked.center.y, 8, 14, _dashOffset);
+    }
+
+    if (_hoverConnectionLinks.partners.length)
+        deployableConnectionsGraphic.lineStyle(2, 0x4caf50, 0.6);
+
+    for (const partner of _hoverConnectionLinks.partners)
+    {
+        if (!partner.destroyed)
+            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, partner.center.x, partner.center.y, 8, 14, _dashOffset);
+    }
+}
+
+function _resolveHoverConnections(token)
+{
+    const links = { deployables: [], partners: [] };
+    const sourceUuid = token?.actor?.uuid;
+
     if (!sourceUuid)
-        return;
+        return links;
 
     const ownerUuidFlag = getLAFlag(token.document,'ownerActorUuid');
-    deployableConnectionsGraphic.lineStyle(2, 0xffd700, 0.6);
+
     if (ownerUuidFlag)
     {
         const ownerToken = canvas.tokens.placeables.find(candidate => candidate.actor?.uuid === ownerUuidFlag);
         if (ownerToken)
-            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, ownerToken.center.x, ownerToken.center.y, 8, 14, _dashOffset);
+            links.deployables.push(ownerToken);
     }
     else
     {
-        const deployables = canvas.tokens.placeables.filter(candidate =>
+        links.deployables = canvas.tokens.placeables.filter(candidate =>
             getLAFlag(candidate.document,'ownerActorUuid') === sourceUuid
         );
-        for (const deployable of deployables)
-            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, deployable.center.x, deployable.center.y, 8, 14, _dashOffset);
     }
 
     const partnerUuids = [];
     const actor = token.actor;
     const pilotUuid = actor?.system?.pilot?.value?.uuid;
     const activeMechUuid = actor?.system?.active_mech?.value?.uuid;
+
     if (actor?.type === 'mech' && pilotUuid)
         partnerUuids.push(pilotUuid);
     if (actor?.type === 'pilot' && activeMechUuid)
         partnerUuids.push(activeMechUuid);
-    if (partnerUuids.length)
-        deployableConnectionsGraphic.lineStyle(2, 0x4caf50, 0.6);
+
     for (const uuid of partnerUuids)
     {
         const partner = canvas.tokens.placeables.find(candidate => candidate.actor?.uuid === uuid);
         if (partner)
-            _drawDashedLine(deployableConnectionsGraphic, token.center.x, token.center.y, partner.center.x, partner.center.y, 8, 14, _dashOffset);
+            links.partners.push(partner);
     }
+
+    return links;
 }
 
 Hooks.on('hoverToken', (token, hovered) =>
 {
     _hoverConnectionToken = hovered ? token : null;
+    _hoverConnectionLinks = _resolveHoverConnections(_hoverConnectionToken);
     _redrawHoverConnections();
+
     if (_hoverConnectionToken && !_hoverConnectionTicker)
     {
         _hoverConnectionTicker = () =>
@@ -1083,6 +1210,7 @@ Hooks.on('hoverToken', (token, hovered) =>
             _dashOffset = (_dashOffset - 0.25) % 1000;
             _redrawHoverConnections();
         };
+
         canvas.app?.ticker?.add(_hoverConnectionTicker);
     }
     else if (!_hoverConnectionToken && _hoverConnectionTicker)
@@ -1109,6 +1237,7 @@ function registerUserHelper(name, value)
         console.warn(`lancer-automations | registerUserHelper: invalid name "${name}".`);
         return;
     }
+
     userHelpers.set(name, value);
     foundry.utils.setProperty(userHelperTree, name, value);
 }
@@ -1127,14 +1256,15 @@ function registerBuiltinStartup(entry)
 
 async function syncBuiltinStartups()
 {
-    ReactionManager.builtinStartups = [];
-    let persistentScripts = ReactionManager.getStartupScripts();
+    AutomationManager.builtinStartups = [];
+    let persistentScripts = AutomationManager.getStartupScripts();
     let persistentChanged = false;
 
     for (const entry of builtinStartups)
     {
         // Remove any world-saved copy; the builtin registry is the source of truth.
         const persistentIdx = persistentScripts.findIndex(script => script.id === entry.id);
+
         if (persistentIdx !== -1)
         {
             persistentScripts.splice(persistentIdx, 1);
@@ -1152,7 +1282,7 @@ async function syncBuiltinStartups()
         {
             const response = await fetch(`/modules/lancer-automations/${entry.filePath}`);
             const code = await response.text();
-            ReactionManager.builtinStartups.push({
+            AutomationManager.builtinStartups.push({
                 id: entry.id,
                 name: entry.name,
                 description: entry.description,
@@ -1169,18 +1299,19 @@ async function syncBuiltinStartups()
     }
 
     if (persistentChanged)
-        await ReactionManager.saveStartupScripts(persistentScripts);
+        await AutomationManager.saveStartupScripts(persistentScripts);
 }
 
 function runStartupScripts(api)
 {
-    const userScripts = ReactionManager.getStartupScripts();
-    const allScripts = [...ReactionManager.builtinStartups, ...userScripts];
+    const userScripts = AutomationManager.getStartupScripts();
+    const allScripts = [...AutomationManager.builtinStartups, ...userScripts];
 
     for (const script of allScripts)
     {
         if (!script.enabled)
             continue;
+
         try
         {
             const fn = stringToAsyncFunction(script.code, ['api'], script.name);
@@ -1213,13 +1344,14 @@ Hooks.on('ready', async () =>
 {
     console.log('lancer-automations | Ready');
 
-    ReactionManager.initialize();
+    AutomationManager.initialize();
     LAAuras.init();
     reapplyIsometricTileTab();
 
     game.modules.get(MODULE_ID).api = /** @type {any} */ ({
         ...OverwatchAPI,
-        ...ReactionsAPI,
+        ...AutomationsAPI,
+        ...AutomationPresetsAPI,
         ...EffectsAPI,
         ...BonusesAPI,
         ...InteractiveAPI,
@@ -1232,6 +1364,7 @@ Hooks.on('ready', async () =>
         ...V3DataAPI,
         ...FlagsAPI,
         ...TemplateActorsAPI,
+        ...WorldClocksAPI,
         ...RestAPI,
         ...AurasAPI,
         ...ItemDisabledAPI,
@@ -1245,6 +1378,8 @@ Hooks.on('ready', async () =>
         TriggerUseAmmoFlow,
         setTokenFlag,
         unsetTokenFlag,
+        asOwner,
+        usePrepared,
         startConfigTour,
         startActivationManagerTour,
         clearMoveData,
@@ -1259,6 +1394,8 @@ Hooks.on('ready', async () =>
         tokenSpeed,
         laTokenHeight,
         laTokenGameplayHeight,
+        isSolidToken,
+        solidTokenTopAt,
         smokeZoneGraphics,
         healCloudGraphics,
         importTemplateMacroPresets,
@@ -1267,17 +1404,26 @@ Hooks.on('ready', async () =>
         recordMovementExtra,
         initMovementCap,
         actionFX,
+        playBurstFX: actionFX.playBurstFX,
         processEffectConsumption,
         handleTrigger,
         dispatchCustomTrigger,
-        checkOnInitReactions,
+        checkOnInitAutomations,
+        // LEGACY NAME, kept for user scripts. See the note on AutomationManager.
+        checkOnInitReactions: checkOnInitAutomations,
         isPilotToken,
         registerUserHelper,
         getUserHelper,
         helpers: userHelperTree,
         getActiveGMId,
         getTokenOwnerUserId,
-        delayedTokenAppearance,
+        toggleReinforcementBar,
+        toggleLeaving,
+        scheduleReinforcement,
+        getReinforcements,
+        removeReinforcement,
+        updateReinforcement,
+        landReinforcements,
         getIsoProvider,
         isoLabelTransform,
         LANCER_ACTOR_TYPES,
@@ -1316,7 +1462,14 @@ Hooks.on('ready', async () =>
     // after initFlowQueue so the measure auto-close wraps outermost (closes before HUD pulses)
     setTimeout(initAdvancedMeasureAutoClose, 0);
 
-    initDelayedAppearanceHook();
+    initLeaveBattlefield();
+    initLeavingRings();
+    initReinforcements();
+    initReinforcementMarkers();
+    initReinforcementSelect();
+    initReinforcementBar();
+    initGrappleTether();
+    initArrivalFx();
     await syncBuiltinStartups();
     runStartupScripts(game.modules.get(MODULE_ID).api);
     Hooks.callAll('lancer-automations.ready', game.modules.get(MODULE_ID).api);
@@ -1357,6 +1510,9 @@ Hooks.on('renderActorSheet', (app, html, data) =>
 
 Hooks.on('renderActorSheet', (app, html) => onRenderActorSheetPerFrequency(app, html));
 Hooks.on('renderActorSheet', (app, html) => injectBarToggles(app, html));
+Hooks.on('renderActorSheet', (app, html) => injectNpcDeployables(app, html));
+Hooks.on('renderActorSheet', (app, html) => injectSheetClockPins(app, html));
+Hooks.on(`${MODULE_ID}.worldClocksChanged`, repaintSheetClockPins);
 Hooks.on('renderActorSheetV2', (app, html) => injectBarToggles(app, html));
 Hooks.on('renderActorSheetV2', (app, html) => onRenderActorSheetPerFrequency(app, html));
 
@@ -1389,9 +1545,11 @@ async function _cleanupRuntimesByFilter(actor, filter)
 {
     if (!actor)
         return;
+
     const runtimes = /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(filter);
     if (!runtimes.length)
         return;
+
     for (const runtime of runtimes)
     {
         try
@@ -1403,6 +1561,7 @@ async function _cleanupRuntimesByFilter(actor, filter)
             console.warn('lancer-automations | charge persist failed:', err);
         }
     }
+
     try
     {
         await actor.deleteEmbeddedDocuments("ActiveEffect", runtimes.map(runtime => runtime.id));
@@ -1437,7 +1596,9 @@ async function _cleanupActorTemplateFromTokens(actor, templateId)
 {
     if (!actor)
         return;
+
     const tokens = actor.getActiveTokens?.() ?? [];
+
     for (const token of tokens)
     {
         const target = token.actor;
@@ -1455,6 +1616,7 @@ Hooks.on('createItem', async (item, _options, _userId) =>
 {
     if (!isExecutorGM())
         return;
+
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -1467,10 +1629,13 @@ Hooks.on('updateItem', async (item, change, _options, _userId) =>
 {
     if (!isExecutorGM())
         return;
+
     const destroyedChanged = foundry.utils.getProperty(change, 'system.destroyed') !== undefined;
     const disabledChanged = foundry.utils.getProperty(change, 'system.disabled') !== undefined;
+
     if (!destroyedChanged && !disabledChanged)
         return;
+
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -1484,6 +1649,7 @@ Hooks.on('deleteItem', async (item, _options, _userId) =>
 {
     if (!isExecutorGM())
         return;
+
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -1497,6 +1663,7 @@ Hooks.on('updateItem', async (item, change, _options, _userId) =>
 {
     if (!isExecutorGM())
         return;
+
     const actor = item.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -1519,14 +1686,17 @@ Hooks.on('deleteActiveEffect', async (effect, _options, userId) =>
         return;
     if (!game.user?.isGM)
         return;
+
     const flags = getLAFlags(effect);
     if (!flags)
         return;
+
     if (flags.isItemTemplate === true)
     {
         const item = effect.parent;
         if (item?.documentName !== 'Item')
             return;
+
         const actor = item.parent;
         if (!actor || actor.documentName !== 'Actor')
             return;
@@ -1557,9 +1727,11 @@ Hooks.on('createToken', async (tokenDoc, _options, userId) =>
         return;
     if (userId !== game.userId)
         return;
+
     const token = canvas?.tokens?.get?.(tokenDoc.id);
     if (!token?.actor)
         return;
+
     let syncDone;
     _tokenTemplateSyncs.set(tokenDoc.id, new Promise(resolve =>
     {
@@ -1599,11 +1771,13 @@ function _laSheetCounts(target)
     const bonusCount = (getLAFlag(target,'global_bonuses') || []).length
         + (getLAFlag(target,'constant_bonuses') || []).length
         + (getLAFlag(target,'bonusTemplates') || []).length;
+
     const statusCount = /** @type {any[]} */ (Array.from(target?.effects ?? []))
         .filter(effect =>
         {
             const laFlags = getLAFlags(effect);
             const isTemplate = laFlags?.isItemTemplate === true || laFlags?.isActorTemplate === true;
+
             if (!(isTemplate || !effect.disabled))
                 return false;
             if (!(effect.icon || effect.img))
@@ -1613,16 +1787,21 @@ function _laSheetCounts(target)
             return true;
         })
         .length;
+
     const extraActionCount = (getActorActions(target) || []).filter(action => action._addedViaExtrasUI === true).length;
+
     const extraDepCount = (getLAFlag(target,'extraDeployableActorsViaUI') || []).length
         + (getLAFlag(target,'extraDeployableLidsViaUI') || []).length;
+
     const extraBarCount = (getLAFlag(target,'extraBarTemplates') || []).length;
     const extraCfg = target?.documentName === 'Item' ? (getLAFlag(target,'extraConfig') ?? {}) : null;
+
     const extraConfigConfigured = extraCfg && (
         (extraCfg.autoConsumeDisabled?.length ?? 0) > 0
         || Object.values(extraCfg.subAutoConsumeDisabled ?? {}).some(list => list?.length)
         || Object.keys(extraCfg.consumeOn ?? {}).length > 0
         || getLAFlag(target,'hidePrimaryAction')) ? 1 : 0;
+
     return { bonusCount, statusCount, extraActionCount, extraDepCount, extraBarCount, extraConfigConfigured };
 }
 
@@ -1639,15 +1818,19 @@ function _openLaSheetMenu(app)
     const isItem = target.documentName === 'Item';
     const isPrototype = !isItem && !app.token && !target.token;
     const { bonusCount, statusCount, extraActionCount, extraDepCount, extraBarCount, extraConfigConfigured } = _laSheetCounts(target);
+
     const row = (count, label) => `<div style="display:flex;justify-content:space-between;padding:2px 0;">
         <span style="color:var(--la-ink-dim);">${label}</span>
         <span style="font-weight:bold;color:${count > 0 ? 'var(--primary-color)' : 'var(--la-ink-dim)'};">${count}</span>
     </div>`;
+
     const stateRow = (on, label) => `<div style="display:flex;justify-content:space-between;padding:2px 0;">
         <span style="color:var(--la-ink-dim);">${label}</span>
         <span style="color:${on ? 'var(--primary-color)' : 'var(--la-ink-dim)'};">${on ? '<i class="fas fa-check"></i>' : '—'}</span>
     </div>`;
+
     const subtitleSuffix = isItem ? ' (item)' : isPrototype ? ' (prototype)' : '';
+
     const buttons = {
         extras: {
             icon: '<i class="fas fa-plus-circle"></i>',
@@ -1666,6 +1849,7 @@ function _openLaSheetMenu(app)
             },
         },
     };
+
     if (isItem)
     {
         buttons.extraConfig = {
@@ -1674,6 +1858,7 @@ function _openLaSheetMenu(app)
             callback: () => openExtraConfigDialog(target),
         };
     }
+
     new Dialog({
         title: localize('LA.dialogTitle.lancerAutomations'),
         content: `
@@ -1765,12 +1950,14 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             el.classList.add('la-invert-icon');
     });
     bindChatMessageStateInterceptor(app, html);
+
     if (html.find('.lancer-damage-targets').length)
     {
         html.find('.lancer-damage-target').each((_, targetEl) =>
         {
             const target = $(targetEl);
             const uuid = target.data('uuid');
+
             if (!uuid)
                 return;
 
@@ -1780,6 +1967,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
 
             let tagsContainer = target.find('.lancer-damage-tags');
             let tagsContainerCreated = false;
+
             if (!tagsContainer.length)
             {
                 tagsContainer = $(htmlToElement('<div class="lancer-damage-tags"></div>'));
@@ -1790,6 +1978,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
 
             const CONCRETE_DMG_TYPES = ['kinetic', 'energy', 'explosive', 'burn', 'heat'];
             const capitalize = (type) => type.charAt(0).toUpperCase() + type.slice(1);
+
             const chip = (tooltip, icon) => tagsContainer.find(`span[data-tooltip="${tooltip}"]`).length
                 ? ''
                 : `<span class="lancer-damage-tag" data-tooltip="${tooltip}"><i class="${icon} i--xs"></i></span>`;
@@ -1799,6 +1988,7 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             const asJudged = (bonuses, ids) => Array.isArray(ids) ? bonuses.filter(bonus => ids.includes(bonus.id)) : bonuses;
             const areaHit = targetResult?.laAoe === true;
             const typeLabel = (type) => (type === 'aoe' ? 'AoE' : capitalize(type));
+
             const judgedTypes = (bonuses, ids) =>
             {
                 const types = new Set();
@@ -1827,11 +2017,13 @@ Hooks.on('renderChatMessageHTML', (app, htmlOrEl, data) =>
             }
 
             const resistTypes = new Set();
+
             for (const type of [...CONCRETE_DMG_TYPES, 'infection'])
             {
                 if (actor.system?.resistances?.[type])
                     resistTypes.add(type);
             }
+
             judgedTypes(getResistanceBonuses(actor), targetResult?.laResistance).forEach(damageType => resistTypes.add(damageType));
 
             if (resistTypes.has('all') || resistTypes.has('variable') || CONCRETE_DMG_TYPES.every(type => resistTypes.has(type)))
@@ -1924,11 +2116,13 @@ Hooks.on('renderTokenHUD', (hud, htmlOrEl, data) =>
     if (getModuleSetting('showBonusHudButton'))
     {
         const token = hud.object;
+
         if (token?.actor)
         {
             const button = htmlToElement(`<div class="control-icon" data-action="bonus-menu" data-tooltip="${localize('LA.effectManager.title')}">
                 <i class="cci cci-accuracy i--m"></i>
             </div>`);
+
             button.addEventListener('click', (event) =>
             {
                 event.preventDefault();
@@ -1987,11 +2181,13 @@ function _combatTurnToken(combat, combatantId)
     const tokenId = combat.combatants.get(combatantId)?.tokenId ?? null;
     const onCanvas = !combat.scene || combat.scene.id === canvas.scene?.id;
     const token = tokenId && onCanvas ? canvas.tokens.get(tokenId) ?? null : null;
+
     if (tokenId && !onCanvas && !_otherSceneWarned.has(combat.id))
     {
         _otherSceneWarned.add(combat.id);
         ui.notifications.warn(localizeFormat('LA.notify.turnTriggersOtherScene', { scene: combat.scene?.name ?? '' }));
     }
+
     return { tokenId, token };
 }
 
@@ -1999,6 +2195,7 @@ Hooks.on('combatTurnChange', (combat, prior, current) =>
 {
     if (!isExecutorGM())
         return;
+
     const priorId = prior.combatantId;
     const currentId = current.combatantId;
     onCombatClock(async () =>
@@ -2016,22 +2213,31 @@ Hooks.on('combatTurnChange', (combat, prior, current) =>
         if (currentId)
         {
             await resetPerFrequencyAtTurnStart(combat, currentId);
+
             for (const combatant of combat.combatants)
             {
                 await resetPerTurnExtraActionsForActor(/** @type {any} */ (combatant).actor);
                 await resetActionExtras(/** @type {any} */ (combatant).actor, ['reaction']);
             }
+
             await resetPerRoundExtraActionsForActor(/** @type {any} */ (combat.combatants.get(currentId))?.actor);
-            await resetActionExtras(/** @type {any} */ (combat.combatants.get(currentId))?.actor, ['slots']);
+            await resetActionExtras(/** @type {any} */ (combat.combatants.get(currentId))?.actor, ['slots', 'quickOnly', 'free']);
             const { tokenId, token } = _combatTurnToken(combat, currentId);
+
             if (token)
             {
                 clearMoveData(token.document.id);
-                initMovementCap(token);
+                for (const deployable of deployablesOf([token.document.id]).filter(owned => movesOnItsOwn(owned)))
+                {
+                    clearMoveData(deployable.document.id);
+                    await deployable.document.clearMovementHistory();
+                }
                 await handleTrigger('onTurnStart', { triggeringToken: token });
             }
+
             if (tokenId)
                 await processDurationEffects('start', tokenId, combat);
+
             if (token)
             {
                 if (token.actor)
@@ -2046,9 +2252,12 @@ Hooks.on('updateCombat', (combat, changed, options) =>
 {
     if (!isExecutorGM() || !('round' in changed) || options?.direction === -1 || !(combat.round > 0))
         return;
+
     const round = combat.round;
     onCombatClock(async () =>
     {
+        if (round === 1)
+            await handleTrigger('onCombatStart', { combat });
         await processRoundEntries(combat, round, 'end');
         if (round > 1)
             await handleTrigger('onRoundEnd', { combat, round: round - 1 });
@@ -2073,6 +2282,7 @@ Hooks.on('deleteToken', (tokenDoc) =>
 {
     if (!isExecutorGM())
         return;
+
     for (const combat of game.combats ?? [])
     {
         if (combat.scene?.id === tokenDoc.parent?.id)
@@ -2084,6 +2294,7 @@ Hooks.on('combatStart', async (combat) =>
 {
     if (!isExecutorGM())
         return;
+
     for (const combatant of combat.combatants)
     {
         if (!combatant.actor)
@@ -2112,6 +2323,7 @@ Hooks.on('createCombatant', async (combatant, options, userId) =>
 {
     if (game.user.id !== userId)
         return;
+
     const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
     if (!token)
         return;
@@ -2123,6 +2335,7 @@ Hooks.on('deleteCombatant', async (combatant, options, userId) =>
 {
     if (game.user.id !== userId)
         return;
+
     const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
     if (!token)
         return;
@@ -2131,14 +2344,22 @@ Hooks.on('deleteCombatant', async (combatant, options, userId) =>
 
 Hooks.on('deleteCombat', (combat) =>
 {
-    if (isExecutorGM())
-        onCombatClock(() => processEncounterEnd(combat));
+    if (!isExecutorGM())
+        return;
+
+    onCombatClock(async () =>
+    {
+        if (combat.started)
+            await handleTrigger('onCombatEnd', { combat });
+        await processEncounterEnd(combat);
+    });
 });
 
 Hooks.on('deleteCombat', async (combat, options, userId) =>
 {
     if (game.user.id !== userId)
         return;
+
     for (const combatant of combat.combatants)
     {
         const token = combatant.token ? canvas.tokens.get(combatant.token.id) : null;
@@ -2162,12 +2383,14 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) =>
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
+
     if (!statusId)
         return true;
 
     const effectData = effect.toObject();
     const immunityBonuses = getEffectImmunityBonuses(actor, statusId, effect, null, { ownerTokenId: token?.id });
     const immunitySources = immunityBonuses.map(bonus => bonus.source || bonus.name || "Unknown Immunity");
+
     if (immunitySources.length > 0)
     {
         (async () =>
@@ -2205,6 +2428,7 @@ Hooks.on('preCreateActiveEffect', (effect, _data, options, _userId) =>
 
     let cancelChange = false;
     const _cancelledBy = options?._cancelledBy || [];
+
     const cancelChangeFn = _buildCancelFn({
         setFlag: () =>
         {
@@ -2245,11 +2469,13 @@ Hooks.on('preDeleteActiveEffect', (effect, options, _userId) =>
 
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     const statusId = effect.statuses?.first() || effect.name;
+
     if (!statusId)
         return;
 
     let cancelChange = false;
     const _cancelledBy = options?._cancelledBy || [];
+
     const cancelChangeFn = _buildCancelFn({
         setFlag: () =>
         {
@@ -2280,6 +2506,7 @@ Hooks.on('createActiveEffect', async (effect, _options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const actor = effect.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -2296,6 +2523,7 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const actor = effect.parent;
     if (!actor || actor.documentName !== 'Actor')
         return;
@@ -2309,11 +2537,13 @@ Hooks.on('deleteActiveEffect', async (effect, options, userId) =>
 
     // grouped effects share lifetime: removing one removes the rest
     const groupId = getLAFlags(effect)?.consumption?.groupId;
+
     if (groupId && !options?.skipGroupCleanup)
     {
         const groupEffects = actor.effects.filter(groupMember =>
             groupMember.id !== effect.id && getLAFlags(groupMember)?.consumption?.groupId === groupId
         );
+
         if (groupEffects.length > 0)
             actor.deleteEmbeddedDocuments("ActiveEffect", groupEffects.map(groupMember => groupMember.id), { skipGroupCleanup: true });
     }
@@ -2325,6 +2555,7 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) =>
         return;
     if (options?.skipGroupSync)
         return;
+
     const newStack = change?.flags?.statuscounter?.value;
     if (newStack === undefined)
         return;
@@ -2340,6 +2571,7 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) =>
     const groupEffects = actor.effects.filter(groupMember =>
         groupMember.id !== effect.id && getLAFlags(groupMember)?.consumption?.groupId === groupId
     );
+
     if (groupEffects.length === 0)
         return;
 
@@ -2350,6 +2582,7 @@ Hooks.on('updateActiveEffect', (effect, change, options, userId) =>
             "flags.statuscounter.value": newStack,
             "flags.statuscounter.visible": newStack > 1
         }));
+
     if (updates.length > 0)
         actor.updateEmbeddedDocuments("ActiveEffect", updates, { skipGroupSync: true });
 });
@@ -2359,16 +2592,21 @@ Hooks.on('preDeleteToken', async (tokenDocument, options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const actor = tokenDocument.actor;
     if (!actor)
         return;
+
     const structure = actor.system?.structure?.value ?? 1;
     const stress = actor.system?.stress?.value ?? 1;
     const cause = /** @type {any} */ (options)?.laCause ?? null;
+
     if (structure > 0 && stress > 0 && !cause)
         return;
+
     const token = canvas.tokens.get(tokenDocument.id)
         ?? { document: tokenDocument, id: tokenDocument.id, name: tokenDocument.name, actor };
+
     await handleTrigger('onDestroyed', { triggeringToken: token, cause });
 });
 
@@ -2376,13 +2614,14 @@ Hooks.on('createToken', (tokenDocument, options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const token = canvas.tokens.get(tokenDocument.id);
     if (!token)
         return;
     setTimeout(async () =>
     {
         await waitForTokenTemplateSync(tokenDocument.id);
-        checkOnInitReactions(token);
+        checkOnInitAutomations(token);
         handleManualDeployLink(tokenDocument);
         handleTrigger('onTokenCreated', { triggeringToken: token });
     }, 100);
@@ -2392,6 +2631,7 @@ Hooks.on('preDeleteToken', (tokenDocument, _options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const token = canvas.tokens.get(tokenDocument.id);
     if (!token)
         return;
@@ -2428,17 +2668,22 @@ const TEMPLATE_NO_PROVOKE_NAMES = new Set([
     'Template Hard Cover',
     'Template Wreck',
 ]);
+
 Hooks.on('createToken', async (tokenDoc, _options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const baseActor = tokenDoc?.baseActor ?? tokenDoc?.actor;
     if (!isTemplateActor(baseActor) && !TEMPLATE_NO_PROVOKE_NAMES.has(baseActor?.name ?? ''))
         return;
+
     const actor = tokenDoc.actor;
     const api = game.modules.get(MODULE_ID)?.api;
+
     if (!actor || !api?.addConstantBonus)
         return;
+
     try
     {
         await api.addConstantBonus(actor, {
@@ -2464,6 +2709,7 @@ Hooks.on('renderSettings', (app, html) =>
     // v13 hands an HTMLElement; sidebar is split into <section class="settings|documentation|access">
     const root = html instanceof HTMLElement ? html : html[0];
     const settingsSection = root.querySelector('section.settings');
+
     if (!settingsSection)
         return;
     if (settingsSection.querySelector('#lancer-automations-overview'))
@@ -2478,6 +2724,7 @@ Hooks.on('renderSettings', (app, html) =>
         btn.innerHTML = `<i class="fa-solid ${icon}" inert></i> ${label}`;
         return btn;
     };
+
     const divider = document.createElement('h4');
     divider.className = 'divider';
     divider.textContent = localize('LA.moduleTitle');
@@ -2493,7 +2740,7 @@ Hooks.on('renderSettings', (app, html) =>
     managerButton.addEventListener('click', (ev) =>
     {
         ev.preventDefault();
-        new ReactionConfig().render(true);
+        new AutomationConfig().render(true);
     });
 });
 

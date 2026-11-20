@@ -1,6 +1,6 @@
 /* global game, fromUuid, Hooks, console, document */
 
-import { appendEvent } from './telemetry-store.js';
+import { appendEvent, getTelemetry, findEntry } from './telemetry-store.js';
 import {
     findActiveCombatForToken as _findActiveCombatForToken,
     findTelemetryCombatForToken as _findTelemetryCombatForToken,
@@ -19,9 +19,11 @@ function _attackerTokenId(msg)
     const speakerToken = msg?.speaker?.token;
     if (speakerToken)
         return resolveCreditTokenId(speakerToken);
+
     const actorId = msg?.speaker?.actor;
     if (!actorId)
         return null;
+
     const actor = game.actors?.get(actorId);
     return resolveCreditTokenId(resolveEntryTokenId(actor) ?? actor?.getActiveTokens?.()?.[0]?.id ?? null, actor);
 }
@@ -31,6 +33,7 @@ async function _tokenIdFromUuid(uuid)
 {
     if (!uuid)
         return null;
+
     try
     {
         const doc = await fromUuid(uuid);
@@ -53,29 +56,39 @@ async function _onDamageApplyClick(ev)
     const btn = ev.target?.closest?.('.lancer-damage-apply');
     if (!btn)
         return;
+
     const msgEl = btn.closest('.chat-message.message');
     const msgId = msgEl?.dataset?.messageId;
     const msg = game.messages?.get(msgId);
+
     if (!msg)
         return;
+
     const group = btn.closest('.lancer-damage-button-group');
     const targetUuid = group?.dataset?.target;
+
     if (!targetUuid)
         return;
+
     const damageData = msg.getFlag?.('lancer', 'damageData')
         ?? msg.flags?.lancer?.damageData
         ?? null;
+
     const targetResult = damageData?.targetDamageResults?.find(result => result.target === targetUuid);
+
     const damages = (targetResult?.damage ?? [])
         .filter(damage => Number(damage.amount ?? damage.val ?? 0) > 0)
         .map(damage => ({
             type: String(damage.type ?? '').toLowerCase(),
             amount: Number(damage.amount ?? damage.val ?? 0),
         }));
+
     const targetDoc = await fromUuid(targetUuid);
     const targetActor = targetDoc?.actor;
+
     if (!targetActor)
         return;
+
     const attackerTokenId = _attackerTokenId(msg);
     const speakerToken = msg?.speaker?.token ?? null;
     /** @type {any} */ (targetActor).__laPendingDamageSrc = {
@@ -88,11 +101,19 @@ async function _onDamageApplyClick(ev)
     };
 }
 
+function _entryIdFor(combat, attackerId, targetTokenId)
+{
+    const telemetry = getTelemetry(combat);
+
+    return attackerId && telemetry && findEntry(telemetry, attackerId) ? attackerId : targetTokenId;
+}
+
 function _emitDotAdded(combat, byId, pilotTokenId, targetId, kind, amount)
 {
     const event = { type: 'dot-added', round: combat.round ?? 0, turn: combat.turn ?? null, byId, targetId, kind, amount };
     if (pilotTokenId)
         event.pilotTokenId = pilotTokenId;
+
     if (isExecutorGM())
         appendEvent(combat, targetId, event);
     else
@@ -109,9 +130,11 @@ function _onDotAdded({ actor, kind, amount, message } = {})
     const targetTokenId = resolveEntryTokenId(actor);
     if (!targetTokenId || !(amount > 0))
         return;
+
     const combat = _findActiveCombatForToken(targetTokenId);
     if (!combat)
         return;
+
     const attackerTokenId = message ? _attackerTokenId(message) : null;
     const speakerToken = message?.speaker?.token ?? null;
     const pilotTokenId = speakerToken && speakerToken !== attackerTokenId ? pilotTokenOf(speakerToken) : null;
@@ -125,15 +148,18 @@ function registerDotTickFlowSteps(flowSteps, flows)
         state.la_extraData = { ...(state.la_extraData ?? {}), dotTick: 'burn' };
         return true;
     });
+
     const burnFlow = flows.get('BurnFlow');
     if (burnFlow?.steps?.includes('printDamageCard') && !burnFlow.steps.includes('lancer-automations:markBurnTick'))
         burnFlow.insertStepBefore('printDamageCard', 'lancer-automations:markBurnTick');
+
     const printDamageCard = flowSteps.get('printDamageCard');
     if (!printDamageCard)
         return;
     flowSteps.set('printDamageCard', async function (state, options)
     {
         const kind = state?.la_extraData?.dotTick;
+
         const hookId = kind
             ? Hooks.on('preCreateChatMessage', message =>
             {
@@ -141,6 +167,7 @@ function registerDotTickFlowSteps(flowSteps, flows)
                     message.updateSource({ [`flags.${MODULE_ID}.dotTick`]: kind });
             })
             : null;
+
         try
         {
             return await printDamageCard(state, options);
@@ -170,19 +197,24 @@ function _emitDamageEvent(targetActor, hpLanded)
     const targetTokenId = resolveEntryTokenId(targetActor);
     if (!targetTokenId)
         return;
+
     const combat = _findActiveCombatForToken(targetTokenId);
     if (!combat)
         return;
+
     const stash = /** @type {any} */ (targetActor).__laPendingDamageSrc;
     delete /** @type {any} */ (targetActor).__laPendingDamageSrc;
     const landed = Number(hpLanded ?? 0);
     const postOvershield = Number(targetActor.system?.overshield?.value ?? 0);
     const overshieldAbsorbed = Math.max(0, (stash?.preOvershield ?? postOvershield) - postOvershield);
+
     // Non-heat rolled damage; heat doesn't hit HP (goes to heat.value only).
     const nonHeatRolled = (stash?.damages ?? []).reduce((sum, damage) =>
         damage.type === 'heat' ? sum : sum + (damage.amount ?? 0), 0);
+
     const armorAbsorbed = Math.max(0, nonHeatRolled - landed - overshieldAbsorbed);
     const attackerId = stash?.dotTick ? targetTokenId : stash?.attackerTokenId ?? null;
+
     const event = {
         type: 'damage',
         round: combat.round ?? 0,
@@ -194,11 +226,14 @@ function _emitDamageEvent(targetActor, hpLanded)
         overshieldAbsorbed,
         armorAbsorbed,
     };
+
     if (stash?.pilotTokenId && !stash.dotTick)
         event.pilotTokenId = stash.pilotTokenId;
     if (stash?.dotTick)
         event.dotTick = stash.dotTick;
-    const entryId = attackerId ?? targetTokenId;
+
+    const entryId = _entryIdFor(combat, attackerId, targetTokenId);
+
     if (isExecutorGM())
         appendEvent(combat, entryId, event);
     else
@@ -208,6 +243,7 @@ function _emitDamageEvent(targetActor, hpLanded)
             payload: { combatId: combat.id, entryId, event },
         });
     }
+
     const burnAdded = Number(targetActor.system?.burn ?? 0) - Number(stash?.preBurn ?? targetActor.system?.burn ?? 0);
     if (burnAdded > 0)
         _emitDotAdded(combat, attackerId, stash?.pilotTokenId ?? null, targetTokenId, 'burn', burnAdded);
@@ -218,22 +254,30 @@ async function _onDamageUndoClick(ev)
     const btn = ev.target?.closest?.('.lancer-damage-undo');
     if (!btn)
         return;
+
     const msgEl = btn.closest('.chat-message.message');
     const msg = game.messages?.get(msgEl?.dataset?.messageId);
+
     if (!msg)
         return;
+
     const targetUuid = btn.dataset?.uuid;
     if (!targetUuid)
         return;
+
     const attackerTokenId = _attackerTokenId(msg);
     const targetTokenId = await _tokenIdFromUuid(targetUuid);
+
     if (!targetTokenId)
         return;
+
     // Undo can land after the wreck flow removed the combatant.
     const combat = _findActiveCombatForToken(targetTokenId)
         ?? _findTelemetryCombatForToken(targetTokenId);
+
     if (!combat)
         return;
+
     const event = {
         type: 'damage-undo',
         round: combat.round ?? 0,
@@ -242,19 +286,24 @@ async function _onDamageUndoClick(ev)
         hpRestored: Number(btn.dataset?.hpDelta ?? 0),
         overshieldRestored: Number(btn.dataset?.overshieldDelta ?? 0),
     };
+
     const burnRemoved = btn.dataset?.addBurn === 'true' ? Number(btn.dataset?.burnDelta ?? 0) : 0;
     const infectionRemoved = Number(btn.dataset?.infectionDelta ?? 0);
+
     if (burnRemoved > 0)
         event.burnRemoved = burnRemoved;
     if (infectionRemoved > 0)
         event.infectionRemoved = infectionRemoved;
+
+    const entryId = _entryIdFor(combat, attackerTokenId, targetTokenId);
+
     if (isExecutorGM())
-        appendEvent(combat, event.byId, event);
+        appendEvent(combat, entryId, event);
     else
     {
         game.socket.emit('module.lancer-automations', {
             action: 'battleLogDamageUndo',
-            payload: { combatId: combat.id, entryId: event.byId, event },
+            payload: { combatId: combat.id, entryId, event },
         });
     }
 }

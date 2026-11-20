@@ -23,10 +23,12 @@ export function findActiveCombatForToken(tokenId)
 {
     if (!game.combats || !tokenId)
         return null;
+
     const primary = game.combat;
     if (getLAFlag(primary,'telemetry')
         && primary.combatants?.some(combatant => _combatantKey(combatant) === tokenId))
         return primary;
+
     for (const combat of game.combats)
     {
         if (!getLAFlag(combat,'telemetry'))
@@ -34,6 +36,7 @@ export function findActiveCombatForToken(tokenId)
         if (combat.combatants?.some(combatant => _combatantKey(combatant) === tokenId))
             return combat;
     }
+
     return null;
 }
 
@@ -45,14 +48,16 @@ export function findTelemetryCombatForToken(tokenId)
         return active;
     if (!game.combats || !tokenId)
         return null;
+
     for (const combat of game.combats)
     {
-        const telemetry = getLAFlag(combat,'telemetry');
+        const telemetry = getTelemetry(combat);
         if (!telemetry)
             continue;
         if (BUCKETS.some(bucket => telemetry[bucket]?.some(entry => entry.tokenId === tokenId)))
             return combat;
     }
+
     return null;
 }
 
@@ -64,14 +69,17 @@ export function resolveEntryTokenId(actor)
         return null;
     if (actor.isToken && actor.token?.id)
         return actor.token.id;
+
     for (const combat of game.combats ?? [])
     {
         if (!getLAFlag(combat,'telemetry'))
             continue;
+
         const combatant = combat.combatants?.find(entry => entry.actorId === actor.id);
         if (combatant)
             return _combatantKey(combatant);
     }
+
     return null;
 }
 
@@ -88,8 +96,10 @@ function _deployableOwner(actor, tokenDoc)
 {
     if (actor?.type !== 'deployable')
         return null;
+
     const raw = getLAFlag(tokenDoc ?? actor.token ?? actor.getActiveTokens?.()?.[0]?.document, 'ownerActorUuid')
         ?? actor.system?.owner;
+
     const uuid = typeof raw === 'string' ? raw : raw?.id;
     const owner = uuid ? fromUuidSync(uuid) : null;
     return owner?.documentName === 'Actor' ? owner : null;
@@ -99,14 +109,17 @@ export function findPilotMechEntry(pilot)
 {
     if (pilot?.type !== 'pilot')
         return null;
+
     const activeId = pilot.system?.active_mech?.value?.id ?? null;
     let linked = null;
     let active = null;
+
     for (const combat of game.combats ?? [])
     {
         const telemetry = getTelemetry(combat);
         if (!telemetry)
             continue;
+
         for (const bucket of BUCKETS)
         {
             for (const entry of telemetry[bucket] ?? [])
@@ -114,6 +127,7 @@ export function findPilotMechEntry(pilot)
                 const mech = game.actors?.get(entry.actorId);
                 if (mech?.type !== 'mech')
                     continue;
+
                 const isActive = mech.id === activeId;
                 if (mech.system?.pilot?.value?.id === pilot.id)
                 {
@@ -126,6 +140,7 @@ export function findPilotMechEntry(pilot)
             }
         }
     }
+
     return linked ?? active;
 }
 
@@ -140,6 +155,7 @@ export function resolveCreditTokenId(tokenId, actor = null)
     const source = actor ?? tokenDoc?.actor ?? null;
     const owner = _deployableOwner(source, tokenDoc);
     const mechEntry = findPilotMechEntry(owner ?? source);
+
     if (mechEntry)
         return mechEntry.tokenId;
     return (owner && resolveEntryTokenId(owner)) || tokenId;
@@ -150,6 +166,7 @@ export async function handleRemoteBattlelogEvent({ combatId, entryId, event })
 {
     if (!isExecutorGM())
         return;
+
     const combat = game.combats?.get(combatId);
     if (!combat)
         return;

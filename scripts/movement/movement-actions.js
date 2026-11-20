@@ -18,6 +18,11 @@ export function isFreeAction(action)
     return parseAction(action).free;
 }
 
+export function isRealStop(waypoint)
+{
+    return waypoint?.explicit === true && waypoint?.intermediate !== true;
+}
+
 export function freeTwinOf(action)
 {
     const { base, free } = parseAction(action);
@@ -31,11 +36,13 @@ function effectHasFlyingStatus(effect)
     const ids = effect?.statuses;
     if (!ids)
         return false;
+
     for (const id of FLYING_STATUS_IDS)
     {
         if (ids.has?.(id))
             return true;
     }
+
     return false;
 }
 
@@ -43,7 +50,9 @@ function syncMovementActionForActor(actor, target)
 {
     if (!actor)
         return;
+
     const tokens = actor.getActiveTokens?.() ?? [];
+
     for (const t of tokens)
     {
         if (t.document?.movementAction === target)
@@ -75,6 +84,7 @@ Hooks.on('deleteActiveEffect', (effect, _options, userId) =>
         return;
     if (effect.parent?.documentName !== 'Actor')
         return;
+
     const actor = effect.parent;
     const stillFlying = actor?.effects?.some?.(otherEffect => otherEffect.id !== effect.id && effectHasFlyingStatus(otherEffect) && getLAFlags(otherEffect)?.isActorTemplate !== true);
     syncMovementActionForActor(actor, stillFlying ? 'fly' : 'walk');
@@ -92,10 +102,12 @@ Hooks.once('init', () =>
     if (actions.crawl)
     {
         const baseCanSelect = actions.crawl.canSelect;
+
         actions.crawl.canSelect = (tokenLike) =>
         {
             const actor = tokenLike?.actor;
             const prone = !!actor?.statuses?.has?.('prone');
+
             if (!prone)
                 return false;
             return baseCanSelect ? baseCanSelect(tokenLike) : true;
@@ -114,11 +126,14 @@ Hooks.once('init', () =>
     // Climb is only ever assigned by the elevation pass, never picked by hand.
     if (actions.climb)
         actions.climb.canSelect = () => false;
+
     if (actions.blink)
     {
         actions.blink.label = 'Teleport';
         actions.blink.teleport = true;
+        actions.blink.walls = null;
     }
+
     if (actions.ignore)
         actions.ignore.label = 'Ignore Elevation';
 

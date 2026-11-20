@@ -6,18 +6,22 @@ export function bindKeybindingEditor(app, $html)
     {
         const km = /** @type {any} */ (globalThis).KeyboardManager;
         const protectedKeys = new Set(km?.PROTECTED_KEYS ?? ['F5', 'F11', 'F12', 'PrintScreen', 'ScrollLock', 'NumLock', 'CapsLock', 'Pause', 'Break', 'Insert', 'Home', 'PageUp', 'PageDown', 'End', 'ContextMenu']);
+
         const handler = (ev) =>
         {
             ev.preventDefault();
             ev.stopPropagation();
+
             if (ev.key === 'Escape')
             {
                 document.removeEventListener('keydown', handler, true);
                 onDone(null);
                 return;
             }
+
             if (['Alt', 'AltLeft', 'AltRight', 'Control', 'ControlLeft', 'ControlRight', 'Shift', 'ShiftLeft', 'ShiftRight', 'Meta', 'MetaLeft', 'MetaRight'].includes(ev.code))
                 return;
+
             if (protectedKeys.has(ev.code))
             {
                 ui.notifications.warn(localizeFormat('LA.notify.keyReservedByFoundry', { key: ev.code }));
@@ -25,6 +29,7 @@ export function bindKeybindingEditor(app, $html)
                 onDone(null);
                 return;
             }
+
             const modifiers = [];
             if (ev.altKey)
                 modifiers.push('Alt');
@@ -37,13 +42,16 @@ export function bindKeybindingEditor(app, $html)
             document.removeEventListener('keydown', handler, true);
             onDone({ key: ev.code, modifiers });
         };
+
         document.addEventListener('keydown', handler, true);
     };
+
     const splitFullKey = (fullKey) =>
     {
         const dot = fullKey.indexOf('.');
         return [fullKey.slice(0, dot), fullKey.slice(dot + 1)];
     };
+
     const writeBindings = async (fullKey, next) =>
     {
         const [ns, action] = splitFullKey(fullKey);
@@ -60,8 +68,10 @@ export function bindKeybindingEditor(app, $html)
         const row = btn.closest('.la-keybinding-row');
         const fullKey = row?.dataset.fullKey;
         const idx = parseInt(btn.dataset.idx, 10);
+
         if (!fullKey || Number.isNaN(idx))
             return;
+
         const original = btn.outerHTML;
         const placeholder = document.createElement('span');
         placeholder.style.cssText = placeholderStyle;
@@ -74,6 +84,7 @@ export function bindKeybindingEditor(app, $html)
                 placeholder.outerHTML = original;
                 return;
             }
+
             const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
             current[idx] = binding;
             await writeBindings(fullKey, current);
@@ -86,8 +97,10 @@ export function bindKeybindingEditor(app, $html)
         const row = btn.closest('.la-keybinding-row');
         const fullKey = row?.dataset.fullKey;
         const idx = parseInt(btn.dataset.idx, 10);
+
         if (!fullKey || Number.isNaN(idx))
             return;
+
         const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
         current.splice(idx, 1);
         await writeBindings(fullKey, current);
@@ -97,8 +110,10 @@ export function bindKeybindingEditor(app, $html)
         ev.preventDefault();
         const row = ev.currentTarget.closest('.la-keybinding-row');
         const fullKey = row?.dataset.fullKey;
+
         if (!fullKey)
             return;
+
         const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
         const defaults = (action?.editable ?? []).map(/** @type {any} */ binding => ({ key: binding.key, modifiers: [...(binding.modifiers ?? [])] }));
         await writeBindings(fullKey, defaults);
@@ -110,8 +125,10 @@ export function bindKeybindingEditor(app, $html)
         const row = btn.closest('.la-keybinding-row');
         const binds = row?.querySelector('.la-kb-binds');
         const fullKey = row?.dataset.fullKey;
+
         if (!fullKey || !binds)
             return;
+
         const placeholder = document.createElement('span');
         placeholder.style.cssText = placeholderStyle;
         placeholder.textContent = localize('LA.settingsMenus.pressKey');
@@ -126,6 +143,7 @@ export function bindKeybindingEditor(app, $html)
                 btn.style.display = '';
                 return;
             }
+
             const current = [...(game.keybindings.bindings.get(fullKey) ?? [])];
             current.push(binding);
             await writeBindings(fullKey, current);
@@ -138,19 +156,23 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
     const $search = $html.find('.la-config-search-input');
     const $clear = $html.find('.la-config-search-clear');
     const escapeRe = (/** @type {string} */ str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     const stash =(/** @type {any} */ $el) =>
     {
         if ($el.data('la-orig') === undefined)
             $el.data('la-orig', $el.html());
     };
+
     const restore = (/** @type {any} */ $el) =>
     {
         const orig = $el.data('la-orig');
         if (orig !== undefined)
             $el.html(orig);
     };
+
     const MARK_OPEN = '<mark style="background:#f8d96b;color:#111;padding:0 1px;border-radius:2px;">';
     const MARK_CLOSE = '</mark>';
+
     const highlightIn = (/** @type {any} */ $el, /** @type {RegExp} */ re) =>
     {
         stash($el);
@@ -159,12 +181,14 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
         const root = $el[0];
         if (!root)
             return;
+
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
         /** @type {Text[]} */
         const textNodes = [];
         let textNode;
         while ((textNode = walker.nextNode()))
             textNodes.push(/** @type {Text} */ (textNode));
+
         for (const node of textNodes)
         {
             const text = node.nodeValue ?? '';
@@ -174,18 +198,22 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
             re.lastIndex = 0;
             let replaced = '';
             let cursor = 0;
+
             for (const hit of text.matchAll(re))
             {
                 replaced += escapeHtml(text.slice(cursor, hit.index)) + MARK_OPEN + escapeHtml(hit[0]) + MARK_CLOSE;
                 cursor = hit.index + hit[0].length;
             }
+
             replaced += escapeHtml(text.slice(cursor));
             const span = document.createElement('span');
             span.innerHTML = replaced;
             node.parentNode?.replaceChild(span, node);
         }
     };
+
     const ROW_SELECTOR = '.la-opt-row, .la-compact-bool, .la-keybinding-row, .la-tour-row, .la-config-table';
+
     const rowText = (/** @type {any} */ $row) =>
     {
         const hints = $row.find('[data-tooltip]').toArray().map((/** @type {any} */ el) => el.dataset.tooltip ?? '').join(' ');
@@ -193,8 +221,10 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
         const names = $row.find('[name]').toArray().map((/** @type {any} */ el) => el.getAttribute('name') ?? '').join(' ');
         return `${$row.text()} ${hints} ${own} ${names}`.toLowerCase();
     };
+
     const $newFilter = $html.find('.la-new-filter');
     let newOnly = false;
+
     const applyFilter = (query) =>
     {
         const normalizedQuery = (query || '').trim().toLowerCase();
@@ -210,6 +240,7 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
             const $rows = $tab.find(ROW_SELECTOR);
             const $titles = $tab.find('.la-card-title, .la-sub-title, .la-page-head h1');
             let tabHits = 0;
+
             if (!filtering)
             {
                 $rows.css('display', '');
@@ -230,9 +261,11 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
                 $rows.each((/** @type {number} */ _j, /** @type {any} */ el) =>
                 {
                     const $row = $(el);
+
                     const headHit = tabHit
                         || titleHit($row.closest('.la-card').children('.la-card-head').find('.la-card-title').text())
                         || titleHit($row.closest('.la-sub').children('.la-sub-head').find('.la-sub-title').text());
+
                     const match = newOnly ? $row.hasClass('la-new-row') : headHit || rowText($row).includes(normalizedQuery);
                     $row.css('display', match ? '' : 'none');
                     if (match)
@@ -242,6 +275,7 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
                     else
                         $row.find('label, .notes, .la-kb-name').each((/** @type {number} */ _k, /** @type {any} */ child) => restore($(child)));
                 });
+
                 const hasVisibleRow = (/** @type {any} */ $box) => $box.find(ROW_SELECTOR).toArray().some((/** @type {any} */ el) => el.style.display !== 'none');
                 $tab.find('.la-compact-bools').each((/** @type {number} */ _k, /** @type {any} */ el) => $(el).css('display', hasVisibleRow($(el)) ? '' : 'none'));
                 $tab.find('.la-sub').each((/** @type {number} */ _k, /** @type {any} */ el) => $(el).css('display', hasVisibleRow($(el)) ? '' : 'none'));
@@ -253,6 +287,7 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
                     $card.find('.la-sub').removeClass('collapsed').children('.la-sub-body').css('display', '');
                 });
             }
+
             $tab.toggleClass('la-no-hits', filtering && tabHits === 0);
             const $navItem = $html.find(`.la-config-rail .item[data-tab="${$tab.data('tab')}"]`);
             const $badge = $navItem.find('.la-rail-badge');
@@ -262,16 +297,20 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
         });
         if (!filtering)
             applyAllSectionStates();
+
         if (filtering)
             $html.find('.tab').addClass('active').css('display', '');
         else
         {
             $html.find('.tab').removeClass('active');
+
             const activeId = $html.find('.tabs .item.active').data('tab')
                 || $html.find('.tab').first().data('tab');
+
             $html.find(`.tab[data-tab="${activeId}"]`).addClass('active');
         }
     };
+
     $search.on('input', (/** @type {any} */ ev) =>
     {
         newOnly = false;
@@ -294,6 +333,7 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
         applyFilter('');
         $search.trigger('focus');
     });
+
     if (app._openNewFilter)
     {
         app._openNewFilter = false;
@@ -301,6 +341,7 @@ export function bindConfigSearch(app, $html, applyAllSectionStates)
         $search.val('');
         applyFilter('');
     }
+
     $html.on('keydown', (/** @type {any} */ ev) =>
     {
         if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'f')

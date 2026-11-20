@@ -13,12 +13,14 @@ const STAT_TIER_VALUE = /^[^/]+\/[^/]+\/[^/]+$/;
 function statBonusValue(bonus, actor)
 {
     let value = bonus.val;
+
     if (Array.isArray(value) || (typeof value === 'string' && STAT_TIER_VALUE.test(value.trim())))
     {
         const tiers = Array.isArray(value) ? value : value.split('/');
         const tier = actor?.type === 'npc' ? (Number(actor.system?.tier) || 1) : 1;
         value = tiers[Math.min(tiers.length, Math.max(1, tier)) - 1];
     }
+
     return evaluateV3Expression(typeof value === 'number' ? value : String(value ?? ''), actor);
 }
 
@@ -26,11 +28,14 @@ export function resolveStatValue(base, entries)
 {
     const valuesOf = (/** @type {string} */ mode) => entries.filter((/** @type {any} */ entry) => entry.mode === mode).map((/** @type {any} */ entry) => entry.value);
     const finals = valuesOf('replace');
+
     if (finals.length)
         return Math.max(...finals);
+
     const bases = valuesOf('replace_base');
     const start = bases.length ? bases.reduce((sum, value) => sum + value, 0) : base;
     const overwrites = valuesOf('overwrite');
+
     if (overwrites.length)
         return start + Math.max(...overwrites);
     return start + valuesOf('add').reduce((sum, value) => sum + value, 0);
@@ -43,6 +48,7 @@ function linkedEffectActive(actor, bonusId)
         if (getLAFlag(effect, 'linkedBonusId') === bonusId)
             return effect.active;
     }
+
     return false;
 }
 
@@ -60,6 +66,7 @@ function isResolvedStatChange(effect, actor, change)
     const bonusId = getLAFlag(effect, 'linkedBonusId');
     if (!bonusId || CURRENT_RESOURCE_STATS.has(change?.key))
         return false;
+
     const bonus = (getLAFlag(actor, 'global_bonuses') || []).find((/** @type {any} */ entry) => entry?.id === bonusId);
     return bonus?.type === 'stat' && bonus.stat === change.key;
 }
@@ -78,20 +85,24 @@ function syncCombatantActivations(actor)
 {
     if (!actor || !isExecutorGM())
         return;
+
     for (const combat of game.combats ?? [])
     {
         if (!combat.started)
             continue;
+
         for (const combatant of /** @type {any} */ (combat).combatants)
         {
             if (combatant.actor?.uuid !== actor.uuid || combatant._source?.system?.activations?.max != null)
                 continue;
+
             const previous = _combatantActivations.get(combatant.uuid) ?? Number(combatant.system?.activations?.max);
             combatant.reset();
             const max = Number(combatant.system?.activations?.max) || 0;
             _combatantActivations.set(combatant.uuid, max);
             const value = Number(combatant.system?.activations?.value) || 0;
             const next = Math.min(max, Math.max(0, value + max - (Number.isFinite(previous) ? previous : max)));
+
             if (next !== value)
                 combatant.update({ 'system.activations.value': next });
             else if (max !== previous)
@@ -120,13 +131,16 @@ export function initConstantStatHooks()
             const bonuses = resolvedStatBonuses(this);
             if (!bonuses.length)
                 return;
+
             const byStat = new Map();
+
             for (const bonus of bonuses)
             {
                 const entries = byStat.get(bonus.stat) ?? [];
                 entries.push({ mode: STAT_MODES.has(bonus.statMode) ? bonus.statMode : 'add', value: statBonusValue(bonus, this) });
                 byStat.set(bonus.stat, entries);
             }
+
             for (const [stat, entries] of byStat)
                 foundry.utils.setProperty(this, stat, resolveStatValue(Number(foundry.utils.getProperty(this, stat)) || 0, entries));
         }, 'WRAPPER');

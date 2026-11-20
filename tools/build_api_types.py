@@ -114,8 +114,8 @@ def names_from_object_body(body, path):
                 if target:
                     names |= module_exports(target)
             continue
-        # `foo` (shorthand) or `foo: bar` (renamed)
-        m2 = re.match(r'^(\w+)(?:\s*:\s*[\w.]+)?$', stripped)
+        # `foo` (shorthand), `foo: bar` (renamed) or `foo: (a) => ...` (arrow)
+        m2 = re.match(r'^(\w+)(?:\s*:\s*(?:[\w.]+|(?:async\s*)?\(.*|\w+\s*=>.*))?$', stripped)
         if m2:
             names.add(m2.group(1))
     return names

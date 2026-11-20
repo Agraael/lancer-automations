@@ -1,6 +1,7 @@
 import { getTelemetry, BUCKETS } from './telemetry-store.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { EVENT_TYPES } from './combat-telemetry.js';
+import { liveDestroyed } from './kill-attribution.js';
 import { escapeHtml as _escape, localize } from '../tools/string-utils.js';
 
 const BUCKET_COLOR = {
@@ -23,10 +24,12 @@ function _telemetryCombats()
 function _pickCombat()
 {
     const combats = _telemetryCombats();
+
     const chosen = combats.find(combat => combat.id === _combatId)
         ?? combats.find(combat => combat.active)
         ?? combats[0]
         ?? null;
+
     _combatId = chosen?.id ?? null;
     return chosen;
 }
@@ -34,11 +37,13 @@ function _pickCombat()
 function _flatEntries(telemetry)
 {
     const out = [];
+
     for (const bucket of BUCKETS)
     {
         for (const entry of telemetry[bucket] ?? [])
             out.push({ entry, bucket });
     }
+
     return out;
 }
 
@@ -56,6 +61,7 @@ function _contentHtml()
     const combats = _telemetryCombats();
     const combat = _pickCombat();
     const telemetry = combat ? getTelemetry(combat) : null;
+
     if (!combat || !telemetry)
         return '<p class="battelog-debug-empty">No telemetry-flagged combat. Enable the Battle Log and start a combat.</p>';
 
@@ -70,7 +76,7 @@ function _contentHtml()
 
     const rows = flat.map(({ entry, bucket }) =>
     {
-        const destroyed = entry.events.some(ev => ev.type === 'destroyed');
+        const destroyed = !!liveDestroyed(entry.events);
         return `
             <tr>
                 <td style="color:${BUCKET_COLOR[bucket] ?? '#888'};">${_escape(bucket)}</td>
@@ -87,6 +93,7 @@ function _contentHtml()
     const countByType = new Map();
     for (const { event } of events)
         countByType.set(event.type, (countByType.get(event.type) ?? 0) + 1);
+
     const chips = EVENT_TYPES.map(type =>
         `<span class="battelog-debug-chip ${_hiddenTypes.has(type) ? 'off' : ''}" data-type="${type}">${type} <b>${countByType.get(type) ?? 0}</b></span>`).join('');
 
@@ -124,6 +131,7 @@ function _rerender()
     const body = _dialog?.element?.[0]?.querySelector?.('.battelog-debug-body');
     if (!body)
         return;
+
     const feed = body.querySelector('.battelog-debug-feed');
     const atBottom = !feed || (feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40);
     body.innerHTML = _contentHtml();
@@ -149,8 +157,10 @@ export function openTelemetryDebugWindow()
         _rerender();
         return _dialog;
     }
+
     const hookId = Hooks.on('updateCombat', _onCombatChange);
     const deleteHookId = Hooks.on('deleteCombat', () => _rerender());
+
     const dlg = new Dialog({
         title: localize('LA.dialogTitle.battleLogTelemetryDebug'),
         content: `<div class="battelog-debug-body">${_contentHtml()}</div>`,
@@ -182,8 +192,10 @@ export function openTelemetryDebugWindow()
             {
                 const combat = _pickCombat();
                 const telemetry = combat ? getTelemetry(combat) : null;
+
                 if (!telemetry)
                     return;
+
                 const json = JSON.stringify(telemetry, null, 2);
                 if (game.clipboard?.copyPlainText)
                     game.clipboard.copyPlainText(json);
@@ -191,6 +203,7 @@ export function openTelemetryDebugWindow()
                     navigator.clipboard?.writeText(json);
                 ui.notifications?.info(localize('LA.notify.telemetryJsonCopied'));
             });
+
             const feed = $root[0]?.querySelector?.('.battelog-debug-feed');
             if (feed)
                 feed.scrollTop = feed.scrollHeight;
@@ -206,6 +219,7 @@ export function openTelemetryDebugWindow()
         width: 680,
         resizable: true,
     });
+
     _dialog = dlg;
     dlg.render(true);
     return dlg;

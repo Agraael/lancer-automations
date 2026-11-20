@@ -6,7 +6,7 @@ import { isExecutorGM } from '../utils/lancer-token.js';
 const USED_FLAG = 'actionExtrasUsed';
 const TEMP_FLAG = 'actionExtrasTemp';
 export const EXTRA_ACTION_KINDS = ['reaction', 'quick', 'full'];
-export const EXTRA_USED_KEYS = ['reaction', 'slots'];
+export const EXTRA_USED_KEYS = ['reaction', 'slots', 'quickOnly', 'free'];
 export const SLOT_COST = { quick: 1, full: 2 };
 /** @type {(actor: any) => any} */
 let grantedProvider = () => ({});
@@ -45,17 +45,20 @@ function extraPool(actor)
 {
     const granted = actionExtrasGranted(actor);
     const temp = actionExtrasTemp(actor);
-    return { reaction: granted.reaction + temp.reaction, slots: slotPool(granted) + temp.slots };
+    return { reaction: granted.reaction + temp.reaction, slots: slotPool(granted) + temp.slots, quickOnly: temp.quickOnly };
 }
 
 function blockedKinds(actor)
 {
     const locked = getStatusLockedFields(actor);
     const blocked = new Set();
+
     if (locked.has('reaction') || foundry.utils.getProperty(actor?.overrides ?? {}, 'system.action_tracker.reaction') === false)
         blocked.add('reaction');
     if (locked.has('full') || locked.has('quick'))
         blocked.add('slots');
+    if (locked.has('free'))
+        blocked.add('quickOnly');
     return blocked;
 }
 
@@ -66,7 +69,8 @@ export function actionExtrasLeft(actor)
     const blocked = blockedKinds(actor);
     return {
         reaction: blocked.has('reaction') ? 0 : Math.max(0, pool.reaction - used.reaction),
-        slots: blocked.has('slots') ? 0 : Math.max(0, pool.slots - used.slots)
+        slots: blocked.has('slots') ? 0 : Math.max(0, pool.slots - used.slots),
+        quickOnly: blocked.has('quickOnly') ? 0 : Math.max(0, pool.quickOnly - used.quickOnly)
     };
 }
 
@@ -85,8 +89,8 @@ export function actionCounts(actor)
     const tracker = actor?.system?.action_tracker ?? {};
     const left = actionExtrasLeft(actor);
     const units = slotUnits(tracker);
-    const quick = units + left.slots;
-    return { reaction: tracker.reaction ? 1 + left.reaction : 0, full: Math.floor(quick / SLOT_COST.full), quick };
+    const slots = units + left.slots;
+    return { reaction: tracker.reaction ? 1 + left.reaction : 0, full: Math.floor(slots / SLOT_COST.full), quick: slots, overcharge: left.quickOnly };
 }
 
 export function reactionCounts(actor)
@@ -105,13 +109,68 @@ export function settleSlots(actor, tracker, change)
 {
     const used = actionExtrasUsed(actor);
     const units = slotUnits(tracker);
+
     if (blockedKinds(actor).has('slots'))
         return { fields: slotFields(Math.max(0, Math.min(2, units + change))), used };
+
     const pool = extraPool(actor).slots;
     const total = Math.max(0, Math.min(2 + pool, units + Math.max(0, pool - used.slots) + change));
     const front = Math.min(2, total);
     used.slots = pool - (total - front);
     return { fields: slotFields(front), used };
+}
+
+export function slotLedger(actor)
+{
+    return slotUnits(actor?.system?.action_tracker) + actionExtrasTemp(actor).slots - actionExtrasUsed(actor).slots;
+}
+
+export function withdrawSlots(actor, tracker, used, count)
+{
+    const pool = extraPool(actor).slots;
+    const temp = actionExtrasTemp(actor);
+    const total = slotUnits(tracker) + Math.max(0, pool - used.slots) - count;
+
+    if (total < 0)
+        return null;
+
+    const taken = Math.min(temp.slots, count);
+    const front = Math.min(2, total);
+    const fields = slotFields(front);
+    return {
+        'system.action_tracker.full': fields.full,
+        'system.action_tracker.quick': fields.quick,
+        ...extrasUsedUpdate({ ...used, slots: pool - taken - (total - front) }),
+        [`flags.${MODULE_ID}.${TEMP_FLAG}.slots`]: temp.slots - taken
+    };
+}
+
+export function freeUsedChange(actor, spend)
+{
+    return { ...actionExtrasUsed(actor), free: spend ? 1 : 0 };
+}
+
+export function quickOnlyGranted(actor)
+{
+    return actionExtrasTemp(actor).quickOnly;
+}
+
+export function spendQuickOnly(actor)
+{
+    if (!actionExtrasLeft(actor).quickOnly)
+        return null;
+
+    const used = actionExtrasUsed(actor);
+    used.quickOnly += 1;
+    return used;
+}
+
+export function withdrawQuickOnly(actor, used, count)
+{
+    const granted = quickOnlyGranted(actor);
+    if (granted - used.quickOnly < count)
+        return null;
+    return { [`flags.${MODULE_ID}.${TEMP_FLAG}.quickOnly`]: granted - count };
 }
 
 export function coverSpentActions(actor, tracker, { reaction = true, slots = true } = {})
@@ -120,12 +179,14 @@ export function coverSpentActions(actor, tracker, { reaction = true, slots = tru
     const used = actionExtrasUsed(actor);
     const next = { ...tracker };
     const fields = [];
+
     if (reaction && !next.reaction && left.reaction > 0)
     {
         next.reaction = true;
         used.reaction += 1;
         fields.push('reaction');
     }
+
     if (slots && left.slots > 0 && slotUnits(next) < 2 && isOwnTurn(actor))
     {
         const settled = settleSlots(actor, next, 0);
@@ -133,6 +194,7 @@ export function coverSpentActions(actor, tracker, { reaction = true, slots = tru
         used.slots = settled.used.slots;
         fields.push('full', 'quick');
     }
+
     return fields.length ? { tracker: next, used, fields } : null;
 }
 
@@ -164,15 +226,19 @@ export async function resetActionExtras(actor, keys = EXTRA_USED_KEYS)
 {
     if (!actor)
         return;
+
     const used = actionExtrasUsed(actor);
     const temp = actionExtrasTemp(actor);
+
     if (!keys.some(key => used[key] || temp[key]))
         return;
+
     for (const key of keys)
     {
         used[key] = 0;
         temp[key] = 0;
     }
+
     await actor.update({ ...extrasUsedUpdate(used), [`flags.${MODULE_ID}.${TEMP_FLAG}`]: temp }, { laActionExtras: true });
 }
 
@@ -180,6 +246,7 @@ export function isActionAtMax(actor, kind)
 {
     const tracker = actor?.system?.action_tracker ?? {};
     const used = actionExtrasUsed(actor);
+
     if (kind === 'reaction')
         return !!tracker.reaction && !used.reaction;
     if (kind in SLOT_COST)
@@ -192,8 +259,19 @@ export async function addTemporaryAction(actor, kind)
     const key = kind === 'reaction' ? 'reaction' : 'slots';
     if (!actor || !(kind === 'reaction' || kind in SLOT_COST))
         return;
+
     const temp = actionExtrasTemp(actor);
     temp[key] += kind === 'reaction' ? 1 : SLOT_COST[kind];
+    await actor.update({ [`flags.${MODULE_ID}.${TEMP_FLAG}`]: temp }, { laActionExtras: true });
+}
+
+export async function grantQuickOnly(actor)
+{
+    if (!actor)
+        return;
+
+    const temp = actionExtrasTemp(actor);
+    temp.quickOnly += 1;
     await actor.update({ [`flags.${MODULE_ID}.${TEMP_FLAG}`]: temp }, { laActionExtras: true });
 }
 
@@ -201,11 +279,14 @@ export async function expireSlotExtras(actor)
 {
     if (!actor)
         return;
-    const pool = extraPool(actor).slots;
+
+    const pool = extraPool(actor);
     const used = actionExtrasUsed(actor);
-    if (used.slots >= pool)
+
+    if (used.slots >= pool.slots && used.quickOnly >= pool.quickOnly)
         return;
-    used.slots = pool;
+    used.slots = Math.max(used.slots, pool.slots);
+    used.quickOnly = Math.max(used.quickOnly, pool.quickOnly);
     await actor.update(extrasUsedUpdate(used), { laActionExtras: true });
 }
 
@@ -223,9 +304,11 @@ export function initActionExtras()
     {
         if (/** @type {any} */ (options)?.laActionExtras || !isExecutorGM() || !foundry.utils.getProperty(changes, 'system.action_tracker'))
             return;
+
         const covered = coverSpentActions(actor, actor.system?.action_tracker ?? {});
         if (!covered)
             return;
+
         const trackerUpdate = Object.fromEntries(covered.fields.map(field => [`system.action_tracker.${field}`, covered.tracker[field]]));
         actor.update(/** @type {any} */ ({ ...trackerUpdate, ...extrasUsedUpdate(covered.used) }), /** @type {any} */ ({ laActionExtras: true }));
     });

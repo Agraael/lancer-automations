@@ -9,17 +9,16 @@ import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { targetInfoAllowed, haseSuccessChance, contestWinChance } from '../activations/targeting-ui.js';
 import { getSettingEnabled } from '../setup/settings-register.js';
 import { formulaBounds } from '../tools/roll-utils.js';
+import { getCornerStack } from '../tools/corner-stack.js';
+import { localize } from '../tools/string-utils.js';
 
 const PANEL_ID = 'la-uplink-panel';
 const LIVE_TICK_MS = 400;
 const HOVER_KEY = 'la-uplink';
-const KIND_SHORT = { attack: 'ATK', tech: 'TECH', damage: 'DMG', hase: 'HASE' };
-const KIND_CHIP = { attack: 'lancer-weapon', tech: 'lancer-tech', damage: 'lancer-weapon', hase: 'lancer-weapon' };
+const KIND_SHORT = { attack: 'ATK', tech: 'TECH', damage: 'DMG', hase: 'HASE', struct: 'STRUCT', stress: 'STRESS' };
+const KIND_CHIP = { attack: 'lancer-weapon', tech: 'lancer-tech', damage: 'lancer-weapon', hase: 'lancer-weapon', struct: 'lancer-primary', stress: 'lancer-primary' };
 
 let _liveHook = null;
-let _collapseHook = null;
-let _resizeObserver = null;
-let _onWindowResize = null;
 let _liveTick = null;
 let _selectedId = null;
 let _lastSelected = null;
@@ -43,19 +42,23 @@ function attackChanceFn(uuid)
             const snapshot = selectedSnapshot();
             const target = snapshot?.raw?.targets?.find(entry => entry.targetUuid === uuid);
             const actor = fromUuidSync(uuid)?.actor;
+
             if (!target || !actor?.system)
                 return null;
+
             const base = snapshot.raw.base || {};
             const weapon = snapshot.raw.weapon || {};
             const bonus = (Number(base.grit) || 0) + (Number(base.flatBonus) || 0);
             const defense = weapon.smart ? (Number(actor.system.edef) || 8) : (Number(actor.system.evasion) || 5);
             const total = snapshot.totals?.targets?.find(entry => entry.uuid === uuid)?.total;
             const result = rollHitCritChance(bonus, Number(total) || 0, defense);
+
             if (target.invisible)
             {
                 result.hit /= 2;
                 result.crit /= 2;
             }
+
             if (weapon.tech)
                 result.crit = 0;
             return result;
@@ -75,29 +78,36 @@ function damageRangeFn(uuid)
         {
             const snapshot = selectedSnapshot();
             const target = snapshot?.raw?.targets?.find(entry => entry.targetUuid === uuid);
+
             if (!target)
                 return null;
+
             if (Number(target.quality) === 0)
             {
                 const reliable = Number(snapshot.raw.weapon?.reliableValue) || 0;
                 return reliable > 0 ? { label: `${reliable}`, fill: 0xb0763a } : null;
             }
+
             const entries = [
                 ...(snapshot.raw.weapon?.damage || []), ...(snapshot.raw.weapon?.bonusDamage || []),
                 ...(snapshot.raw.base?.damage || []), ...(snapshot.raw.base?.bonusDamage || []),
                 ...(target.bonusDamage || [])
             ];
+
             let min = 0;
             let max = 0;
+
             for (const entry of entries)
             {
                 const formula = String(entry?.val ?? '').trim();
                 if (!formula)
                     continue;
+
                 const bounds = formulaBounds(formula);
                 min += bounds.min;
                 max += bounds.max;
             }
+
             if (max <= 0)
                 return null;
             return { label: min === max ? `${max}` : `${min}-${max}`, fill: 0xff9a4d };
@@ -117,16 +127,19 @@ function haseChanceFn()
         {
             const snapshot = selectedSnapshot();
             const actor = snapshot?.rollerTokenUuid ? fromUuidSync(snapshot.rollerTokenUuid)?.actor : null;
+
             if (!actor)
                 return null;
+
             const base = snapshot.raw.base || {};
             const netAcc = (Number(base.accuracy) || 0) - (Number(base.difficulty) || 0);
             let chance = null;
+
             if (snapshot.contest?.actorUuid)
             {
                 const opponent = fromUuidSync(snapshot.contest.actorUuid);
                 const opponentActor = opponent?.actor ?? opponent;
-                chance = opponentActor ? contestWinChance(actor, snapshot.checkLabel, opponentActor, snapshot.contest.stat, { netAcc }) : null;
+                chance = opponentActor ? contestWinChance(actor, snapshot.checkLabel, opponentActor, snapshot.contest.stat, { netAcc, winTies: snapshot.contest.winsTies === true }) : null;
             }
             else
                 chance = haseSuccessChance(actor, snapshot.checkLabel, Number(snapshot.check?.targetVal) || 10, { netAcc, applyStatuses: false });
@@ -169,54 +182,60 @@ function clearHover()
     clearChanceLabels();
 }
 
-// crlngn resizes and collapses the sidebar live, so the offset comes from its rect.
-function placePanel(panel)
-{
-    const sidebar = document.querySelector('#sidebar');
-    let right = 60;
-    if (sidebar)
-    {
-        const rect = sidebar.getBoundingClientRect();
-        if (rect.width > 0)
-            right = Math.max(0, window.innerWidth - rect.left) + 12;
-    }
-    panel.style.right = `${right}px`;
-}
-
 function renderBar(panel)
 {
     const bar = panel.querySelector('.lau-bar');
     const liveRolls = getLiveRolls();
+
     if (_selectedId && !liveRolls.some(entry => entry.id === _selectedId))
         _selectedId = null;
 
     const newcomers = liveRolls.filter(entry => !_seenRolls.has(entry.id));
+
     for (const id of _seenRolls)
     {
         if (!liveRolls.some(entry => entry.id === id))
             _seenRolls.delete(id);
     }
+
     for (const entry of newcomers)
         _seenRolls.add(entry.id);
     if (!_selectedId && newcomers.length && getSettingEnabled('uplinkAutoOpen'))
         _selectedId = newcomers[0].id;
 
+    bar.innerHTML = barHtml(liveRolls, _selectedId);
+    renderView(panel, _selectedId !== _lastSelected);
+    _lastSelected = _selectedId;
+}
+
+function barHtml(liveRolls, selectedId)
+{
     const chips = liveRolls.map(entry =>
     {
         const kindLabel = entry.kind === 'hase' ? (entry.checkLabel || KIND_SHORT.hase) : (KIND_SHORT[entry.kind] || entry.kind);
         const label = `${entry.actorName || entry.userName} · ${kindLabel}`;
-        const selectedClass = entry.id === _selectedId ? ' on' : '';
+        const selectedClass = entry.id === selectedId ? ' on' : '';
         return `<button type="button" class="lau-roll-chip lancer-chip ${KIND_CHIP[entry.kind] || 'lancer-dark'}${selectedClass}" data-roll="${entry.id}"><span>${label}</span></button>`;
     }).join('');
 
-    bar.innerHTML = `
+    return `
         <span>Uplink · ${liveRolls.length}</span>
         ${chips}
         <span class="lau-spacer"></span>
+        <button type="button" data-action="tour" data-tooltip="${localize('LA.configUi.startTour')}"><i class="fas fa-circle-question"></i></button>
         <button type="button" data-action="refresh" title="Fail-safe refresh">↻</button>
         <button type="button" data-action="close">✕</button>`;
-    renderView(panel, _selectedId !== _lastSelected);
-    _lastSelected = _selectedId;
+}
+
+export function uplinkPanelPreview(liveRolls, selectedId)
+{
+    const panel = document.createElement('div');
+    panel.id = PANEL_ID;
+    panel.innerHTML = `<div class="lau-bar">${barHtml(liveRolls, selectedId)}</div><div class="lau-view"></div>`;
+    const snapshot = entrySnapshot(liveRolls.find(entry => entry.id === selectedId));
+    if (snapshot)
+        panel.querySelector('.lau-view').appendChild(buildMirrorCard(snapshot));
+    return panel;
 }
 
 function renderView(panel, animate = false)
@@ -225,6 +244,7 @@ function renderView(panel, animate = false)
     const entry = _selectedId ? getLiveRolls().find(candidate => candidate.id === _selectedId) : null;
     const snapshot = entrySnapshot(entry);
     let renderKey = null;
+
     if (snapshot)
     {
         const stable = { ...snapshot };
@@ -232,6 +252,7 @@ function renderView(panel, animate = false)
         delete stable.ts;
         renderKey = `${_selectedId}|${JSON.stringify(stable)}`;
     }
+
     if (!animate && renderKey !== null && renderKey === _lastRenderKey)
         return;
     _lastRenderKey = renderKey;
@@ -244,8 +265,10 @@ function renderView(panel, animate = false)
         view.appendChild(buildMirrorCard(snapshot));
     if (!hoveredRef)
         return;
+
     const selector = hoveredRef.tgt ? `[data-hover-tgt="${hoveredRef.tgt}"]` : `[data-hover-range="${hoveredRef.range}"]`;
     const rebound = view.querySelector(selector);
+
     if (rebound)
         _hoveredControl = rebound;
     else
@@ -263,17 +286,21 @@ export function openUplinkPanel()
     panel.addEventListener('click', (event) =>
     {
         const panSource = /** @type {HTMLElement} */ (event.target)?.closest?.('[data-hover-tgt], [data-pan-uuid]');
+
         if (panSource)
         {
             const uuid = panSource.dataset.hoverTgt || panSource.dataset.panUuid;
             const token = uuid ? fromUuidSync(uuid)?.object : null;
+
             if (token)
                 canvas.animatePan({ x: token.center.x, y: token.center.y, duration: 500 });
             return;
         }
+
         const button = /** @type {HTMLElement} */ (event.target)?.closest?.('button');
         if (!button)
             return;
+
         const rollId = button.dataset.roll;
         if (rollId)
         {
@@ -284,6 +311,8 @@ export function openUplinkPanel()
             renderBar(panel);
         else if (button.dataset.action === 'close')
             closeUplinkPanel(true);
+        else if (button.dataset.action === 'tour')
+            import('../setup/tour.js').then(module => module.startTourAt('roll-uplink-tour'));
     });
 
     panel.addEventListener('mouseover', (event) =>
@@ -294,19 +323,24 @@ export function openUplinkPanel()
         clearHover();
         if (!hovered)
             return;
+
         const entry = getLiveRolls().find(candidate => candidate.id === _selectedId);
         const snapshot = entrySnapshot(entry);
         const roller = rollerToken(snapshot);
+
         if (!roller)
             return;
         _hoveredControl = hovered;
+
         if (hovered.dataset.hoverTgt)
         {
             const uuid = hovered.dataset.hoverTgt;
             const targetToken = fromUuidSync(uuid)?.object;
+
             if (!targetToken)
                 return;
             drawSightlines(HOVER_KEY, roller, [targetToken]);
+
             if (targetInfoAllowed())
             {
                 const labelFn = snapshot?.kind === 'damage' ? damageRangeFn(uuid) : attackChanceFn(uuid);
@@ -328,18 +362,7 @@ export function openUplinkPanel()
     panel.addEventListener('mouseleave', clearHover);
 
     renderBar(panel);
-    document.body.appendChild(panel);
-    placePanel(panel);
-
-    const sidebar = document.querySelector('#sidebar');
-    if (sidebar && window.ResizeObserver)
-    {
-        _resizeObserver = new ResizeObserver(() => placePanel(panel));
-        _resizeObserver.observe(sidebar);
-    }
-    _onWindowResize = () => placePanel(panel);
-    window.addEventListener('resize', _onWindowResize);
-    _collapseHook = Hooks.on('collapseSidebar', () => setTimeout(() => placePanel(panel), 350));
+    getCornerStack().prepend(panel);
 
     _liveHook = Hooks.on('lancer-automations.uplinkLiveRolls', () => renderBar(panel));
     _liveTick = setInterval(() =>
@@ -356,9 +379,11 @@ Hooks.on('lancer-automations.uplinkLiveRolls', () =>
 {
     if (!game.user?.isGM)
         return;
+
     const liveCount = getLiveRolls().length;
     const panel = document.getElementById(PANEL_ID);
     const open = !!panel && !panel.classList.contains('lau-out');
+
     if (liveCount > 0 && !open && getSettingEnabled('uplinkAutoOpen'))
         openUplinkPanel();
     else if (liveCount === 0 && open)
@@ -369,42 +394,32 @@ export function closeUplinkPanel(animate = false)
 {
     clearHover();
     clearChanceLabels();
+
     if (_liveHook !== null)
     {
         Hooks.off('lancer-automations.uplinkLiveRolls', _liveHook);
         _liveHook = null;
     }
-    if (_collapseHook !== null)
-    {
-        Hooks.off('collapseSidebar', _collapseHook);
-        _collapseHook = null;
-    }
-    if (_resizeObserver)
-    {
-        _resizeObserver.disconnect();
-        _resizeObserver = null;
-    }
-    if (_onWindowResize)
-    {
-        window.removeEventListener('resize', _onWindowResize);
-        _onWindowResize = null;
-    }
+
     if (_liveTick !== null)
     {
         clearInterval(_liveTick);
         _liveTick = null;
     }
+
     _selectedId = null;
     _lastSelected = null;
     _lastRenderKey = null;
     const panel = document.getElementById(PANEL_ID);
     if (!panel)
         return;
+
     if (!animate)
     {
         panel.remove();
         return;
     }
+
     panel.classList.add('lau-out');
     const removePanel = () => panel.remove();
     panel.addEventListener('animationend', removePanel, { once: true });

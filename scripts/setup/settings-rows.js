@@ -5,10 +5,15 @@ import { localize } from '../tools/string-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 
-// Core is not a module, but its settings ride the same external-shortcut plumbing.
+// Core and the system are not modules, but their settings ride the same external-shortcut plumbing.
 export function _extNamespaceActive(namespace)
 {
-    return namespace === 'core' || !!game.modules.get(namespace)?.active;
+    return namespace === 'core' || namespace === game.system.id || !!game.modules.get(namespace)?.active;
+}
+
+export function _extFormKey(field)
+{
+    return `__ext.${field.module}.${field.key}${field.path ? `.${field.path}` : ''}`;
 }
 
 // Keep the owning module's own wording, minus a prefix that the section header already says
@@ -16,9 +21,11 @@ function externalLabel(field, setting)
 {
     if (field.label)
         return localize(field.label);
+
     const name = localize(setting?.name ?? field.key);
     if (typeof name !== 'string')
         return name;
+
     const trimmed = name.replace(/^experimental:\s*/i, '');
     return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
@@ -56,6 +63,7 @@ const KEY_DISPLAY = {
     Semicolon: ';',
     Slash: '/'
 };
+
 function _displayKey(code)
 {
     if (code in KEY_DISPLAY)
@@ -68,6 +76,7 @@ function _displayKey(code)
         return code.slice(3);
     return code;
 }
+
 function _formatBinding(binding)
 {
     const parts = [...(binding.modifiers ?? [])];
@@ -83,6 +92,7 @@ function _isLockedForUser(key)
         return true;
     if (typeof key === 'string' && key.startsWith('_sfx.'))
         return true;
+
     const setting = game.settings.settings.get(`${MODULE_ID}.${key}`);
     if (!setting)
         return true;
@@ -114,24 +124,31 @@ function _buildItem(field)
             if (!mod?.active || mod.title !== field.requireForkTitle.title)
                 return null;
         }
+
         return { type: 'section', label: localize(field.label), hint: localize(field.hint ?? ''), isSection: true, collapsible: field.collapsible !== false, collapsed: !!field.collapsed, isSubsection: !!field.subsection };
     }
+
     if (field.type === 'button')
     {
         if (field.requiresModule && !game.modules.get(field.requiresModule)?.active)
             return null;
+
         let state = null;
+
         try
         {
             state = typeof field.state === 'function' ? field.state() : null;
         }
         catch
         { /* setting not registered */ }
+
         return { type: 'button', isButton: true, key: field.key, label: localize(field.label), hint: localize(field.hint ?? ''), icon: field.icon ?? '', state, isLocked: !game.user.isGM && !field.clientAllowed };
     }
+
     if (field.type === 'table')
     {
         const table = field.getTable();
+
         const rows = table.rows.map(row => ({
             ...row,
             label: localize(row.label),
@@ -142,8 +159,10 @@ function _buildItem(field)
                 isLocked: cell.name ? _isLockedForUser(cell.name) : false
             }))
         }));
+
         return { type: 'table', label: localize(field.label), isTable: true, columns: table.columns.map(localize), rows };
     }
+
     if (field.type === 'keybinding')
     {
         const mod = game.modules.get(field.module);
@@ -151,10 +170,13 @@ function _buildItem(field)
             return null;
         if (field.requireTitle && mod.title !== field.requireTitle)
             return null;
+
         const fullKey = `${field.module}.${field.key}`;
         const action = /** @type {any} */ (game.keybindings).actions?.get(fullKey);
+
         if (!action)
             return null;
+
         const bindings = /** @type {any[]} */ (game.keybindings.bindings?.get(fullKey)) ?? [];
         return {
             type: 'keybinding',
@@ -165,15 +187,19 @@ function _buildItem(field)
             bindings: bindings.map(/** @type {any} */ binding => ({ display: _formatBinding(binding) }))
         };
     }
+
     if (field.type === 'tour')
     {
         const mod = game.modules.get(field.module);
         if (!mod?.active)
             return null;
+
         const fullKey = `${field.module}.${field.key}`;
         const tour = /** @type {any} */ (game.tours)?.get?.(fullKey);
-        if (!tour)
+
+        if (!tour || (tour.config?.restricted && !game.user.isGM))
             return null;
+
         const rawTitle = tour.title ?? field.key;
         const title = String(rawTitle).replace(/^Lancer Automations:\s*/i, '');
         const stepCount = tour.steps?.length ?? 0;
@@ -186,14 +212,17 @@ function _buildItem(field)
             description: tour.description ?? '',
         };
     }
+
     if (field.type === 'moduleBoolean')
     {
         if (!_extNamespaceActive(field.module))
             return null;
+
         // Absent means that build of the module does not have it, so there is nothing to shortcut to
         const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
         if (!setting)
             return null;
+
         const value = !!getExternalSetting(field.module, field.key, setting.default);
         return {
             key: `__ext.${field.module}.${field.key}`,
@@ -206,13 +235,16 @@ function _buildItem(field)
             isLocked: setting.scope === 'world' && !game.user.isGM
         };
     }
+
     if (field.type === 'moduleSlider')
     {
         if (!_extNamespaceActive(field.module))
             return null;
+
         const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
         if (!setting)
             return null;
+
         const value = getExternalSetting(field.module, field.key, setting.default);
         const range = setting.range ?? {};
         return {
@@ -229,21 +261,26 @@ function _buildItem(field)
             isLocked: setting.scope === 'world' && !game.user.isGM
         };
     }
+
     if (field.type === 'moduleColor')
     {
         if (!game.modules.get(field.module)?.active)
             return null;
+
         const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
         if (!setting)
             return null;
+
         let value = getExternalSetting(field.module, field.key, setting.default);
         // A ColorField hands back a Color object, and the picker needs a plain hex string
         const hexRe = /^#[0-9a-fA-F]{6}$/;
+
         if (typeof value !== 'string' || !hexRe.test(value))
         {
             const asText = (typeof value?.toString === 'function') ? value.toString() : null;
             value = (asText && hexRe.test(asText)) ? asText : (setting.default ?? '#000000');
         }
+
         return {
             key: `__ext.${field.module}.${field.key}`,
             type: 'color',
@@ -255,32 +292,40 @@ function _buildItem(field)
             isLocked: setting.scope === 'world' && !game.user.isGM
         };
     }
+
     if (field.type === 'moduleSelect')
     {
         if (!_extNamespaceActive(field.module))
             return null;
-        const setting = game.settings.settings.get(`${field.module}.${field.key}`);
+
+        const setting = /** @type {any} */ (game.settings.settings.get(`${field.module}.${field.key}`));
         if (!setting)
             return null;
-        const value = getExternalSetting(field.module, field.key, setting.default);
+
+        const stored = getExternalSetting(field.module, field.key, setting.default);
+        const value = field.path ? foundry.utils.getProperty(stored, field.path) : stored;
         // Core puts its choices on the DataField rather than on the setting config.
-        const choices = Object.entries(setting.choices ?? setting.type?.choices ?? {}).map(([choiceValue, choiceLabel]) => ({
+        const dataField = field.path ? setting.type?.getField(field.path) : setting.type;
+
+        const choices = Object.entries(setting.choices ?? dataField?.choices ?? {}).map(([choiceValue, choiceLabel]) => ({
             value: choiceValue,
             label: localize(String(choiceLabel)),
             selected: choiceValue === String(value),
         }));
+
         return {
-            key: `__ext.${field.module}.${field.key}`,
+            key: _extFormKey(field),
             type: 'select',
             label: externalLabel(field, setting),
             hint: localize(field.hint ?? setting.hint ?? ''),
             value,
             isSelect: true,
             choices,
-            ..._rowFlags(setting, choices),
+            ..._rowFlags(field.path ? { ...setting, default: foundry.utils.getProperty(setting.default, field.path) } : setting, choices),
             isLocked: setting.scope === 'world' && !game.user.isGM
         };
     }
+
     if (field.type === 'compactBooleans')
     {
         return {
@@ -289,18 +334,21 @@ function _buildItem(field)
             items: (field.items ?? []).map((/** @type {any} */ it) =>
             {
                 let value = true;
+
                 try
                 {
                     value = !!getModuleSetting(it.key);
                 }
                 catch
                 { /* not ready */ }
+
                 const setting = game.settings.settings.get(`${MODULE_ID}.${it.key}`);
                 const hint = it.hint || setting?.hint || '';
                 return { key: it.key, label: localize(it.label), hint: localize(hint), value, preview: !!it.preview, ..._rowFlags(setting), isLocked: _isLockedForUser(it.key) };
             }),
         };
     }
+
     if (field.type === 'compactStatusFx')
     {
         return {
@@ -315,6 +363,7 @@ function _buildItem(field)
             })),
         };
     }
+
     if (field.type === 'statusFx')
     {
         // _sfx. prefix routes the value back into statusFXConfig on save.
@@ -330,7 +379,9 @@ function _buildItem(field)
             isLocked: !game.user.isGM
         };
     }
+
     let value;
+
     try
     {
         value = getModuleSetting(field.key);
@@ -339,29 +390,36 @@ function _buildItem(field)
     {
         value = field.default;
     }
+
     const setting = /** @type {any} */ (game.settings.settings.get(`${MODULE_ID}.${field.key}`) || {});
+
     if (field.type === 'color')
     {
         const hexRe = /^#[0-9a-fA-F]{6}$/;
+
         if (typeof value !== 'string' || !hexRe.test(value))
         {
             const fromColor = (typeof value?.toString === 'function') ? value.toString() : null;
             value = (fromColor && hexRe.test(fromColor)) ? fromColor : (setting.default ?? field.default ?? '#000000');
         }
     }
+
     const choices = (() =>
     {
         const raw = (typeof field.getChoices === 'function' ? field.getChoices() : field.choices);
         if (raw)
             return raw.map(choice => ({ ...choice, label: localize(choice.label), selected: choice.selected ?? (choice.value === value) }));
+
         if (setting.choices)
         {
             return Object.entries(setting.choices).map(([choiceValue, choiceLabel]) => ({
                 value: choiceValue, label: localize(choiceLabel), selected: choiceValue === value,
             }));
         }
+
         return [];
     })();
+
     return {
         key: field.key,
         type: field.type,
@@ -398,6 +456,7 @@ export function _groupSections(tabId, items)
     let current = null;
     let currentSub = null;
     const rowCount = (/** @type {any} */ item) => item.isCompactBooleans ? item.items.length : (item.isSection ? 0 : 1);
+
     const ensureCard = () =>
     {
         if (!current)
@@ -405,8 +464,10 @@ export function _groupSections(tabId, items)
             current = { id: `la-sec-${tabId}-general`, label: localize('LA.settingsMenus.section.general.label'), headerless: true, collapsible: false, collapsed: false, hint: '', items: [], subs: [], count: 0 };
             sections.push(current);
         }
+
         return current;
     };
+
     for (const item of items)
     {
         if (item.isSection && !item.isSubsection)
@@ -416,17 +477,20 @@ export function _groupSections(tabId, items)
             sections.push(current);
             continue;
         }
+
         if (item.isSection && item.isSubsection)
         {
             currentSub = { label: item.label, collapsible: item.collapsible, collapsed: item.collapsed, hint: item.hint, items: [] };
             ensureCard().subs.push(currentSub);
             continue;
         }
+
         (currentSub ? currentSub.items : ensureCard().items).push(item);
         ensureCard().count += rowCount(item);
         if (item.isCompactBooleans && !currentSub)
             ensureCard().hasGrid = true;
     }
+
     return sections;
 }
 
@@ -442,11 +506,13 @@ function _dropLockedItems(items)
             const open = item.items.filter(entry => !entry.isLocked);
             return open.length > 0 ? { ...item, items: open } : null;
         }
+
         if (item.isTable)
         {
             const rows = item.rows.filter(row => row.cells.some(cell => !cell.isLocked));
             return rows.length > 0 ? { ...item, rows } : null;
         }
+
         return item.isLocked ? null : item;
     }).filter(Boolean);
 }

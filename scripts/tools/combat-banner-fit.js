@@ -9,12 +9,14 @@ function applyBannerFit()
     let offset = 0;
     let zIndex = null;
     const hudEl = document.getElementById('la-hud');
+
     if (hudEl)
     {
         const rect = hudEl.getBoundingClientRect();
         // saved position beats the rect: the hud may still be mid slide-in
         const savedLeft = getModuleSetting('tah.position')?.left;
         const left = typeof savedLeft === 'number' ? savedLeft : rect.left;
+
         if (rect.width && left < 300 && rect.top < 400)
         {
             offset = Math.ceil(left + rect.width);
@@ -26,11 +28,13 @@ function applyBannerFit()
     container.style.zIndex = zIndex ?? '100';
 
     const turnBanner = document.getElementById('yourTurnBanner');
+
     if (turnBanner)
     {
         turnBanner.style.left = offset ? `${offset}px` : '';
         turnBanner.style.width = offset ? `calc(100% - ${offset}px)` : '';
     }
+
     const turnImg = document.getElementById('yourTurnImageId');
     if (turnImg)
         turnImg.style.left = offset ? `${offset}px` : '';
@@ -53,6 +57,7 @@ export function initCombatBannerFit()
         const touchesHud = mutations.some(mutation =>
             [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)]
                 .some(node => /** @type {any} */ (node)?.id === 'la-hud'));
+
         if (touchesHud)
             applyBannerFit();
     }).observe(document.body, { childList: true });
@@ -61,11 +66,13 @@ export function initCombatBannerFit()
     if (!watchBanner())
     {
         const host = document.getElementById('interface') ?? document.body;
+
         const containerWatch = new MutationObserver(() =>
         {
             if (watchBanner())
                 containerWatch.disconnect();
         });
+
         containerWatch.observe(host, { childList: true });
     }
 }

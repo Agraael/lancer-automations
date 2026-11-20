@@ -17,6 +17,7 @@ export function durationOptionsHtml()
         { label: 'indefinite', name: 'Indefinite' },
         { label: 'permanent', name: 'Permanent' },
     ];
+
     if (!game.combat)
         durations = durations.filter(duration => duration.label === 'indefinite' || duration.label === 'permanent');
     return durations.map(duration => `<option value="${duration.label}" ${duration.label === 'end' ? 'selected' : ''}>${duration.name}</option>`).join('');
@@ -29,6 +30,7 @@ export function originOptionsHtml(selfTokenId)
         const isSelf = token.id === selfTokenId;
         return `<option value="${token.id}" ${isSelf ? 'selected' : ''}>${token.name}${isSelf ? ' (self)' : ''}</option>`;
     }).join('');
+
     return `<optgroup label="Special"><option value="${ANY_TURN_ORIGIN}">Any</option></optgroup><optgroup label="Tokens">${tokensHtml}</optgroup>`;
 }
 
@@ -54,14 +56,17 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
         const opts = $root.find(`#${prefix}-duration`).siblings('.dur-opts');
         opts.toggleClass('la-dur-disabled', off);
         opts.filter('select, input, button').prop('disabled', off);
+
         if (isRound)
         {
             const originParts = opts.filter('.la-dur-originpart');
             originParts.addClass('la-dur-disabled');
             originParts.filter('select, button').prop('disabled', true);
         }
+
         opts.filter('.la-dur-turns').attr('title', isRound ? 'Rounds, counting the current one' : 'Turns. 0 = next matching trigger');
     };
+
     $root.find(`#${prefix}-duration`).on('change', () =>
     {
         toggle();
@@ -76,6 +81,7 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
         const currentVal = String($root.find(`#${prefix}-origin`).val());
         const caster = canvas.tokens.get(currentVal) || canvas.tokens.controlled[0];
         onPickStart?.();
+
         const selected = await api.chooseToken(caster, {
             count: 1,
             includeSelf: true,
@@ -85,6 +91,7 @@ export function setupDurationUI($root, prefix, { onChange, onPickStart } = {})
             description: localize('LA.duration.selectATokenOnTheMap'),
             icon: 'fas fa-crosshairs'
         });
+
         if (selected && selected.length > 0)
             $root.find(`#${prefix}-origin`).val(selected[0].id).change();
         else
@@ -108,6 +115,7 @@ export function createDurationMarks()
 {
     let marks = [];
     let tether = null;
+
     const clear = () =>
     {
         for (const mark of marks)
@@ -116,6 +124,7 @@ export function createDurationMarks()
         tether?.destroy();
         tether = null;
     };
+
     return {
         update({ targetToken = null, targetTokens = null, originToken = null, originTokens = null } = {})
         {
@@ -123,22 +132,27 @@ export function createDurationMarks()
             const targets = (targetTokens ?? [targetToken]).filter(Boolean);
             const origins = (originTokens ?? [originToken]).filter(Boolean);
             const originIds = new Set(origins.map(token => token.id));
+
             for (const token of targets)
             {
                 if (originIds.has(token.id))
                     continue;
                 marks.push(createTokenMark(token, TG.reference));
             }
+
             for (const token of origins)
                 marks.push(createTokenMark(token, TG.placed));
             if (!origins.length || !targets.length)
                 return;
+
             const pairs = [];
+
             for (const target of targets)
             {
                 for (const origin of origins)
                     pairs.push([target, origin]);
             }
+
             tether = createTokenTether();
             tether.setPairs(pairs);
         },

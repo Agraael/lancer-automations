@@ -1,8 +1,11 @@
 /**
  * Wraps Grid-Aware Auras to support lambda-function macro callbacks, via libWrapper (no GAA edits).
  */
-import { hasReactionAvailable } from "./misc-tools.js";
+import { hasReactionAvailable, isExecutorGM } from "./misc-tools.js";
 import { MODULE_ID } from "./constants.js";
+import { gridScale } from "./canvas-utils.js";
+
+export { gridScale } from "./canvas-utils.js";
 
 // GAA auras live in one flag array with read-modify-write updates, so concurrent
 // writers clobber each other's append unless serialized per owner document.
@@ -42,10 +45,12 @@ export class LAAuras
             {
                 const id = args[0];
                 const isBody = typeof id === 'string' && id.startsWith('@@code:');
+
                 if (isBody || (typeof id === 'string' && id.startsWith('@@fn:')))
                 {
                     const macroSource = id.slice(isBody ? '@@code:'.length : '@@fn:'.length);
                     let callbackFn = LAAuras.callbackCache.get(macroSource);
+
                     if (!callbackFn)
                     {
                         try
@@ -61,10 +66,14 @@ export class LAAuras
                             return wrapped(...args);
                         }
                     }
+
                     return {
                         canExecute: true,
                         execute: (params) =>
                         {
+                            if (!params.options?.isPreview && !isExecutorGM())
+                                return;
+
                             try
                             {
                                 callbackFn(params.token, params.parent, params.aura, params.options);
@@ -76,6 +85,7 @@ export class LAAuras
                         }
                     };
                 }
+
                 return wrapped(...args);
             }, 'MIXED');
             LAAuras._initialized = true;
@@ -106,6 +116,7 @@ export class LAAuras
     static _buildMacroBody(fn, scope, apiIsParam)
     {
         const lines = [`${apiIsParam ? '' : 'const '}api = game.modules.get('${MODULE_ID}')?.api;`];
+
         for (const [name, value] of Object.entries(scope ?? {}))
         {
             if (!/^[A-Za-z_$][\w$]*$/.test(name))
@@ -113,8 +124,10 @@ export class LAAuras
                 console.warn(`lancer-automations | Aura scope key '${name}' is not a valid identifier, skipped.`);
                 continue;
             }
+
             lines.push(`const ${name} = ${typeof value === 'function' ? value.toString() : JSON.stringify(value)};`);
         }
+
         lines.push(`return (${fn.toString()})(token, parent, aura, options);`);
         return lines.join('\n');
     }
@@ -122,6 +135,7 @@ export class LAAuras
     static async _createAuraInner(owner, auraConfig)
     {
         const gridAwareAuras = game.modules.get("grid-aware-auras");
+
         if (!gridAwareAuras?.api?.createAura)
         {
             console.warn("lancer-automations | Grid-Aware Auras module is not active or does not support the API.");
@@ -136,6 +150,7 @@ export class LAAuras
         // Resolve context actor + token-like doc (for disposition/name) regardless of owner type
         let contextActor = null;
         let contextTokenDoc = null;
+
         if (owner instanceof Item)
         {
             contextActor = owner.parent instanceof Actor ? owner.parent : null;
@@ -201,6 +216,7 @@ export class LAAuras
         if (configToPass.macros && Array.isArray(configToPass.macros))
         {
             const inlineCode = LAAuras._hasInlineCodeMacros(gridAwareAuras);
+
             for (let macro of configToPass.macros)
             {
                 if (typeof macro.function === 'function')
@@ -235,6 +251,7 @@ export class LAAuras
             console.warn("lancer-automations | ensureAura: auraConfig.name is required for dedupe.");
             return LAAuras.createAura(owner, auraConfig);
         }
+
         // dedupe check runs inside the queue so two same-name ensures can't both pass it
         return _queueAuraWrite(owner, () =>
         {
@@ -253,6 +270,7 @@ export class LAAuras
         const gridAwareAuras = game.modules.get("grid-aware-auras");
         if (!gridAwareAuras?.api?.deleteAuras)
             return [];
+
         const opts = owner instanceof Item ? options : { includeItems: true, ...options };
         return _queueAuraWrite(owner, () => gridAwareAuras.api.deleteAuras(owner, filter, opts));
     }
@@ -279,11 +297,13 @@ export class LAAuras
 
         const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
         const token = LAAuras._auraToken(actorOrToken);
+
         if (gridAwareAuras?.getTokenAuras && token)
             return gridAwareAuras.getTokenAuras(token).find(entry => entry.aura?.name === auraName)?.aura ?? null;
 
         const actor = /** @type {Actor} */ (/** @type {any} */ (actorOrToken).actor || actorOrToken);
         const auras = actor?.getFlag('grid-aware-auras', 'auras');
+
         if (!auras)
             return null;
         return Object.values(auras).find(aura => aura.name === auraName) || null;
@@ -301,6 +321,7 @@ export class LAAuras
         const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
         const token = LAAuras._auraToken(actorOrToken);
         const aura = LAAuras.findAura(actorOrToken, auraName);
+
         if (!gridAwareAuras?.getTokensInsideAura || !aura || !token)
             return null;
         return gridAwareAuras.getTokensInsideAura(token, aura.id).filter(entry => !entry.isPreview);
@@ -318,8 +339,10 @@ export class LAAuras
         const gridAwareAuras = game.modules.get('grid-aware-auras')?.api;
         if (!gridAwareAuras?.updateAuras)
             return null;
+
         let owner = null;
         let aura = null;
+
         if (actorOrToken instanceof Item)
         {
             owner = actorOrToken;
@@ -328,28 +351,26 @@ export class LAAuras
         else
         {
             const token = LAAuras._auraToken(actorOrToken);
+
             const entry = token && gridAwareAuras.getTokenAuras
                 ? gridAwareAuras.getTokenAuras(token).find(candidate => candidate.aura?.name === auraName)
                 : null;
+
             owner = entry?.owner ?? null;
             aura = entry?.aura ?? null;
         }
+
         if (!owner || !aura)
             return null;
+
         const currentEnabled = !!aura.enabled;
         const next = typeof on === 'boolean' ? on : !currentEnabled;
+
         if (next === currentEnabled)
             return currentEnabled;
         await _queueAuraWrite(owner, () => gridAwareAuras.updateAuras(owner, { id: aura.id }, { enabled: next }));
         return next;
     }
-}
-
-/** Scene grid size relative to baseline (100 px); multiply stroke / dash / texture-scale fields by this. */
-export function gridScale()
-{
-    const gridSize = canvas?.scene?.grid?.size ?? canvas?.grid?.size ?? 100;
-    return gridSize / 100;
 }
 
 /**
@@ -367,6 +388,7 @@ export function scaleAuraStroke(aura)
         aura.lineDashSize = Math.max(1, Math.round(aura.lineDashSize * scale));
     if (typeof aura.lineGapSize === 'number')
         aura.lineGapSize = Math.max(1, Math.round(aura.lineGapSize * scale));
+
     if (aura.fillTextureScale && typeof aura.fillTextureScale === 'object')
     {
         if (typeof aura.fillTextureScale.x === 'number')
@@ -374,6 +396,7 @@ export function scaleAuraStroke(aura)
         if (typeof aura.fillTextureScale.y === 'number')
             aura.fillTextureScale.y = Math.max(1, Math.round(aura.fillTextureScale.y * scale));
     }
+
     return aura;
 }
 

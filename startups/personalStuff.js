@@ -54,16 +54,18 @@ async function ensureZDAAura(tokenDoc)
 {
     if (!game.modules.get('grid-aware-auras')?.active)
         return;
+
     const actor = tokenDoc.actor;
     if (!actor)
         return;
+
     const sensors = actor.system?.sensor_range ?? 10;
     const aura = foundry.utils.deepClone(ZDA_TEMPLATE);
     aura.radius = Math.floor(sensors * 0.75).toString();
     await api.ensureAura(tokenDoc, aura);
 }
 
-api.registerDefaultGeneralReactions({
+api.registerDefaultGeneralAutomations({
     "ZDA Aura": {
         category: "General (LaSossis)",
         comments: "Zone of Deadly Approach aura, created disabled on every mech/npc/pilot token",
@@ -85,11 +87,13 @@ api.registerDefaultGeneralReactions({
 window.toggleLancerZDA = async function ()
 {
     const controlled = canvas.tokens.controlled;
+
     if (!controlled.length)
     {
         ui.notifications.warn(game.i18n.localize('LA.notify.noTokensSelected'));
         return;
     }
+
     for (const token of controlled)
     {
         if (!ZDA_ACTOR_TYPES.has(token.actor?.type))
@@ -97,6 +101,7 @@ window.toggleLancerZDA = async function ()
         await ensureZDAAura(token.document);
         const auras = token.document.getFlag('grid-aware-auras', 'auras') ?? [];
         const zdaAura = auras.find(existing => existing.name === 'ZDA');
+
         if (!zdaAura)
             continue;
         zdaAura.enabled = !zdaAura.enabled;

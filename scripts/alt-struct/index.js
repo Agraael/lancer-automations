@@ -19,6 +19,7 @@ const OVERRIDE_STEP_KEYS = [
     "rollOverheatTable", "checkOverheatMultipleOnes", "overheatInsertEngCheckButton",
     "noStressRemaining", "secondaryStructureRoll"
 ];
+
 const NEW_STEP_KEYS = [
     "npcOneStructStep", "applyStructureEffects", "selectDestructionTargetDirectHitFallback",
     "selectDestructionTargetCrushingHitFallback", "tearOffCrushingHitFlow", "tearOffDirectHitFlow",
@@ -26,7 +27,9 @@ const NEW_STEP_KEYS = [
     "executeMeltdown", "executeCriticalMeltdown",
     "baseApplyStructureEffects", "baseSelectDestructionTarget", "baseApplyStressEffects"
 ];
+
 const ALL_STEP_KEYS = [...OVERRIDE_STEP_KEYS, ...NEW_STEP_KEYS];
+
 const NEW_FLOW_KEYS = [
     "secondaryStructureCrushingHit", "secondaryStructureDirectHit",
     "TearOffDirectHitFlow", "TearOffCrushingHitFlow", "SimulatedStructureFlow",
@@ -69,11 +72,13 @@ function insertSteps(flow, anchor, offset, ...steps)
 function chainNoStressRemaining(flowSteps, handler)
 {
     const original = flowSteps?.get("noStressRemaining");
+
     if (!original)
     {
         console.warn("lancer-automations | alt-struct |noStressRemaining flow step not found");
         return;
     }
+
     flowSteps.set("noStressRemaining", async function (state)
     {
         await handler(state);
@@ -146,13 +151,16 @@ function setupBaseRules(flowSteps, flows)
 function _detectPostRegisterConflicts(flowSteps)
 {
     const conflicts = [];
+
     for (const key of ALL_STEP_KEYS)
     {
         const snapshot = _preInstallSnapshot.get(key);
         const current = flowSteps.get(key) ?? null;
+
         if (snapshot !== current)
             conflicts.push(key);
     }
+
     return conflicts;
 }
 
@@ -160,6 +168,7 @@ function _detectPostRegisterConflicts(flowSteps)
 function _detectPreRegisterOverrideHijacks()
 {
     const hijacked = [];
+
     for (const key of OVERRIDE_STEP_KEYS)
     {
         const fn = _preInstallSnapshot.get(key);
@@ -168,6 +177,7 @@ function _detectPreRegisterOverrideHijacks()
         if (fn.name && fn.name !== key)
             hijacked.push({ key, byFunctionName: fn.name });
     }
+
     return hijacked;
 }
 
@@ -184,11 +194,13 @@ export function initAltStructReady()
             _flowSteps?.set('npcOneStructStep', npcOneStructStep);
             insertSteps(_flows?.get('StructureFlow'), 'preStructureRollChecks', 0, 'npcOneStructStep');
         }
+
         if (!hasConflict && _flowSteps && _flows)
         {
             setupBaseRules(_flowSteps, _flows);
             console.log("lancer-automations | base-struct |initialized");
         }
+
         return;
     }
 
@@ -206,6 +218,7 @@ export function initAltStructReady()
     const preHijacks = _detectPreRegisterOverrideHijacks();
 
     const totalConflicts = preSteps.length + preFlows.length + postConflicts.length + preHijacks.length;
+
     if (totalConflicts > 0)
     {
         const parts = [];
@@ -247,17 +260,20 @@ const CHECK_RESULTS = {
 async function _runHaseCheck(btn, handler)
 {
     const actor = await fromUuid(btn.dataset.actorId);
+
     if (!actor)
     {
         ui.notifications?.error(localize('LA.notify.invalidActorIdOnCheckButton'));
         return;
     }
+
     const result = await executeStatRoll(actor, btn.dataset.checkType ?? "hull", null);
     if (!result.completed)
         return;
 
     const outcome = await handler(actor, result.passed);
     const printGenericCard = /** @type {any} */ (game)?.lancer?.flowSteps?.get("printGenericCard");
+
     if (outcome && printGenericCard)
         await printGenericCard({ actor, data: { ...outcome, tags: [] } });
 }
@@ -266,24 +282,29 @@ function _runAltStructFlow(btn)
 {
     const flowType = btn.dataset.flowType;
     const actorId = btn.dataset.actorId;
+
     if (!flowType || !actorId)
     {
         ui.notifications?.error(localize('LA.notify.missingFlowTypeOrActorIdOn'));
         return;
     }
+
     if (CHECK_RESULTS[flowType])
     {
         _runHaseCheck(btn, CHECK_RESULTS[flowType])
             .catch(error => console.error(`lancer-automations | alt-struct |${flowType} failed:`, error));
         return;
     }
+
     const Flow = /** @type {any} */ (game)?.lancer?.Flow;
     const flowDef = /** @type {any} */ (game)?.lancer?.flows?.get(flowType);
+
     if (!Flow || !flowDef?.steps)
     {
         ui.notifications?.error(localizeFormat('LA.notify.altStructFlowNotRegistered', { flow: flowType }));
         return;
     }
+
     const flowParams = { ...btn.dataset };
     delete flowParams.flowType;
     delete flowParams.actorId;

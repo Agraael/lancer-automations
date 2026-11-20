@@ -58,12 +58,15 @@ export function haseSuccessChance(actor, skill, dc, { netAcc = 0, applyStatuses 
     const key = String(skill ?? '').toUpperCase();
     // npc grit rolls off tier
     const path = (key === 'GRIT' && actor?.type === 'npc') ? 'system.tier' : HASE_PATHS[key];
+
     if (!path || !actor?.system)
         return null;
     if (actor.statuses?.has?.('stunned') && (key === 'HULL' || key === 'AGI'))
         return { hit: 0, crit: 0 };
+
     const stat = Number(foundry.utils.getProperty(actor, path)) || 0;
     let acc = netAcc;
+
     if (applyStatuses)
     {
         if (actor.statuses?.has?.('impaired'))
@@ -71,29 +74,34 @@ export function haseSuccessChance(actor, skill, dc, { netAcc = 0, applyStatuses 
         if (actor.statuses?.has?.('bolster'))
             acc += 2;
     }
+
     const { hit } = rollHitCritChance(stat, acc, Math.max(1, Number(dc) || 10));
     return { hit, crit: 0 };
 }
 
 // P(A's total beats B's total), from the two CDFs; netAcc applies to A only.
-export function contestWinChance(actorA, skillA, actorB, skillB, { netAcc = 0 } = {})
+export function contestWinChance(actorA, skillA, actorB, skillB, { netAcc = 0, winTies = false } = {})
 {
     if (!haseSuccessChance(actorA, skillA, 10, { netAcc, applyStatuses: false })
         || !haseSuccessChance(actorB, skillB, 10, { netAcc: 0, applyStatuses: false }))
         return null;
+
     const successChanceA = (dc) => haseSuccessChance(actorA, skillA, dc, { netAcc, applyStatuses: false })?.hit ?? 0;
     const successChanceB = (dc) => haseSuccessChance(actorB, skillB, dc, { netAcc: 0, applyStatuses: false })?.hit ?? 0;
     let win = 0;
     // totals below the lowest tracked DC (difficulty dice can push under 1) collapse into one bucket
     const pLow = 1 - successChanceB(1);
+
     if (pLow > 0)
         win += pLow * successChanceA(1);
+
     for (let total = 1; total <= 46; total++)
     {
         const pB = successChanceB(total) - successChanceB(total + 1);
         if (pB > 0)
-            win += pB * successChanceA(total + 1);
+            win += pB * successChanceA(winTies ? total : total + 1);
     }
+
     return { hit: win, crit: 0 };
 }
 
@@ -102,24 +110,31 @@ async function resolveWeaponRange(state, useThreat = false)
 {
     if (isTechAttack(state))
         return { val: sensorRange(state.actor), type: 'Sensors', canSwitch: false };
+
     const item = state.data?.lancerItem ?? state.item;
     const targeting = state.la_extraData?.laTargeting;
+
     if (!item && targeting?.rangeType)
         return { val: Number(targeting.range) || 0, type: targeting.rangeType, canSwitch: false };
+
     const thrown = !!state.data?.acc_diff?.weapon?.thrown;
     const throwDist = throwDistance(item);
+
     if (thrown && throwDist > 0)
         return { val: throwDist, type: 'Throw', canSwitch: false };
+
     const ranges = await getMaxItemRanges_WithBonus(item, state.actor);
     const rangeVal = ranges.Range ?? 0;
     const threatVal = ranges.Threat ?? 0;
     const canSwitch = rangeVal > 0 && threatVal > 0 && rangeVal !== threatVal;
+
     if (canSwitch)
     {
         return useThreat
             ? { val: threatVal, type: 'Threat', canSwitch: true }
             : { val: rangeVal, type: 'Range', canSwitch: true };
     }
+
     return threatVal > rangeVal
         ? { val: threatVal, type: 'Threat', canSwitch: false }
         : { val: rangeVal, type: 'Range', canSwitch: false };
@@ -152,6 +167,7 @@ function isTechAttack(state)
     const lancerItem = state?.data?.lancerItem ?? state?.data?.acc_diff?.lancerItem;
     if (lancerItem)
         return !isWeaponItem(lancerItem);
+
     const title = String(state?.data?.title ?? '').toLowerCase();
     return title === 'tech attack' || title.includes('tech');
 }
@@ -167,21 +183,48 @@ function readToggles($form)
     };
 }
 
-function injectToggleRow($form)
+export const TARGETING_SECTION_HTML = '<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>';
+const SIDE_BUTTON_STYLE = 'position:absolute;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 5px;font-size:15px;line-height:1;';
+const SHAPE_SWITCH_HTML = `<button class="la-accdiff-shape-switch" type="button" title="Shape / Size / Range" style="${SIDE_BUTTON_STYLE}"><i class="fas fa-draw-polygon"></i></button>`;
+const RANGE_SWITCH_HTML = `<button class="la-accdiff-range-switch" type="button" title="Toggle Range / Threat" style="display:none;${SIDE_BUTTON_STYLE}"><i class="fas fa-arrow-right-arrow-left"></i></button>`;
+const RESET_BUTTON_HTML = '<button class="la-bas-reset" type="button" title="Reset to weapon range" style="background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 4px;font-size:13px;line-height:1;"><i class="fas fa-rotate-left"></i></button>';
+const HINT_HTML = '<div class="la-accdiff-hint" style="display:none;text-align:center;opacity:0.6;font-size:10px;color:var(--dark-text, #fff);padding:2px 0;"></div>';
+const TARGET_HINT = '⇧ multi-targets · Right-click / Esc cancels';
+
+const targetButtonHtml = inner => `<button class="range-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> ${inner}</button>`;
+
+function areaHint(pattern)
 {
-    if ($form.find('.la-accdiff-area-toggles').length)
-        return;
+    const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
+    const tiltHint = pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
+    const aimHint = pattern === 'cone' || pattern === 'line' ? 'Drag: aim · ' : '';
+    return `${aimHint}⇧ stack shapes · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Right-click / Esc cancels`;
+}
+
+function toggleRowHtml()
+{
     const losToggle = getSettingEnabled('rangePulseLos')
         ? '<label class="la2-toggle"><input type="checkbox" class="la-tg-los" checked><i class="mdi mdi-eye-outline"></i>Line of sight</label>'
         : '';
+
     const elevChecked = getModuleSetting('tah.areaElevationAware', true) ? 'checked' : '';
     const spreadChecked = getModuleSetting('areaSpread', false) ? 'checked' : '';
-    const toggleRow = htmlToElement(`<div class="la-accdiff-area-toggles la2-tgopts">
+
+    return `<div class="la-accdiff-area-toggles la2-tgopts">
         <label class="la2-toggle la-tg-area-lbl" title="${escapeHtml(localize('LA.measure.toggle.elevationHint'))}"><input type="checkbox" class="la-tg-elev" ${elevChecked}>${localize('LA.measure.toggle.elevation')}</label>
         <label class="la2-toggle la-tg-area-lbl" title="${escapeHtml(localize('LA.measure.toggle.terrainHint'))}"><input type="checkbox" class="la-tg-autoelev" checked>${localize('LA.measure.toggle.terrain')}</label>
         <label class="la2-toggle la-tg-area-lbl" title="${escapeHtml(localize('LA.measure.toggle.spreadHint'))}"><input type="checkbox" class="la-tg-prop" ${spreadChecked}>${localize('LA.measure.toggle.spread')}</label>
         ${losToggle}
-    </div>`);
+    </div>`;
+}
+
+function injectToggleRow($form)
+{
+    if ($form.find('.la-accdiff-area-toggles').length)
+        return;
+
+    const toggleRow = htmlToElement(toggleRowHtml());
+
     const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
     if ($section.length)
         $section.append(toggleRow);
@@ -214,15 +257,17 @@ function bindLosToggle($form, state, onChange)
 function ensureHint($form)
 {
     let $hint = $form.find('.la-accdiff-hint');
+
     if (!$hint.length)
     {
-        $hint = $(htmlToElement('<div class="la-accdiff-hint" style="display:none;text-align:center;opacity:0.6;font-size:10px;color:var(--dark-text, #fff);padding:2px 0;"></div>'));
+        $hint = $(htmlToElement(HINT_HTML));
         const $section = $form.find('.accdiff-ranges').first().closest('.accdiff-grid__section');
         if ($section.length)
             $section.append($hint);
         else
             $form.find('.accdiff-ranges').first().after($hint);
     }
+
     return $hint;
 }
 
@@ -238,6 +283,7 @@ export function toggleCardTargeting()
 
 // Own listener: a focused button inside the card form mutes every registered keybinding.
 let _cardKeyBound = false;
+
 function bindCardTargetingKey()
 {
     if (_cardKeyBound)
@@ -258,6 +304,9 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
 {
     // pulseOwner: range pulse shown only while a picker from this HUD is running
     let lastPickRange = 0;
+
+    const pulseLos = () => usesLineOfSight(null, weapon, null) && readToggles($form).los;
+
     const setPickPulse = (rangeVal) =>
     {
         if (!pulseOwner)
@@ -265,15 +314,17 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         lastPickRange = rangeVal;
         const token = state.actor?.getActiveTokens?.()[0] ?? null;
         if (token && rangeVal > 0)
-            rangePulse.setRange(pulseOwner, { token, range: rangeVal, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: weapon ? RANGE_GLOW.weapon : RANGE_GLOW.manual, los: usesLineOfSight(null, weapon, null) && readToggles($form).los });
+            rangePulse.setRange(pulseOwner, { token, range: rangeVal, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD, glowColor: weapon ? RANGE_GLOW.weapon : RANGE_GLOW.manual, los: pulseLos() });
         else
             rangePulse.clear(pulseOwner);
     };
+
     const clearPickPulse = () =>
     {
         if (pulseOwner)
             rangePulse.clear(pulseOwner);
     };
+
     const refreshPickPulse = () =>
     {
         if (pulseOwner && rangePulse.has(pulseOwner))
@@ -286,8 +337,9 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         $row.empty();
         const caster = () => state.actor?.getActiveTokens?.()[0] ?? null;
         $row.css({ justifyContent: 'center', alignItems: 'center', position: 'relative' });
-        const $shapeToggle = $(htmlToElement(`<button class="la-accdiff-shape-switch" type="button" title="Shape / Size / Range" style="position:absolute;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 5px;font-size:15px;line-height:1;"><i class="fas fa-draw-polygon"></i></button>`));
+        const $shapeToggle = $(htmlToElement(SHAPE_SWITCH_HTML));
         $row.append($shapeToggle);
+
         // hang the toggle off the left edge of the (centered) button group
         const positionShapeToggle = () =>
         {
@@ -296,6 +348,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 const buttons = $row.find('.la-accdiff-target-button').toArray();
                 if (!buttons.length)
                     return;
+
                 const firstRect = buttons[0].getBoundingClientRect();
                 const lastRect = buttons[buttons.length - 1].getBoundingClientRect();
                 const half = Math.round((lastRect.right - firstRect.left) / 2) + 1;
@@ -312,19 +365,14 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         const stripDrives = () => !!state.__laAttackShapeVisible;
         let pickerRun = null;
         let $lastActive = null;
+
         const launchStripPicker = ($activeBtn, keepExisting = false) =>
         {
             const $hint = ensureHint($form);
             const shape = state.__laAttackShape ?? state.__laAttackShapeDefaults;
             const isArea = !!shape.pattern && shape.pattern !== 'target';
-            if (isArea)
-            {
-                const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-                const tiltHint = shape.pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
-                $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
-            }
-            else
-                $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
+
+            $hint.text(isArea ? areaHint(shape.pattern) : TARGET_HINT).stop(true, true).slideDown(120);
             $lastActive = $activeBtn;
             $activeBtn.addClass('la-targeting-active');
             setPickPulse(shapeReach(shape));
@@ -368,9 +416,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         {
             const pattern = aoeRange.type.toLowerCase();
             const $hint = ensureHint($form);
-            const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-            const tiltHint = pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
-            $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
+            $hint.text(areaHint(pattern)).stop(true, true).slideDown(120);
             $lastActive = $aoeBtn;
             $aoeBtn.addClass('la-targeting-active');
             setPickerTargetCursor(true);
@@ -404,64 +450,79 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         };
 
         const aoeButtons = [];
+
         for (const aoeRange of aoe)
         {
-            const $aoeBtn = $(htmlToElement(`<button class="range-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> ${aoeRange.type} ${aoeRange.val}</button>`));
+            const $aoeBtn = $(htmlToElement(targetButtonHtml(`${aoeRange.type} ${aoeRange.val}`)));
             aoeButtons.push({ $btn: $aoeBtn, aoeRange });
             $aoeBtn.on('click', async (ev) =>
             {
                 ev.preventDefault();
                 ev.stopPropagation();
+
                 if (isAreaPickerActive())
                 {
                     cancelAreaPicker();
                     return;
                 }
+
                 if (isSingleTargetPickerActive())
                 {
                     cancelSingleTargetPicker();
                     return;
                 }
+
                 if (stripDrives())
                 {
                     launchStripPicker($aoeBtn, ev.shiftKey);
                     return;
                 }
+
                 await launchAoePicker($aoeBtn, aoeRange, ev.shiftKey);
             });
             $row.append($aoeBtn);
         }
+
         positionShapeToggle();
 
         // Shortcut mirrors the last used pattern button, falling back to the first.
         _cardToggle = () =>
         {
             playUiSound('toggle');
+
             if (isAreaPickerActive())
             {
                 cancelAreaPicker();
                 return;
             }
+
             if (isSingleTargetPickerActive())
             {
                 cancelSingleTargetPicker();
                 return;
             }
+
             const entry = aoeButtons.find(candidate => $lastActive && candidate.$btn.is($lastActive)) ?? aoeButtons[0];
             if (stripDrives())
                 launchStripPicker(entry.$btn);
             else
                 launchAoePicker(entry.$btn, entry.aoeRange);
         };
+
         bindCardTargetingKey();
 
         injectToggleRow($form);
-        bindLosToggle($form, state, refreshPickPulse);
+        bindLosToggle($form, state, () =>
+        {
+            refreshPickPulse();
+            strip.refreshPreview();
+        });
         // strip closed: the pattern buttons always place an area, so the elevation toggles stay relevant
         const syncToggles = () => syncAreaToggles($form, !stripDrives() || (state.__laAttackShape?.pattern ?? 'target') !== 'target');
         syncToggles();
 
         let restartTimer = null;
+
         const onShapeStripChange = () =>
         {
             syncToggles();
@@ -480,6 +541,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                     cancelAreaPicker();
                 if (isSingleTargetPickerActive())
                     cancelSingleTargetPicker();
+
                 try
                 {
                     await pickerRun;
@@ -488,11 +550,13 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 {
                     // prior picker resolves to null on cancel; ignore
                 }
+
                 if (!state.__laHudClosed)
                     launchStripPicker($lastActive ?? $row.find('.la-accdiff-target-button').first());
             }, 250);
         };
-        const strip = injectAttackShapeStrip($form, $row, state, { onCommit: onShapeStripChange, showReset: true });
+
+        const strip = injectAttackShapeStrip($form, $row, state, { onCommit: onShapeStripChange, showReset: true, getLos: pulseLos });
         strip.$strip.toggle(!!state.__laAttackShapeVisible);
         $shapeToggle.on('click', (ev) =>
         {
@@ -511,12 +575,12 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     }
 
     // Simple range / tech: single-target picker driven by the editable shape state.
-    const $targetBtn = $(htmlToElement(`<button class="range-button la-accdiff-target-button svelte-13q4b2q" type="button"><i class="fas fa-crosshairs"></i> <span class="la-tgt-label">…</span></button>`));
+    const $targetBtn = $(htmlToElement(targetButtonHtml('<span class="la-tgt-label">…</span>')));
     let useThreat = false;
     let switchResets = false;
-    const $switch = $(htmlToElement(`<button class="la-accdiff-range-switch" type="button" title="Toggle Range / Threat" style="display:none;position:absolute;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 5px;font-size:15px;line-height:1;"><i class="fas fa-arrow-right-arrow-left"></i></button>`));
+    const $switch = $(htmlToElement(RANGE_SWITCH_HTML));
     const isBasicAttack = !weapon;
-    const $shapeToggle = $(htmlToElement(`<button class="la-accdiff-shape-switch" type="button" title="Shape / Size / Range" style="position:absolute;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 5px;font-size:15px;line-height:1;"><i class="fas fa-draw-polygon"></i></button>`));
+    const $shapeToggle = $(htmlToElement(SHAPE_SWITCH_HTML));
 
     // keep the big button dead-center: side buttons hang off it at a measured offset
     const positionSideButtons = () =>
@@ -539,15 +603,18 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         return resolveWeaponRange(state, useThreat).then(({ val, type, canSwitch }) =>
         {
             const native = { pattern: 'target', size: 1, range: Math.max(0, val || 0) };
+
             // follow the native range (thrown toggle, bonuses) while the shape is untouched
             if (shapesEqual(state.__laAttackShape, state.__laAttackShapeDefaults) && !shapesEqual(state.__laAttackShape, native))
             {
                 state.__laAttackShape = { ...native };
                 strip?.setFields(native);
             }
+
             state.__laAttackShapeDefaults = native;
             const shape = state.__laAttackShape ?? native;
             let label = 'Target';
+
             if (shape.pattern && shape.pattern !== 'target')
                 label = `${shape.pattern[0].toUpperCase() + shape.pattern.slice(1)} ${Math.max(1, Number(shape.size) || 1)}`;
             else if (shape.range > 0)
@@ -562,23 +629,19 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             positionSideButtons();
         });
     };
+
     relabel();
     $form.on('change.laTargetBtn', 'input[type="checkbox"]', relabel);
 
     let pickerRun = null;
+
     const launchPicker = () =>
     {
         const $hint = ensureHint($form);
         const shape = state.__laAttackShape ?? state.__laAttackShapeDefaults ?? { pattern: 'target', size: 1, range: 0 };
         const isArea = !!shape.pattern && shape.pattern !== 'target';
-        if (isArea)
-        {
-            const keyLabel = (id) => (firstKeyFor(id) || '').replace(/^Key/, '');
-            const tiltHint = shape.pattern === 'line' ? ` · ${keyLabel('lineTiltDown')}/${keyLabel('lineTiltUp')}: tilt` : '';
-            $hint.text(`⇧ stack shapes · Ctrl+wheel: rotate · ${keyLabel('elevationDown')}/${keyLabel('elevationUp')}: elevation${tiltHint} · Esc / re-click cancels`).stop(true, true).slideDown(120);
-        }
-        else
-            $hint.text('⇧ multi-targets · Esc / re-click cancels').stop(true, true).slideDown(120);
+
+        $hint.text(isArea ? areaHint(shape.pattern) : TARGET_HINT).stop(true, true).slideDown(120);
         $targetBtn.addClass('la-targeting-active');
         setPickPulse(shapeReach(shape));
         setPickerTargetCursor(true);
@@ -627,6 +690,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         else
             launchPicker();
     };
+
     _cardToggle = toggleTargeting;
     bindCardTargetingKey();
     $targetBtn.on('click', (ev) =>
@@ -640,11 +704,13 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     {
         ev.preventDefault();
         ev.stopPropagation();
+
         if (switchResets)
         {
             strip?.reset();
             return;
         }
+
         useThreat = !useThreat;
         state.__laUseThreat = useThreat;
         const resolved = await resolveWeaponRange(state, useThreat);
@@ -654,6 +720,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
         strip?.setFields(state.__laAttackShape);
         await relabel();
         Hooks.callAll('lancer-automations.attackRangeMode', state);
+
         if (isSingleTargetPickerActive() || isAreaPickerActive())
         {
             if (isSingleTargetPickerActive())
@@ -669,11 +736,16 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
     positionSideButtons();
 
     injectToggleRow($form);
-    bindLosToggle($form, state, refreshPickPulse);
+    bindLosToggle($form, state, () =>
+    {
+        refreshPickPulse();
+        strip?.refreshPreview();
+    });
     const syncToggles = () => syncAreaToggles($form, (state.__laAttackShape?.pattern ?? 'target') !== 'target');
     syncToggles();
 
     let restartTimer = null;
+
     const onShapeStripChange = () =>
     {
         syncToggles();
@@ -691,6 +763,7 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
                 cancelAreaPicker();
             if (isSingleTargetPickerActive())
                 cancelSingleTargetPicker();
+
             try
             {
                 await pickerRun;
@@ -699,11 +772,13 @@ export async function buildTargetingUI(state, $form, $row, { weapon = null, aoe 
             {
                 // prior picker resolves to null on cancel; ignore
             }
+
             if (!state.__laHudClosed)
                 launchPicker();
         }, 250);
     };
-    strip = injectAttackShapeStrip($form, $row, state, { onCommit: onShapeStripChange, showReset: !isBasicAttack });
+
+    strip = injectAttackShapeStrip($form, $row, state, { onCommit: onShapeStripChange, showReset: !isBasicAttack, getLos: pulseLos });
     strip.$strip.toggle(!!state.__laAttackShapeVisible);
     $shapeToggle.on('click', (ev) =>
     {
@@ -734,20 +809,18 @@ function shapesEqual(shapeA, shapeB)
         && Number(shapeA.size) === Number(shapeB.size) && Number(shapeA.range) === Number(shapeB.range);
 }
 
-// Inline shape/size/range editor: writes state.__laAttackShape and calls onCommit() so a running picker restarts with the new shape.
-function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, showReset = false } = {})
+function shapeStripHtml(shape)
 {
-    $form.find('.la-attack-shape-strip').remove();
-    const shape = state.__laAttackShape ?? { pattern: 'target', size: 1, range: 0 };
-    const caster = state.actor?.getActiveTokens?.()[0] ?? null;
-    const $strip = $(htmlToElement(`
+    const optionStyle = 'background:#1e1e1e;color:#fff;';
+
+    return `
         <div class="la-attack-shape-strip" style="display:flex;align-items:center;justify-content:center;gap:6px;margin:4px 0 6px;font-size:12px;color:var(--dark-text,#ddd);">
             <select class="la-bas-shape" title="Shape" style="width:78px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
-                <option value="target">Target</option>
-                <option value="blast">Blast</option>
-                <option value="cone">Cone</option>
-                <option value="line">Line</option>
-                <option value="burst">Burst</option>
+                <option value="target" style="${optionStyle}">Target</option>
+                <option value="blast" style="${optionStyle}">Blast</option>
+                <option value="cone" style="${optionStyle}">Cone</option>
+                <option value="line" style="${optionStyle}">Line</option>
+                <option value="burst" style="${optionStyle}">Burst</option>
             </select>
             <label class="la-bas-size-lbl" style="display:flex;align-items:center;gap:3px;">Size
                 <input type="number" class="la-bas-size" min="1" value="${shape.size}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
@@ -756,31 +829,49 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
                 <input type="number" class="la-bas-range" min="0" value="${shape.range}" style="width:44px;background:rgba(0,0,0,0.3);color:inherit;border:1px solid #444;padding:2px 4px;">
             </label>
         </div>
-    `));
+    `;
+}
+
+// Inline shape/size/range editor: writes state.__laAttackShape and calls onCommit() so a running picker restarts with the new shape.
+function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, showReset = false, getLos = null } = {})
+{
+    $form.find('.la-attack-shape-strip').remove();
+    const shape = state.__laAttackShape ?? { pattern: 'target', size: 1, range: 0 };
+    const caster = state.actor?.getActiveTokens?.()[0] ?? null;
+
+    const $strip = $(htmlToElement(shapeStripHtml(shape)));
+
     $strip.find('.la-bas-shape').val(shape.pattern);
     const $sizeLbl = $strip.find('.la-bas-size-lbl');
+    let lastPattern = shape.pattern ?? 'target';
+
     const syncSizeVisibility = () =>
     {
         const isTarget = String($strip.find('.la-bas-shape').val()) === 'target';
         $sizeLbl.toggle(!isTarget);
     };
+
     syncSizeVisibility();
+
     // the custom preview pulse only runs once the shape differs from the roll's native one
     const syncPreview = (next) =>
     {
         if (shapesEqual(next, state.__laAttackShapeDefaults))
             clearAttackShapePreview();
         else
-            updateAttackShapePreview(caster, shapeReach(next));
+            updateAttackShapePreview(caster, shapeReach(next), getLos?.() ?? false);
     };
+
     const setFields = (next) =>
     {
-        $strip.find('.la-bas-shape').val(next.pattern ?? 'target');
+        lastPattern = next.pattern ?? 'target';
+        $strip.find('.la-bas-shape').val(lastPattern);
         $strip.find('.la-bas-size').val(Math.max(1, Number(next.size) || 1));
         $strip.find('.la-bas-range').val(Math.max(0, Number(next.range) || 0));
         syncSizeVisibility();
         syncPreview(next);
     };
+
     const commit = () =>
     {
         const next = {
@@ -788,23 +879,48 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
             size: Math.min(99, Math.max(1, Number($strip.find('.la-bas-size').val()) || 1)),
             range: Math.min(99, Math.max(0, Number($strip.find('.la-bas-range').val()) || 0)),
         };
+
         state.__laAttackShape = next;
         syncPreview(next);
         onCommit?.();
     };
+
+    $strip.on('change input', '.la-bas-shape', () =>
+    {
+        const pattern = String($strip.find('.la-bas-shape').val());
+        const $size = $strip.find('.la-bas-size');
+        const $range = $strip.find('.la-bas-range');
+        const size = Math.max(1, Number($size.val()) || 1);
+        const range = Math.max(0, Number($range.val()) || 0);
+
+        if (pattern === lastPattern)
+            return;
+        if (lastPattern === 'target')
+        {
+            $size.val(Math.max(1, range));
+            $range.val(0);
+        }
+        else if (pattern === 'target')
+            $range.val(size + range);
+
+        lastPattern = pattern;
+    });
+
     $strip.on('change input', 'select,input', () =>
     {
         syncSizeVisibility();
         commit();
     });
+
     const reset = () =>
     {
         setFields(state.__laAttackShapeDefaults ?? { pattern: 'target', size: 1, range: 0 });
         commit();
     };
+
     if (showReset)
     {
-        const resetBtn = htmlToElement(`<button class="la-bas-reset" type="button" title="Reset to weapon range" style="background:transparent;border:none;color:var(--dark-text,#fff);opacity:0.7;cursor:pointer;padding:2px 4px;font-size:13px;line-height:1;"><i class="fas fa-rotate-left"></i></button>`);
+        const resetBtn = htmlToElement(RESET_BUTTON_HTML);
         resetBtn.addEventListener('click', (ev) =>
         {
             ev.preventDefault();
@@ -813,12 +929,64 @@ function injectAttackShapeStrip($form, $targetRow, state, { onCommit = null, sho
         });
         $strip.append(resetBtn);
     }
+
     $targetRow.before($strip);
     syncPreview(shape);
-    return { $strip, setFields, reset };
+    return { $strip, setFields, reset, refreshPreview: () => syncPreview(state.__laAttackShape ?? shape) };
+}
+
+export function targetingPreview({ label = 'Target', aoe = [], shape = null, stripOpen = false, active = true } = {})
+{
+    const isArea = aoe.length > 0;
+    const section = htmlToElement(TARGETING_SECTION_HTML);
+    section.classList.add('la-targeting-section');
+    const row = /** @type {HTMLElement} */ (section.querySelector('.accdiff-ranges'));
+    Object.assign(row.style, { justifyContent: 'center', alignItems: 'center', position: 'relative' }, isArea ? {} : { gap: '6px' });
+
+    const shapeSwitch = htmlToElement(SHAPE_SWITCH_HTML);
+    const inners = isArea ? aoe.map(entry => `${entry.type} ${entry.val}`) : [`<span class="la-tgt-label">${escapeHtml(label)}</span>`];
+    const buttons = inners.map(inner => htmlToElement(targetButtonHtml(inner)));
+    const rangeSwitch = isArea ? null : htmlToElement(RANGE_SWITCH_HTML);
+    row.append(shapeSwitch, ...buttons, ...(rangeSwitch ? [rangeSwitch] : []));
+    buttons[0].classList.toggle('la-targeting-active', active);
+
+    const stripShape = shape ?? { pattern: 'target', size: 1, range: 0 };
+    const strip = htmlToElement(shapeStripHtml(stripShape));
+    /** @type {HTMLSelectElement} */ (strip.querySelector('.la-bas-shape')).value = stripShape.pattern;
+    /** @type {HTMLElement} */ (strip.querySelector('.la-bas-size-lbl')).style.display = stripShape.pattern === 'target' ? 'none' : 'flex';
+    strip.append(htmlToElement(RESET_BUTTON_HTML));
+    strip.style.display = stripOpen ? 'flex' : 'none';
+    row.before(strip);
+
+    const toggles = htmlToElement(toggleRowHtml());
+    const areaToggles = isArea || stripShape.pattern !== 'target';
+    toggles.querySelectorAll('.la-tg-area-lbl').forEach((element) => { /** @type {HTMLElement} */ (element).style.display = areaToggles ? '' : 'none'; });
+    toggles.style.display = areaToggles || toggles.querySelector('.la-tg-los') ? '' : 'none';
+    section.append(toggles);
+
+    if (active)
+    {
+        const hint = htmlToElement(HINT_HTML);
+        hint.textContent = areaToggles ? areaHint(isArea ? String(aoe[0].type).toLowerCase() : stripShape.pattern) : TARGET_HINT;
+        hint.style.display = 'block';
+        section.append(hint);
+    }
+
+    requestAnimationFrame(() =>
+    {
+        const first = buttons[0].getBoundingClientRect();
+        const last = buttons.at(-1).getBoundingClientRect();
+        const half = Math.round((last.right - first.left) / 2) + 1;
+        shapeSwitch.style.right = `calc(50% + ${half}px)`;
+        if (rangeSwitch)
+            rangeSwitch.style.left = `calc(50% + ${half}px)`;
+    });
+
+    return section;
 }
 
 const ATTACK_SHAPE_RANGE_OWNER = 'la-attack-shape';
+
 export function clearAttackShapePreview()
 {
     rangePulse.clear(ATTACK_SHAPE_RANGE_OWNER);
@@ -835,19 +1003,23 @@ export function clearAllAttackShapes()
 export function pollForForm(findForm, onFound)
 {
     let elapsed = 0;
+
     const tick = () =>
     {
         const $form = findForm();
+
         if ($form && $form.length)
         {
             onFound($form);
             return;
         }
+
         elapsed += 50;
         if (elapsed > 2000)
             return;
         setTimeout(tick, 50);
     };
+
     tick();
 }
 
@@ -866,18 +1038,21 @@ export function injectWhenReady(state, findForm, inject, label)
         }
     });
 }
-function updateAttackShapePreview(casterToken, range)
+
+function updateAttackShapePreview(casterToken, range, los = false)
 {
     if (!casterToken || range <= 0)
     {
         clearAttackShapePreview();
         return;
     }
+
     rangePulse.setRange(ATTACK_SHAPE_RANGE_OWNER, {
         token: casterToken,
         range,
         includeSelf: true,
         priority: RANGE_PULSE_PRIORITY.ATTACK_CARD,
+        los,
     });
 }
 
@@ -886,11 +1061,13 @@ function maybeAutoStart(state, $form, $row, { mode = 'setting', hudHasTargets = 
 {
     if (mode === 'never')
         return;
+
     if (mode === 'setting')
     {
         if (getModuleSetting('attackTargeting', 'auto') !== 'auto')
             return;
     }
+
     if (mode !== 'force')
     {
         if (hudHasTargets?.())
@@ -898,9 +1075,12 @@ function maybeAutoStart(state, $form, $row, { mode = 'setting', hudHasTargets = 
         if ((game.user.targets?.size ?? 0) > 0)
             return;
     }
+
     if (isAreaPickerActive() || isSingleTargetPickerActive())
         return;
+
     const $targetBtn = $row.find('.la-accdiff-target-button').first();
+
     if ($targetBtn.length)
     {
         setTimeout(() =>

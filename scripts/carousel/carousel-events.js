@@ -1,6 +1,7 @@
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 import { escapeHtml, localize, localizeFormat } from '../tools/string-utils.js';
 import { EVENT_FLAG, eventRound, eventRoundsLeft } from './carousel-view.js';
 
@@ -30,6 +31,7 @@ function formHtml(recent)
     const tiles = recent.map((entry, index) =>
         `<button type="button" class="lac-recent" data-index="${index}" data-tooltip="${escapeHtml(entry.name)}" style="background-image:url(&quot;${escapeHtml(entry.img)}&quot;)"></button>`
     ).join('');
+
     const label = key => escapeHtml(localize(key));
     return `<div class="lancer-dialog-header"><div class="lancer-dialog-title">${label('LA.carousel.addEvent.title')}</div></div>
         <form class="lac-add-event">
@@ -48,6 +50,7 @@ function bindRecent(html, recent)
     {
         const tile = event.target.closest('.lac-recent');
         const entry = tile ? recent[Number(tile.dataset.index)] : null;
+
         if (!entry)
             return;
         form.elements.name.value = entry.name ?? '';
@@ -63,6 +66,7 @@ function readEventForm(html)
     const data = form ? new foundry.applications.ux.FormDataExtended(form).object : {};
     const name = String(data.name ?? '').trim();
     const img = String(data.img ?? '').trim();
+
     if (!name || !img)
         throw new Error(localize('LA.carousel.addEvent.error'));
     return { name, img, duration: Math.max(0, Math.floor(Number(data.duration) || 0)), hidden: !!data.hidden };
@@ -76,6 +80,7 @@ async function submitEvent(combat, { name, img, duration, hidden })
         hidden,
         flags: { [MODULE_ID]: { [EVENT_FLAG]: { duration, roundCreated: eventRound(combat) } } },
     }]);
+
     const recent = recentEvents().filter(entry => entry.name !== name || entry.img !== img);
     await game.settings.set(MODULE_ID, SETTING_RECENT, [{ name, img, duration, hidden }, ...recent].slice(0, RECENT_MAX));
 }
@@ -104,6 +109,7 @@ async function expireEvents(combat)
     if (!expired.length)
         return;
     await combat.deleteEmbeddedDocuments('Combatant', expired.map(combatant => combatant.id));
+
     for (const combatant of expired)
     {
         ChatMessage.create({
@@ -118,7 +124,7 @@ export function initEventExpiry()
 {
     Hooks.on('updateCombat', (combat, changed) =>
     {
-        if ('round' in changed && game.users.activeGM?.isSelf)
+        if ('round' in changed && isExecutorGM())
             expireEvents(combat);
     });
 }

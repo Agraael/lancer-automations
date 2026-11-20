@@ -12,6 +12,7 @@ function _findInput(root, names)
         if (el)
             return el;
     }
+
     return null;
 }
 
@@ -29,8 +30,10 @@ function _getBackgroundSrc(app, root)
     const fromForm = root.querySelector('[name="background.src"]')?.value
         ?? root.querySelector('file-picker[name="background.src"]')?.getAttribute("value")
         ?? root.querySelector('[name="img"]')?.value;
+
     if (fromForm)
         return String(fromForm).trim();
+
     const doc = app?.document ?? app?.object;
     return (doc?.background?.src ?? doc?.img ?? "").trim();
 }
@@ -38,11 +41,13 @@ function _getBackgroundSrc(app, root)
 async function _applyImageSize(app, root)
 {
     const src = _getBackgroundSrc(app, root);
+
     if (!src)
     {
         ui.notifications?.warn(localize('LA.notify.noBackgroundImageSetOnThisScene'));
         return;
     }
+
     const img = new Image();
     await new Promise((resolve, reject) =>
     {
@@ -55,8 +60,10 @@ async function _applyImageSize(app, root)
     });
     if (!img.naturalWidth || !img.naturalHeight)
         return;
+
     const linkBtn = _findLinkBtn(root);
     const wasLinked = !!linkBtn?.querySelector("i.fa-link-simple");
+
     if (wasLinked)
         linkBtn.click();
     _setInput(_findInput(root, ["width"]), img.naturalWidth);
@@ -76,15 +83,19 @@ function _applyScale(root, wPct, hPct)
 {
     const widthInput = _findInput(root, ["width"]);
     const heightInput = _findInput(root, ["height"]);
+
     if (!widthInput || !heightInput)
         return;
+
     const curW = Number(widthInput.value) || 0;
     const curH = Number(heightInput.value) || 0;
+
     if (!curW || !curH)
     {
         ui.notifications?.warn(localize('LA.notify.currentSceneDimensionsAreEmptySetWidth'));
         return;
     }
+
     const newW = Math.max(1, Math.round(curW * (wPct / 100)));
     const newH = Math.max(1, Math.round(curH * (hPct / 100)));
 
@@ -92,6 +103,7 @@ function _applyScale(root, wPct, hPct)
     // Unlink while we write, then relink if it was linked.
     const linkBtn = _findLinkBtn(root);
     const wasLinked = !!linkBtn?.querySelector("i.fa-link-simple");
+
     if (wasLinked)
         linkBtn.click();
     _setInput(widthInput, newW);
@@ -136,6 +148,7 @@ function _buildScaleRow(root)
             ? "Linked: typing one mirrors the other. Click to unlink."
             : "Unlinked: scale Width and Height separately. Click to link.";
     };
+
     link.addEventListener("click", (ev) =>
     {
         ev.preventDefault();
@@ -183,10 +196,13 @@ function _inject(app, htmlOrEl)
         return;
     if (root.querySelector(`.${BTN_CLASS}`))
         return;
+
     const widthInput = _findInput(root, ["width"]);
     const group = widthInput?.closest(".form-group");
+
     if (!group)
         return;
+
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = BTN_CLASS;

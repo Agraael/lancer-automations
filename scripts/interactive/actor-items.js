@@ -47,6 +47,7 @@ export function hasItem(actorOrToken, lidOrLids)
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor?.items || !lidOrLids)
         return false;
+
     const lids = Array.isArray(lidOrLids) ? lidOrLids : [lidOrLids];
     if (lids.length === 0)
         return false;
@@ -71,6 +72,7 @@ export async function reloadOneWeapon(actorOrToken, targetName)
     }
 
     const weapons = getWeapons(actor);
+
     const unloadedWeapons = weapons.filter(weapon =>
     {
         const tags = itemAllTags(weapon);
@@ -94,12 +96,15 @@ export async function reloadOneWeapon(actorOrToken, targetName)
     {
         await chosenWeapon.update(/** @type {any} */({ "system.loaded": true }));
         ui.notifications.info(localizeFormat('LA.notify.weaponReloaded', { name, weapon: chosenWeapon.name }));
+
         const token = (/** @type {any} */ (actorOrToken))?.actor
             ? /** @type {any} */ (actorOrToken)
             : actor.getActiveTokens?.()?.[0];
+
         if (token)
             playReloadFX(token);
     }
+
     return chosenWeapon;
 }
 
@@ -127,16 +132,19 @@ export async function rechargeSystem(actorOrToken, targetName)
             return false;
         if (item.system?.type?.toLowerCase() === 'weapon')
             return false;
+
         const sys = item.system;
         const tags = itemAllTags(sys);
         const hasLimited = tags.some(tag => tag.lid === 'tg_limited');
         const hasRecharge = tags.some(tag => tag.lid === 'tg_recharge');
+
         if (hasLimited)
         {
             const usesValue = typeof sys.uses === 'number' ? sys.uses : (sys.uses?.value ?? 0);
             if (usesValue <= 0)
                 return true;
         }
+
         if (hasRecharge && sys.charged === false)
             return true;
         return false;
@@ -171,6 +179,7 @@ export async function rechargeSystem(actorOrToken, targetName)
         else
             update['system.uses.value'] = sys.uses?.max ?? 0;
     }
+
     if (hasRecharge)
         update['system.charged'] = true;
 

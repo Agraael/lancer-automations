@@ -52,6 +52,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
 
         /** @type {Map<string, {token: any, mark: any}>} */
         const picked = new Map();
+
         for (const id of preselected)
         {
             const token = allTokens.find(candidate => candidate.id === id);
@@ -61,20 +62,24 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
 
         const anchors = linkFrom.filter(Boolean);
         const tether = anchors.length ? createTokenTether() : null;
+
         const refreshTether = (hoveredToken = null) =>
         {
             if (!tether)
                 return;
+
             const ends = [...picked.values()].map(entry => entry.token);
             if (hoveredToken && !picked.has(hoveredToken.id))
                 ends.push(hoveredToken);
             tether.setPairs(anchors.flatMap(anchor => ends.map(end => [anchor, end])));
         };
+
         refreshTether();
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
         let shiftHeld = game.keyboard?.isModifierActive?.('Shift') ?? false;
         let lastCursor = null;
+
         const indicator = createCtrlMarkIndicator({
             queryMarked: (x, y) =>
             {
@@ -85,6 +90,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             },
             alwaysOn: true,
         });
+
         const onShiftKey = (event) =>
         {
             if (event.key !== 'Shift')
@@ -93,12 +99,14 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             if (lastCursor)
                 indicator.move(lastCursor.x, lastCursor.y);
         };
+
         document.addEventListener('keydown', onShiftKey, true);
         document.addEventListener('keyup', onShiftKey, true);
 
         const restoreTokenInteraction = suppressTokenInteraction();
 
         let closeStack = null;
+
         const closeStackPopup = () =>
         {
             closeStack?.();
@@ -117,7 +125,6 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             document.removeEventListener('keydown', onShiftKey, true);
             document.removeEventListener('keyup', onShiftKey, true);
             session.unbind();
-            canvas.stage.off('rightdown', onRight);
             restoreTokenInteraction();
             closeStackPopup();
         };
@@ -147,6 +154,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
                 finish();
                 return;
             }
+
             if (picked.has(token.id))
             {
                 unmark(token);
@@ -154,6 +162,7 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
                 refreshTether();
                 return;
             }
+
             picked.set(token.id, { token, mark: createTokenMark(token, markColor) });
             playUiSound('tokenTarget');
             refreshTether();
@@ -181,13 +190,16 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             const shift = isShiftDown(event);
             const { x, y } = pointerToWorld(event);
             const here = tokensAt(allTokens, x, y);
+
             if (!here.length)
                 return;
+
             if (here.length === 1)
             {
                 pick(here[0], shift);
                 return;
             }
+
             closeStackPopup();
             closeStack = showOverlapStackPicker(here, (originalEvent?.clientX ?? 0) + 10, (originalEvent?.clientY ?? 0) + 10, {
                 isSelected: (token) => picked.has(token.id),
@@ -195,14 +207,14 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             });
         };
 
-        const onRight = (event) =>
+        const onRight = () =>
         {
-            suppressEvent(event?.data?.originalEvent ?? event);
             if (document.querySelector('.la-stack-picker'))
             {
                 closeStackPopup();
                 return;
             }
+
             finish();
         };
 
@@ -211,11 +223,13 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             if (event.key !== 'Escape' && event.key !== 'Enter')
                 return;
             suppressEvent(event);
+
             if (event.key === 'Escape' && document.querySelector('.la-stack-picker'))
             {
                 closeStackPopup();
                 return;
             }
+
             finish();
         };
 
@@ -229,14 +243,16 @@ export function pickTokensCardless(casterToken = null, { includeSelf = true, sin
             {
                 void 0;
             }
+
             resolve([]);
         });
+
         _activeCancel = () =>
         {
             playUiSound('toggle');
             finish();
         };
-        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
-        canvas.stage.on('rightdown', onRight);
+
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, rightClick: onRight });
     });
 }

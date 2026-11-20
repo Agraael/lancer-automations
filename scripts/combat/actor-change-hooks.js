@@ -2,7 +2,7 @@ import { _buildCancelFn } from "../activations/flow-steps.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localize } from "../tools/string-utils.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/index.js";
-import { handleTrigger } from "../activations/reactions-engine.js";
+import { handleTrigger } from "../activations/automation-engine.js";
 import { updateStructure } from "../tools/wreck.js";
 import { isDangerZoneHeat } from "../utils/lancer-token.js";
 
@@ -13,6 +13,7 @@ Hooks.on('preUpdateActor', (actor, change, _options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     try
     {
         if (getModuleSetting('syncActorImgToToken'))
@@ -20,12 +21,14 @@ Hooks.on('preUpdateActor', (actor, change, _options, userId) =>
             const newTokenImg = foundry.utils.getProperty(change, 'prototypeToken.texture.src');
             // actor.img is IMAGE-only, so a video token image must not be mirrored onto it.
             const ext = String(newTokenImg ?? '').split('?')[0].split('.').pop().toLowerCase();
+
             if (newTokenImg && change.img === undefined && ext in CONST.IMAGE_FILE_EXTENSIONS)
                 foundry.utils.setProperty(change, 'img', newTokenImg);
         }
     }
     catch
     { /* ignore */ }
+
     try
     {
         if (getModuleSetting('syncActorNameToToken'))
@@ -43,6 +46,13 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
 {
     if (userId !== game.userId)
         return true;
+
+    const changedSystem = /** @type {any} */ (change.system);
+    if (changedSystem?.hp?.value !== undefined)
+        previousHPValues.set(actor.uuid, actor.system.hp.value);
+    if (changedSystem?.heat?.value !== undefined)
+        previousHeatValues.set(actor.uuid, actor.system.heat.value);
+
     if (options._bypassPreChange)
         return true;
 
@@ -54,9 +64,10 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
 
     if (change.system?.hp?.value !== undefined)
     {
-        const previousHP = previousHPValues.get(actor.id) ?? actor.system.hp.value;
+        const previousHP = previousHPValues.get(actor.uuid) ?? actor.system.hp.value;
         const newHP = change.system.hp.value;
         const delta = newHP - previousHP;
+
         if (delta !== 0)
         {
             const _cancelledBy = options._cancelledBy || [];
@@ -84,6 +95,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 const identity = modifyHpChange._reactorIdentity;
                 if (identity)
                     _cancelledBy.push(identity);
+
                 const defaults = modifyHpChange._defaultContext ?? {};
                 item = item ?? defaults.item ?? null;
                 originToken = originToken ?? defaults.originToken ?? null;
@@ -93,6 +105,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 {
                     await actor.update({ "system.hp.value": newValue }, { ...options, _bypassPreChange: true, _cancelledBy });
                 };
+
                 const executeOriginal = async () =>
                 {
                     await actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
@@ -101,21 +114,25 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 modifyPromise = (async () =>
                 {
                     await Promise.resolve();
+
                     if (preConfirm)
                     {
                         const confirmed = await preConfirm();
+
                         if (!confirmed)
                         {
                             await executeOriginal();
                             return;
                         }
                     }
+
                     if (!allowConfirm)
                     {
                         await executeModify();
                         await postChoice?.(true);
                         return;
                     }
+
                     await startChoiceCard({
                         mode: "or",
                         title: localize('LA.dialogTitle.hpModified'),
@@ -144,6 +161,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 })();
                 return modifyPromise;
             };
+
             modifyHpChange.wait = () => modifyPromise;
 
             handleTrigger('onPreHpChange', {
@@ -169,9 +187,10 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
 
     if (change.system?.heat?.value !== undefined)
     {
-        const previousHeat = previousHeatValues.get(actor.id) ?? actor.system.heat.value;
+        const previousHeat = previousHeatValues.get(actor.uuid) ?? actor.system.heat.value;
         const newHeat = change.system.heat.value;
         const delta = newHeat - previousHeat;
+
         if (delta !== 0)
         {
             const _cancelledBy = options._cancelledBy || [];
@@ -199,6 +218,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 const identity = modifyHeatChange._reactorIdentity;
                 if (identity)
                     _cancelledBy.push(identity);
+
                 const defaults = modifyHeatChange._defaultContext ?? {};
                 item = item ?? defaults.item ?? null;
                 originToken = originToken ?? defaults.originToken ?? null;
@@ -208,6 +228,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 {
                     await actor.update({ "system.heat.value": newValue }, { ...options, _bypassPreChange: true, _cancelledBy });
                 };
+
                 const executeOriginal = async () =>
                 {
                     await actor.update(change, { ...options, _bypassPreChange: true, _cancelledBy });
@@ -216,21 +237,25 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 modifyPromise = (async () =>
                 {
                     await Promise.resolve();
+
                     if (preConfirm)
                     {
                         const confirmed = await preConfirm();
+
                         if (!confirmed)
                         {
                             await executeOriginal();
                             return;
                         }
                     }
+
                     if (!allowConfirm)
                     {
                         await executeModify();
                         await postChoice?.(true);
                         return;
                     }
+
                     await startChoiceCard({
                         mode: "or",
                         title: localize('LA.dialogTitle.heatModified'),
@@ -259,6 +284,7 @@ Hooks.on('preUpdateActor', (actor, change, options, userId) =>
                 })();
                 return modifyPromise;
             };
+
             modifyHeatChange.wait = () => modifyPromise;
 
             handleTrigger('onPreHeatChange', {
@@ -291,13 +317,14 @@ Hooks.on('updateActor', async (actor, change, options, userId) =>
 {
     if (userId !== game.userId)
         return;
+
     const token = actor.token ? canvas.tokens.get(actor.token.id) : actor.getActiveTokens()?.[0];
     if (!token)
         return;
 
     if (change.system?.heat?.value !== undefined)
     {
-        const previousHeat = previousHeatValues.get(actor.id) ?? actor.system.heat.value;
+        const previousHeat = previousHeatValues.get(actor.uuid) ?? actor.system.heat.value;
         const currentHeat = change.system.heat.value;
         const heatChange = currentHeat - previousHeat;
 
@@ -313,12 +340,12 @@ Hooks.on('updateActor', async (actor, change, options, userId) =>
             await handleTrigger('onHeatLoss', { triggeringToken: token, heatCleared, currentHeat });
         }
 
-        previousHeatValues.set(actor.id, currentHeat);
+        previousHeatValues.set(actor.uuid, currentHeat);
     }
 
     if (change.system?.hp?.value !== undefined)
     {
-        const previousHP = previousHPValues.get(actor.id) ?? actor.system.hp.value;
+        const previousHP = previousHPValues.get(actor.uuid) ?? actor.system.hp.value;
         const currentHP = change.system.hp.value;
         const hpChange = currentHP - previousHP;
 
@@ -333,7 +360,7 @@ Hooks.on('updateActor', async (actor, change, options, userId) =>
             await handleTrigger('onHpLoss', { triggeringToken: token, hpLost, currentHP });
         }
 
-        previousHPValues.set(actor.id, currentHP);
+        previousHPValues.set(actor.uuid, currentHP);
     }
 
     if (change.system?.structure !== undefined && game.userId === userId)

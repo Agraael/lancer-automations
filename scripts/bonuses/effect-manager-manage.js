@@ -18,6 +18,7 @@ import { escapeHtml } from "../tools/string-utils.js";
 import { htmlToElement } from "../tools/dom-utils.js";
 import { durationText, sourceName } from "./status-tooltip.js";
 import { v3ConditionLabel } from "../tools/v3-condition.js";
+import { updateRouted, deleteRouted } from "../tools/routed-update.js";
 
 async function modifyEffectStack(targetID, effectID, delta)
 {
@@ -25,15 +26,32 @@ async function modifyEffectStack(targetID, effectID, delta)
     if (!target)
         return;
 
+    if (!game.user.isGM && !target.actor?.isOwner)
+    {
+        const effect = target.actor?.effects.get(effectID);
+        if (!effect)
+            return;
+
+        const newStack = (effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1) + delta;
+        if (newStack <= 0)
+            await deleteRouted(effect);
+        else
+            await updateRouted(effect, { "flags.statuscounter.value": newStack, ...(newStack > 1 ? { "flags.statuscounter.visible": true } : {}) });
+        return;
+    }
+
     const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
     if (customStatusApi)
     {
         await customStatusApi.modifyStack(target.actor, effectID, delta);
 
         const effect = target.actor.effects.get(effectID);
+
         if (effect)
         {
             const newStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
+
             if (newStack > 1)
             {
                 await effect.update(/** @type {any} */({
@@ -45,10 +63,12 @@ async function modifyEffectStack(targetID, effectID, delta)
     else
     {
         const effect = target.actor.effects.get(effectID);
+
         if (effect)
         {
             const currentStack = effect.flags?.statuscounter?.value || effect.getFlag("temporary-custom-statuses", "stack") || 1;
             const newStack = currentStack + delta;
+
             if (newStack <= 0)
                 await effect.delete();
             else
@@ -67,10 +87,12 @@ async function pushRemoveEffect(targetID, effectID)
     // Supports token id (scene token), actor UUID (prototype), and item UUID (item-carried).
     const { actor, item, token } = _resolveEmTarget(targetID);
     const doc = item ?? (token ? token.actor : actor);
+
     if (!doc)
         return;
 
     const canWrite = game.user.isGM || doc.isOwner;
+
     if (canWrite)
         await doc.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
     else if (item || (actor && !token))
@@ -86,9 +108,10 @@ async function pushRemoveEffect(targetID, effectID)
     else
     {
         game.socket.emit('module.lancer-automations', {
-            action: "removeEffect",
+            action: "removeEffectById",
             payload: {
-                targetID,
+                targetID: token.id,
+                sceneId: token.document?.parent?.id ?? null,
                 effectID
             }
         });
@@ -113,18 +136,22 @@ export function updateManageTabCount(html)
 {
     const targetID = String(html.find('#manage-target').val());
     const { actor } = _resolveEmTarget(targetID);
+
     if (!actor)
     {
         html.find('#manage-tab-count').text('');
         return;
     }
+
     const effectCount = actor.effects.filter(effect =>
         (isTemplateAE(effect) || !effect.disabled) && (effect.icon || effect.img) && !getLAFlag(effect,"linkedBonusId")
     ).length;
+
     const bonusCount = (getLAFlag(actor,"global_bonuses") || []).length
         + (getLAFlag(actor,"constant_bonuses") || []).length
         + (getLAFlag(actor,"bonusTemplates") || []).length
         + getV3DefenseRows(actor).length;
+
     const total = effectCount + bonusCount;
     html.find('#manage-tab-count').text(total > 0 ? `(${total})` : '');
 }
@@ -152,6 +179,7 @@ export function updateManageList(html, dialog)
     {
         const dur = getLAFlag(effect,'duration') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'duration') : null);
         const consumption = getLAFlag(effect,'consumption');
+
         const stack = effect.flags?.statuscounter?.value ||
             effect.flags?.['temporary-custom-statuses']?.stack || 0;
 
@@ -162,11 +190,13 @@ export function updateManageList(html, dialog)
             durText = `${dur.label}, ${dur.turns}t`;
 
         let consumptionText = '';
+
         if (consumption?.trigger)
         {
             let triggerLabel = Array.isArray(consumption.trigger)
                 ? consumption.trigger.join(', ')
                 : consumption.trigger;
+
             if (consumption.itemId)
                 triggerLabel += ` ID:${consumption.itemId}`;
             else if (consumption.itemLid)
@@ -225,6 +255,7 @@ export function updateManageList(html, dialog)
     const globalBonuses = getLAFlag(actor,"global_bonuses") || [];
     const constantBonuses = getLAFlag(actor,"constant_bonuses") || [];
     const bonusTemplates = getLAFlag(actor,"bonusTemplates") || [];
+
     const allBonuses = [
         ...globalBonuses.map(bonus => ({ ...bonus, _kind: 'global', _off: isItemBonusOff(actor, bonus) })),
         ...constantBonuses.map(bonus => ({ ...bonus, _kind: 'constant', _off: isItemBonusOff(actor, bonus) })),
@@ -244,41 +275,53 @@ export function updateManageList(html, dialog)
             const types = (bonus.rollTypes && bonus.rollTypes.length > 0) ? ` <span style="font-size:0.8em; opacity:0.7;">[Flows: ${bonus.rollTypes.join(', ')}]</span>` : '';
             const itemIdInfo = bonus.itemId ? ` <span style="font-size:0.8em; opacity:0.7;">[Item: ${bonus.itemId}]</span>` : '';
             let kindLabel = '';
+
             if (bonus._kind === 'constant')
                 kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(constant)</span>';
             else if (bonus._kind === 'template')
                 kindLabel = ' <span style="font-size:0.75em; color:var(--la-ink-dim);">(template)</span>';
             else if (bonus._kind === 'data')
                 kindLabel = ' <span style="font-size:0.75em; color:#2a9d8f;">(data)</span>';
+
             const source = sourceName(bonus);
             const origin = itemAttachmentOrigin(bonus);
             let sourceText = source ? `<i class="fas fa-link"></i> ${escapeHtml(source)}` : '';
+
             if (source && origin === 'automation')
                 sourceText = `<i class="fas fa-gear"></i> Automation on ${escapeHtml(source)}`;
             else if (source && origin === 'hand')
                 sourceText = `<i class="fas fa-link"></i> ${escapeHtml(source)} · remove it in its L.A menu`;
             if (bonus._replaced)
                 sourceText = '<i class="fas fa-right-left"></i> Replaced by automation';
+
             const sourceLine = sourceText
                 ? `<span style="display:block; font-size:0.8em; color:var(--la-ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${sourceText}</span>`
                 : '';
+
             const laMark = origin ? '<span style="font-family:var(--la-mono, ui-monospace, monospace); font-size:0.78em; letter-spacing:0.04em; padding-right:4px; margin-right:4px; border-right:1px solid currentColor;">L.A</span>' : '';
+
             const dataConditionLine = bonus.dataCondition
                 ? `<span style="display:block; font-size:0.8em; color:${bonus._inactive ? 'var(--la-ink-dim)' : '#2a9d8f'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><i class="fas fa-code-branch"></i> ${escapeHtml(`while ${v3ConditionLabel(bonus.dataCondition)}`)}</span>`
                 : '';
+
             const switchable = !bonus._replaced && (bonus._kind === 'data' || (bonus._kind !== 'template' && !!bonus.sourceItemUuid));
+
             let actionBtn = switchable
                 ? `<div class="te-delete-btn manage-bonus-toggle-btn" title="${bonus._off ? 'Switch on' : 'Switch off'}" style="color:${bonus._kind === 'data' ? '#2a9d8f' : 'var(--la-ink)'};"><i class="fas ${bonus._off ? 'fa-toggle-off' : 'fa-toggle-on'}"></i></div>`
                 : `<div class="te-delete-btn manage-bonus-remove-btn" data-id="${bonus.id}" data-kind="${bonus._kind}" title="Remove"><i class="fas fa-trash"></i></div>`;
+
             if (bonus._replaced)
                 actionBtn = '<div style="color:var(--la-ink); opacity:0.75; padding:2px 6px;"><i class="fas fa-right-left"></i></div>';
+
             const condHint = getBonusConditionHint(bonus);
+
             const condLabel = condHint
                 ? ' <span class="te-bonus-cond" style="font-size:0.75em; color:var(--la-accent); cursor:help;"><i class="fas fa-code-branch"></i> conditional</span>'
                 : '';
 
             let usesInfo = '';
             const uses = getBonusUsesInfo(actor, bonus);
+
             if (uses)
             {
                 usesInfo = ` <span style="color:var(--la-accent);">[${uses.label}]</span>`;
@@ -293,6 +336,7 @@ export function updateManageList(html, dialog)
                     ${actionBtn}
                 </div>
             `));
+
             bonusRow.find('.manage-bonus-toggle-btn').click(async () =>
             {
                 await setItemBonusOff(actor, bonus.id, !bonus._off);
@@ -307,6 +351,7 @@ export function updateManageList(html, dialog)
                 {
                     const templates = foundry.utils.deepClone(getLAFlag(actor,'bonusTemplates') || []);
                     const record = templates.find((/** @type {any} */ tpl) => tpl.id === bonus._templateId);
+
                     if (!record)
                         return;
                     record.bonusData = record.bonusData ?? {};
@@ -317,9 +362,11 @@ export function updateManageList(html, dialog)
                     await setLAFlag(actor,'bonusTemplates', templates);
                     return;
                 }
+
                 const flagKey = bonus._kind === 'constant' ? 'constant_bonuses' : 'global_bonuses';
                 const listCopy = foundry.utils.deepClone(getLAFlag(actor,flagKey) || []);
                 const entry = listCopy.find((/** @type {any} */ stored) => stored.id === bonus.id);
+
                 if (!entry)
                     return;
                 if (tier)

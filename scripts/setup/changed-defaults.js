@@ -24,6 +24,7 @@ function _pendingRows()
         const setting = /** @type {any} */ (game.settings.settings.get(`${MODULE_ID}.${key}`));
         if (!setting || reviewed.has(key) || (setting.scope === 'world' && !game.user.isGM))
             return [];
+
         const stored = storedSettingValue(key, setting.scope);
         if (stored === undefined || !_same(stored, previous) || _same(setting.default, previous))
             return [];
@@ -38,6 +39,7 @@ function _content(rows)
     const intro = document.createElement('p');
     intro.textContent = localize('LA.changedDefaults.intro');
     root.append(intro);
+
     for (const { key, setting, previous } of rows)
     {
         const row = document.createElement('label');
@@ -55,6 +57,7 @@ function _content(rows)
         row.append(box, name, values);
         root.append(row);
     }
+
     return root.outerHTML;
 }
 
@@ -62,6 +65,7 @@ async function _apply(html, rows)
 {
     const root = html?.[0] ?? html;
     let reload = false;
+
     for (const { key, setting } of rows)
     {
         const ticked = !!root?.querySelector(`input[name="${key}"]`)?.checked;
@@ -69,6 +73,7 @@ async function _apply(html, rows)
             await game.settings.set(MODULE_ID, key, setting.default);
         reload ||= !!setting.requiresReload && ticked !== pinnedThisLoad.has(key);
     }
+
     if (reload)
         await /** @type {any} */ (foundry.applications.settings.SettingsConfig).reloadConfirm({ world: game.user.isGM });
 }
@@ -89,11 +94,13 @@ Hooks.once('ready', async () =>
     await migrationsDone;
     await afterFirstRun();
     const rows = _pendingRows();
+
     if (!rows.length)
     {
         await _markReviewed();
         return;
     }
+
     new Dialog({
         title: localize('LA.changedDefaults.title'),
         content: _content(rows),

@@ -4,6 +4,8 @@ import { refreshTokenBlockEdges } from './tokenBlocksVision.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
+import { syncHardCoverFlags } from '../tools/template-actors.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 const FLAG_KEY = 'losBlock';
 const SETTING_FLAG_ONLY = 'lancerLosFlagOnly';
 const EDGE_PREFIX = 'la-wall-los-';
@@ -43,7 +45,9 @@ function _addMirror(wallDoc)
     const coords = wallDoc.c;
     if (!canvas?.edges || !Array.isArray(coords) || coords.length < 4)
         return;
+
     const id = _edgeId(wallDoc);
+
     // Real document as the object so wall-height reads its top/bottom flags.
     const edge = new foundry.canvas.geometry.edges.Edge(
         { x: coords[0], y: coords[1] },
@@ -58,6 +62,7 @@ function _addMirror(wallDoc)
             sound: CONST.WALL_SENSE_TYPES.NONE,
             move: CONST.WALL_SENSE_TYPES.NONE,
         });
+
     canvas.edges.set(id, edge);
 }
 
@@ -76,19 +81,24 @@ function _refreshAll()
 {
     if (!canvas?.edges || !canvas.scene)
         return;
+
     const toDelete = [];
+
     for (const key of canvas.edges.keys())
     {
         if (key.startsWith(EDGE_PREFIX))
             toDelete.push(key);
     }
+
     for (const key of toDelete)
         canvas.edges.delete(key);
+
     for (const wallDoc of canvas.scene.walls)
     {
         if (_shouldMirror(wallDoc))
             _addMirror(wallDoc);
     }
+
     invalidateLosCaches();
 }
 
@@ -97,9 +107,12 @@ function _patchSweepEdgeTypes()
 {
     const cls = CONFIG.Canvas?.polygonBackends?.sight ?? foundry.canvas.geometry.ClockwiseSweepPolygon;
     const proto = cls?.prototype;
+
     if (!proto?._determineEdgeTypes || proto._laSightPatched)
         return;
+
     const original = proto._determineEdgeTypes;
+
     proto._determineEdgeTypes = function (type, priority, config = {})
     {
         const edgeTypes = original.call(this, type, priority, config);
@@ -107,6 +120,7 @@ function _patchSweepEdgeTypes()
             edgeTypes.laSight = { mode: 1, priority: -Infinity };
         return edgeTypes;
     };
+
     proto._laSightPatched = true;
 }
 
@@ -116,7 +130,9 @@ function _patchWallColor()
     const proto = foundry.canvas.placeables.Wall?.prototype;
     if (!proto?._getWallColor || proto._laColorPatched)
         return;
+
     const original = proto._getWallColor;
+
     proto._getWallColor = function ()
     {
         const doc = this.document;
@@ -124,6 +140,7 @@ function _patchWallColor()
             return WALL_COLOR;
         return original.call(this);
     };
+
     proto._laColorPatched = true;
 }
 
@@ -132,9 +149,11 @@ function _onRenderWallConfig(app, html)
     const el = html instanceof HTMLElement ? html : html?.[0];
     if (!el || el.querySelector(`input[name="flags.${MODULE_ID}.${FLAG_KEY}"]`))
         return;
+
     const doc = app.document;
     const checked = !!getLAFlag(doc,FLAG_KEY);
     const anchor = el.querySelector('[name="door"]')?.closest('fieldset');
+
     if (!anchor)
         return;
     anchor.insertAdjacentHTML('afterend', `
@@ -168,6 +187,8 @@ export function initLaWallLos()
             _refreshAll();
             refreshTokenBlockEdges();
             canvas?.perception?.update?.({ refreshVision: true });
+            if (isExecutorGM())
+                syncHardCoverFlags();
         }
     });
     Hooks.on('canvasReady', _refreshAll);
@@ -188,10 +209,13 @@ export function initLaWallLos()
     {
         if (wallDoc.parent !== canvas?.scene)
             return;
+
         const flagChanged = getLAFlags(change)?.[FLAG_KEY] !== undefined;
+
         const relevant = ['c', 'sight', 'door', 'ds', 'dir'].some(key => key in change)
             || flagChanged
             || change?.flags?.['wall-height'] !== undefined;
+
         if (relevant)
             _refreshWall(wallDoc);
         if (flagChanged)

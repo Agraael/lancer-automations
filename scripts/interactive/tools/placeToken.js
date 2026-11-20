@@ -25,6 +25,7 @@ import {
 } from "../canvas-helpers.js";
 import { broadcastToolPresence, clearToolPresence, startToolHeartbeat } from "../presence.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
+import { socketRequestWithAck } from "../../socket.js";
 
 /**
  * Interactive tool to place tokens on the map with visual preview.
@@ -64,6 +65,7 @@ export function placeToken(options = {})
             elevation = null,
             los: optLos = null
         } = /** @type {any} */ (options);
+
         // range/count are `let` so the card can edit them live.
         let range = /** @type {any} */ (options).range ?? null;
         let count = /** @type {any} */ (options).count ?? 1;
@@ -72,6 +74,7 @@ export function placeToken(options = {})
 
         // Each entry: { actor, extraData, prototypeToken, texture }
         const actorEntries = [];
+
         if (Array.isArray(actorInput))
         {
             for (const item of actorInput)
@@ -125,6 +128,7 @@ export function placeToken(options = {})
         const getActiveEntry = () => actorEntries[activeActorIndex];
 
         const originToken = (origin?.document) ? origin : null;
+
         const originOffset = (!originToken && origin)
             ? pixelToOffset(origin.x, origin.y)
             : null;
@@ -152,6 +156,7 @@ export function placeToken(options = {})
                     hexagonalShape: getActiveEntry().prototypeToken?.hexagonalShape ?? 0,
                     name: "__laDeployRef"
                 }, { parent: canvas.scene });
+
                 refToken = {
                     document: refDoc,
                     w: protoWidth * gridSize,
@@ -168,15 +173,18 @@ export function placeToken(options = {})
         const placements = [];
 
         let inRangeSet = null;
+
         const rebuildRangePulse = () =>
         {
             const originForRange = originToken ?? (originOffset ? getHexCenter(originOffset.col, originOffset.row) : null);
+
             if (range === null || !origin || !originForRange)
             {
                 inRangeSet = null;
                 rangePulse.clear('interactive:placeToken');
                 return;
             }
+
             const losFilter = makePulseCellFilter(originToken ?? null, { los: losOn });
             inRangeSet = new Set(losFilter(getInRangeOffsets(originForRange, range, { includeSelf: true })));
             rangePulse.set('interactive:placeToken', {
@@ -184,6 +192,7 @@ export function placeToken(options = {})
                 build: () =>
                 {
                     let rangeHighlight;
+
                     if (originToken)
                     {
                         rangeHighlight = drawRangeHighlight(originToken, range, TG.rangeFill, 0.1, false, {
@@ -206,6 +215,7 @@ export function placeToken(options = {})
                         addGraphicsBelowTokens(highlightGraphics);
                         rangeHighlight = highlightGraphics;
                     }
+
                     const pulseGraphic = new PIXI.Graphics();
                     addGraphicsBelowTokens(pulseGraphic);
                     const originOffsetsForPulse = originToken ? getOccupiedOffsets(originToken) : [originOffset];
@@ -216,6 +226,7 @@ export function placeToken(options = {})
                 },
             });
         };
+
         rebuildRangePulse();
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
@@ -225,12 +236,15 @@ export function placeToken(options = {})
         let pendingElevationOffset = defaultElevation;
         let lastCursorOffset = null;
         let lastCursorColor = TG.inRange; // mirrors the live cursor's in-range/out-of-range colour
+
         const groundAt = (offset) =>
         {
             const terrainAPI = globalThis.terrainHeightTools;
             return terrainAPI ? (Number(getHexGroundElevation(offset.col, offset.row, terrainAPI)) || 0) : 0;
         };
+
         const elevAt = (offset) => (autoElevation ? groundAt(offset) : 0) + pendingElevationOffset;
+
         const cursorElevLabel = makeText('', {
             fontFamily: 'Arial',
             fontSize: Math.max(14, canvas.grid.size * 0.22),
@@ -239,10 +253,13 @@ export function placeToken(options = {})
             strokeThickness: gridLineWidth(4),
             fontWeight: 'bold',
         });
+
         cursorElevLabel.anchor.set(0.5);
         cursorElevLabel.visible = false;
+
         {
             const iso = getIsoProvider();
+
             if (iso)
             {
                 cursorElevLabel.rotation = iso.reverseRotation;
@@ -250,6 +267,7 @@ export function placeToken(options = {})
                 cursorElevLabel.scale.set(iso.counterScale, 1 / iso.counterScale);
             }
         }
+
         canvas.stage.addChild(cursorElevLabel).eventMode = 'none';
 
         const restoreTokenInteraction = suppressTokenInteraction();
@@ -260,10 +278,12 @@ export function placeToken(options = {})
                 return [{ col: centerCol, row: centerRow }];
 
             const center = getHexCenter(centerCol, centerRow);
+
             const overridePos = {
                 x: center.x - (protoWidth * gridSize / 2),
                 y: center.y - (protoHeight * gridSize / 2)
             };
+
             if (refToken)
                 return getOccupiedOffsets(refToken, overridePos);
             return [{ col: centerCol, row: centerRow }];
@@ -294,6 +314,7 @@ export function placeToken(options = {})
                 const snapped = snapTokenCenter(refToken, { x: tx, y: ty });
                 return pixelToOffset(snapped.x + refToken.w / 2, snapped.y + refToken.h / 2);
             }
+
             return pixelToOffset(tx, ty);
         };
 
@@ -312,6 +333,7 @@ export function placeToken(options = {})
         };
 
         let stopPresenceBeat = /** @type {null | (() => void)} */ (null);
+
         const doCleanup = () =>
         {
             if (stopPresenceBeat)
@@ -334,6 +356,7 @@ export function placeToken(options = {})
         {
             if (!cardEl)
                 return;
+
             const warnings = {};
             placements.forEach((placement, idx) =>
             {
@@ -372,10 +395,12 @@ export function placeToken(options = {})
         {
             const spawnedTokens = [];
             const allTokenData = [];
+
             for (const p of placements)
             {
                 const entry = actorEntries[p.actorIndex ?? 0];
                 const pos = getSpawnPosition(p.col, p.row);
+
                 const tokenData = foundry.utils.mergeObject(
                     foundry.utils.deepClone(entry.prototypeToken || {}),
                     entry.extraData || {}
@@ -383,6 +408,7 @@ export function placeToken(options = {})
 
                 if (disposition !== null)
                     tokenData.disposition = disposition;
+
                 if (team !== null)
                 {
                     tokenData.flags = tokenData.flags || {};
@@ -399,37 +425,21 @@ export function placeToken(options = {})
             }
 
             let createdIds;
+
             if (game.user.isGM)
             {
                 const created = await canvas.scene.createEmbeddedDocuments("Token", allTokenData);
                 createdIds = created.map(doc => doc.id);
             }
             else
-            {
-                const requestId = foundry.utils.randomID();
-                game.socket.emit('module.lancer-automations', {
-                    action: "createTokens",
-                    payload: { tokenDataArray: allTokenData, sceneId: canvas.scene.id, requestId }
-                });
-                createdIds = await new Promise((resolve) =>
-                {
-                    const handler = (data) =>
-                    {
-                        if (data.action === 'createTokensResponse' && data.payload.requestId === requestId)
-                        {
-                            game.socket.off('module.lancer-automations', handler);
-                            resolve(data.payload.tokenIds);
-                        }
-                    };
-                    game.socket.on('module.lancer-automations', handler);
-                });
-            }
+                createdIds = (await socketRequestWithAck('createTokens', { tokenDataArray: allTokenData, sceneId: canvas.scene.id }, { timeoutMs: 15000 })) ?? [];
 
             for (let i = 0; i < createdIds.length; i++)
             {
                 const id = createdIds[i];
                 const entry = actorEntries[placements[i]?.actorIndex ?? 0];
                 const doc = canvas.scene.tokens.get(id);
+
                 if (doc)
                 {
                     spawnedTokens.push(doc);
@@ -437,6 +447,7 @@ export function placeToken(options = {})
                     if (globalThis.Sequencer)
                     {
                         const tokenObj = canvas.tokens.get(id);
+
                         if (tokenObj)
                         {
                             new Sequence()
@@ -494,12 +505,14 @@ export function placeToken(options = {})
             onCountChange: (newCount) =>
             {
                 count = newCount;
+
                 if (count !== -1 && placements.length > count)
                 {
                     const removed = placements.splice(0, placements.length - count);
                     for (const placement of removed)
                         destroyGraphics(placement.graphics);
                 }
+
                 refreshCard();
                 broadcastToolPresence('placeToken', presenceData());
             },
@@ -521,6 +534,7 @@ export function placeToken(options = {})
             container.addChild(graphics);
 
             const center = getHexCenter(centerCol, centerRow);
+
             const label = makeText(elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`, {
                 fontFamily: 'Arial',
                 fontSize: Math.max(14, gridSize * 0.22),
@@ -529,16 +543,19 @@ export function placeToken(options = {})
                 strokeThickness: gridLineWidth(4),
                 fontWeight: 'bold'
             });
+
             label.anchor.set(0.5);
             label.x = center.x;
             label.y = center.y - gridSize * 0.45;
             const iso = getIsoProvider();
+
             if (iso)
             {
                 label.rotation = iso.reverseRotation;
                 label.skew.set(iso.reverseSkewX, iso.reverseSkewY);
                 label.scale.set(iso.counterScale, 1 / iso.counterScale);
             }
+
             container.addChild(label);
             container._labelText = label;
 
@@ -547,22 +564,27 @@ export function placeToken(options = {})
         };
 
         const formatElevation = (elev) => elev > 0 ? `↑ ${elev}` : elev < 0 ? `↓ ${-elev}` : `↕ 0`;
+
         // Presence: live cursor footprint (blue) + placed markers (yellow) + elevation labels.
         const presenceData = () =>
         {
             const placedCells = placements.flatMap(placement => getProtoOffsets(placement.col, placement.row).map(offset => `${offset.col},${offset.row}`));
+
             const labels = placements.map(p =>
             {
                 const center = getHexCenter(p.col, p.row);
                 return { x: center.x, y: center.y - gridSize * 0.45, text: formatElevation(p.elevation) };
             });
+
             const cells = lastCursorOffset
                 ? getProtoOffsets(lastCursorOffset.col, lastCursorOffset.row).map(offset => `${offset.col},${offset.row}`)
                 : [];
+
             if (cursorElevLabel.visible)
                 labels.push({ x: cursorElevLabel.x, y: cursorElevLabel.y, text: cursorElevLabel.text });
             return { cells, placedCells, labels, tokens: [], placedColor: 0xff6400, cellColor: lastCursorColor, relatedToken: originToken };
         };
+
         const drawCursorAt = (offset) =>
         {
             const inRange = checkInRange(offset.col, offset.row);
@@ -599,6 +621,7 @@ export function placeToken(options = {})
             // Re-placing on the same cell is a no-op; at the count cap, recycle the oldest marker (FIFO).
             if (placements.some(placement => placement.col === cursorOffset.col && placement.row === cursorOffset.row))
                 return;
+
             if (count !== -1 && placements.length >= count)
             {
                 const oldest = placements.shift();
@@ -626,6 +649,7 @@ export function placeToken(options = {})
 
         const ascendKeys = keyCodesFor('elevationUp');
         const descendKeys = keyCodesFor('elevationDown');
+
         const keyHandler = (event) =>
         {
             if (event.key === "Escape")
@@ -635,6 +659,7 @@ export function placeToken(options = {})
                 resolve(null);
                 return;
             }
+
             let step = 0;
             if (ascendKeys.has(event.code))
                 step = 1;
@@ -661,8 +686,10 @@ export function placeToken(options = {})
             }
             catch
             { /* */ }
+
             resolve(null);
         });
+
         session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
         stopPresenceBeat = startToolHeartbeat('placeToken', presenceData);
     }), _title);

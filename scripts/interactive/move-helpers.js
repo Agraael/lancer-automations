@@ -9,6 +9,7 @@ import { awaitMovementSettled } from "../movement/move-api.js";
 
 // Footprint + polyline trace for a move; broadcasts to other clients unless suppressed.
 let _moveTraceSeq = 0;
+
 export function drawMovementTrace(token, originalEndPos, newEndPos = null, { suppressBroadcast = false, path = null, newPath = null } = {})
 {
     const trace = new PIXI.Graphics();
@@ -21,11 +22,13 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
         const points = [{ x: centerStart.x, y: centerStart.y }];
         for (const pathWp of Array.isArray(pathWps) ? pathWps : [])
             points.push({ x: pathWp.x + token.w / 2, y: pathWp.y + token.h / 2 });
+
         const last = points.at(-1);
         if (Math.round(last.x) !== Math.round(targetCenter.x) || Math.round(last.y) !== Math.round(targetCenter.y))
             points.push(targetCenter);
         return points;
     };
+
     const drawPolyline = (points) =>
     {
         trace.moveTo(points[0].x, points[0].y);
@@ -38,6 +41,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
         trace.lineStyle(gridLineWidth(3), lineColor, 0.8);
         trace.beginFill(fillColor, 0.3);
         const offsets = getOccupiedOffsets(token, { x: targetX, y: targetY });
+
         for (const cellOffset of offsets)
         {
             if (isHexGrid())
@@ -48,6 +52,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
                 trace.drawRect(cellCenter.x - gridSize / 2, cellCenter.y - gridSize / 2, gridSize, gridSize);
             }
         }
+
         trace.endFill();
     };
 
@@ -62,6 +67,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
     drawPolyline(originalPoints);
 
     let newPoints = null;
+
     if (newEndPos)
     {
         const centerNew = { x: newEndPos.x + token.w/2, y: newEndPos.y + token.h/2 };
@@ -86,6 +92,7 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
             traceLines.push({ x1: originalPoints[pointIdx - 1].x, y1: originalPoints[pointIdx - 1].y, x2: originalPoints[pointIdx].x, y2: originalPoints[pointIdx].y });
         for (let pointIdx = 1; pointIdx < (newPoints?.length ?? 0); pointIdx++)
             traceLines.push({ x1: newPoints[pointIdx - 1].x, y1: newPoints[pointIdx - 1].y, x2: newPoints[pointIdx].x, y2: newPoints[pointIdx].y });
+
         const tracePresence = {
             originCells: startCells,
             cells: origCells,
@@ -97,10 +104,12 @@ export function drawMovementTrace(token, originalEndPos, newEndPos = null, { sup
             lineColor: TG.traceLine,
             relatedToken: token,
         };
+
         broadcastToolPresence(kind, tracePresence);
         let destroyed = false; // guard a heartbeat tick that fires after destroy
         const stopTraceBeat = startToolHeartbeat(kind, () => destroyed ? null : tracePresence);
         const origDestroy = trace.destroy.bind(trace);
+
         trace.destroy = (...args) =>
         {
             destroyed = true;
@@ -123,21 +132,28 @@ export function cancelRulerDrag(token, _moveInfo = null)
 {
     const doc = token?.document;
     const history = doc?._source?._movementHistory;
+
     if (!Array.isArray(history) || history.length === 0)
         return;
+
     const currentX = doc.x, currentY = doc.y;
     let lastValidIdx = -1;
+
     for (let idx = history.length - 1; idx >= 0; idx--)
     {
         const waypoint = history[idx];
+
         if (Math.abs((waypoint.x ?? 0) - currentX) < 2 && Math.abs((waypoint.y ?? 0) - currentY) < 2)
         {
             lastValidIdx = idx; break;
         }
     }
+
     if (lastValidIdx === history.length - 1)
         return;
+
     const trimmed = history.slice(0, lastValidIdx + 1);
+
     try
     {
         doc.update({ _movementHistory: trimmed }, { diff: false });
@@ -191,19 +207,23 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
         const dest = { x: updateData.x, y: updateData.y };
         if (!asVoluntary)
             dest.action = 'forced';
+
         if (typeof updateData.elevation === 'number')
             dest.elevation = updateData.elevation; // chosen in the picker (auto-ground + Q/E offset)
         else if (setElevation && terrainAPI)
         {
             let maxHeight = 0;
+
             for (const cellOffset of getOccupiedOffsets(token, dest))
             {
-                const cellHeight = getHexGroundElevation(cellOffset.col, cellOffset.row, terrainAPI);
+                const cellHeight = getHexGroundElevation(cellOffset.col, cellOffset.row, terrainAPI, { excludeTokenId: token.id });
                 if (cellHeight > maxHeight)
                     maxHeight = cellHeight;
             }
+
             dest.elevation = maxHeight;
         }
+
         const legs = movePathLegs(updateData.waypoints, dest).map(leg => ({
             snapped: true,
             explicit: true,
@@ -211,6 +231,7 @@ export async function applyKnockbackMoves(moveList, triggeringToken, distance, a
             ...leg,
             ...((!asVoluntary && !leg.action) ? { action: 'forced' } : {})
         }));
+
         if (!asVoluntary)
             Hooks.callAll('lancer-automations.battelog.knockbackSource', { tokenId: token.id, sourceId: triggeringToken?.id });
         await _rulerMove(token, legs.length === 1 ? legs[0] : legs, extraOpts);

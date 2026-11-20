@@ -26,7 +26,6 @@ export const CHANGED_DEFAULTS = [
     ['autoDamageApply', false],
     ['autoStructFollowup', false],
     ['enableKnockbackFlow', false],
-    ['enableThrowFlow', false],
     ['enableOneStructNpc', false],
     ['enablePerRoundTurnTags', false],
     ['resistSelfHeat', false],
@@ -48,8 +47,10 @@ export const CHANGED_DEFAULTS = [
     ['autoFocusCheck', false],
     ['autoFocusActivation', false],
     ['tah.narrativeMode', false],
-    ['tah.portrait.mode', 'off'],
-    ['tah.portrait.scope', 'mechPilot'],
+    ['tah.portrait.mech', 'off'],
+    ['tah.portrait.pilot', 'off'],
+    ['tah.portrait.npc', 'off'],
+    ['tah.portrait.deployable', 'off'],
     ['tah.maxColumnItems', 0],
     ['tah.wheelRadiusOffset', 0],
     ['rangePulseLineWidth', 1],
@@ -64,6 +65,9 @@ export const CHANGED_DEFAULTS = [
     ['guardianBulwarkAuraMode', 'always'],
     ['consumeReaction', false],
     ['combatCarousel', false],
+    ['visionAnimationThrottleFps', 0],
+    ['dragVisionRefreshFps', 10],
+    ['tacticalDistanceThrottleFps', 10],
 ];
 
 export const pinnedThisLoad = new Set();
@@ -78,7 +82,9 @@ async function _pinOldDefaults(scope)
 {
     if (!_priorInstall())
         return;
+
     const gmDefaults = new Set((getModuleSetting('gmClientDefaults') ?? []).map(entry => entry?.key));
+
     for (const [key, oldValue] of CHANGED_DEFAULTS)
     {
         const setting = game.settings.settings.get(/** @type {any} */ (`${MODULE_ID}.${key}`));
@@ -102,9 +108,11 @@ function _storedValue(key, scope = 'world')
 {
     if (scope !== 'client')
         return game.settings.storage.get('world')?.getSetting(`${MODULE_ID}.${key}`)?.value;
+
     const raw = globalThis.localStorage.getItem(`${MODULE_ID}.${key}`);
     if (raw === null)
         return undefined;
+
     try
     {
         return JSON.parse(raw);
@@ -115,6 +123,57 @@ function _storedValue(key, scope = 'world')
     }
 }
 
+async function _reshapeStoredBonuses()
+{
+    const keys = ['global_bonuses', 'constant_bonuses', 'ephemeral_bonuses', 'bonusTemplates'];
+
+    const reshape = (entry, key) => (key === 'bonusTemplates' && entry?.bonusData
+        ? { ...entry, bonusData: normalizeBonusShape(entry.bonusData) }
+        : normalizeBonusShape(entry));
+
+    const migrateDoc = async (doc) =>
+    {
+        for (const key of keys)
+        {
+            const list = getLAFlag(doc, key);
+            if (!Array.isArray(list))
+                continue;
+
+            const next = list.map(entry => reshape(entry, key));
+
+            const changed = next.some((entry, index) => (key === 'bonusTemplates'
+                ? entry.bonusData !== list[index]?.bonusData
+                : entry !== list[index]));
+
+            if (changed)
+                await setLAFlag(doc, key, next);
+        }
+    };
+
+    const migrateActor = async (actor) =>
+    {
+        await migrateDoc(actor);
+        for (const item of actor?.items ?? [])
+            await migrateDoc(item);
+    };
+
+    for (const actor of game.actors)
+        await migrateActor(actor);
+    for (const item of game.items)
+        await migrateDoc(item);
+
+    for (const scene of game.scenes)
+    {
+        for (const tokenDoc of scene.tokens)
+        {
+            if (!tokenDoc.actorLink && tokenDoc.actor)
+                await migrateActor(tokenDoc.actor);
+        }
+    }
+
+    Hooks.callAll('lancer-automations.clearCaches');
+}
+
 const MIGRATIONS = [
     {
         // keep pre-4.0 Overwatch notify on for worlds that never saved a choice
@@ -123,8 +182,10 @@ const MIGRATIONS = [
         {
             const priorInstall = game.settings.storage.get('world')?.contents
                 ?.some(setting => setting.key?.startsWith(`${MODULE_ID}.`));
+
             if (!priorInstall)
                 return;
+
             const saved = getModuleSetting('generalReactions') || {};
             if (saved.Overwatch?.reactions?.some(sub => sub?.enabled !== undefined))
                 return;
@@ -170,64 +231,61 @@ const MIGRATIONS = [
             {
                 const saved = foundry.utils.deepClone(getModuleSetting(key) || {});
                 let changed = false;
+
                 for (const entry of Object.values(saved))
                 {
-                    for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
+                    for (const automation of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
                     {
-                        if (!Array.isArray(reaction?.triggers) || !reaction.triggers.includes('onInvoluntaryMove'))
+                        if (!Array.isArray(automation?.triggers) || !automation.triggers.includes('onInvoluntaryMove'))
                             continue;
-                        reaction.triggers = reaction.triggers.map(trigger => (trigger === 'onInvoluntaryMove' ? 'onPreInvoluntaryMove' : trigger));
+                        automation.triggers = automation.triggers.map(trigger => (trigger === 'onInvoluntaryMove' ? 'onPreInvoluntaryMove' : trigger));
                         changed = true;
                     }
                 }
+
                 if (changed)
                     await game.settings.set(MODULE_ID, key, saved);
             }
+
             Hooks.callAll('lancer-automations.clearCaches');
         },
     },
     {
         id: 'defenseBonusTypes_v1',
+        run: _reshapeStoredBonuses,
+    },
+    {
+        id: 'movementBonusTypes_v1',
+        run: _reshapeStoredBonuses,
+    },
+    {
+        id: 'effectGrantedActions_v1',
         async run()
         {
-            const keys = ['global_bonuses', 'constant_bonuses', 'ephemeral_bonuses', 'bonusTemplates'];
-            const reshape = (entry, key) => (key === 'bonusTemplates' && entry?.bonusData
-                ? { ...entry, bonusData: normalizeBonusShape(entry.bonusData) }
-                : normalizeBonusShape(entry));
-            const migrateDoc = async (doc) =>
+            const names = new Set(["Break Free (Sealant)", "Fall Prone (Sniper's Mark)", "Break Free (Rift)"]);
+
+            const sweep = async (actor) =>
             {
-                for (const key of keys)
-                {
-                    const list = getLAFlag(doc, key);
-                    if (!Array.isArray(list))
-                        continue;
-                    const next = list.map(entry => reshape(entry, key));
-                    const changed = next.some((entry, index) => (key === 'bonusTemplates'
-                        ? entry.bonusData !== list[index]?.bonusData
-                        : entry !== list[index]));
-                    if (changed)
-                        await setLAFlag(doc, key, next);
-                }
+                const list = getLAFlag(actor, 'extraActions');
+                if (!Array.isArray(list))
+                    return;
+
+                const kept = list.filter(action => action?._addedViaExtrasUI || !names.has(action?.name));
+                if (kept.length !== list.length)
+                    await setLAFlag(actor, 'extraActions', kept);
             };
-            const migrateActor = async (actor) =>
-            {
-                await migrateDoc(actor);
-                for (const item of actor?.items ?? [])
-                    await migrateDoc(item);
-            };
+
             for (const actor of game.actors)
-                await migrateActor(actor);
-            for (const item of game.items)
-                await migrateDoc(item);
+                await sweep(actor);
+
             for (const scene of game.scenes)
             {
                 for (const tokenDoc of scene.tokens)
                 {
                     if (!tokenDoc.actorLink && tokenDoc.actor)
-                        await migrateActor(tokenDoc.actor);
+                        await sweep(tokenDoc.actor);
                 }
             }
-            Hooks.callAll('lancer-automations.clearCaches');
         },
     },
     {
@@ -235,6 +293,7 @@ const MIGRATIONS = [
         run()
         {
             const keys = ['tah.showDisposition'];
+
             for (const key of keys)
             {
                 try
@@ -242,8 +301,10 @@ const MIGRATIONS = [
                     const raw = globalThis.localStorage.getItem(`${MODULE_ID}.${key}`);
                     if (raw === null)
                         continue;
+
                     const value = JSON.parse(raw);
                     const def = game.settings.settings.get(`${MODULE_ID}.${key}`)?.default;
+
                     if (value === def)
                         continue;
                     game.settings.set(MODULE_ID, key, value);
@@ -267,6 +328,7 @@ const MIGRATIONS = [
         {
             const enabled = _storedValue('tokenGroundShadow') === true;
             const opacity = _storedValue('tokenGroundShadowOpacity');
+
             if (enabled && opacity === undefined)
                 await game.settings.set(MODULE_ID, 'tokenGroundShadowOpacity', 0.55);
             else if (!enabled && opacity !== undefined && Number(opacity) !== 0)
@@ -280,6 +342,7 @@ const MIGRATIONS = [
         {
             const ruler = _storedValue('rulerToolCursor', 'client') ?? true;
             const target = _storedValue('targetToolCursor', 'client') ?? true;
+
             if (!ruler && target)
                 await game.settings.set(MODULE_ID, 'rulerToolCursor', true);
         },
@@ -300,6 +363,7 @@ const MIGRATIONS = [
             const stored = _storedValue('enableBoostOffer');
             if (stored === 'yes' || stored === 'auto' || stored === true)
                 return;
+
             const next = _storedValue('enableMovementCapDetection') === true ? 'stop' : 'off';
             if (stored !== undefined || next !== 'off')
                 await game.settings.set(MODULE_ID, 'enableBoostOffer', next);
@@ -343,6 +407,7 @@ const MIGRATIONS = [
         {
             if (!_priorInstall())
                 return;
+
             let mode = 'auto';
             if ((_storedValue('enableAttackTargeting') ?? true) === false)
                 mode = 'off';
@@ -357,6 +422,7 @@ const MIGRATIONS = [
         {
             if (!_priorInstall())
                 return;
+
             let mode = 'nobody';
             if (_storedValue('revealStatsWithoutScan') === true)
                 mode = 'everyone';
@@ -374,6 +440,7 @@ const MIGRATIONS = [
         {
             if (!_priorInstall())
                 return;
+
             let placement = 'token';
             if (_storedValue('tokenStatHintDocked', 'client') === true)
                 placement = 'docked';
@@ -399,6 +466,7 @@ const MIGRATIONS = [
         {
             const hud = _storedValue('tah.uiScale', 'client');
             const toolbar = _storedValue('advMeasureScale', 'client');
+
             if ((hud === undefined || Number(hud) === 1) && toolbar !== undefined && Number(toolbar) !== 1)
                 await game.settings.set(MODULE_ID, 'tah.uiScale', Number(toolbar));
         },
@@ -418,6 +486,28 @@ const MIGRATIONS = [
             await _pinOldDefaults('client');
         },
     },
+    {
+        id: 'tahPortraitPerType_v1',
+        scope: 'client',
+        async run()
+        {
+            const mode = _storedValue('tah.portrait.mode', 'client');
+            const scope = _storedValue('tah.portrait.scope', 'client');
+
+            if (mode === undefined && scope === undefined)
+                return;
+
+            const shared = mode ?? 'token';
+            const others = (scope ?? 'all') === 'mechPilot' ? 'off' : shared;
+            const values = { mech: shared, pilot: shared, npc: others, deployable: others };
+            for (const [type, value] of Object.entries(values))
+                await game.settings.set(MODULE_ID, `tah.portrait.${type}`, value);
+
+            const reviewed = getModuleSetting('reviewedDefaultKeys') ?? [];
+            if (reviewed.includes('tah.portrait.mode') || reviewed.includes('tah.portrait.scope'))
+                await game.settings.set(MODULE_ID, 'reviewedDefaultKeys', [...new Set([...reviewed, ...Object.keys(values).map(type => `tah.portrait.${type}`)])]);
+        },
+    },
 ];
 
 Hooks.once('init', () =>
@@ -431,6 +521,7 @@ Hooks.once('init', () =>
             default: false,
         });
     }
+
     game.settings.register(MODULE_ID, SETTING_INSTALL_STATE, { scope: 'world', config: false, type: String, default: '' });
 });
 
@@ -440,12 +531,14 @@ Hooks.once('ready', async () =>
     await new Promise(resolve => globalThis.setTimeout(resolve, 0));
     if (executor && !getModuleSetting(SETTING_INSTALL_STATE))
         await game.settings.set(MODULE_ID, SETTING_INSTALL_STATE, isFreshWorld() ? 'fresh' : 'prior');
+
     for (const m of MIGRATIONS)
     {
         if ((m.scope ?? 'world') === 'world' && !executor)
             continue;
         if (getModuleSetting(m.id))
             continue;
+
         try
         {
             await m.run();
@@ -455,8 +548,10 @@ Hooks.once('ready', async () =>
             console.error(`lancer-automations | migration "${m.id}" failed`, e);
             continue;
         }
+
         await game.settings.set(MODULE_ID, m.id, true);
     }
+
     _resolveMigrations();
 });
 

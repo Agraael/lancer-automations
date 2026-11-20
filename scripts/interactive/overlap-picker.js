@@ -12,6 +12,7 @@ function overlappingTokens(token)
     const width = token.document.width;
     const height = token.document.height;
     const overlapping = [];
+
     for (const tok of canvas.tokens.placeables)
     {
         if (!tok.document)
@@ -24,6 +25,7 @@ function overlappingTokens(token)
             continue;
         overlapping.push(tok);
     }
+
     return overlapping;
 }
 
@@ -35,36 +37,44 @@ Hooks.once('init', () =>
     {
         if (game.activeTool === 'target')
             return wrapped(event);
+
         const enabled = !!getModuleSetting('overlapTokenPicker');
         if (!enabled)
             return wrapped(event);
+
         const stack = overlappingTokens(this);
         if (stack.length <= 1)
             return wrapped(event);
+
         const result = wrapped(event);
         const shift = !!event.shiftKey;
         const originalEvent = event?.data?.originalEvent;
         const startX = originalEvent?.clientX ?? 0;
         const startY = originalEvent?.clientY ?? 0;
+
         const closePicker = showOverlapStackPicker(stack, startX + 10, startY + 10, {
             isSelected: (t) => t.controlled,
             onPick: (t) => t.control({ releaseOthers: !shift })
         });
+
         const cleanup = () =>
         {
             globalThis.removeEventListener('pointermove', moveHandler, true);
             globalThis.removeEventListener('pointerup', upHandler, true);
         };
+
         const moveHandler = (e) =>
         {
             const dx = (e.clientX ?? 0) - startX;
             const dy = (e.clientY ?? 0) - startY;
+
             if (Math.hypot(dx, dy) > 6)
             {
                 closePicker();
                 cleanup();
             }
         };
+
         const upHandler = () => cleanup();
         globalThis.addEventListener('pointermove', moveHandler, true);
         globalThis.addEventListener('pointerup', upHandler, true);

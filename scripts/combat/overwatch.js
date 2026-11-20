@@ -6,7 +6,7 @@ import {
     getOccupiedOffsets, getOccupiedCenters, getMinGridDistance,
     measureGridDistance, pixelToOffset, isPositionInRange
 } from "./grid-helpers.js";
-import { hasReactionAvailable, getActorMaxThreat } from "../tools/misc-tools.js";
+import { hasReactionAvailable, getActorMaxThreat, isExecutorGM, hasExecutorGM } from "../tools/misc-tools.js";
 import { tfGetDisposition } from "../tools/token-factions-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
@@ -24,9 +24,11 @@ function getDispositionData(tokenA, tokenB)
     const factionDisposition = tfGetDisposition(tokenA, tokenB);
     if (factionDisposition !== null)
         return factionDisposition;
+
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
     const dispA = tokenA.document.disposition;
     const dispB = tokenB.document.disposition;
+
     if (dispA !== HOSTILE && dispA !== SECRET)
         return dispB;
     if (dispB === FRIENDLY)
@@ -170,6 +172,7 @@ export async function checkOverwatch(token, distance, elevation, startPos, endPo
         for (const reactor of triggeredReactors)
         {
             const owners = game.users.filter(user => user.active && reactor.document.testUserPermission(user, "OWNER"));
+
             for (const user of owners)
             {
                 if (!ownerMap[user.id])
@@ -250,6 +253,7 @@ export function displayOverwatch(reactors, target)
                 {
                     const tokenId = event.currentTarget.dataset.tokenId;
                     const token = canvas.tokens.get(tokenId);
+
                     if (token)
                     {
                         token.control({ releaseOthers: true });
@@ -304,6 +308,7 @@ export async function drawThreatDebug(token)
         footprintSet.add(`${footprintCube.col},${footprintCube.row}`);
 
         const inRange = getHexesInRange(footprintCube, maxThreat);
+
         for (const cube of inRange)
         {
             const offset = cubeToOffset(cube);
@@ -335,11 +340,13 @@ export async function drawThreatDebug(token)
 
     canvas.controls.debug.lineStyle(0);
     canvas.controls.debug.beginFill(0xFF0000, 1);
+
     for (const footprintCube of footprintCubes)
     {
         const center = getHexCenter(footprintCube.col, footprintCube.row);
         canvas.controls.debug.drawCircle(center.x, center.y, 5);
     }
+
     canvas.controls.debug.endFill();
 }
 
@@ -375,10 +382,12 @@ export async function drawDistanceDebug()
         for (const offset1 of token1Offsets)
         {
             const cube1 = offsetToCube(offset1.col, offset1.row);
+
             for (const offset2 of token2Offsets)
             {
                 const cube2 = offsetToCube(offset2.col, offset2.row);
                 const hexDistance = cubeDistance(cube1, cube2);
+
                 if (hexDistance < closestPair.dist)
                 {
                     closestPair = {
@@ -394,6 +403,7 @@ export async function drawDistanceDebug()
     {
         const token1Centers = getOccupiedCenters(token1);
         const token2Centers = getOccupiedCenters(token2);
+
         for (const center1 of token1Centers)
         {
             for (const center2 of token2Centers)
@@ -403,6 +413,7 @@ export async function drawDistanceDebug()
                     closestPair = { nearCenter1: center1, nearCenter2: center2, dist: pixelDistance };
             }
         }
+
         closestPair.dist = Math.round(closestPair.dist / canvas.scene.grid.distance);
     }
 
@@ -410,6 +421,7 @@ export async function drawDistanceDebug()
 
     canvas.controls.debug.lineStyle(2, 0x0066FF, 0.5);
     canvas.controls.debug.beginFill(0x0066FF, 0.15);
+
     for (const offset of token1Offsets)
     {
         if (isHexGrid())
@@ -420,10 +432,12 @@ export async function drawDistanceDebug()
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
     }
+
     canvas.controls.debug.endFill();
 
     canvas.controls.debug.lineStyle(2, 0xFF6600, 0.5);
     canvas.controls.debug.beginFill(0xFF6600, 0.15);
+
     for (const offset of token2Offsets)
     {
         if (isHexGrid())
@@ -434,6 +448,7 @@ export async function drawDistanceDebug()
             canvas.controls.debug.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
     }
+
     canvas.controls.debug.endFill();
 
     if (closestPair.nearCenter1 && closestPair.nearCenter2)
@@ -463,35 +478,43 @@ export function canProvokeReaction(triggering, reactor, reasonOut = null)
         return true;
     if (triggering.id === reactor.id)
         return true;
+
     const api = game.modules.get(MODULE_ID)?.api;
+
     const hasStatus = (token, statusId) =>
     {
         if (api?.findEffectOnToken && api.findEffectOnToken(token, statusId))
             return true;
         return !!token.actor?.effects?.some(effect => effect.statuses?.has(statusId) && !effect.disabled);
     };
+
     const hasProvokeImmunity = (token, other) =>
         !!api?.getGateImmunityBonuses && api.getGateImmunityBonuses(token.actor, "provoke", { ownerToken: token, otherToken: other }).length > 0;
+
     if (hasStatus(triggering, "hidden"))
     {
         reasonOut?.push('hidden');
         return false;
     }
+
     if (hasStatus(triggering, "disengage"))
     {
         reasonOut?.push('disengage');
         return false;
     }
+
     if (hasProvokeImmunity(triggering, reactor))
     {
         reasonOut?.push('provoke_immunity');
         return false;
     }
+
     if (hasStatus(triggering, "intangible") && !hasStatus(reactor, "intangible"))
     {
         reasonOut?.push('intangible');
         return false;
     }
+
     return true;
 }
 
@@ -536,6 +559,7 @@ export function canEngage(token1, token2)
 
     const hasProvokeImmunity = (token, other) =>
         !!api?.getGateImmunityBonuses && api.getGateImmunityBonuses(token.actor, "provoke", { ownerToken: token, otherToken: other }).length > 0;
+
     if (hasProvokeImmunity(token1, token2) || hasProvokeImmunity(token2, token1))
         return false;
 
@@ -554,6 +578,7 @@ function hasEngagedStatus(token)
 {
     if (!token?.actor)
         return false;
+
     const api = game.modules.get(MODULE_ID)?.api;
     if (api?.findEffectOnToken && api.findEffectOnToken(token, 'engaged'))
         return true;
@@ -587,17 +612,21 @@ function _originDistance(origin, token, includeElevation)
 {
     if (!_isPoint(origin))
         return getMinGridDistance(origin, token, null, includeElevation);
+
     const originOffset = pixelToOffset(origin.x, origin.y);
     const originCube = isHexGrid() ? offsetToCube(originOffset.col, originOffset.row) : null;
     let minDist = Infinity;
+
     for (const offset of getOccupiedOffsets(token))
     {
         const dist = originCube
             ? cubeDistance(originCube, offsetToCube(offset.col, offset.row))
             : Math.max(Math.abs(offset.col - originOffset.col), Math.abs(offset.row - originOffset.row));
+
         if (dist < minDist)
             minDist = dist;
     }
+
     return minDist;
 }
 
@@ -621,6 +650,7 @@ export function getTokensInRange(origin, options = {})
 {
     if (!origin)
         return [];
+
     const {
         range = 1,
         disposition = null,
@@ -634,6 +664,7 @@ export function getTokensInRange(origin, options = {})
     } = /** @type {any} */ (options);
 
     const fromPoint = _isPoint(origin);
+
     const maxRange = range === 'sensors'
         ? (/** @type {any} */ (origin).actor?.system?.sensor_range ?? 10)
         : Number(range);
@@ -651,6 +682,7 @@ export function getTokensInRange(origin, options = {})
                 return false;
             if (!includeDefeated && (token.actor.system?.structure?.value === 0 || token.actor.system?.stress?.value === 0))
                 return false;
+
             if (!fromPoint)
             {
                 if (disposition === 'friendly' && !isFriendly(origin, token))
@@ -660,9 +692,11 @@ export function getTokensInRange(origin, options = {})
                 if (engageable && !canEngage(origin, token))
                     return false;
             }
+
             const inRange = fromPoint
                 ? isPositionInRange(origin, token, maxRange)
                 : getMinGridDistance(origin, token, null, includeElevation) <= maxRange;
+
             if (!inRange)
                 return false;
             return !filter || filter(token);
@@ -675,14 +709,19 @@ export function getTokensInRange(origin, options = {})
 export async function updateAllEngagements(options = {})
 {
     if (!game.user.isGM)
+    {
+        if (hasExecutorGM())
+            game.socket.emit(`module.${MODULE_ID}`, { action: 'updateAllEngagements', payload: { options } });
         return;
+    }
 
     const api = game.modules.get(MODULE_ID)?.api;
 
-    if (!api)
+    if (!api || !(options.combatStarting || game.combat?.started))
         return;
 
     const excludeId = options.excludeTokenId;
+
     const allTokens = excludeId
         ? canvas.tokens.placeables.filter(token => token.id !== excludeId)
         : canvas.tokens.placeables;
@@ -738,6 +777,26 @@ export async function updateAllEngagements(options = {})
         }
     }
 }
+
+const isCombatOnCanvas = combat => !combat.scene || combat.scene.id === canvas.scene?.id;
+
+Hooks.on('combatStart', (combat) =>
+{
+    if (isExecutorGM() && isCombatOnCanvas(combat))
+        updateAllEngagements({ combatStarting: true });
+});
+
+Hooks.on('deleteCombat', async (combat) =>
+{
+    if (!isExecutorGM() || !combat.started || !isCombatOnCanvas(combat) || game.combat?.started)
+        return;
+
+    const api = game.modules.get(MODULE_ID)?.api;
+    const engaged = (canvas.tokens?.placeables ?? []).filter(token => !!api?.findEffectOnToken(token, 'engaged'));
+
+    if (engaged.length)
+        await api.removeEffectsByNameFromTokens({ tokens: engaged, effectNames: ['engaged'], notify: false });
+});
 
 export const OverwatchAPI = {
     drawThreatDebug,

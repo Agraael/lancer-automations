@@ -10,12 +10,18 @@ const RESTORE_FLAG = 'actionTrackerRestore';
 // brace / dazed: 1 quick action only (Lancer "prefer full, then quick" spend logic means
 // full=false + quick=true allows exactly one quick before quick flips to false).
 const ACTION_LIMITING_EFFECTS = [
-    { statusId: 'brace',                          locks: ['protocol', 'full', 'reaction'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
+    { statusId: 'brace',                          locks: ['protocol', 'full', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'dazed',                          locks: ['protocol', 'full', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
+    { statusId: 'stunned',                        locks: ['protocol', 'full', 'quick', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
+    { statusId: 'preparing',                      locks: ['protocol', 'full', 'quick', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)', 'Prepare'] },
     { statusId: 'DeadRings_statuses_staggered',   locks: ['protocol', 'reaction', 'free'], actionLocks: ['Overcharge', 'Overcharge (NPC)'] },
     { statusId: 'slow',                           locks: [],                              actionLocks: ['Boost'] },
+    { statusId: 'grappling',                      locks: [],                              actionLocks: ['Boost'] },
+    { statusId: 'grappled',                       locks: [],                              actionLocks: ['Boost'] },
 ];
+
 const ALL_LOCKABLE_FIELDS = ['protocol', 'full', 'quick', 'reaction', 'free'];
+const STUN_LEGAL_ACTIONS = new Set(['Mount', 'Dismount', 'Eject', 'Boot Up']);
 export const LIMITING_STATUS_IDS = new Set(ACTION_LIMITING_EFFECTS.map(e => e.statusId));
 
 export function isStaleStatusSource(source)
@@ -36,9 +42,9 @@ export function lockEntryLabel(entry)
     return String(entry?.reason || entry?.id || '');
 }
 
-function isOrdnanceWeapon(item)
+export function isOrdnanceWeapon(item)
 {
-    const tags = [...(item.system?.active_profile?.tags ?? []), ...(item.system?.all_base_tags ?? []), ...(item.system?.tags ?? [])];
+    const tags = [...(item?.system?.active_profile?.tags ?? []), ...(item?.system?.all_base_tags ?? []), ...(item?.system?.tags ?? [])];
     return tags.some(tag => tag?.lid === 'tg_ordnance');
 }
 
@@ -46,21 +52,25 @@ function getOrdnanceLocks(actor, actionName)
 {
     if (!actionName)
         return [];
+
     const weapon = actor?.items?.find(item => item.name === actionName && isOrdnanceWeapon(item));
     const token = actor?.token?.object ?? actor?.getActiveTokens?.()?.[0];
+
     if (!weapon || !token || !ordnanceWindowClosed(token))
         return [];
-    return [{ item: weapon, actionName, reason: localize('LA.tokenHud.ordnanceLocked'), kind: null }];
+    return [{ item: weapon, actionName, reason: localize('LA.tokenHud.ordnanceLocked'), kind: null, ordnance: true }];
 }
 
 // Item-held locks (actionLocks item flag), live only while the item is owned and active.
 export function getItemActionLocks(actor, actionName = null)
 {
     const out = [];
+
     for (const item of actor?.items ?? [])
     {
         if (item.system?.destroyed || item.system?.disabled)
             continue;
+
         for (const lock of (getLAFlag(item,'actionLocks') ?? []))
         {
             if (!lock?.actionName || (actionName && lock.actionName !== actionName))
@@ -68,6 +78,7 @@ export function getItemActionLocks(actor, actionName = null)
             out.push({ item, actionName: lock.actionName, reason: lock.reason ?? null, kind: lock.kind ?? null });
         }
     }
+
     return out;
 }
 
@@ -84,17 +95,21 @@ export function getItemActionTypeLocks(actor, actionName = null, activation = nu
 {
     if (!activation)
         return [];
+
     const out = [];
+
     for (const item of actor?.items ?? [])
     {
         if (item.system?.destroyed || item.system?.disabled)
             continue;
+
         for (const lock of (getLAFlag(item,'actionTypeLocks') ?? []))
         {
             if (typeLockApplies(lock, activation, actionName))
                 out.push({ item, actionName, activation, reason: lock.reason ?? null, kind: lock.kind ?? null });
         }
     }
+
     return out;
 }
 
@@ -103,8 +118,10 @@ export function getActorActionTypeLocks(actor, actionName = null, activation = n
 {
     if (!activation)
         return [];
+
     const byType = /** @type {Record<string,any[]>} */ (getLAFlag(actor,'lockedActionTypes')) ?? {};
     const out = [];
+
     for (const [type, entries] of Object.entries(byType))
     {
         for (const entry of (entries ?? []))
@@ -113,7 +130,15 @@ export function getActorActionTypeLocks(actor, actionName = null, activation = n
                 out.push(entry);
         }
     }
+
     return out;
+}
+
+export function isFieldLockExempt(actor, actionName, field)
+{
+    if (actionName === 'Stabilize' && actor?.statuses?.has('aided'))
+        return true;
+    return STUN_LEGAL_ACTIONS.has(actionName) && getFieldLockingStatuses(actor, field).every(statusId => statusId === 'stunned');
 }
 
 export function getFieldLockingStatuses(actor, field)
@@ -129,6 +154,7 @@ export function getFieldLockingStatuses(actor, field)
 const STATUS_DISABLING_ACTION = (() =>
 {
     const actionToStatuses = {};
+
     for (const { statusId, actionLocks } of ACTION_LIMITING_EFFECTS)
     {
         for (const name of (actionLocks ?? []))
@@ -138,6 +164,7 @@ const STATUS_DISABLING_ACTION = (() =>
             actionToStatuses[name].push(statusId);
         }
     }
+
     return actionToStatuses;
 })();
 
@@ -145,10 +172,12 @@ export function getActionLockInfo(actor, actionName, activation = null)
 {
     const statuses = (STATUS_DISABLING_ACTION[actionName] ?? []).filter(statusId => actor?.statuses?.has?.(statusId));
     const tracker = /** @type {any[]} */ ((getLAFlag(actor,'lockedActions') ?? {})[actionName] ?? []);
+
     const sources = [
         ...tracker.filter(entry => !isStaleStatusSource(lockEntryId(entry))),
         ...getActorActionTypeLocks(actor, actionName, activation)
     ];
+
     const itemLocks = [...getItemActionLocks(actor, actionName), ...getItemActionTypeLocks(actor, actionName, activation), ...getOrdnanceLocks(actor, actionName)];
     return { statuses, sources, itemLocks };
 }
@@ -158,6 +187,7 @@ export function isActionDisabledByStatus(actor, actionName)
     const statuses = STATUS_DISABLING_ACTION[actionName];
     if (!statuses)
         return false;
+
     const actorStatuses = actor?.statuses;
     if (!actorStatuses)
         return false;
@@ -172,6 +202,7 @@ function _hasStatus(actor, statusId)
 export function getStatusLockedFields(actor)
 {
     const locked = new Set();
+
     for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
     {
         if (!locks?.length || !_hasStatus(actor, statusId))
@@ -179,6 +210,7 @@ export function getStatusLockedFields(actor)
         for (const field of locks)
             locked.add(field);
     }
+
     return locked;
 }
 
@@ -187,7 +219,9 @@ export async function refreshActionLimits(token, { turnStart = false } = {})
     const actor = token?.actor;
     if (!actor)
         return;
+
     const lockedFields = new Set();
+
     for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
     {
         if (!locks?.length)
@@ -197,14 +231,17 @@ export async function refreshActionLimits(token, { turnStart = false } = {})
         for (const field of locks)
             lockedFields.add(field);
     }
+
     const prevRestore = getLAFlag(actor,RESTORE_FLAG) ?? {};
     const restore = { ...prevRestore };
     const tracker = actor.system?.action_tracker ?? {};
     const updates = {};
+
     for (const field of ALL_LOCKABLE_FIELDS)
     {
         const isLocked = lockedFields.has(field);
         const hadCapture = field in prevRestore;
+
         if (isLocked)
         {
             // First lock or turn-start re-capture records the current "natural" value.
@@ -220,6 +257,7 @@ export async function refreshActionLimits(token, { turnStart = false } = {})
             delete restore[field];
         }
     }
+
     const restoreChanged = !foundry.utils.objectsEqual(prevRestore, restore);
     if (restoreChanged && Object.keys(restore).length > 0)
         updates[`flags.${MODULE_ID}.${RESTORE_FLAG}`] = restore;
@@ -242,6 +280,7 @@ function _resolveActorToken(effect)
 {
     if (!isExecutorGM())
         return null;
+
     const actor = effect?.parent;
     if (!actor || actor.documentName !== 'Actor')
         return null;
@@ -252,22 +291,27 @@ async function _cleanupStaleStatusLocks()
 {
     if (!isExecutorGM())
         return;
+
     for (const actor of game.actors ?? [])
     {
         const locks = getLAFlag(actor,'lockedActions');
         if (!locks || typeof locks !== 'object')
             continue;
+
         const next = {};
         let changed = false;
+
         for (const [name, sources] of Object.entries(locks))
         {
             const sourcesArray = Array.isArray(sources) ? sources : [];
             const kept = sourcesArray.filter(source => !isStaleStatusSource(source));
+
             if (kept.length !== sourcesArray.length)
                 changed = true;
             if (kept.length)
                 next[name] = kept;
         }
+
         if (changed)
         {
             console.log(`lancer-automations | action-limits | cleanup:${actor.name} had stale status: locks`, locks, '→', next);
@@ -304,10 +348,13 @@ export function registerActionLimitsHooks()
             return;
         if (!isExecutorGM())
             return;
+
         const hasCapture = !!getLAFlag(actor,RESTORE_FLAG);
         const hasLimiting = ACTION_LIMITING_EFFECTS.some(e => e.locks?.length && _hasStatus(actor, e.statusId));
+
         if (!hasCapture && !hasLimiting)
             return;
+
         const token = _findTokenForActor(actor);
         if (token)
             await refreshActionLimits(token);
@@ -318,10 +365,13 @@ export function registerActionLimitsHooks()
     {
         if (options?._laActionLimits)
             return;
+
         const trackerChange = foundry.utils.getProperty(changes, 'system.action_tracker');
         if (!trackerChange)
             return;
+
         const lockedFields = new Set();
+
         for (const { statusId, locks } of ACTION_LIMITING_EFFECTS)
         {
             if (!locks?.length)
@@ -331,22 +381,28 @@ export function registerActionLimitsHooks()
             for (const field of locks)
                 lockedFields.add(field);
         }
+
         if (!lockedFields.size)
             return;
+
         const prevRestore = getLAFlag(actor,RESTORE_FLAG) ?? {};
         const restore = { ...prevRestore };
         let restoreChanged = false;
+
         for (const field of lockedFields)
         {
             if (!(field in trackerChange))
                 continue;
+
             if (restore[field] !== trackerChange[field])
             {
                 restore[field] = trackerChange[field];
                 restoreChanged = true;
             }
+
             trackerChange[field] = false;
         }
+
         if (restoreChanged)
             foundry.utils.setProperty(changes, `flags.${MODULE_ID}.${RESTORE_FLAG}`, restore);
     });

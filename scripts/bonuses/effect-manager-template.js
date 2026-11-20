@@ -1,5 +1,6 @@
 import { tierGateControl } from "../interactive/tier-gate.js";
 import { localize } from "../tools/string-utils.js";
+import { CUSTOM_STATUS_ICON } from "../tools/constants.js";
 import { STATUS_GROUP_ORDER, statusGroupKey } from "../tah/status-groups.js";
 
 // Bonus composition modes. First entry is the default for backward compatibility.
@@ -9,18 +10,23 @@ const DAMAGE_BONUS_MODES = [
     { value: 'replace', label: 'LA.effectManager.mode.replace' },
     { value: 'change_type', label: 'LA.effectManager.mode.changeType' },
 ];
+
 const DAMAGE_CHANGE_TYPE_SCOPES = [
     { value: 'base', label: 'LA.effectManager.mode.weaponDamage' },
     { value: 'bonus', label: 'LA.effectManager.mode.bonusDamage' },
     { value: 'all', label: 'LA.effectManager.mode.both' },
 ];
+
 const STAT_BONUS_MODES = [
     { value: 'add', label: 'LA.effectManager.mode.add' },
     { value: 'replace_base', label: 'LA.effectManager.mode.replaceBase' },
     { value: 'overwrite', label: 'LA.effectManager.mode.highestWins' },
     { value: 'replace', label: 'LA.effectManager.mode.setFinal' },
 ];
+
 export const DAMAGE_CHANGE_TYPE_ALL = 'all';
+
+const GRANTS_PLACEHOLDER = "[{ name: 'Break Free', activation: 'Quick', detail: '...' }]";
 
 /** Renders a code field row: preview badge + Edit/Clear buttons; code stored in a hidden input. */
 function codeFieldRow(id, label, placeholder)
@@ -62,6 +68,7 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onDamage', label: 'LA.effectManager.trigger.onDamage' },
     { value: 'onTechAttack', label: 'LA.effectManager.trigger.onTechAttack' },
     { value: 'onTechHit', label: 'LA.effectManager.trigger.onTechHit' },
+    { value: 'onInvadeHit', label: 'LA.effectManager.trigger.onInvadeHit' },
     { value: 'onMove', label: 'LA.effectManager.trigger.onMove' },
     { value: 'onPreMove', label: 'LA.effectManager.trigger.onPreMove' },
     { value: 'onInitActivation', label: 'LA.effectManager.trigger.onInitActivation' },
@@ -78,6 +85,8 @@ const CONSUMPTION_TRIGGER_LIST = [
     { value: 'onTurnEnd', label: 'LA.effectManager.trigger.onTurnEnd' },
     { value: 'onRoundStart', label: 'LA.effectManager.trigger.onRoundStart' },
     { value: 'onRoundEnd', label: 'LA.effectManager.trigger.onRoundEnd' },
+    { value: 'onCombatStart', label: 'LA.effectManager.trigger.onCombatStart' },
+    { value: 'onCombatEnd', label: 'LA.effectManager.trigger.onCombatEnd' },
     { value: 'onEnterCombat', label: 'LA.effectManager.trigger.onEnterCombat' },
     { value: 'onExitCombat', label: 'LA.effectManager.trigger.onExitCombat' },
     { value: 'onFullRepair', label: 'LA.effectManager.trigger.onFullRepair' },
@@ -170,6 +179,7 @@ export function buildEffectManagerContent(view)
         hasCustomStatus, allPresets, targetsHtml, tokensHtml, originsHtml, durationOptionsHtml, bonusDurationOptionsHtml,
         dmgTypeOptionsHtml, statusEffectIconsHtml, damageTypeIconsHtml, savedStatuses, availableTags, STAT_BONUS_GROUPS,
     } = view;
+
     return `
     <style>
         .te-dialog { min-width: 560px; font-family: var(--font-primary); }
@@ -288,6 +298,7 @@ export function buildEffectManagerContent(view)
                         const members = /** @type {any[]} */ ([...CONFIG.statusEffects])
                             .filter(statusEffect => statusGroupKey(statusEffect.id) === groupKey)
                             .sort((a, b) => (localize(a.name) || a.name).localeCompare(localize(b.name) || b.name));
+
                         if (!members.length)
                             return '';
                         return `<div class="la-hud-status-section std-effect-group" data-group="${groupKey}" style="font-weight:bold; text-transform:uppercase;">${localize(`LA.tokenHud.statusGroup.${groupKey}`)}</div>` + members.map(statusEffect =>
@@ -322,6 +333,10 @@ export function buildEffectManagerContent(view)
             </div>
             <div class="te-section">Consumption</div>
             ${triggerFieldsHtml('std', tokensHtml)}
+            <details class="te-advanced">
+                <summary>Advanced</summary>
+                ${codeFieldRow('std-grants', 'Granted Actions', GRANTS_PLACEHOLDER)}
+            </details>
             <div class="te-btn-group">
                 <button type="button" class="te-btn save-preset-btn" data-prefix="std"><i class="fas fa-bookmark"></i> Save Preset</button>
                 <button type="button" class="te-btn extract-code-btn" data-tab="standard" title="Show the api call for this form, to use in automation code"><i class="fas fa-code"></i> Extract Code</button>
@@ -348,6 +363,7 @@ export function buildEffectManagerContent(view)
                         <option value="">-- Select --</option>
                         ${savedStatuses.map(savedStatus => `<option value="${savedStatus.name}" data-icon="${savedStatus.icon}">${savedStatus.name}</option>`).join('')}
                     </select>
+                    <button type="button" class="te-btn-icon delete-status-btn" title="${localize('LA.effectManager.deleteSavedStatus')}" style="flex:0 0 28px; width:28px; height:26px; padding:0;"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
             <div class="form-group two-col" style="grid-template-columns: 80px 1fr 60px 60px;">
@@ -362,8 +378,8 @@ export function buildEffectManagerContent(view)
             <div class="form-group">
                 <label>Icon:</label>
                 <div style="flex:1; display:flex; gap:5px; align-items:center;">
-                    <img id="cust-icon-preview" src="systems/lancer/assets/icons/white/d20-framed.svg" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid var(--la-edge); border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
-                    <input type="text" id="cust-icon" value="systems/lancer/assets/icons/white/d20-framed.svg" style="flex:1; min-width:0;">
+                    <img id="cust-icon-preview" src="${CUSTOM_STATUS_ICON}" style="width:26px; height:26px; flex:0 0 26px; object-fit:contain; background:#1a1a1a; border:2px solid var(--la-edge); border-radius:4px; padding:1px;" onerror="this.style.opacity='0.3';">
+                    <input type="text" id="cust-icon" value="${CUSTOM_STATUS_ICON}" style="flex:1; min-width:0;">
                     <button type="button" class="file-picker" data-type="image" data-target="cust-icon" title="Browse Files" tabindex="-1" style="flex:0 0 30px;"><i class="fas fa-file-import fa-fw"></i></button>
                 </div>
             </div>
@@ -394,6 +410,7 @@ export function buildEffectManagerContent(view)
             <details class="te-advanced">
                 <summary>Advanced</summary>
                 ${codeFieldRow('cust-changes', 'Active Effect Changes', '[{"key":"system.armor","mode":2,"value":"1"}]')}
+                ${codeFieldRow('cust-grants', 'Granted Actions', GRANTS_PLACEHOLDER)}
             </details>
             <div class="te-btn-group">
                 <button type="button" class="te-btn save-preset-btn" data-prefix="cust"><i class="fas fa-bookmark"></i> Save Preset</button>
@@ -501,6 +518,7 @@ export function buildEffectManagerContent(view)
                         <option value="vulnerability">Vulnerability</option>
                         <option value="target_modifier">Target Modifier</option>
                         <option value="reroll">Reroll</option>
+                        <option value="movement">Movement</option>
                         <option value="movement_extra">Movement Extra</option>
                         <option value="action_extra">Action Extra</option>
                     </select>
@@ -707,9 +725,6 @@ export function buildEffectManagerContent(view)
                         <option value="crit">Critical Hit</option>
                         <option value="hit">Hit</option>
                         <option value="miss">Miss</option>
-                        <option value="elevation">Elevation</option>
-                        <option value="terrain">Terrain</option>
-                        <option value="obstacle">Obstacle (Phasing)</option>
                         <option value="provoke">Provoke (Engagement &amp; Reactions)</option>
                     </select>
                 </div>
@@ -768,6 +783,18 @@ export function buildEffectManagerContent(view)
                             <label><input type="checkbox" value="stressRoll"> Stress Roll</label>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div id="bonus-type-movement" style="display:none;">
+                <div class="form-group">
+                    <label>Movement:</label>
+                    <select id="bonus-movement-subtype">
+                        <option value="climber">Climber</option>
+                        <option value="terrain_immunity">Terrain Immunity</option>
+                        <option value="surefoot">Surefoot</option>
+                        <option value="phasing">Phasing</option>
+                        <option value="straight_line">Straight Line</option>
+                    </select>
                 </div>
             </div>
             <div id="bonus-type-movement_extra" style="display:none;">

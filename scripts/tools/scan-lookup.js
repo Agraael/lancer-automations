@@ -17,10 +17,12 @@ export function getScanJournalsForActor(actor, options = {})
     const out = [];
     if (!actor)
         return out;
+
     const user = options.user ?? globalThis.game?.user;
     const allowGm = options.allowGm ?? false;
     const uuid = actor.uuid;
     const name = (actor.name ?? '').toLowerCase();
+
     for (const entry of globalThis.game?.journal ?? [])
     {
         let matched = getLAFlag(entry,'scan')?.actorUuid === uuid;
@@ -32,6 +34,7 @@ export function getScanJournalsForActor(actor, options = {})
             continue;
         out.push(entry);
     }
+
     return out;
 }
 
@@ -45,11 +48,14 @@ export function isActorAllyOfUser(actor, user)
 {
     if (!actor || !user)
         return false;
+
     const tokens = actor.getActiveTokens?.() ?? [];
     if (!tokens.length)
         return false;
+
     const owned = (globalThis.canvas?.tokens?.placeables ?? [])
         .filter(own => own.actor?.testUserPermission?.(user, 'OWNER'));
+
     return tokens.some(token => owned.some(own => own.id !== token.id && isFriendly(own, token)));
 }
 
@@ -65,6 +71,7 @@ export function isActorScannedForUser(actor, user)
         return false;
     if (isScannedByAll(actor))
         return true;
+
     const mode = _scanRevealMode();
     if (mode === 'everyone')
         return true;

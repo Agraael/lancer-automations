@@ -22,8 +22,10 @@ export function accDiffTargetInvisible(accDiffTarget, actor = null)
 {
     const plugin = accDiffTarget?.plugins?.invisibility;
     const invisibilityMode = Number(plugin && typeof plugin === 'object' ? plugin.data : plugin);
+
     if (Number.isFinite(invisibilityMode) && invisibilityMode !== 0)
         return invisibilityMode > 0;
+
     const resolved = actor ?? accDiffTargetToken(accDiffTarget)?.actor;
     return !!resolved?.statuses?.has?.('invisible');
 }
@@ -123,6 +125,7 @@ export function cubeRound(q, r, s)
 {
     let roundedQ = Math.round(q), roundedR = Math.round(r), roundedS = Math.round(s);
     const dq = Math.abs(roundedQ - q), dr = Math.abs(roundedR - r), ds = Math.abs(roundedS - s);
+
     if (dq > dr && dq > ds)
         roundedQ = -roundedR - roundedS;
     else if (dr > ds)
@@ -144,6 +147,7 @@ export function cubeDistance(cube1, cube2)
 export function getHexesInRange(center, range)
 {
     const results = [];
+
     for (let q = -range; q <= range; q++)
     {
         for (let r = Math.max(-range, -q - range); r <= Math.min(range, -q + range); r++)
@@ -156,6 +160,7 @@ export function getHexesInRange(center, range)
             });
         }
     }
+
     return results;
 }
 
@@ -164,12 +169,14 @@ export function neighborKeys(key)
 {
     const [col, row] = key.split(',').map(Number);
     const keys = [];
+
     if (isHexGrid())
     {
         /** @type {any} */
         const grid = canvas.grid;
         const centerCube = grid.getCube({ i: row, j: col });
         const dirs = [[1, 0, -1], [0, 1, -1], [-1, 1, 0], [-1, 0, 1], [0, -1, 1], [1, -1, 0]];
+
         for (const [dq, dr, ds] of dirs)
         {
             const neighborOffset = grid.getOffset({ q: centerCube.q + dq, r: centerCube.r + dr, s: centerCube.s + ds });
@@ -187,6 +194,7 @@ export function neighborKeys(key)
             }
         }
     }
+
     return keys;
 }
 
@@ -232,30 +240,36 @@ export function getCellToward(from, toward, { steps = 1, away = false } = {})
 {
     const fromPoint = from?.center ?? from;
     const towardPoint = toward?.center ?? toward;
+
     const goal = away
         ? { x: (2 * fromPoint.x) - towardPoint.x, y: (2 * fromPoint.y) - towardPoint.y }
         : towardPoint;
 
     let current = pixelToOffset(fromPoint.x, fromPoint.y);
+
     for (let step = 0; step < steps; step++)
     {
         let best = null;
         let bestDist = Infinity;
+
         for (const key of neighborKeys(`${current.col},${current.row}`))
         {
             const [col, row] = key.split(',').map(Number);
             const center = getHexCenter(col, row);
             const dist = Math.hypot(center.x - goal.x, center.y - goal.y);
+
             if (dist < bestDist)
             {
                 bestDist = dist;
                 best = { col, row };
             }
         }
+
         if (!best)
             break;
         current = best;
     }
+
     return getHexCenter(current.col, current.row);
 }
 
@@ -268,6 +282,7 @@ export function getHexVertices(col, row)
     if (canvas.grid.getShape)
     {
         const shape = /** @type {PIXI.Polygon} */ (/** @type {unknown} */ (canvas.grid.getShape()));
+
         if (shape && shape.points && shape.points.length > 0)
         {
             for (let i = 0; i < shape.points.length; i += 2)
@@ -289,6 +304,7 @@ export function getHexVertices(col, row)
             y: center.y + radius * Math.sin(angle_rad)
         });
     }
+
     return points;
 }
 
@@ -315,6 +331,7 @@ export function measureGridDistance(point1, point2)
     const distance = canvas.grid.measurePath
         ? canvas.grid.measurePath([point1, point2], {}).distance
         : canvas.grid.measureDistance(point1, point2, {});
+
     return Array.isArray(distance) ? distance.reduce((sum, segment) => sum + segment, 0) : distance;
 }
 
@@ -322,13 +339,16 @@ export function getOccupiedOffsets(token, overridePos = null)
 {
     // v13: getOccupiedGridSpaceOffsets returns {i,j} grid offsets directly.
     const doc = token.document ?? token;
+
     if (typeof doc.getOccupiedGridSpaceOffsets === 'function')
     {
         const pos = overridePos
             ? { x: overridePos.x, y: overridePos.y, width: doc.width, height: doc.height }
             : { x: doc.x, y: doc.y, width: doc.width, height: doc.height };
+
         return doc.getOccupiedGridSpaceOffsets(pos).map(gridOffset => ({ col: gridOffset.j, row: gridOffset.i }));
     }
+
     // v12 fallback (Lancer system extension on the Token class).
     if (typeof token.getOccupiedSpaces === 'function')
     {
@@ -391,7 +411,9 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
     {
         includeElevation = !!getModuleSetting('count3DDistance');
     }
+
     let planarDist;
+
     if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
     {
         const doc1 = token1.document ?? token1;
@@ -408,6 +430,7 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
         const centers2 = getOccupiedCenters(token2);
 
         let minDist = Infinity;
+
         for (const center1 of centers1)
         {
             for (const center2 of centers2)
@@ -417,6 +440,7 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
                     minDist = rawDist;
             }
         }
+
         planarDist = Math.round(minDist / canvas.scene.grid.distance);
     }
     else
@@ -425,35 +449,37 @@ export function getMinGridDistance(token1, token2, overridePos1 = null, includeE
         const offsets2 = getOccupiedOffsets(token2);
 
         let minDist = Infinity;
+
         for (const offset1 of offsets1)
         {
             const cube1 = offsetToCube(offset1.col, offset1.row);
+
             for (const offset2 of offsets2)
             {
                 const cube2 = offsetToCube(offset2.col, offset2.row);
                 const dist = cubeDistance(cube1, cube2);
+
                 if (dist < minDist)
                     minDist = dist;
             }
         }
+
         planarDist = minDist;
     }
 
     if (!includeElevation)
         return planarDist;
 
-    const elev1 = token1?.document?.elevation ?? 0;
+    const elev1 = typeof overridePos1?.elevation === 'number' ? overridePos1.elevation : (token1?.document?.elevation ?? 0);
     const elev2 = token2?.document?.elevation ?? 0;
     const elevDist = Math.round(Math.abs(elev1 - elev2) / canvas.scene.grid.distance);
     // Max: 5 horizontal + 3 vertical = 5 (dominant axis wins).
     return Math.max(planarDist, elevDist);
 }
 
-/** Combat-elevation flag: setting on AND THT active. */
+/** Combat-elevation flag: the count3DDistance setting, with or without THT. */
 export function isElevationCheckActive()
 {
-    if (!globalThis.terrainHeightTools)
-        return false;
     return !!getModuleSetting('count3DDistance');
 }
 
@@ -466,14 +492,17 @@ export function getOriginElevation(originOrToken)
 {
     if (!originOrToken)
         return 0;
+
     const doc = originOrToken.document ?? (typeof originOrToken.elevation === 'number' ? originOrToken : null);
     if (doc)
         return doc.elevation ?? 0;
+
     if (typeof originOrToken.x === 'number' && typeof originOrToken.y === 'number')
     {
         const hexOffset = pixelToOffset(originOrToken.x, originOrToken.y);
         return getHexGroundElevation(hexOffset.col, hexOffset.row);
     }
+
     return 0;
 }
 
@@ -482,26 +511,32 @@ function _canvasReachCap(originOffsets)
     const rect = canvas.dimensions?.rect;
     if (!rect)
         return Infinity;
+
     const corners = [
         pixelToOffset(rect.x, rect.y),
         pixelToOffset(rect.x + rect.width, rect.y),
         pixelToOffset(rect.x, rect.y + rect.height),
         pixelToOffset(rect.x + rect.width, rect.y + rect.height),
     ];
+
     const hex = isHexGrid();
     let farthest = 0;
+
     for (const originOffset of originOffsets)
     {
         const originCube = hex ? offsetToCube(originOffset.col, originOffset.row) : null;
+
         for (const corner of corners)
         {
             const dist = hex
                 ? cubeDistance(originCube, offsetToCube(corner.col, corner.row))
                 : Math.max(Math.abs(corner.col - originOffset.col), Math.abs(corner.row - originOffset.row));
+
             if (dist > farthest)
                 farthest = dist;
         }
     }
+
     return farthest + 1;
 }
 
@@ -524,11 +559,13 @@ export function getInRangeOffsets(origin, range, opts = {})
     const reach = Math.min(range, _canvasReachCap(originOffsets));
 
     const candidates = new Set();
+
     if (isHexGrid())
     {
         for (const originOffset of originOffsets)
         {
             const cube = offsetToCube(originOffset.col, originOffset.row);
+
             for (const hexCube of getHexesInRange(cube, reach))
             {
                 const candidateOffset = cubeToOffset(hexCube);
@@ -558,22 +595,27 @@ export function getInRangeOffsets(origin, range, opts = {})
             for (const k of selfKeys)
                 candidates.delete(k);
         }
+
         return candidates;
     }
 
     const sceneDist = canvas.scene.grid.distance || 1;
     const inRangeKeys = new Set();
+
     for (const key of candidates)
     {
         if (!includeSelf && selfKeys.has(key))
             continue;
+
         const [col, row] = key.split(',').map(Number);
         const hexElev = getHexGroundElevation(col, row);
         const elevDelta = Math.round((hexElev - originElev) / sceneDist);
+
         if (elevDelta > range)
             continue;
         inRangeKeys.add(key);
     }
+
     return inRangeKeys;
 }
 
@@ -586,10 +628,11 @@ export function getInRangeOffsets(origin, range, opts = {})
  */
 export function isPositionInRange(origin, target, range)
 {
-    const inRange = getInRangeOffsets(origin, range, { includeSelf: true });
+    const inRange = getInRangeOffsets(origin, range, { includeSelf: true, elevationAware: false });
     const isPoint = target && !target.document && typeof target.x === 'number' && typeof target.y === 'number';
     const targetOffsets = isPoint ? [pixelToOffset(target.x, target.y)] : getOccupiedOffsets(target);
     let horizontalOk = false;
+
     for (const offset of targetOffsets)
     {
         if (inRange.has(`${offset.col},${offset.row}`))
@@ -598,8 +641,12 @@ export function isPositionInRange(origin, target, range)
             break;
         }
     }
+
     if (!horizontalOk)
         return false;
+    if (!getModuleSetting('count3DDistance'))
+        return true;
+
     // vertical: |Δelev| must be within range too
     const sceneDist = canvas.scene.grid.distance || 1;
     const vertDist = Math.round(Math.abs(getOriginElevation(target) - getOriginElevation(origin)) / sceneDist);
@@ -615,6 +662,7 @@ export function isPositionInRange(origin, target, range)
 export function snapTokenCenter(token, centerPoint)
 {
     const doc = token.document ?? token;
+
     if (doc.width < 1 || doc.height < 1)
     {
         const offset = pixelToOffset(centerPoint.x, centerPoint.y);
@@ -624,6 +672,7 @@ export function snapTokenCenter(token, centerPoint)
             y: cellCenter.y - (token.h / 2)
         };
     }
+
     const topLeftX = centerPoint.x - (token.w / 2);
     const topLeftY = centerPoint.y - (token.h / 2);
     return token.getSnappedPosition({ x: topLeftX, y: topLeftY });
@@ -648,6 +697,7 @@ export function getOccupiedGridSpaces(excludeIds = [])
         for (const offset of tokenOffsets)
             occupied.add(`${offset.col},${offset.row}`);
     }
+
     return occupied;
 }
 
@@ -662,19 +712,24 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
 {
     let rawPoints = [];
 
-    const getCenterFromTopLeft = (x, y) => ({
+    const getCenterFromTopLeft = (x, y, elevation = null) => ({
         x: x + (token.document.width * canvas.grid.size / 2),
-        y: y + (token.document.height * canvas.grid.size / 2)
+        y: y + (token.document.height * canvas.grid.size / 2),
+        elevation
     });
+
+    const startElevation = token.document.elevation ?? 0;
+    const endElevation = typeof change?.elevation === 'number' ? change.elevation : startElevation;
 
     if (Array.isArray(dragWaypoints) && dragWaypoints.length)
     {
-        rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y));
+        rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y, startElevation));
         for (const waypoint of dragWaypoints)
-            rawPoints.push(getCenterFromTopLeft(waypoint.x, waypoint.y));
+            rawPoints.push(getCenterFromTopLeft(waypoint.x, waypoint.y, typeof waypoint.elevation === 'number' ? waypoint.elevation : null));
     }
 
     let newMoveStartRayIndex = 0;
+
     if (rawPoints.length === 0 && token._movement && token._movement.points)
     {
         const movePoints = token._movement.points;
@@ -689,6 +744,11 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
         rawPoints.push(getCenterFromTopLeft(token.document.x, token.document.y));
         rawPoints.push(getCenterFromTopLeft(change.x ?? token.document.x, change.y ?? token.document.y));
     }
+
+    rawPoints[0].elevation ??= startElevation;
+    rawPoints[rawPoints.length - 1].elevation ??= endElevation;
+    for (let index = 1; index < rawPoints.length - 1; index++)
+        rawPoints[index].elevation ??= startElevation + (endElevation - startElevation) * (index / (rawPoints.length - 1));
 
     let pathHexes = /** @type {PathHexArray} */ (/** @type {unknown} */ ([]));
     let seenHexes = new Set();
@@ -713,6 +773,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
         const p2 = rawPoints[i + 1];
 
         const alignOffset = { x: 0, y: 0 };
+
         if (canvas.grid.isHexagonal && token.document.width % 2 === 0)
         {
             if (/** @type {any} */ (canvas.grid).columns)
@@ -720,14 +781,22 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
             else
                 alignOffset.y = canvas.grid.sizeY / 2;
         }
+        else if (canvas.grid.isSquare)
+        {
+            if (token.document.width % 2 === 0)
+                alignOffset.x = canvas.grid.size / 2;
+            if (token.document.height % 2 === 0)
+                alignOffset.y = canvas.grid.size / 2;
+        }
 
         const adjustedP1 = { x: p1.x + alignOffset.x, y: p1.y + alignOffset.y };
         const adjustedP2 = { x: p2.x + alignOffset.x, y: p2.y + alignOffset.y };
 
         const pathOffsets = canvas.grid.getDirectPath([adjustedP1, adjustedP2]);
 
-        for (const step of pathOffsets)
+        for (const [stepIndex, step] of pathOffsets.entries())
         {
+            const stepElevation = p1.elevation + (p2.elevation - p1.elevation) * (pathOffsets.length > 1 ? stepIndex / (pathOffsets.length - 1) : 1);
             const stepHexCenter = getHexCenter(step.j, step.i);
             const trueTokenCenter = { x: stepHexCenter.x - alignOffset.x, y: stepHexCenter.y - alignOffset.y };
 
@@ -739,6 +808,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
             const occupiedHexCenters = getOccupiedCenters(token, topLeft);
 
             let newHexesInThisStep = [];
+
             for (const center of occupiedHexCenters)
             {
                 const offset = getOffsetFromPx(center.x, center.y);
@@ -756,6 +826,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
                 pathHexes.push({
                     x: topLeft.x,
                     y: topLeft.y,
+                    elevation: stepElevation,
                     cx: trueTokenCenter.x,
                     cy: trueTokenCenter.y,
                     hexes: newHexesInThisStep,
@@ -772,6 +843,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
     };
 
     let matchIndex = -1;
+
     for (let i = 0; i < pathHexes.length; i++)
     {
         // Skip steps already natively flagged as history from previous rounds
@@ -779,6 +851,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
             continue;
 
         const dist = Math.hypot(pathHexes[i].cx - startCenter.x, pathHexes[i].cy - startCenter.y);
+
         // Take the FIRST match within half a grid square to avoid jumping ahead on looping paths
         if (dist <= canvas.grid.size / 2)
         {
@@ -804,6 +877,7 @@ export function getMovementPathHexes(token, change, dragWaypoints = null)
     {
         if (index < 0 || index >= pathHexes.length)
             return null;
+
         const step = pathHexes[index];
         return snapTokenCenter(token, { x: step.cx, y: step.cy });
     };
@@ -862,4 +936,21 @@ export function getDistanceTokenToPoint(point, token)
         const tokenCenter = getHexCenter(tokenCenterOffset.col, tokenCenterOffset.row);
         return Math.round(measureGridDistance(tokenCenter, point) / canvas.scene.grid.distance);
     }
+}
+
+/** Distance from a point to the token's nearest occupied cell, same math as getDistanceTokenToPoint. */
+export function getMinDistanceTokenToPoint(point, token)
+{
+    const offsets = getOccupiedOffsets(token);
+    if (!offsets.length)
+        return getDistanceTokenToPoint(point, token);
+
+    if (isHexGrid())
+    {
+        const pointOffset = pixelToOffset(point.x, point.y);
+        const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
+        return Math.min(...offsets.map(offset => cubeDistance(offsetToCube(offset.col, offset.row), pointCube)));
+    }
+
+    return Math.min(...offsets.map(offset => Math.round(measureGridDistance(getHexCenter(offset.col, offset.row), point) / canvas.scene.grid.distance)));
 }

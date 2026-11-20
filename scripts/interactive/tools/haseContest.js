@@ -26,12 +26,14 @@ function contestStats(actor)
 
 // Two-token / two-stat HASE contest card. Any of tokenA/skillA/tokenB/skillB can be pre-set.
 export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = null, skillB = null, title = 'HASE Contest', sendToOwner = true,
+    cardTitle = null, description = '', cancelText = '',
     accuracy1 = 0, difficulty1 = 0, flatModifier1 = 0, accuracy2 = 0, difficulty2 = 0, flatModifier2 = 0,
     sourceItem = null, sourceAction = null, extraData = null } = {})
 {
     return _queueCard(() => new Promise((resolve) =>
     {
         const api = game.modules.get(MODULE_ID)?.api;
+
         const state = {
             a: { token: tokenA ?? null, skill: skillA ? String(skillA).toUpperCase() : null, mark: null, chance: null },
             b: { token: tokenB ?? null, skill: skillB ? String(skillB).toUpperCase() : null, mark: null, chance: null },
@@ -46,16 +48,19 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 state[side].chance = null;
             }
         };
+
         const syncChanceLabels = () =>
         {
             clearChanceLabels();
             if (!chanceLabelsOn() || !targetInfoAllowed())
                 return;
+
             const { a, b } = state;
             if (!(a.token?.actor && a.skill && b.token?.actor && b.skill))
                 return;
+
             const masked = !targetInfoAllowedFor(a.token.actor) || !targetInfoAllowedFor(b.token.actor);
-            a.chance = createChanceLabel(a.token, () => masked ? UNKNOWN_CHANCE : contestWinChance(a.token?.actor, a.skill, b.token?.actor, b.skill, {}));
+            a.chance = createChanceLabel(a.token, () => masked ? UNKNOWN_CHANCE : contestWinChance(a.token?.actor, a.skill, b.token?.actor, b.skill, { winTies: true }));
             b.chance = createChanceLabel(b.token, () => masked ? UNKNOWN_CHANCE : contestWinChance(b.token?.actor, b.skill, a.token?.actor, a.skill, {}));
         };
 
@@ -68,6 +73,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
         const presenceData = () =>
         {
             const placedCells = [];
+
             for (const side of ['a', 'b'])
             {
                 const token = state[side].token;
@@ -76,15 +82,19 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 for (const o of getOccupiedOffsets(token))
                     placedCells.push(`${o.col},${o.row}`);
             }
+
             return { placedCells, placedColor: TG.placed };
         };
+
         const stopHeartbeat = startToolHeartbeat('haseContest', () => presenceData());
+
         const ensureMarkContainer = () =>
         {
             if (markG || !canvas?.stage)
                 return;
             markG = new PIXI.Container();
             canvas.stage.addChild(markG).eventMode = 'none';
+
             markPulse = () =>
             {
                 if (!markG || markG.destroyed)
@@ -94,17 +104,22 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                     markG = null;
                     return;
                 }
+
                 markG.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+
                 for (const side of ['a', 'b'])
                 {
                     const token = state[side].token;
                     const markGraphic = state[side].mark;
+
                     if (token && markGraphic && !markGraphic.destroyed)
                         paintMark(token, markGraphic);
                 }
             };
+
             canvas.app.ticker.add(markPulse);
         };
+
         // repaint at the token's current cells each tick so the mark follows it
         const paintMark = (token, markGraphic) =>
         {
@@ -112,6 +127,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             const cells = getOccupiedOffsets(token).map(offset => [offset.col, offset.row]);
             paintDashedFootprint(markGraphic, cells, TG.placed);
         };
+
         const drawMark = (token) =>
         {
             if (!token || !canvas?.stage)
@@ -122,12 +138,14 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             markG.addChild(markGraphic);
             return markGraphic;
         };
+
         const clearMark = (side) =>
         {
             if (state[side].mark && !state[side].mark.destroyed)
                 state[side].mark.destroy();
             state[side].mark = null;
         };
+
         const destroyMarks = () =>
         {
             if (markPulse)
@@ -135,12 +153,14 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 canvas.app.ticker.remove(markPulse);
                 markPulse = null;
             }
+
             if (markG && !markG.destroyed)
                 markG.destroy({ children: true });
             markG = null;
             tether?.destroy();
             tether = null;
         };
+
         const refreshTether = () =>
         {
             if (!state.a.token || !state.b.token)
@@ -148,11 +168,13 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 tether?.setPairs([]);
                 return;
             }
+
             tether ??= createTokenTether();
             tether.setPairs([[state.a.token, state.b.token]]);
         };
 
         let cardEl;
+
         const cleanup = () =>
         {
             if (isSingleTargetPickerActive())
@@ -171,10 +193,12 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             resolve(null);
         };
 
-        const unbindEscape = bindCardEscape(cancel, isSingleTargetPickerActive);
+        const unbindEscape = bindCardEscape(cancel, isSingleTargetPickerActive, () => cardEl);
 
         cardEl = _createInfoCard("haseContest", {
-            title: localize('LA.dialogTitle.haseContest'),
+            title: cardTitle ?? localize('LA.dialogTitle.haseContest'),
+            description,
+            cancelText,
             onCancel: cancel,
         });
 
@@ -197,6 +221,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
 
             const img = colEl.find('[data-role="token-img"]');
             const src = token ? (token.document?.texture?.src ?? '') : '';
+
             if (src)
             {
                 img.attr('src', src).css('display', '');
@@ -207,12 +232,14 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 img.css('display', 'none');
                 colEl.find('[data-role="token-placeholder"]').css('display', '');
             }
+
             colEl.find('[data-role="token-label"]').text(token ? (token.name ?? token.document?.name ?? '?') : 'Pick token');
 
             const select = colEl.find('[data-role="skill"]');
             const stats = contestStats(token?.actor);
             const prev = s.skill;
             select.empty();
+
             if (stats.length)
             {
                 for (const st of stats)
@@ -225,6 +252,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
                 select.append('<option value="">—</option>');
                 s.skill = null;
             }
+
             select.prop('disabled', !token || !stats.length);
             syncChanceLabels();
             updateRun();
@@ -237,6 +265,7 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             {
                 const caster = state[side].token ?? state.a.token ?? canvas.tokens?.controlled?.[0] ?? null;
                 const token = await api?.pickSingleTargetToggle?.(caster, { single: false, includeSelf: true });
+
                 if (token)
                 {
                     token.setTarget?.(false, { releaseOthers: false }); // the picker targets it; we only keep the mark
@@ -263,8 +292,10 @@ export function openHaseContestCard({ tokenA = null, skillA = null, tokenB = nul
             if (!(a.token && a.skill && b.token && b.skill))
                 return;
             cleanup();
+
             const result = await api?.executeContestedCheck?.(a.token, a.skill, b.token, b.skill,
                 { title, sendToOwner: state.sendToOwner, accuracy1, difficulty1, flatModifier1, accuracy2, difficulty2, flatModifier2, sourceItem, sourceAction, extraData });
+
             resolve(result ?? null);
         });
 

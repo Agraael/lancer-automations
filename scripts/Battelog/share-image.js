@@ -73,8 +73,10 @@ async function _loadAssets()
         {
             const cssHref = new URL(CSS_PATH, document.baseURI).href;
             const response = await fetch(cssHref);
+
             if (!response.ok)
                 throw new Error(`Could not read battelog.css (${response.status})`);
+
             const css = await _inlineCssUrls(await response.text(), cssHref);
 
             const faces = await Promise.all(FONT_SOURCES.map(async (font) =>
@@ -90,6 +92,7 @@ async function _loadAssets()
                     return '';
                 }
             }));
+
             return { css, fontFace: faces.join('') };
         })().catch((err) =>
         {
@@ -97,6 +100,7 @@ async function _loadAssets()
             throw err;
         });
     }
+
     return _assetsPromise;
 }
 
@@ -117,18 +121,23 @@ function _bakeIcons(liveRoot, cloneRoot)
 {
     const liveNodes = liveRoot.querySelectorAll('*');
     const cloneNodes = cloneRoot.querySelectorAll('*');
+
     for (let idx = 0; idx < liveNodes.length && idx < cloneNodes.length; idx++)
     {
         const liveEl = liveNodes[idx];
         if (!/\bfa[srbldt]?\b|\bfa-|\bcci\b|\bcci-|\bmdi\b|\bmdi-/.test(String(liveEl.className || '')))
             continue;
+
         const beforeStyle = getComputedStyle(liveEl, '::before');
         const content = beforeStyle.content;
+
         if (!content || content === 'none' || content === 'normal')
             continue;
+
         const glyph = content.replaceAll(/^["']|["']$/g, '');
         if (!glyph)
             continue;
+
         const target = /** @type {HTMLElement} */ (cloneNodes[idx]);
         target.textContent = glyph;
         target.style.fontFamily = beforeStyle.fontFamily;
@@ -143,11 +152,15 @@ async function _inlineStyleUrls(root)
     await Promise.all([...root.querySelectorAll('[style*="url("]')].map(async (el) =>
     {
         const styleText = el.getAttribute('style') ?? '';
+
         const urlRefs = [...new Set([...styleText.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map(match => match[1]))]
             .filter(ref => !ref.startsWith('data:'));
+
         if (!urlRefs.length)
             return;
+
         let rewritten = styleText;
+
         for (const ref of urlRefs)
         {
             try
@@ -159,6 +172,7 @@ async function _inlineStyleUrls(root)
                 // icon stays blank
             }
         }
+
         el.setAttribute('style', rewritten);
     }));
 }
@@ -172,6 +186,7 @@ async function _inlineImages(root)
         const src = img.getAttribute('src');
         if (!src || src.startsWith('data:'))
             return;
+
         try
         {
             img.setAttribute('src', await _dataUri(new URL(src, document.baseURI).href));
@@ -212,6 +227,7 @@ function _rasterize(svg, width, height)
     return new Promise((resolve, reject) =>
     {
         const img = new Image();
+
         img.onload = async () =>
         {
             // Trade scale for area rather than hand the encoder a canvas it will refuse.
@@ -221,6 +237,7 @@ function _rasterize(svg, width, height)
             canvas.width = Math.max(1, Math.round(width * scale));
             canvas.height = Math.max(1, Math.round(height * scale));
             const canvasSize = `${canvas.width}x${canvas.height}`;
+
             try
             {
                 // CPU-backed canvas; the desktop app's GPU readback often returns an empty blob.
@@ -230,11 +247,13 @@ function _rasterize(svg, width, height)
                 ctx.scale(scale, scale);
                 ctx.drawImage(img, 0, 0);
                 const blob = await new Promise(done => canvas.toBlob(done, 'image/png'));
+
                 if (blob)
                 {
                     resolve(blob);
                     return;
                 }
+
                 // toDataURL reports why (tainted canvas throws) where toBlob only yields null.
                 const dataUrl = canvas.toDataURL('image/png');
                 resolve(await (await fetch(dataUrl)).blob());
@@ -244,6 +263,7 @@ function _rasterize(svg, width, height)
                 reject(new Error(`Canvas export failed at ${canvasSize}: ${err.message}`));
             }
         };
+
         img.onerror = () => reject(new Error('Poster could not be rendered'));
         img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     });
@@ -261,12 +281,14 @@ async function _copyToClipboard(blob)
 async function _saveToFile(blob, filename)
 {
     const picker = /** @type {any} */ (window).showSaveFilePicker;
+
     if (picker)
     {
         const handle = await picker.call(window, {
             suggestedName: filename,
             types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
         });
+
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
@@ -319,6 +341,7 @@ function _showPreview(dataUri, blob, filename)
         },
         default: 'copy',
     }, { classes: ['lancer-dialog-base'], width: 760 });
+
     dlg.render(true);
 }
 
@@ -336,16 +359,19 @@ async function _deliver(blob, filename, toClipboard)
             console.warn(`${MODULE_ID} | Clipboard write refused, showing preview instead.`, err);
         }
     }
+
     _showPreview(await _blobToDataUri(blob), blob, filename);
 }
 
 async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipboard })
 {
     const host = document.createElement('div');
+
     try
     {
         if (!cards.length)
             throw new Error('No squad cards to export');
+
         const { css, fontFace } = await _loadAssets();
 
         const clone = (source) =>
@@ -372,9 +398,11 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
         const headEl = rootEl.querySelector('.battelog-recap-head');
         if (headEl)
             poster.appendChild(clone(headEl));
+
         const row = document.createElement('div');
         row.className = 'la-share-cards';
         cards.forEach(card => row.appendChild(clone(card)));
+
         if (detailEl)
         {
             // cloned as laid out so the capture matches the screen
@@ -387,6 +415,7 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
             row.querySelectorAll('.battelog-pcol .battelog-tip-panel').forEach(tip => tip.remove());
             row.appendChild(detailClone);
         }
+
         poster.appendChild(row);
         const foot = document.createElement('div');
         foot.className = 'la-share-foot';
@@ -412,6 +441,7 @@ async function _exportPoster(rootEl, cards, { detailEl = null, filename, toClipb
 
         // CDATA, because XMLSerializer would escape > and break child selectors
         const markup = new XMLSerializer().serializeToString(poster);
+
         const body = `<div xmlns="http://www.w3.org/1999/xhtml">`
             + `<style><![CDATA[${sheet}]]></style>${markup}</div>`;
 

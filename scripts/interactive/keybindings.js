@@ -30,6 +30,7 @@ export function registerElevTiltKeybindings()
             editable: [{ key: k.key }],
         });
     }
+
     for (const k of TAH_NAV_KEYBINDS)
     {
         game.keybindings.register(MODULE_ID, k.id, {
@@ -50,6 +51,7 @@ export function eventMatchesKeybind(event, actionId)
             && !!event.altKey === modifiers.includes('Alt'))
             return true;
     }
+
     return false;
 }
 

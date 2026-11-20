@@ -23,6 +23,7 @@ export async function setItemAsActivated(item, token, endAction, endActionDescri
         ui.notifications.warn(localize('LA.notify.noItemProvidedToSetitemasactivated'));
         return null;
     }
+
     const blockedAction = options.blockAction === false ? null : (options.actionName ?? item.name);
     if (blockedAction)
         await lockActorAction(item, blockedAction, { reason: options.blockReason ?? `${item.name} is already active.` });
@@ -45,12 +46,24 @@ export function getActivatedItems(token)
 {
     if (!token?.actor)
         return [];
+
     const allItems = token.actor.items;
     return allItems.filter(item =>
     {
         const flags = getItemFlags(item);
         return flags?.activeStateData?.active === true;
     });
+}
+
+/**
+ * True when the item is one of the token's activated items.
+ * @param {Token} token
+ * @param {Item} item
+ * @returns {boolean}
+ */
+export function isItemActivated(token, item)
+{
+    return !!item && getActivatedItems(token).some(active => active.id === item.id);
 }
 
 /**
@@ -77,6 +90,7 @@ export async function endItemActivation(item, token)
         await unlockActorAction(item, blockedAction);
 
     const api = game.modules.get(MODULE_ID)?.api;
+
     if (api?.executeSimpleActivation)
     {
         const result = await api.executeSimpleActivation(token.actor, {
@@ -88,8 +102,10 @@ export async function endItemActivation(item, token)
             item: item,
             endActivation: true
         });
+
         return result.completed;
     }
+
     return false;
 }
 
@@ -107,6 +123,7 @@ export async function openEndActivationMenu(token)
     }
 
     const activatedItems = getActivatedItems(token);
+
     if (activatedItems.length === 0)
     {
         ui.notifications.warn(localizeFormat('LA.notify.noActivatedItems', { name: token.name }));

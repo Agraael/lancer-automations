@@ -2630,6 +2630,7 @@
 }
 
 .battelog-hcard-badge-alive,
+.battelog-hcard-badge-left,
 .battelog-hcard-badge-dead {
     position: absolute;
     bottom: 5px;
@@ -2657,7 +2658,14 @@
     background: #c62828;
 }
 
-.battelog-hcard-badge-alive i {
+.battelog-hcard-badge-left {
+    left: 50%;
+    transform: translateX(-50%);
+    background: #4a5a72;
+}
+
+.battelog-hcard-badge-alive i,
+.battelog-hcard-badge-left i {
     font-size: 9px;
 }
 

@@ -1,19 +1,17 @@
-export function floatTokenText(token, text, fill)
+import { getExternalSetting } from './settings-utils.js';
+
+/** @param {CONST.TEXT_ANCHOR_POINTS} [direction] */
+export function floatTokenText(token, text, fill, direction = CONST.TEXT_ANCHOR_POINTS.TOP)
 {
     if (!token?.center || !text)
         return;
-    try
-    {
-        if (!game.settings.get('lancer', 'floatingNumbers'))
-            return;
-    }
-    catch (_)
-    {
+
+    if (!getExternalSetting('lancer', 'floatingNumbers', true))
         return;
-    }
+
     canvas.interface?.createScrollingText(token.center, text, {
         anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-        direction: CONST.TEXT_ANCHOR_POINTS.TOP,
+        direction,
         fontSize: 28,
         fill,
         stroke: 0,

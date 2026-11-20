@@ -28,6 +28,7 @@ function _mountScroller(overlay)
     const body = overlay.querySelector('.battelog-intro-body');
     const rail = overlay.querySelector('.battelog-intro-rail');
     const segments = [];
+
     for (let index = 0; index < RAIL_SEGMENTS; index++)
     {
         const segment = document.createElement('span');
@@ -42,12 +43,14 @@ function _mountScroller(overlay)
     const layoutOverflow = () =>
     {
         let bottom = 0;
+
         for (const child of body.children)
         {
             const edge = child.offsetTop + child.offsetHeight;
             if (edge > bottom)
                 bottom = edge;
         }
+
         return bottom - body.clientHeight;
     };
 
@@ -64,10 +67,12 @@ function _mountScroller(overlay)
         const lit = scrollable
             ? Math.max(0, Math.min(segments.length - 1, Math.round((top / max) * (segments.length - 1))))
             : -1;
+
         segments.forEach((segment, index) => segment.classList.toggle('lit', index === lit));
     };
 
     let pinned = true;
+
     const onScroll = () =>
     {
         pinned = layoutOverflow() - body.scrollTop < RAIL_STICK_PX;
@@ -92,6 +97,7 @@ function _mountScroller(overlay)
     resizeObserver.observe(body);
     for (const child of body.children)
         resizeObserver.observe(child);
+
     const childWatcher = new MutationObserver(mutations =>
     {
         for (const mutation of mutations)
@@ -103,6 +109,7 @@ function _mountScroller(overlay)
             }
         }
     });
+
     childWatcher.observe(body, { childList: true, subtree: true });
 
     return {
@@ -166,13 +173,17 @@ export function playTerminal({
         document.body.appendChild(preamble);
 
         playBattleLogSound('incomingTrans');
+
         let bgSound = { stop: () =>
         {} };
+
         let bgTimer = /** @type {any} */ (null);
 
         let done = false;
+
         let controller = /** @type {{cancel: () => void, skip?: () => void}} */ ({ cancel: () =>
         {} });
+
         let overlay = null;
         let scroller = null;
 
@@ -187,15 +198,18 @@ export function playTerminal({
             controller.cancel();
             scroller?.disconnect();
             playBattleLogSound('fadeOut');
+
             if (preamble.isConnected)
             {
                 preamble.remove();
                 resolve();
                 return;
             }
+
             const crt = overlay?.querySelector('.battelog-intro-crt');
             if (crt)
                 crt.classList.add('battelog-intro-crt-off');
+
             const offFlash = document.createElement('div');
             offFlash.className = 'battelog-intro-crt-flash off';
             overlay?.appendChild(offFlash);
@@ -205,6 +219,7 @@ export function playTerminal({
                 resolve();
             }, 500);
         };
+
         const swapTimer = setTimeout(() =>
         {
             playBattleLogSound('fadeIn');
@@ -240,6 +255,7 @@ export function playTerminal({
             scroller = _mountScroller(overlay);
             preamble.remove();
             overlay.addEventListener('click', () => controller.skip?.());
+
             if (dismissOnClick)
             {
                 overlay.addEventListener('contextmenu', (/** @type {any} */ ev) =>
@@ -248,6 +264,7 @@ export function playTerminal({
                     finish();
                 });
             }
+
             controller = run(overlay, { finish, speed, body: scroller.body });
         }, 2600 / speed);
     });
@@ -315,11 +332,13 @@ export function revealVerdict(pane, { tone, word, subtitle, label = 'RESULT >>',
     wordEl.style.whiteSpace = 'nowrap';
     wordEl.classList.add('on');
     const startedAt = Date.now();
+
     const scrambleId = interval(() =>
     {
         const progress = Math.min(1, (Date.now() - startedAt) / 750);
         const reveal = progress * word.length;
         let scrambled = '';
+
         for (let idx = 0; idx < word.length; idx++)
         {
             if (word[idx] === ' ')
@@ -327,10 +346,13 @@ export function revealVerdict(pane, { tone, word, subtitle, label = 'RESULT >>',
                 scrambled += ' ';
                 continue;
             }
+
             scrambled += idx < reveal ? word[idx] : SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
         }
+
         wordEl.textContent = scrambled;
         wordEl.dataset.text = scrambled;
+
         if (progress >= 1)
         {
             wordEl.textContent = word;
@@ -338,6 +360,7 @@ export function revealVerdict(pane, { tone, word, subtitle, label = 'RESULT >>',
             clearInterval(scrambleId);
         }
     }, 45);
+
     later(() => wordEl.classList.remove('on'), 850);
     return wrap;
 }
@@ -381,6 +404,7 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
     const squadRatio = squad.split(' ')[0];
 
     const totalKills = players.reduce((a, player) => a + (player.kills ?? 0), 0);
+
     // General efficiency: avg of each pilot's accuracy and HASE save rate; accuracy-only if the pilot has no HASE saves.
     const perPilotEfficiency = players.map(player =>
     {
@@ -388,9 +412,11 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
         const hase = player.bd?.hase?.total?.rate ?? null;
         return hase != null ? (acc + hase) / 2 : acc;
     });
+
     const avgEff = perPilotEfficiency.length
         ? Math.round(perPilotEfficiency.reduce((a, b) => a + b, 0) / perPilotEfficiency.length)
         : 0;
+
     // HP: current HP + remaining structure lives, over the full mech pool (hpMax * structMax).
     const hpSumEnd = players.reduce((a, player) => a + (player.effectiveHpEnd ?? player.hpEnd ?? 0), 0);
     const hpSumMax = players.reduce((a, player) => a + (player.effectiveHpMax ?? (player.hpMax ?? 0) * (player.structMax ?? 1)), 0);
@@ -435,6 +461,7 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
     if (extraLines.length > 0)
     {
         const LABEL_COL = 42;
+
         const formatted = extraLines
             .filter(row => (row?.label ?? '').trim() || (row?.result ?? '').trim())
             .map(row =>
@@ -446,6 +473,7 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
                     result: String(row.result ?? '').trim().toUpperCase() || 'OK',
                 };
             });
+
         lines.splice(-1, 0, ...formatted);
     }
 
@@ -454,6 +482,7 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
         const chips = players.map(player =>
             `<span class="battelog-mechs-deployed-chip">${_escape(player.callsign)}</span>`,
         ).join('');
+
         const deployed = document.createElement('div');
         deployed.className = 'battelog-mechs-deployed';
         deployed.innerHTML = `<span class="battelog-mechs-deployed-label">◇ MECHS DEPLOYED</span>${chips}`;
@@ -463,11 +492,13 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
     const revealFinal = ({ later, interval }) =>
     {
         const word = { win: 'SUCCESS', lose: 'FAILURE', partial: 'PARTIAL' }[tone];
+
         const subtitle = {
             win: 'ENGAGEMENT WON : ALL OBJECTIVES SECURED',
             lose: 'ENGAGEMENT LOST : TACTICAL WITHDRAWAL',
             partial: 'ENGAGEMENT INCONCLUSIVE : PARTIAL OBJECTIVES',
         }[tone];
+
         revealVerdict(body, { tone, word, subtitle, later, interval });
 
         playBattleLogSound(/** @type {any} */ ({ win: 'resultImpactGood', lose: 'resultImpactBad', partial: 'resultImpact' }[tone]));
@@ -486,6 +517,7 @@ function _run(overlay, { outcome, battle, mvpId, extraLines = [], speed, onDone,
         {
             if (_themeStart() !== 'result')
                 return;
+
             const toReveal = line.result ? 1120 / speed : 500 / speed;
             later(() => playBattleLogTheme(outcome), Math.max(0, toReveal - THEME_LEAD_MS));
         },
@@ -511,10 +543,13 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
     let cancelled = false;
     // Collapses the current line's delays, cleared once it is done.
     let rush = false;
+
     let typingSound = { stop: () =>
     {} };
+
     const timers = new Set();
     const intervals = new Set();
+
     const later = (fn, ms) =>
     {
         const id = setTimeout(() =>
@@ -522,9 +557,11 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
             timers.delete(id); if (!cancelled)
                 fn();
         }, ms);
+
         timers.add(id);
         return id;
     };
+
     const interval = (fn, ms) =>
     {
         const id = setInterval(() =>
@@ -532,8 +569,11 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
             if (cancelled)
             {
                 clearInterval(id); intervals.delete(id); return;
-            } fn();
+            }
+
+            fn();
         }, ms);
+
         intervals.add(id);
         return id;
     };
@@ -541,6 +581,7 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
     // The typing chain schedules through step so skip() can fire the pending hop early.
     let stepId = null;
     let stepFn = null;
+
     const step = (fn, ms) =>
     {
         stepFn = fn;
@@ -569,6 +610,7 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
     {
         const base = Math.max(8, 1000 / (46 * speed));
         let delay = base * (0.45 + Math.random() * 1.2);
+
         if (ch === ' ')
             delay += base * 0.6;
         if (ch === '.')
@@ -582,6 +624,7 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
     {
         if (lineEls[cur])
             return;
+
         const line = lines[cur];
         const el = document.createElement('div');
         el.className = 'battelog-intro-line' + (line.head ? ' head' : '') + (line.cls ? ' ' + line.cls : '');
@@ -599,17 +642,21 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
         const el = lineEls[lineIdx];
         if (!el)
             return;
+
         let left = count;
         let html = '';
+
         for (const part of labelParts(lines[lineIdx]))
         {
             if (left <= 0)
                 break;
+
             const text = typeof part === 'string' ? part : part.text;
             const slice = _escape(text.slice(0, left));
             html += typeof part === 'string' ? slice : `<span class="${part.cls}">${slice}</span>`;
             left -= text.length;
         }
+
         const labelSpan = el.querySelector('.battelog-intro-label');
         labelSpan.innerHTML = html + (showCaret ? '<span class="battelog-intro-caret">▊</span>' : '');
     };
@@ -619,6 +666,7 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
         const el = lineEls[lineIdx];
         if (!el)
             return;
+
         const resultSpan = document.createElement('span');
         resultSpan.className = 'battelog-intro-result';
         if (html)
@@ -651,6 +699,7 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
                 typingSound.stop();
                 typingSound = playBattleLogSound('typingLoop', { loop: true });
             }
+
             const ch = text[charIdx];
             charIdx++;
             setLabelText(cur, charIdx, true);
@@ -683,12 +732,14 @@ export function typeTerminalLines(inner, lines, { speed = INTRO_SPEED, onDone, o
         if (cancelled)
             return;
         rush = false;
+
         if (cur >= lines.length - 1)
         {
             typingSound.stop();
             onDone?.({ later, interval });
             return;
         }
+
         cur++;
         charIdx = 0;
         step(typeChar, 240 / speed);
@@ -726,12 +777,15 @@ function _dressingHtml(color, {
     const tickerPayload = singleCopy.repeat(copies);
     // Scale duration with copies to hold ~67 px/s scroll speed regardless of copy count.
     const tickerDurationS = Math.round((copies * copyPx) / 67);
+
     const eqBars = [0, 1, 2, 3, 4].map(i =>
         `<span class="battelog-dress-eq" style="background:${color};animation-delay:${i * 0.12}s;"></span>`,
     ).join('');
+
     const ticks = Array.from({ length: 11 }).map((_, i) =>
         `<span class="battelog-dress-tick${i % 5 === 0 ? ' long' : ''}"></span>`,
     ).join('');
+
     return `
         <div class="battelog-dress">
             <div class="battelog-dress-corner tl"></div>

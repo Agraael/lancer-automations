@@ -27,6 +27,7 @@ function isEnabled()
 function lightDirection()
 {
     let bearing = FALLBACK_BEARING;
+
     if (game.modules.get(THT_ID)?.active)
     {
         // THT without the fork does not register it
@@ -75,7 +76,7 @@ export function refreshGroundShadow(token)
         return;
 
     const texture = token.mesh?.texture;
-    const cells = cellsAboveGround(token);
+    const cells = isEnabled() ? cellsAboveGround(token) : 0;
 
     // Standing on whatever is under it casts nothing: the shadow is the elevation cue, not decoration
     if (!isEnabled() || cells <= 0 || !texture?.valid || token.document.hidden || !token.visible)
@@ -88,6 +89,7 @@ export function refreshGroundShadow(token)
     const throwBy = (getModuleSetting('tokenGroundShadowThrow') ?? 9) * scale * cells;
 
     let shadow = shadows.get(id);
+
     if (!shadow || shadow.texture !== texture)
     {
         removeShadow(id);
@@ -120,6 +122,7 @@ export function refreshGroundShadow(token)
     // Softer the further it is thrown, which is what makes the height read rather than the offset alone
     const blur = Math.max(1, (2 + cells * 1.5) * scale);
     const existing = shadow.filters?.[0];
+
     if (existing instanceof PIXI.BlurFilter)
         existing.blur = blur;
     else

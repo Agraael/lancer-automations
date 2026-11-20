@@ -5,7 +5,9 @@
 import {
     addGraphicsBelowTokens, destroyGraphics, paintCellRegion, createFadeInOut,
 } from "./canvas-helpers.js";
-import { computeMovementReach } from "../movement/reachability.js";
+import { computeMovementReach, computeStraightReach } from "../movement/reachability.js";
+import { isStraightMove, straightStartState, straightStateAfter } from "../movement/straight-line.js";
+import { climberFlipFor, straightFlipFor } from "../movement/keybindings.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { liveDragState } from "../movement/token-ruler.js";
 import { getSpeedRanges, tokenSpeed } from "../combat/speed-provider.js";
@@ -42,9 +44,23 @@ function effectiveAction(token)
 {
     const doc = token.document;
     const layer = /** @type {any} */ (canvas.tokens);
+
     if (layer?._draggedToken?.document?.id && layer._draggedToken.document.id === doc?.id)
         return layer._dragMovementAction ?? doc.movementAction ?? 'walk';
     return doc?.movementAction ?? 'walk';
+}
+
+function straightStartFor(token, drag)
+{
+    const doc = token.document;
+    if (!drag)
+        return straightStartState(doc, { x: doc.x, y: doc.y, elevation: doc.elevation });
+
+    const foundPath = token._plannedMovement?.[game.user.id]?.foundPath ?? [];
+    const anchorIdx = foundPath.findLastIndex((waypoint, index) => index > 0 && waypoint.explicit && waypoint.checkpoint
+        && Math.round(waypoint.x) === Math.round(drag.end.x) && Math.round(waypoint.y) === Math.round(drag.end.y));
+
+    return anchorIdx > 0 ? straightStateAfter(doc, foundPath.slice(0, anchorIdx + 1)) : null;
 }
 
 function buildTokenReach(token)
@@ -59,6 +75,8 @@ function buildTokenReach(token)
 
     let tiers, spent, budget;
     const flat = teleport || forced;
+    const straightStart = !flat && isStraightMove(doc, action) ? straightStartFor(token, drag) : null;
+
     if (forced)
     {
         // knockback: one flat purple band = 2x the unit's speed; not tiered, not speed-limited, no spend
@@ -72,25 +90,32 @@ function buildTokenReach(token)
         tiers = getSpeedRanges(token);
         if (!tiers.length)
             return null;
+
         // already-committed turn movement only counts in combat; the drag/waypoint cost always applies
         const historySpent = game.combat?.active ? spentFor(doc, !!drag) : 0;
-        spent = historySpent + dragDelta;
+        spent = straightStart ? straightStart.spent : historySpent + dragDelta;
         budget = tiers[tiers.length - 1].max - spent;
     }
 
     const result = { tiers, budget, cells: new Map(), reach: new Map() };
     if (budget <= 0)
         return result;
+
     const origin = drag ? drag.end : null;
     const footprints = new Map();
     const occupied = new Set();
-    result.reach = computeMovementReach(token, budget, { action, origin, footprintsOut: footprints, occupiedOut: occupied, flat });
+    result.reach = straightStart
+        ? computeStraightReach(token, budget, { action, origin, start: straightStart, footprintsOut: footprints, occupiedOut: occupied })
+        : computeMovementReach(token, budget, { action, origin, footprintsOut: footprints, occupiedOut: occupied, flat });
+
     for (const [key, cost] of result.reach)
     {
         if (cost <= 0)
             continue;
+
         const total = spent + cost;
         let tier = -1;
+
         for (let tierIdx = 0; tierIdx < tiers.length; tierIdx++)
         {
             if (total <= tiers[tierIdx].max + 1e-9)
@@ -99,14 +124,18 @@ function buildTokenReach(token)
                 break;
             }
         }
+
         if (tier < 0)
             continue;
+
         // Paint the whole footprint at that position, not just the center cell (multi-hex tokens).
         const footprintCells = footprints.get(key);
         const cellsHere = footprintCells?.length ? footprintCells : [key];
+
         // Lancer: can't end where the footprint covers another character; drop the position.
         if (occupied.size && cellsHere.some(cellKey => occupied.has(cellKey)))
             continue;
+
         for (const footprintKey of cellsHere)
         {
             const existing = result.cells.get(footprintKey);
@@ -114,6 +143,7 @@ function buildTokenReach(token)
                 result.cells.set(footprintKey, tier);
         }
     }
+
     // The cells under the token itself are never painted (same as size 1's own hex).
     for (const [key, cost] of result.reach)
     {
@@ -122,6 +152,7 @@ function buildTokenReach(token)
         for (const footprintKey of footprints.get(key) ?? [key])
             result.cells.delete(footprintKey);
     }
+
     return result;
 }
 
@@ -134,16 +165,19 @@ export function createMovementReachHighlight(tokens)
     {
         const bestByCell = new Map();
         const tierColors = [];
+
         for (const token of tokens)
         {
             const data = buildTokenReach(token);
             if (!data)
                 continue;
+
             for (let tierIdx = 0; tierIdx < data.tiers.length; tierIdx++)
             {
                 if (tierColors[tierIdx] === undefined)
                     tierColors[tierIdx] = data.tiers[tierIdx].color;
             }
+
             for (const [key, tierIdx] of data.cells)
             {
                 const existing = bestByCell.get(key);
@@ -156,6 +190,7 @@ export function createMovementReachHighlight(tokens)
         const bandCells = [];
         for (const [key, tierIdx] of bestByCell)
             (bandCells[tierIdx] ??= []).push(key);
+
         // outer tiers first so the inner (cheaper) band paints on top of shared outlines
         for (let tierIdx = bandCells.length - 1; tierIdx >= 0; tierIdx--)
         {
@@ -164,10 +199,12 @@ export function createMovementReachHighlight(tokens)
             paintCellRegion(staticGfx, bandCells[tierIdx], { color: tierColors[tierIdx] ?? 0x1e88e5, alpha: 0.14, lineAlpha: 0, lineWidth: 0 });
         }
     };
+
     rebuild();
 
-    const posKey = () => tokens.map(token => `${token.document?.x},${token.document?.y},${token.document?.elevation},${effectiveAction(token)}`).join('|');
+    const posKey = () => tokens.map(token => `${token.document?.x},${token.document?.y},${token.document?.elevation},${effectiveAction(token)},${straightFlipFor(token.document)},${climberFlipFor(token.document)}`).join('|');
     let lastKey = posKey();
+
     const followTick = () =>
     {
         if (staticGfx.destroyed)
@@ -175,21 +212,26 @@ export function createMovementReachHighlight(tokens)
             canvas.app.ticker.remove(followTick);
             return;
         }
+
         const key = posKey();
+
         if (key !== lastKey)
         {
             lastKey = key;
             rebuild();
         }
     };
+
     canvas.app.ticker.add(followTick);
 
     const tokenIds = new Set(tokens.map(token => token.document?.id));
+
     const onDragChanged = (tokenId) =>
     {
         if (tokenIds.has(tokenId) && !staticGfx.destroyed)
             rebuild();
     };
+
     Hooks.on('lancer-automations.dragMoveChanged', onDragChanged);
 
     const fadeDestroy = createFadeInOut([staticGfx], { fadeInMs: 180, fadeOutMs: 180 }, () =>
@@ -197,6 +239,7 @@ export function createMovementReachHighlight(tokens)
         canvas.app.ticker.remove(followTick);
         destroyGraphics(staticGfx);
     });
+
     // Off synchronously: on canvasTearDown the graphic dies before the fade ends, so the
     // fade's onDestroyed never runs and the listener would leak if removed only there.
     return () =>

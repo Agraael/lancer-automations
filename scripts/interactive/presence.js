@@ -39,6 +39,7 @@ export function broadcastToolPresence(kind, data)
 {
     if (!canShareTools() || !canvas.scene)
         return;
+
     // Related token hidden (e.g. a stealthed unit): reveal nothing to other clients, drop any live ghost once.
     if (data.relatedToken?.document?.hidden)
     {
@@ -46,6 +47,7 @@ export function broadcastToolPresence(kind, data)
             clearToolPresence(kind);
         return;
     }
+
     const cells = data.cells ?? [];
     const placedCells = data.placedCells ?? [];
     const originCells = data.originCells ?? [];
@@ -58,6 +60,7 @@ export function broadcastToolPresence(kind, data)
     const sig = `${cells.join('|')}#${placedCells.join('|')}#${originCells.join('|')}#${tokens.join(',')}#${lineSig}#${labelSig}`;
     const now = Date.now();
     const lastAt = _lastAt.get(kind) ?? 0;
+
     // Skip unchanged frames; still re-send every ~1s as a heartbeat.
     if (_lastSig.get(kind) === sig && now - lastAt < 1000)
         return;
@@ -97,6 +100,7 @@ export function clearToolPresence(kind)
 
 // Active sender heartbeats, cleared on scene change so a tool open during teardown can't leak its interval.
 const _activeBeats = new Set();
+
 // Re-emit a tool's presence every ~1.2s so its ghost survives idle (cursor not moving). Returns a stop fn.
 export function startToolHeartbeat(kind, getData)
 {
@@ -111,7 +115,9 @@ export function startToolHeartbeat(kind, getData)
         catch
         { /* canvas torn down or tool disposed */ }
     }, 1200);
+
     _activeBeats.add(beat);
+
     return () =>
     {
         clearInterval(beat);
@@ -130,8 +136,10 @@ export function onRemotePresence(payload)
         return;
     if (payload.sceneId !== canvas.scene?.id)
         return;
+
     const key = ghostKey(payload.userId, payload.kind);
     const prev = _ghosts.get(key);
+
     if (prev)
         destroyGraphics(prev.container);
 
@@ -141,54 +149,66 @@ export function onRemotePresence(payload)
     const originColor = payload.originColor ?? 0xffff00;
     g.lineStyle(gridLineWidth(2), originColor, 0.45);
     g.beginFill(originColor, 0.08);
+
     for (const ckey of payload.originCells ?? [])
     {
         const [col, row] = ckey.split(',').map(Number);
         drawCell(g, col, row);
     }
+
     g.endFill();
     // Placed/confirmed shapes: mirror the local placed colour (yellow by default), more transparent.
     const placedColor = payload.placedColor ?? 0xffd84a;
     g.lineStyle(gridLineWidth(2), placedColor, 0.5);
     g.beginFill(placedColor, 0.1);
+
     for (const ckey of payload.placedCells ?? [])
     {
         const [col, row] = ckey.split(',').map(Number);
         drawCell(g, col, row);
     }
+
     g.endFill();
     // Live cursor preview: mirror the local cursor colour (blue by default), more transparent.
     const cellColor = payload.cellColor ?? 0x0088ff;
     g.lineStyle(gridLineWidth(2), cellColor, 0.4);
     g.beginFill(cellColor, 0.06);
+
     for (const ckey of payload.cells ?? [])
     {
         const [col, row] = ckey.split(',').map(Number);
         drawCell(g, col, row);
     }
+
     g.endFill();
     // Highlighted tokens: same cyan as the local highlight, more transparent.
     g.lineStyle(gridLineWidth(3), 0x00ffff, 0.45);
     g.beginFill(0x00ffff, 0.07);
+
     for (const id of payload.tokens ?? [])
     {
         const token = canvas.tokens.get(id);
+
         if (token)
         {
             for (const offset of getOccupiedOffsets(token))
                 drawCell(g, offset.col, offset.row);
         }
     }
+
     g.endFill();
     // Trace lines (origin -> chosen destination); drawn last so no fill bleeds in.
     const lineColor = payload.lineColor ?? 0xffffff;
     g.lineStyle(gridLineWidth(3), lineColor, 0.5);
+
     for (const ln of payload.lines ?? [])
     {
         g.moveTo(ln.x1, ln.y1);
         g.lineTo(ln.x2, ln.y2);
     }
+
     container.addChild(g);
+
     // Elevation labels (band / per-cell), white, semi-transparent.
     for (const label of payload.labels ?? [])
     {
@@ -201,11 +221,13 @@ export function onRemotePresence(payload)
             fontWeight: 'bold',
             align: 'center',
         });
+
         txt.anchor.set(0.5);
         txt.position.set(label.x, label.y);
         txt.alpha = 0.75;
         container.addChild(txt);
     }
+
     addGraphicsBelowTokens(container);
     _ghosts.set(key, { container, ts: payload.ts ?? Date.now() });
 }
@@ -214,6 +236,7 @@ export function onRemotePresenceClear(payload)
 {
     if (!payload)
         return;
+
     for (const [key, entry] of _ghosts)
     {
         if (!key.startsWith(`${payload.userId}|`))
@@ -238,6 +261,7 @@ Hooks.once('ready', () =>
     setInterval(() =>
     {
         const now = Date.now();
+
         for (const [key, entry] of _ghosts)
         {
             if (now - entry.ts > STALE_MS)

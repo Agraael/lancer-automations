@@ -19,6 +19,7 @@ export function buildDuration(durationLabel, originID, turnsInput)
         return { label: 'encounter', turns: null, rounds: null };
     if (durationLabel === 'roundEnd' || durationLabel === 'roundStart')
         return { label: durationLabel, turns: null, rounds: Math.max(1, Number(turnsInput) || 1) };
+
     const isOriginTurn = game.combat?.current?.tokenId === originID;
     const turns = (durationLabel === 'end' && isOriginTurn) ? turnsInput + 1 : (turnsInput === 0 ? 1 : turnsInput);
     return { label: durationLabel, turns, rounds: 0, _preAdjusted: true };
@@ -74,6 +75,7 @@ export function currentTurnKey()
     const combat = game.combat;
     if (!combat)
         return null;
+
     const combatant = /** @type {any} */ (combat.combatant);
     return `${combat.id}:${combat.round}:${combatant?.id ?? combat.turn ?? 'none'}:${activationsUsed(combatant)}`;
 }

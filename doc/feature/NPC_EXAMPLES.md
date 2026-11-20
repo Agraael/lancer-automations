@@ -3,7 +3,7 @@
 [← Back to Home](../index.md) · Engine guide: [Automation Engine](./AUTOMATION_ENGINE.md) · API: [API Reference](../API_REFERENCE.md)
 
 > [!WARNING]
-> **These come from my personal NPC set** - teaching material, not a supported content pack. The LIDs, numbers, and balance are tuned for my own games, and **some are old and may not run as-is anymore** (the engine and API move on). Copy the patterns, not the literal code. See [the personal activation set](./AUTOMATION_ENGINE.md#the-personal-activation-set).
+> **These come from my personal NPC set**, as teaching material, not a supported content pack. The LIDs, numbers, and balance are tuned for my own games, and **some are old and may not run as-is anymore** (the engine and API move on). Copy the patterns, not the literal code. See [the personal automation set](./AUTOMATION_ENGINE.md#the-personal-automation-set).
 
 Each example teaches one engine concept, simplest first. Read [Automation Engine](./AUTOMATION_ENGINE.md) first for the basics.
 
@@ -84,9 +84,9 @@ const npcInsulatedBonus = {
 <img src="../img/npc-smoke-zone.png" width="53%"/>
 
 > [!TIP]
-> The simplest active automation: `onActivation` + `onlyOnSourceMatch` + `autoActivate`, then one call to `placeZone`. `onlyOnSourceMatch` scopes it to this feature, `triggerOther: false` scopes it to the acting token (unlinked copies of one NPC share item ids, so without it every copy on the scene fires). The `statusEffects` array applies those effects to any token inside the zone automatically.
+> The simplest active automation: `onActivation` + `onlyOnSourceMatch` + `autoActivate`, then one call to `placeZone`. `onlyOnSourceMatch` scopes it to this feature, `triggerOther: false` scopes it to the acting token. Unlinked copies of one NPC share item ids, so without `triggerOther: false` every copy on the scene fires. The `statusEffects` array applies those effects to any token inside the zone automatically.
 >
-> There is no `usesPerRound` field on a reaction config, the engine never reads one. To limit a feature per round, either put a `tg_round` tag on the item and leave `checkUsage` on, or open `activationCode` with `if (!await api.consumeOncePerRound(reactorToken, 'my_key')) return;`. It has to go in `activationCode`, not `evaluate`, because `evaluate` must stay synchronous.
+> There is no `usesPerRound` field on an automation config, the engine never reads one. To limit a feature per round, either put a `tg_round` tag on the item and leave `checkUsage` on, or open `activationCode` with `if (!await api.consumeOncePerRound(reactorToken, 'my_key')) return;`. It has to go in `activationCode`, not `evaluate`, because `evaluate` must stay synchronous.
 
 ---
 
@@ -97,7 +97,7 @@ const npcInsulatedBonus = {
 **Triggers:** `onEnterCombat`, `onExitCombat`
 
 > [!NOTE]
-> Veterancy is not from my personal set. It is one of the built-in defaults (`npcf_veterancy_veteran`), so you already have it. The shipped version is bigger than what's below: three sub-reactions instead of two (a third on `onActivation` lets you re-pick mid-combat), `linkBonusToItem` / `unlinkBonusFromItem` instead of raw constant bonuses so the bonus dies with the item, and `startChoiceCard` instead of `pickCard`. What follows is the simplified teaching version. Read it for the shape, then open the real one in the Activation Manager.
+> Veterancy is not from my personal set. It is one of the built-in defaults (`npcf_veterancy_veteran`), so you already have it. The shipped version is bigger than what's below: three sub-automations instead of two (a third on `onActivation` lets you re-pick mid-combat), `linkBonusToItem` / `unlinkBonusFromItem` instead of raw constant bonuses so the bonus dies with the item, and `startChoiceCard` instead of `pickCard`. What follows is the simplified teaching version. Read it for the shape, then open the real one in the Automation Manager.
 
 ```js
 const veterancyVeteranAutomation = {
@@ -157,8 +157,7 @@ const veterancyVeteranAutomation = {
 
 **What it does.** Grants a friendly target in sensor range resistance to all damage for the next `1d3` attacks.
 
-**Triggers:** `onActivation`  ·  *(also in the [README](../index.md))*
-
+**Triggers:** `onActivation`
 ```js
 "npcf_dispersal_shield_priest": {
     itemType: "npc_feature",
@@ -212,8 +211,7 @@ const veterancyVeteranAutomation = {
 
 **What it does.** Places a Blast 2 smoke zone that persists until the start of the NPC's next turn, then deletes itself.
 
-**Triggers:** `onActivation`  ·  *(also in the [README](../index.md))*
-
+**Triggers:** `onActivation`
 ```js
 "nrfaw-npc_carrier_SmokeLaunchers": {
     itemType: "npc_feature",
@@ -239,13 +237,13 @@ const veterancyVeteranAutomation = {
 ```
 
 > [!TIP]
-> `expires` stamps the template so the module deletes it on that combat event (`turns: 2` would survive one extra turn, and `ownerTurnEnd` also exists). No cleanup reaction, no flag bookkeeping. For state that is not a template, actor flags remain the way to carry data between reactions.
+> `expires` stamps the template so the module deletes it on that combat event (`turns: 2` would survive one extra turn, and `ownerTurnEnd` also exists). No cleanup automation, no flag bookkeeping. For state that is not a template, actor flags remain the way to carry data between automations.
 
 ---
 
 ## 6. Moving Target
 
-**What it does.** When an enemy moves within 20 of the sniper, it can interrupt that movement and fire its Anti-materiel Rifle. An unloaded rifle reloads instead and nobody is interrupted.
+**What it does.** When an enemy moves within 20 of the sniper, the sniper can interrupt that movement and fire its Anti-materiel Rifle. An unloaded rifle reloads instead and nobody is interrupted.
 
 **Triggers:** `onPreMove`
 
@@ -276,7 +274,6 @@ const movingTargetSniperAutomation = {
             const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
             if (!rifle) return;
             if (rifle.system?.loaded === false) { await api.setItemResource(rifle, true); return; }
-            let responderIds = [];
             const preConfirm = async () => {
                 const ask = await api.askCard({
                     title: "INTERRUPT MOVEMENT?",
@@ -285,41 +282,33 @@ const movingTargetSniperAutomation = {
                     owner: reactorToken,
                     yesText: "Interrupt", yesIcon: "fas fa-crosshairs", noText: "Let pass"
                 });
-                responderIds = ask.responderIds;
-                if (ask.confirmed) triggerData.startRelatedFlowToReactor(responderIds[0]);
+                if (ask.confirmed) triggerData.startRelatedFlowToReactor(ask.responderIds[0]);
                 return ask.confirmed;
             };
             const postChoice = async (chose) => {
-                if (chose || !responderIds.length) return;
-                await triggerData.sendMessageToReactor({ mover }, responderIds[0], {
-                    wait: true,
-                    waitTitle: "MOVING TARGET",
-                    waitDescription: `Waiting for ${reactorToken.name}'s player to fire...`,
-                    waitItem: item, waitOriginToken: reactorToken, waitRelatedToken: mover
-                });
+                if (chose) return;
+                await api.asOwner(reactorToken, {
+                    title: "MOVING TARGET",
+                    description: `Waiting for ${reactorToken.name}'s player to fire...`,
+                    item, relatedToken: mover
+                }).attackWith(rifle, [mover]);
             };
             triggerData.cancelTriggeredMove?.(
                 `${reactorToken.name} is interrupting ${mover.name}'s movement.`,
                 true, api.getTokenOwnerUserId(mover), preConfirm, postChoice,
                 { item, originToken: reactorToken, relatedToken: mover }
             );
-        },
-        onMessage: async function (triggerType, data, reactorToken, item, activationName, api) {
-            const mover = data.mover ?? null;
-            const rifle = api.findItemByLid(reactorToken.actor, "npcf_anti_materiel_rifle_sniper");
-            if (!rifle) return;
-            await api.attackWith(rifle, mover ? [mover] : null);
         }
     }]
 };
 ```
 
 > [!TIP]
-> The classic interrupt. `triggerOther: true` with `triggerSelf: false` means it reacts to others moving, not to itself. `onPreMove` fires before the move runs, so `cancelTriggeredMove` has to be called before the first `await`, which is exactly what happens here: everything async lives in `preConfirm` and `postChoice`, which run after the cancel has already stuck. Setting `awaitActivationCompletion` would change nothing on this trigger, see [Automation System](../AUTOMATION_SYSTEM.md#the-synchronous-rule).
+> The classic interrupt. `triggerOther: true` with `triggerSelf: false` means it reacts to others moving, not to itself. `onPreMove` fires before the move runs, so `cancelTriggeredMove` has to be called before the first `await`. That's exactly what happens here: everything async lives in `preConfirm` and `postChoice`, which run after the cancel has already stuck. Setting `awaitActivationCompletion` would change nothing on this trigger, see [Automation System](../AUTOMATION_SYSTEM.md#the-synchronous-rule).
 >
-> `preConfirm` asks the sniper's player whether to interrupt, and fires the rifle through `startRelatedFlowToReactor` if they say yes. `postChoice` covers the other branch: the mover's player overrode the interrupt (`chose === false`, the move goes through), and the sniper still gets its shot. That branch delegates through `sendMessageToReactor`, which is what puts `data.mover` on the `onMessage` handler below, as a live Token on the sniper player's client. Drop the send and `onMessage` never fires.
+> `preConfirm` asks the sniper's player whether to interrupt, and fires the rifle through `startRelatedFlowToReactor` if they say yes. `postChoice` covers the other branch: the mover's player overrode the interrupt (`chose === false`, the move goes through), and the sniper still gets its shot: `asOwner` runs `attackWith` on the sniper player's client, with a waiting card on the mover's side.
 >
-> The rifle is checked before any card goes out, so an unloaded sniper reloads and leaves the movement alone instead of interrupting it only to find there is nothing to fire. Note `setItemResource` rather than `reloadOneWeapon`: the latter asks which weapon to reload, which would be another prompt. Once the sniper's player has committed to the interrupt, the shot needs no second confirmation, so `onMessage` goes straight to `attackWith`.
+> The rifle is checked before any card goes out, so an unloaded sniper reloads and leaves the movement alone instead of interrupting it only to find there is nothing to fire. Note `setItemResource` rather than `reloadOneWeapon`: the latter asks which weapon to reload, which would be another prompt. Once the sniper's player has committed to the interrupt, the shot needs no second confirmation, so `postChoice` goes straight to `attackWith`.
 
 ---
 
@@ -382,11 +371,20 @@ const restockDroneSupportAutomation = {
         activationType: "none",
         onInit: async function (token, item, api) {
             await api.addItemFlags(item, { deployRange: 5 });
-            await api.addExtraDeploymentLids(item, [
-                { lid: "dep_(npc)_support_restock_drone_t1", tier: 1 },
-                { lid: "dep_(npc)_support_restock_drone_t2", tier: 2 },
-                { lid: "dep_(npc)_support_restock_drone_t3", tier: 3 }
-            ]);
+            for (const tier of [1, 2, 3]) {
+                const defense = [10, 12, 14][tier - 1];
+                await api.addDeployableSpec(item, {
+                    lid: `la_dep_support_restock_drone_t${tier}_npc`,
+                    name: "Restock Drone",
+                    type: "Drone",
+                    size: 0.5,
+                    hp: [5, 8, 10][tier - 1],
+                    evasion: defense,
+                    edef: defense,
+                    activation: "Quick",
+                    detail: `<p>The next allied character that moves through or next to the drone regains ${[5, 10, 15][tier - 1]} HP.</p>`
+                }, { tier });
+            }
             await api.setHidePrimaryAction(item);
         }
     }]
@@ -396,9 +394,9 @@ const restockDroneSupportAutomation = {
 <img src="../img/npc-restock-aura.png" width="53%"/>
 
 > [!TIP]
-> Both halves of "a deployable on an NPC": `onInit` uses `addExtraDeploymentLids` to attach the deployable, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. Inside the aura callback, `parent.delete()` removes the drone so it is consumed on use.
+> Both halves of "a deployable on an NPC": `onInit` uses `addDeployableSpec` to define the drone on the item, one spec per tier, so no LCP is needed, and `onDeploy` (with `triggerSelf` + `onlyOnSourceMatch`) reads `deployedTokens[0]` and builds a `createAura` on the deployed drone. Inside the aura callback, `parent.delete()` removes the drone so it is consumed on use.
 >
-> The second sub-reaction is `onInit`-only, so it spells out `triggerSelf: false`, `triggerOther: false`, `autoActivate: false` alongside `triggers: []`. `triggerOther` defaults to **true**, so leaving it out would make the entry a candidate on every trigger it happens to match. See [self-deploy in Automation System](../AUTOMATION_SYSTEM.md#self-deployable).
+> The second sub-automation is `onInit`-only, so it spells out `triggerSelf: false`, `triggerOther: false`, `autoActivate: false` alongside `triggers: []`. `triggerOther` defaults to **true**, so leaving it out would make the entry a candidate on every trigger it happens to match. See [self-deploy in Automation System](../AUTOMATION_SYSTEM.md#self-deployable).
 
 ---
 
@@ -409,7 +407,7 @@ const restockDroneSupportAutomation = {
 **Triggers:** `onActivation`, `onEndActivation`, `onStatusApplied` (+ `onHeatGain`, `onTechMiss` in the variant)
 
 > [!NOTE]
-> This one is a sketch, not a runnable block. `buildDefenseNetAuraCallback` and `teardownDefenseNet` are real functions in the shipped source but are not shown here, and the rebake reactions are elided. Read it for the factory shape.
+> This one is a sketch, not a runnable block. `buildDefenseNetAuraCallback` and `teardownDefenseNet` are real functions in the shipped source but are not shown here, and the rebake sub-automations are elided. Read it for the factory shape.
 
 ```js
 function buildDefenseNetAutomation(radius, isRebake = false) {
@@ -472,9 +470,9 @@ const defenseNetRebakeAutomation = buildDefenseNetAutomation(2, true);
 ```
 
 > [!TIP]
-> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`). A second reaction tears it down on stun/jam. The two elided entries are the rebake's own: one collapses the net when heat hits the cap, the other retaliates with Heat damage on a tech miss. `buildDefenseNetAuraCallback()` returns the aura macro that applies the bonuses to allies inside.
+> A self-deploying aura on the reactor. `setItemAsActivated` makes it a toggle (End Activation arrives as `triggerData.endActivation`). A second sub-automation tears it down on stun/jam. The two elided entries are the rebake's own: one collapses the net when heat hits the cap, the other retaliates with Heat damage on a tech miss. `buildDefenseNetAuraCallback()` returns the aura macro that applies the bonuses to allies inside.
 >
-> The whole thing is a `buildDefenseNetAutomation(radius, isRebake)` factory, so the variant *layers* extra reactions onto the same base. That's how you build tiered or variant abilities without copy-pasting.
+> The whole thing is a `buildDefenseNetAutomation(radius, isRebake)` factory, so the variant *layers* extra sub-automations onto the same base. That's how you build tiered or variant abilities without copy-pasting.
 
 ---
 
@@ -482,15 +480,15 @@ const defenseNetRebakeAutomation = buildDefenseNetAutomation(2, true);
 
 These eight cover the core toolbox. Patterns they don't touch, with an example to study for each. Most live in `startups/itemActivations.js`, keyed by LID, so search for the name in lowercase with underscores (`voice_of_authority`, `bulky_construction`). The ones marked built-in are in `scripts/activations/reactions-registry.js` instead.
 
-- **Prevent death** (`onPreHpChange` + `modifyHpChange`) - *True Grit*
-- **Intercept destruction / clone a token** (`onDestroyed`) - *Feign Death*
-- **Inject a bonus into someone else's check** (`injectBonus`, opposed checks) - *Squad Leader*
-- **Add or remove extra actions** on effect gain/loss (`addExtraActions`) - *Sniper's Mark*
-- **Lock or replace an action** (`lockActorAction`) - *Bulky Construction*, and *Limited Melee Attacks* (built-in)
-- **Cancel a status or an action** (`cancelChange` / `cancelAction`) - *Marker Rifle*
-- **Reply to a hit asynchronously** (`onMessage`) - *Lightning Reflexes*
-- **Sequencer VFX** in a reaction - *Volley - Rainmaker*
-- **Reroll auras** (`onRoll`) - *Nano-Repair Cloud*, *Voice of Authority*
-- **General (item-less) reactions** registered for everyone - *Overwatch* (built-in), *Fall Prone (Sniper's Mark)*, and *Break Free* in `scripts/combat/grapple.js`
+- **Prevent death** (`onPreHpChange` + `modifyHpChange`): *True Grit*
+- **Intercept destruction / clone a token** (`onDestroyed`): *Feign Death*
+- **Inject a bonus into someone else's check** (`injectBonus`, opposed checks): *Squad Leader*
+- **Add or remove extra actions** on effect gain/loss (`addExtraActions`): *Sniper's Mark*
+- **Lock or replace an action** (`lockActorAction`): *Bulky Construction*, and *Limited Melee Attacks* (built-in)
+- **Cancel a status or an action** (`cancelChange` / `cancelAction`): *Marker Rifle*
+- **Roll or move on the reactor owner's client** (`asOwner`): *Lightning Reflexes*, *Rebound*
+- **Sequencer VFX** in an automation: *Volley - Rainmaker*
+- **Reroll auras** (`onRoll`): *Nano-Repair Cloud*, *Voice of Authority*
+- **General (item-less) automations** registered for everyone: *Overwatch* (built-in), *Fall Prone (Sniper's Mark)*, and *Break Free* in `scripts/combat/grapple.js`
 
 My personal set has many more. Browse `startups/itemActivations.js` (or enable the set in settings) to learn from the rest.

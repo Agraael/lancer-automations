@@ -1,9 +1,9 @@
-import { ReactionReset } from '../activations/reaction-reset.js';
+import { AutomationReset } from '../activations/automation-reset.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { tfGetTeams } from '../tools/token-factions-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
 import { setLAFlag } from '../tools/flag-utils.js';
-import { ReactionExport, ReactionImport } from '../activations/reaction-export-import.js';
+import { AutomationExport, AutomationImport } from '../activations/automation-export-import.js';
 import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
 import { openNewsHistory } from './news.js';
 import { openBattleLogGMCardTest, openBattleLogRecapTest } from '../Battelog/battlelog.js';
@@ -11,10 +11,20 @@ import { openTelemetryDebugWindow } from '../Battelog/telemetry-debug.js';
 import { runSettingsOnboarding } from './settings-onboarding.js';
 import { resetPaletteColorSettings } from '../interactive/canvas-helpers.js';
 import { importTemplateMacroPresets } from './tmac-presets.js';
-import { syncTemplateActors } from '../tools/template-actors.js';
+import { ensureTemplateActors, syncTemplateActors } from '../tools/template-actors.js';
+import { deployableArtEnabled, onDeployableArtToggled } from '../tools/deployable-art.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { STATUS_FX_KEYS } from '../fx/statusFX.js';
+
+function weaponFxDefaultsNotice()
+{
+    if (!game.modules.get('lancer-weapon-fx')?.active)
+        return 'LA.settingsMenus.weaponFxDefaults.needsLwfx';
+    if (/** @type {any} */ (game.settings.get('lancer-weapon-fx', 'isWeaponHeuristicActive')) === false)
+        return 'LA.settingsMenus.weaponFxDefaults.heuristicOff';
+    return null;
+}
 
 // Per-action FX functions, as [action id, label key].
 // Same list as the settings registered in tah/index.js.
@@ -42,6 +52,7 @@ const ACTION_FX_KEYS = [
     ['fullTech', 'LA.settingsMenus.tah.actionFxSound.fullTech.label'],
     ['quickTech', 'LA.settingsMenus.tah.actionFxSound.quickTech.label'],
     ['invade', 'LA.settingsMenus.tah.actionFxSound.invade.label'],
+    ['invadeHit', 'LA.settingsMenus.tah.actionFxSound.invadeHit.label'],
     ['grapple', 'LA.settingsMenus.tah.actionFxSound.grapple.label'],
     ['ram', 'LA.settingsMenus.tah.actionFxSound.ram.label'],
     ['jockey', 'LA.settingsMenus.tah.actionFxSound.jockey.label'],
@@ -118,17 +129,22 @@ const COMBAT_MOVEMENT_FIELDS = [
 
     { type: 'section', label: 'LA.settingsMenus.section.attacks.label', collapsible: true, collapsed: true },
     { key: 'enableKnockbackFlow', type: 'boolean' },
-    { key: 'enableThrowFlow', type: 'boolean' },
     { key: 'autoDamageRoll', type: 'boolean' },
     { key: 'autoDamageApply', type: 'boolean' },
     { key: 'autoStructFollowup', type: 'boolean' },
+    { key: 'diceFirst', type: 'boolean' },
+    { key: 'diceFirstLead', type: 'number', min: 0, max: 2000, step: 50, nested: true, hideUnmet: true, requires: 'diceFirst' },
 
     { type: 'section', label: 'LA.settingsMenus.section.rollUplink.label', collapsible: true, collapsed: true },
     { key: 'uplinkEnabled', type: 'boolean' },
     { key: 'uplinkAutoOpen', type: 'boolean', requires: 'uplinkEnabled' },
 
+    { type: 'section', label: 'LA.settingsMenus.section.clocks.label', collapsible: true, collapsed: true },
+    { key: 'clockWindowEnabled', type: 'boolean' },
+
     { type: 'section', label: 'LA.settingsMenus.section.combatCarousel.label', collapsible: true, collapsed: true },
     { key: 'combatCarousel', type: 'boolean' },
+    { key: 'carouselShow', type: 'boolean', requires: 'combatCarousel' },
     { key: 'carouselPortraitSize', type: 'slider', requires: 'combatCarousel' },
     { key: 'carouselLength', type: 'slider', requires: 'combatCarousel' },
     { key: 'carouselMaxOverlap', type: 'slider', requires: 'combatCarousel' },
@@ -178,8 +194,7 @@ const RULER_MEASURE_FIELDS = [
 
     { type: 'section', label: 'LA.settingsMenus.section.advancedMeasure.label', collapsible: true, collapsed: true },
     { key: 'ctrlRulerMode', type: 'select', label: 'LA.settingsMenus.ctrlRulerMode.label', hint: 'LA.settingsMenus.ctrlRulerMode.hint' },
-    { key: 'rulerToolCursor', type: 'boolean', label: 'LA.settingsMenus.rulerToolCursor.label', hint: 'LA.settingsMenus.rulerToolCursor.hint' },
-];
+    { key: 'rulerToolCursor', type: 'boolean', label: 'LA.settingsMenus.rulerToolCursor.label', hint: 'LA.settingsMenus.rulerToolCursor.hint' },];
 
 const WRECK_AURA_REQUIRES = ['mech', 'vehicle', 'human', 'monstrosity', 'biological'].map(category => `wreckTerrain_${category}=aura`);
 
@@ -197,6 +212,7 @@ const WRECKS_FIELDS = [
         {
             const current = getModuleSetting('wreckTerrainType') || '';
             const choices = [{ value: '', label: 'LA.settingsMenus.choice.blank.label', selected: current === '' }];
+
             try
             {
                 const types = globalThis.terrainHeightTools?.getTerrainTypes?.() || [];
@@ -205,6 +221,7 @@ const WRECKS_FIELDS = [
             }
             catch
             { /* ignore */ }
+
             return choices;
         },
         requires: 'enableWrecks' },
@@ -223,6 +240,7 @@ const WRECKS_FIELDS = [
                     { value: 'none', label: 'LA.settingsMenus.choice.none.label', selected: cur === 'none' },
                 ];
             };
+
             const terrainChoices = (key) =>
             {
                 let cur = getModuleSetting(key);
@@ -238,6 +256,7 @@ const WRECKS_FIELDS = [
                     { value: 'aura', label: 'LA.settingsMenus.choice.aura.label', selected: cur === 'aura' },
                 ];
             };
+
             return {
                 columns: ['LA.settingsMenus.tableColumn.category', 'LA.settingsMenus.tableColumn.mode', 'LA.settingsMenus.tableColumn.onWreck'],
                 rows: [
@@ -279,10 +298,12 @@ const WRECKS_FIELDS = [
         getChoices: () =>
         {
             const cur = getModuleSetting('wreckFactionOnDeath') || 'same';
+
             const choices = [
                 { value: 'same', label: 'LA.settingsMenus.choice.same.label', selected: cur === 'same' },
                 { value: 'neutral', label: 'LA.settingsMenus.choice.neutral.label', selected: cur === 'neutral' },
             ];
+
             for (const team of tfGetTeams())
                 choices.push({ value: team.id, label: team.name, selected: team.id === cur });
             return choices;
@@ -312,6 +333,18 @@ const TOKENS_DISPLAY_FIELDS = [
     { key: 'linkManualDeploy', type: 'boolean' },
     { key: 'defaultDeployableArt', type: 'boolean' },
     { key: 'deployableArtScale', type: 'number', min: 0.5, max: 3, step: 0.1, requires: 'defaultDeployableArt' },
+    { type: 'button',
+        key: 'reapplyDeployableArt',
+        label: 'LA.settingsMenus.reapplyDeployableArt.label',
+        hint: 'LA.settingsMenus.reapplyDeployableArt.hint',
+        icon: 'fas fa-paint-brush',
+        onClick: async () =>
+        {
+            await ensureTemplateActors();
+            await onDeployableArtToggled(deployableArtEnabled(), game.userId);
+        },
+    },
+    { key: 'deployableFolderName', type: 'string' },
     { key: 'showDeployableLines', type: 'boolean' },
     { key: 'allowHalfSizeTokens', type: 'boolean' },
     { key: 'overlapTokenPicker', type: 'boolean' },
@@ -413,6 +446,7 @@ const STAT_BARS_FIELDS = [
         {
             const mod = await import('../tah/tokenStatBar.js');
             const fn = /** @type {any} */ (mod).reinjectAutoBarsOnAllTokens;
+
             if (typeof fn === 'function')
                 await fn();
             else
@@ -430,6 +464,7 @@ const STAT_BARS_FIELDS = [
         {
             const mod = await import('../tah/tokenStatBar.js');
             const fn = /** @type {any} */ (mod).applyDefaultsToCurrentScene;
+
             if (typeof fn === 'function')
                 await fn();
             else
@@ -483,8 +518,10 @@ const TAH_FIELDS = [
     { key: 'tah.showDisposition', type: 'boolean', label: 'LA.settingsMenus.tah.showDisposition.label', hint: 'LA.settingsMenus.tah.showDisposition.hint' , requires: 'tahEnabled' },
 
     { type: 'section', label: 'LA.settingsMenus.section.tahPortrait.label', collapsible: true, collapsed: true },
-    { key: 'tah.portrait.mode', type: 'select', label: 'LA.settingsMenus.tah.portrait.mode.label', hint: 'LA.settingsMenus.tah.portrait.mode.hint', requires: 'tahEnabled' },
-    { key: 'tah.portrait.scope', type: 'select', label: 'LA.settingsMenus.tah.portrait.scope.label', hint: 'LA.settingsMenus.tah.portrait.scope.hint', requires: 'tahEnabled' },
+    { key: 'tah.portrait.mech', type: 'select', label: 'LA.settingsMenus.tah.portrait.mech.label', hint: 'LA.settingsMenus.tah.portrait.type.hint', requires: 'tahEnabled', mergedFrom: ['tah.portrait.mode', 'tah.portrait.scope'] },
+    { key: 'tah.portrait.pilot', type: 'select', label: 'LA.settingsMenus.tah.portrait.pilot.label', hint: 'LA.settingsMenus.tah.portrait.type.hint', requires: 'tahEnabled', mergedFrom: ['tah.portrait.mode', 'tah.portrait.scope'] },
+    { key: 'tah.portrait.npc', type: 'select', label: 'LA.settingsMenus.tah.portrait.npc.label', hint: 'LA.settingsMenus.tah.portrait.type.hint', requires: 'tahEnabled', mergedFrom: ['tah.portrait.mode', 'tah.portrait.scope'] },
+    { key: 'tah.portrait.deployable', type: 'select', label: 'LA.settingsMenus.tah.portrait.deployable.label', hint: 'LA.settingsMenus.tah.portrait.type.hint', requires: 'tahEnabled', mergedFrom: ['tah.portrait.mode', 'tah.portrait.scope'] },
     { key: 'tah.portrait.mechUsePilot', type: 'boolean', label: 'LA.settingsMenus.tah.portrait.mechUsePilot.label', hint: 'LA.settingsMenus.tah.portrait.mechUsePilot.hint', requires: 'tahEnabled' },
     { key: 'tah.portrait.scale', type: 'slider', label: 'LA.settingsMenus.tah.portrait.scale.label', hint: 'LA.settingsMenus.tah.portrait.scale.hint', min: 0.5, max: 2.5, step: 0.05, requires: 'tahEnabled' },
     { key: 'tah.portrait.trim', type: 'boolean', label: 'LA.settingsMenus.tah.portrait.trim.label', hint: 'LA.settingsMenus.tah.portrait.trim.hint', requires: 'tahEnabled' },
@@ -530,6 +567,7 @@ const TAH_FIELDS = [
                 title: localize('LA.dialogTitle.clearTahMacros'),
                 content: localize('LA.settingsMenus.content.removeEveryMacroFromTheTah'),
             });
+
             if (!confirmed)
                 return;
             await game.settings.set(MODULE_ID, 'tah.macroList', []);
@@ -548,6 +586,7 @@ const TAH_FIELDS = [
                 title: localize('LA.dialogTitle.clearTahFavorites'),
                 content: localize('LA.settingsMenus.content.removeEveryFavoriteMarkerThisCannot'),
             });
+
             if (!confirmed)
                 return;
             await setLAFlag(game.user,'tahFavorites', []);
@@ -564,10 +603,12 @@ const UI_VARIANTS = [
     ['open', 'LA.settingsMenus.tah.uiSound.open.label'],
     ['details', 'LA.settingsMenus.tah.uiSound.details.label'],
     ['toggle', 'LA.settingsMenus.tah.uiSound.toggle.label'],
+    ['locateToken', 'LA.settingsMenus.tah.uiSound.locateToken.label'],
     ['statusHover', 'LA.settingsMenus.tah.uiSound.statusHover.label'],
     ['battleLogHover', 'LA.settingsMenus.tah.uiSound.battleLogHover.label'],
     ['battleLogClick', 'LA.settingsMenus.tah.uiSound.battleLogClick.label'],
 ];
+
 const TOKEN_VARIANTS = [
     ['tokenHover', 'LA.settingsMenus.tah.tokenSound.tokenHover.label'],
     ['tokenSelect', 'LA.settingsMenus.tah.tokenSound.tokenSelect.label'],
@@ -580,6 +621,7 @@ const TOKEN_VARIANTS = [
     ['targeting', 'LA.settingsMenus.tah.tokenSound.targeting.label'],
     ['targetingConfirm', 'LA.settingsMenus.tah.tokenSound.targetingConfirm.label'],
 ];
+
 const DAMAGE_TYPES = [
     ['kinetic', 'LA.settingsMenus.tah.damageSound.kinetic.label'],
     ['energy', 'LA.settingsMenus.tah.damageSound.energy.label'],
@@ -592,6 +634,7 @@ const DAMAGE_TYPES = [
     ['hit_overshield', 'LA.settingsMenus.tah.damageSound.hit_overshield.label'],
     ['overshield', 'LA.settingsMenus.tah.damageSound.overshield.label'],
 ];
+
 const STAT_EVENTS = [
     ['hp_loss', 'LA.settingsMenus.tah.statSound.hp_loss.label'],
     ['hp_heal', 'LA.settingsMenus.tah.statSound.hp_heal.label'],
@@ -607,6 +650,7 @@ const STAT_EVENTS = [
     ['fail', 'LA.settingsMenus.tah.statSound.fail.label'],
     ['generic_stat', 'LA.settingsMenus.tah.statSound.generic_stat.label'],
 ];
+
 const STATUS_SFX_EVENTS = [
     ['bonus', 'LA.settingsMenus.tah.statusSfx.bonus.label'],
     ['status', 'LA.settingsMenus.tah.statusSfx.status.label'],
@@ -641,6 +685,9 @@ const SOUNDS_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.actionFxAudio.label', collapsible: true, collapsed: true },
     { key: 'tah.actionFxVolume', type: 'slider', label: 'LA.settingsMenus.tah.actionFxVolume.label', min: 0, max: 1.5, step: 0.05 },
     { type: 'compactBooleans', requires: '_sfx.actionFX', items: ACTION_FX_KEYS.map(([actionKey, label]) => ({ key: `tah.actionFxSound.${actionKey}`, label, preview: true })) },
+
+    { type: 'section', label: 'LA.settingsMenus.section.weaponFxAudio.label', collapsible: true, collapsed: true },
+    { key: 'tah.weaponFxVolume', type: 'slider', label: 'LA.settingsMenus.tah.weaponFxVolume.label', min: 0, max: 1.5, step: 0.05 },
 ];
 
 // StatusFX subkeys live in the `statusFXConfig` Object setting. Derived from the one list statusFX.js owns.
@@ -648,6 +695,7 @@ const STATUS_FX_VISUAL = STATUS_FX_KEYS.map(key => ({
     sub: `fx_${key}`,
     label: `LA.settingsMenus.statusFx.fx_${key}.label`,
 }));
+
 const STATUS_FX_AUTO = [
     { sub: 'auto_dangerZone', label: 'LA.settingsMenus.statusFx.auto_dangerZone.label' },
     { sub: 'auto_burn',       label: 'LA.settingsMenus.statusFx.auto_burn.label' },
@@ -671,7 +719,10 @@ const STATUSES_FIELDS = [
 
     { type: 'section', label: 'LA.settingsMenus.section.visualEffects.label', collapsible: true, collapsed: true },
     { type: 'compactStatusFx', items: STATUS_FX_VISUAL, requires: '_sfx.master' },
+    { type: 'statusFx', sub: 'legacyBurnInfection', default: false, label: 'LA.settingsMenus.statusFx.legacyBurnInfection.label', hint: 'LA.settingsMenus.statusFx.legacyBurnInfection.hint', requires: '_sfx.master' },
+    { type: 'moduleBoolean', module: 'tokenmagic', key: 'disableAnimations', hint: 'LA.settingsMenus.tmfxDisableAnimations.hint' },
     { key: 'weaponFxAboveTokens', type: 'boolean' },
+    { key: 'weaponFxDefaults', type: 'boolean', notice: weaponFxDefaultsNotice },
     { key: 'guardianBulwarkAuraMode', type: 'select', label: 'LA.settingsMenus.guardianBulwarkAuraMode.label', hint: 'LA.settingsMenus.guardianBulwarkAuraMode.hint' },
 
     { type: 'section', label: 'LA.settingsMenus.section.autoStatusIcons.label', collapsible: true, collapsed: true },
@@ -724,7 +775,6 @@ const VISION_FIELDS = [
     { key: 'lancerVisionAutoAdd', type: 'boolean' },
     { key: 'lancerLos', type: 'boolean' },
     { key: 'lancerLosAttackHover', type: 'boolean', nested: true, hideUnmet: true, requires: 'lancerLos' },
-    { key: 'lancerLosPeekRange', type: 'number', nested: true, hideUnmet: true, requires: ['lancerLos', 'lancerLosHeightRule=trig'], requiresAll: true },
     { key: 'lancerLosFlagOnly', type: 'boolean' },
     { key: 'lancerLosHeightRule', type: 'select' },
     { key: 'lancerAwarenessStyle', type: 'select' },
@@ -755,10 +805,11 @@ const VISION_FIELDS = [
         onClick: () => syncAllTokenHeights(),
     },
 
-    { type: 'section', label: 'LA.settingsMenus.section.visionFromEdgeExperimental.label', collapsible: true, collapsed: true, hint: 'LA.settingsMenus.section.visionFromEdgeExperimental.hint' },
+    { type: 'section', label: 'LA.settingsMenus.section.experimental.label', collapsible: true, collapsed: true, hint: 'LA.settingsMenus.section.experimental.hint' },
     { key: 'visionFromEdgeEnabled', type: 'boolean' },
-    { key: 'visionFromEdgeSampleMode', type: 'select', label: 'LA.settingsMenus.visionFromEdgeSampleMode.label', softRequires: true, requires: 'visionFromEdgeEnabled' },
     { key: 'visionFromEdgeSampleOffset', type: 'number', label: 'LA.settingsMenus.visionFromEdgeSampleOffset.label', softRequires: true, requires: 'visionFromEdgeEnabled' },
+    { key: 'lancerLosTrigShadows', type: 'boolean', hideUnmet: true, requires: ['lancerLos', 'lancerLosHeightRule=trig'], requiresAll: true },
+    { key: 'lancerLosTrigShadowQuality', type: 'select', nested: true, hideUnmet: true, requires: ['lancerLos', 'lancerLosHeightRule=trig', 'lancerLosTrigShadows'], requiresAll: true },
 
     { type: 'section', label: 'LA.settingsMenus.section.dragVision.label', collapsible: true, collapsed: true },
     { key: 'dragVisionMode', type: 'select' },
@@ -770,7 +821,8 @@ const VISION_FIELDS = [
 const PERFORMANCE_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.vision.label', hint: 'LA.settingsMenus.section.vision.hint' },
     { key: 'visionAnimationThrottleFps', type: 'number' },
-    { key: 'visionFromEdgeDeferDrag', type: 'boolean' },
+    { key: 'tacticalDistanceThrottleFps', type: 'number' },
+    { key: 'dragVisionRefreshFps', type: 'number' },
     { key: 'occlusionDimDeferMoving', type: 'boolean' },
     { key: 'disableVisionAboveControlled', type: 'number' },
 
@@ -789,17 +841,9 @@ const PERFORMANCE_FIELDS = [
 ];
 
 const TOOLS_FIELDS = [
-    { type: 'section', label: 'LA.settingsMenus.section.optionalContentPacks.label', hint: 'LA.settingsMenus.section.optionalContentPacks.hint' },
+    { type: 'section', label: 'LA.settingsMenus.section.optionalContentPacks.label' },
     { key: 'enableLaSossisItems', type: 'boolean', requires: 'additionalStatuses' },
     { key: 'enablePersonalStuff', type: 'boolean' },
-    { type: 'button',
-        key: 'getDeployablesLcp',
-        label: 'LA.settingsMenus.getDeployablesLcp.label',
-        icon: 'fas fa-download',
-        hint: 'LA.settingsMenus.getDeployablesLcp.hint',
-        clientAllowed: true,
-        onClick: () => window.open(foundry.utils.getRoute('modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp'), '_blank'),
-    },
 
     { type: 'section', label: 'LA.settingsMenus.section.downtime.label', hint: 'LA.settingsMenus.section.downtime.hint' },
     { type: 'button',
@@ -837,7 +881,11 @@ const TOOLS_FIELDS = [
         label: 'LA.settingsMenus.syncTemplateActors.label',
         icon: 'fas fa-rotate',
         hint: 'LA.settingsMenus.syncTemplateActors.hint',
-        onClick: () => syncTemplateActors({ force: true }),
+        onClick: async () =>
+        {
+            await ensureTemplateActors();
+            await syncTemplateActors({ force: true });
+        },
     },
     { type: 'button',
         key: 'openLcpRepair',
@@ -851,21 +899,21 @@ const TOOLS_FIELDS = [
         label: 'LA.settingsMenus.openReset.label',
         icon: 'fas fa-undo',
         hint: 'LA.settingsMenus.openReset.hint',
-        onClick: () => new ReactionReset().render(true),
+        onClick: () => new AutomationReset().render(true),
     },
     { type: 'button',
         key: 'openExport',
         label: 'LA.settingsMenus.openExport.label',
         icon: 'fas fa-file-export',
         hint: 'LA.settingsMenus.openExport.hint',
-        onClick: () => new ReactionExport().render(true),
+        onClick: () => new AutomationExport().render(true),
     },
     { type: 'button',
         key: 'openImport',
         label: 'LA.settingsMenus.openImport.label',
         icon: 'fas fa-file-import',
         hint: 'LA.settingsMenus.openImport.hint',
-        onClick: () => new ReactionImport().render(true),
+        onClick: () => new AutomationImport().render(true),
     },
 
     { type: 'section', label: 'LA.settingsMenus.section.news.label' },
@@ -884,15 +932,25 @@ const laTour = (key) => ({ type: 'tour', module: MODULE_ID, key });
 const TUTORIALS_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.setup.label', hint: 'LA.settingsMenus.section.setup.hint' },
     { type: 'button', key: 'openOnboarding', label: 'LA.settingsMenus.openOnboarding.label', icon: 'fas fa-wand-magic-sparkles', hint: 'LA.settingsMenus.openOnboarding.hint', onClick: () => runSettingsOnboarding() },
-    { type: 'section', label: 'LA.settingsMenus.section.tutorials.label', hint: 'LA.settingsMenus.section.tutorials.hint' },
+    { type: 'section', label: 'LA.settingsMenus.section.tutorialsStart.label', hint: 'LA.settingsMenus.section.tutorialsStart.hint' },
     laTour('config-tour'),
-    laTour('activation-manager-tour'),
-    laTour('effect-manager-tour'),
     laTour('tah-tour'),
-    laTour('tah-advanced-tour'),
     laTour('ruler-tour'),
+    { type: 'section', label: 'LA.settingsMenus.section.tutorialsCombat.label' },
+    laTour('attack-tour'),
+    laTour('vision-tour'),
+    laTour('carousel-tour'),
+    laTour('cards-tour'),
+    laTour('roll-uplink-tour'),
+    laTour('battle-log-tour'),
+    { type: 'section', label: 'LA.settingsMenus.section.tutorialsTools.label' },
+    laTour('clocks-tour'),
+    laTour('tah-advanced-tour'),
     laTour('advanced-measure-tour'),
+    laTour('effect-manager-tour'),
     laTour('add-extra-tour'),
+    { type: 'section', label: 'LA.settingsMenus.section.tutorialsAutomation.label' },
+    laTour('activation-manager-tour'),
 ];
 
 // [control, where, action] keys. Verified against the handlers, not the docs.
@@ -904,7 +962,8 @@ const FIXED_CONTROLS = [
     ['LA.settingsMenus.fixedControl.tabActionStatusWheel.control', 'LA.settingsMenus.fixedControl.tabActionStatusWheel.where', 'LA.settingsMenus.fixedControl.tabActionStatusWheel.action'],
     ['LA.settingsMenus.fixedControl.escapeAnyWheel.control', 'LA.settingsMenus.fixedControl.escapeAnyWheel.where', 'LA.settingsMenus.fixedControl.escapeAnyWheel.action'],
     ['LA.settingsMenus.fixedControl.shiftWheelShapePlacement.control', 'LA.settingsMenus.fixedControl.shiftWheelShapePlacement.where', 'LA.settingsMenus.fixedControl.shiftWheelShapePlacement.action'],
-    ['LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.control', 'LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.where', 'LA.settingsMenus.fixedControl.ctrlWheelShapePlacement.action'],
+    ['LA.settingsMenus.fixedControl.leftDragShapePlacement.control', 'LA.settingsMenus.fixedControl.leftDragShapePlacement.where', 'LA.settingsMenus.fixedControl.leftDragShapePlacement.action'],
+    ['LA.settingsMenus.fixedControl.rightClickShapePlacement.control', 'LA.settingsMenus.fixedControl.rightClickShapePlacement.where', 'LA.settingsMenus.fixedControl.rightClickShapePlacement.action'],
     ['LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.control', 'LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.where', 'LA.settingsMenus.fixedControl.shiftLeftClickAdvancedMeasure.action'],
     ['LA.settingsMenus.fixedControl.ctrlFThisWindow.control', 'LA.settingsMenus.fixedControl.ctrlFThisWindow.where', 'LA.settingsMenus.fixedControl.ctrlFThisWindow.action'],
 ];
@@ -1030,6 +1089,20 @@ const BATTLE_LOG_FIELDS = [
 const COLORS_FIELDS = [
     { type: 'section', label: 'LA.settingsMenus.section.theme.label' },
     { type: 'moduleSelect', module: 'lancer-style-library', key: 'theme' },
+    { type: 'moduleSelect', module: 'lancer', key: 'uiTheme', label: 'LA.settingsMenus.lancerUiTheme.label' },
+    { type: 'moduleSelect',
+        module: 'core',
+        key: 'uiConfig',
+        path: 'colorScheme.applications',
+        label: 'LA.settingsMenus.foundryApplicationsTheme.label',
+        hint: 'SETTINGS.UI.FIELDS.colorScheme.applications.hint' },
+    { type: 'moduleSelect',
+        module: 'core',
+        key: 'uiConfig',
+        path: 'colorScheme.interface',
+        label: 'LA.settingsMenus.foundryInterfaceTheme.label',
+        hint: 'SETTINGS.UI.FIELDS.colorScheme.interface.hint' },
+    { type: 'moduleSelect', module: 'lancer', key: 'pauseIcon' },
     { type: 'section', label: 'LA.settingsMenus.section.targetingColors.label' },
     { key: 'color.inRange', type: 'color', label: 'LA.settingsMenus.color.inRange.label' },
     { key: 'color.target', type: 'color', label: 'LA.settingsMenus.color.target.label' },
@@ -1135,11 +1208,13 @@ const THT_FIELDS = [
         onClick: () =>
         {
             const menu = /** @type {any} */ (game.settings.menus.get(`${THT_ID}.terrainTypes`));
+
             if (!menu?.type)
             {
                 ui.notifications?.warn(localize('LA.settingsMenus.openThtTerrainTypes.missing'));
                 return;
             }
+
             new menu.type().render(true);
         },
     },
@@ -1178,6 +1253,7 @@ export const TAB_DEFS = [
         {
             const hasIsometricPerspective = !!game.modules.get('isometric-perspective')?.active;
             const hasGrapeJuiceIsometrics = !!game.modules.get('grape_juice-isometrics')?.active;
+
             if (hasIsometricPerspective || hasGrapeJuiceIsometrics)
                 return null;
             return 'LA.settingsMenus.tab.iso.disabledReason';
@@ -1214,6 +1290,7 @@ export function getExportableModuleBooleanFields()
 {
     /** @type {{ module: string, key: string }[]} */
     const fields = [];
+
     for (const tab of TAB_DEFS)
     {
         for (const field of /** @type {any[]} */ (tab.fields))
@@ -1222,6 +1299,7 @@ export function getExportableModuleBooleanFields()
                 fields.push({ module: field.module, key: field.key });
         }
     }
+
     return fields;
 }
 
@@ -1229,6 +1307,7 @@ export function getExportableKeybindingFields()
 {
     /** @type {{ module: string, key: string }[]} */
     const fields = [];
+
     for (const tab of TAB_DEFS)
     {
         for (const field of /** @type {any[]} */ (tab.fields))
@@ -1237,5 +1316,6 @@ export function getExportableKeybindingFields()
                 fields.push({ module: field.module, key: field.key });
         }
     }
+
     return fields;
 }

@@ -6,6 +6,7 @@ const SETTING_CLEAR_ON_TURN = 'historyClearOnTurn';
 const SETTING_CLEAR_ON_ROUND = 'historyClearOnRound';
 
 import { clearMoveTracking } from './move-tracking.js';
+import { deployablesOf, movesOnItsOwn } from '../interactive/deployable-owner.js';
 
 function asTokenDoc(tokenLike)
 {
@@ -60,6 +61,7 @@ function buildRevertWaypoints(doc, history, priorIdx)
 
     // keep prior and current position, skip per-cell intermediates and stalls
     const segment = [];
+
     for (let idx = 0; idx < rawSegment.length; idx++)
     {
         const waypoint = rawSegment[idx];
@@ -69,11 +71,13 @@ function buildRevertWaypoints(doc, history, priorIdx)
             continue;
         segment.push(waypoint);
     }
+
     if (segment.length < 2)
         return null;
 
     const validActions = CONFIG?.Token?.movement?.actions ?? {};
     const waypoints = [];
+
     for (let idx = segment.length - 2; idx >= 0; idx--)
     {
         const target = segment[idx];
@@ -92,6 +96,7 @@ function buildRevertWaypoints(doc, history, priorIdx)
             checkpoint: idx === 0
         });
     }
+
     return waypoints.length > 0 ? waypoints : null;
 }
 
@@ -103,6 +108,7 @@ export async function revertLastMovement(tokenLike)
         return true;
     if (!doc.isOwner)
         return false;
+
     const history = doc._source?._movementHistory ?? [];
     if (history.length === 0)
         return true;
@@ -130,6 +136,7 @@ export async function revertLastMovement(tokenLike)
 
     // isUndo takes these waypoints verbatim; method must stay implicit ("undo")
     let revertWaypoints = null;
+
     try
     {
         revertWaypoints = buildRevertWaypoints(doc, history, priorIdx);
@@ -144,6 +151,7 @@ export async function revertLastMovement(tokenLike)
         options.movement = { [doc.id]: { waypoints: revertWaypoints } };
 
     const before = history.length;
+
     try
     {
         await doc.update(update, options);
@@ -156,7 +164,9 @@ export async function revertLastMovement(tokenLike)
         console.warn('lancer-automations | revertLastMovement retrace rejected, falling back', err);
         await doc.update(update, { isUndo: true, diff: false, animate: true });
     }
+
     const after = doc._source?._movementHistory?.length ?? 0;
+
     if (laDebug())
     {
         console.log('lancer-automations | revertLastMovement', {
@@ -167,6 +177,7 @@ export async function revertLastMovement(tokenLike)
             prior: { x: prior.x, y: prior.y, elevation: prior.elevation }
         });
     }
+
     return after === 0;
 }
 
@@ -174,11 +185,12 @@ async function clearCombatantsHistory(combat, full = false)
 {
     if (!game.user?.isGM)
         return;
-    for (const c of combat?.combatants ?? [])
+
+    const docs = [...(combat?.combatants ?? [])].map(combatant => combatant.token).filter(Boolean);
+    docs.push(...deployablesOf(docs.map(doc => doc.id)).map(token => token.document));
+
+    for (const doc of docs)
     {
-        const doc = c.token;
-        if (!doc)
-            continue;
         try
         {
             if ((doc._source?._movementHistory?.length ?? 0) > 0)
@@ -195,9 +207,10 @@ async function clearCombatantsHistory(combat, full = false)
 Hooks.once('setup', () =>
 {
     const proto = foundry.documents.TokenDocument.prototype;
+
     proto._shouldRecordMovementHistory = function()
     {
-        return !!this.combatant;
+        return !!this.combatant || movesOnItsOwn(this);
     };
 });
 
@@ -249,12 +262,16 @@ Hooks.on('combatTurnChange', async (combat, prior, _current) =>
         return;
     if (!getModuleSetting(SETTING_CLEAR_ON_TURN))
         return;
+
     const priorToken = prior?.tokenId ? canvas.scene?.tokens?.get(prior.tokenId) : null;
-    if (priorToken)
+    if (!priorToken)
+        return;
+
+    for (const doc of [priorToken, ...deployablesOf([priorToken.id]).map(token => token.document)])
     {
         try
         {
-            await priorToken.clearMovementHistory();
+            await doc.clearMovementHistory();
         }
         catch
         { /* ignore */ }
@@ -270,9 +287,11 @@ Hooks.on('deleteCombatant', async (combatant) =>
 {
     if (!game.user?.isGM)
         return;
+
     const doc = combatant?.token;
     if (!doc)
         return;
+
     try
     {
         if ((doc._source?._movementHistory?.length ?? 0) > 0)

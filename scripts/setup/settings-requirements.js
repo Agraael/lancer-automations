@@ -56,6 +56,7 @@ function _requirementLabel(key)
 {
     const { name, op, expected } = _parseRequirement(key);
     const label = _settingLabel(name);
+
     if (key.startsWith('!'))
         return localizeFormat('LA.settingsMenus.requires.off', { label });
     if (op === '=')
@@ -68,12 +69,14 @@ export function _isRequirementMet($html, key, seen = new Set())
 {
     if (key.startsWith('!'))
         return !_isRequirementMet($html, key.slice(1), seen);
+
     const { name, op, expected } = _parseRequirement(key);
     if (seen.has(name))
         return true;
     seen.add(name);
     const input = $html.find(`[name="${name}"]`)[0];
     let on;
+
     if (name.startsWith('module:'))
         on = !!game.modules.get(name.slice(7))?.active;
     else if (op)
@@ -96,6 +99,7 @@ function _isFieldMet($html, field, seen = new Set())
 {
     if (!field?.requires)
         return true;
+
     const keys = _requiredKeys(field);
     return field.requiresAll
         ? keys.every(key => _isRequirementMet($html, key, seen))
@@ -107,6 +111,7 @@ export function _requirementHint(field)
     const names = _requiredKeys(field).map(_requirementLabel);
     if (!names.length)
         return '';
+
     const joiner = ` ${localize(field.requiresAll ? 'LA.settingsMenus.requires.and' : 'LA.settingsMenus.requires.or')} `;
     return localizeFormat('LA.settingsMenus.requires.needs', { names: names.join(joiner) });
 }
@@ -115,17 +120,20 @@ function _unmetRoot($html, field, depth = 0)
 {
     if (!field?.requires || depth > 6)
         return null;
+
     for (const key of _requiredKeys(field))
     {
         if (_isRequirementMet($html, key))
             continue;
         if (key.startsWith('!'))
             return key;
+
         const { name } = _parseRequirement(key);
         if (name !== key && _isFieldMet($html, _fieldByKey(name)))
             return key;
         return _unmetRoot($html, _fieldByKey(name), depth + 1) ?? key;
     }
+
     return null;
 }
 
@@ -134,6 +142,7 @@ function _requirementLineText($html, key)
     const { name, op, expected } = _parseRequirement(key);
     if (!game.user.isGM && !$html.find(`[name="${name}"]`).length)
         return localize('LA.settingsMenus.requires.worldOff');
+
     const label = _settingLabel(name);
     if (key.startsWith('!'))
         return localizeFormat('LA.settingsMenus.requires.turnOff', { label });
@@ -146,15 +155,19 @@ export function _syncRequirementLines($html, gated)
 {
     $html.find('.la-req-line').remove();
     $html.find('.la-req-grouped').removeClass('la-req-grouped');
+
     const unmet = gated
         .filter(entry => entry.$row.hasClass('la-req-unmet'))
         .map(entry => ({ row: entry.$row[0], root: _unmetRoot($html, entry.field) }))
         .filter(entry => entry.root);
+
     const sharedRoot = (list) => list.length > 0 && list.every(entry => entry.root === list[0].root);
+
     const addLine = (body, list) =>
     {
         if (!body)
             return;
+
         const line = document.createElement('p');
         line.className = 'notes la-section-hint la-req-line';
         const icon = document.createElement('i');
@@ -166,16 +179,19 @@ export function _syncRequirementLines($html, gated)
         for (const entry of list)
             entry.row.classList.add('la-req-grouped');
     };
+
     $html.find('.la-card').each((/** @type {number} */ _i, /** @type {any} */ card) =>
     {
         const inCard = unmet.filter(entry => card.contains(entry.row));
         if (!inCard.length)
             return;
+
         if (inCard.some(entry => !entry.row.closest('.la-sub')) && sharedRoot(inCard))
         {
             addLine(card.querySelector(':scope > .la-card-body'), inCard);
             return;
         }
+
         for (const sub of card.querySelectorAll('.la-sub'))
         {
             const inSub = inCard.filter(entry => sub.contains(entry.row));

@@ -35,10 +35,13 @@ Hooks.once('init', () =>
     {
         if (options?.document || (!_cacheAll && namespace !== MODULE_ID))
             return wrapped(namespace, key, options);
+
         const bucket = _cache.get(namespace);
         if (bucket?.has(key))
             return bucket.get(key);
+
         const value = wrapped(namespace, key, options);
+
         if (typeof value !== 'object')
         {
             if (bucket)
@@ -46,6 +49,7 @@ Hooks.once('init', () =>
             else
                 _cache.set(namespace, new Map([[key, value]]));
         }
+
         return value;
     }, 'MIXED');
     // Force Client Settings redirects forced keys inside the same call, so either nesting order yields the same value.
@@ -58,6 +62,13 @@ Hooks.once('init', () =>
 
 function _read(namespace, key, fallback)
 {
+    if (namespace === MODULE_ID || _cacheAll)
+    {
+        const bucket = _cache.get(namespace);
+        if (bucket?.has(key))
+            return bucket.get(key);
+    }
+
     try
     {
         return game.settings.get(namespace, key);

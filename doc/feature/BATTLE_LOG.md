@@ -18,7 +18,12 @@ The **Battle Log** tab: **Enable Battle Log** (on by default), **Disable awards*
 
 ## Ending a combat
 
-When a combat ends, the GM gets a card first. Pick the outcome, **SUCCESS**, **PARTIAL**, or **FAILURE**, add whatever detail lines you want, and set the **MVP** (leave it blank and it auto-picks from the awards). Hit broadcast and the sequence plays for everyone.
+When a combat ends, the GM gets a card first:
+
+1. Pick the outcome: **SUCCESS**, **PARTIAL**, or **FAILURE**.
+2. Add whatever detail lines you want.
+3. Set the **MVP** (leave it blank and it auto-picks from the awards).
+4. Hit broadcast and the sequence plays for everyone.
 
 ---
 
@@ -32,7 +37,7 @@ It is not magic. The log relies entirely on Foundry's encounter system: the comb
 
 A token outside the encounter is not tracked, and skipping rounds or turns throws off the per-round stats and the telemetry charts.
 
-Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item the moment it hits the chat. That is what it reads as "used."
+Because of how Foundry works, I can't tell whether you fired something on purpose or by accident. So the more accurately you play, the more accurate the recap. For actions, the log counts an item as "used" the moment it hits the chat.
 
 Past that it tracks kills, assists, accuracy, damage, movement, and saves, per token, so every grunt in a squad gets its own line. An assist is a hit or damage you landed on an enemy someone else finished off: the last blow is the kill and everyone else who hurt it gets the assist.
 
@@ -83,7 +88,7 @@ The enemy side. Each hostile gets a card: whether it died and on which round, wh
 
 <img src="../vid/bl-telemetry.gif" width="80%"/>
 
-The nerd tab: per-round line charts for the squad, HP, heat, damage, and kills/assists, from R0 (the start of combat) to the last round. Click a name to isolate one pilot, or toggle the squad total.
+The nerd tab: per-round line charts of the squad's HP, heat, damage, and kills/assists, from R0 (the start of combat) to the last round. Click a name to isolate one pilot, or toggle the squad total.
 
 ## Notable options
 

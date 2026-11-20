@@ -2,27 +2,24 @@
 // and CSS values are lifted from the system's AccDiffHUD / DamageHUD styles.
 
 import { LANCER_ROW_TAGS, laValueTag, laPills, laDamageChips, laStatesHtml } from '../bonuses/roll-card-rows.js';
-import { signedNumber as signed } from '../tools/string-utils.js';
+import { signedNumber as signed, escapeHtml as esc } from '../tools/string-utils.js';
 
 const COVER_LABELS = ['No Cover', 'Soft (-1)', 'Hard (-2)'];
 const COVER_ICONS = ['mdi mdi-shield-outline', 'mdi mdi-shield-half-full', 'mdi mdi-shield'];
 const QUALITY_LABELS = ['Miss', 'Hit', 'Crit'];
 const QUALITY_ICONS = ['mdi mdi-call-missed', 'fas fa-crosshairs', 'fas fa-explosion'];
-const KIND_LABELS = { attack: 'Attack', tech: 'Tech Attack', damage: 'Damage', hase: 'Check' };
+const KIND_LABELS = { attack: 'Attack', tech: 'Tech Attack', damage: 'Damage', hase: 'Check', struct: 'Structure Damage', stress: 'Stress Damage' };
+
 const HEAD_META = {
     attack: { cls: 'lancer-weapon', icon: 'cci cci-weapon' },
     tech: { cls: 'lancer-tech', icon: 'cci cci-tech-quick' },
     damage: { cls: 'lancer-weapon', icon: 'cci cci-large-beam' },
-    hase: { cls: 'lancer-weapon', icon: 'fas fa-dice-d20' }
+    hase: { cls: 'lancer-weapon', icon: 'fas fa-dice-d20' },
+    struct: { cls: 'lancer-primary', icon: 'cci cci-structure' },
+    stress: { cls: 'lancer-primary', icon: 'cci cci-reactor' }
 };
-const DMG_ICONS = { kinetic: 'cci-kinetic', energy: 'cci-energy', explosive: 'cci-explosive', heat: 'cci-heat', burn: 'cci-burn', variable: 'cci-variable', infection: 'cci-infection' };
 
-function esc(text)
-{
-    const div = document.createElement('div');
-    div.textContent = String(text ?? '');
-    return div.innerHTML;
-}
+const DMG_ICONS = { kinetic: 'cci-kinetic', energy: 'cci-energy', explosive: 'cci-explosive', heat: 'cci-heat', burn: 'cci-burn', variable: 'cci-variable', infection: 'cci-infection' };
 
 function checkbox(label, checked, disabled = false)
 {
@@ -61,6 +58,7 @@ function radioRow(labels, activeIdx, icons = null)
         const icon = icons?.[idx] ? `<i class="${icons[idx]} lau-rad-i"></i>` : '';
         return `<span class="lau-rad${icon ? ' has-i' : ''}${idx === Number(activeIdx) ? ' on' : ''}">${icon}${esc(label)}</span>`;
     });
+
     return `<div class="lau-radrow">${parts.join('')}</div>`;
 }
 
@@ -94,12 +92,15 @@ function liveLine(snapshot)
     const line = snapshot.liveLine;
     if (!line)
         return '';
+
     const rangeHtml = line.ranges.map(entry => `<span data-hover-range="${Number(entry.val) || 0}"><i class="cci cci-${esc(String(entry.type).toLowerCase())}"></i>${esc(entry.val)}</span>`).join('');
+
     const damageHtml = line.damage.map(entry =>
     {
         const type = esc(String(entry.type).toLowerCase());
         return `<span><i class="cci cci-${type} damage--${type}"></i>${esc(entry.val)}</span>`;
     }).join('');
+
     return `<div class="lau-profile">${rangeHtml}${rangeHtml && damageHtml ? '<span class="lau-sep">//</span>' : ''}${damageHtml}</div>`;
 }
 
@@ -120,16 +121,20 @@ function accDiffBody(snapshot)
     // hidden on tech attacks, Impaired always shown but disabled (actor status).
     const isHase = snapshot.kind === 'hase';
     const laRows = snapshot.laRows || {};
+
     const accColumn = [
         lancerRow('Accurate (+1)', weapon.accurate),
         lancerRow('Smart (*)', weapon.smart)
     ];
+
     if (!isHase)
         accColumn.push(lancerRow('Seeking (*)', weapon.seeking));
+
     const diffColumn = [
         lancerRow('Inaccurate (-1)', weapon.inaccurate),
         lancerRow('Impaired (-1)', weapon.impaired, true)
     ];
+
     if (!isHase && weapon.melee && !weapon.tech)
         diffColumn.push(lancerRow('Thrown (*)', weapon.thrown));
     if (!isHase && !weapon.tech)
@@ -161,12 +166,14 @@ function accDiffBody(snapshot)
     if ((raw.targets || []).length)
     {
         const showsCover = !isHase && !weapon.tech && !(weapon.melee && !weapon.thrown);
+
         const cards = raw.targets.map(target =>
         {
             const total = snapshot.totals?.targets?.find(entry => entry.uuid === target.targetUuid)?.total;
             const cardRows = isHase ? [] : [lancerRow('Invisible (*)', target.invisible)];
             for (const row of laRows.targets?.[target.targetUuid] || [])
                 cardRows.push(laRow(row));
+
             const modifiers = [];
             if (target.accuracy)
                 modifiers.push(`Acc +${target.accuracy}`);
@@ -183,6 +190,7 @@ function accDiffBody(snapshot)
                 </div>
             </div>`;
         }).join('');
+
         rows.push(`<div class="lau-tgrid">${cards}</div>`);
     }
 
@@ -225,10 +233,12 @@ function damageBody(snapshot)
     </div>`);
 
     rows.push(sectionHeader('', 'Configuration'));
+
     const config = [
         checkbox('Overkill', weapon.overkill),
         checkbox(weapon.reliable ? `Reliable ${weapon.reliableValue}` : 'Reliable', weapon.reliable)
     ];
+
     const laConfig = snapshot.la || {};
     if (laConfig.knockback)
         config.push(checkbox(laConfig.knockback.enabled ? `Knockback ${laConfig.knockback.value || 1}` : 'Knockback', laConfig.knockback.enabled));
@@ -237,6 +247,7 @@ function damageBody(snapshot)
     if (laConfig.throttled)
         config.push(checkbox('Throttled (Half Dmg)', laConfig.throttled.enabled));
     rows.push(`<div class="lau-chiprow">${config.join('')}</div>`);
+
     if (laRows.global?.length)
     {
         const globalRows = laRows.global.map(laRow);
@@ -258,11 +269,31 @@ function damageBody(snapshot)
             ${damageLine(withoutSynced(target.bonusDamage, laTarget))}
         </div>`;
         }).join('');
+
         rows.push(`<div class="lau-tgrid">${cards}</div>`);
     }
 
     return rows.join('');
 }
+
+function structStressBody(snapshot)
+{
+    if (!snapshot.track)
+        return '';
+
+    const stat = snapshot.kind === 'stress' ? 'reactor' : 'structure';
+    const pip = `<i class="cci cci-${stat} i--4 damage-pip svelte-1gz7luo"></i>`;
+    const lost = '<i class="mdi mdi-hexagon-outline i--4 damage-pip damaged svelte-1gz7luo"></i>';
+    const { current, damage } = snapshot.track;
+
+    return `<div class="lancer-hud-body svelte-1gz7luo">
+        <h4 class="svelte-1gz7luo">${esc(snapshot.actorName || 'UNKNOWN MECH')} has taken ${stat} damage!</h4>
+        <div class="damage-preview svelte-1gz7luo">${pip.repeat(current)} ${lost.repeat(damage)}</div>
+        <p class="message">Roll ${damage}d6 to determine what happens.</p>
+    </div>`;
+}
+
+const BODY_OF = { damage: damageBody, struct: structStressBody, stress: structStressBody };
 
 /**
  * Build one read-only mirror card element from a recorded snapshot.
@@ -273,9 +304,10 @@ export function buildMirrorCard(snapshot)
 {
     const title = snapshot.title || snapshot.itemName || (snapshot.kind === 'hase' ? snapshot.checkLabel : '') || KIND_LABELS[snapshot.kind] || 'Roll';
     const head = HEAD_META[snapshot.kind] || HEAD_META.hase;
-    const body = snapshot.kind === 'damage' ? damageBody(snapshot) : accDiffBody(snapshot);
+    const body = (BODY_OF[snapshot.kind] || accDiffBody)(snapshot);
 
     let iconHtml = `<i class="${head.icon} i--m i--light"></i>`;
+
     if (snapshot.weaponIcon)
     {
         const url = esc(foundry.utils.getRoute(snapshot.weaponIcon));

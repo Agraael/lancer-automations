@@ -4,10 +4,12 @@ let _pending = 0;
 export function queueFirstRun(task)
 {
     _pending++;
+
     const run = _chain.then(task).finally(() =>
     {
         _pending--;
     });
+
     _chain = run.catch(() => undefined);
     return run;
 }

@@ -3,13 +3,20 @@
 import { maybeRunSettingsOnboarding } from './settings-onboarding.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { getBoostOfferMode } from './settings-register.js';
 import { getWeapons } from '../interactive/deployables.js';
 import { queueFirstRun } from './first-run-queue.js';
 
 const SETTING_TOUR_DONE = 'tourCompleted';
 const SETTING_RESUME_TOUR = 'tourResumeAfterReload';
-const GM_TOUR_IDS = ['config-tour', 'activation-manager-tour', 'tah-tour', 'effect-manager-tour', 'ruler-tour', 'advanced-measure-tour'];
-const PLAYER_TOUR_IDS = ['tah-tour', 'ruler-tour', 'advanced-measure-tour'];
+const GM_TOUR_IDS = ['config-tour', 'activation-manager-tour', 'tah-tour', 'effect-manager-tour', 'ruler-tour', 'attack-tour', 'vision-tour', 'carousel-tour', 'cards-tour', 'roll-uplink-tour', 'battle-log-tour', 'clocks-tour', 'advanced-measure-tour'];
+const PLAYER_TOUR_IDS = ['tah-tour', 'ruler-tour', 'attack-tour', 'vision-tour', 'carousel-tour', 'cards-tour', 'clocks-tour', 'advanced-measure-tour'];
+const TOUR_GROUPS = [
+    { label: 'LA.settingsMenus.section.tutorialsStart.label', ids: ['config-tour', 'tah-tour', 'ruler-tour'] },
+    { label: 'LA.settingsMenus.section.tutorialsCombat.label', ids: ['attack-tour', 'vision-tour', 'carousel-tour', 'cards-tour', 'roll-uplink-tour', 'battle-log-tour'] },
+    { label: 'LA.settingsMenus.section.tutorialsTools.label', ids: ['clocks-tour', 'tah-advanced-tour', 'advanced-measure-tour', 'effect-manager-tour', 'add-extra-tour'] },
+    { label: 'LA.settingsMenus.section.tutorialsAutomation.label', ids: ['activation-manager-tour'] },
+];
 import { MODULE_ID } from '../tools/constants.js';
 const ROOT = '#lancer-automations-config';
 const RM_ROOT = '#reaction-manager-config';
@@ -23,6 +30,7 @@ function _emTabClick(tab)
         const tabEl = document.querySelector(`${EM_ROOT} .te-tab[data-tab="${tab}"]`);
         if (tabEl instanceof HTMLElement)
             tabEl.click();
+
         for (let i = 0; i < 20; i++)
         {
             if (document.querySelector(`${EM_ROOT} #tab-${tab}.active`))
@@ -32,7 +40,7 @@ function _emTabClick(tab)
     };
 }
 
-const EFFECT_MANAGER_STEPS = [
+const EFFECT_MANAGER_STEPS = () => [
     {
         id: 'em-intro',
         title: localize('LA.tour.step.effectManager'),
@@ -123,7 +131,7 @@ const EFFECT_MANAGER_STEPS = [
     },
 ];
 
-const AD_EXTRA_STEPS = [
+const AD_EXTRA_STEPS = () => [
     {
         id: 'sheet-btn',
         title: localize('LA.tour.step.onASheet'),
@@ -134,6 +142,7 @@ const AD_EXTRA_STEPS = [
             const actor = /** @type {any} */ (_emDemoActor);
             if (actor && !actor.sheet?.rendered)
                 actor.sheet?.render(true);
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (document.querySelector('.la-sheet-menu'))
@@ -155,6 +164,7 @@ const AD_EXTRA_STEPS = [
                 if (btn instanceof HTMLElement)
                     btn.click();
             }
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (document.querySelector('button[data-button="extras"]'))
@@ -173,6 +183,7 @@ const AD_EXTRA_STEPS = [
             if (!document.querySelector('.la-extras-body'))
             {
                 const extrasBtn = document.querySelector('button[data-button="extras"]');
+
                 if (extrasBtn instanceof HTMLElement)
                     extrasBtn.click();
                 else if (_emDemoActor)
@@ -181,6 +192,7 @@ const AD_EXTRA_STEPS = [
                     openExtrasDialog(/** @type {any} */ (_emDemoActor));
                 }
             }
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (document.querySelector('.la-extras-body'))
@@ -219,12 +231,14 @@ const AD_EXTRA_STEPS = [
                 const drawer = document.querySelector('.la-extras-drawer');
                 return drawer instanceof HTMLElement && Number.parseFloat(globalThis.getComputedStyle(drawer).opacity) > 0.5;
             };
+
             if (!isOpen())
             {
                 const newBtn = document.querySelector('.la-extras-act-new');
                 if (newBtn instanceof HTMLElement)
                     newBtn.click();
             }
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (isOpen())
@@ -235,7 +249,15 @@ const AD_EXTRA_STEPS = [
     },
 ];
 
-const CONFIG_STEPS = [
+const _configTabStep = (tab, contentKey) => ({
+    id: tab,
+    tab,
+    title: localize(`LA.settingsMenus.tab.${tab}.label`),
+    content: localize(contentKey),
+    selector: `${ROOT} .tab[data-tab="${tab}"]`,
+});
+
+const CONFIG_STEPS = () => [
     {
         id: 'shortcut',
         title: localize('LA.tour.step.whereToFindThis'),
@@ -272,19 +294,13 @@ const CONFIG_STEPS = [
         content: localize('LA.tour.content.allTheCombatFlavorTogglesKnockback'),
         selector: `${ROOT} .tab[data-tab="combat"]`,
     },
+    _configTabStep('ruler', 'LA.tour.content.configRulerIs'),
     {
         id: 'statuses',
         tab: 'statuses',
         title: localize('LA.tour.step.statusesFx'),
         content: localize('LA.tour.content.theFxSectionStatusVisualEffects'),
         selector: `${ROOT} .tab[data-tab="statuses"]`,
-    },
-    {
-        id: 'wrecks',
-        tab: 'wrecks',
-        title: localize('LA.tour.step.wrecks'),
-        content: localize('LA.tour.content.whatHappensWhenSomethingDiesSpawn'),
-        selector: `${ROOT} .tab[data-tab="wrecks"]`,
     },
     {
         id: 'vision',
@@ -294,11 +310,34 @@ const CONFIG_STEPS = [
         selector: `${ROOT} .tab[data-tab="vision"]`,
     },
     {
+        id: 'wrecks',
+        tab: 'wrecks',
+        title: localize('LA.tour.step.wrecks'),
+        content: localize('LA.tour.content.whatHappensWhenSomethingDiesSpawn'),
+        selector: `${ROOT} .tab[data-tab="wrecks"]`,
+    },
+    {
         id: 'tokens',
         tab: 'tokens',
         title: localize('LA.tour.step.tokensDisplay'),
         content: localize('LA.tour.content.halfSizeTokensAutoWallHeight'),
         selector: `${ROOT} .tab[data-tab="tokens"]`,
+    },
+    _configTabStep('statbars', 'LA.tour.content.configStatBarsIs'),
+    {
+        id: 'tah',
+        tab: 'tah',
+        title: localize('LA.tour.step.tokenActionHud'),
+        content: localize('LA.tour.content.hereYouCanEnableTheTah'),
+        selector: `${ROOT} .tab[data-tab="tah"]`,
+    },
+    _configTabStep('colors', 'LA.tour.content.configColorsIs'),
+    {
+        id: 'sounds',
+        tab: 'sounds',
+        title: localize('LA.tour.step.sounds'),
+        content: localize('LA.tour.content.allTheSoundFeedbackOptionsIncluding'),
+        selector: `${ROOT} .tab[data-tab="sounds"]`,
     },
     {
         id: 'iso',
@@ -309,19 +348,10 @@ const CONFIG_STEPS = [
         condition: () => !!game.modules.get('isometric-perspective')?.active || !!game.modules.get('grape_juice-isometrics')?.active,
     },
     {
-        id: 'tah',
-        tab: 'tah',
-        title: localize('LA.tour.step.tokenActionHud'),
-        content: localize('LA.tour.content.hereYouCanEnableTheTah'),
-        selector: `${ROOT} .tab[data-tab="tah"]`,
+        ..._configTabStep('mapModules', 'LA.tour.content.configMapModulesIs'),
+        condition: () => !!game.modules.get('terrain-height-tools')?.active || !!game.modules.get('templatemacro')?.active,
     },
-    {
-        id: 'sounds',
-        tab: 'sounds',
-        title: localize('LA.tour.step.sounds'),
-        content: localize('LA.tour.content.allTheSoundFeedbackOptionsIncluding'),
-        selector: `${ROOT} .tab[data-tab="sounds"]`,
-    },
+    _configTabStep('battelog', 'LA.tour.content.configBattleLogIs'),
     {
         id: 'tools',
         tab: 'tools',
@@ -329,6 +359,7 @@ const CONFIG_STEPS = [
         content: localize('LA.tour.content.myOptionalContentPacksPersonalStuff'),
         selector: `${ROOT} .tab[data-tab="tools"]`,
     },
+    _configTabStep('control', 'LA.tour.content.configControlIs'),
     {
         id: 'tutorials',
         tab: 'tutorials',
@@ -336,6 +367,7 @@ const CONFIG_STEPS = [
         content: localize('LA.tour.content.reRunTheSetupWizardOr'),
         selector: `${ROOT} .tab[data-tab="tutorials"]`,
     },
+    _configTabStep('performance', 'LA.tour.content.configPerformanceIs'),
     {
         id: 'debug',
         tab: 'debug',
@@ -351,7 +383,7 @@ const CONFIG_STEPS = [
     },
 ];
 
-const ACTIVATION_MANAGER_STEPS = [
+const ACTIVATION_MANAGER_STEPS = () => [
     {
         id: 'shortcut',
         title: localize('LA.tour.step.whereToFindThis'),
@@ -393,50 +425,50 @@ const ACTIVATION_MANAGER_STEPS = [
         title: localize('LA.tour.step.editor'),
         content: localize('LA.tour.content.addOpensThisEditorTriggersFilters'),
         selector: '#reaction-editor',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-binding',
         title: localize('LA.tour.step.itemBoundOrGeneral'),
         content: localize('LA.tour.content.bindItToAnItemBy'),
         selector: '#reaction-editor input[name="isGeneral"]',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-lid',
         title: localize('LA.tour.step.itemLid'),
         content: localize('LA.tour.content.forItemBoundActivationsTheItem'),
         selector: '#reaction-editor input[name="lid"]',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-triggers',
         title: localize('LA.tour.step.triggers'),
         content: localize('LA.tour.content.tickTheTriggersThatFireIt'),
         selector: '#reaction-editor .trigger-groups-container',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-options',
         title: localize('LA.tour.step.filters'),
         content: localize('LA.tour.content.narrowWhenItFiresReactTo'),
         selector: '#reaction-editor .la-eligibility',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-code',
         title: localize('LA.tour.step.codeBlocks'),
         content: localize('LA.tour.content.yourLogicEvaluateShouldItFire'),
         selector: '#reaction-editor .CodeMirror',
-        action: _ensureReactionEditorOpen,
+        action: _ensureAutomationEditorOpen,
     },
     {
         id: 'editor-autocomplete',
         title: localize('LA.tour.step.autocomplete'),
         content: localize('LA.tour.content.theEditorSuggestsApiNamesAs'),
         selector: '#reaction-editor .CodeMirror',
-        action: _ensureReactionEditorOpen,
-        cleanup: _closeReactionEditor,
+        action: _ensureAutomationEditorOpen,
+        cleanup: _closeAutomationEditor,
     },
     {
         id: 'folder',
@@ -479,32 +511,41 @@ function _tahDrillStep(id, title, content, drillPath, finalPrefix)
         action: async () =>
         {
             document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
+
             const findRow = (prefix) => Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`))
                 .find((row) => row.textContent?.trim().toLowerCase().startsWith(prefix));
+
             const openRow = async (prefix) =>
             {
                 for (let i = 0; i < 40; i++)
                 {
                     const row = findRow(prefix);
+
                     if (row)
                     {
                         $(row).trigger('mouseenter');
                         $(row).trigger('click');
                         return row;
                     }
+
                     await new Promise((resolve) => setTimeout(resolve, 50));
                 }
+
                 return null;
             };
+
             for (const pathStep of drillPath)
                 await openRow(pathStep);
-            for (let i = 0; i < 40; i++)
+
+            for (let attempt = 0; attempt < 40; attempt++)
             {
                 const target = findRow(finalPrefix);
+
                 if (target)
                 {
                     target.classList.add(cls); break;
                 }
+
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
         },
@@ -512,6 +553,7 @@ function _tahDrillStep(id, title, content, drillPath, finalPrefix)
         {
             document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
             const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+
             for (let i = 1; i < colLabels.length; i++)
             {
                 const col = colLabels[i].parentElement;
@@ -534,12 +576,15 @@ function _tahCategoryStep(label, content, alternatives = [])
         action: async () =>
         {
             document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
+
             const findTarget = () => Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`)).find((row) =>
             {
                 const text = row.textContent?.trim().toLowerCase() ?? '';
                 return candidates.some((candidate) => text.startsWith(candidate));
             });
+
             let target = null;
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 target = findTarget();
@@ -547,6 +592,7 @@ function _tahCategoryStep(label, content, alternatives = [])
                     break;
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
+
             if (target)
             {
                 target.classList.add(cls);
@@ -558,6 +604,7 @@ function _tahCategoryStep(label, content, alternatives = [])
         {
             document.querySelectorAll(`${TAH_ROOT} .${cls}`).forEach((el) => el.classList.remove(cls));
             const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+
             for (let idx = 1; idx < colLabels.length; idx++)
             {
                 const col = colLabels[idx].parentElement;
@@ -568,7 +615,7 @@ function _tahCategoryStep(label, content, alternatives = [])
     };
 }
 
-const TAH_STEPS = [
+const TAH_STEPS = () => [
     {
         id: 'intro',
         title: localize('LA.tour.step.tokenActionHud'),
@@ -645,11 +692,13 @@ const TAH_STEPS = [
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-item`).forEach((el) => el.classList.remove('la-hud-tour-item'));
             // TAH wires click or mouseenter per the click-to-open setting; trigger both so bound handlers fire.
             const col1Rows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
+
             if (col1Rows[0])
             {
                 $(col1Rows[0]).trigger('mouseenter');
                 $(col1Rows[0]).trigger('click');
             }
+
             for (let i = 0; i < 40; i++)
             {
                 const allRows = document.querySelectorAll(`${TAH_ROOT} .la-hud-row`);
@@ -657,6 +706,7 @@ const TAH_STEPS = [
                     break;
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
+
             const allRows = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`));
             const firstItemRow = allRows[col1Rows.length];
             firstItemRow?.classList.add('la-hud-tour-item');
@@ -666,6 +716,7 @@ const TAH_STEPS = [
             document.querySelectorAll(`${TAH_ROOT} .la-hud-tour-item`).forEach((el) => el.classList.remove('la-hud-tour-item'));
             // Close any cascading columns (c2/c3/c4) opened by the action.
             const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+
             for (let i = 1; i < colLabels.length; i++)
             {
                 const col = colLabels[i].parentElement;
@@ -683,20 +734,25 @@ const TAH_STEPS = [
         {
             const findRow = (prefix) => Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`))
                 .find((row) => row.textContent?.trim().toLowerCase().startsWith(prefix));
+
             const openRow = async (prefix) =>
             {
                 for (let attempt = 0; attempt < 40; attempt++)
                 {
                     const row = findRow(prefix);
+
                     if (row)
                     {
                         $(row).trigger('mouseenter'); $(row).trigger('click'); return;
                     }
+
                     await new Promise((resolve) => setTimeout(resolve, 50));
                 }
             };
+
             await openRow('actions');
             await openRow('basic');
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (document.querySelector(`${TAH_ROOT} .la-hud-auto-tick`))
@@ -707,6 +763,7 @@ const TAH_STEPS = [
         cleanup: () =>
         {
             const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+
             for (let idx = 1; idx < colLabels.length; idx++)
             {
                 const col = colLabels[idx].parentElement;
@@ -724,24 +781,31 @@ const TAH_STEPS = [
         {
             const findRow = (prefix) => Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-row`))
                 .find((row) => row.textContent?.trim().toLowerCase().startsWith(prefix));
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 const cat = findRow('weapons') ?? findRow('systems');
+
                 if (cat)
                 {
                     $(cat).trigger('mouseenter'); $(cat).trigger('click'); break;
                 }
+
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 const leaf = document.querySelector(`${TAH_ROOT} .la-hud-row.la-hud-rclick`);
+
                 if (leaf)
                 {
                     $(leaf).trigger('contextmenu'); break;
                 }
+
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
+
             for (let attempt = 0; attempt < 40; attempt++)
             {
                 if (document.querySelector('.la-hud-popup'))
@@ -753,6 +817,7 @@ const TAH_STEPS = [
         {
             document.querySelectorAll('.la-hud-popup').forEach((el) => el.remove());
             const colLabels = Array.from(document.querySelectorAll(`${TAH_ROOT} .la-hud-col-label`));
+
             for (let idx = 1; idx < colLabels.length; idx++)
             {
                 const col = colLabels[idx].parentElement;
@@ -783,6 +848,7 @@ const TAH_STEPS = [
         {
             if (!canvas.tokens.controlled[0])
                 canvas.tokens.placeables.find((token) => token.actor && !token.document.hidden)?.control({ releaseOthers: true });
+
             const { toggleActionWheel } = await import('../tah/action-wheel.js');
             if (!document.querySelector('.lancer-action-wheel'))
                 await toggleActionWheel();
@@ -806,6 +872,7 @@ const TAH_STEPS = [
         {
             if (!canvas.tokens.controlled[0])
                 canvas.tokens.placeables.find((token) => token.actor && !token.document.hidden)?.control({ releaseOthers: true });
+
             const { toggleStatusWheel } = await import('../tah/status-wheel.js');
             if (!document.querySelector('.lancer-status-wheel'))
                 toggleStatusWheel();
@@ -863,68 +930,110 @@ const TAH_STEPS = [
     },
 ];
 
-const ADV_TAH_STEPS = [
+const ADV_TAH_STEPS = () => _withNeeds([
     {
         id: 'adv-intro',
         title: localize('LA.tour.step.advancedTahTools'),
         content: localize('LA.tour.content.aPassThroughTheToolsTucked'),
         selector: TAH_ROOT,
     },
-    _tahDrillStep('adv-attacks', 'Skirmish & Barrage', "You can attack straight from a weapon, but Skirmish and Barrage live here as real actions so the gameplay action is captured: an automation watching for a skirmish reacts to it, and the secondary weapon gets its no-bonus-damage rule.", ['actions', 'attacks'], 'skirmish'),
-    _tahDrillStep('adv-basic-tools', 'Basic Attack, Damage, Basic Tech', "Support tools for rolls your setup doesn't cover. Basic Attack and Damage sit under Attacks, Basic Tech under Tech. Reach for them to roll something by hand.", ['actions', 'attacks'], 'basic attack'),
-    _tahDrillStep('adv-boost', 'Boost', "Boost feeds the movement cap: with that feature on, using it auto-emulates the extra move, and anything reacting to a boost fires through here. The auto-boost offer also spots when you need one and prompts you.", ['actions', 'basic'], 'boost'),
-    _tahDrillStep('adv-deploy', 'Deploy', "Places a deployable. The range ring is only the default suggestion, nothing stops you dropping it outside. Change a deployable's range or count with Add Extra / Extra Config on the item.", ['deployables'], 'deploy item'),
-    _tahDrillStep('adv-contest', 'Contest', "Runs a contested check between two tokens. Also available as an automation tool.", ['attributes', 'skills'], 'contest'),
-    _tahDrillStep('adv-force-check', 'Force Check', "Sends a HASE check to picked tokens, rolled by their owners; with a save target it becomes a save against it.", ['attributes', 'skills'], 'force check'),
-    _tahDrillStep('adv-scan', 'Generate Scan', "Builds a scan of a token by hand when you need one. A token's settings can also force it to read as scanned with no scan document.", ['utility', 'gameplay'], 'generate scan'),
-    _tahDrillStep('adv-link', 'Link to Token', "Ties two tokens together. Hover one and its linked token lights up with it.", ['utility', 'gameplay'], 'link to token'),
-    _tahDrillStep('adv-reinforcement', 'Reinforcement', "Sets up entrances. Drop tokens with Alt so they start hidden, select them, run Reinforcement, and pick the turn each one appears. It can preview an optional token to swap in.", ['utility', 'gameplay'], 'reinforcement'),
-    _tahDrillStep('adv-downtime', 'Downtime', "Runs the between-mission downtime actions.", ['utility', 'misc'], 'downtime'),
-    _tahDrillStep('adv-reserve', 'Reserve', "Grabs a downtime reserve for the pilot.", ['utility', 'misc'], 'reserve'),
-    _tahDrillStep('adv-vote', 'Vote', "Sends a quick poll to the table and tallies the answers.", ['utility', 'misc'], 'vote'),
+    _tahDrillStep('adv-attacks', localize('LA.tour.step.skirmishBarrage'), localize('LA.tour.content.tahSkirmishBarrage'), ['actions', 'attacks'], 'skirmish'),
+    _tahDrillStep('adv-basic-tools', localize('LA.tour.step.basicTools'), localize('LA.tour.content.tahBasicTools'), ['actions', 'attacks'], 'basic attack'),
+    _tahDrillStep('adv-boost', localize('LA.tour.step.boost'), localize('LA.tour.content.tahBoost'), ['actions', 'basic'], 'boost'),
+    _tahDrillStep('adv-deploy', localize('LA.tour.step.deploy'), localize('LA.tour.content.tahDeploy'), ['deployables'], 'deploy item'),
+    _tahDrillStep('adv-recall', localize('LA.tour.step.recallItem'), localize('LA.tour.content.tahRecallItem'), ['deployables'], 'recall item'),
+    _tahDrillStep('adv-link-actor', localize('LA.tour.step.linkUnlinkActor'), localize('LA.tour.content.tahLinkUnlinkActor'), ['deployables'], 'link/unlink actor'),
+    _tahDrillStep('adv-contest', localize('LA.tour.step.contest'), localize('LA.tour.content.tahContest'), ['attributes', 'skills'], 'contest'),
+    _tahDrillStep('adv-force-check', localize('LA.tour.step.forceCheck'), localize('LA.tour.content.tahForceCheck'), ['attributes', 'skills'], 'force check'),
+    _tahDrillStep('adv-scan', localize('LA.tour.step.generateScan'), localize('LA.tour.content.tahGenerateScan'), ['utility', 'gameplay'], 'generate scan'),
+    _tahDrillStep('adv-link', localize('LA.tour.step.linkToToken'), localize('LA.tour.content.tahLinkToToken'), ['utility', 'gameplay'], 'link to token'),
+    _tahDrillStep('adv-reinforcement', localize('LA.tour.step.reinforcement'), localize('LA.tour.content.tahReinforcement'), ['utility', 'gameplay'], 'reinforcement'),
+    _tahDrillStep('adv-leave', localize('LA.tour.step.leaveBattlefield'), localize('LA.tour.content.tahLeaveBattlefield'), ['utility', 'gameplay'], 'leave battlefield'),
+    _tahDrillStep('adv-downtime', localize('LA.tour.step.downtime'), localize('LA.tour.content.tahDowntime'), ['utility', 'misc'], 'downtime'),
+    _tahDrillStep('adv-reserve', localize('LA.tour.step.reserve'), localize('LA.tour.content.tahReserve'), ['utility', 'misc'], 'reserve'),
+    _tahDrillStep('adv-vote', localize('LA.tour.step.vote'), localize('LA.tour.content.tahVote'), ['utility', 'misc'], 'vote'),
     {
         id: 'adv-outro',
         title: localize('LA.tour.step.andMore'),
         content: localize('LA.tour.content.thatSTheToolboxDigThrough'),
         selector: TAH_ROOT,
     },
-];
+], {
+    'adv-link-actor': ['deployLines'],
+});
 
-const RULER_STEPS = [
+const RULER_DEMO = '#la-tour-ruler-demo';
+const RULER_DEMO_LAST = `${RULER_DEMO} .la-demo-last`;
+
+let _rulerCardShown = false;
+
+async function _dropRulerCard()
+{
+    if (!_rulerCardShown)
+        return;
+    _rulerCardShown = false;
+    await _hideEncounterDemos();
+}
+
+async function _rulerDemo()
+{
+    await _dropRulerCard();
+    const { ensureRulerDemo } = await import('./tour-ruler-demo.js');
+    await ensureRulerDemo();
+}
+
+async function _wheelDemo()
+{
+    await _dropRulerCard();
+    const { showWheelPreview } = await import('./tour-ruler-demo.js');
+    await showWheelPreview();
+}
+
+async function _hideRulerTourDemos()
+{
+    await _dropRulerCard();
+    const { hideTourDemos } = await import('./tour-ruler-demo.js');
+    hideTourDemos();
+}
+
+async function _boostCardDemo()
+{
+    const { hideTourDemos } = await import('./tour-ruler-demo.js');
+    hideTourDemos();
+    _rulerCardShown = true;
+    await _cardDemo('boost');
+}
+
+const _rulerDemoStep = (id, titleKey, contentKey, selector) => ({
+    id,
+    title: localize(titleKey),
+    content: localize(contentKey),
+    selector,
+    action: _rulerDemo,
+});
+
+const RULER_STEPS = () => _withNeeds([
     {
         id: 'intro',
         title: localize('LA.tour.step.lancerRuler'),
-        content: `${localize('LA.tour.content.dragATokenToMeasureThe')}${localize('LA.onboarding.movement-beta.note')}`,
+        content: localize('LA.tour.content.dragATokenToMeasureThe'),
         selector: 'body',
         allowCanvas: true,
+        action: _hideRulerTourDemos,
     },
     {
         id: 'wheel',
         title: localize('LA.tour.step.movementWheel'),
         content: localize('LA.tour.content.pressMOnASelectedToken'),
-        selector: '.lancer-movement-wheel',
-        action: async () =>
-        {
-            if (!canvas.tokens.controlled[0])
-                canvas.tokens.placeables.find((token) => token.actor && !token.document.hidden)?.control({ releaseOthers: true });
-            const { toggleMovementWheel } = await import('../movement/movement-wheel.js');
-            if (!document.querySelector('.lancer-movement-wheel'))
-                toggleMovementWheel();
-            for (let attempt = 0; attempt < 20; attempt++)
-            {
-                if (document.querySelector('.lancer-movement-wheel'))
-                    break;
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-        },
-        cleanup: async () =>
-        {
-            if (document.querySelector('.lancer-movement-wheel'))
-            {
-                const { toggleMovementWheel } = await import('../movement/movement-wheel.js');
-                toggleMovementWheel();
-            }
-        },
+        selector: '#la-tour-frame',
+        action: _wheelDemo,
+    },
+    {
+        id: 'wheel-current',
+        title: localize('LA.tour.step.wheelCurrent'),
+        content: localize('LA.tour.content.wheelCurrentType'),
+        selector: '.lancer-movement-wheel .lancer-mw-btn.current',
+        action: _wheelDemo,
     },
     {
         id: 'm-drag',
@@ -932,26 +1041,359 @@ const RULER_STEPS = [
         content: localize('LA.tour.content.duringADragPressMTo'),
         selector: 'body',
         allowCanvas: true,
+        action: _hideRulerTourDemos,
+    },
+    _rulerDemoStep('ruler-labels', 'LA.tour.step.rulerLabels', 'LA.tour.content.rulerLabelsIntro', RULER_DEMO),
+    _rulerDemoStep('label-cost', 'LA.tour.step.labelCost', 'LA.tour.content.labelCostIs', `${RULER_DEMO_LAST} .la-badge-disc`),
+    _rulerDemoStep('label-ring', 'LA.tour.step.labelRing', 'LA.tour.content.labelRingIs', RULER_DEMO),
+    _rulerDemoStep('band-start', 'LA.tour.step.bandStart', 'LA.tour.content.bandStartIs', `${RULER_DEMO} .la-demo-boost`),
+    _rulerDemoStep('label-distance', 'LA.tour.step.labelDistance', 'LA.tour.content.labelDistanceIs', `${RULER_DEMO_LAST} .la-notch`),
+    _rulerDemoStep('label-row', 'LA.tour.step.labelRow', 'LA.tour.content.labelRowIs', `${RULER_DEMO_LAST} .la-badge-row`),
+    _rulerDemoStep('label-saved', 'LA.tour.step.labelSaved', 'LA.tour.content.labelSavedIs', `${RULER_DEMO_LAST} .la-saved-value`),
+    _rulerDemoStep('label-pathfind', 'LA.tour.step.labelPathfind', 'LA.tour.content.labelPathfindIs', `${RULER_DEMO_LAST} .la-badge-pathfind`),
+    _rulerDemoStep('label-elevmode', 'LA.tour.step.labelElevMode', 'LA.tour.content.labelElevModeIs', `${RULER_DEMO_LAST} .la-badge-elevmode`),
+    _rulerDemoStep('label-straight', 'LA.tour.step.labelStraight', 'LA.tour.content.labelStraightIs', `${RULER_DEMO_LAST} .la-badge-straight`),
+    _rulerDemoStep('label-elevcost', 'LA.tour.step.labelElevCost', 'LA.tour.content.labelElevCostIs', `${RULER_DEMO_LAST} .la-badge-elevcost`),
+    {
+        id: 'boost-card',
+        title: localize('LA.tour.step.pastYourSpeed'),
+        content: localize('LA.tour.content.pastYourSpeedIs'),
+        selector: TOUR_CARD,
+        action: _boostCardDemo,
     },
     {
-        id: 'free-debug',
-        title: localize('LA.tour.step.freeDebug'),
-        content: localize('LA.tour.content.holdVForFreeMovementNo'),
-        selector: 'body',
-        allowCanvas: true,
+        id: 'over-speed',
+        title: localize('LA.tour.step.overSpeed'),
+        content: localize('LA.tour.content.overSpeedIs'),
+        selector: TOUR_CARD,
+        action: _boostCardDemo,
     },
+    _rulerDemoStep('free-debug', 'LA.tour.step.freeDebug', 'LA.tour.content.holdVForFreeMovementNo', `${RULER_DEMO} .la-demo-free`),
+    _rulerDemoStep('force', 'LA.tour.step.forceMovement', 'LA.tour.content.forceIsUnintentionalMovementKnockbackDrag', `${RULER_DEMO} .la-demo-force`),
+], {
+    'boost-card': ['overSpeed'],
+});
+
+const STAGE_FRAME = '#la-tour-frame';
+const TOUR_CARD = '.la-tour-card';
+
+async function _stageDemo(kind, part)
+{
+    const { showEncounterDemo } = await import('./tour-encounter-demo.js');
+    await showEncounterDemo(kind, part);
+}
+
+async function _cardDemo(kind)
+{
+    const { showCardDemo } = await import('./tour-encounter-demo.js');
+    await showCardDemo(kind);
+}
+
+async function _hideEncounterDemos()
+{
+    const { hideEncounterDemos } = await import('./tour-encounter-demo.js');
+    hideEncounterDemos();
+}
+
+async function _battleLogDemo(kind, tab)
+{
+    const { showBattleLogDemo } = await import('./tour-battlelog-demo.js');
+    await showBattleLogDemo(kind, tab);
+}
+
+async function _hideBattleLogDemos()
+{
+    const { hideBattleLogDemos } = await import('./tour-battlelog-demo.js');
+    hideBattleLogDemos();
+}
+
+const _windowStep = (id, titleKey, contentKey, selector, kind, tab = null) => ({
+    id,
+    title: localize(titleKey),
+    content: localize(contentKey),
+    selector,
+    action: () => _battleLogDemo(kind, tab),
+});
+
+const _stageStep = (id, titleKey, contentKey, kind, part, restricted = false) => ({
+    id,
+    title: localize(titleKey),
+    content: localize(contentKey),
+    selector: STAGE_FRAME,
+    restricted,
+    action: () => _stageDemo(kind, part),
+});
+
+const _cardStep = (id, titleKey, contentKey, selector, kind = 'arrival', restricted = true) => ({
+    id,
+    title: localize(titleKey),
+    content: localize(contentKey),
+    selector,
+    restricted,
+    action: () => _cardDemo(kind),
+});
+
+const _withNeeds = (steps, table) => steps.map(step => (table[step.id] ? { ...step, needs: table[step.id] } : step));
+
+async function _overwatchOn(trigger)
+{
+    const { AutomationManager } = await import('../activations/automation-manager.js');
+    const group = AutomationManager.getGeneralAutomations()?.Overwatch;
+    return (group?.reactions ?? []).some(sub => sub && sub.enabled !== false && (sub.triggers ?? []).includes(trigger));
+}
+
+function _offNote(textKey, set = null, world = true)
+{
+    const isGM = !!game.user?.isGM;
+    const askGm = world && set && !isGM ? ` ${localize('LA.tour.off.askGm')}` : '';
+    return { text: `${localize(textKey)}${askGm}`, set: set && (!world || isGM) ? set : null };
+}
+
+const TOUR_NEEDS = {
+    carousel: () => (getModuleSetting('combatCarousel') ? null : _offNote('LA.tour.off.carousel', { key: 'combatCarousel', value: true })),
+    carouselShow: () => (getModuleSetting('carouselShow') ? null : _offNote('LA.tour.off.carouselShow', { key: 'carouselShow', value: true }, false)),
+    clockWindow: () => (getModuleSetting('clockWindowEnabled') ? null : _offNote('LA.tour.off.clockWindow', { key: 'clockWindowEnabled', value: true }, false)),
+    tah: () => (getModuleSetting('tahEnabled') ? null : _offNote('LA.tour.off.tah', { key: 'tahEnabled', value: true, reload: true }, false)),
+    narrativeTah: () => (getModuleSetting('tah.narrativeMode') ? null : _offNote('LA.tour.off.narrativeTah', { key: 'tah.narrativeMode', value: true }, false)),
+    attackPicker: () => (getModuleSetting('attackTargeting', 'auto') === 'off' ? _offNote('LA.tour.off.attackPicker', { key: 'attackTargeting', value: 'auto' }) : null),
+    autoStart: () => (getModuleSetting('attackTargeting', 'auto') === 'picker' ? _offNote('LA.tour.off.autoStart', { key: 'attackTargeting', value: 'auto' }) : null),
+    hitLabels: () =>
     {
-        id: 'force',
-        title: localize('LA.tour.step.forceMovement'),
-        content: localize('LA.tour.content.forceIsUnintentionalMovementKnockbackDrag'),
-        selector: 'body',
-        allowCanvas: true,
+        const mode = getModuleSetting('targetInfoDisplay') ?? 'gm';
+        if (mode === 'all')
+            return null;
+        return _offNote(mode === 'gm' ? 'LA.tour.off.hitLabelsGm' : 'LA.tour.off.hitLabels', { key: 'targetInfoDisplay', value: 'all' });
     },
-];
+    lancerLos: () => (getModuleSetting('lancerLos') ? null : _offNote('LA.tour.off.lancerLos', { key: 'lancerLos', value: true })),
+    losHover: () => (getModuleSetting('lancerLosAttackHover') ? null : _offNote('LA.tour.off.losHover', { key: 'lancerLosAttackHover', value: true })),
+    tht: () => (game.modules.get('terrain-height-tools')?.active ? null : _offNote('LA.tour.off.tht')),
+    reminders: () => (getModuleSetting('reactionNotificationMode') === 'gm' ? _offNote('LA.tour.off.reminders', { key: 'reactionNotificationMode', value: 'both' }) : null),
+    uplink: () => (getModuleSetting('uplinkEnabled') ? null : _offNote('LA.tour.off.uplink', { key: 'uplinkEnabled', value: true })),
+    uplinkAutoOpen: () => (getModuleSetting('uplinkAutoOpen') ? null : _offNote('LA.tour.off.uplinkAutoOpen', { key: 'uplinkAutoOpen', value: true }, false)),
+    overwatchCard: async () => ((await _overwatchOn('onPreMove')) ? null : _offNote('LA.tour.off.overwatchCard')),
+    reactionSkirmish: async () => ((await _overwatchOn('onMove')) ? null : _offNote('LA.tour.off.reactionSkirmish')),
+    battleLog: () => (getModuleSetting('battleLogEnabled') ? null : _offNote('LA.tour.off.battleLog', { key: 'battleLogEnabled', value: true })),
+    awards: () => (getModuleSetting('tah.disableAwards') ? _offNote('LA.tour.off.awards', { key: 'tah.disableAwards', value: false }) : null),
+    visionModes: () => (getModuleSetting('lancerVisionAutoAdd') ? null : _offNote('LA.tour.off.visionModes', { key: 'lancerVisionAutoAdd', value: true })),
+    distanceLabels: () => (getModuleSetting('enableTacticalDistance') === 'off' ? _offNote('LA.tour.off.distanceLabels', { key: 'enableTacticalDistance', value: 'combat' }, false) : null),
+    deployLines: () => (getModuleSetting('showDeployableLines') ? null : _offNote('LA.tour.off.deployLines', { key: 'showDeployableLines', value: true }, false)),
+    overSpeed: () => (['yes', 'auto'].includes(getBoostOfferMode()) ? null : _offNote('LA.tour.off.overSpeed', { key: 'enableBoostOffer', value: 'yes' })),
+};
+
+const CLOCK_NEEDS = ['clockWindow'];
+const CAROUSEL_NEEDS = ['carousel', 'carouselShow'];
+const UPLINK_NEEDS = ['uplink'];
+const PICKER_NEEDS = ['attackPicker'];
+
+const CLOCKS_STEPS = () => _withNeeds([
+    _stageStep('clocks-intro', 'LA.tour.step.clocks', 'LA.tour.content.clocksIntro', 'clocks', '#la-world-clocks'),
+    _stageStep('clock-set', 'LA.tour.step.clockSet', 'LA.tour.content.clockSetIs', 'clocks', '.lawc-row[data-key="la-tour-clock-a"] .lawc-pie-slot'),
+    _stageStep('clock-add', 'LA.tour.step.clockAdd', 'LA.tour.content.clockAddIs', 'clocks', '[data-action="add"]', true),
+    _stageStep('clock-pins', 'LA.tour.step.clockPins', 'LA.tour.content.clockPinsIs', 'clocks', '.lawc-block[data-key="block:pinned"]'),
+    _stageStep('clock-hidden', 'LA.tour.step.clockHidden', 'LA.tour.content.clockHiddenIs', 'clocks', '[data-action="unhide"]'),
+    _stageStep('clock-rings', 'LA.tour.step.clockRings', 'LA.tour.content.clockRingsIs', 'clock-rings', '#la-world-clocks'),
+], {
+    'clocks-intro': CLOCK_NEEDS,
+    'clock-set': CLOCK_NEEDS,
+    'clock-add': [...CLOCK_NEEDS, 'tah', 'narrativeTah'],
+    'clock-pins': CLOCK_NEEDS,
+    'clock-hidden': CLOCK_NEEDS,
+    'clock-rings': CLOCK_NEEDS,
+});
+
+const ATTACK_STEPS = () => _withNeeds([
+    _stageStep('attack-intro', 'LA.tour.step.attacking', 'LA.tour.content.attackIntro', 'attack', '#accdiff-hud'),
+    _stageStep('attack-pick', 'LA.tour.step.attackPick', 'LA.tour.content.attackPickIs', 'attack', '.la-targeting-section .accdiff-ranges'),
+    _stageStep('attack-cancel', 'LA.tour.step.attackCancel', 'LA.tour.content.attackCancelIs', 'attack', '.la-accdiff-hint'),
+    _stageStep('attack-map', 'LA.tour.step.attackMap', 'LA.tour.content.attackMapIs', 'attack-board', '.la-ts-board'),
+    _stageStep('attack-chance', 'LA.tour.step.attackChance', 'LA.tour.content.attackChanceIs', 'attack-board', '.la-ts-target-a'),
+    _stageStep('attack-los', 'LA.tour.step.attackLos', 'LA.tour.content.attackLosIs', 'los-board', '.la-ts-board'),
+    _stageStep('area-intro', 'LA.tour.step.areas', 'LA.tour.content.areasIntro', 'attack-area', '.la-targeting-section'),
+    _stageStep('area-aim', 'LA.tour.step.areaAim', 'LA.tour.content.areaAimIs', 'area-board', '.la-ts-board'),
+    _stageStep('area-options', 'LA.tour.step.areaOptions', 'LA.tour.content.areaOptionsAre', 'attack-area', '.la-accdiff-area-toggles'),
+    _stageStep('area-shape', 'LA.tour.step.areaShape', 'LA.tour.content.areaShapeIs', 'attack-strip', '.la-attack-shape-strip'),
+    _cardStep('invade', 'LA.tour.step.invade', 'LA.tour.content.invadeIs', TOUR_CARD, 'invade', false),
+    _stageStep('fire-strip', 'LA.tour.step.skirmishBarrage', 'LA.tour.content.fireStripIs', 'attack-chain', '.la-fire-strip'),
+    _stageStep('vulnerable-intro', 'LA.tour.step.vulnerable', 'LA.tour.content.vulnerableIntro', 'damage-vulnerable', '.la-vulnerable-row'),
+    _stageStep('vulnerable-cards', 'LA.tour.step.vulnerableCards', 'LA.tour.content.vulnerableCardsAre', 'damage-vulnerable-multi', '.la-vulnerable-box'),
+    _stageStep('reliable-type', 'LA.tour.step.reliableType', 'LA.tour.content.reliableTypeIs', 'damage-reliable', '.la-tour-reliable'),
+    _stageStep('variable-damage', 'LA.tour.step.variableDamage', 'LA.tour.content.variableDamageIs', 'damage-variable', '.la-variable-row'),
+], {
+    'attack-intro': [...PICKER_NEEDS, 'autoStart'],
+    'attack-pick': PICKER_NEEDS,
+    'attack-cancel': PICKER_NEEDS,
+    'attack-map': PICKER_NEEDS,
+    'attack-chance': [...PICKER_NEEDS, 'hitLabels'],
+    'attack-los': ['tht', 'lancerLos', 'losHover'],
+    'area-intro': PICKER_NEEDS,
+    'area-aim': PICKER_NEEDS,
+    'area-options': PICKER_NEEDS,
+    'area-shape': PICKER_NEEDS,
+});
+
+const CARDS_STEPS = () => _withNeeds([
+    _cardStep('cards-intro', 'LA.tour.step.cards', 'LA.tour.content.cardsIntro', TOUR_CARD, 'skirmish', false),
+    _cardStep('cards-rows', 'LA.tour.step.cardsRows', 'LA.tour.content.cardsRowsAre', `${TOUR_CARD} [data-role="pick-list"]`, 'skirmish', false),
+    _cardStep('cards-queue', 'LA.tour.step.cardsQueue', 'LA.tour.content.cardsQueueIs', `${TOUR_CARD} .lancer-header`, 'skirmish', false),
+    _cardStep('reactions-intro', 'LA.tour.step.reactions', 'LA.tour.content.reactionsIntro', TOUR_CARD, 'overwatch', false),
+    _cardStep('reactions-card', 'LA.tour.step.reactionsCard', 'LA.tour.content.reactionsCardIs', `${TOUR_CARD} [data-role="choice-list"]`, 'overwatch', false),
+    _stageStep('reactions-lane', 'LA.tour.step.reactionsLane', 'LA.tour.content.reactionsLaneIs', 'lane', '#la-reaction-lane'),
+    _stageStep('reactions-row', 'LA.tour.step.reactionsRow', 'LA.tour.content.reactionsRowIs', 'lane', '.la-rx-strip[data-rx-index="0"]'),
+    _stageStep('reactions-head', 'LA.tour.step.reactionsHead', 'LA.tour.content.reactionsHeadIs', 'lane', '.la-rx-head'),
+    _cardStep('prepare-intro', 'LA.tour.step.prepare', 'LA.tour.content.prepareIntro', TOUR_CARD, 'prepare', false),
+    _cardStep('prepare-trigger', 'LA.tour.step.prepareTrigger', 'LA.tour.content.prepareTriggerIs', TOUR_CARD, 'prepare-trigger', false),
+    _cardStep('prepare-fire', 'LA.tour.step.prepareFire', 'LA.tour.content.prepareFireIs', TOUR_CARD, 'ask', false),
+], {
+    'reactions-intro': ['overwatchCard'],
+    'reactions-card': ['overwatchCard'],
+    'reactions-lane': ['reminders', 'reactionSkirmish'],
+    'reactions-row': ['reminders'],
+    'reactions-head': ['reminders'],
+});
+
+const CAROUSEL_STEPS = () => _withNeeds([
+    _stageStep('carousel-intro', 'LA.tour.step.combatCarousel', 'LA.tour.content.carouselIntro', 'carousel', '#la-carousel'),
+    _stageStep('carousel-lane', 'LA.tour.step.carouselLanes', 'LA.tour.content.carouselLanesAre', 'carousel', '.lac-head'),
+    _stageStep('carousel-card', 'LA.tour.step.carouselUnits', 'LA.tour.content.carouselUnitsAre', 'carousel', '.lac-slot[data-id="la-tour-b"]'),
+    _stageStep('carousel-acts', 'LA.tour.step.carouselActivations', 'LA.tour.content.carouselActivationsAre', 'carousel', '.lac-slot[data-id="la-tour-c"] .lac-pips'),
+    _stageStep('carousel-active', 'LA.tour.step.carouselTurn', 'LA.tour.content.carouselTurnIs', 'carousel', '.lac-slot.is-active'),
+    _stageStep('carousel-menu', 'LA.tour.step.carouselMenu', 'LA.tour.content.carouselMenuIs', 'carousel', '.lac-slot[data-id="la-tour-c"]'),
+    _stageStep('carousel-deps', 'LA.tour.step.carouselDeployables', 'LA.tour.content.carouselDeployablesAre', 'carousel', '.lac-deps'),
+    _stageStep('carousel-buttons', 'LA.tour.step.carouselButtons', 'LA.tour.content.carouselButtonsAre', 'carousel', '.lac-buttons.right', true),
+    _stageStep('carousel-fold', 'LA.tour.step.carouselFold', 'LA.tour.content.carouselFoldIs', 'carousel', '[data-combat-action="fold"]'),
+    _stageStep('reinforcement-intro', 'LA.tour.step.reinforcements', 'LA.tour.content.reinforcementsIntro', 'bar', '#la-reinforcement-bar', true),
+    _stageStep('reinforcement-drop', 'LA.tour.step.reinforcementBar', 'LA.tour.content.reinforcementBarIs', 'bar', '#la-reinforcement-bar > b', true),
+    _stageStep('reinforcement-arrive', 'LA.tour.step.reinforcementArrive', 'LA.tour.content.reinforcementArriveIs', 'bar', '.la-rf-bar-arrive', true),
+    _stageStep('reinforcement-visibility', 'LA.tour.step.reinforcementVisibility', 'LA.tour.content.reinforcementVisibilityIs', 'bar', '[data-action="visibility"]', true),
+    _stageStep('reinforcement-team', 'LA.tour.step.reinforcementTeam', 'LA.tour.content.reinforcementTeamIs', 'bar', '[data-action="team"]', true),
+    _stageStep('reinforcement-marker', 'LA.tour.step.reinforcementMarker', 'LA.tour.content.reinforcementMarkerIs', 'board', '.la-ts-marker'),
+    _stageStep('carousel-incoming', 'LA.tour.step.carouselIncoming', 'LA.tour.content.carouselComingIs', 'carousel', '.lac-rf-in'),
+    _cardStep('arrival-card', 'LA.tour.step.arrivalCard', 'LA.tour.content.arrivalCardIs', TOUR_CARD),
+    _stageStep('leave-intro', 'LA.tour.step.leaveBattlefield', 'LA.tour.content.leaveBattlefieldIntro', 'board', '.la-ts-leaver'),
+    _stageStep('leave-mark', 'LA.tour.step.leaveMark', 'LA.tour.content.leaveBattlefieldIs', 'board', '.la-ts-leaver'),
+    _stageStep('carousel-leaving', 'LA.tour.step.carouselLeaving', 'LA.tour.content.carouselLeavingIs', 'carousel', '.lac-slot.is-leaving'),
+    _cardStep('leave-card', 'LA.tour.step.leaveOrStay', 'LA.tour.content.leaveOrStayIs', `${TOUR_CARD} [data-pick-index="2"]`),
+], {
+    'carousel-intro': CAROUSEL_NEEDS,
+    'carousel-lane': CAROUSEL_NEEDS,
+    'carousel-card': CAROUSEL_NEEDS,
+    'carousel-acts': CAROUSEL_NEEDS,
+    'carousel-active': CAROUSEL_NEEDS,
+    'carousel-menu': CAROUSEL_NEEDS,
+    'carousel-deps': CAROUSEL_NEEDS,
+    'carousel-buttons': CAROUSEL_NEEDS,
+    'carousel-fold': CAROUSEL_NEEDS,
+    'carousel-incoming': CAROUSEL_NEEDS,
+    'carousel-leaving': CAROUSEL_NEEDS,
+});
+
+const UPLINK_STEPS = () => _withNeeds([
+    _stageStep('uplink-intro', 'LA.tour.step.rollUplink', 'LA.tour.content.rollUplinkIntro', 'uplink', '#la-uplink-panel'),
+    _stageStep('uplink-bar', 'LA.tour.step.uplinkChips', 'LA.tour.content.uplinkChipsAre', 'uplink', '.lau-bar'),
+    _stageStep('uplink-who', 'LA.tour.step.uplinkWho', 'LA.tour.content.uplinkWhoIs', 'uplink', '.lau-head'),
+    _stageStep('uplink-choices', 'LA.tour.step.uplinkChoices', 'LA.tour.content.uplinkChoicesAre', 'uplink', '.lau-cols'),
+    _stageStep('uplink-range', 'LA.tour.step.uplinkRange', 'LA.tour.content.uplinkRangeIs', 'uplink', '.lau-profile'),
+    _stageStep('uplink-targets', 'LA.tour.step.uplinkTargets', 'LA.tour.content.uplinkTargetsAre', 'uplink', '.lau-tcard'),
+], {
+    'uplink-intro': [...UPLINK_NEEDS, 'uplinkAutoOpen'],
+    'uplink-bar': UPLINK_NEEDS,
+    'uplink-who': UPLINK_NEEDS,
+    'uplink-choices': UPLINK_NEEDS,
+    'uplink-range': UPLINK_NEEDS,
+    'uplink-targets': UPLINK_NEEDS,
+});
+
+const GM_CARD = '.battelog-dialog';
+const RECAP = '.battelog-recap-dialog';
+
+const BATTLELOG_STEPS = () => _withNeeds([
+    _windowStep('battlelog-intro', 'LA.tour.step.battleLog', 'LA.tour.content.battleLogIntro', GM_CARD, 'gm'),
+    _windowStep('battlelog-outcome', 'LA.tour.step.battleLogOutcome', 'LA.tour.content.battleLogOutcomeIs', `${GM_CARD} .battelog-outcome`, 'gm'),
+    _windowStep('battlelog-mvp', 'LA.tour.step.battleLogMvp', 'LA.tour.content.battleLogMvpIs', `${GM_CARD} .battelog-mvp`, 'gm'),
+    _windowStep('battlelog-analysis', 'LA.tour.step.battleLogAnalysis', 'LA.tour.content.battleLogAnalysisIs', `${GM_CARD} .battelog-extra-add`, 'gm'),
+    _windowStep('battlelog-broadcast', 'LA.tour.step.battleLogBroadcast', 'LA.tour.content.battleLogBroadcastIs', `${GM_CARD} .battelog-actions`, 'gm'),
+    _windowStep('battlelog-recap', 'LA.tour.step.battleLogRecap', 'LA.tour.content.battleLogRecapIs', `${RECAP} .battelog-recap-head`, 'recap', 'squad'),
+    _windowStep('battlelog-squad', 'LA.tour.step.battleLogSquad', 'LA.tour.content.battleLogSquadIs', `${RECAP} .battelog-recap-squad-grid`, 'recap', 'squad'),
+    _windowStep('battlelog-awards', 'LA.tour.step.battleLogAwards', 'LA.tour.content.battleLogAwardsAre', `${RECAP} .battelog-pcol-medals`, 'recap', 'squad'),
+    _windowStep('battlelog-encounter', 'LA.tour.step.battleLogEncounter', 'LA.tour.content.battleLogEncounterIs', `${RECAP} [data-tab-panel="encounter"]`, 'recap', 'encounter'),
+    _windowStep('battlelog-telemetry', 'LA.tour.step.battleLogTelemetry', 'LA.tour.content.battleLogTelemetryIs', `${RECAP} [data-tab-panel="telemetry"]`, 'recap', 'telemetry'),
+    _windowStep('battlelog-share', 'LA.tour.step.battleLogShare', 'LA.tour.content.battleLogShareIs', `${RECAP} .battelog-recap-share`, 'recap', 'squad'),
+], {
+    'battlelog-intro': ['battleLog'],
+    'battlelog-mvp': ['awards'],
+    'battlelog-awards': ['awards'],
+});
+
+const TOKEN_LA_TAB = '.la-compact-config';
+let _tourTokenSheet = null;
+
+async function _openTokenLaTab()
+{
+    await _hideEncounterDemos();
+    const { subjectToken } = await import('./tour-samples.js');
+    const sheet = (subjectToken() ?? canvas.tokens?.placeables?.find(token => token.actor))?.document?.sheet;
+    if (!sheet)
+        return;
+
+    if (!sheet.rendered)
+    {
+        await sheet.render(true);
+        _tourTokenSheet = sheet;
+    }
+
+    const rootOf = () => (sheet.element instanceof HTMLElement ? sheet.element : sheet.element?.[0]);
+    for (let attempt = 0; attempt < 40 && !rootOf()?.querySelector('a[data-tab="la"]'); attempt++)
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const root = rootOf();
+    /** @type {HTMLElement | null | undefined} */ (root?.querySelector('a[data-tab="la"]'))?.click();
+
+    const shown = [localize('LA.wreck.sectionAwareness'), localize('LA.wreck.sectionLineOfSight')];
+    for (const section of root?.querySelectorAll('.la-config-section') ?? [])
+    {
+        if (shown.includes(section.querySelector('.la-config-section-head')?.textContent?.trim()))
+            section.classList.remove('collapsed');
+    }
+
+    sheet.setPosition?.({ height: 'auto' });
+}
+
+async function _closeTokenLaTab()
+{
+    const sheet = _tourTokenSheet;
+    _tourTokenSheet = null;
+    if (sheet?.rendered)
+        await sheet.close();
+}
+
+const VISION_STEPS = () => _withNeeds([
+    _stageStep('vision-intro', 'LA.tour.step.vision', 'LA.tour.content.visionIntro', 'vision-board', '.la-ts-board'),
+    _stageStep('vision-los', 'LA.tour.step.visionLos', 'LA.tour.content.visionLosIs', 'vision-board', '.la-ts-seen'),
+    _stageStep('vision-terrain', 'LA.tour.step.visionTerrain', 'LA.tour.content.visionTerrainIs', 'vision-board', '.la-ts-terrain'),
+    _stageStep('vision-sensors', 'LA.tour.step.visionSensors', 'LA.tour.content.visionSensorsIs', 'vision-board', '.la-ts-sensor'),
+    _stageStep('vision-awareness', 'LA.tour.step.visionAwareness', 'LA.tour.content.visionAwarenessIs', 'vision-board', '.la-ts-aware'),
+    _stageStep('vision-eye', 'LA.tour.step.visionEye', 'LA.tour.content.visionEyeIs', 'vision-board', '.la-ts-board'),
+    {
+        id: 'vision-token',
+        title: localize('LA.tour.step.visionToken'),
+        content: localize('LA.tour.content.visionTokenIs'),
+        selector: TOKEN_LA_TAB,
+        restricted: true,
+        action: _openTokenLaTab,
+        cleanup: _closeTokenLaTab,
+    },
+], {
+    'vision-intro': ['lancerLos'],
+    'vision-los': ['lancerLos'],
+    'vision-terrain': ['tht', 'lancerLos'],
+    'vision-sensors': ['visionModes'],
+    'vision-awareness': ['visionModes'],
+    'vision-eye': ['lancerLos', 'distanceLabels'],
+});
 
 const AM_ROOT = '#la-measure-toolbar';
 
-const ADV_MEASURE_STEPS = [
+const ADV_MEASURE_STEPS = () => [
     {
         id: 'intro',
         title: localize('LA.tour.step.advancedMeasure'),
@@ -1034,6 +1476,7 @@ function _findUsableToken()
     const isEquipped = (token) => isMech(token) && !!getWeapons(token).length;
     const visible = canvas.tokens.placeables.filter((token) => !token.document.hidden);
     const controlled = canvas.tokens.controlled[0];
+
     if (controlled && isEquipped(controlled))
         return controlled;
     return visible.find(isEquipped)
@@ -1047,17 +1490,20 @@ async function _setupDemoCombat(target)
 {
     const hadStartedCombat = !!game.combat?.started;
     const prevTurnIdx = game.combat?.turn ?? null;
+
     if (!game.combat)
     {
         const combat = await Combat.create({ scene: canvas.scene.id, active: true });
         if (combat)
             _tahCreatedCombat = true;
     }
+
     if (!target.inCombat)
     {
         await target.document.toggleCombatant?.(true);
         _tahDemoAddedToCombat = true;
     }
+
     if (game.combat && !game.combat.started)
     {
         try
@@ -1069,15 +1515,18 @@ async function _setupDemoCombat(target)
             void 0;
         }
     }
+
     // Token must be the CURRENT combatant; otherwise the bar shows the active turn's.
     if (game.combat?.started)
     {
         const combatant = game.combat.combatants.find(entry => entry.tokenId === target.id);
         const idx = combatant ? game.combat.turns.findIndex(entry => entry.id === combatant.id) : -1;
+
         if (combatant && idx >= 0 && game.combat.combatant?.id !== combatant.id)
         {
             if (hadStartedCombat)
                 _tahPrevTurnIdx = prevTurnIdx;
+
             try
             {
                 await game.combat.update({ turn: idx });
@@ -1088,6 +1537,7 @@ async function _setupDemoCombat(target)
             }
         }
     }
+
     for (let attempt = 0; attempt < 40; attempt++)
     {
         if (document.querySelector('#la-combat-bar'))
@@ -1118,6 +1568,7 @@ async function _ensureTAHOpen({ withCombat = true } = {})
                 close: () => resolve(false),
             }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
         });
+
         if (!enable)
             return false;
         await game.settings.set(MODULE_ID, 'tahEnabled', true);
@@ -1126,14 +1577,17 @@ async function _ensureTAHOpen({ withCombat = true } = {})
     _tahPrevControlled = canvas.tokens.controlled.slice();
 
     let target = _findUsableToken();
+
     while (!target)
     {
         const proceed = await _waitForTokenDialog();
+
         if (!proceed)
         {
             _tahPrevControlled = [];
             return false;
         }
+
         target = _findUsableToken();
     }
 
@@ -1143,13 +1597,32 @@ async function _ensureTAHOpen({ withCombat = true } = {})
     if (withCombat)
         await _setupDemoCombat(target);
 
-    for (let attempt = 0; attempt < 40; attempt++)
-    {
-        if (document.querySelector('#la-hud-stats'))
-            break;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    await _waitForTahBound(target);
     return true;
+}
+
+const TAH_BIND_WAIT_MS = 10000;
+const TAH_BIND_POLL_MS = 100;
+const TAH_STABLE_POLLS = 2;
+
+async function _waitForTahBound(target)
+{
+    const { hud } = await import('../tah/index.js');
+    let lastElement = null;
+    let lastKey = null;
+    let stable = 0;
+
+    for (let waited = 0; waited < TAH_BIND_WAIT_MS && stable < TAH_STABLE_POLLS; waited += TAH_BIND_POLL_MS)
+    {
+        await new Promise((resolve) => setTimeout(resolve, TAH_BIND_POLL_MS));
+        const element = hud._el?.[0];
+        const ready = hud._token?.id === target.id && !!element?.isConnected && !hud._el.is(':animated');
+        const box = ready ? element.getBoundingClientRect() : null;
+        const key = box ? `${box.left}|${box.top}|${box.width}|${box.height}` : null;
+        stable = ready && element === lastElement && key === lastKey ? stable + 1 : 0;
+        lastElement = element;
+        lastKey = key;
+    }
 }
 
 async function _restoreAfterTAH()
@@ -1162,6 +1635,7 @@ async function _restoreAfterTAH()
     }
     catch
     { /* ignore */ }
+
     try
     {
         if (_tahDemoToken && _tahDemoAddedToCombat)
@@ -1169,6 +1643,7 @@ async function _restoreAfterTAH()
     }
     catch
     { /* ignore */ }
+
     try
     {
         if (_tahCreatedCombat && game.combat)
@@ -1176,12 +1651,14 @@ async function _restoreAfterTAH()
     }
     catch
     { /* ignore */ }
+
     try
     {
         _tahDemoToken?.release();
     }
     catch
     { /* ignore */ }
+
     for (const token of _tahPrevControlled)
     {
         try
@@ -1191,6 +1668,7 @@ async function _restoreAfterTAH()
         catch
         { /* ignore */ }
     }
+
     _tahPrevControlled = [];
     _tahDemoToken = null;
     _tahDemoAddedToCombat = false;
@@ -1200,6 +1678,29 @@ async function _restoreAfterTAH()
 
 let _tahTour;
 let _advTahTour;
+
+const FIXED_OVERFLOW = new Set(['hidden', 'clip']);
+
+function _scrollIntoViewLocked(target)
+{
+    const locked = [];
+
+    for (let node = target.parentElement; node; node = node.parentElement)
+    {
+        const style = getComputedStyle(node);
+        locked.push({ node, top: FIXED_OVERFLOW.has(style.overflowY) ? node.scrollTop : null, left: FIXED_OVERFLOW.has(style.overflowX) ? node.scrollLeft : null });
+    }
+
+    Element.prototype.scrollIntoView.call(target, { block: 'nearest', inline: 'nearest' });
+
+    for (const { node, top, left } of locked)
+    {
+        if (top !== null)
+            node.scrollTop = top;
+        if (left !== null)
+            node.scrollLeft = left;
+    }
+}
 
 export async function startTahTour()
 {
@@ -1214,16 +1715,38 @@ class _RootTour extends foundry.nue.Tour
         this._root = root;
         this._onCompleteHook = null;
     }
+    async progress(stepIndex)
+    {
+        if (this._progressing)
+            return;
+
+        this._progressing = true;
+
+        try
+        {
+            return await super.progress(stepIndex);
+        }
+        finally
+        {
+            this._progressing = false;
+        }
+    }
     async _preStep()
     {
+        this._stepShown = false;
         await super._preStep();
+        if (foundry.nue.Tour.activeTour !== this)
+            return;
+
         const step = /** @type {any} */ (this.currentStep);
+
         if (step?.tab)
         {
             const tab = document.querySelector(`${this._root} nav.tabs a[data-tab="${step.tab}"]`);
             if (tab instanceof HTMLElement)
                 tab.click();
         }
+
         if (typeof step?.action === 'function')
         {
             try
@@ -1235,6 +1758,12 @@ class _RootTour extends foundry.nue.Tour
                 console.warn('lancer-automations | tour step action failed', e);
             }
         }
+
+        if (foundry.nue.Tour.activeTour !== this)
+            return;
+
+        await this._noteNeeds(step);
+
         // A selector resolving to nothing makes Foundry throw; degrade to a centered popover instead.
         if (step?.selector && step.selector !== 'body' && !document.querySelector(step.selector))
         {
@@ -1252,10 +1781,59 @@ class _RootTour extends foundry.nue.Tour
             this._blankedSelector = null;
         }
     }
+    async _noteNeeds(step)
+    {
+        this._needNotes = new Map();
+        if (!step?.needs?.length)
+            return;
+
+        const notes = await Promise.all(step.needs.map(async id => [id, await TOUR_NEEDS[id]?.()]));
+        const failing = notes.filter(([, note]) => note);
+        if (!failing.length)
+            return;
+
+        this._needNotes = new Map(failing);
+        this._notedStep = step;
+        this._notedContent = step.content;
+
+        const lines = failing.map(([id, note]) =>
+        {
+            const button = note.set ? `<button type="button" class="la-tour-turn-on" data-need="${id}">${localize(note.set.reload ? 'LA.tour.off.turnOnReload' : 'LA.tour.off.turnOn')}</button>` : '';
+            return `<span class="la-tour-off-line"><i class="fas fa-power-off"></i><span class="la-tour-off-body"><span>${note.text}</span>${button}</span></span>`;
+        });
+
+        step.content = `${localize(step.content)}\n<span class="la-tour-off">${lines.join('')}</span>`;
+    }
+    _restoreNotes()
+    {
+        if (this._notedStep)
+        {
+            this._notedStep.content = this._notedContent;
+            this._notedStep = null;
+            this._notedContent = null;
+        }
+    }
+    async _turnOn(button)
+    {
+        const note = this._needNotes?.get(button.dataset.need);
+        if (!note?.set)
+            return;
+
+        button.disabled = true;
+        await game.settings.set(MODULE_ID, note.set.key, note.set.value);
+
+        if (note.set.reload)
+        {
+            foundry.utils.debouncedReload();
+            return;
+        }
+
+        button.closest('.la-tour-off-line')?.replaceChildren(localize('LA.tour.off.done'));
+    }
     async _postStep()
     {
-        this._restoreBlanked();
         const step = /** @type {any} */ (this.currentStep);
+
         if (typeof step?.cleanup === 'function')
         {
             try
@@ -1267,15 +1845,58 @@ class _RootTour extends foundry.nue.Tour
                 console.warn('lancer-automations | tour step cleanup failed', e);
             }
         }
-        await super._postStep();
+
+        if (this._stepShown)
+            await super._postStep();
+        this._stepShown = false;
+        this._restoreBlanked();
+        this._restoreNotes();
+
+        for (const button of game.tooltip.tooltip?.querySelectorAll('.step-button') ?? [])
+            /** @type {HTMLElement} */ (button).style.pointerEvents = 'none';
     }
     async _renderStep()
     {
-        await super._renderStep();
+        if (foundry.nue.Tour.activeTour !== this)
+            return;
+
         const step = /** @type {any} */ (this.currentStep);
+        const self = /** @type {any} */ (this);
+
+        if (step?.selector && !self.targetElement?.isConnected)
+        {
+            self.targetElement = document.querySelector(step.selector);
+
+            if (!self.targetElement)
+            {
+                this._blankedSelector = step.selector;
+                this._blankedStep = step;
+                step.selector = null;
+            }
+        }
+
+        const target = step?.selector ? self.targetElement : null;
+        if (target)
+            target.scrollIntoView = () => _scrollIntoViewLocked(target);
+
+        try
+        {
+            await super._renderStep();
+        }
+        finally
+        {
+            if (target)
+                delete target.scrollIntoView;
+        }
+
+        this._stepShown = true;
+        const shown = step?.selector ? game.tooltip.tooltip : self.targetElement;
+
+        for (const button of shown?.querySelectorAll?.('.la-tour-turn-on') ?? [])
+            button.addEventListener('click', () => this._turnOn(button));
+
         if (step?.allowCanvas)
         {
-            const self = /** @type {any} */ (this);
             if (self.overlayElement)
                 self.overlayElement.style.pointerEvents = 'none';
             if (self.fadeElement)
@@ -1289,7 +1910,6 @@ class _RootTour extends foundry.nue.Tour
     }
     async complete()
     {
-        this._restoreBlanked();
         const fn = this._onCompleteHook;
         this._onCompleteHook = null;
         await super.complete();
@@ -1298,7 +1918,6 @@ class _RootTour extends foundry.nue.Tour
     }
     async exit()
     {
-        this._restoreBlanked();
         this._onCompleteHook = null;
         await super.exit();
     }
@@ -1308,6 +1927,13 @@ let _configTour;
 let _activationTour;
 let _effectManagerTour;
 let _rulerTour;
+let _attackTour;
+let _carouselTour;
+let _cardsTour;
+let _clocksTour;
+let _uplinkTour;
+let _battleLogTour;
+let _visionTour;
 let _advMeasureTour;
 let _addExtraTour;
 
@@ -1330,21 +1956,24 @@ function _ensureConfigOpen()
 
 function _ensureActivationManagerOpen()
 {
-    return _ensureWindowOpen('reaction-manager-config', '../activations/reaction-manager.js', 'ReactionConfig');
+    return _ensureWindowOpen('reaction-manager-config', '../activations/automation-manager.js', 'AutomationConfig');
 }
 
 async function _ensureEffectManagerOpen()
 {
     if (document.querySelector(EM_ROOT))
         return true;
+
     const { executeEffectManager } = await import('../bonuses/effectManager.js');
     executeEffectManager();
+
     for (let i = 0; i < 40; i++)
     {
         if (document.querySelector(EM_ROOT))
             return true;
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
+
     return !!document.querySelector(EM_ROOT);
 }
 
@@ -1353,7 +1982,9 @@ function _closeEffectManager()
     const el = document.querySelector(EM_ROOT);
     if (!el)
         return;
+
     const dlg = Object.values(/** @type {any} */ (ui.windows)).find((win) => /** @type {any} */ (win).element?.[0] === el || /** @type {any} */ (win).element?.[0]?.contains(el));
+
     try
     {
         /** @type {any} */ (dlg)?.close?.();
@@ -1371,7 +2002,9 @@ function _closeExtrasDialog()
         const el = document.querySelector(selector);
         if (!el)
             return;
+
         const dlg = Object.values(/** @type {any} */ (ui.windows)).find((win) => /** @type {any} */ (win).element?.[0]?.contains(el));
+
         try
         {
             /** @type {any} */ (dlg)?.close?.();
@@ -1379,8 +2012,10 @@ function _closeExtrasDialog()
         catch
         { /* ignore */ }
     };
+
     closeContaining('.la-extras-body');
     closeContaining('button[data-button="extras"]');
+
     try
     {
         if (/** @type {any} */ (_emDemoActor)?.sheet?.rendered)
@@ -1388,6 +2023,7 @@ function _closeExtrasDialog()
     }
     catch
     { /* ignore */ }
+
     _emDemoActor = null;
 }
 
@@ -1395,11 +2031,13 @@ async function _ensureAddExtraStart()
 {
     const mech = canvas.tokens.controlled.find((token) => token.actor?.type === 'mech')?.actor
         ?? canvas.tokens.placeables.find((token) => token.actor?.type === 'mech' && !token.document.hidden)?.actor;
+
     if (!mech)
     {
         ui.notifications.warn(localize('LA.notify.theAddExtraTourNeedsAMech'));
         return false;
     }
+
     _emDemoActor = mech;
     return true;
 }
@@ -1408,14 +2046,17 @@ async function _ensureAdvMeasureOpen()
 {
     if (document.querySelector(AM_ROOT))
         return true;
+
     const { toggleAdvancedMeasure } = await import('../interactive/tools/advancedMeasure.js');
     toggleAdvancedMeasure();
+
     for (let attempt = 0; attempt < 40; attempt++)
     {
         if (document.querySelector(AM_ROOT))
             return true;
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
+
     return !!document.querySelector(AM_ROOT);
 }
 
@@ -1423,30 +2064,34 @@ async function _closeAdvMeasure()
 {
     if (!document.querySelector(AM_ROOT))
         return;
+
     const { closeAdvancedMeasure } = await import('../interactive/tools/advancedMeasure.js');
     closeAdvancedMeasure();
 }
 
-async function _ensureReactionEditorOpen()
+async function _ensureAutomationEditorOpen()
 {
     if (document.querySelector('#reaction-editor'))
     {
         document.querySelector('#reaction-editor .la-band-fold')?.setAttribute('open', '');
         return true;
     }
+
     const btn = document.querySelector(`${RM_ROOT} .tab[data-tab="custom"] .add-reaction`);
     if (btn instanceof HTMLElement)
         btn.click();
+
     for (let attempt = 0; attempt < 40; attempt++)
     {
         if (document.querySelector('#reaction-editor'))
             return true;
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
+
     return !!document.querySelector('#reaction-editor');
 }
 
-async function _closeReactionEditor()
+async function _closeAutomationEditor()
 {
     const app = Object.values(/** @type {any} */ (ui.windows)).find((win) => /** @type {any} */ (win).id === 'reaction-editor');
     if (app)
@@ -1460,7 +2105,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsConfiguration'),
         description: localize('LA.tour.guidedWalkthroughOfEveryTabIn'),
         root: ROOT,
-        steps: () => CONFIG_STEPS.filter(step => !(/** @type {any} */ (step).condition) || /** @type {any} */ (step).condition()),
+        steps: () => CONFIG_STEPS().filter(step => !(/** @type {any} */ (step).condition) || /** @type {any} */ (step).condition()),
         ensure: _ensureConfigOpen,
         gated: false,
         assign: (tour) => { _configTour = tour; },
@@ -1471,7 +2116,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsActivationManager'),
         description: localize('LA.tour.walksThroughTheActivationManagerDialog'),
         root: RM_ROOT,
-        steps: () => ACTIVATION_MANAGER_STEPS,
+        steps: ACTIVATION_MANAGER_STEPS,
         ensure: _ensureActivationManagerOpen,
         gated: false,
         assign: (tour) => { _activationTour = tour; },
@@ -1482,7 +2127,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsTokenActionHud'),
         description: localize('LA.tour.walksThroughTheTokenActionHud'),
         root: TAH_ROOT,
-        steps: () => TAH_STEPS,
+        steps: TAH_STEPS,
         ensure: _ensureTAHOpen,
         gated: true,
         cleanup: _restoreAfterTAH,
@@ -1494,7 +2139,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsTahAdvancedTools'),
         description: localize('LA.tour.theGameplayToolsInsideTheToken'),
         root: TAH_ROOT,
-        steps: () => ADV_TAH_STEPS,
+        steps: ADV_TAH_STEPS,
         ensure: () => _ensureTAHOpen({ withCombat: false }),
         gated: true,
         cleanup: _restoreAfterTAH,
@@ -1506,7 +2151,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsEffectManager'),
         description: localize('LA.tour.walksThroughTheEffectManagerDialog'),
         root: EM_ROOT,
-        steps: () => EFFECT_MANAGER_STEPS,
+        steps: EFFECT_MANAGER_STEPS,
         ensure: _ensureEffectManagerOpen,
         gated: true,
         cleanup: _closeEffectManager,
@@ -1518,16 +2163,89 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsLancerRuler'),
         description: localize('LA.tour.theMovementWheelMovementTypesAnd'),
         root: 'body',
-        steps: () => RULER_STEPS,
+        steps: RULER_STEPS,
+        cleanup: _hideRulerTourDemos,
         assign: (tour) => { _rulerTour = tour; },
         get: () => _rulerTour,
+    },
+    {
+        id: 'attack-tour',
+        title: localize('LA.tour.step.lancerAutomationsAttacking'),
+        description: localize('LA.tour.attackDescription'),
+        root: 'body',
+        steps: ATTACK_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _attackTour = tour; },
+        get: () => _attackTour,
+    },
+    {
+        id: 'carousel-tour',
+        title: localize('LA.tour.step.lancerAutomationsCombatCarousel'),
+        description: localize('LA.tour.carouselDescription'),
+        root: 'body',
+        steps: CAROUSEL_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _carouselTour = tour; },
+        get: () => _carouselTour,
+    },
+    {
+        id: 'cards-tour',
+        title: localize('LA.tour.step.lancerAutomationsCardsReactions'),
+        description: localize('LA.tour.cardsDescription'),
+        root: 'body',
+        steps: CARDS_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _cardsTour = tour; },
+        get: () => _cardsTour,
+    },
+    {
+        id: 'clocks-tour',
+        title: localize('LA.tour.step.lancerAutomationsClocks'),
+        description: localize('LA.tour.clocksDescription'),
+        root: 'body',
+        steps: CLOCKS_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _clocksTour = tour; },
+        get: () => _clocksTour,
+    },
+    {
+        id: 'roll-uplink-tour',
+        title: localize('LA.tour.step.lancerAutomationsRollUplink'),
+        description: localize('LA.tour.rollUplinkLiveCopies'),
+        root: 'body',
+        restricted: true,
+        steps: UPLINK_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _uplinkTour = tour; },
+        get: () => _uplinkTour,
+    },
+    {
+        id: 'battle-log-tour',
+        title: localize('LA.tour.step.lancerAutomationsBattleLog'),
+        description: localize('LA.tour.battleLogDescription'),
+        root: 'body',
+        restricted: true,
+        steps: BATTLELOG_STEPS,
+        cleanup: _hideBattleLogDemos,
+        assign: (tour) => { _battleLogTour = tour; },
+        get: () => _battleLogTour,
+    },
+    {
+        id: 'vision-tour',
+        title: localize('LA.tour.step.lancerAutomationsVision'),
+        description: localize('LA.tour.visionDescription'),
+        root: 'body',
+        steps: VISION_STEPS,
+        cleanup: _hideEncounterDemos,
+        assign: (tour) => { _visionTour = tour; },
+        get: () => _visionTour,
     },
     {
         id: 'advanced-measure-tour',
         title: localize('LA.tour.step.lancerAutomationsAdvancedMeasure'),
         description: localize('LA.tour.theAdvancedMeasureToolShapesRanges'),
         root: AM_ROOT,
-        steps: () => ADV_MEASURE_STEPS,
+        steps: ADV_MEASURE_STEPS,
         ensure: _ensureAdvMeasureOpen,
         gated: true,
         cleanup: _closeAdvMeasure,
@@ -1539,7 +2257,7 @@ const TOURS = [
         title: localize('LA.tour.step.lancerAutomationsAddExtra'),
         description: localize('LA.tour.addExtraAddEffectAndExtra'),
         root: 'body',
-        steps: () => AD_EXTRA_STEPS,
+        steps: AD_EXTRA_STEPS,
         ensure: _ensureAddExtraStart,
         gated: true,
         cleanup: _closeExtrasDialog,
@@ -1552,8 +2270,10 @@ async function startTour(id)
 {
     const entry = TOURS.find((candidate) => candidate.id === id);
     const tour = entry?.get();
+
     if (tour && (await tour.start()) === false)
         return;
+
     try
     {
         await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
@@ -1565,6 +2285,17 @@ async function startTour(id)
 export async function startConfigTour()
 {
     return startTour('config-tour');
+}
+
+export async function startTourAt(id, stepId = null)
+{
+    const tour = TOURS.find((candidate) => candidate.id === id)?.get();
+    const index = stepId && tour ? tour.steps.findIndex((step) => step.id === stepId) : -1;
+
+    if (index > 0)
+        await tour.progress(index);
+    else
+        await startTour(id);
 }
 
 export async function startActivationManagerTour()
@@ -1596,12 +2327,15 @@ export async function startAddExtraTour()
 function _welcomeDialog()
 {
     const isGM = !!game.user?.isGM;
+
     const setupNote = isGM
         ? `<p style="margin: 8px 0 0;">${localize('LA.tour.welcome.firstTime')}</p>`
         : '';
+
     return new Promise((resolve) =>
     {
         const buttons = {};
+
         if (isGM)
         {
             buttons.setup = {
@@ -1610,11 +2344,13 @@ function _welcomeDialog()
                 callback: () => resolve('setup'),
             };
         }
+
         buttons.skip = {
             icon: '<i class="fas fa-times"></i>',
             label: localize('LA.common.skip'),
             callback: () => resolve('skip'),
         };
+
         const dialog = new Dialog({
             title: localize('LA.tour.step.lancerAutomations'),
             content: `
@@ -1628,7 +2364,7 @@ function _welcomeDialog()
                     <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.tours')}</p>
                     ${_tourListHtml()}
                     <p style="margin: 0 0 8px;">${localize('LA.tour.welcome.help')}</p>
-                    <p style="margin: 0; opacity: 0.85;">${localize('LA.tour.welcome.support')}</p>
+                    <p style="margin: 0;">${localize('LA.tour.welcome.support')}</p>
                     ${setupNote}
                     <p style="margin: 10px 0 0; padding: 6px 8px; border-left: 3px solid #ff6400; background: rgba(255,100,0,0.08);">${localize('LA.tour.welcome.lastWarning')}</p>
                 </div>
@@ -1643,20 +2379,33 @@ function _welcomeDialog()
             }),
             close: () => resolve('skip'),
         }, { width: 600, classes: ['lancer-dialog-base', 'lancer-no-title'] });
+
         dialog.render(true);
     });
 }
 
+function _tourRowHtml(id)
+{
+    const tour = TOURS.find(entry => entry.id === id)?.get();
+    if (!tour)
+        return '';
+
+    const title = String(tour.title ?? '').replace(/^Lancer Automations:\s*/i, '');
+    const steps = tour.steps?.length ?? 0;
+    return `<div class="la-tour-row"><div class="la-kb-text"><div class="la-kb-name">${title}${steps ? `<span class="la-tour-steps">${localizeFormat('LA.tour.stepCount', { count: steps })}</span>` : ''}</div></div><button type="button" class="la-tour-play lancer-action-btn la-primary" data-tour-id="${id}"><i class="fas fa-play"></i> ${localize('LA.configUi.play')}</button></div>`;
+}
+
 function _tourListHtml()
 {
-    const ids = game.user?.isGM ? GM_TOUR_IDS : PLAYER_TOUR_IDS;
-    const rows = ids.map(id => TOURS.find(entry => entry.id === id)?.get()).filter(Boolean).map((tour, index) =>
+    const allowed = new Set(game.user?.isGM ? GM_TOUR_IDS : PLAYER_TOUR_IDS);
+
+    const groups = TOUR_GROUPS.map((group) =>
     {
-        const title = String(tour.title ?? '').replace(/^Lancer Automations:\s*/i, '');
-        const steps = tour.steps?.length ?? 0;
-        return `<div class="la-tour-row"><div class="la-kb-text"><div class="la-kb-name">${title}${steps ? `<span class="la-tour-steps">${localizeFormat('LA.tour.stepCount', { count: steps })}</span>` : ''}</div></div><button type="button" class="la-tour-play lancer-action-btn la-primary" data-tour-id="${ids[index]}"><i class="fas fa-play"></i> ${localize('LA.configUi.play')}</button></div>`;
+        const rows = group.ids.filter(id => allowed.has(id)).map(_tourRowHtml).join('');
+        return rows ? `<div class="la-tour-group">${localize(group.label)}</div>${rows}` : '';
     });
-    return `<div class="la-welcome-tours">${rows.join('')}</div>`;
+
+    return `<div class="la-welcome-tours">${groups.join('')}</div>`;
 }
 
 function _bindTourList(html, onPick)
@@ -1695,6 +2444,7 @@ function _resumeDialog()
             }),
             close: () => resolve(null),
         }, { width: 460, classes: ['lancer-dialog-base', 'lancer-no-title'] });
+
         dialog.render(true);
     });
 }
@@ -1710,19 +2460,24 @@ async function _runResume()
 async function _runChooser()
 {
     const choice = await _welcomeDialog();
+
     if (choice === 'setup')
     {
         const stayed = await maybeRunSettingsOnboarding();
+
         if (!stayed)
         {
             await game.settings.set(MODULE_ID, SETTING_RESUME_TOUR, true);
             await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
             return;
         }
+
         return _runChooser();
     }
+
     if (choice.startsWith('tour:'))
         await startTour(choice.slice('tour:'.length));
+
     try
     {
         await game.settings.set(MODULE_ID, SETTING_TOUR_DONE, true);
@@ -1772,20 +2527,24 @@ export function registerTourBootstrap()
     const doRegister = () =>
     {
         console.log('lancer-automations | tour registration starting, Tour=', typeof Tour, 'game.tours=', !!game.tours);
+
         for (const entry of TOURS)
         {
             try
             {
                 const tour = new _RootTour({
-                    title: entry.title,
-                    description: entry.description,
+                    title: localize(entry.title),
+                    description: localize(entry.description),
                     display: true,
+                    restricted: !!entry.restricted,
                     canBeResumed: false,
                     steps: entry.steps(),
                 }, entry.root);
+
                 if (entry.ensure)
                 {
                     const baseStart = tour.start.bind(tour);
+
                     tour.start = async () =>
                     {
                         const ready = await entry.ensure();
@@ -1795,11 +2554,13 @@ export function registerTourBootstrap()
                         return true;
                     };
                 }
+
                 if (entry.cleanup)
                 {
                     for (const method of ['exit', 'complete'])
                     {
                         const base = tour[method].bind(tour);
+
                         tour[method] = async () =>
                         {
                             try
@@ -1816,6 +2577,7 @@ export function registerTourBootstrap()
                         };
                     }
                 }
+
                 entry.assign(tour);
                 game.tours.register(MODULE_ID, entry.id, tour);
             }
@@ -1824,6 +2586,7 @@ export function registerTourBootstrap()
                 console.error(`lancer-automations | failed to register tour ${entry.id}`, e);
             }
         }
+
         console.log('lancer-automations | tours registered OK', game.tours.get(`${MODULE_ID}.config-tour`), game.tours.get(`${MODULE_ID}.activation-manager-tour`), game.tours.get(`${MODULE_ID}.tah-tour`));
     };
 

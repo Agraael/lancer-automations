@@ -1,4 +1,5 @@
 const BUCKETS = ['players', 'hostiles', 'friendlies', 'neutrals', 'secrets'];
+
 const BUCKET_TEAM = {
     players: 'player',
     hostiles: 'hostile',
@@ -11,6 +12,7 @@ export function matchUndoneDamage(events)
 {
     const undone = new Map();
     const damageByTarget = new Map();
+
     for (const ev of [...events].sort((lhs, rhs) => (lhs.seq ?? 0) - (rhs.seq ?? 0)))
     {
         if (ev.type === 'damage' && !ev.dotCredit)
@@ -22,6 +24,7 @@ export function matchUndoneDamage(events)
         else if (ev.type === 'damage-undo' && !ev.matched)
         {
             const candidates = damageByTarget.get(ev.targetId) ?? [];
+
             for (let idx = candidates.length - 1; idx >= 0; idx--)
             {
                 const damage = candidates[idx];
@@ -33,13 +36,30 @@ export function matchUndoneDamage(events)
             }
         }
     }
+
     return undone;
+}
+
+export function liveDestroyed(events)
+{
+    let live = null;
+
+    for (const ev of events ?? [])
+    {
+        if (ev.type === 'destroyed')
+            live = ev;
+        else if (ev.type === 'revived')
+            live = null;
+    }
+
+    return live;
 }
 
 export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = null)
 {
     const allLogs = [];
     const teamOf = new Map();
+
     for (const bucket of BUCKETS)
     {
         for (const log of telemetry?.[bucket] ?? [])
@@ -48,20 +68,25 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = nul
             teamOf.set(log.tokenId, BUCKET_TEAM[bucket]);
         }
     }
+
     const sideOf = new Map(allLogs.map(log => [log.tokenId, log.side ?? 'player']));
     const victimSide = sideOf.get(victimTokenId) ?? 'enemy';
+
     const meltdownSeqs = cause === 'reactor'
         ? (allLogs.find(log => log.tokenId === victimTokenId)?.events ?? []).filter(ev => ev.type === 'meltdown').map(ev => ev.seq ?? 0)
         : [];
+
     const cutoffSeq = meltdownSeqs.length ? Math.max(...meltdownSeqs) : Infinity;
     const contributions = [];
     const undoneDamage = new Set(matchUndoneDamage(allLogs.flatMap(log => log.events)).values());
+
     const add = (id, round, seq, pilot = false) =>
     {
         if (!id || id === victimTokenId || (sideOf.get(id) ?? 'player') === victimSide || (seq ?? 0) > cutoffSeq)
             return;
         contributions.push({ id, round, seq: seq ?? 0, pilot });
     };
+
     for (const log of allLogs)
     {
         for (const ev of log.events)
@@ -85,6 +110,7 @@ export function attributeKill(telemetry, victimTokenId, cutoffRound, cause = nul
                 add(ev.forcedBy, ev.round, ev.seq);
         }
     }
+
     if (contributions.length === 0)
         return { killerId: null, killerTeam: 'unknown', assistIds: [], killerIsPilot: false, pilotAssistIds: [] };
 

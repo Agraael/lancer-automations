@@ -17,7 +17,7 @@ export {
 } from "./canvas-helpers.js";
 
 export { chooseToken } from "./tools/chooseToken.js";
-export { placeZone, tokensInTemplate } from "./tools/placeZone.js";
+export { placeZone, tokensInTemplate, findZones, clearZones } from "./tools/placeZone.js";
 export { moveToken } from "./tools/moveToken.js";
 export { placeToken } from "./tools/placeToken.js";
 export { pickSingleTargetToggle, isSingleTargetPickerActive, cancelSingleTargetPicker } from "./tools/pickSingleTargetToggle.js";

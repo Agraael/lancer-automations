@@ -26,12 +26,15 @@ export function collectSearchResults(query, categories, keyOf = null)
         {
             if (item.isSectionLabel)
                 continue;
+
             if (item.onClick)
             {
                 const plainLabel = String(item.text ?? item.label).toLowerCase();
+
                 if (plainLabel.includes(query))
                 {
                     const key = keyOf?.(item) ?? plainLabel;
+
                     if (seen.has(key))
                     {
                         const idx = seen.get(key);
@@ -45,6 +48,7 @@ export function collectSearchResults(query, categories, keyOf = null)
                     }
                 }
             }
+
             // Many actions nest under sub-headers; recurse
             if (item.getChildren)
                 walk(item.getChildren(), catLabel);
@@ -57,6 +61,7 @@ export function collectSearchResults(query, categories, keyOf = null)
             continue;
         walk(cat.getItems?.(), cat.label);
     }
+
     return results;
 }
 
@@ -106,6 +111,7 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
     col.css('top', colTop);
 
     const scrollWrap = $(htmlToElement(`<div class="la-hud-search-scroll"></div>`));
+
     if (!results.length)
         scrollWrap.append(htmlToElement(`<div class="la-hud-muted">No results</div>`));
     else
@@ -115,6 +121,7 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
             const labelHasIcon = typeof item.labelHtml === 'string' && item.labelHtml.includes('<');
             const rowIcon = item.icon ?? (labelHasIcon ? null : 'fas fa-circle-dot');
             const row = makeRow(item.label, false, rowIcon, item.activation ?? null, item.badge ?? null, item.badgeTone ?? null, 0, item.sizeLevel ?? null, item.labelHtml ?? null);
+
             if (item.favKey)
             {
                 row.attr('data-la-fav-key', item.favKey);
@@ -122,15 +129,18 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
                 if (wheel)
                     row.css('position', 'relative').append(favMarkHtml(wheel));
             }
+
             const stripe = laHudStripeStyle(item);
             if (stripe)
                 applyStripeStyle(row, stripe);
+
             if (item.hoverData)
             {
                 const hoverData = item.hoverData;
                 row.on('mouseenter', () => onHudRowHover({ ...hoverData, token, isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hoverData, token, isEntering: false, isLeaving: true  }));
             }
+
             const catColor = stripe && !stripe.light ? 'color:rgba(255,255,255,0.9);' : '';
             row.append(htmlToElement(`<span class="la-hud-cat" style="flex-shrink:0;padding-right:8px;font-size:0.62em;text-transform:uppercase;letter-spacing:0.06em;line-height:1;${catColor}">${catLabel(item._catLabel)}</span>`));
             if (item.onRightClick)
@@ -149,6 +159,7 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
                     onCtrlRightClick(item, row, ev);
                     return;
                 }
+
                 if (!item.onRightClick)
                     return;
                 ev.preventDefault(); playUiSound('details'); item.onRightClick(row);
@@ -156,6 +167,7 @@ export function openSearchResults(col, results, { el, makeRow, token, onCtrlRigh
             scrollWrap.append(row);
         }
     }
+
     col.append(scrollWrap);
     capColumnItems(col, results.length);
     if (sameView || !animate)

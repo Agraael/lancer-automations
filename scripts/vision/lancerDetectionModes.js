@@ -4,7 +4,7 @@ import { getTokenDistance } from "../combat/overwatch.js";
 import { getTokenVisionLOS, isAnyTokenMoving } from "./visionFromEdge.js";
 import {
     SETTING_LOS_HEIGHT_RULE, lancerHasLineOfSight, setLastOverlaySignature, _lastOverlaySignature, _losPairsClear, _losInvalidateAll,
-    _collectSightEdges, _segmentBlocked, _tokenLosPoints, _tokenSamplePoints, _blindedBlocksSight,
+    _collectSightEdges, _segmentBlocked, _tokenLosPoints, _tokenSamplePoints, _blindedBlocksSight, trackEdgeWrites,
 } from "./losEngine.js";
 export {
     invalidateLosCaches, lancerHasLineOfSight, hasLineOfSight, makeSkimRayCaster, makeCellRayCaster,
@@ -38,6 +38,7 @@ function _fovContains(visionSource, target)
     const fov = /** @type {any} */ (visionSource)?.fov;
     if (!fov?.contains)
         return false;
+
     const targetCenter = target?.center ?? { x: target?.x, y: target?.y };
     if (typeof targetCenter?.x !== 'number' || typeof targetCenter?.y !== 'number')
         return false;
@@ -50,6 +51,7 @@ function _losVetoed(visionSource, target)
         return false;
     if (!(target instanceof foundry.canvas.placeables.Token))
         return false;
+
     const viewerToken = visionSource?.object;
     if (!viewerToken?.document)
         return false;
@@ -70,11 +72,13 @@ function _laDragPreview(token)
     const id = token?.document?.id;
     if (!id)
         return token;
+
     for (const preview of canvas?.tokens?.preview?.children ?? [])
     {
         if (preview?.document?.id === id)
             return preview;
     }
+
     return token;
 }
 
@@ -86,9 +90,11 @@ function _drawLosDebug()
         child.destroy();
     if (!getModuleSetting(SETTING_LOS_DEBUG))
         return;
+
     const edges = _collectSightEdges();
     const gfx = new PIXI.Graphics();
     _losDebugLayer.addChild(gfx);
+
     // Every sight edge the LOS test sees: cyan = height-limited (top shown), magenta = full-height wall.
     for (const record of edges)
     {
@@ -97,34 +103,43 @@ function _drawLosDebug()
         gfx.lineStyle(3, color, 0.85);
         gfx.moveTo(record.edge.a.x, record.edge.a.y);
         gfx.lineTo(record.edge.b.x, record.edge.b.y);
+
         const heightText = new PIXI.Text(finite ? record.top.toFixed(1) : 'inf', {
             fontFamily: 'monospace', fontSize: 11, fill: color, stroke: 0x000000, strokeThickness: 3,
         });
+
         heightText.anchor.set(0.5, 0.5);
         heightText.position.set((record.edge.a.x + record.edge.b.x) / 2, (record.edge.a.y + record.edge.b.y) / 2);
         _losDebugLayer.addChild(heightText);
     }
+
     const viewers = canvas?.tokens?.controlled ?? [];
     const targets = canvas?.tokens?.placeables ?? [];
+
     if (!viewers.length)
         return;
+
     for (const viewer of viewers)
     {
         if (!viewer.document)
             continue;
+
         const effectiveViewer = _laDragPreview(viewer);
         const eyeViewer = getTokenVisionLOS(effectiveViewer);
         const skipViewer = `la-block-los-${viewer.document.id}-`;
+
         for (const target of targets)
         {
             if (target === viewer || !target.document)
                 continue;
+
             const effectiveTarget = _laDragPreview(target);
             const eyeTarget = getTokenVisionLOS(effectiveTarget);
             const viewerCenter = effectiveViewer.center;
             const targetCenter = effectiveTarget.center;
             const viewerPoints = _tokenLosPoints(effectiveViewer, viewerCenter, targetCenter);
             const targetPoints = _tokenLosPoints(effectiveTarget, viewerCenter, targetCenter);
+
             const ctx = {
                 skipPrefixA: skipViewer,
                 skipPrefixB: `la-block-los-${target.document.id}-`,
@@ -134,7 +149,9 @@ function _drawLosDebug()
                 radiusB: Math.max(effectiveTarget.w ?? 0, effectiveTarget.h ?? 0) / 2,
                 nearestBlock: true,
             };
+
             let anyClear = false;
+
             for (let index = 0; index < viewerPoints.length; index++)
             {
                 const clear = !_segmentBlocked(viewerPoints[index], eyeViewer, targetPoints[index], eyeTarget, edges, ctx);
@@ -143,29 +160,35 @@ function _drawLosDebug()
                 gfx.lineStyle(2, clear ? 0x22ff44 : 0xff2222, clear ? 0.7 : 0.4);
                 gfx.moveTo(viewerPoints[index].x, viewerPoints[index].y);
                 gfx.lineTo(targetPoints[index].x, targetPoints[index].y);
+
                 const reasonText = new PIXI.Text(ctx.lastReason ?? '', {
                     fontFamily: 'monospace', fontSize: 10, fill: clear ? 0x22ff44 : 0xff2222, stroke: 0x000000, strokeThickness: 3,
                 });
+
                 reasonText.anchor.set(0.5, 0.5);
                 const labelPoint = (!clear && ctx.blockPoint) ? ctx.blockPoint : { x: (viewerPoints[index].x + targetPoints[index].x) / 2, y: (viewerPoints[index].y + targetPoints[index].y) / 2 };
                 reasonText.position.set(labelPoint.x, labelPoint.y);
                 _losDebugLayer.addChild(reasonText);
+
                 if (!clear && ctx.blockPointFar)
                 {
                     const exitText = new PIXI.Text('exit', {
                         fontFamily: 'monospace', fontSize: 10, fill: 0xff2222, stroke: 0x000000, strokeThickness: 3,
                     });
+
                     exitText.anchor.set(0.5, 0.5);
                     exitText.alpha = 0.6;
                     exitText.position.set(ctx.blockPointFar.x, ctx.blockPointFar.y);
                     _losDebugLayer.addChild(exitText);
                 }
             }
+
             if (!anyClear)
             {
                 const denseV = _tokenSamplePoints(effectiveViewer);
                 const denseT = _tokenSamplePoints(effectiveTarget);
                 let found = null;
+
                 for (const pointV of denseV)
                 {
                     for (const pointT of denseT)
@@ -176,24 +199,30 @@ function _drawLosDebug()
                             break;
                         }
                     }
+
                     if (found)
                         break;
                 }
+
                 if (found)
                 {
                     anyClear = true;
                     gfx.lineStyle(2, 0x22ff44, 0.9);
                     gfx.moveTo(found.pointV.x, found.pointV.y);
                     gfx.lineTo(found.pointT.x, found.pointT.y);
+
                     const denseText = new PIXI.Text(`dense:${found.reason}`, {
                         fontFamily: 'monospace', fontSize: 10, fill: 0x22ff44, stroke: 0x000000, strokeThickness: 3,
                     });
+
                     denseText.anchor.set(0.5, 0.5);
                     denseText.position.set((found.pointV.x + found.pointT.x) / 2, (found.pointV.y + found.pointT.y) / 2);
                     _losDebugLayer.addChild(denseText);
                 }
             }
+
             const center = effectiveTarget.center;
+
             const label = new PIXI.Text(`${anyClear ? 'LOS' : 'NO LOS'}  eye ${eyeViewer.toFixed(1)} -> ${eyeTarget.toFixed(1)}`, {
                 fontFamily: 'monospace',
                 fontSize: 13,
@@ -201,6 +230,7 @@ function _drawLosDebug()
                 stroke: 0x000000,
                 strokeThickness: 3,
             });
+
             label.anchor.set(0.5, 1);
             label.position.set(center.x, center.y - effectiveTarget.h / 2 - 4);
             _losDebugLayer.addChild(label);
@@ -215,6 +245,7 @@ function _installLosDebug()
         _losDebugLayer = new PIXI.Container();
         _losDebugLayer.eventMode = 'none';
     }
+
     if (canvas?.stage && _losDebugLayer.parent !== canvas.stage)
         canvas.stage.addChild(_losDebugLayer);
     _drawLosDebug();
@@ -239,6 +270,7 @@ class SilhouetteOutlineFilter extends foundry.canvas.rendering.filters.OutlineOv
             super.apply(filterManager, input, output, clear, currentState);
             return;
         }
+
         const thickness = this.thickness * canvas.stage.scale.x;
         this.uniforms.time = canvas.app.ticker.lastTime;
         this.uniforms.thickness[0] = thickness / input._frame.width;
@@ -387,6 +419,7 @@ class DetectionModeLancerLineOfSight extends foundry.canvas.perception.Detection
             return false;
         if (getLAFlag(target.document,'awarenessMode') === 'ignore')
             return false;
+
         const viewerToken = visionSource?.object;
         if (!viewerToken?.document)
             return false;
@@ -437,6 +470,7 @@ class PrimaryCopyFilter extends foundry.canvas.rendering.filters.AbstractBaseMas
 }
 
 let _primaryCopyFilter = null;
+
 function _getPrimaryCopyFilter()
 {
     if (_primaryCopyFilter)
@@ -485,6 +519,7 @@ class DetectionModeLancerAwareness extends foundry.canvas.perception.DetectionMo
     {
         if (this._detectionFilter)
             return this._detectionFilter;
+
         const filter = SilhouetteOutlineFilter.create({ outlineColor: [1, 0.85, 0.15, 1], styleMode: _awarenessStyleMode(), simpleMode: 0 });
         filter.thickness = 1.25;
         this._detectionFilter = filter;
@@ -522,19 +557,23 @@ function _losCanDetect(target)
 {
     if (!getModuleSetting(SETTING_LOS))
         return false;
+
     const losMode = CONFIG.Canvas.detectionModes.lancerLineOfSight;
     if (!losMode)
         return false;
+
     for (const source of canvas?.effects?.visionSources?.values?.() ?? [])
     {
         if (!source.active)
             continue;
+
         const entry = source.object?.document?.detectionModes?.find(modeEntry => modeEntry.id === 'lancerLineOfSight');
         if (!entry?.enabled)
             continue;
         if (losMode._canDetect(source, target))
             return true;
     }
+
     return false;
 }
 
@@ -547,6 +586,7 @@ function _anySensorCanDetect(target)
         if (_sensorCanDetect(source, target))
             return true;
     }
+
     return false;
 }
 
@@ -555,19 +595,24 @@ function _sensorCanDetect(visionSource, target)
     const sourceToken = visionSource?.object;
     if (!sourceToken?.document)
         return false;
+
     const sensorMode = sourceToken.document.detectionModes?.find(modeEntry => modeEntry.id === 'lancerSensor');
     if (!sensorMode?.enabled)
         return false;
     if (getModuleSetting(SETTING_SENSOR_COMBAT_ONLY) && !_isCombatActive())
         return false;
+
     const targetMode = getLAFlag(target.document,'awarenessMode');
     if (targetMode && targetMode !== 'default')
         return false;
+
     const sensorRange = sourceToken.actor?.system?.sensor_range;
     if ((sensorRange ?? 0) <= 0)
         return false;
+
     const candidates = _sourcePositions(sourceToken);
     const targets = _sourceWithPreview(target);
+
     for (const src of candidates)
     {
         for (const targetPreview of targets)
@@ -583,6 +628,7 @@ function _sensorCanDetect(visionSource, target)
             }
         }
     }
+
     return false;
 }
 
@@ -592,6 +638,7 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
     {
         if (this._detectionFilter)
             return this._detectionFilter;
+
         const filter = ScanlineOutlineFilter.create({ outlineColor: [0.329, 0.620, 1.0, 1.0] });
         filter.thickness = 1.25;
         this._detectionFilter = filter;
@@ -606,6 +653,7 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
             return false;
         if (_basicVisionSees(visionSource, target))
             return false;
+
         const mode = getLAFlag(target.document,'awarenessMode');
         if (mode && mode !== 'default')
             return false;
@@ -618,14 +666,18 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
     {
         if (getModuleSetting(SETTING_SENSOR_USE_MODE_RANGE))
             return super._testRange(visionSource, mode, target, test);
+
         const sourceToken = visionSource.object;
         const sensorRange = sourceToken?.actor?.system?.sensor_range;
+
         if ((sensorRange ?? 0) <= 0)
             return false;
         if (!sourceToken?.document || !target?.document)
             return super._testRange(visionSource, mode, target, test);
+
         const candidates = _sourcePositions(sourceToken);
         const targets = _sourceWithPreview(target);
+
         for (const src of candidates)
         {
             for (const targetPreview of targets)
@@ -641,6 +693,7 @@ class DetectionModeLancerSensor extends foundry.canvas.perception.DetectionMode
                 }
             }
         }
+
         return false;
     }
 }
@@ -656,15 +709,19 @@ function _sourceWithPreview(token)
 {
     if (!token)
         return [];
+
     const list = [token];
     if (token._original?.document)
         list.push(token._original);
+
     const previews = canvas?.tokens?.preview?.children ?? [];
+
     for (const preview of previews)
     {
         if (preview instanceof foundry.canvas.placeables.Token && preview._original === token)
             list.push(preview);
     }
+
     return list;
 }
 
@@ -675,6 +732,7 @@ function _registerVisionSettings()
         if (canvas?.perception)
             canvas.perception.update({ refreshVision: true });
     };
+
     game.settings.register(MODULE_ID, SETTING_SILH_LEGACY_OVERLAY, {
         name: 'LA.settings.lancerSilhLegacyOverlay.name',
         scope: 'world',
@@ -831,6 +889,7 @@ function _sanitizeMode(mode)
 {
     if (!mode)
         return null;
+
     const copy = { ...mode };
     if (_ZERO_SCRUB_IDS.has(copy.id) && copy.range === 0)
         copy.range = null;
@@ -841,6 +900,7 @@ function _augmentDetectionModes(existing)
 {
     const original = [...(existing ?? [])];
     const byId = new Map(original.filter(mode => mode?.id).map(mode => [mode.id, _sanitizeMode(mode)]));
+
     // range null = unlimited (Foundry preps it to Infinity); 0 would mean "detects nothing"
     if (!byId.has('lancerLineOfSight'))
         byId.set('lancerLineOfSight', { id: 'lancerLineOfSight', enabled: true, range: null });
@@ -850,7 +910,9 @@ function _augmentDetectionModes(existing)
         byId.set('lancerSensor', { id: 'lancerSensor', enabled: true, range: null });
     if (!byId.has('lancerAwareness'))
         byId.set('lancerAwareness', { id: 'lancerAwareness', enabled: true, range: null });
+
     const ordered = [];
+
     for (const id of _CANONICAL_ORDER)
     {
         if (byId.has(id))
@@ -859,15 +921,19 @@ function _augmentDetectionModes(existing)
             byId.delete(id);
         }
     }
+
     for (const mode of byId.values())
         ordered.push(mode);
+
     const orderChanged = ordered.length !== original.length
         || ordered.some((mode, i) => original[i]?.id !== mode?.id);
+
     const rangesSanitized = ordered.some(mode =>
     {
         const orig = original.find(origMode => origMode?.id === mode?.id);
         return orig && orig.range !== mode.range;
     });
+
     return { updates: ordered, changed: orderChanged || rangesSanitized };
 }
 
@@ -877,8 +943,10 @@ function _onCreateToken(tokenDoc, _options, userId)
         return;
     if (!getModuleSetting(SETTING_AUTO_ADD))
         return;
+
     const update = {};
     const { updates, changed } = _augmentDetectionModes(tokenDoc._source?.detectionModes ?? tokenDoc.detectionModes);
+
     if (changed)
         update.detectionModes = updates;
     if (getModuleSetting(SETTING_BASIC_SIGHT_999) && tokenDoc.sight?.range !== null)
@@ -891,6 +959,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
 {
     if (!game.user.isGM)
         return;
+
     const overrideSightRange = getModuleSetting(SETTING_BASIC_SIGHT_999);
 
     ui.notifications.info(localize('LA.notify.updatingPrototypeTokenVision'));
@@ -899,6 +968,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
         const proto = actor.prototypeToken;
         const { updates, changed } = _augmentDetectionModes(proto?._source?.detectionModes ?? proto?.detectionModes);
         const update = {};
+
         if (changed)
             update["prototypeToken.detectionModes"] = updates;
         if (overrideSightRange && proto?.sight?.range !== null)
@@ -909,33 +979,42 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
     }));
 
     ui.notifications.info(localize('LA.notify.updatingPlacedTokenVision'));
+
     for (const scene of game.scenes)
     {
         if (activeSceneOnly && scene !== game.canvas.scene)
             continue;
+
         const updates = [];
+
         for (const tokenDoc of scene.tokens)
         {
             if (!tokenDoc.actor)
                 continue;
+
             const { updates: detectionModeUpdates, changed } = _augmentDetectionModes(tokenDoc._source?.detectionModes ?? tokenDoc.detectionModes);
             const tokenUpdate = { _id: tokenDoc.id };
             let hasUpdates = false;
+
             if (changed)
             {
                 tokenUpdate.detectionModes = detectionModeUpdates;
                 hasUpdates = true;
             }
+
             if (overrideSightRange && tokenDoc.sight?.range !== null)
             {
                 tokenUpdate["sight.range"] = null;
                 hasUpdates = true;
             }
+
             if (hasUpdates)
                 updates.push(tokenUpdate);
         }
+
         if (updates.length === 0)
             continue;
+
         try
         {
             await scene.updateEmbeddedDocuments("Token", updates);
@@ -945,6 +1024,7 @@ window.lancerAutoVisionSetup = async function (activeSceneOnly = false)
             console.warn(`lancer-automations | vision update failed in scene ${scene.name}`, err);
         }
     }
+
     ui.notifications.info(localize('LA.notify.tokenVisionUpdated'));
 };
 
@@ -953,6 +1033,7 @@ export function initLancerDetectionModes()
     Hooks.once('init', () =>
     {
         _registerVisionSettings();
+        trackEdgeWrites();
         CONFIG.Canvas.detectionModes.lancerAwareness = new DetectionModeLancerAwareness({
             id: 'lancerAwareness',
             label: 'LA.detectionMode.battlefieldAwareness',
@@ -1011,6 +1092,11 @@ export function initLancerDetectionModes()
     Hooks.on('refreshToken', _drawLosDebug);
     Hooks.on('controlToken', _markOverlayDirty);
     Hooks.on('updateToken', _markOverlayDirty);
+    Hooks.on('drawToken', (token) =>
+    {
+        if (token.detectionFilterMesh)
+            token.detectionFilterMesh.getBounds = _detectionPaintBounds;
+    });
     _patchRenderDetectionFilter();
 }
 
@@ -1021,6 +1107,7 @@ function _wrapPlainSightVeto(mode)
         return;
     mode._laLosVeto = true;
     const original = mode._canDetect.bind(mode);
+
     mode._canDetect = (visionSource, target) =>
     {
         const result = original(visionSource, target);
@@ -1038,6 +1125,14 @@ const _REVEAL_FILTER_NAMES = new Set(['PlainVisionFilter', 'ShadowVisionFilter']
 const _LOS_REVEAL_VIA_COPY = true;
 const _LOS_REVEAL_VIA_MASK = false;
 
+function _detectionPaintBounds(skipUpdate, rect)
+{
+    const token = /** @type {any} */ (this).parent;
+    if (token?.detectionFilter && token.mesh)
+        return token.mesh.getBounds(false).clone();
+    return PIXI.Container.prototype.getBounds.call(this, skipUpdate, rect);
+}
+
 // Stock SilhouetteOutlineFilter breaks at scale<=1 and conflicts with our overlay; skip it.
 function _patchRenderDetectionFilter()
 {
@@ -1045,14 +1140,17 @@ function _patchRenderDetectionFilter()
     const orig = proto._renderDetectionFilter;
     // Hover raises zIndex, and at the re-sorted position the pass loses its body fill.
     const origRefreshState = proto._refreshState;
+
     proto._refreshState = function()
     {
         origRefreshState.call(this);
         if (!this.controlled && _MESH_FILTER_NAMES.has(this.detectionFilter?.constructor?.name))
             this.zIndex = 0;
     };
+
     const frameRect = new PIXI.Rectangle();
     const chainFilters = [];
+
     // fresh bounds (not the cached getBounds(true)), mesh filters kept so displacement FX carry over
     const renderWithMeshFilters = (token, renderer, filter = token.detectionFilter) =>
     {
@@ -1065,17 +1163,20 @@ function _patchRenderDetectionFilter()
         const originalTint = mesh.tint;
         const originalAlpha = mesh.worldAlpha;
         chainFilters.length = 0;
+
         for (const filter of originalFilters ?? [])
         {
             if (filter?.constructor?.name === 'FilterTransform')
                 chainFilters.push(filter);
         }
+
         chainFilters.push(filter);
         mesh.filterArea = frameRect;
         mesh.filters = chainFilters;
         mesh.tint = 0xFFFFFF;
         mesh.worldAlpha = 1;
         mesh.pluginName = 'batch';
+
         try
         {
             mesh.render(renderer);
@@ -1089,21 +1190,26 @@ function _patchRenderDetectionFilter()
             mesh.filterArea = null;
         }
     };
+
     proto._renderDetectionFilter = function(renderer)
     {
         const filterName = this.detectionFilter?.constructor?.name;
-        if (filterName === 'SilhouetteOutlineFilter')
+        const awareness = filterName === 'SilhouetteOutlineFilter' ? getLAFlag(this.document, 'awarenessMode') : null;
+
+        if (filterName === 'SilhouetteOutlineFilter' && awareness !== 'visible')
         {
             if (!getModuleSetting(SETTING_SILH_LEGACY_OVERLAY))
-                renderWithMeshFilters(this, renderer, getLAFlag(this.document, 'awarenessMode') === 'simple' ? _getSimpleSilhouetteFilter() : this.detectionFilter);
+                renderWithMeshFilters(this, renderer, awareness === 'simple' ? _getSimpleSilhouetteFilter() : this.detectionFilter);
             return;
         }
+
         if (filterName === 'ScanlineOutlineFilter')
         {
             renderWithMeshFilters(this, renderer);
             return;
         }
-        if (_REVEAL_FILTER_NAMES.has(filterName))
+
+        if (awareness === 'visible' || _REVEAL_FILTER_NAMES.has(filterName))
         {
             if (_LOS_REVEAL_VIA_COPY)
                 renderWithMeshFilters(this, renderer, _getPrimaryCopyFilter());
@@ -1111,6 +1217,7 @@ function _patchRenderDetectionFilter()
                 this.mesh?.render(renderer);
             return;
         }
+
         return orig.call(this, renderer);
     };
 }
@@ -1188,11 +1295,14 @@ function _makeSilhouetteMesh(token, color)
     const tex = token.mesh?.texture;
     if (!tex)
         return null;
+
     const geometry = new PIXI.Geometry()
         .addAttribute('aVertexPosition', [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5], 2)
         .addAttribute('aTextureCoord', [0, 0, 1, 0, 1, 1, 0, 1], 2)
         .addIndex([0, 1, 2, 0, 2, 3]);
+
     const program = PIXI.Program.from(_SILH_VERT, _SILH_FRAG);
+
     const shader = new PIXI.Shader(program, {
         uSampler: tex,
         outlineColor: color,
@@ -1202,6 +1312,7 @@ function _makeSilhouetteMesh(token, color)
         simpleMode: 0,
         styleMode: 0
     });
+
     const mesh = new PIXI.Mesh(geometry, shader);
     mesh.name = _OVERLAY_NAME;
     return mesh;
@@ -1212,6 +1323,7 @@ function _syncOverlayTransform(mesh, token, simple)
     const tokenMesh = token.mesh;
     if (!tokenMesh)
         return;
+
     const meshWidth = tokenMesh.width || token.w;
     const meshHeight = tokenMesh.height || token.h;
     // mirror: tokenMesh.width/height are abs(); use the signed scale to mirror the overlay quad
@@ -1232,6 +1344,7 @@ function _syncOverlayTransform(mesh, token, simple)
     mesh.rotation = rot;
     if (mesh.skew && tokenMesh.skew)
         mesh.skew.set(tokenMesh.skew.x ?? 0, tokenMesh.skew.y ?? 0);
+
     const stageScale = canvas.stage?.scale?.x ?? 1;
     const thicknessFactor = simple ? 0.1 : 0.35;
     const pulse = simple ? 1 : 0.75 + 0.5 * (Math.cos(performance.now() / 1500 * Math.PI * 2) * 0.5 + 0.5);
@@ -1243,10 +1356,12 @@ const _OVERLAY_COLOR = [1, 0.85, 0.15, 1];
 const _OVERLAY_COLOR_SIMPLE = [1.0, 0.55, 0.15, 1.0];
 
 let _simpleSilhouetteFilter = null;
+
 function _getSimpleSilhouetteFilter()
 {
     if (_simpleSilhouetteFilter)
         return _simpleSilhouetteFilter;
+
     const filter = SilhouetteOutlineFilter.create({ outlineColor: _OVERLAY_COLOR_SIMPLE, styleMode: 0, simpleMode: 1 });
     filter.thickness = 1.25;
     _simpleSilhouetteFilter = filter;
@@ -1260,9 +1375,11 @@ function _getOverlayConfig(token)
         return null;
     if (!getModuleSetting(SETTING_SILH_LEGACY_OVERLAY))
         return null;
+
     const mode = getLAFlag(token.document,'awarenessMode') ?? 'default';
     if (mode === 'ignore' || mode === 'visible')
         return null;
+
     const simple = mode === 'simple';
     return { color: simple ? _OVERLAY_COLOR_SIMPLE : _OVERLAY_COLOR, simple, styleMode: simple ? 0 : _awarenessStyleMode() };
 }
@@ -1275,9 +1392,11 @@ function _isOccludedFromUser(token)
 {
     if (!getModuleSetting(SETTING_LOS) || !token?.document)
         return false;
+
     const sources = canvas?.effects?.visionSources;
     if (!sources || !sources.size)
         return false;
+
     for (const source of sources.values())
     {
         const viewer = source.object;
@@ -1286,6 +1405,7 @@ function _isOccludedFromUser(token)
         if (lancerHasLineOfSight(viewer, token))
             return false;
     }
+
     return true;
 }
 
@@ -1293,7 +1413,9 @@ function _applyOcclusionDim(token)
 {
     if (!token.mesh)
         return;
+
     const dim = token.visible && _isOccludedFromUser(token);
+
     if (dim)
     {
         token._laDimmed = true;
@@ -1320,18 +1442,22 @@ function _markOverlayDirty()
 function _overlaySignature()
 {
     const parts = [];
+
     // Collection iterates values, so take entries for the id.
     for (const [sourceId, source] of canvas?.effects?.visionSources?.entries() ?? [])
     {
         const data = source?.data;
         parts.push(`${sourceId}:${Math.round(data?.x ?? 0)},${Math.round(data?.y ?? 0)},${data?.elevation ?? 0},${source?.active ? 1 : 0}`);
     }
+
     parts.push('|');
+
     for (const token of canvas?.tokens?.placeables ?? [])
     {
         const doc = token.document;
         parts.push(`${doc.id}:${Math.round(doc.x)},${Math.round(doc.y)},${doc.elevation ?? 0},${token.visible ? 1 : 0},${token.detectionFilter?.constructor?.name ?? 0}`);
     }
+
     return parts.join(';');
 }
 
@@ -1342,6 +1468,7 @@ function _refreshOverlayState()
     const signature = _overlaySignature();
     if (signature === _lastOverlaySignature)
         return;
+
     // Occlusion costs a LOS raycast per token per source and goes stale a frame later while something
     // moves, so hold the dim until the move lands. Null signature forces that landing pass to recompute.
     const holdDim = getModuleSetting(SETTING_DIM_DEFER_MOVING) === true && isAnyTokenMoving();
@@ -1349,24 +1476,30 @@ function _refreshOverlayState()
     _overlayTokens.clear();
     if (!canvas?.tokens?.placeables)
         return;
+
     for (const token of canvas.tokens.placeables)
     {
         if (!holdDim)
             _applyOcclusionDim(token);
+
         const overlayConfig = _getOverlayConfig(token);
         const existing = token.children.find(child => child.name === _OVERLAY_NAME);
+
         if (!overlayConfig)
         {
             if (existing)
                 existing.destroy({ children: true });
             continue;
         }
+
         let mesh = existing;
+
         if (!mesh)
         {
             mesh = _makeSilhouetteMesh(token, overlayConfig.color);
             if (!mesh)
                 continue;
+
             // above the token base layers, below bars / status icons / nameplate
             const uiIndex = token.children.indexOf(token.bars);
             if (uiIndex >= 0)
@@ -1374,6 +1507,7 @@ function _refreshOverlayState()
             else
                 token.addChild(mesh);
         }
+
         mesh.shader.uniforms.outlineColor = overlayConfig.color;
         mesh.shader.uniforms.simpleMode = overlayConfig.simple ? 1 : 0;
         mesh.shader.uniforms.styleMode = overlayConfig.styleMode;
@@ -1413,10 +1547,12 @@ function _ensureFootRoot()
 function _makeFootprintMesh(tex)
 {
     const uvs = /** @type {any} */ (tex)._uvs?.uvsFloat32;
+
     const geometry = new PIXI.Geometry()
         .addAttribute('aVertexPosition', [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5], 2)
         .addAttribute('aTextureCoord', uvs ? Array.from(uvs) : [0, 0, 1, 0, 1, 1, 0, 1], 2)
         .addIndex([0, 1, 2, 0, 2, 3]);
+
     _footProgram ??= PIXI.Program.from(_SILH_VERT, _FOOT_FRAG);
     const mesh = new PIXI.Mesh(geometry, new PIXI.Shader(_footProgram, { uSampler: tex }));
     mesh.state.blendMode = PIXI.BLEND_MODES.MAX_COLOR;
@@ -1438,6 +1574,7 @@ function _syncFootprint(entry, tokenMesh)
     const posY = tokenMesh.position.y + sinRot * offsetX + cosRot * offsetY;
     const scaleX = mirrorX * meshWidth * 1.1;
     const scaleY = mirrorY * meshHeight * 1.1;
+
     if (entry.posX === posX && entry.posY === posY && entry.rot === rot && entry.scaleX === scaleX && entry.scaleY === scaleY)
         return false;
     entry.posX = posX;
@@ -1465,11 +1602,14 @@ function _tickFootprints()
 {
     if (!_LOS_REVEAL_VIA_MASK)
         return;
+
     const root = _ensureFootRoot();
     if (!root)
         return;
+
     let changed = false;
     const live = new Set();
+
     for (const token of canvas.tokens?.placeables ?? [])
     {
         const tokenMesh = token.mesh;
@@ -1477,20 +1617,24 @@ function _tickFootprints()
             continue;
         live.add(token.id);
         let entry = _footprints.get(token.id);
+
         if (entry && entry.tex !== tokenMesh.texture)
         {
             entry.mesh.destroy();
             entry = null;
         }
+
         if (!entry)
         {
             entry = { tex: tokenMesh.texture, mesh: root.addChild(_makeFootprintMesh(tokenMesh.texture)), posX: NaN, posY: NaN, rot: NaN, scaleX: NaN, scaleY: NaN };
             _footprints.set(token.id, entry);
             changed = true;
         }
+
         if (_syncFootprint(entry, tokenMesh))
             changed = true;
     }
+
     for (const [id, entry] of _footprints)
     {
         if (live.has(id))
@@ -1499,6 +1643,7 @@ function _tickFootprints()
         _footprints.delete(id);
         changed = true;
     }
+
     if (changed)
         canvas.masks.vision.renderDirty = true;
 }
@@ -1506,22 +1651,27 @@ function _tickFootprints()
 function _tickSilhouetteOverlays()
 {
     const now = performance.now();
+
     if (_overlayDirty || now - _lastOverlayRefresh > 500)
     {
         _refreshOverlayState();
         _lastOverlayRefresh = now;
     }
+
     _tickFootprints();
     if (!_overlayTokens.size)
         return;
+
     for (const [token, simple] of _overlayTokens)
     {
         const mesh = token.children?.find(child => child.name === _OVERLAY_NAME);
+
         if (!mesh || mesh.destroyed)
         {
             _overlayTokens.delete(token);
             continue;
         }
+
         if (token.targetArrows && token.targetArrows.zIndex < 600)
             token.targetArrows.zIndex = 600;
         if (token.targetPips && token.targetPips.zIndex < 600)
@@ -1534,6 +1684,7 @@ function _tickSilhouetteOverlays()
 }
 
 let _silhouetteTickerInstalled = false;
+
 function _installSilhouetteOverlayTicker()
 {
     _markOverlayDirty();

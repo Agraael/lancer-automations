@@ -3,7 +3,7 @@
 import { ActiveFlowState } from './flows.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { localize, localizeFormat } from '../tools/string-utils.js';
+import { localize, localizeFormat, signedNumber } from '../tools/string-utils.js';
 import {
     injectNoBonusDmgCheckbox,
     injectThrottledCheckbox,
@@ -18,6 +18,9 @@ import {
     getConstantBonuses,
     getGlobalBonuses
 } from '../bonuses/genericBonuses.js';
+import { injectVulnerableToggle } from '../bonuses/vulnerable-consume.js';
+import { injectReliableTypePicker, reliableChosenType } from '../bonuses/reliable-type.js';
+import { injectVariablePicker } from '../bonuses/variable-damage.js';
 
 export async function noBonusDmgInjectStep(state)
 {
@@ -26,8 +29,12 @@ export async function noBonusDmgInjectStep(state)
         state.la_extraData = state.la_extraData || {};
         state.la_extraData._csmNoBonusDmg = { ...ActiveFlowState.current._csmNoBonusDmg };
     }
+
     injectNoBonusDmgCheckbox(state);
     injectThrottledCheckbox(state);
+    injectVulnerableToggle(state);
+    injectReliableTypePicker(state);
+    injectVariablePicker(state);
     return true;
 }
 
@@ -49,12 +56,14 @@ export function wrapRollDamageForNoBonusDmg(flowSteps)
                 state.la_extraData = state.la_extraData || {};
                 state.la_extraData._csmNoBonusDmg = { ...ActiveFlowState.current._csmNoBonusDmg };
             }
+
             if (state.la_extraData?._csmNoBonusDmg?.enabled)
             {
                 state.data.bonus_damage = [];
                 for (const target of (state.data.damage_hud_data?.targets || []))
                     target.bonusDamage = [];
             }
+
             return orig(state);
         });
     }
@@ -70,7 +79,9 @@ function applyStatRollPresets(state)
     const extra = state.la_extraData;
     if (!extra)
         return;
+
     const base = state.data.acc_diff?.base;
+
     if (base)
     {
         if (Number(extra.accuracy))
@@ -78,6 +89,7 @@ function applyStatRollPresets(state)
         if (Number(extra.difficulty))
             base.accuracy = (base.accuracy || 0) - Number(extra.difficulty);
     }
+
     if (Number(extra.flatModifier))
         state.data.bonus = (state.data.bonus || 0) + Number(extra.flatModifier);
 }
@@ -107,6 +119,7 @@ export function wrapStatRollFlatModifier(flowSteps)
                 flatMod = value;
             });
         });
+
         observer.observe(document.body, { childList: true, subtree: true });
 
         const result = await orig(state);
@@ -119,6 +132,7 @@ export function wrapStatRollFlatModifier(flowSteps)
             const accStr = accTotal !== 0 ? ` + ${accTotal}d6kh1` : '';
             state.data.roll_str = `1d20+${state.data.bonus}${accStr}`;
         }
+
         return result;
     });
 }
@@ -132,11 +146,13 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
         const ref = dialog.querySelector('.accdiff-grid, .accdiff-other-grid');
         if (!ref)
             return '';
+
         for (const cls of ref.classList)
         {
             if (cls.startsWith('svelte-'))
                 return cls;
         }
+
         return '';
     })();
 
@@ -156,7 +172,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
     const leftB = document.createElement('b');
     leftB.textContent = 'Base:';
     leftSpan.appendChild(leftB);
-    leftSpan.append(` ${bonus >= 0 ? '+' : ''}${bonus}`);
+    leftSpan.append(` ${signedNumber(bonus)}`);
     leftCol.appendChild(leftSpan);
 
     const midCol = document.createElement('div');
@@ -184,7 +200,7 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
     rightB.textContent = 'Total:';
     rightSpan.appendChild(rightB);
     rightSpan.append(' ');
-    const totalText = document.createTextNode(`${bonus >= 0 ? '+' : ''}${bonus}`);
+    const totalText = document.createTextNode(signedNumber(bonus));
     rightSpan.appendChild(totalText);
     rightCol.appendChild(rightSpan);
 
@@ -199,8 +215,9 @@ function _injectStatFlatModRow(dialog, bonus, onChange)
         const parsedValue = Number(input.value) || 0;
         onChange(parsedValue);
         const total = bonus + parsedValue;
-        totalText.textContent = (total >= 0 ? '+' : '') + total;
+        totalText.textContent = signedNumber(total);
     };
+
     input.addEventListener('input', update);
     plusBtn.addEventListener('click', () =>
     {
@@ -219,12 +236,16 @@ async function _collectDamageMutations(state, applies)
     const actor = state.actor;
     if (!actor)
         return [];
+
     const flowTags = new Set(['all', 'damage']);
+
     const raw = flattenBonuses([
         ...getGlobalBonuses(actor),
         ...getConstantBonuses(actor)
     ]);
+
     const applicableBonuses = [];
+
     for (const bonus of raw)
     {
         if (bonus.type !== 'damage' || !applies(bonus))
@@ -232,6 +253,7 @@ async function _collectDamageMutations(state, applies)
         if (await isBonusApplicable(bonus, flowTags, state))
             applicableBonuses.push(bonus);
     }
+
     return applicableBonuses;
 }
 
@@ -241,6 +263,7 @@ export function convertBonusDamageEntries(entries, bonuses, state)
     const cloned = foundry.utils.duplicate(entries ?? []);
     if (!bonuses.length)
         return cloned;
+
     const mockState = { actor: state.actor, item: state.item, data: { damage: cloned } };
     for (const bonus of bonuses)
         mutateDamageWithBonus(mockState, bonus);
@@ -252,9 +275,11 @@ export async function bonusDamageMutateStep(state)
 {
     if (!state?.data)
         return true;
+
     const bonuses = await _collectDamageMutations(state, mutatesBonusDamage);
     if (bonuses.length === 0)
         return true;
+
     try
     {
         state.data.bonus_damage = convertBonusDamageEntries(state.data.bonus_damage, bonuses, state);
@@ -265,6 +290,7 @@ export async function bonusDamageMutateStep(state)
     {
         console.warn('lancer-automations | bonus damage mutation failed:', e);
     }
+
     return true;
 }
 
@@ -288,12 +314,14 @@ export function wrapShowDamageHUD(flowSteps)
         let restore = null;
         // currentProfile() reads the swapped array, so its own wrap must not mutate it a second time.
         item._laBaseDamageSwapped = true;
+
         try
         {
             if (item.type === 'mech_weapon' && item.system.active_profile)
             {
                 const activeProfile = item.system.active_profile;
                 const origDmg = activeProfile.damage;
+
                 if (Array.isArray(origDmg))
                 {
                     const cloned = origDmg.map(dmg => ({ type: dmg.type, val: dmg.val }));
@@ -301,6 +329,7 @@ export function wrapShowDamageHUD(flowSteps)
                     for (const bonus of bonuses)
                         mutateDamageWithBonus(mockState, bonus);
                     activeProfile.damage = cloned;
+
                     restore = () =>
                     {
                         activeProfile.damage = origDmg;
@@ -312,6 +341,7 @@ export function wrapShowDamageHUD(flowSteps)
                 const tier = (state.actor?.system?.tier || 1) - 1;
                 const tierArr = item.system.damage;
                 const origDmg = Array.isArray(tierArr) && Array.isArray(tierArr[tier]) ? tierArr[tier] : null;
+
                 if (Array.isArray(origDmg))
                 {
                     const cloned = origDmg.map(dmg => ({ type: dmg.type, val: dmg.val }));
@@ -319,6 +349,7 @@ export function wrapShowDamageHUD(flowSteps)
                     for (const bonus of bonuses)
                         mutateDamageWithBonus(mockState, bonus);
                     tierArr[tier] = cloned;
+
                     restore = () =>
                     {
                         tierArr[tier] = origDmg;
@@ -333,6 +364,7 @@ export function wrapShowDamageHUD(flowSteps)
                 for (const bonus of bonuses)
                     mutateDamageWithBonus(mockState, bonus);
                 item.system.damage = cloned;
+
                 restore = () =>
                 {
                     item.system.damage = origDmg;
@@ -342,6 +374,7 @@ export function wrapShowDamageHUD(flowSteps)
         catch (e)
         {
             console.warn('lancer-automations | pre-HUD damage mutation failed:', e);
+
             if (restore)
             {
                 try
@@ -349,7 +382,9 @@ export function wrapShowDamageHUD(flowSteps)
                     restore();
                 }
                 catch (_)
-                { /* ignore */ } restore = null;
+                { /* ignore */ }
+
+                restore = null;
             }
         }
 
@@ -360,6 +395,7 @@ export function wrapShowDamageHUD(flowSteps)
         finally
         {
             delete item._laBaseDamageSwapped;
+
             if (restore)
             {
                 try
@@ -384,11 +420,20 @@ export function wrapRollReliable(flowSteps)
     flowSteps.set('rollReliable', async function wrappedRollReliable(state)
     {
         const result = await origRollReliable(state);
+        const chosenType = reliableChosenType(state);
+
+        if (chosenType)
+        {
+            for (const reliable of state.data?.reliable_results ?? [])
+                reliable.d_type = chosenType;
+        }
+
         if (result === false && state.data?._csmKnockback?.enabled)
         {
             // No damage configured but knockback is pending; let the flow continue
             return true;
         }
+
         return result;
     });
 }
@@ -402,12 +447,15 @@ function getHeatMitigation(actor)
 
     const immune = getImmunityBonuses(actor, "damage")
         .some(bonus => bonus.damageTypes?.some(damageType => ['heat', 'all'].includes(damageType.toLowerCase())));
+
     const resisted = !actor.system.statuses?.shredded && (
         actor.system.resistances?.heat ||
         checkDamageResistances(actor, "heat").length > 0
     );
+
     const vulnerable = checkDamageVulnerabilities(actor, "heat").length > 0;
     let multiplier = 1;
+
     if (resisted && !vulnerable)
         multiplier = 0.5;
     else if (vulnerable && !resisted)
@@ -446,6 +494,7 @@ export function wrapApplySelfHeat(flowSteps)
             state.data.self_heat_result = { roll, tt: await roll.getTooltip() };
 
             const automationSettings = game.settings.get(game.system.id, "automationOptions");
+
             if (automationSettings?.attack_self_heat && (actor.is_mech() || actor.is_npc()))
             {
                 await actor.update(/** @type {any}*/({
@@ -478,6 +527,7 @@ export function wrapUpdateOverchargeActor(flowSteps)
     {
         const actor = /** @type {Actor}*/(state.actor);
         const rollTotal = Number(state.data?.result?.roll?.total);
+
         if (!actor?.is_mech?.() || !Number.isFinite(rollTotal))
             return orig(state, options);
 
@@ -487,11 +537,13 @@ export function wrapUpdateOverchargeActor(flowSteps)
 
         await actor.update(/** @type {any}*/({ "system.overcharge": state.data.level }));
         const heatEnabled = game.settings.get(game.system.id, "automationOptions")?.overcharge_heat;
+
         if (heatEnabled)
         {
             const applied = immune ? 0 : Math.ceil(rollTotal * multiplier);
             await actor.update(/** @type {any}*/({ "system.heat.value": actor.system.heat.value + applied }));
         }
+
         return true;
     });
 }
@@ -514,6 +566,7 @@ export function wrapApplyOverkillHeat(flowSteps)
 
         let overkillHeat = 0;
         const results = state.data.has_crit_hit ? state.data.crit_damage_results : state.data.damage_results;
+
         for (const entry of (results ?? []))
         {
             for (const term of (entry.roll?.terms ?? []))
@@ -525,6 +578,7 @@ export function wrapApplyOverkillHeat(flowSteps)
                 }
             }
         }
+
         state.data.overkill_heat = overkillHeat;
 
         if ((actor.is_mech?.() || actor.is_npc?.() || actor.is_deployable?.()) && (actor.system.heat?.max ?? 0) > 0)
@@ -532,6 +586,7 @@ export function wrapApplyOverkillHeat(flowSteps)
             const applied = immune ? 0 : Math.ceil(overkillHeat * multiplier);
             await actor.update(/** @type {any}*/({ "system.heat.value": (Number(actor.system.heat.value) || 0) + applied }));
         }
+
         return true;
     });
 }
@@ -544,9 +599,10 @@ export function wrapFreeUseCard(flowSteps)
     flowSteps.set('printActionUseCard', async function wrappedPrintActionUseCard(state, options)
     {
         const action = state?.data?.action;
-        if (!action || !state.la_extraData?.freeUse)
+        if (!action || !(state.la_extraData?.freeUse || state.la_extraData?.asReaction))
             return orig.call(this, state, options);
-        state.data.action = { ...action, activation: 'Free' };
+        state.data.action = { ...action, activation: state.la_extraData.freeUse ? 'Free' : 'Reaction' };
+
         try
         {
             return await orig.call(this, state, options);
@@ -563,6 +619,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
     // (a) Wrap findRechargeableSystems so the flow doesn't abort when only
     //     extra actions need recharging (no native tg_recharge items).
     const origFind = flowSteps.get('findRechargeableSystems');
+
     if (origFind)
     {
         flowSteps.set('findRechargeableSystems', async function wrappedFindRechargeableSystems(state)
@@ -570,25 +627,30 @@ export function wrapExtraActionRecharge(flowSteps, flows)
             const result = await origFind.call(this, state);
 
             let hasExtraRechargeables = false;
+
             for (const item of state.actor.items)
             {
                 const extraActions = getLAFlag(item,'extraActions') || [];
+
                 if (extraActions.some(action => action.recharge && action.charged === false))
                 {
                     hasExtraRechargeables = true; break;
                 }
             }
+
             if (!hasExtraRechargeables)
             {
                 const actorExtraActions = getLAFlag(state.actor,'extraActions') || [];
                 if (actorExtraActions.some(action => action.recharge && action.charged === false))
                     hasExtraRechargeables = true;
             }
+
             if (hasExtraRechargeables)
             {
                 state.data.la_hasExtraRechargeables = true;
                 return true;
             }
+
             return result;
         });
     }
@@ -600,12 +662,14 @@ export function wrapExtraActionRecharge(flowSteps, flows)
             return true;
         if (!state.data?.result?.roll)
             return true;
+
         const rollTotal = state.data.result.roll.total;
 
         for (const item of state.actor.items)
         {
             const extraActions = getLAFlag(item,'extraActions') || [];
             let changed = false;
+
             for (const action of extraActions)
             {
                 if (action.recharge && action.charged === false)
@@ -616,11 +680,14 @@ export function wrapExtraActionRecharge(flowSteps, flows)
                     changed = true;
                 }
             }
+
             if (changed)
                 await setLAFlag(item,'extraActions', extraActions);
         }
+
         const actorActions = getLAFlag(state.actor,'extraActions') || [];
         let actorChanged = false;
+
         for (const action of actorActions)
         {
             if (action.recharge && action.charged === false)
@@ -631,6 +698,7 @@ export function wrapExtraActionRecharge(flowSteps, flows)
                 actorChanged = true;
             }
         }
+
         if (actorChanged)
             await setLAFlag(state.actor,'extraActions', actorActions);
         return true;
@@ -642,11 +710,13 @@ export function wrapExtraActionRecharge(flowSteps, flows)
     flowSteps.set('lancer-automations:checkExtraActionRecharge', async function checkExtraActionRecharge(state)
     {
         const action = state.data?.action;
+
         if (action?.recharge && action?.charged === false)
         {
             ui.notifications.warn(localizeFormat('LA.notify.hasNotRecharged', { name: action.name, recharge: action.recharge }));
             return false;
         }
+
         return true;
     });
     flows.get('SimpleActivationFlow')?.insertStepBefore('printActionUseCard', 'lancer-automations:checkExtraActionRecharge');

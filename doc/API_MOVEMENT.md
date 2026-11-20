@@ -25,7 +25,7 @@ api.getMoveDataList(tokenOrId)              // raw per-move list, [] when empty
 **`getCumulativeMoveData` / `getIntentionalMoveData`** return `{ moved, cost }`: `moved` is grid distance, `cost` is the movement cost with terrain penalty, falling back to `moved`.
 - **Cumulative** = every move that isn't free movement, i.e. voluntary drags **plus** involuntary/forced pushes (knockback etc.).
 - **Intentional** = only player-driven drag moves (`isDrag`), excluding involuntary/forced.
-- Both exclude **free** movement (the V-key hold, see [Movement](feature/MOVEMENT.md)).
+- Both exclude **free** movement (the V toggle, see [Movement](feature/MOVEMENT.md)).
 
 **`getMovementHistory(tokenOrId)`** returns:
 ```js
@@ -71,7 +71,7 @@ api.initMovementCap(token)                  // turn reset: clear per-turn legs, 
 
 **`clearMoveData(tokenOrId)`** deletes the token's move-history flag. If the token is a combatant in the active combat it also re-caches the cap, re-derived from the movement bands (speed after prone halving, plus standing bonuses), and 0 while immobilized. Outside combat it only deletes the flag.
 
-**`undoMoveData(tokenOrId)`** removes the last recorded move from the history. A Boost cast on that move is dropped with it (that is the refund, the cap is summed from what is left) and the cap is re-cached.
+**`undoMoveData(tokenOrId)`** removes the last recorded move from the history and re-caches the cap. A Boost cast on that move is kept, so its leg stays granted.
 
 **`initMovementCap(token)`** is the turn reset the module runs itself: for a combatant it clears the per-turn legs (boost casts and hand adjustments) and re-caches the cap, 0 while immobilized. No-op for tokens not in combat. Call it after tampering with the history flags directly.
 
@@ -92,12 +92,15 @@ api.tokenSpeed(tokenOrActor)                // speed after prone halving
 |:------|:-----|:--------|:------------|
 | <kbd>tokenOrId</kbd> | `string \| Token \| TokenDocument` | *required* | Token to read. `tokenSpeed` also takes an `Actor`. |
 
-A turn's movement is a list of **legs**, returned as cumulative bands. `name` is `'standard'`, `'boost'` or
-`'over-boost'`: the standard move, then one band per Boost actually taken, then previews of what is still
-available. `granted: true` means the token has paid for it, and only those count toward the cap. Both previews
-are dropped while the token is slow or prone, and the over-boost preview also stops once two Boosts have been
-taken. `size` is recomputed live from speed, statuses and standing bonuses, so a mid-turn speed
-change moves the bands and the cap together. The ruler colours and the boost/overcharge offer both read this.
+A turn's movement is a list of **legs**, returned as cumulative bands:
+
+- `name` is `'standard'`, `'boost'` or `'over-boost'`.
+- `granted: true` means the token has paid for it, and only those count toward the cap.
+- `size` is recomputed live from speed, statuses and standing bonuses, so a mid-turn speed change moves the bands and the cap together.
+
+The bands come in order: the standard move, then one band per Boost actually taken, then previews of what is still available. Both previews are dropped while the token is slow or prone, and the over-boost preview also stops once two Boosts have been taken.
+
+The ruler colours and the boost/overcharge offer both read this.
 
 **`getMovementCap`** is the last granted band's `max`, floored at what the token has already spent under the cap
 (drag movement that is neither free nor a cap bypass). A stop-movement status empties the bands, so the cap is 0
@@ -122,8 +125,11 @@ api.recordBoostCast(tokenOrId, speed)       // a Boost happened: grants a boost 
 | <kbd>leg</kbd> | `"standard" \| "boost" \| "current"` | `"current"` | `recordMovementExtra` only. Which leg receives it. |
 | <kbd>speed</kbd> | `number` | *required* | `recordBoostCast` only. Stored on the cast entry but read nowhere: the granted leg's size is recomputed live, so this value has no effect. |
 
-`recordMovementExtra` targets: `'standard'` the normal move, `'boost'` the latest granted boost leg (parked for
-the next one if no Boost has been taken yet), `'current'` whichever granted leg the spent distance sits in.
+`recordMovementExtra` targets:
+
+- `'standard'`: the normal move.
+- `'boost'`: the latest granted boost leg (parked for the next one if no Boost has been taken yet).
+- `'current'`: whichever granted leg the spent distance sits in.
 
 Use a `movement_extra` **bonus** (`subtype: "standard" | "boost"`) instead when the effect lengthens *every* leg
 of that kind rather than one. `recordMovementExtra` is for one-shots like "double your speed for this boost".

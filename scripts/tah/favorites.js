@@ -28,11 +28,13 @@ export function favoriteWheel(key)
 {
     if (!key)
         return 0;
+
     for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
     {
         if (favoriteKeys(wheel).includes(key))
             return wheel;
     }
+
     return 0;
 }
 
@@ -43,6 +45,7 @@ export function hasSecondWheel()
         if (favoriteKeys(wheel).length > 0)
             return true;
     }
+
     return false;
 }
 
@@ -62,11 +65,14 @@ export async function setFavoriteWheel(key, wheel)
         {
             const keys = favoriteKeys(target);
             const wanted = target === wheel;
+
             if (wanted === keys.includes(key))
                 continue;
+
             const next = wanted ? [...keys, key] : keys.filter(entry => entry !== key);
             await setLAFlag(game.user,WHEEL_FLAGS[target - 1], next);
         }
+
         return wheel;
     });
 }
@@ -92,6 +98,7 @@ export function favMarkHtml(wheel)
 {
     if (!wheel)
         return '';
+
     const digit = hasSecondWheel() ? `<span class="la-hud-fav-digit">${wheel}</span>` : '';
     return `<span class="la-hud-fav-mark">★${digit}</span>`;
 }
@@ -108,11 +115,13 @@ export function favMarkHtml(wheel)
 export function openFavoritePopup(x, y, currentWheel, { onEnter = null, onLeave = null } = {})
 {
     const rows = [];
+
     for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
     {
         if (wheel !== currentWheel)
             rows.push({ value: wheel, label: localizeFormat('LA.tokenHud.wheel', { n: wheel }), glyph: `★<span class="la-hud-fav-digit">${wheel}</span>` });
     }
+
     if (currentWheel)
         rows.push({ value: 0, label: localize('LA.common.remove'), glyph: '✕', cls: 'la-menu-popup-danger' });
     return openCursorMenu({
@@ -132,21 +141,25 @@ export function collectFavorites(categories, wheel = 0)
     const favs = wheel ? favoriteKeys(wheel) : Array.from({ length: WHEEL_COUNT }, (_, index) => favoriteKeys(index + 1)).flat();
     if (!favs.length)
         return [];
+
     const favSet = new Set(favs);
     const results = [];
     const seen = new Set();
     const migrations = new Map();
+
     const walk = (items, catLabel) =>
     {
         for (const item of (items ?? []))
         {
             if (item.isSectionLabel)
                 continue;
+
             if (item.onClick)
             {
                 const key = favKeyOf(item);
                 const legacy = key && !favSet.has(key) ? legacyFavKeyOf(item) : null;
                 const matched = key && (favSet.has(key) || (legacy && legacy !== key && favSet.has(legacy)));
+
                 if (matched && !seen.has(key))
                 {
                     seen.add(key);
@@ -155,16 +168,19 @@ export function collectFavorites(categories, wheel = 0)
                     results.push({ ...item, _catLabel: catLabel, favKey: key });
                 }
             }
+
             if (item.getChildren)
                 walk(item.getChildren(), catLabel);
         }
     };
+
     for (const cat of (categories ?? []))
     {
         if (cat.isStatusPanel)
             continue;
         walk(cat.getItems?.(), cat.label);
     }
+
     migrateFavoriteKeys(migrations);
     return results;
 }
@@ -188,13 +204,16 @@ export function favKeyOf(item)
 {
     if (item?.favKey)
         return item.favKey;
+
     const sourceUuid = item?.hoverData?.item?.uuid;
+
     if (sourceUuid)
     {
         // Rows for an action ON the item key separately from the item row itself.
         const actionName = item.hoverData.action?.name;
         return actionName ? `${sourceUuid}|${actionName}` : sourceUuid;
     }
+
     return item?.stableKey ?? item?.onRightClick?.favId ?? item?.labelHtml ?? item?.label ?? null;
 }
 
@@ -210,8 +229,10 @@ export function favoriteWheelOf(item)
     const key = favKeyOf(item);
     const wheel = favoriteWheel(key);
     const legacy = wheel ? null : legacyFavKeyOf(item);
+
     if (!legacy || legacy === key)
         return wheel;
+
     const legacyWheel = favoriteWheel(legacy);
     if (legacyWheel)
         migrateFavoriteKeys(new Map([[legacy, key]]));

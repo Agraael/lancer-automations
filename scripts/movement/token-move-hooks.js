@@ -5,19 +5,21 @@ import { getLAFlag } from "../tools/flag-utils.js";
 import { getOriginalMovePath, trimPathToPosition } from "./path-replay.js";
 import {
     _moveHasForcedAction, _moveHasTeleportAction, _computeMoveData, _rulerMove,
-    _handleMovementCapExceeded, handleTokenMove, _involuntaryMoveData,
+    _handleMovementCapExceeded, _handleLineBlocked, handleTokenMove, _involuntaryMoveData,
     _isActiveMoveStackFor, _wipeMoveStack, _moveHistoryCache, isPositionChange
 } from "./move-tracking.js";
 import { getMovementPathHexes, drawDebugPath } from "../combat/grid-helpers.js";
 import { cancelRulerDrag, getActiveGMId, drawMovementTrace, startChoiceCard } from "../interactive/index.js";
 import { _buildCancelFn } from "../activations/flow-steps.js";
-import { handleTrigger } from "../activations/reactions-engine.js";
+import { handleTrigger } from "../activations/automation-engine.js";
 
 // Carry our flags across core's checkpoint continuation segments.
 const _replayOptionCache = new Map();
-const _REPLAY_OPTION_KEYS = ['isDrag', 'ignoreMovementCap', '_skipBoostOffer', '_cancelledBy',
+
+const _REPLAY_OPTION_KEYS = ['isDrag', 'ignoreMovementCap', '_skipBoostOffer', '_cancelledBy', 'lancerLineBlockChecked',
     'IgnorePreMove', 'IgnoreOnMove', 'isModified', 'teleport', 'lancerFreeMovement',
     'lancerInvoluntarySourceId', 'lancerInvoluntaryActionName', 'lancerInvoluntaryItemUuid'];
+
 const _debugMoveChains = new Set();
 
 Hooks.on('preUpdateToken', (document, change, options, userId) =>
@@ -33,6 +35,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             options.animate = false;
         if (moveOp?.recorded)
             delete change._movementHistory;
+
         const debugRoot = chainRoot ?? moveOp?.id;
         if (debugRoot && moveOp?.pending?.waypoints?.length)
             _debugMoveChains.add(debugRoot);
@@ -46,11 +49,13 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
     else if (moveOp?.pending?.waypoints?.length && moveOp.id)
     {
         const carried = {};
+
         for (const key of _REPLAY_OPTION_KEYS)
         {
             if (key in options)
                 carried[key] = options[key];
         }
+
         // Cost was already billed in full on the passed part of the split leg.
         if ('lancerSegmentDistance' in options)
         {
@@ -58,14 +63,17 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             carried.lancerSegmentCost = 0;
             carried.lancerTerrainPenalty = 0;
         }
+
         _replayOptionCache.set(moveOp.id, carried);
     }
+
     if (chainRoot && !(moveOp?.pending?.waypoints?.length))
         _replayOptionCache.delete(chainRoot);
 
     // Native drags set method:'dragging'; our own moves (moveToken/_rulerMove) set isDrag/rulerSegment.
     const v13Method = options.movement?.[document.id]?.method;
     const isForceMovement = _moveHasForcedAction(document, options);
+
     const isDrag = !isForceMovement && (
         'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
     );
@@ -77,6 +85,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             const token = canvas.tokens.get(document.id);
             handleTokenMove(token, change, options, userId);
         }
+
         return true;
     }
 
@@ -101,7 +110,8 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
 
         const { distanceMoved: distanceToMove, movementCost: moveCost, isFreeMovement: moveIsFreeMovement } = _computeMoveData(options, startPos, endPos, 0, document);
 
-        const isTeleport = !!options.teleport || _moveHasTeleportAction(document, options);
+        const isTeleport = _moveHasTeleportAction(document, options);
+
         const moveInfo = {
             isInvoluntary: !isDrag,
             isTeleport,
@@ -109,6 +119,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             isModified: options.isModified,
             pathHexes: getMovementPathHexes(token, change, options.movement?.[document.id]?.waypoints)
         };
+
         options.lancerPathHexes = moveInfo.pathHexes;
 
         const triggerData = {
@@ -129,6 +140,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
         const originalIsTeleport = !!CONFIG.Token?.movement?.actions?.[originalAction]?.teleport;
         const originalPathWaypoints = getOriginalMovePath(document, options);
         const intentEndPos = originalPathWaypoints.at(-1) ?? endPos;
+
         const continueCallback = async () =>
         {
             const dest = { x: change.x ?? token.x, y: change.y ?? token.y };
@@ -136,11 +148,14 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                 dest.elevation = change.elevation;
             if (originalAction)
                 dest.action = originalAction;
+
             // Strip v13-internal options before re-firing: the cancelled call froze them with defineProperty, and spreading them crashes #preUpdateMovement.
             const { _movement, _movementArguments, movement, _laTeleFxPlayed, ...cleanOptions } = options;
             await _rulerMove(token, originalPathWaypoints.length ? originalPathWaypoints : dest, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
         };
+
         triggerData._cancelledBy = options._cancelledBy || [];
+
         const _cancelMoveCard = _buildCancelFn({
             setFlag: () =>
             {
@@ -153,22 +168,27 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             defaultTitle: "MOVEMENT CANCELED",
             choice1Text: "Stop",
             choice2Text: "Ignore",
+            choice1Icon: "fas fa-hand",
+            choice2Icon: "fas fa-forward",
             getExtraCardOptions: (userIdControl) => ({
                 traceData: (userIdControl ?? getActiveGMId()) ? { tokenId: token.id, endPos: intentEndPos, newEndPos: null, path: originalPathWaypoints } : null
             }),
         });
+
         // adapter: trace drawn here (not in _cancelMoveCard) so it shows during preConfirm too
         triggerData.cancelTriggeredMove = (reasonText = "This movement has been canceled.", allowConfirm = true, userIdControl = null, preConfirm = null, postChoice = null, opts = {}) =>
         {
             _cancelMoveCard._reactorIdentity = triggerData.cancelTriggeredMove._reactorIdentity;
             _cancelMoveCard._engineCancel = triggerData.cancelTriggeredMove._engineCancel;
             const trace = drawMovementTrace(token, intentEndPos, null, { path: originalPathWaypoints });
+
             const cleanup = () =>
             {
                 if (trace?.parent)
                     trace.parent.removeChild(trace);
                 trace?.destroy();
             };
+
             const result = _cancelMoveCard(reasonText, undefined, allowConfirm, userIdControl, preConfirm, postChoice, opts);
             Promise.resolve(result).finally(cleanup);
             return result;
@@ -181,6 +201,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             const identity = triggerData.changeTriggeredMove._reactorIdentity;
             if (identity && triggerData._cancelledBy)
                 triggerData._cancelledBy.push(identity);
+
             const trimmedPath = trimPathToPosition(token, originalPathWaypoints, startPos, position, originalAction);
 
             // Rerouted move is a real new move on purpose: no _cancelledBy carry, reactors may evaluate it again.
@@ -193,12 +214,14 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                         dest.elevation = extraData.elevation;
                     if (originalAction)
                         dest.action = originalAction;
+
                     const trimmed = trimmedPath ? [...trimmedPath] : null;
                     if (trimmed && extraData.elevation !== undefined)
                         trimmed[trimmed.length - 1] = { ...trimmed[trimmed.length - 1], elevation: extraData.elevation };
                     await _rulerMove(token, trimmed ?? dest, { isUndo: false, isModified: true, isDrag: true, useRuler: true, teleport: originalIsTeleport, ...extraData });
                 }, 50);
             };
+
             const executeOriginal = async () =>
             {
                 if (originalPathWaypoints.length)
@@ -207,9 +230,11 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
                     await _rulerMove(token, originalPathWaypoints, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true, useRuler: true, teleport: originalIsTeleport || cleanOptions.teleport });
                     return;
                 }
+
                 const originalUpdate = { x: change.x ?? token.x, y: change.y ?? token.y };
                 if (change.elevation !== undefined)
                     originalUpdate.elevation = change.elevation;
+
                 // strip v13-internal frozen options (see continueCallback)
                 const { _movement, _movementArguments, movement, ...cleanOptions } = options;
                 await token.document.update(originalUpdate, { ...cleanOptions, _cancelledBy: triggerData._cancelledBy, isDrag: true });
@@ -218,6 +243,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             if (preConfirm)
             {
                 const confirmed = await preConfirm();
+
                 if (!confirmed)
                 {
                     await executeOriginal();
@@ -271,18 +297,20 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
             }
         };
 
-        if (isDrag)
+        const lineBlocked = isDrag && _handleLineBlocked(token, { options, startPos, moveInfo, triggerData, intentPath: originalPathWaypoints, intentEndPos });
+
+        if (isDrag && !lineBlocked)
             _handleMovementCapExceeded(token, { options, change, startPos, endPos, moveInfo, moveToMovementCost: moveCost, moveIsFreeMovement, triggerData, intentPath: originalPathWaypoints, intentEndPos });
 
         // no await: sync reactors flip cancelUpdate before the next line reads it
         if (!cancelUpdate)
-            handleTrigger(isDrag ? 'onPreMove' : 'onPreInvoluntaryMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy, ...(isDrag ? {} : _involuntaryMoveData(options)) });
+            handleTrigger(isDrag ? 'onPreMove' : 'onPreInvoluntaryMove', { triggeringToken: token, distanceToMove, elevationToMove, startPos, endPos, isDrag, moveInfo, originalPath: originalPathWaypoints, cancel: triggerData.cancel, cancelTriggeredMove: triggerData.cancelTriggeredMove, changeTriggeredMove: triggerData.changeTriggeredMove, _cancelledBy: triggerData._cancelledBy, ...(isDrag ? {} : _involuntaryMoveData(options)) });
 
         if (cancelUpdate)
         {
             // a reactor (Overwatch/Engagement/…) cancelled; the awaiting stack is broken
             if (_isActiveMoveStackFor(token.id))
-                _wipeMoveStack();
+                _wipeMoveStack(token.id);
             return false;
         }
 
@@ -312,6 +340,7 @@ Hooks.on('preUpdateToken', (document, change, options, userId) =>
         if (token)
             handleTokenMove(token, change, options, userId);
     }
+
     return true;
 });
 
@@ -322,10 +351,12 @@ Hooks.on('updateToken', async function(document, change, options, userId)
 
     // stamp v13 movementId on the last LA history entry (id only exists after preUpdateToken)
     const moveId = document.movement?.id;
+
     if (moveId && !options.lancerDebugMovement)
     {
         const moveHistory = _moveHistoryCache.get(document.id) ?? getLAFlag(document,'moveHistory');
         const lastEntry = moveHistory?.moves?.at(-1);
+
         if (lastEntry && !lastEntry.movementId && !lastEntry.virtual)
         {
             lastEntry.movementId = moveId;

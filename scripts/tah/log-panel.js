@@ -23,6 +23,7 @@ export class LogPanel extends HudPanel
         this._resetPanel(anchorRow);
         const actor = this._actor;
         const token = this._token;
+
         if (!actor)
             return;
 

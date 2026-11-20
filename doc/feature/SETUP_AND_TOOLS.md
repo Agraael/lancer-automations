@@ -8,7 +8,7 @@ Setup and housekeeping: optional content, actor and data cleanup, news, guided t
 
 ## Settings
 
-The **Tools** tab, with the tours under **Tutorials**.
+The **Tools** tab, with the tours in the **Tutorials** tab.
 
 <img src="../img/st-settings.png" width="70%"/>
 
@@ -16,9 +16,9 @@ The **Tools** tab, with the tours under **Tutorials**.
 
 ## Optional content packs
 
-**LaSossis's Items** (**`enableLaSossisItems`**) loads my prebuilt item activations. It's greyed out unless **Extra Lancer Statuses** (**`additionalStatuses`**, Statuses & FX tab) is on, since the activations use those statuses. Some of them also want the personal NPC Deployables LCP: the **Get the Deployables LCP** button right below downloads it, then import it through the Lancer Compendium Manager.
+**LaSossis's Items** (**`enableLaSossisItems`**) loads my prebuilt item automations. It's greyed out unless **Extra Lancer Statuses** (**`additionalStatuses`**, Statuses & FX tab) is on, since the automations use those statuses.
 
-**LaSossis's Personal Stuff** (**`enablePersonalStuff`**) loads my personal tweaks, probably not useful to anyone else. Both load as startup scripts, so toggling either needs a reload.
+**LaSossis's Personal Stuff** (**`enablePersonalStuff`**) loads my personal tweaks, probably not useful to anyone else. Toggling either needs a reload.
 
 ---
 
@@ -26,7 +26,7 @@ The **Tools** tab, with the tours under **Tutorials**.
 
 **`syncActorImgToToken`** and **`syncActorNameToToken`** copy a prototype token's image and name onto the actor whenever they change. Video token images are skipped there, since an actor portrait only takes stills.
 
-**Sync All Actors Now** does the same pass over every world actor at once, behind a confirmation. It ignores both toggles, writes image and name together, and does not skip videos.
+**Sync All Actors Now** does the same pass over every world actor at once, after a confirmation. It ignores both toggles, writes image and name together, and does not skip videos.
 
 ---
 
@@ -50,7 +50,7 @@ On load, the GM gets a popup for new module news and pending updates. The **News
 
 ## Guided tours
 
-Guided in-app tours explain the main systems. A welcome dialog offers them on first install, along with a **Setup Wizard** for the main settings.
+There are guided tours for the main systems. On first install, a welcome dialog offers them, along with a **Setup Wizard** for the main settings.
 
 <img src="../img/st-tour.png" width="70%"/>
 

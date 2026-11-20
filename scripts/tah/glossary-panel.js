@@ -11,6 +11,7 @@ function _collectVisibleScans()
 {
     /** @type {any[]} */
     const out = [];
+
     for (const entry of game.journal ?? [])
     {
         const flag = getLAFlags(entry)?.scan;
@@ -18,6 +19,7 @@ function _collectVisibleScans()
             continue;
         if (!entry.testUserPermission(game.user, 'OBSERVER'))
             continue;
+
         const titleMatch = entry.name.match(/^SCAN:\s*\d+\s*-\s*(.+)$/);
         const titleName = titleMatch ? titleMatch[1].trim() : null;
         const name = titleName ?? flag.actorName ?? entry.name;
@@ -30,6 +32,7 @@ function _collectVisibleScans()
             scannedAt: flag.scannedAt ?? 0,
         });
     }
+
     out.sort((a, b) => (b.scannedAt || 0) - (a.scannedAt || 0));
     return out;
 }
@@ -56,14 +59,17 @@ export class GlossaryPanel extends HudPanel
         {
             list.empty();
             const q = filter?.trim().toLowerCase() ?? '';
+
             const filtered = q
                 ? scans.filter((s) => s.name.toLowerCase().includes(q) || s.displayName.toLowerCase().includes(q))
                 : scans;
+
             if (!filtered.length)
             {
                 list.append(empty.clone());
                 return;
             }
+
             for (const s of filtered)
             {
                 const row = $(htmlToElement(`<div class="la-glossary-row">
@@ -74,6 +80,7 @@ export class GlossaryPanel extends HudPanel
                     </div>
                     <i class="fas fa-book-open la-glossary-row__icon"></i>
                 </div>`));
+
                 row.on('mouseenter', () =>
                 {
                     this._cancelCollapse();
@@ -81,6 +88,7 @@ export class GlossaryPanel extends HudPanel
                     row.css('background', 'color-mix(in srgb, var(--la-plate), #000 12%)');
                     const clip = row.find('.la-hud-clip')[0];
                     const pan  = row.find('.la-hud-pan')[0];
+
                     if (clip && pan)
                     {
                         const overflow = pan.scrollWidth - clip.clientWidth;
@@ -96,6 +104,7 @@ export class GlossaryPanel extends HudPanel
                 row.on('click', async (ev) =>
                 {
                     ev.stopPropagation();
+
                     try
                     {
                         const doc = /** @type {any} */ (await fromUuid(s.uuid));

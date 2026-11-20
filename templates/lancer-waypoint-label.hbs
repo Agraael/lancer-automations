@@ -6,15 +6,20 @@
 		<i class="la-icon {{action.icon}}"></i>
 		{{/if}}
 	</div>
-	<div class="la-badge-disc"><span class="la-total">{{totalCost}}</span></div>
+	<div class="la-badge-disc"><span class="la-total">{{totalCost}}</span>{{#if lost}}<span class="la-notch la-notch-lost"><i class="fa-solid fa-arrow-turn-up"></i>{{lost}}</span>{{/if}}{{#if showNotch}}<span class="la-notch">{{notch}}</span>{{/if}}</div>
 	{{#if showPathfind}}
 	<div class="la-badge-pathfind{{#unless pathfindOn}} off{{/unless}}"><i class="fa-solid fa-route"></i></div>
 	{{/if}}
 	{{#if showElevMode}}
 	<div class="la-badge-elevmode {{elevMode}}"><i class="fa-solid {{elevIcon}}"></i></div>
 	{{/if}}
+	{{#if showStraight}}
+	<div class="la-badge-straight{{#unless straightOn}} off{{/unless}}"><img src="{{straightIcon}}" alt=""></div>
+	{{/if}}
+	{{#if showElevationCost}}
+	<div class="la-badge-elevcost{{#unless elevationCostOff}} off{{/unless}}"><img src="{{elevationCostIcon}}" alt=""></div>
+	{{/if}}
 	<div class="la-badge-row{{#unless showSecondLine}} empty{{/unless}}">
-		{{#if deltaCost}}<span class="la-delta">+{{deltaCost}}</span>{{/if}}
 		{{#if elevArrow}}
 		<i class="la-icon {{elevArrow}}"></i>
 		<span class="la-elev">{{elevAbs}}</span>
@@ -24,6 +29,10 @@
 		<span class="la-penalty-value">{{penalty}}</span>
 		{{else if penaltyZone}}
 		<i class="la-icon la-penalty fa-solid fa-triangle-exclamation" data-tooltip="Movement penalty zone (no cost on gridless)"></i>
+		{{/if}}
+		{{#if saved}}
+		<i class="la-icon la-saved fa-solid fa-feather"></i>
+		<span class="la-saved-value">{{saved}}</span>
 		{{/if}}
 	</div>
 </div>

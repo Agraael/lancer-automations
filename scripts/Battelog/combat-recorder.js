@@ -35,6 +35,7 @@ function _linkPilotToken(telemetry, combatant)
 {
     const mechEntry = combatant?.tokenId ? findPilotMechEntry(combatant.actor) : null;
     const entry = mechEntry ? findEntry(telemetry, mechEntry.tokenId) : null;
+
     if (!entry)
         return false;
     entry.pilotTokenIds ??= [];
@@ -74,11 +75,13 @@ export function registerCombatRecorder()
         {
             if (!telemetry)
                 return null;
+
             for (const combatant of combat.combatants ?? [])
             {
                 reconcileCombatant(telemetry, combatant, 0);
                 _linkPilotToken(telemetry, combatant);
             }
+
             return telemetry;
         });
     });
@@ -87,6 +90,7 @@ export function registerCombatRecorder()
     {
         if (!isExecutorGM())
             return;
+
         const combat = combatant?.combat ?? combatant?.parent;
         if (!combat)
             return;
@@ -111,8 +115,10 @@ export function registerCombatRecorder()
     {
         if (!isExecutorGM())
             return;
+
         const round = combat.round ?? 0;
         const telemetry = getTelemetry(combat);
+
         if (!telemetry)
             return;
         if (round >= 1)

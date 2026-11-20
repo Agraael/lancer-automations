@@ -1,16 +1,16 @@
 import { getApiEntries, getTriggerHelperEntries, apiDocUrl } from '../setup/codemirror-hints.js';
-import { localize } from '../tools/string-utils.js';
+import { localize, escapeHtml as esc } from '../tools/string-utils.js';
 
 // Shown before any search; everything else is reachable from the search box.
 const CURATED_GROUPS = [
     { label: 'LA.apiRef.group.cancelModify', names: ['triggerData.cancel', 'triggerData.cancelAction', 'triggerData.cancelAttack', 'triggerData.cancelTechAttack', 'triggerData.cancelCheck', 'triggerData.cancelChange', 'triggerData.cancelTriggeredMove', 'triggerData.changeTriggeredMove', 'triggerData.cancelStructure', 'triggerData.cancelStress', 'triggerData.cancelStructureOutcome', 'triggerData.cancelStressOutcome', 'triggerData.cancelHpChange', 'triggerData.cancelHeatChange', 'triggerData.modifyHpChange', 'triggerData.modifyHeatChange', 'triggerData.modifyRoll', 'triggerData.reroll', 'triggerData.changeRoll'] },
-    { label: 'LA.apiRef.group.reachReactor', names: ['triggerData.startRelatedFlow', 'triggerData.startRelatedFlowToReactor', 'triggerData.sendMessageToReactor', 'triggerData.endActivation', 'triggerData.debugActivation'] },
+    { label: 'LA.apiRef.group.reachReactor', names: ['triggerData.startRelatedFlow', 'triggerData.startRelatedFlowToReactor', 'triggerData.sendMessageToReactor', 'triggerData.askToActivate', 'asOwner', 'triggerData.endActivation', 'triggerData.debugActivation'] },
     { label: 'LA.apiRef.group.attacksRolls', names: ['executeBasicAttack', 'executeTechAttack', 'executeDamageRoll', 'executeSkirmish', 'executeBarrage', 'attackWith', 'beginWeaponAttackFlow', 'executeStatRoll', 'executeForceCheck', 'executeContestedCheck', 'openHaseContestCard', 'executeSaveVsEffect'] },
-    { label: 'LA.apiRef.group.activations', names: ['executeSimpleActivation', 'executeItemActivation', 'setItemAsActivated', 'getActivatedItems', 'endItemActivation'] },
+    { label: 'LA.apiRef.group.activations', names: ['executeSimpleActivation', 'executeItemActivation', 'setItemAsActivated', 'getActivatedItems', 'isItemActivated', 'endItemActivation'] },
     { label: 'LA.apiRef.group.effects', names: ['applyEffectsToTokens', 'removeEffectsByNameFromTokens', 'findEffectOnToken', 'findEffectsOnToken', 'findEffectFrom', 'hasStatus', 'getAllEffects', 'deleteEffect', 'consumeEffectCharge', 'triggerEffectImmunity', 'ensureLinkedEffect', 'linkEffectToItem', 'applyMark', 'findMarkedTokens', 'clearMarks'] },
     { label: 'LA.apiRef.group.bonuses', names: ['addGlobalBonus', 'removeGlobalBonus', 'addConstantBonus', 'removeConstantBonus', 'getGlobalBonuses', 'getConstantBonuses', 'ensureLinkedBonus', 'linkBonusToItem', 'unlinkBonusFromItem', 'getLinkedBonuses', 'injectBonusToFlowState'] },
     { label: 'LA.apiRef.group.cardsChoices', names: ['startChoiceCard', 'confirmCard', 'askCard', 'pickCard', 'pickItem', 'startVoteCard', 'openChoiceMenu'] },
-    { label: 'LA.apiRef.group.tokensCanvas', names: ['chooseToken', 'placeToken', 'moveToken', 'knockBackToken', 'placeZone', 'placeDeployable', 'spawnHardCover', 'createAura', 'ensureAura', 'findAura', 'getTokensInAura', 'deleteAuras'] },
+    { label: 'LA.apiRef.group.tokensCanvas', names: ['chooseToken', 'placeToken', 'moveToken', 'knockBackToken', 'placeZone', 'findZones', 'clearZones', 'placeDeployable', 'spawnHardCover', 'createAura', 'ensureAura', 'findAura', 'getTokensInAura', 'deleteAuras'] },
     { label: 'LA.apiRef.group.hudActions', names: ['addExtraActions', 'removeExtraActions', 'resolveGrant', 'findGrantedAction', 'isGrantStale', 'sweepStaleGrants', 'lockActorAction', 'unlockActorAction', 'lockActorActionTypes', 'unlockActorActionTypes', 'disableActorAction', 'enableActorAction', 'disableActorActionTypes', 'enableActorActionTypes', 'destroyItem', 'disableItem', 'restoreItem', 'setActionOverlay', 'getActionOverlay', 'addExtraDeploymentLids', 'setHidePrimaryAction'] },
     { label: 'LA.apiRef.group.flagsGates', names: ['getActorFlags', 'addActorFlags', 'removeActorFlags', 'getItemFlags', 'addItemFlags', 'getTokenFlags', 'addTokenFlags', 'consumeGate', 'checkGate', 'clearGate', 'consumeOncePerRound', 'consumeOncePerTurn', 'getFlowFlag', 'setFlowFlag'] },
     { label: 'LA.apiRef.group.queries', names: ['getTokenDistance', 'getMinGridDistance', 'findItemByLid', 'getWeapons', 'getMaxWeaponRanges_WithBonus', 'isHostile', 'isFriendly', 'canProvokeReaction', 'hasLineOfSight', 'consumeItemResource', 'consumeAction', 'gainAction', 'getTier', 'tierValue'] },
@@ -18,25 +18,25 @@ const CURATED_GROUPS = [
 
 const TAG_ROW = 'display: flex; align-items: baseline; gap: 5px; padding: 3px 8px; border-bottom: 1px solid var(--la-edge);';
 
-function esc(str)
-{
-    return String(str ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-}
-
 function rowHtml(entry)
 {
     const docName = entry.docName ?? entry.name;
     const hasDoc = !!apiDocUrl(docName);
+
     const docLink = hasDoc
         ? `<a class="la-api-ref-doc" data-name="${esc(docName)}" title="Open the doc" style="margin-left: auto; flex-shrink: 0; cursor: pointer; color: var(--la-accent); font-size: 0.8em;"><i class="fas fa-book"></i></a>`
         : '';
+
     const returns = entry.returns
         ? `<span style="font-size: 0.7em; color: var(--la-ink-dim, #888); flex-shrink: 0;">&rarr; ${esc(entry.returns)}</span>`
         : '';
+
     const tip = entry.summary ? ` title="${esc(entry.summary)}"` : '';
+
     const nameAttrs = hasDoc
         ? `class="la-api-ref-doc" data-name="${esc(docName)}" title="Open the doc"`
         : '';
+
     const nameStyle = `${hasDoc ? 'cursor: pointer; ' : ''}font-weight: bold; font-size: 0.8em; color: var(--la-accent); flex-shrink: 0;`;
     return `<div class="la-api-ref-row" style="${TAG_ROW}"${tip}>
         <span ${nameAttrs} style="${nameStyle}">${esc(entry.name)}</span>
@@ -66,14 +66,19 @@ function groupsHtml(byName)
 function searchHtml(entries, query)
 {
     const needle = query.toLowerCase();
+
     const hits = entries.filter(entry =>
         entry.name.toLowerCase().includes(needle) || (entry.summary ?? '').toLowerCase().includes(needle));
+
     if (!hits.length)
         return `<div style="padding: 10px; font-size: 0.8em; color: var(--la-ink-dim, #888);">No function matches "${esc(query)}".</div>`;
+
     const shown = hits.slice(0, 80);
+
     const more = hits.length > shown.length
         ? `<div style="padding: 6px 8px; font-size: 0.75em; color: var(--la-ink-dim, #888);">${hits.length - shown.length} more, keep typing to narrow it down.</div>`
         : '';
+
     return shown.map(rowHtml).join('') + more;
 }
 
@@ -111,6 +116,7 @@ export function openApiRefPopup()
     });
 
     const list = popup.querySelector('.la-api-ref-list');
+
     const bindGroupHeads = () =>
     {
         popup.querySelectorAll('.la-api-ref-head').forEach(head =>
@@ -126,6 +132,7 @@ export function openApiRefPopup()
             });
         });
     };
+
     bindGroupHeads();
 
     popup.querySelector('.la-api-ref-search').addEventListener('input', (event) =>
@@ -140,6 +147,7 @@ export function openApiRefPopup()
     {
         const docEl = event.target.closest?.('.la-api-ref-doc');
         const url = docEl && apiDocUrl(docEl.dataset.name);
+
         if (url)
             window.open(url, '_blank', 'noopener');
     });
@@ -152,6 +160,7 @@ export function openApiRefPopup()
         dy = event.clientY - popup.offsetTop;
         event.preventDefault();
     });
+
     const onDocMove = (event) =>
     {
         if (!dragging)
@@ -159,10 +168,12 @@ export function openApiRefPopup()
         popup.style.left = (event.clientX - dx) + 'px';
         popup.style.top = (event.clientY - dy) + 'px';
     };
+
     const onDocUp = () =>
     {
         dragging = false;
     };
+
     document.addEventListener('mousemove', onDocMove);
     document.addEventListener('mouseup', onDocUp);
 
@@ -172,6 +183,7 @@ export function openApiRefPopup()
         document.removeEventListener('mouseup', onDocUp);
         popup.remove();
     };
+
     popup.querySelector('.la-api-ref-close').addEventListener('click', destroy);
 
     document.body.appendChild(popup);

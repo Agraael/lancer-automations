@@ -13,16 +13,21 @@ async function _fetchPackItems()
         return _sharedPackItemCache;
 
     const items = [];
+
     for (const pack of game.packs)
     {
         if (pack.documentName !== "Item")
             continue;
+
         const index = await pack.getIndex({ fields: ["system.lid", "type", "system.actions", "system.ranks", "system.profiles", "system.trigger"] });
+
         for (const entry of index)
         {
             if (!entry.system?.lid)
                 continue;
+
             let actionCount = 0;
+
             if (entry.type === "npc_feature")
             {
                 if (entry.system?.trigger)
@@ -39,6 +44,7 @@ async function _fetchPackItems()
                         actionCount += (rank.actions?.length || 0);
                     });
                 }
+
                 if (entry.system?.profiles)
                 {
                     entry.system.profiles.forEach(profile =>
@@ -46,14 +52,17 @@ async function _fetchPackItems()
                         actionCount += (profile.actions?.length || 0);
                     });
                 }
+
                 if (entry.system?.actions)
                     actionCount += entry.system.actions.length;
             }
+
             if (actionCount === 0)
                 actionCount = 1;
             items.push({ name: entry.name, lid: entry.system.lid, type: entry.type, uuid: entry.uuid, actionCount });
         }
     }
+
     items.sort((a, b) => a.name.localeCompare(b.name));
     _sharedPackItemCache = items;
     return items;
@@ -69,6 +78,7 @@ export async function openItemBrowserDialog()
     const items = await _fetchPackItems();
 
     const sortedTypes = [...new Set(items.map(item => item.type))].sort();
+
     const typeOptions = sortedTypes.map(itemType =>
         `<option value="${itemType}">${game.i18n.localize(CONFIG.Item.typeLabels?.[itemType]) || itemType}</option>`
     ).join('');
@@ -80,6 +90,7 @@ export async function openItemBrowserDialog()
         const countLabel = item.actionCount > 1
             ? `<span style="font-size:0.8em;opacity:0.7;font-weight:normal;">(${item.actionCount} actions)</span>`
             : '';
+
         return `<div class="lancer-item-card item-browser-entry" data-lid="${item.lid}" data-uuid="${item.uuid}" data-type="${item.type}" style="margin-bottom:6px;padding:10px;">
             <div class="lancer-item-icon"><i class="fas fa-cube"></i></div>
             <div class="lancer-item-content" style="flex:1;min-width:0;">
@@ -157,13 +168,16 @@ export async function openItemBrowserDialog()
 
                     const slice = showAll ? matched : matched.slice(0, MAX_RESULTS);
                     const more = matched.length - slice.length;
+
                     const moreHtml = more > 0
                         ? `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more — keep typing to narrow down.</div>`
                         : '';
+
                     listContainer.html(slice.map(buildItemHtml).join('') + moreHtml);
                 };
 
                 let _debounceTimer = null;
+
                 const debouncedUpdate = () =>
                 {
                     clearTimeout(_debounceTimer);
@@ -185,6 +199,7 @@ export async function openItemBrowserDialog()
                 {
                     ev.preventDefault();
                     const uuid = $(ev.currentTarget).data('uuid');
+
                     if (uuid)
                     {
                         const item = /** @type {Item} */ (await fromUuid(uuid));
@@ -198,6 +213,7 @@ export async function openItemBrowserDialog()
                     ev.preventDefault();
                     ev.stopPropagation();
                     const lid = $(this).closest('.item-browser-entry').data('lid');
+
                     if (lid)
                     {
                         await navigator.clipboard.writeText(lid);
@@ -212,6 +228,7 @@ export async function openItemBrowserDialog()
             width: 500,
             classes: ["lancer-dialog-base", "lancer-item-browser-dialog", "lancer-no-title"]
         });
+
         dialog.render(true);
     });
 }

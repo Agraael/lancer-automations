@@ -39,13 +39,16 @@ export function _setEmTargetValue($select, ids)
     const el = $select[0];
     if (!el)
         return;
+
     const value = ids.join(', ');
+
     if (el.tagName === 'SELECT')
     {
         $select.find('option.em-multi-opt').remove();
         if (ids.length > 1)
             $select.prepend(`<option class="em-multi-opt" value="${value}">${ids.length} tokens</option>`);
     }
+
     $select.val(value).change();
 }
 
@@ -56,6 +59,7 @@ export function _resolveEmTarget(targetID)
         targetID = _emTargetIds(targetID)[0];
     if (!targetID)
         return { actor: null, token: null, item: null };
+
     if (typeof targetID === 'string' && targetID.includes('.'))
     {
         const doc = /** @type {any} */ (fromUuidSync(targetID));
@@ -63,6 +67,7 @@ export function _resolveEmTarget(targetID)
             return { actor: doc, token: null, item: doc };
         return { actor: doc?.documentName === 'Actor' ? doc : null, token: null, item: null };
     }
+
     const token = canvas.tokens.get(targetID);
     return { actor: token?.actor ?? null, token: token ?? null, item: null };
 }

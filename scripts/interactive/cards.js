@@ -3,10 +3,13 @@
 import { firstKeyFor } from "./keybindings.js";
 import { isWhiteIcon } from "../tah/item-helpers.js";
 import { createTokenMark } from "./target-shapes.js";
+import { startReactionCue } from "./reaction-cue.js";
+import { TG } from "./canvas-palette.js";
 import { focusTokens } from "../tools/auto-focus.js";
 
-import { localize } from '../tools/string-utils.js';
+import { localize, signedNumber } from '../tools/string-utils.js';
 import { htmlToElement } from '../tools/dom-utils.js';
+import { getFlowChain, getFlowBodyDepth, setStackWaiting } from './stack-indicator.js';
 // Info Card Helpers (internal)
 
 export function isWhiteSvgIcon(iconPath)
@@ -17,6 +20,7 @@ export function isWhiteSvgIcon(iconPath)
 const IMMOVABLE_ICON = 'modules/lancer-automations/icons/immovable.svg';
 
 const _ELEV_KEY_LABELS = { KeyQ: 'Q', KeyE: 'E', KeyA: 'A', KeyD: 'D', KeyW: 'W', KeyS: 'S' };
+
 function _elevationKeyLabels()
 {
     const labelOf = (keyCode) => _ELEV_KEY_LABELS[keyCode] ?? (keyCode ? keyCode.replace(/^Key/, '') : '');
@@ -34,6 +38,7 @@ export const _cardDefaults = {
     placeToken:  { title: 'LA.card.placeToken',     icon: "fas fa-user-plus" },
     placeZone:   { title: 'LA.card.placeZone',      icon: "fas fa-bullseye" },
     choiceCard:  { title: 'LA.card.choice',          icon: "fas fa-list" },
+    pickCard:    { title: 'LA.card.choice',          icon: "fas fa-list" },
     deploymentCard: { title: 'LA.card.deploy',      icon: "cci cci-deployable" },
     voteCard:    { title: 'LA.card.vote',            icon: "fas fa-poll" },
     haseContest: { title: 'LA.card.haseContest',    icon: "fas fa-dice-d20" },
@@ -45,8 +50,8 @@ export const _cardDefaults = {
 // Card queue: serialise all interactive cards so they never overwrite each other
 const INTER_CARD_DELAY_MS = 400;
 let _cardQueue = Promise.resolve();
-let _cardQueueTitles = []; // index 0 = active card, 1+ = pending
-let _serialActive = false;
+let _promptQueue = Promise.resolve();
+let _cardQueueTitles = [];
 
 // Card visual stack: sub-cards push on top, parent cards re-appear when child pops
 let _cardCallbackDepth = 0;  // >0 → inside a card callback, new cards push on stack
@@ -56,6 +61,7 @@ let _cardVisualStack = [];   // jQuery elements - topmost is visible
 export async function _runCardCallback(fn)
 {
     _cardCallbackDepth++;
+
     try
     {
         return await fn();
@@ -66,79 +72,46 @@ export async function _runCardCallback(fn)
     }
 }
 
-function _injectCardQueueStyles()
+let _hudZoneWatcher = null;
+
+function _moveCardsIntoHudZone()
 {
-    if (document.getElementById('la-card-queue-styles'))
+    const realHud = document.getElementById('hudzone');
+    if (!realHud)
         return;
-    const style = document.createElement('style');
-    style.id = 'la-card-queue-styles';
-    style.textContent = `
-        .la-card-queue-banner {
-            background: var(--primary-color, #b13a30);
-            color: #ffffff;
-            padding: 4px 12px;
-            font-family: inherit;
-            font-size: 0.82em;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            border-bottom: 1px solid #000;
-            cursor: help;
-        }
-        .la-card-queue-banner i {
-            color: #ffffff;
-            animation: la-card-queue-pulse 1.6s ease-in-out infinite;
-        }
-        .la-card-queue-banner b {
-            color: #ffeb99;
-            font-weight: 800;
-            margin-right: 2px;
-        }
-        @keyframes la-card-queue-pulse {
-            0%, 100% { opacity: 0.7; transform: rotate(0deg); }
-            50%      { opacity: 1.0; transform: rotate(180deg); }
-        }
-    `;
-    document.head.appendChild(style);
+
+    _hudZoneWatcher?.disconnect();
+    _hudZoneWatcher = null;
+    document.querySelectorAll('#la-hudzone > .la-info-card').forEach(card => realHud.appendChild(card));
+    _updatePendingBadge();
+}
+
+function _watchForHudZone()
+{
+    if (_hudZoneWatcher)
+        return;
+
+    _hudZoneWatcher = new MutationObserver(_moveCardsIntoHudZone);
+    _hudZoneWatcher.observe(document.body, { childList: true });
+}
+
+const _isPromptCard = cardEl => !!cardEl?.[0]?._laPrompt;
+const _topOfKind = prompt => _cardVisualStack.findLast(cardEl => _isPromptCard(cardEl) === prompt);
+const _claimedEscapes = new WeakSet();
+
+export function claimCardEscape(event, cardEl)
+{
+    if (event.key !== 'Escape' || _claimedEscapes.has(event) || !cardEl?.[0] || _cardVisualStack.at(-1)?.[0] !== cardEl[0])
+        return false;
+    _claimedEscapes.add(event);
+    return true;
 }
 
 export function _updatePendingBadge()
 {
-    _injectCardQueueStyles();
-    const hiddenAliveTitles = _cardVisualStack.slice(0, -1).map((cardEl) => cardEl[0]?._laCardTitle || 'Card');
-    const serialPendingTitles = _cardQueueTitles.slice(_serialActive ? 1 : 0);
-    const pendingTitles = [...hiddenAliveTitles, ...serialPendingTitles];
-    const banner = $(document.querySelectorAll('.la-info-card .la-card-queue-banner'));
-    if (pendingTitles.length > 0)
-    {
-        const pendingCount = pendingTitles.length;
-        const tooltip = pendingTitles.map((cardTitle, i) => `${i + 1}. ${cardTitle || 'Card'}`).join('<br>');
-        const html = `<i class="fas fa-hourglass-half"></i><span><b>${pendingCount}</b> card${pendingCount === 1 ? '' : 's'} queued</span>`;
-        if (banner.length)
-            banner.html(html).attr('data-tooltip', tooltip);
-        else
-        {
-            const div = document.createElement('div');
-            div.className = 'la-card-queue-banner';
-            div.dataset.tooltip = tooltip;
-            div.dataset.tooltipDirection = 'UP';
-            div.innerHTML = html;
-            // Prepend INSIDE the visible card body (before the lancer-header).
-            const cards = document.querySelectorAll('.la-info-card');
-            const lastCard = cards[cards.length - 1];
-            const hud = lastCard?.querySelector('.lancer-hud');
-            if (hud)
-                hud.prepend(div);
-            else
-                lastCard?.prepend(div);
-        }
-    }
-    else
-        banner.remove();
+    const waiting = _cardQueueTitles.filter(entry => !entry.active);
+    setStackWaiting('flowCards', waiting.filter(entry => entry.afterFlows).map(entry => entry.title || 'Card'));
+    setStackWaiting('cards', waiting.filter(entry => !entry.afterFlows).map(entry => entry.title || 'Card'));
 }
 
 export function _queueCardUrgent(fn, title = '')
@@ -146,46 +119,53 @@ export function _queueCardUrgent(fn, title = '')
     return _queueCard(fn, title, { urgent: true });
 }
 
-export function _queueCard(fn, title = '', { urgent = false } = {})
+export function _queueCard(fn, title = '', { urgent = false, afterFlows = false } = {})
 {
     // In-scope or urgent (reactive): push on visual stack, bypass serial queue
     if (urgent || _cardCallbackDepth > 0)
     {
-        if (_cardVisualStack.length > 0)
-            _cardVisualStack[_cardVisualStack.length - 1].hide();
+        _topOfKind(afterFlows)?.hide();
         const promise = fn();
         _updatePendingBadge();
         return promise;
     }
 
     // Out-of-scope: normal queue behaviour
-    const wasIdle = _cardQueueTitles.length === 0;
-    _cardQueueTitles.push(title);
+    const entry = { title, afterFlows, active: false };
+    const wasIdle = !_cardQueueTitles.some(other => other.afterFlows === afterFlows);
+    _cardQueueTitles.push(entry);
     _updatePendingBadge(); // badge on currently visible card, if any
-    const next = _cardQueue.then(async () =>
+
+    const flowLine = getFlowBodyDepth() > 0 ? null : getFlowChain();
+    const next = (afterFlows ? Promise.all([_promptQueue, flowLine]) : _cardQueue).then(async () =>
     {
         if (!wasIdle)
             await new Promise((resolve) => setTimeout(resolve, INTER_CARD_DELAY_MS));
-        while (_cardVisualStack.length > 0 && _cardVisualStack[_cardVisualStack.length - 1][0]?._laClose)
-            await _cardVisualStack[_cardVisualStack.length - 1][0]._laClose;
-        _serialActive = true;
+        while (_topOfKind(afterFlows))
+            await _topOfKind(afterFlows)[0]._laClose;
+        entry.active = true;
         const promise = fn(); // card DOM created synchronously here
         _updatePendingBadge(); // badge on newly shown card
         return promise;
     });
+
     const _onCardDone = () =>
     {
-        _serialActive = false;
-        _cardQueueTitles.shift();
+        _cardQueueTitles.splice(_cardQueueTitles.indexOf(entry), 1);
         _updatePendingBadge();
     };
-    _cardQueue = next.then(_onCardDone, _onCardDone);
+
+    if (afterFlows)
+        _promptQueue = next.then(_onCardDone, _onCardDone);
+    else
+        _cardQueue = next.then(_onCardDone, _onCardDone);
     return next;
 }
 
 export function _createInfoCard(type, opts)
 {
     const defaults = _cardDefaults[type] || { title: 'LA.card.info', icon: 'fas fa-info' };
+
     const {
         title = localize(defaults.title),
         icon = defaults.icon,
@@ -214,23 +194,27 @@ export function _createInfoCard(type, opts)
     });
 
     let infoRowHtml = '';
-    if (type !== "choiceCard" && type !== "deploymentCard" && type !== "voteCard" && type !== "haseContest" && type !== "forceCheck" && type !== "rollCard")
+
+    if (type !== "choiceCard" && type !== "pickCard" && type !== "deploymentCard" && type !== "voteCard" && type !== "haseContest" && type !== "forceCheck" && type !== "rollCard")
     {
         let infoItems = [];
         const isAoePattern = pattern === 'blast' || pattern === 'burst' || pattern === 'cone' || pattern === 'line';
         const shownRange = range !== null ? range : (isAoePattern ? areaRange : null);
+
         if (shownRange !== null && shownRange !== undefined)
             infoItems.push(`<span style="white-space:nowrap"><b>Range:</b> ${shownRange}</span>`);
         if (count !== -1)
             infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> ${count}</span>`);
         else
             infoItems.push(`<span style="white-space:nowrap"><b>Count:</b> &infin;</span>`);
+
         if (type === "placeZone")
         {
             if (zoneType)
                 infoItems.push(`<span style="white-space:nowrap"><b>Type:</b> ${zoneType}</span>`);
             infoItems.push(`<span style="white-space:nowrap"><b>Size:</b> ${zoneSize}</span>`);
         }
+
         if (infoItems.length > 0)
             infoRowHtml = `<label class="flexrow la-info-row lancer-border-primary">${infoItems.join('  ')}</label>`;
     }
@@ -240,6 +224,7 @@ export function _createInfoCard(type, opts)
         : '';
 
     let dynamicHtml = "";
+
     if (type === "chooseToken")
     {
         const selectionCheckbox = opts.hasSelection ? `
@@ -247,20 +232,23 @@ export function _createInfoCard(type, opts)
                 <input type="checkbox" data-role="selection-toggle" checked style="margin:0;" />
                 <span>Restrict to selection</span>
             </label>` : '';
+
         const isAreaPattern = opts.pattern === 'blast' || opts.pattern === 'burst' || opts.pattern === 'cone' || opts.pattern === 'line';
         const showAutoElev = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line'; // burst pins elevation to its host token
         const showQEHint = opts.pattern === 'blast' || opts.pattern === 'cone' || opts.pattern === 'line';
         const showRotateHint = opts.pattern === 'cone' || opts.pattern === 'line';
         const showTiltHint = opts.pattern === 'line';
         const elevKeys = _elevationKeyLabels();
+
         const losToggleHtml = opts.showLosToggle ? `
             <label data-role="los-wrap" style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Range shown with line of sight">
                 <input type="checkbox" data-role="los-toggle" ${opts.losOn === false ? '' : 'checked'} style="margin:0;">
                 <span>Line of sight</span>
             </label>` : '';
+
         const blastSection = isAreaPattern ? `
             <h3 class="la-section-header lancer-border-primary">Placed Areas</h3>
-            <div class="la-area-modes" data-role="area-modes" style="display:flex;gap:14px;align-items:center;padding:4px 4px 6px 4px;border-bottom:1px solid #ccc;margin-bottom:6px;color:#fff;font-size:11.5px;flex-wrap:wrap;">
+            <div class="la-area-modes" data-role="area-modes" style="display:flex;gap:14px;align-items:center;padding:4px 4px 6px 4px;border-bottom:1px solid #ccc;margin-bottom:6px;font-size:11.5px;flex-wrap:wrap;">
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
                     <input type="checkbox" data-role="elevation-aware-toggle" style="margin:0;">
                     <span>Elevation aware</span>
@@ -275,15 +263,17 @@ export function _createInfoCard(type, opts)
                 </label>
                 ${losToggleHtml}
                 ${showQEHint ? `<span style="margin-left:auto;color:#666;font-size:10.5px;font-style:italic;">${elevKeys.down}/${elevKeys.up}: shift elevation</span>` : ''}
-                ${showRotateHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">Ctrl+wheel: rotate</span>` : ''}
+                ${showRotateHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">Drag: aim</span>` : ''}
                 ${showTiltHint ? `<span style="color:#666;font-size:10.5px;font-style:italic;">${elevKeys.tiltDown}/${elevKeys.tiltUp}: tilt</span>` : ''}
             </div>
             <div class="la-placed-areas" data-role="area-list">
                 <div class="la-empty-state">No areas placed</div>
             </div>` : '';
+
         const losRowHtml = (!isAreaPattern && losToggleHtml)
-            ? `<div style="display:flex;gap:12px;align-items:center;color:#fff;font-size:11.5px;margin-bottom:4px;">${losToggleHtml}</div>`
+            ? `<div style="display:flex;gap:12px;align-items:center;font-size:11.5px;margin-bottom:4px;">${losToggleHtml}</div>`
             : '';
+
         dynamicHtml = `
             ${selectionCheckbox}
             ${blastSection}
@@ -305,6 +295,7 @@ export function _createInfoCard(type, opts)
         const selectorHtml = opts.isMultiActor ? `
             <h3 class="la-section-header lancer-border-primary">Select Actor</h3>
             <div class="la-actor-selector" data-role="actor-selector" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px;"></div>` : '';
+
         dynamicHtml = `
             ${selectorHtml}
             <h3 class="la-section-header lancer-border-primary">Tokens to Place</h3>
@@ -330,6 +321,14 @@ export function _createInfoCard(type, opts)
         dynamicHtml = `
             ${opts.disabled ? '' : `<h3 class="la-section-header lancer-border-primary">${modeLabel}</h3>`}
             <div class="la-choice-list" data-role="choice-list"></div>`;
+    }
+    else if (type === "pickCard")
+    {
+        dynamicHtml = `
+            <div class="la-pick-head" data-role="pick-head"></div>
+            ${opts.hint ? `<div class="la-pick-hint"><i class="fas fa-mouse-pointer"></i> ${opts.hint}</div>` : ''}
+            <div class="la-choice-list la-pick-list" data-role="pick-list"></div>
+            ${opts.foot ? `<div class="la-info-description la-pick-foot">${opts.foot}</div>` : ''}`;
     }
     else if (type === "deploymentCard")
     {
@@ -358,6 +357,7 @@ export function _createInfoCard(type, opts)
                 </button>
                 <select data-role="skill" style="width:100%;padding:4px;" disabled></select>
             </div>`;
+
         dynamicHtml = `
             <div style="display:flex;gap:8px;align-items:center;">
                 ${contestCol('a', 'Contender A')}
@@ -376,6 +376,7 @@ export function _createInfoCard(type, opts)
         const listSection = opts.isMulti ? `
             <h3 class="la-section-header lancer-border-primary">Tokens to Move</h3>
             <div class="la-selected-targets" data-role="token-list"></div>` : '';
+
         dynamicHtml = `
             ${listSection}
             <h3 class="la-section-header lancer-border-primary">Destination</h3>
@@ -472,8 +473,11 @@ export function _createInfoCard(type, opts)
             </div>`;
     }
 
-    const showConfirm = type !== "choiceCard" && type !== "voteCard" && type !== "haseContest" && type !== "forceCheck" && type !== "rollCard";
+    const showConfirm = type === "pickCard"
+        ? !!opts.confirmText
+        : type !== "choiceCard" && type !== "voteCard" && type !== "haseContest" && type !== "forceCheck" && type !== "rollCard";
     const showConfirmVote = type === "voteCard" && opts.isCreator;
+    const cueCard = !!originToken;
 
     const html = `
     <div class="component grid-enforcement la-info-card" data-card-type="${type}">
@@ -486,7 +490,7 @@ export function _createInfoCard(type, opts)
                 </div>
                 ${(originToken || relatedToken) ? `
                     <div style="display:flex;align-items:center;gap:3px;margin-left:auto;flex-shrink:0;">
-                        ${originToken ? `<img data-role="origin-token" src="${originToken.document?.texture?.src ?? originToken.texture?.src ?? ''}" title="Origin Token" style="width:38px;height:38px;object-fit:contain;border:2px solid #ff6400;cursor:pointer;border-radius:3px;flex-shrink:0;">` : ''}
+                        ${originToken ? `<img data-role="origin-token"${cueCard ? ' class="la-card-origin-pulse"' : ''} src="${originToken.document?.texture?.src ?? originToken.texture?.src ?? ''}" title="Origin Token" style="width:38px;height:38px;object-fit:contain;border:2px solid #ff6400;cursor:pointer;border-radius:3px;flex-shrink:0;">` : ''}
                         ${(originToken && relatedToken) ? `<span style="color:#aaa;font-size:0.8em;">→</span>` : ''}
                         ${relatedToken ? `<img data-role="related-token" src="${relatedToken.document?.texture?.src ?? relatedToken.texture?.src ?? ''}" title="Related Token" style="width:38px;height:38px;object-fit:contain;border:2px solid #4488ff;cursor:pointer;border-radius:3px;flex-shrink:0;">` : ''}
                     </div>` : ''}
@@ -496,9 +500,9 @@ export function _createInfoCard(type, opts)
                 ${descHtml}
                 ${dynamicHtml}
                 <div class="dialog-buttons flexrow">
-                    ${showConfirm ? `<button class="lancer-button lancer-secondary dialog-button submit default" data-action="confirm" type="button"><i class="fas fa-check"></i> Confirm</button>` : ''}
+                    ${showConfirm ? `<button class="lancer-button lancer-secondary dialog-button submit default" data-action="confirm" type="button"><i class="${opts.confirmIcon ?? 'fas fa-check'}"></i> ${opts.confirmText || 'Confirm'}</button>` : ''}
                     ${showConfirmVote ? `<button class="lancer-button lancer-secondary dialog-button submit default" data-action="confirm-vote" type="button"><i class="fas fa-check-double"></i> Confirm Vote</button>` : ''}
-                    <button class="dialog-button cancel" data-action="cancel" type="button"><i class="fas fa-times"></i> Cancel</button>
+                    <button class="dialog-button cancel" data-action="cancel" type="button"><i class="${opts.cancelIcon ?? 'fas fa-times'}"></i> ${opts.cancelText || 'Cancel'}</button>
                 </div>
             </div>
         </div>
@@ -506,27 +510,26 @@ export function _createInfoCard(type, opts)
 
     // v13: #hudzone is created lazily (only with a Lancer HUD shown); fall back to #la-hudzone so cards always have a container.
     let container = $(document.querySelector('#hudzone'));
+
     if (!container.length)
     {
         let laHud = $(document.querySelector('#la-hudzone'));
+
         if (!laHud.length)
         {
             laHud = $(htmlToElement('<div id="la-hudzone" class="lancer-hud-zone" style="position:fixed;bottom:0;right:var(--sidebar-width,38px);z-index:70;display:flex;flex-direction:column-reverse;align-items:flex-end;pointer-events:none;"></div>'));
             laHud.appendTo(document.body);
         }
+
         container = laHud;
     }
+
     container.append(html);
     const cardEl = $(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.la-info-card'))).last();
 
     // Re-parent the card into Lancer's real #hudzone if it appears later (DAMAGE ROLL / ATTACK HUD opens).
-    const reparentHook = Hooks.on('renderApplication', () =>
-    {
-        const realHud = document.getElementById('hudzone');
-        if (realHud && cardEl[0].parentElement?.id !== 'hudzone')
-            realHud.appendChild(cardEl[0]);
-    });
-    cardEl[0]._laReparentHook = reparentHook;
+    if (cardEl[0].parentElement?.id !== 'hudzone')
+        _watchForHudZone();
 
     cardEl.find('[data-action="confirm"]').on('click', () => onConfirm());
     cardEl.find('[data-action="confirm-vote"]').on('click', () => opts.onConfirmVote?.());
@@ -545,6 +548,7 @@ export function _createInfoCard(type, opts)
     {
         opts.onToggleLos?.(/** @type {HTMLInputElement} */ (this).checked);
     });
+
     if (originToken)
     {
         cardEl.find('[data-role="origin-token"]').on('click', () =>
@@ -552,6 +556,7 @@ export function _createInfoCard(type, opts)
             canvas.animatePan(originToken.center);
         });
     }
+
     if (relatedToken)
     {
         cardEl.find('[data-role="related-token"]').on('click', () =>
@@ -573,12 +578,16 @@ export function _createInfoCard(type, opts)
     );
     setTimeout(() => cardEl.css('transform', 'translateY(0)'), 10);
 
-    cardEl[0]._laClose = new Promise((resolve) => { cardEl[0]._laCloseResolve = resolve; });
-    cardEl[0]._laCardTitle = title;
-    if (relatedToken)
-        cardEl[0]._laRelatedMark = createTokenMark(relatedToken);
+    const cardNode = /** @type {any} */ (cardEl[0]);
+    cardNode._laClose = new Promise((resolve) => { cardNode._laCloseResolve = resolve; });
+    cardNode._laCardTitle = title;
+    cardNode._laPrompt = type === 'pickCard';
+    if (cueCard)
+        cardNode._laReactionCue = startReactionCue(originToken, relatedToken);
+    else if (relatedToken)
+        cardNode._laRelatedMark = createTokenMark(relatedToken, TG.cardRelated);
     _cardVisualStack.push(cardEl);
-    focusTokens('cards', [originToken, relatedToken]);
+    focusTokens('cards', [originToken, relatedToken], { avoidRect: cardEl[0].getBoundingClientRect() });
     return cardEl;
 }
 
@@ -593,6 +602,7 @@ export function _updateInfoCard(cardEl, type, cardState)
         if (cardState.pattern === 'blast' || cardState.pattern === 'burst' || cardState.pattern === 'cone' || cardState.pattern === 'line')
         {
             const modesEl = cardEl.find('[data-role="area-modes"]');
+
             if (modesEl.length)
             {
                 const elevAware = !!cardState.elevationAware;
@@ -609,9 +619,11 @@ export function _updateInfoCard(cardEl, type, cardState)
                 modesEl.find('[data-role="propagation-wrap"]').css('opacity', elevAware ? 1 : 0.5);
                 $prop.off('change').on('change', () => cardState.onTogglePropagation?.());
             }
+
             const areaEl = cardEl.find('[data-role="area-list"]');
             areaEl.empty();
             const placements = cardState.placements ?? [];
+
             if (placements.length === 0)
                 areaEl.html('<div class="la-empty-state">No areas placed</div>');
             else
@@ -621,6 +633,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                     : cardState.pattern === 'cone' ? 'systems/lancer/assets/icons/aoe_cone.svg'
                         : cardState.pattern === 'line' ? 'systems/lancer/assets/icons/aoe_line.svg'
                             : 'systems/lancer/assets/icons/aoe_blast.svg';
+
                 for (const placement of placements)
                 {
                     const tokensHtml = placement.candidates.map(candidate =>
@@ -635,22 +648,27 @@ export function _updateInfoCard(cardEl, type, cardState)
                                 <span style="${candidate.filtered ? 'text-decoration:line-through;' : ''}">${candidate.name}</span>
                             </label>`;
                     }).join('');
+
                     const filterToggleHtml = placement.hasFiltered ? `
                         <label style="display:flex;align-items:center;gap:4px;padding:2px 4px;font-size:10.5px;color:#666;cursor:pointer;">
                             <input type="checkbox" data-role="area-filter-toggle" ${placement.ignoreFilter ? 'checked' : ''} style="margin:0;">
                             <span>Ignore filter</span>
                         </label>` : '';
+
                     const candidatesHtml = placement.candidates.length === 0
                         ? '<div style="font-size:10.5px;color:#888;font-style:italic;padding:2px 4px;">No tokens caught</div>'
                         : tokensHtml;
+
                     const oorWarn = placement.centerOutOfRange
                         ? `<div style="font-size:10.5px;color:#b34700;font-style:italic;margin-bottom:3px;"><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>Area center out of range</div>`
                         : '';
+
                     const elevBadge = cardState.elevationAware
-                        ? `<span style="font-size:10.5px;color:#555;padding:0 4px;" title="Q/E to adjust">Elev ${placement.elevation}${placement.elevationOffset ? ` (${placement.elevationOffset > 0 ? '+' : ''}${placement.elevationOffset})` : ''}</span>`
+                        ? `<span style="font-size:10.5px;color:#555;padding:0 4px;" title="Q/E to adjust">Elev ${placement.elevation}${placement.elevationOffset ? ` (${signedNumber(placement.elevationOffset)})` : ''}</span>`
                         : '';
+
                     areaEl.append(`
-                        <div class="la-placed-area" data-area-id="${placement.id}" style="border:1px solid ${placement.centerOutOfRange ? '#ffaa00' : '#aaa'};border-radius:3px;padding:4px;margin-bottom:4px;background:${placement.centerOutOfRange ? '#fff6e0' : '#fafafa'};color:#111;">
+                        <div class="la-placed-area" data-area-id="${placement.id}" style="border:1px solid ${placement.centerOutOfRange ? '#ffaa00' : '#aaa'};border-radius:3px;padding:4px;margin-bottom:4px;background:${placement.centerOutOfRange ? 'color-mix(in srgb, #ffaa00 15%, var(--background-color, #ededed))' : 'color-mix(in srgb, var(--background-color, #ededed), var(--dark-text, #000) 7%)'};color:var(--dark-text, #111);">
                             <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                                 <img src="${aoeIconSrc}" alt="${cardState.pattern}" style="width:16px;height:16px;object-fit:contain;flex-shrink:0;">
                                 <span style="flex:1;font-weight:600;font-size:12px;color:#111;">${placement.label}</span>
@@ -663,6 +681,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                             ${filterToggleHtml}
                         </div>`);
                 }
+
                 areaEl.find('.la-placed-area').each(function ()
                 {
                     const $area = $(this);
@@ -706,13 +725,15 @@ export function _updateInfoCard(cardEl, type, cardState)
                 const imgSrc = token.document.texture.src;
                 const name = token.name;
                 const warns = cardState.warnings?.[token.id] ?? [];
+
                 const warnHtml = warns.length > 0
                     ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
                            ${warns.map(warn => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${warn}</div>`).join('')}
                        </div>`
                     : '';
+
                 listEl.append(`
-                    <div class="la-selected-target" data-token-id="${token.id}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
+                    <div class="la-selected-target" data-token-id="${token.id}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:color-mix(in srgb, #ffaa00 15%, var(--background-color, #ededed));' : ''}">
                         <img src="${imgSrc}" alt="${name}">
                         <span class="la-selected-target-name">${name}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
@@ -738,6 +759,7 @@ export function _updateInfoCard(cardEl, type, cardState)
     else if (type === "placeZone")
     {
         const placeBtn = cardEl.find('[data-role="place-more"]');
+
         if (placeBtn.length)
         {
             const canPlaceMore = cardState.canPlaceMore !== false;
@@ -748,6 +770,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                     cardState.onPlaceMore?.();
             });
         }
+
         const listEl = cardEl.find('[data-role="zone-list"]');
         listEl.empty();
 
@@ -790,9 +813,11 @@ export function _updateInfoCard(cardEl, type, cardState)
                 const borderColor = isActive ? '#ff6400' : '#555';
                 const opacity = isActive ? '1' : '0.6';
                 const imgSrc = entry.texture || entry.actor?.img || '';
+
                 const imgHtml = imgSrc
                     ? `<img src="${imgSrc}" style="width:32px; height:32px; object-fit:contain;">`
                     : `<i class="fas fa-user" style="font-size:20px; color:#ccc;"></i>`;
+
                 selectorEl.append(`
                     <div class="la-actor-entry" data-actor-index="${idx}" title="${entry.name}"
                          style="cursor:pointer; padding:3px; border:2px solid ${borderColor}; border-radius:4px;
@@ -822,20 +847,24 @@ export function _updateInfoCard(cardEl, type, cardState)
                 const entry = cardState.actorEntries?.[placement.actorIndex ?? 0];
                 const imgSrc = entry?.texture || "";
                 const tokenName = entry?.name || `Token ${idx + 1}`;
+
                 const imgHtml = imgSrc
                     ? `<img src="${imgSrc}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
                     : `<i class="fas fa-user" style="color:#ff6400; font-size:16px; margin-right:8px;"></i>`;
+
                 const warns = cardState.warnings?.[idx] ?? [];
+
                 const warnHtml = warns.length > 0
                     ? `<div class="la-target-warnings" style="width:100%;margin-top:3px;font-size:10.5px;color:#b34700;font-style:italic;">
                            ${warns.map(warn => `<div><i class="fas fa-exclamation-triangle" style="margin-right:4px;"></i>${warn}</div>`).join('')}
                        </div>`
                     : '';
+
                 const elev = typeof placement.elevation === 'number' ? placement.elevation : 0;
                 const elevKeys = _elevationKeyLabels();
                 const elevHtml = `<span class="la-selected-target-elev" title="Elevation (use ${elevKeys.down} / ${elevKeys.up} keys)" style="margin-left:auto; margin-right:6px; font-size:0.85em; opacity:0.9; white-space:nowrap;"><i class="fas fa-arrows-alt-v"></i> ${elev}</span>`;
                 listEl.append(`
-                    <div class="la-selected-target" data-placement-index="${idx}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:#fff6e0;' : ''}">
+                    <div class="la-selected-target" data-placement-index="${idx}" style="flex-wrap:wrap;${warns.length > 0 ? 'border-color:#ffaa00;background:color-mix(in srgb, #ffaa00 15%, var(--background-color, #ededed));' : ''}">
                         ${imgHtml}
                         <span class="la-selected-target-name">${tokenName} #${idx + 1}</span>
                         ${elevHtml}
@@ -875,6 +904,7 @@ export function _updateInfoCard(cardEl, type, cardState)
                     <span class="la-kb-name" style="display:flex; align-items:center;">${token.name}${immovableIcon}</span>
                     <span class="la-kb-status">${statusIcon}</span>
                 </div>`;
+
             listEl.append(itemHtml);
         });
 
@@ -895,14 +925,17 @@ export function _updateInfoCard(cardEl, type, cardState)
             const isDone = cardState.chosenSet?.has(idx);
             const doneClass = isDone ? "la-choice-done" : "";
             const disabledClass = (cardState.disabled || choice.disabled) ? "la-choice-disabled" : "";
+
             const iconHtml = choice.icon
                 ? (/[./]/.test(choice.icon)
                     ? `<img class="la-hud-icon--${isWhiteSvgIcon(choice.icon) ? 'white' : 'dark'}" src="${choice.icon}" style="width:18px;height:18px;object-fit:contain;border:none;margin-right:8px;flex-shrink:0;transform:scale(1.25);transform-origin:center;filter:${isWhiteSvgIcon(choice.icon) ? 'invert(1)' : 'none'};">`
                     : `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`)
                 : '';
+
             const statusHtml = isDone
                 ? '<span class="la-choice-status"><i class="fas fa-check"></i></span>'
                 : '';
+
             const titleAttr = choice.disabled && choice.disabledReason ? ` title="${choice.disabledReason}"` : '';
 
             listEl.append(`
@@ -935,15 +968,19 @@ export function _updateInfoCard(cardEl, type, cardState)
             cardState.deployables.forEach((deployable, idx) =>
             {
                 const disabledClass = deployable.disabled ? "la-choice-done" : "";
+
                 const imgHtml = deployable.img
                     ? `<img src="${deployable.img}" style="width:24px; height:24px; object-fit:contain; border:1px solid #000; margin-right:8px;">`
                     : `<i class="cci cci-deployable" style="font-size:16px; margin-right:8px;"></i>`;
+
                 const usesHtml = deployable.usesText
                     ? `<span style="font-size:0.8em; color:#ff6400; margin-left:auto; white-space:nowrap;"><i class="fas fa-battery-three-quarters"></i> ${deployable.usesText}</span>`
                     : '';
+
                 const chargesHtml = deployable.chargesText
                     ? `<span style="font-size:0.8em; color:#4488ff; margin-left:${deployable.usesText ? '6px' : 'auto'}; white-space:nowrap;"><i class="fas fa-bolt"></i> ${deployable.chargesText}</span>`
                     : '';
+
                 const badgeHtml = deployable.fromCompendium
                     ? `<span style="font-size:0.65em; background:#ff6400; color:white; padding:1px 4px; border-radius:2px; margin-left:6px;">COMP</span>`
                     : '';
@@ -968,15 +1005,18 @@ export function _updateInfoCard(cardEl, type, cardState)
     else if (type === "teleport")
     {
         const listEl = cardEl.find('[data-role="token-list"]');
+
         if (listEl.length && cardState.tokens)
         {
             listEl.empty();
             cardState.tokens.forEach((token, idx) =>
             {
                 const isActive = idx === cardState.activeIndex;
+
                 const statusIcon = token.planned
                     ? '<i class="fas fa-check" style="color:var(--lancer-color-green, #3a9e6e);"></i>'
                     : '<i class="fas fa-arrow-right" style="opacity:0.6;"></i>';
+
                 listEl.append(`
                     <div class="la-selected-target" data-token-index="${idx}" style="${isActive ? 'border-color:#ff6400; background:rgba(255,100,0,0.12);' : ''}">
                         <img src="${token.img}" alt="${token.name}">
@@ -989,17 +1029,21 @@ export function _updateInfoCard(cardEl, type, cardState)
                 cardState.onSelectToken?.(Number($(this).data('token-index')));
             });
         }
+
         const destEl = cardEl.find('[data-role="dest-info"]');
         if (!destEl.length)
             return;
+
         if (!cardState.selectedPos)
         {
             destEl.html('<div class="la-empty-state">No destination selected</div>');
             return;
         }
+
         const elevation = typeof cardState.selectedPos.elevation === 'number'
             ? ` <span style="opacity:0.8;">(elev ${cardState.selectedPos.elevation})</span>`
             : '';
+
         destEl.html(`
             <div class="la-selected-target">
                 <i class="fas fa-map-marker-alt" style="color:var(--primary-color); font-size:16px;"></i>
@@ -1017,9 +1061,11 @@ export function _updateInfoCard(cardEl, type, cardState)
         choices.forEach((choice, idx) =>
         {
             const isMyVote = myVote === idx;
+
             const iconHtml = choice.icon
                 ? `<i class="${choice.icon}" style="font-size:16px; margin-right:8px;"></i>`
                 : '';
+
             const checkHtml = isMyVote
                 ? '<span class="la-choice-status" style="color:#ff6400;"><i class="fas fa-check"></i></span>'
                 : '';
@@ -1032,6 +1078,7 @@ export function _updateInfoCard(cardEl, type, cardState)
             // Creators and non-hidden voters see all counts; hidden voters see only their own.
             let countBadge = '';
             const count = voteCounts[idx] ?? 0;
+
             if (isCreator || !hidden)
                 countBadge = `<span style="font-size:0.78em; font-weight:600; color:#cc5200; background:rgba(255,100,0,0.12); border:1px solid rgba(255,100,0,0.3); border-radius:3px; padding:1px 6px; margin-left:auto; white-space:nowrap;">${count}</span>`;
             else if (isMyVote)
@@ -1070,16 +1117,17 @@ export function _updateInfoCard(cardEl, type, cardState)
 }
 
 // Capture-phase Escape that cancels the card, unless an open picker owns the key.
-export function bindCardEscape(onCancel, isPickerActive)
+export function bindCardEscape(onCancel, isPickerActive, getCardEl)
 {
     const keyHandler = (event) =>
     {
-        if (event.key !== 'Escape' || isPickerActive?.())
+        if (event.key !== 'Escape' || isPickerActive?.() || !claimCardEscape(event, getCardEl()))
             return;
         event.preventDefault();
         event.stopPropagation();
         onCancel();
     };
+
     document.addEventListener('keydown', keyHandler, true);
     return () => document.removeEventListener('keydown', keyHandler, true);
 }
@@ -1089,24 +1137,21 @@ export function _removeInfoCard(cardEl)
     if (!cardEl || cardEl.length === 0)
         return;
 
-    // Tear down the reparent hook so it doesn't leak.
-    const reparentHook = cardEl[0]?._laReparentHook;
-    if (reparentHook)
-    {
-        Hooks.off('renderApplication', reparentHook);
-        cardEl[0]._laReparentHook = null;
-    }
     cardEl[0]._laRelatedMark?.destroy();
     cardEl[0]._laRelatedMark = null;
+    cardEl[0]._laReactionCue?.end();
+    cardEl[0]._laReactionCue = null;
 
+    cardEl[0]._laClosing = true;
     const stackIdx = _cardVisualStack.findIndex((stackEl) => stackEl[0] === cardEl[0]);
     if (stackIdx >= 0)
         _cardVisualStack.splice(stackIdx, 1);
     cardEl[0]._laCloseResolve?.();
 
     // Reveal parent card immediately (appears behind the fade-out for a cross-fade)
-    if (_cardVisualStack.length > 0)
-        _cardVisualStack[_cardVisualStack.length - 1].show();
+    _topOfKind(_isPromptCard(cardEl))?.show();
+
+    _updatePendingBadge();
 
     cardEl.css('transform', 'translateY(30px)');
     cardEl.animate(

@@ -4,9 +4,9 @@
 
 Lancer Automations only supports **isometric-perspective**.
 
-**grape_juice-isometrics** isn't supported and isn't tested. It may work, but issues specific to it won't be handled unless they're proven unrelated to it. Support may come later, it's not a priority right now.
+**grape_juice-isometrics** isn't supported and isn't tested. It may work, but I won't look at issues that come up with it unless they turn out to be unrelated. Support may come later, it's not a priority right now.
 
-It re-aligns its own overlays (stat bars, labels, target reticle, etc.) so they sit upright over the projected token instead of the flat grid cell, and on Isometric Perspective it animates a token's elevation over terrain.
+Lancer Automations puts its own overlays (stat bars, labels, target reticle, etc.) upright over the token as you see it in iso, instead of on the flat grid cell. On Isometric Perspective it also animates a token's elevation over terrain.
 
 <p align="center"><img src="../img/iso-action.png" width="50%"/></p>
 
@@ -14,7 +14,7 @@ It re-aligns its own overlays (stat bars, labels, target reticle, etc.) so they 
 
 ## Settings
 
-**Isometric → Isometric Integrations**. The tab is always there, but with neither isometric module active it renders greyed out with a tooltip naming what to install.
+**Isometric → Isometric Integrations**. The tab is always there. With neither isometric module active it's greyed out, and its tooltip says what to install.
 
 <p align="center"><img src="../img/iso-settings.png" width="50%"/></p>
 

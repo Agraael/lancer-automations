@@ -16,7 +16,8 @@ const SEEN_SETTING = "seenNewsIds";
 const NEWS_CONSENT_KEY = "dataConsent";
 const NEWS_PENDING = "pending";
 const POLL_RESPONDED_SETTING = "respondedPollIds";
-const HISTORY_HINT = `<p style="margin-top: 12px; padding: 8px 10px; background: rgba(120,46,34,0.08); border-left: 3px solid #782e22; border-radius: 2px; font-size: 0.9em;">
+
+const HISTORY_HINT = `<p style="margin-top: 12px; padding: 8px 10px; background: color-mix(in srgb, var(--la-accent) 8%, transparent); border-left: 3px solid var(--la-accent); border-radius: 2px; font-size: 0.9em;">
     <i class="fas fa-info-circle"></i> Past news and release notes are available under
     <b>Configure Settings → Module Settings → Lancer Automations → Tools → News & Releases</b>.
 </p>`;
@@ -31,6 +32,7 @@ function _getRole()
     }
     catch
     { /* not registered yet */ }
+
     return null;
 }
 
@@ -50,6 +52,7 @@ async function _fetchNews()
             console.warn(`lancer-automations | News fetch failed (${url}):`, err);
         }
     }
+
     return null;
 }
 
@@ -86,11 +89,13 @@ function _filterEntries(entries, { seen, role, version, isGM })
             return false;
         if (entry.gmOnly && !isGM)
             return false;
+
         if (Array.isArray(entry.roles) && entry.roles.length)
         {
             if (!role || !entry.roles.includes(role))
                 return false;
         }
+
         return true;
     });
 }
@@ -101,29 +106,34 @@ function _renderLinkCard(entry)
 {
     if (!entry?.link)
         return "";
+
     let host = "";
+
     try
     {
         host = new URL(entry.link).hostname.replace(/^www\./, "");
     }
     catch
     { /* keep it blank on a malformed url */ }
+
     const href = _escAttr(entry.link);
     const label = _escAttr(entry.linkLabel || entry.title || entry.link);
     const note = entry.linkNote ? `<div style="font-size:0.85em; opacity:0.8; margin-top:2px;">${_escAttr(entry.linkNote)}</div>` : "";
     const hostLine = host ? `<div style="font-size:0.78em; opacity:0.6; margin-top:3px;">${_escAttr(host)}</div>` : "";
+
     const thumb = entry.image
         ? `<img src="${_escAttr(entry.image)}" alt="" onerror="this.style.display='none'"
-                style="width:96px; height:96px; object-fit:cover; border-radius:2px; flex:0 0 auto; border:1px solid rgba(120,46,34,0.25);">`
+                style="width:96px; height:96px; object-fit:cover; border-radius:2px; flex:0 0 auto; border:1px solid color-mix(in srgb, var(--la-accent) 25%, transparent);">`
         : "";
+
     return `
         <a href="${href}" target="_blank" rel="noopener"
            style="display:flex; gap:10px; align-items:center; margin-top:10px; padding:8px;
-                  border:1px solid rgba(120,46,34,0.35); border-left-width:3px; border-radius:2px;
-                  background:rgba(120,46,34,0.06); text-decoration:none; color:inherit;">
+                  border:1px solid color-mix(in srgb, var(--la-accent) 35%, transparent); border-left-width:3px; border-radius:2px;
+                  background:color-mix(in srgb, var(--la-accent) 6%, transparent); text-decoration:none; color:inherit;">
             ${thumb}
             <div style="min-width:0;">
-                <div style="font-weight:bold; color:#782e22;">${label}</div>
+                <div style="font-weight:bold; color:var(--la-accent-text);">${label}</div>
                 ${note}
                 ${hostLine}
             </div>
@@ -136,8 +146,8 @@ function _renderEntry(entry)
     const dateLine = entry.date ? `<div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${entry.date}</div>` : "";
     const body = Array.isArray(entry.body) ? entry.body.join("") : (entry.body ?? "");
     return `
-        <div style="border-bottom: 1px solid rgba(120,46,34,0.2); padding: 10px 4px;">
-            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${entry.title ?? ""}</div>
+        <div style="border-bottom: 1px solid color-mix(in srgb, var(--la-accent) 20%, transparent); padding: 10px 4px;">
+            <div style="font-weight: bold; font-size: 1.1em; color: var(--la-accent-text);">${entry.title ?? ""}</div>
             ${dateLine}
             <div style="line-height: 1.5;">${body}</div>
             ${_renderLinkCard(entry)}
@@ -151,9 +161,11 @@ function _pollState(entry)
     const poll = entry?.poll;
     if (!poll?.tableName || !Array.isArray(poll.fields) || poll.fields.length === 0)
         return null;
+
     const now = new Date();
     const expired = poll.expiresAt ? (new Date(poll.expiresAt) < now) : false;
     let responded = false;
+
     try
     {
         const list = getModuleSetting(POLL_RESPONDED_SETTING) || [];
@@ -161,6 +173,7 @@ function _pollState(entry)
     }
     catch
     { /* not registered yet */ }
+
     return { poll, expired, responded };
 }
 
@@ -169,10 +182,12 @@ function _renderField(field)
     const name = String(field?.name ?? "").trim();
     if (!name)
         return "";
+
     const label = String(field?.label ?? name);
     const placeholderAttr = field?.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : "";
     const required = field?.required ? "required" : "";
     let input;
+
     if (field?.type === "select" && Array.isArray(field.options))
     {
         const opts = field.options.map(opt =>
@@ -181,6 +196,7 @@ function _renderField(field)
             const optLabel = typeof opt === "object" ? String(opt.label ?? opt.value ?? "") : String(opt);
             return `<option value="${escapeHtml(value)}">${optLabel}</option>`;
         }).join("");
+
         input = `<select name="${name}" ${required} style="width:100%;"><option value=""></option>${opts}</select>`;
     }
     else if (field?.type === "textarea")
@@ -192,6 +208,7 @@ function _renderField(field)
         const max = field?.max != null ? `max="${field.max}"` : "";
         input = `<input type="${type}" name="${name}" ${required} ${placeholderAttr} ${min} ${max} style="width:100%;"/>`;
     }
+
     return `
         <label style="display:flex; flex-direction:column; gap:2px; font-size:0.9em;">
             <span>${label}${field?.required ? ' <span style="opacity:0.6">*</span>' : ""}</span>
@@ -205,29 +222,35 @@ function _renderPoll(entry)
     const pollInfo = _pollState(entry);
     if (!pollInfo)
         return "";
+
     const { poll, expired, responded } = pollInfo;
+
     const wrap = (inner) => `
         <div class="lancer-poll" data-poll-id="${entry.id}" data-poll-table="${poll.tableName}"
-             style="margin-top: 12px; padding: 10px 12px; background: rgba(120,46,34,0.05); border: 1px solid rgba(120,46,34,0.2); border-radius: 4px;">
+             style="margin-top: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--la-accent) 5%, transparent); border: 1px solid color-mix(in srgb, var(--la-accent) 20%, transparent); border-radius: 4px;">
             ${poll.title ? `<div style="font-weight:bold; margin-bottom:4px;">${poll.title}</div>` : ""}
             ${poll.intro ? `<div style="font-size:0.9em; margin-bottom:8px;">${poll.intro}</div>` : ""}
             ${inner}
         </div>
     `;
+
     if (expired)
         return wrap(`<div style="font-size:0.85em; opacity:0.7;">This poll closed on ${poll.expiresAt}.</div>`);
     if (responded)
         return wrap(`<div style="font-size:0.85em; opacity:0.8;"><i class="fas fa-check"></i> Thanks, your response was recorded.</div>`);
+
     const fieldsHtml = poll.fields.map(_renderField).join("");
+
     const closesLine = poll.expiresAt
         ? `<div style="font-size:0.8em; opacity:0.7; margin-bottom:6px;"><i class="far fa-clock"></i> Closes on ${poll.expiresAt}.</div>`
         : "";
+
     return wrap(`
         ${closesLine}
         <form class="poll-form" style="display:flex; flex-direction:column; gap:6px;">
             ${fieldsHtml}
             <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                <button type="submit" style="padding:4px 12px; flex:0 0 auto;">Submit</button>
+                <button type="submit" style="padding:4px 12px; flex:0 0 auto; color: var(--la-ink);">Submit</button>
                 <span class="poll-status" style="font-size:0.85em; opacity:0.8;"></span>
             </div>
         </form>
@@ -237,6 +260,7 @@ function _renderPoll(entry)
 function _collectInstallContext()
 {
     const ctx = {};
+
     try
     {
         const consent = getModuleSetting(NEWS_CONSENT_KEY);
@@ -245,17 +269,20 @@ function _collectInstallContext()
     }
     catch
     { /* ignore */ }
+
     try
     {
         ctx.language = game.i18n?.lang ?? null;
     }
     catch
     { /* ignore */ }
+
     for (const k of Object.keys(ctx))
     {
         if (ctx[k] == null)
             delete ctx[k];
     }
+
     return ctx;
 }
 
@@ -265,25 +292,31 @@ async function _submitPoll(pollEl)
     const table = pollEl.dataset.pollTable;
     const form = pollEl.querySelector("form.poll-form");
     const status = pollEl.querySelector(".poll-status");
+
     if (!form || !table || !pollId)
         return;
+
     const data = {};
+
     for (const el of form.querySelectorAll("[name]"))
     {
         const fieldValue = (el.value ?? "").trim();
         if (fieldValue !== "")
             data[el.name] = fieldValue;
     }
+
     const installId = await getOrCreateInstallId();
     const context = _collectInstallContext();
     const payload = { install_id: installId, ...context, ...data };
     status.textContent = "Sending...";
     form.querySelectorAll("button, input, textarea").forEach(el => el.disabled = true);
+
     try
     {
         const { error } = await getSupabase().from(table).upsert(payload, { onConflict: "install_id" });
         if (error)
             throw error;
+
         const list = new Set(getModuleSetting(POLL_RESPONDED_SETTING) || []);
         list.add(pollId);
         await game.settings.set(MODULE_ID, POLL_RESPONDED_SETTING, [...list]);
@@ -302,6 +335,7 @@ function _attachPollHandlers(rootEl)
 {
     if (!rootEl)
         return;
+
     for (const pollEl of rootEl.querySelectorAll(".lancer-poll"))
     {
         const form = pollEl.querySelector("form.poll-form");
@@ -320,6 +354,7 @@ function _renderRelease(release)
 {
     const date = release.published_at ? release.published_at.split("T")[0] : "";
     let bodyHtml = "";
+
     if (release.body)
     {
         try
@@ -331,9 +366,10 @@ function _renderRelease(release)
             bodyHtml = `<pre>${release.body}</pre>`;
         }
     }
+
     return `
-        <div style="border-bottom: 1px solid rgba(120,46,34,0.2); padding: 10px 4px;">
-            <div style="font-weight: bold; font-size: 1.1em; color: #782e22;">${release.tag_name ?? ""}</div>
+        <div style="border-bottom: 1px solid color-mix(in srgb, var(--la-accent) 20%, transparent); padding: 10px 4px;">
+            <div style="font-weight: bold; font-size: 1.1em; color: var(--la-accent-text);">${release.tag_name ?? ""}</div>
             <div style="opacity:0.7; font-size:0.85em; margin-bottom:4px;">${date}</div>
             <div style="line-height: 1.5;">${bodyHtml}</div>
         </div>
@@ -352,6 +388,7 @@ function _renderUpdate(update)
 {
     const { module, newVersion, releaseNotes } = update;
     let notesHtml = "";
+
     if (releaseNotes)
     {
         try
@@ -363,12 +400,13 @@ function _renderUpdate(update)
             notesHtml = `<pre>${releaseNotes}</pre>`;
         }
     }
+
     return `
         <div style="padding: 10px 4px;">
-            <p>A new version of <b>${module.title}</b> is available: <span style="color: #782e22;"><b>v${newVersion}</b></span> (current: v${module.version}).</p>
+            <p>A new version of <b>${module.title}</b> is available: <span style="color: var(--la-accent-text);"><b>v${newVersion}</b></span> (current: v${module.version}).</p>
             <p>You can update via the Foundry VTT Module Manager.</p>
-            <p style="margin-top: 8px;">If you like this module or my other work, you can support me on <a href="https://www.patreon.com/cw/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener"><b>Ko-fi</b></a>. Updates and previews land there too.</p>
-            ${notesHtml ? `<div style="margin-top: 10px; padding: 10px; border: 1px solid #999; border-radius: 4px; background: rgba(0,0,0,0.05); max-height: 35vh; overflow-y: auto;">${notesHtml}</div>` : ""}
+            <p style="margin-top: 8px;">If you like this module, you can support it on <a href="https://www.patreon.com/c/LaSossis" target="_blank" rel="noopener"><b>Patreon</b></a> or <a href="https://ko-fi.com/lasossis" target="_blank" rel="noopener"><b>Ko-fi</b></a>. Patron money goes into commissioned art and assets for LA, and the occasional dead PC part. Updates and previews land there too.</p>
+            ${notesHtml ? `<div style="margin-top: 10px; padding: 10px; border: 1px solid var(--la-edge); border-radius: 4px; background: var(--la-raise); max-height: 35vh; overflow-y: auto;">${notesHtml}</div>` : ""}
         </div>
     `;
 }
@@ -379,12 +417,14 @@ function _showCombinedDialog({ news, update, firstRun })
 {
     const hasNews = news.length > 0;
     const hasUpdate = !!update;
+
     if (!hasNews && !hasUpdate)
         return;
 
     const newsBody = hasNews
         ? news.map(_renderEntry).join("") + (firstRun ? HISTORY_HINT : "")
         : "";
+
     const updateBody = hasUpdate ? _renderUpdate(update) : "";
 
     let title = "Lancer Automations";
@@ -397,6 +437,7 @@ function _showCombinedDialog({ news, update, firstRun })
 
     let content;
     let bindTabs = false;
+
     if (hasNews && hasUpdate)
     {
         bindTabs = true;
@@ -434,6 +475,7 @@ function _showCombinedDialog({ news, update, firstRun })
         if (hasUpdate)
             game.settings.set(update.module.id, "lastNotifiedVersion", update.newVersion);
     };
+
     const ackNews = () =>
     {
         if (hasNews && !firstRun)
@@ -482,6 +524,7 @@ function _showCombinedDialog({ news, update, firstRun })
             });
         },
     }, { width: hasNews && hasUpdate ? 720 : 600, height: "auto", classes: ["lancer-dialog-base", "lancer-no-title"] });
+
     dialog.render(true);
 }
 
@@ -504,12 +547,14 @@ async function _runNews()
 
     let news = [];
     let firstRun = false;
+
     if (!seenRaw.length)
     {
         firstRun = true;
         const allIds = entries.map(entry => entry.id).filter(Boolean);
         const visible = _filterEntries(entries, { seen: new Set(), role, version, isGM });
         const sorted = _sortByDateDesc(visible);
+
         if (sorted[0])
             news = [sorted[0]];
         if (allIds.length)
@@ -527,9 +572,11 @@ export async function openNewsHistory()
     const [newsPayload, releases] = await Promise.all([_fetchNews(), _fetchReleases()]);
 
     const newsEntries = _sortByDateDesc(Array.isArray(newsPayload?.entries) ? newsPayload.entries : []);
+
     const newsHtml = newsEntries.length
         ? newsEntries.map(_renderEntry).join("")
         : '<p style="padding: 10px; opacity: 0.7;">No news yet.</p>';
+
     const releasesHtml = releases.length
         ? releases.map(_renderRelease).join("")
         : '<p style="padding: 10px; opacity: 0.7;">Could not load releases (offline or rate-limited).</p>';

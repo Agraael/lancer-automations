@@ -12,8 +12,12 @@ uniform float slip;
 uniform float ghostStrength;
 uniform float holdStrength;
 uniform float snapStrength;
+uniform float inkStrength;
+uniform float inkHold;
+uniform float inkW;
 uniform vec3 ghostColor;
 uniform vec3 snapColor;
+uniform vec3 inkColor;
 uniform vec2 dirV;
 ${GLSL_FILTER_INPUTS}
 
@@ -34,6 +38,18 @@ float ringMin(vec2 uv, float r)
     return m;
 }
 
+float ringMax(vec2 uv, float radius)
+{
+    vec2 span = outputFrame.zw * inputSize.zw * radius;
+    float highest = 0.0;
+    for (int index = 0; index < 8; index++)
+    {
+        float angle = float(index) * 0.7853982;
+        highest = max(highest, tapA(uv + vec2(cos(angle), sin(angle)) * span));
+    }
+    return highest;
+}
+
 vec4 over(vec4 base, vec3 rgb, float a)
 {
     return vec4(base.rgb * (1.0 - a) + rgb * a, base.a * (1.0 - a) + a);
@@ -51,10 +67,12 @@ void main()
     float g = tapA(vTextureCoord - b * outputFrame.zw * inputSize.zw * push * slip);
     float ghost = clamp(g - pixel.a, 0.0, 1.0) * (0.3 + 0.7 * push) * ghostStrength;
 
-    float rim = clamp(pixel.a - ringMin(vTextureCoord, 0.012), 0.0, 1.0);
+    float rim = clamp(pixel.a - ringMin(vTextureCoord, 0.012), 0.0, 1.0) * smoothstep(0.9, 0.995, pixel.a);
     float snap = exp(-fract(ph - 0.76 + 1.0) / 0.05);
+    float outside = clamp(ringMax(vTextureCoord, inkW) - pixel.a, 0.0, 1.0);
 
-    vec4 result = over(pixel, snapColor, clamp(rim * holdStrength * opacity, 0.0, 1.0));
+    vec4 result = over(pixel, inkColor, clamp(outside * inkStrength * (inkHold + (1.0 - inkHold) * snap) * opacity, 0.0, 1.0));
+    result = over(result, snapColor, clamp(rim * holdStrength * opacity, 0.0, 1.0));
     result = over(result, ghostColor, clamp(ghost * opacity, 0.0, 1.0));
     result = over(result, snapColor, clamp(rim * snap * snapStrength * opacity, 0.0, 1.0));
 
@@ -69,8 +87,45 @@ export class FilterNoDrift extends LaCustomFilter
         super(noDriftFragment, params, {
             ghostColor: new Float32Array([0.58, 0.65, 0.72]),
             snapColor: new Float32Array([0.91, 0.95, 1.0]),
+            inkColor: new Float32Array([0.04, 0.06, 0.09]),
             dirV: new Float32Array([0.0, -1.0]),
         });
+    }
+
+    get inkStrength()
+    {
+        return this.uniforms.inkStrength;
+    }
+    set inkStrength(value)
+    {
+        this.uniforms.inkStrength = value;
+    }
+
+    get inkHold()
+    {
+        return this.uniforms.inkHold;
+    }
+    set inkHold(value)
+    {
+        this.uniforms.inkHold = value;
+    }
+
+    get inkW()
+    {
+        return this.uniforms.inkW;
+    }
+    set inkW(value)
+    {
+        this.uniforms.inkW = value;
+    }
+
+    get inkColor()
+    {
+        return PIXI.utils.rgb2hex(this.uniforms.inkColor);
+    }
+    set inkColor(value)
+    {
+        new PIXI.Color(value).toRgbArray(this.uniforms.inkColor);
     }
 
     get tryPeriod()
@@ -158,5 +213,9 @@ FilterNoDrift.defaults = {
     ghostStrength: 0.3,
     holdStrength: 0.15,
     snapStrength: 0.75,
+    inkStrength: 0,
+    inkHold: 0,
+    inkW: 0.011,
+    inkColor: 0x0b1016,
     opacity: 1.0,
 };

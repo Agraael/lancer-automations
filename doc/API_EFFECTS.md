@@ -23,7 +23,7 @@ await api.applyEffectsToTokens(options, extraOptions)
 | <kbd>tokens</kbd> | `Array<Token>` | *required* | Targets |
 | <kbd>effectNames</kbd> | `string\|{ name?: string; icon?: string; isCustom?: boolean }\|Array` | *required* | `"prone"` or `{ name, icon, isCustom }`. `isCustom: true` marks a Temporary-Custom-Statuses effect, not a built-in status |
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
-| <kbd>duration</kbd> | `Object` | `{}` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). `turns` counts turn labels, `rounds` counts round labels. When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
+| <kbd>duration</kbd> | `Object` | `{}` | `{ label, turns, rounds, overrideTurnOriginId }` - `label` is a [duration label](API_REFERENCE.md#duration-labels). `turns` is the count for turn labels, `rounds` the count for round labels. When `overrideTurnOriginId` is set, duration ticks down from that token's turn instead of the target's |
 | <kbd>checkEffectCallback</kbd> | `(token: Token, effectData: object) => boolean` | `null` | Dup-check predicate `(token, effectData) => boolean`. Returning `true` blocks the apply with a warning |
 | <kbd>notify</kbd> | `Object\|boolean` | `true` | Notification config `{ prefixText, source, whisper }` (or `true`) |
 | <kbd>refresh</kbd> | `boolean` | `false` | If the effect already exists, reset its duration instead of blocking. Stack untouched |
@@ -87,7 +87,7 @@ await api.clearMarks(reactorToken, 'Suppress', { flagKey: 'suppressSourceId' });
 await api.removeEffectsByName(targetID, effectName, originID, extraFlags)
 ```
 
-Single-token version of `removeEffectsByNameFromTokens`.
+Single-token version of `removeEffectsByNameFromTokens`. Deletes through the GM when you do not own the token.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -173,7 +173,15 @@ await api.executeEffectManager(options) // Opens the Effect Manager UI
 |:------|:-----|:------------|
 | <kbd>tokens</kbd> | `Array<Token\|TokenDocument>` | Tokens to clear (`deleteAllEffects`) |
 
-`executeEffectManager(options)` - `options`: `{ item?, actor?, forcePrototype?, initialTab? }`. The first three pre-select the target (an item's prototype, an actor's active token, or the actor prototype when `forcePrototype`). `initialTab` opens on a named tab: `'standard'`, `'custom'`, `'bonus'`, `'manage'`.
+`executeEffectManager(options)`: `options` is `{ item?, actor?, forcePrototype?, initialTab?, preset? }`. The first three pre-select the target:
+
+- `item`: an item's prototype.
+- `actor`: an actor's active token, or the actor prototype when it has none.
+- `actor` + `forcePrototype`: the actor prototype.
+
+`initialTab` opens on a named tab: `'standard'`, `'custom'`, `'bonus'`, `'manage'`.
+
+`preset` is `{ category, name, apply? }`: opens one of your saved presets (`category` is `'standard'`, `'custom'` or `'bonus'`, `name` matched exactly) with its form filled. `apply: true` applies it without showing the dialog, on the pre-selected target, or on every controlled token when several are selected.
 
 ```js
 await api.deleteAllEffects([token]);
@@ -199,7 +207,7 @@ api.currentTurnKey()
 
 `untilEndOfRound` / `untilStartOfRound` count rounds including the current one: `untilEndOfRound(1)` ends at the end of this round, `untilStartOfRound(1)` at the start of the next. `untilEndOfEncounter` ends when the combat ends.
 
-`currentTurnKey` stamps "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn. Each activation of a combatant gets its own key. `null` out of combat.
+`currentTurnKey` returns a key for "the turn this happened on", so a later turn-end handler can tell whether it is looking at the same turn. Each activation of a combatant gets its own key. `null` out of combat.
 
 ```js
 await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slow'], duration: api.untilEndOfTurn(target) });
@@ -217,15 +225,16 @@ await api.applyEffectsToTokens({ tokens: [target], effectNames: ['slow'], durati
 <br>
 
 ```js
-api.findEffectOnToken(token, identifier)
+api.findEffectOnToken(token, identifier, options)
 ```
 
-First match by name or predicate. The string form uses the house name rules (exact name, custom-status originalName, effect flags, loose includes, status id) and delegates to `findEffectsOnToken`, which is the one to use for flag filters or all matches.
+First match by name or predicate. The string form uses the house name rules: exact name, custom-status originalName, effect flags, loose includes, status id. It delegates to `findEffectsOnToken`, which is the one to use for all matches.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token\|TokenDocument` | The token to search |
 | <kbd>identifier</kbd> | `string\|((e: ActiveEffect) => boolean)` | Effect name (string) or predicate `(effect) => boolean` |
+| <kbd>options</kbd> | `{ extraFlags, hasFlags, excludeId }` | Name form only, same filters as `findEffectsOnToken` |
 
 **Example:**
 ```js
@@ -270,7 +279,13 @@ const others = api.findEffectsOnToken(token, 'Overshield', { excludeId: effect.i
 api.findEffectFrom(token, effectName, sourceToken)
 ```
 
-The `originID` variant: matches the duration origin stamp, `overrideTurnOriginId` for `applyEffectsToTokens`, `origin` for `addGlobalBonus`, the bearer itself by default. It finds an effect by applier only when that applier was passed as the origin. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
+The `originID` variant. It matches the duration origin stamp:
+
+- `overrideTurnOriginId` for `applyEffectsToTokens`
+- `origin` for `addGlobalBonus`
+- the bearer itself by default
+
+It finds an effect by applier only when that applier was passed as the origin. Use `findEffectsOnToken` with `extraFlags` instead when the source was stamped by `applyMark`'s `flagKey`.
 
 The name match here is exact. The loose house name rules do not apply.
 
@@ -458,9 +473,10 @@ Returns `undefined` if `actor` is falsy.
 | <kbd>durationRounds</kbd> | `number` | `1` | Rounds for `'roundStart'` / `'roundEnd'`, counting the current one |
 | <kbd>origin</kbd> | `Token\|TokenDocument\|string` | the actor's token | Whose turns `durationTurns` counts |
 | <kbd>consumption</kbd> | `ConsumptionConfig` | `null` | A [Consumption](API_REFERENCE.md#consumption) config |
-| <kbd>refresh</kbd> | `boolean` | `false` | Re-add an existing bonus id in place: values replaced, linked effect's duration reset instead of blocked |
+| <kbd>refresh</kbd> | `boolean` | `false` | Re-add an existing bonus id in place instead of blocking: values replaced, linked effect's duration reset |
 | <kbd>icon</kbd> | `string` | per bonus type | Image path for the linked effect, overriding the type's default icon |
 | <kbd>forcePrototype</kbd> | `boolean` | `false` | Ignore the scene token and write the effect on the actor itself, so spawned tokens inherit it |
+| <kbd>usesLeft</kbd> | `number` | `bonusData.uses` | Starting charge count. `uses` stays the max. Ignored with `duration: 'constant'`, and `0` is read as unset |
 
 `durationTurns` counts origin turns until the effect ends:
 - `0`: next matching trigger. If applied during origin's own turn with `duration: "end"`, ends at end of that same turn. With `duration: "start"`, it ends at start of the next turn. Off the origin's turn, `0` clamps to `1`.
@@ -482,12 +498,12 @@ Out of combat, `'start'` and `'end'` become indefinite. The prototype write (no 
 | <kbd>val</kbd> | `number\|string` | Value for stat, accuracy, difficulty, tag, or range bonuses |
 | <kbd>uses</kbd> | `number` | Charges. Written to the linked effect's counter, the same one `consumeEffectCharge` reads |
 | <kbd>consumeOnUsage</kbd> | `boolean` | Burn 1 charge only when the bonus actually applies (still checked at roll time / immunity blocked / reroll accepted). Supported: accuracy, difficulty, damage, target_modifier, reroll, resistance, vulnerability, immunity (effect/crit/hit/miss/damage/provoke/terrain). An immunity, resistance or vulnerability charge burns where it is consulted, never on the bearer's own roll, so resistance burns at damage-apply time. Default true, except immunity, resistance and vulnerability, which default false. The `Auto-consume on:` triggers burn regardless and take precedence. |
-| <kbd>frequency</kbd> | `"round" \| "turn" \| "combat"` | Applies once per round / turn / combat, then stops until the window passes. Gated with the [gate API](API_FLAGS.md#consumeGate) under the key `bonus:<id>`, burned where the bonus is actually consulted. Out of combat gates never block, so the bonus always applies |
+| <kbd>frequency</kbd> | `"round" \| "turn" \| "combat"` | Applies once per round / turn / combat, then stops until the window passes. Gated with the [gate API](API_FLAGS.md#consumeGate) under the key `bonus:<id>`, burned where the bonus is actually consulted. Out of combat, gates never block, so the bonus always applies |
 | <kbd>rollTypes</kbd> | `Array` | `["attack"]`, `["check"]`, etc. |
-| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate - if false, the whole bonus is skipped. On an `immunity`, `actor` is the other party and the owner is `context.ownerTokenId`. |
-| <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty`, `target_modifier` and every filtered `immunity`. `reactorToken` is the owner, `target` the Token rolled against. On an immunity `target` is the other party instead, and `entry` is `null`. Skipped, not failed, when there is no other party. Must be synchronous. Serialized via `@@fn:` - survives reloads. |
+| <kbd>condition</kbd> | `string\|fn` | `(state, actor, data, context) => boolean`. **Per-bonus** gate: if false, the whole bonus is skipped. On an `immunity`, `actor` is the other party and the owner is `context.ownerTokenId`. |
+| <kbd>applyToCondition</kbd> | `string\|fn` | `(target, state, reactorToken, entry) => boolean`. **Per-target** gate for `accuracy`, `difficulty`, `target_modifier` and every filtered `immunity`. `reactorToken` is the owner, `target` the Token rolled against. On an immunity `target` is the other party instead, and `entry` is `null`. Skipped, not failed, when there is no other party. Must be synchronous. Serialized via `@@fn:`, so it survives reloads. |
 | <kbd>itemLids</kbd> | `Array` | LID filters |
-| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static - set at bonus creation. For a dynamic per-target gate, see `applyToCondition`. |
+| <kbd>applyTo</kbd> | `Array` | Token ID filters. Static, set at bonus creation. For a dynamic per-target gate, see `applyToCondition`. |
 | <kbd>applyToTargetter</kbd> | `boolean` | Reverse direction: the bonus sits on the defender and applies to anyone rolling against it, never to the owner's own rolls. `condition` then runs in the attacker's flow (`state.actor` is the attacker, the owner is `context.ownerTokenId`) and `applyTo` filters attacker token IDs instead. Not for `stat` or `range`. How Brace grants its +1 difficulty. |
 | <kbd>tier</kbd> | `1\|2\|3` | Gate to an NPC owner tier. Unset = any. Non-NPC owners ignore it |
 
@@ -500,7 +516,7 @@ Out of combat, `'start'` and `'end'` become indefinite. The prototype write (no 
 |:---------|:-----|:------------|
 | <kbd>subtype</kbd> | `string` | One of the [immunity subtypes](API_REFERENCE.md#immunity-subtypes) |
 | <kbd>effects</kbd> | `Array` | Only for `subtype: "effect"`. List of effect/status names (e.g. `["Prone", "Immobilized"]`) |
-| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"`. List of damage types (e.g. `["Energy", "Kinetic"]`). `"all"` covers every type, and `"variable"` is treated the same way. `"AoE"` covers every type of [area damage](API_REFERENCE.md#immunity-subtypes). Infection is included only while its integration setting is on |
+| <kbd>damageTypes</kbd> | `Array` | Only for `subtype: "damage"`. List of damage types (e.g. `["Energy", "Kinetic"]`). `"all"` covers every type, and `"variable"` is treated the same way. `"AoE"` covers every type of [area damage](API_REFERENCE.md#immunity-subtypes). `"all"`, `"variable"` and `"AoE"` include Infection only while the Infection integration setting is on |
 
 `"provoke"` acts like permanent DISENGAGE. No extra fields required.
 
@@ -525,7 +541,12 @@ Filters honoured per subtype:
 
 A `resistance` halves its types after armor. A `vulnerability` doubles them after armor, so the two cancel out on the same type. Shredded and Cannot Be Reduced remove armor and resistance, not vulnerability.
 
-Both honour `rollTypes`, `itemLids`, `condition` and `applyToCondition`, with the roles of an immunity: `itemLids` filters the other party's weapon, `applyTo` and `applyToTargetter` are ignored. A filtered resistance is not written to `system.resistances`, so it no longer shows as a checked resistance on the sheet. The `"AoE"` entry of a resistance is never written there either.
+Both honour `rollTypes`, `itemLids`, `condition` and `applyToCondition`, with the roles of an immunity:
+
+- `itemLids` filters the other party's weapon.
+- `applyTo` and `applyToTargetter` are ignored.
+
+A filtered resistance is not written to `system.resistances`, so it no longer shows as a checked resistance on the sheet. The `"AoE"` entry of a resistance is never written there either.
 
 </details>
 
@@ -554,7 +575,7 @@ read as `movement_extra` with `subtype: "boost"`.
 
 `"no_invisible"` forces `plugins.invisibility.data = 0` on the target, bypassing `"invisible"`.
 
-**Example - ignore invisibility only within range 3:**
+**Example: ignore invisibility only within range 3**
 ```js
 await api.addConstantBonus(actor, {
     id: 'lesser-sight',
@@ -672,7 +693,7 @@ const single = api.getGlobalBonus(actor, bonusId)  // → BonusData | null
 | <kbd>actor</kbd> | `Actor` | The actor to inspect |
 | <kbd>bonusId</kbd> | `string` | The bonus ID (for `getGlobalBonus` only) |
 
-`getGlobalBonuses` drops bonuses gated to a `tier` the NPC owner is not. `getGlobalBonus` does not: a by-id lookup returns the bonus whatever its tier gate.
+`getGlobalBonuses` drops bonuses gated to a `tier` other than the NPC owner's. `getGlobalBonus` does not: a by-id lookup returns the bonus whatever its tier gate.
 
 ```js
 const bonus = api.getGlobalBonus(actor, 'lightning-reflexes');
@@ -691,7 +712,7 @@ const bonuses = api.getConstantBonuses(actor)              // → Array<BonusDat
 await api.removeConstantBonus(actor, bonusIdOrPredicate)   // string ID or predicate
 ```
 
-Constant bonuses are permanent (stored in flags, not linked to an active effect). Auto-generates an `id` if not provided. `getConstantBonuses` drops bonuses gated to a `tier` the NPC owner is not.
+Constant bonuses are permanent (stored in flags, not linked to an active effect). Auto-generates an `id` if not provided. `getConstantBonuses` drops bonuses gated to a `tier` other than the NPC owner's.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -735,7 +756,7 @@ Attaches a status to each source doc. Fires immediately on any active tokens.
 | <kbd>note</kbd> | `string` | `""` | Flavor note |
 | <kbd>duration</kbd> | `Object` | `{}` (permanent) | `{ label, turns?, rounds? }` |
 
-`extraOptions` keys are stored on the source template, where `ensureLinkedEffect` matches on them. They are not copied to the effects it creates, except `changes`. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
+`extraOptions` keys are stored on the source template, where `ensureLinkedEffect` matches on them. They are not copied to the effects created from the template, except `changes`. `extraOptions.tier` (1-3) gates materialization to NPC owners of that tier.
 
 `ensureLinkedEffect` is `linkEffectToItem` that skips effects the item already carries as a template (match = effect name + every `extraOptions` flag). The onInit way to link: no hand-written guard needed.
 
@@ -862,7 +883,7 @@ await api.cleanupItemBonusesFromActor(item, actor)          // remove bonuses th
 await api.cleanupActorBonusesFromTokens(actor)              // remove bonuses that came from this actor
 ```
 
-The lifecycle hooks call these for you. Only reach for them if you need to force a pass from custom code. All safe to call repeatedly - they skip anything already applied.
+The lifecycle hooks call these for you. Only reach for them if you need to force a pass from custom code. All safe to call repeatedly, they skip anything already applied.
 
 Args: `item`/`actor` source doc. The `apply*` helpers also take `tokens` (`Array<Token|TokenDocument>`). `cleanupItemBonusesFromActor(item, actor)` and `cleanupActorBonusesFromTokens(actor)`.
 
@@ -885,9 +906,9 @@ triggerData.flowState.injectFlowExtraData(extraData) // merge into state.la_extr
 triggerData.flowState.getFlowExtraData()             // read la_extraData
 ```
 
-- **`injectBonus`** - ephemeral bonus (e.g. an accuracy bonus) applied to this flow's rolls, discarded when the flow completes.
-- **`injectFlowExtraData`** - merges into `state.la_extraData`, passing variables between trigger phases (e.g. `onHit` to `onDamage`).
-- **`getFlowExtraData`** - reads `la_extraData` back.
+- **`injectBonus`**: ephemeral bonus (e.g. an accuracy bonus) applied to this flow's rolls, discarded when the flow completes.
+- **`injectFlowExtraData`**: merges into `state.la_extraData`, passing variables between trigger phases (e.g. `onHit` to `onDamage`).
+- **`getFlowExtraData`**: reads `la_extraData` back.
 
 </details>
 
@@ -944,7 +965,7 @@ await api.consumeVulnerabilityUse(actor, state, { damageTypes, bonuses, aoe })
 |:---------|:------------|
 | `getImmunityBonuses` | Returns the actor's immunity bonuses of the given [subtype](API_REFERENCE.md#immunity-subtypes), or every immunity bonus when <kbd>subtype</kbd> is omitted. A Token resolves to its actor. Unknown subtypes log a console warning. **No filters are applied**, so this is the raw list. |
 | `getResistanceBonuses`, `getVulnerabilityBonuses` | The actor's resistance or vulnerability bonuses, raw like `getImmunityBonuses`. |
-| `checkDamageResistances` | Source **names** of the resistance bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. <kbd>allowedIds</kbd> (`string[]`, default `null`) keeps only the filtered bonuses whose id is listed, which is how a decision made during the damage flow reaches apply time. `null` filters nothing. <kbd>aoe</kbd> (`boolean`, default `false`) lets `"AoE"` entries match. |
+| `checkDamageResistances` | Source **names** of the resistance bonuses matching the damage type, not the bonus objects. Empty when there is no resistance. <kbd>allowedIds</kbd> (`string[]`, default `null`) keeps a bonus with filters only when its id is listed, which is how a decision made during the damage flow reaches apply time. `null` filters nothing. <kbd>aoe</kbd> (`boolean`, default `false`) lets `"AoE"` entries match. |
 | `checkDamageVulnerabilities` | Same as `checkDamageResistances`, for vulnerability bonuses. |
 | `consumeResistanceUse`, `consumeVulnerabilityUse` | Burn the frequency gate and, with `consumeOnUsage`, one charge of the matching bonuses. <kbd>damageTypes</kbd> keeps the bonuses covering one of these types, <kbd>bonuses</kbd> supplies a prefiltered list, <kbd>aoe</kbd> lets `"AoE"` entries match. `true` when something was spent. |
 | `applyDamageImmunities` | Takes an array of damage objects `{type, val}` and returns a copy with the immune types zeroed. Both `val` and `amount` are zeroed where present. With no immunities it returns the array it was given, not a copy. <kbd>bonuses</kbd> (`object[]`, default `null`) supplies a prefiltered list instead of re-reading the flags. <kbd>aoe</kbd> (`boolean`, default `false`) lets `"AoE"` entries zero every type. |
@@ -975,7 +996,7 @@ api.getGateImmunityBonuses(actor, subtype, { ownerToken, otherToken, state })
 |:---------|:----|
 | `getApplicableImmunityBonuses` | Inside a flow. Runs every filter. <kbd>flowType</kbd> picks the tag set (default `"damage"`). |
 | `getAttackImmunityBonuses` | `crit`, `hit`, `miss`. Adds `flowType: "attack"` and rebinds `state.actor` to the attacker. |
-| `getGateImmunityBonuses` | Outside a flow, for `effect` and `provoke`. Runs the two code fields only. |
+| `getGateImmunityBonuses` | Outside a flow, for `effect` and `provoke`. Runs only the two code fields, `condition` and `applyToCondition`. |
 
 <kbd>ownerToken</kbd> is the bearer and becomes `reactorToken`. <kbd>otherToken</kbd> becomes `applyToCondition`'s `target`.
 

@@ -27,6 +27,7 @@ function _stableGetDirectPath(waypoints)
         const c1 = this.getCube(waypoints[i]);
         const { q: q1, r: r1, k: k1 } = c1;
         const s1 = (typeof c1.s === 'number') ? c1.s : (-q1 - r1);
+
         if (q0 === q1 && r0 === r1 && k0 === k1)
             continue;
 
@@ -45,11 +46,15 @@ function _stableGetDirectPath(waypoints)
             let eq = 0, er = 0;
             if (!(collinearSENW || collinearAlt1 || collinearAlt2))
                 return { eq, er };
+
             const sMix = 0 - qMix - rMix;
+
             const cell = this._cubeRound
                 ? this._cubeRound({ q: qMix, r: rMix, s: sMix })
                 : cubeRound(qMix, rMix, sMix);
+
             const cq = cell.q, cr = cell.r;
+
             if (columns)
             {
                 if (collinearSENW)
@@ -74,6 +79,7 @@ function _stableGetDirectPath(waypoints)
                 else if (collinearAlt2)
                     eq = ((cr & 1) === 0) === even ? -EPS : EPS;
             }
+
             return { eq, er };
         };
 
@@ -83,13 +89,16 @@ function _stableGetDirectPath(waypoints)
             {
                 let q = q0, r = r0, s = s1, k = k0, j = 0;
                 const sk = k0 < k1 ? 1 : -1;
+
                 if (diagonals)
                 {
                     const dk = 0 - Math.abs(k0 - k1);
                     let err = n + dk;
+
                     for (;;)
                     {
                         const errDoubled = err * 2;
+
                         if (errDoubled >= dk)
                         {
                             err += dk; j++;
@@ -101,10 +110,12 @@ function _stableGetDirectPath(waypoints)
                             r = rMix + er;
                             s = 0 - q - r;
                         }
+
                         if (errDoubled <= n)
                         {
                             err += n; k += sk;
                         }
+
                         if (j === n && k === k1)
                             break;
                         path.push(this.getOffset({ q, r, s, k }));
@@ -114,6 +125,7 @@ function _stableGetDirectPath(waypoints)
                 {
                     const dkClamped = Math.abs(k0 - k1) || 1;
                     let threshC = dkClamped, threshK = n;
+
                     for (;;)
                     {
                         if (threshC <= threshK)
@@ -131,11 +143,13 @@ function _stableGetDirectPath(waypoints)
                         {
                             threshK += n; k += sk;
                         }
+
                         if (j === n && k === k1)
                             break;
                         path.push(this.getOffset({ q, r, s, k }));
                     }
                 }
+
                 path.push(this.getOffset(c1));
             }
             else
@@ -143,6 +157,7 @@ function _stableGetDirectPath(waypoints)
                 const last = path.at(-1);
                 let k = k0;
                 const sk = k0 < k1 ? 1 : -1;
+
                 while (k !== k1)
                 {
                     k += sk; path.push({ i: last.i, j: last.j, k });
@@ -162,6 +177,7 @@ function _stableGetDirectPath(waypoints)
                 const s = 0 - q - r;
                 path.push(this.getOffset({ q, r, s }));
             }
+
             path.push(this.getOffset(c1));
         }
 
@@ -175,6 +191,7 @@ export function initHexDragStabilizer()
 {
     if (typeof libWrapper === 'undefined')
         return;
+
     const HexClass = /** @type {any} */ (foundry)?.grid?.HexagonalGrid;
     if (!HexClass)
         return;

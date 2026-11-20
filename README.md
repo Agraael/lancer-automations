@@ -28,9 +28,9 @@
 <details>
 <summary>patreon...</summary>
 
-Well, project became bigger, now there's more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
+Well, the project got bigger, and now there are more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
 
-In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis) or [Ko-fi](https://ko-fi.com/lasossis)
+In any case, my stuff will always be free. If I stop working on it, I'll just close the Patreon. [Patreon](https://www.patreon.com/c/LaSossis) or [Ko-fi](https://ko-fi.com/lasossis)
 
 </details>
 
@@ -38,7 +38,7 @@ Check out my other modules and tools: [List of stuff](https://www.patreon.com/po
 
 ---
 
-Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an automation engine that can drive almost any item from any LCP, plus a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
+Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT. At its core is an automation engine that can drive almost any item from any LCP. Around it you get a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
 
 <p align="center">
   <img src="doc/vid/battlelog.gif" width="85%"/>
@@ -52,26 +52,9 @@ Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an 
 
 The most common spot is [my channel](https://discord.com/channels/426286410496999425/1436087781666455642) on the [Pilot NET Discord](https://discord.com/invite/lancer).
 
-## Acknowledgments
+## Credits
 
-Inspiration, reference code, and ideas drawn from the work of:
-
-- [Eranziel](https://github.com/Eranziel)
-- [mandatoryhashtags](https://github.com/mandatoryhashtags)
-- [caewok](https://github.com/caewok)
-- [Wibble199](https://github.com/Wibble199)
-- [csmcfarland](https://gitlab.com/csmcfarland)
-- [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
-- [mxzf](https://gitlab.com/mxzf/status-halo)
-- [hylandpad](https://github.com/hylandpad)
-
-## Assets
-
-UI icons come from [game-icons.net](https://game-icons.net), licensed CC BY 3.0, credited to their individual authors.
-
-Sounds come from [freesound.org](https://freesound.org), where the licence is picked per sound: CC0, CC BY, or CC BY-NC.
-
-Vehicle wreck tokens are by @MachineBoot on Discord.
+Acknowledgments and asset credits are on the [Support & Credits](https://agraael.github.io/lancer-automations/supporters.html) page.
 
 ## License
 

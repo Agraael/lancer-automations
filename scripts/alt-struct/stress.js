@@ -6,6 +6,7 @@ import { altStructButton, pushEmbedButton, getRollCount } from "./alt-struct-hel
 import { rollCard } from "../interactive/tools/rollCard.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
+
 const stressTableTitles = [
     'LA.altStruct.criticalReactorFailure',
     'LA.altStruct.meltdownTitle',
@@ -23,6 +24,7 @@ function stressTableDescriptions(roll, remStress)
     // Used for multiple ones
         case 0:
             return localize('LA.altStruct.stress.criticalReactorFailure');
+
         case 1:
             switch (remStress)
             {
@@ -33,6 +35,7 @@ function stressTableDescriptions(roll, remStress)
                 default:
                     return localize('LA.altStruct.stress.meltdown');
             }
+
         case 2:
         case 3:
         case 4:
@@ -41,6 +44,7 @@ function stressTableDescriptions(roll, remStress)
         case 6:
             return localize('LA.altStruct.stress.emergencyShunt');
     }
+
     return "";
 }
 
@@ -48,7 +52,9 @@ export async function altRollStress(state)
 {
     if (!state.data)
         throw new TypeError(`Stress roll flow data missing!`);
+
     const actor = state.actor;
+
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanRollStress'));
@@ -85,6 +91,7 @@ export async function altRollStress(state)
     let remStress = state.data?.reroll_data?.stress ?? actor.system.stress.value;
     let stressLost = actor.system.stress.max - remStress;
     let formula = `${stressLost}d6kl1`;
+
     // Legendary NPCs roll with advantage.
     if (actor.is_npc() &&
     actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
@@ -122,6 +129,7 @@ export async function stressCheckMultipleOnes(state)
         throw new TypeError(`Stress roll flow data missing!`);
 
     let actor = state.actor;
+
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanRollStress'));
@@ -134,6 +142,7 @@ export async function stressCheckMultipleOnes(state)
 
     // Multiple ones: critical reactor failure
     let onesRolled = getRollCount(roll, 1);
+
     if (onesRolled > 1)
     {
         state.data.title = localize(stressTableTitles[0]);
@@ -149,6 +158,7 @@ export async function insertEngineeringCheckButton(state)
         throw new TypeError(`Stress roll flow data missing!`);
 
     let actor = state.actor;
+
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanRollStress'));
@@ -157,6 +167,7 @@ export async function insertEngineeringCheckButton(state)
 
     let showEngCheckButton = false;
     const result = state.data.result;
+
     if (!result)
         throw new TypeError(`Stress check hasn't been rolled yet!`);
 
@@ -194,6 +205,7 @@ export async function applyStressEffects(state)
     const rollTotal = roll.total;
 
     const tokens = actor.getActiveTokens();
+
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations | alt-struct |No active token found for actor");
@@ -250,6 +262,7 @@ export async function applyStressEffects(state)
                 {
                     console.warn("lancer-automations | alt-struct |Could not apply SLOW + THROTTLED effects:", error);
                 }
+
                 break;
 
             case 5:
@@ -268,6 +281,7 @@ export async function applyStressEffects(state)
                 {
                     console.warn("lancer-automations | alt-struct |Could not apply IMPAIRED effect:", error);
                 }
+
                 break;
 
             case 1:
@@ -287,6 +301,7 @@ export async function applyStressEffects(state)
                         console.warn("lancer-automations | alt-struct |Could not apply EXPOSED effect:", error);
                     }
                 }
+
                 break;
         }
     }
@@ -300,6 +315,7 @@ async function applyEngineeringCheckEffects(actor, engineeringSuccess)
     let description = "";
 
     const tokens = actor.getActiveTokens();
+
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations | alt-struct |No active token found for actor");
@@ -401,6 +417,7 @@ export async function rollMeltdownCountdown(state)
         throw new TypeError(`Meltdown flow data missing!`);
 
     const actor = state.actor;
+
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanRollMeltdown'));
@@ -410,6 +427,7 @@ export async function rollMeltdownCountdown(state)
     // alt-struct rolls 1d3, the core table rolls 1d6, the button carries the formula
     const formula = state.data.countdownFormula || "1d3";
     const token = actor.getActiveTokens()?.[0] ?? null;
+
     const rolled = await rollCard({
         title: localize('LA.dialogTitle.meltdownCountdown'),
         roll: formula,
@@ -417,8 +435,10 @@ export async function rollMeltdownCountdown(state)
         originToken: token,
         icon: "fas fa-radiation"
     });
+
     if (!rolled)
         return false;
+
     const countdown = rolled.total;
 
     state.data = {
@@ -445,6 +465,7 @@ export async function executeMeltdown(state)
     const countdown = state.data.countdown || 1;
 
     const tokens = actor.getActiveTokens();
+
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations | alt-struct |No active token found for actor");
@@ -462,6 +483,7 @@ export async function executeCriticalMeltdown(state)
         state.data = {};
 
     const actor = state.actor;
+
     if (!actor.is_mech() && !actor.is_npc())
     {
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanHaveReactor'));
@@ -473,6 +495,7 @@ export async function executeCriticalMeltdown(state)
     state.data.desc = localize('LA.altStruct.criticalReactorMeltdownDesc');
 
     const tokens = actor.getActiveTokens();
+
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations | alt-struct |No active token found for actor");
@@ -498,9 +521,11 @@ export async function handleNoStressRemaining(state)
     if (actor.is_npc() && actor.system.stress.max === 1)
     {
         const tokens = actor.getActiveTokens();
+
         if (tokens && tokens.length > 0)
         {
             const token = tokens[0];
+
             try
             {
                 // Apply EXPOSED without duration (permanent until removed)

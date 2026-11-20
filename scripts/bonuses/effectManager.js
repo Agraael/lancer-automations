@@ -8,11 +8,12 @@ import {
 } from "./flagged-effects.js";
 import { createDurationMarks, buildDuration } from "./duration-widget.js";
 import { durationChoice, ANY_TURN_ORIGIN } from "./duration-builders.js";
-import { getLAFlag, unsetLAFlag } from "../tools/flag-utils.js";
+import { getLAFlag } from "../tools/flag-utils.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import {
     addGlobalBonus,
+    removeGlobalBonus,
     addConstantBonus,
     linkBonusToItem,
     linkBonusToActor,
@@ -47,12 +48,14 @@ export { openItemBrowser };
 async function fetchAvailableTags()
 {
     let tags = [];
+
     // Core tags live in the lancer-data compendium.
     for (const pack of game.packs)
     {
         if (pack.metadata.type === "Item" && pack.metadata.packageName === "lancer-data")
         {
             const index = pack.index || await pack.getIndex({ fields: ["type", "system.lid", "system.val"] });
+
             for (const item of index)
             {
                 if (item.type === "tag")
@@ -66,6 +69,7 @@ async function fetchAvailableTags()
             }
         }
     }
+
     tags.sort((a, b) => a.name.localeCompare(b.name));
 
     // Fallback if none found (e.g. system not fully loaded or different pack structure)
@@ -85,10 +89,14 @@ async function fetchAvailableTags()
             { id: "tg_arcing", name: "Arcing" }
         ];
     }
+
     return tags;
 }
 
 /** @returns {Promise<void>} */
+const PRESET_PREFIX = { standard: 'std', custom: 'cust', bonus: 'bonus' };
+const GRANTS_DEF = '// activation: Quick, Full, Free, Reaction, Protocol, Quick Tech, Full Tech, Invade\n[\n // { "name": "Break Free", "activation": "Quick", "detail": "Make a Hull save to end it." }\n]';
+
 export async function executeEffectManager(options = {})
 {
     console.log('lancer-automations | Executing Effect Manager');
@@ -99,40 +107,49 @@ export async function executeEffectManager(options = {})
     let defaultTarget = null;
     const itemTarget = options.item ?? null;
     const isItemContext = !!itemTarget;
+
     if (!options.forcePrototype && !isItemContext && options.actor)
     {
         const active = options.actor.getActiveTokens?.() || [];
         if (active[0])
             defaultTarget = active[0];
     }
+
     // Several tokens selected: open targeting all of them.
     const multiDefault = (!options.forcePrototype && !isItemContext && canvas.tokens.controlled.length > 1)
         ? canvas.tokens.controlled.map(token => token.id).join(', ')
         : null;
+
     if (!options.forcePrototype && !isItemContext && !defaultTarget && canvas.tokens.controlled.length > 0)
         defaultTarget = canvas.tokens.controlled[0];
     else if (!options.forcePrototype && !isItemContext && !defaultTarget && game.user.targets.size > 0)
         defaultTarget = game.user.targets.first();
 
     const tokens = canvas.tokens.placeables;
+
     const protoActor = (options.actor && !isItemContext && (options.forcePrototype || !options.actor.getActiveTokens?.().length))
         ? options.actor : null;
+
     const itemHtml = itemTarget
         ? `<option value="${itemTarget.uuid}" selected>${itemTarget.name} (item)</option>`
         : '';
+
     const protoHtml = protoActor
         ? `<option value="${protoActor.uuid}" selected>${protoActor.name} (prototype)</option>`
         : '';
+
     const tokensHtml = itemHtml + protoHtml + tokens.map(token =>
     {
         const isSelf = !protoActor && !isItemContext && token.id === defaultTarget?.id;
         return `<option value="${token.id}" ${isSelf ? 'selected' : ''}>${token.name}${isSelf ? ' (self)' : ''}</option>`;
     }).join('');
+
     // Target selects only: the multi option wins over the (self) one; origin selects keep the single list.
     const targetsHtml = multiDefault
         ? `<option class="em-multi-opt" value="${multiDefault}" selected>${canvas.tokens.controlled.length} tokens</option>`
             + tokensHtml.replaceAll(' selected>', '>')
         : tokensHtml;
+
     // Origin selects: EACH_ORIGIN makes every target its own duration reference. Default when several targets.
     const originsHtml = `<optgroup label="Special"><option value="${ANY_TURN_ORIGIN}">Any</option><option value="${EACH_ORIGIN}"${multiDefault ? ' selected' : ''}>Each Target</option></optgroup>`
         + `<optgroup label="Tokens">${multiDefault ? tokensHtml.replaceAll(' selected>', '>') : tokensHtml}</optgroup>`;
@@ -150,6 +167,7 @@ export async function executeEffectManager(options = {})
         name: "Start of Turn"
     }
     ];
+
     // Permanent: same as indefinite at apply time, but survives Full Repair (snapshot/restore in lancer-modif.js).
     durations.push(
         { label: 'roundEnd', turns: null, rounded: 1, name: "End of Round" },
@@ -158,6 +176,7 @@ export async function executeEffectManager(options = {})
         { label: 'indefinite', turns: null, rounded: null, name: "Indefinite" },
         { label: 'permanent',  turns: null, rounded: null, name: "Permanent (kept through Full Repair)" }
     );
+
     const allDurations = [...durations];
 
     if (!game.combat)
@@ -198,9 +217,11 @@ export async function executeEffectManager(options = {})
         { name: 'Heat', icon: 'systems/lancer/assets/icons/white/damage_heat.svg' },
         { name: 'Burn', icon: 'systems/lancer/assets/icons/white/damage_burn.svg' }
     ];
+
     if (getModuleSetting('enableInfectionDamageIntegration'))
         damageTypes.push({ name: 'Infection', icon: 'modules/lancer-automations/icons/infection.svg' });
     damageTypes.push({ name: 'AoE', icon: 'systems/lancer/assets/icons/white/aoe_blast.svg' });
+
     const damageTypeIconsHtml = damageTypes.map(dmgType => `
         <div class="bonus-immunity-damage-option te-icon-option" data-type="${dmgType.name}" title="${dmgType.name}">
             <img src="${dmgType.icon}" width="24" height="24">
@@ -226,6 +247,7 @@ export async function executeEffectManager(options = {})
     // White target mark, yellow tethered mark on every reference token, while the manager is open.
     const emMarks = createDurationMarks();
     const clearEmHighlight = () => emMarks.destroy();
+
     const highlightEmToken = (tokenId, originIds = []) =>
     {
         emMarks.update({
@@ -252,21 +274,27 @@ export async function executeEffectManager(options = {})
             {
                 const inCombat = !!game.combat;
                 const def = 'indefinite';
+
                 const opts = allDurations
                     .filter(duration => inCombat || duration.label === 'indefinite' || duration.label === 'permanent')
                     .map(duration => `<option value="${duration.label}">${duration.name}</option>`).join('');
+
                 const bonusOpts = opts + '<option value="constant">Constant (no icon, always active)</option>';
+
                 for (const id of ['#std-duration', '#cust-duration'])
                 {
                     const $sel = html.find(id);
                     if (!$sel.length)
                         continue;
+
                     const cur = String($sel.val() ?? '');
                     $sel.html(opts);
                     $sel.val($sel.find(`option[value="${cur}"]`).length ? cur : def);
                     $sel.trigger('change');
                 }
+
                 const $bonusSel = html.find('#bonus-duration');
+
                 if ($bonusSel.length)
                 {
                     const bonusCur = String($bonusSel.val() ?? '');
@@ -274,10 +302,12 @@ export async function executeEffectManager(options = {})
                     $bonusSel.val(($bonusSel.find(`option[value="${bonusCur}"]`).length ? bonusCur : def));
                     $bonusSel.trigger('change');
                 }
+
                 constrainStdDuration();
                 constrainCustDuration();
                 constrainDurationForTarget();
             };
+
             const _onCombatChange = () => _rebuildDurationSelects();
             Hooks.on('createCombat', _onCombatChange);
             Hooks.on('deleteCombat', _onCombatChange);
@@ -288,23 +318,27 @@ export async function executeEffectManager(options = {})
             {
                 let lastScrollHeight = 0;
                 let rafId = 0;
+
                 const refit = () =>
                 {
                     rafId = 0;
                     if (!dlg.element?.length)
                         return;
+
                     const currentHeight = root.scrollHeight;
                     if (currentHeight === lastScrollHeight || currentHeight === 0)
                         return;
                     lastScrollHeight = currentHeight;
                     dlg.setPosition(/** @type {any} */ ({ height: 'auto', left: dlg.position.left, top: dlg.position.top }));
                 };
+
                 const resizeObserver = new ResizeObserver(() =>
                 {
                     if (rafId)
                         cancelAnimationFrame(rafId);
                     rafId = requestAnimationFrame(refit);
                 });
+
                 resizeObserver.observe(root);
                 dlg._laResizeObserver = resizeObserver;
             }
@@ -314,6 +348,7 @@ export async function executeEffectManager(options = {})
             const TAB_ORIGIN_SELECT = { std: '#std-origin', cust: '#cust-origin', bonus: '#bonus-durOrigin' };
             const TAB_TRIGGER_SELECT = { std: '#std-trigger-origin', cust: '#cust-trigger-origin', bonus: '#bonus-trigger-origin' };
             const TAB_DURATION_SELECT = { std: '#std-duration', cust: '#cust-duration', bonus: '#bonus-duration' };
+
             const refreshEmHighlight = () =>
             {
                 const prefix = TAB_TARGET_PREFIX[html.find('.te-tab.active').data('tab')] || 'std';
@@ -322,6 +357,7 @@ export async function executeEffectManager(options = {})
                 const originSelect = TAB_ORIGIN_SELECT[prefix];
                 const triggerSelect = TAB_TRIGGER_SELECT[prefix];
                 const origins = [];
+
                 if (turnBased && originSelect)
                     origins.push(html.find(originSelect).val());
                 // Trigger origin only matters once a consumption trigger is checked.
@@ -329,6 +365,7 @@ export async function executeEffectManager(options = {})
                     origins.push(html.find(triggerSelect).val());
                 highlightEmToken(html.find(`#${prefix}-target`).val(), origins.filter(Boolean));
             };
+
             html.find('#std-target, #cust-target, #bonus-target, #manage-target').on('change', refreshEmHighlight);
             html.find('#std-origin, #cust-origin, #bonus-durOrigin').on('change', refreshEmHighlight);
             html.find('#std-trigger-origin, #cust-trigger-origin, #bonus-trigger-origin').on('change', refreshEmHighlight);
@@ -337,25 +374,31 @@ export async function executeEffectManager(options = {})
             // One target for the whole manager: Standard / Custom / Bonus / Manage stay in step.
             const EM_TARGET_IDS = ['std-target', 'cust-target', 'bonus-target', 'manage-target'];
             let syncingTargets = false;
+
             const syncEmTargets = (sourceId) =>
             {
                 if (syncingTargets)
                     return;
                 syncingTargets = true;
                 const ids = _emTargetIds(html.find(`#${sourceId}`).val());
+
                 for (const id of EM_TARGET_IDS)
                 {
                     if (id === sourceId)
                         continue;
+
                     const $select = html.find(`#${id}`);
                     // Manage lists one actor's effects, so it follows the first target only.
                     const next = id === 'manage-target' ? ids.slice(0, 1) : ids;
+
                     if (!$select.length || _emTargetIds($select.val()).join(',') === next.join(','))
                         continue;
                     _setEmTargetValue($select, next);
                 }
+
                 syncingTargets = false;
             };
+
             html.find('#std-target, #cust-target, #bonus-target, #manage-target').on('change', function ()
             {
                 syncEmTargets(String(this.id));
@@ -368,6 +411,7 @@ export async function executeEffectManager(options = {})
                 const prefix = String(this.id).replace('-target', '');
                 const $origin = html.find(TAB_ORIGIN_SELECT[prefix]);
                 const ids = _emTargetIds($(this).val());
+
                 if (ids.length > 1 && String($origin.val()) !== ANY_TURN_ORIGIN)
                     $origin.val(EACH_ORIGIN).change();
                 else if (String($origin.val()) === EACH_ORIGIN)
@@ -385,6 +429,7 @@ export async function executeEffectManager(options = {})
                     html.find(`.em-tier-slot[data-tab="${tab}"]`).toggle(!liveOnly && tierGateApplies(item ?? actor));
                 }
             };
+
             updateTierSlots();
             html.find('#std-target, #cust-target, #bonus-target').on('change', updateTierSlots);
             bindTierGate(html, () =>
@@ -412,6 +457,7 @@ export async function executeEffectManager(options = {})
                 const val = html.find(`#${prefix}-duration`).val();
                 const $opts = html.find(`#${prefix}-duration`).siblings('.dur-opts');
                 const isRound = val === 'roundEnd' || val === 'roundStart';
+
                 if (val === 'indefinite' || val === 'permanent' || val === 'encounter')
                     $opts.hide();
                 else
@@ -423,6 +469,7 @@ export async function executeEffectManager(options = {})
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
+
             html.find('#std-duration').change(() => toggleDurOpts('std'));
             html.find('#cust-duration').change(() => toggleDurOpts('cust'));
             toggleDurOpts('std');
@@ -437,12 +484,14 @@ export async function executeEffectManager(options = {})
             {
                 const path = String(html.find(`#${inputId}`).val() ?? '');
                 const $img = html.find(`#${inputId}-preview`);
+
                 if ($img.length)
                 {
                     $img.attr('src', path);
                     $img[0].style.opacity = '1';
                 }
             };
+
             const _syncCustIconPreview = () => _syncIconPreview('cust-icon');
 
             // File Picker: honors the button's data-target so each input has its own.
@@ -468,24 +517,30 @@ export async function executeEffectManager(options = {})
                 const statusEffect = (CONFIG.statusEffects ?? []).find(se => se.id === id || se.name === id);
                 if (!statusEffect)
                     return '';
+
                 const desc = /** @type {any} */ (statusEffect).description;
                 return typeof desc === 'string' && desc.trim() ? localize(desc) : '';
             };
+
             let _laHoverTip = null;
+
             const _hideEffectTooltip = () =>
             {
                 _laHoverTip?.remove();
                 _laHoverTip = null;
             };
+
             const _showEffectTooltip = (anchor, label, desc) =>
             {
                 _hideEffectTooltip();
                 if (!desc)
                     return;
+
                 const tip = $(htmlToElement(`<div class="la-status-tooltip" style="position:fixed;z-index:9999;background:#1a1a1a;color:#eee;border:1px solid #555;border-radius:3px;padding:6px 8px;max-width:280px;font-size:0.78em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.6);">
                     <div style="font-weight:bold;color:#fff;margin-bottom:4px;">${label}</div>
                     <div style="color:#bbb;line-height:1.4;">${desc}</div>
                 </div>`));
+
                 tip.appendTo(document.body);
                 const rect = anchor.getBoundingClientRect();
                 const tooltipHeight = tip.outerHeight() ?? 0;
@@ -493,6 +548,7 @@ export async function executeEffectManager(options = {})
                 tip.css({ top, left: rect.right + 6 });
                 _laHoverTip = tip;
             };
+
             const _attachEffectHoverTooltip = (selector, idAttr) =>
             {
                 let timer = null;
@@ -502,8 +558,10 @@ export async function executeEffectManager(options = {})
                         const id = $(this).attr(idAttr) ?? $(this).data('name');
                         const label = String($(this).data('name') ?? id ?? '');
                         const desc = _findStatusDesc(String(id));
+
                         if (!desc)
                             return;
+
                         const el = this;
                         timer = setTimeout(() => _showEffectTooltip(el, label, desc), 500);
                     })
@@ -514,9 +572,11 @@ export async function executeEffectManager(options = {})
                             clearTimeout(timer);
                             timer = null;
                         }
+
                         _hideEffectTooltip();
                     });
             };
+
             _attachEffectHoverTooltip('.std-effect-option', 'data-id');
             _attachEffectHoverTooltip('.bonus-immunity-effect-option', 'data-effect');
 
@@ -531,6 +591,7 @@ export async function executeEffectManager(options = {})
                 const $input = html.find('#bonus-uses');
                 const currentUses = Number.parseInt(String($input.val() ?? ''));
                 const nextUses = Number.isFinite(currentUses) ? currentUses + step : (step > 0 ? 1 : 0);
+
                 if (nextUses < 1)
                     $input.val('');
                 else
@@ -542,13 +603,17 @@ export async function executeEffectManager(options = {})
                 const target = String($(this).data('target') ?? '');
                 if (!target)
                     return;
+
                 const step = Number($(this).data('step')) || 0;
                 const $input = html.find(`#${target}`);
+
                 if (!$input.length)
                     return;
+
                 const min = Number($input.attr('min'));
                 const currentValue = Number.parseInt(String($input.val() ?? '0'));
                 let nextValue = (Number.isFinite(currentValue) ? currentValue : 0) + step;
+
                 if (Number.isFinite(min) && nextValue < min)
                     nextValue = min;
                 $input.val(nextValue).trigger('change');
@@ -559,6 +624,7 @@ export async function executeEffectManager(options = {})
             {
                 if (!hasCustomStatus)
                     return null;
+
                 const list = /** @type {any[]} */ (game.settings.get('temporary-custom-statuses', 'savedStatuses') || []);
                 return list.find(saved => saved.name === name) || null;
             };
@@ -600,6 +666,7 @@ export async function executeEffectManager(options = {})
             {
                 const clip = this.querySelector('.la-hud-clip');
                 const pan = this.querySelector('.la-hud-pan');
+
                 if (clip && pan)
                 {
                     const overflow = pan.scrollWidth - clip.clientWidth;
@@ -615,6 +682,7 @@ export async function executeEffectManager(options = {})
             {
                 const initialId = html.find('#std-effect').val();
                 const $initOpt = html.find(`.std-effect-option[data-id="${initialId}"]`);
+
                 if ($initOpt.length)
                     $initOpt.click();
                 else
@@ -623,6 +691,7 @@ export async function executeEffectManager(options = {})
                     html.find('.std-effect-option').first().click();
                 }
             };
+
             initStdGrid();
 
             html.find('#std-effect-search').on('input', function ()
@@ -645,12 +714,15 @@ export async function executeEffectManager(options = {})
                 const name = String(html.find('#cust-name').val() || '').trim();
                 const icon = String(html.find('#cust-icon').val() || '').trim();
                 const description = String(html.find('#cust-description').val() || '').trim();
+
                 if (!name)
                     return ui.notifications.warn(localize('LA.notify.nameIsRequiredToSaveAStatus'));
                 if (!icon)
                     return ui.notifications.warn(localize('LA.notify.iconIsRequiredToSaveAStatus'));
+
                 const list = game.settings.get('temporary-custom-statuses', 'savedStatuses') || [];
                 const existing = list.find(saved => saved.name === name);
+
                 if (existing)
                 {
                     existing.icon = icon;
@@ -670,18 +742,58 @@ export async function executeEffectManager(options = {})
                 ui.notifications.info(localizeFormat('LA.notify.savedCustomStatus', { name }));
             });
 
+            html.find('.delete-status-btn').click(async () =>
+            {
+                const $sel = html.find('#cust-saved');
+                const name = String($sel.val() || '');
+
+                if (!name)
+                    return ui.notifications.warn(localize('LA.notify.selectASavedStatusToDeleteFirst'));
+
+                const list = (game.settings.get('temporary-custom-statuses', 'savedStatuses') || []).filter(saved => saved.name !== name);
+                await game.settings.set('temporary-custom-statuses', 'savedStatuses', list);
+                game.modules.get('temporary-custom-statuses')?.api?.syncStatusEffects?.();
+                $sel.find('option').filter((_, option) => /** @type {HTMLOptionElement} */ (option).value === name).remove();
+                $sel.val('');
+                html.find('#cust-saved-icon').hide();
+                ui.notifications.info(localizeFormat('LA.notify.deletedCustomStatus', { name }));
+            });
+
             const _codeFieldMeta = {
                 'bonus-condition':        { title: localize('LA.effectManager.codeField.condition'),            def: '(state, actor, data, context) => { return true; }' },
                 'bonus-applyToCondition': { title: localize('LA.effectManager.codeField.applyToCondition'),   def: '(target, state, reactorToken) => { return true; }' },
                 'std-evaluate':           { title: localize('LA.effectManager.codeField.consumptionEvaluate'), def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
                 'cust-evaluate':          { title: localize('LA.effectManager.codeField.consumptionEvaluate'), def: '(triggerType, triggerData, effectBearerToken, effect) => { return true; }' },
                 'cust-changes':           { title: localize('LA.effectManager.codeField.activeEffectChanges'), def: '// Modes: 0=CUSTOM 1=MULTIPLY 2=ADD 3=DOWNGRADE 4=UPGRADE 5=OVERRIDE\n[\n // { "key": "system.armor", "mode": 2, "value": 1 }\n]' },
+                'std-grants':             { title: localize('LA.effectManager.codeField.grantedActions'),      def: GRANTS_DEF },
+                'cust-grants':            { title: localize('LA.effectManager.codeField.grantedActions'),      def: GRANTS_DEF },
             };
+
+            const readGrantActions = (prefix) =>
+            {
+                const src = String(html.find(`#${prefix}-grants-value`).val() || '').trim();
+                if (!src)
+                    return {};
+
+                try
+                {
+                    const parsed = (new Function(`return (${src}\n);`))();
+                    if (!Array.isArray(parsed))
+                        return { error: localize('LA.notify.grantedActionsMustBeAnArray') };
+                    return parsed.length ? { list: parsed } : {};
+                }
+                catch (err)
+                {
+                    return { error: localizeFormat('LA.notify.grantedActionsParseError', { error: err.message }) };
+                }
+            };
+
             // Immunity flips who is who: the bearer is the defender, so the other party is the attacker.
             const _immunityCodeDefs = {
                 'bonus-condition':        '(state, attacker, data, context) => { return true; }',
                 'bonus-applyToCondition': '(attacker, state, me) => { return true; }',
             };
+
             const _rebuildPresetSelect = (prefix) =>
             {
                 const cat = presetCategoryFor(prefix);
@@ -694,10 +806,12 @@ export async function executeEffectManager(options = {})
                     $sel.append(`<option value="${preset.name}">${preset.name}</option>`);
                 $sel.val(prev);
             };
+
             html.find('.save-preset-btn').click(async function ()
             {
                 const prefix = $(this).data('prefix');
                 const cat = presetCategoryFor(prefix);
+
                 const name = await new Promise((resolve) =>
                 {
                     new Dialog({
@@ -712,11 +826,14 @@ export async function executeEffectManager(options = {})
                         render: (dlgHtml) => setTimeout(() => dlgHtml.find('#preset-name-input').focus(), 50)
                     }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
                 });
+
                 if (!name)
                     return;
+
                 const all = getStoredPresets();
                 const data = gatherPresetData(html, prefix);
                 const existing = all[cat].find(p => p.name === name);
+
                 if (existing)
                 {
                     const overwrite = await new Promise((resolve) =>
@@ -732,6 +849,7 @@ export async function executeEffectManager(options = {})
                             close: () => resolve(false)
                         }, { classes: ['lancer-dialog-base', 'lancer-no-title'] }).render(true);
                     });
+
                     if (!overwrite)
                         return;
                     existing.data = data;
@@ -749,10 +867,12 @@ export async function executeEffectManager(options = {})
                 const name = String($(this).val() || '');
                 if (!name)
                     return;
+
                 const id = this.id;
                 const prefix = id.startsWith('std') ? 'std' : id.startsWith('cust') ? 'cust' : 'bonus';
                 const cat = presetCategoryFor(prefix);
                 const preset = getStoredPresets()[cat].find(p => p.name === name);
+
                 if (!preset)
                     return;
                 applyPresetData(html, prefix, preset.data);
@@ -763,8 +883,10 @@ export async function executeEffectManager(options = {})
                 const prefix = $(this).closest('.preset-bar').data('prefix');
                 const $sel = html.find(`#${prefix}-preset-load`);
                 const name = String($sel.val() || '');
+
                 if (!name)
                     return ui.notifications.warn(localize('LA.notify.selectAPresetToDeleteFirst'));
+
                 const all = getStoredPresets();
                 const cat = presetCategoryFor(prefix);
                 all[cat] = (all[cat] || []).filter(p => p.name !== name);
@@ -779,6 +901,7 @@ export async function executeEffectManager(options = {})
             {
                 const all = getStoredPresets();
                 const rows = [];
+
                 for (const [cat, prefix, label] of [['standard', 'std', 'Standard'], ['custom', 'cust', 'Custom'], ['bonus', 'bonus', 'Bonus']])
                 {
                     for (const preset of (all[cat] ?? []))
@@ -791,8 +914,10 @@ export async function executeEffectManager(options = {})
                         </div>`);
                     }
                 }
+
                 html.find('#manage-presets-list').html(rows.join('') || '<p style="opacity:0.6; margin:2px 0;">No presets saved.</p>');
             };
+
             renderManagePresets();
             html.find('#manage-presets-list').on('click', '.manage-preset-load', function ()
             {
@@ -801,8 +926,10 @@ export async function executeEffectManager(options = {})
                 const prefix = String(row.data('prefix'));
                 const name = String(row.data('name'));
                 const preset = (getStoredPresets()[cat] ?? []).find(entry => entry.name === name);
+
                 if (!preset)
                     return;
+
                 const tabButton = html.find(`.te-tab[data-tab="${cat}"]`);
                 if (!tabButton.length)
                     return ui.notifications.warn(localize('LA.notify.thatTabIsNotAvailable'));
@@ -832,6 +959,7 @@ export async function executeEffectManager(options = {})
             const pruneSnippet = (obj) =>
             {
                 const out = {};
+
                 for (const [key, value] of Object.entries(obj))
                 {
                     if (value === undefined || value === null || value === '' || value === false)
@@ -840,6 +968,7 @@ export async function executeEffectManager(options = {})
                         continue;
                     out[key] = value;
                 }
+
                 return out;
             };
 
@@ -857,11 +986,14 @@ export async function executeEffectManager(options = {})
                     const type = selectedBonusType();
                     const { bonusData, addOptions, duration } = gatherBonusFormData(html, type);
                     const prunedBonus = pruneSnippet(bonusData);
+
                     if (duration === 'constant')
                         return `await api.addConstantBonus(reactorToken.actor, ${formatSnippet(prunedBonus)});`;
+
                     const options = pruneSnippet({ ...addOptions, origin: '__REACTOR_ID__', forcePrototype: undefined });
                     return `await api.addGlobalBonus(reactorToken.actor, ${formatSnippet(prunedBonus)}, ${formatSnippet(options)});`;
                 }
+
                 const prefix = tab === 'standard' ? 'std' : 'cust';
                 const { label: durationLabel } = durationChoice(String(html.find(`#${prefix}-duration`).val()), String(html.find(`#${prefix}-origin`).val()));
                 const turnsRaw = Number.parseInt(String(html.find(`#${prefix}-turns`).val()));
@@ -872,16 +1004,27 @@ export async function executeEffectManager(options = {})
                 delete duration._preAdjusted;
                 if (['end', 'start'].includes(durationLabel))
                     duration.overrideTurnOriginId = '__REACTOR_ID__';
+
                 const extraOptions = {};
                 if (stack > 1)
                     extraOptions.stack = stack;
+
                 const consumption = getTriggerConfig(html, prefix);
                 if (consumption)
                     extraOptions.consumption = consumption;
+
                 const tier = readTierGate(html.find(`.la-tier-gate[data-role="em-${prefix}"]`)[0]);
                 if (tier)
                     extraOptions.tier = tier;
+
+                const grants = readGrantActions(prefix);
+                if (grants.error)
+                    ui.notifications.warn(grants.error);
+                else if (grants.list)
+                    extraOptions.grantActions = grants.list;
+
                 let effectNames;
+
                 if (tab === 'standard')
                     effectNames = String(html.find('#std-effect').val());
                 else
@@ -894,7 +1037,9 @@ export async function executeEffectManager(options = {})
                         isCustom: true,
                         description: findSavedStatus(snippetName) ? '' : snippetDescription
                     });
+
                     const changesSrc = String(html.find('#cust-changes-value').val() || '').trim();
+
                     if (changesSrc)
                     {
                         try
@@ -907,6 +1052,7 @@ export async function executeEffectManager(options = {})
                         }
                     }
                 }
+
                 const options = pruneSnippet({ tokens: '__REACTOR_TOKENS__', effectNames, note, duration });
                 const hasExtra = Object.keys(extraOptions).length > 0;
                 return `await api.applyEffectsToTokens(${formatSnippet(options)}${hasExtra ? `, ${formatSnippet(extraOptions)}` : ''});`;
@@ -945,12 +1091,14 @@ export async function executeEffectManager(options = {})
                     render: (dlgHtml) =>
                     {
                         const host = dlgHtml.find('.lcm-host')[0];
+
                         if (typeof CodeMirror === 'undefined')
                         {
                             host.innerHTML = '<textarea readonly spellcheck="false" style="width:100%; height:100%; font-family:var(--font-mono, monospace); font-size:12px; white-space:pre; resize:none;"></textarea>';
                             host.firstChild.value = code;
                             return;
                         }
+
                         editor = CodeMirror(host, {
                             value: code,
                             mode: 'javascript',
@@ -962,6 +1110,7 @@ export async function executeEffectManager(options = {})
                             lineWrapping: false,
                             scrollbarStyle: "native"
                         });
+
                         const windowEl = dlgHtml.closest('.window-app')[0];
                         resizeObserver = attachEditorResizeObserver(editor, windowEl);
                     },
@@ -980,6 +1129,7 @@ export async function executeEffectManager(options = {})
             html.find('.extract-code-btn').click(function ()
             {
                 const tab = $(this).data('tab');
+
                 try
                 {
                     showExtractedCode(buildExtractedCode(tab));
@@ -1027,20 +1177,30 @@ export async function executeEffectManager(options = {})
                     const consumption = getTriggerConfig(html, 'std');
                     const ownConsumptionOrigin = perEach && !consumption?.originId;
                     const extraOptions = {};
+
                     if (stack > 1 || consumption)
                         extraOptions.stack = stack;
+
                     if (consumption)
                     {
                         if (!consumption.originId)
                             consumption.originId = _emTargetIds(targetID)[0] ?? targetID;
                         extraOptions.consumption = consumption;
                     }
+
                     const stdTier = readTierGate(html.find('.la-tier-gate[data-role="em-std"]')[0]);
                     if (stdTier)
                         extraOptions.tier = stdTier;
 
+                    const stdGrants = readGrantActions('std');
+                    if (stdGrants.error)
+                        return ui.notifications.error(stdGrants.error);
+                    if (stdGrants.list)
+                        extraOptions.grantActions = stdGrants.list;
+
                     const resolved = _resolveEmTargets(targetID);
                     const liveTokens = resolved.filter(entry => entry.token && !entry.item).map(entry => entry.token);
+
                     if (liveTokens.length)
                     {
                         for (const group of _emApplyGroups(liveTokens, originID))
@@ -1048,6 +1208,7 @@ export async function executeEffectManager(options = {})
                             const groupOptions = ownConsumptionOrigin
                                 ? { ...extraOptions, consumption: { ...consumption, originId: group.origin } }
                                 : extraOptions;
+
                             await applyEffectsToTokens({
                                 tokens: group.tokens,
                                 effectNames: effectName,
@@ -1055,25 +1216,30 @@ export async function executeEffectManager(options = {})
                                 duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
                             }, groupOptions);
                         }
+
                         ui.notifications.info(localizeFormat('LA.notify.appliedTo', { effect: effectName, target: _emTargetLabel(liveTokens) }));
                     }
                     else
                     {
                         const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
+
                         if (!doc)
                             return ui.notifications.error(localize('LA.notify.targetNotFound'));
+
                         const linkOpts = {
                             effectNames: effectName,
                             note: note,
                             duration: { ...duration, overrideTurnOriginId: docOrigin },
                         };
+
                         if (doc.documentName === 'Item')
                             await linkEffectToItem({ items: [doc], ...linkOpts }, { ...extraOptions, addedViaUI: true });
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
                         ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: effectName, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
                     }
+
                     setTimeout(updateManageTabCount, 200);
 
                 }
@@ -1098,8 +1264,10 @@ export async function executeEffectManager(options = {})
                     const consumption = getTriggerConfig(html, 'cust');
                     const ownConsumptionOrigin = perEach && !consumption?.originId;
                     const extraOptions = {};
+
                     if (stack > 1)
                         extraOptions.stack = stack;
+
                     if (consumption)
                     {
                         if (!consumption.originId)
@@ -1107,10 +1275,13 @@ export async function executeEffectManager(options = {})
                         extraOptions.consumption = consumption;
                         extraOptions.stack = stack;
                     }
+
                     const custTier = readTierGate(html.find('.la-tier-gate[data-role="em-cust"]')[0]);
                     if (custTier)
                         extraOptions.tier = custTier;
+
                     const changesSrc = String(html.find('#cust-changes-value').val() || '').trim();
+
                     if (changesSrc)
                     {
                         try
@@ -1126,11 +1297,18 @@ export async function executeEffectManager(options = {})
                         }
                     }
 
+                    const custGrants = readGrantActions('cust');
+                    if (custGrants.error)
+                        return ui.notifications.error(custGrants.error);
+                    if (custGrants.list)
+                        extraOptions.grantActions = custGrants.list;
+
                     const resolved = _resolveEmTargets(targetID);
                     const liveTokens = resolved.filter(entry => entry.token && !entry.item).map(entry => entry.token);
                     // saved statuses resolve from CONFIG, stamp only one-offs
                     const description = String(html.find('#cust-description').val() || '').trim();
                     const stampDescription = description && !findSavedStatus(String(name));
+
                     const effectData = {
                         name: name,
                         icon: icon,
@@ -1138,6 +1316,7 @@ export async function executeEffectManager(options = {})
                         isCustom: true,
                         ...(stampDescription ? { description } : {})
                     };
+
                     if (liveTokens.length)
                     {
                         for (const group of _emApplyGroups(liveTokens, originID))
@@ -1145,6 +1324,7 @@ export async function executeEffectManager(options = {})
                             const groupOptions = ownConsumptionOrigin
                                 ? { ...extraOptions, consumption: { ...consumption, originId: group.origin } }
                                 : extraOptions;
+
                             await applyEffectsToTokens({
                                 tokens: group.tokens,
                                 effectNames: effectData,
@@ -1152,25 +1332,30 @@ export async function executeEffectManager(options = {})
                                 duration: { ...buildDuration(durationLabel, group.origin, turnsInput), overrideTurnOriginId: group.origin },
                             }, groupOptions);
                         }
+
                         ui.notifications.info(localizeFormat('LA.notify.appliedTo', { effect: name, target: _emTargetLabel(liveTokens) }));
                     }
                     else
                     {
                         const { actor: resolvedActor, item: resolvedItem } = resolved[0] ?? {};
                         const doc = resolvedItem ?? resolvedActor;
+
                         if (!doc)
                             return ui.notifications.error(localize('LA.notify.targetNotFound'));
+
                         const linkOpts = {
                             effectNames: effectData,
                             note: note,
                             duration: { ...duration, overrideTurnOriginId: docOrigin },
                         };
+
                         if (doc.documentName === 'Item')
                             await linkEffectToItem({ items: [doc], ...linkOpts }, { ...extraOptions, addedViaUI: true });
                         else
                             await linkEffectToActor({ actors: [doc], ...linkOpts }, extraOptions);
                         ui.notifications.info(localizeFormat('LA.notify.appliedToDoc', { effect: name, target: doc.name, kind: doc.documentName === 'Item' ? ' (item)' : ' (prototype)' }));
                     }
+
                     setTimeout(updateManageTabCount, 200);
                 }
             });
@@ -1192,11 +1377,13 @@ export async function executeEffectManager(options = {})
                     summary.text('—').removeClass('has-bonuses').attr('title', 'No target selected');
                     return;
                 }
+
                 const actor = resolvedActor;
                 const bonuses = getLAFlag(actor,"global_bonuses") || [];
                 const constantBonuses = getLAFlag(actor,"constant_bonuses") || [];
                 const bonusTemplates = getLAFlag(actor,"bonusTemplates") || [];
                 const total = bonuses.length + constantBonuses.length + bonusTemplates.length;
+
                 if (total > 0)
                     summary.text(`${total} active`).addClass('has-bonuses').attr('title', `${total} active bonus${total > 1 ? 'es' : ''} — see Manage tab.`);
                 else
@@ -1209,6 +1396,7 @@ export async function executeEffectManager(options = {})
             // Durations valid for item / prototype-actor targets (no round or encounter anchor on a template).
             const _durationsAllowedForDoc = new Set(['indefinite', 'permanent', 'constant', 'end', 'start']);
             const _durationsAllowedForItem = new Set(['indefinite', 'constant']);
+
             const _constrainDurationDropdown = (targetSelector, durationSelector) =>
             {
                 const tid = String(html.find(targetSelector).val());
@@ -1216,6 +1404,7 @@ export async function executeEffectManager(options = {})
                 const isDoc = !!(item || (actor && !token));
                 const allowed = item ? _durationsAllowedForItem : _durationsAllowedForDoc;
                 const $sel = html.find(durationSelector);
+
                 if (!$sel.length)
                     return;
                 $sel.find('option').each((_i, el) =>
@@ -1227,6 +1416,7 @@ export async function executeEffectManager(options = {})
                 if (isDoc && $sel.find('option:selected').is(':disabled'))
                     $sel.val('indefinite').trigger('change');
             };
+
             const constrainDurationForTarget = () => _constrainDurationDropdown('#bonus-target', '#bonus-duration');
             const constrainStdDuration = () => _constrainDurationDropdown('#std-target', '#std-duration');
             const constrainCustDuration = () => _constrainDurationDropdown('#cust-target', '#cust-duration');
@@ -1242,6 +1432,7 @@ export async function executeEffectManager(options = {})
                 const val = html.find('#bonus-duration').val();
                 const $opts = html.find('.bonus-dur-opts');
                 const isRound = val === 'roundEnd' || val === 'roundStart';
+
                 if (!val || val === 'indefinite' || val === 'permanent' || val === 'constant' || val === 'encounter')
                     $opts.hide();
                 else
@@ -1253,6 +1444,7 @@ export async function executeEffectManager(options = {})
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
+
             html.find('#bonus-duration').on('change', toggleBonusDurOpts);
             toggleBonusDurOpts();
             constrainDurationForTarget();
@@ -1266,6 +1458,7 @@ export async function executeEffectManager(options = {})
                 onDamage: ['bonus-filter-itemLid', 'bonus-filter-itemId', 'bonus-filter-role'],
                 onTechAttack: ['bonus-filter-itemLid', 'bonus-filter-itemId', 'bonus-filter-role'],
                 onTechHit: ['bonus-filter-itemLid', 'bonus-filter-itemId', 'bonus-filter-role'],
+                onInvadeHit: ['bonus-filter-itemLid', 'bonus-filter-itemId', 'bonus-filter-role'],
                 onMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onPreMove: ['bonus-filter-boost', 'bonus-filter-distance'],
                 onInitActivation: ['bonus-filter-actionName'],
@@ -1322,11 +1515,13 @@ export async function executeEffectManager(options = {})
 
                 // Reference picks (duration / trigger origin) mark yellow and tether back to the target.
                 const prefix = TAB_TARGET_PREFIX[html.find('.te-tab.active').data('tab')] || 'std';
+
                 const anchors = single
                     ? _emTargetIds(html.find(`#${prefix}-target`).val()).map(id => canvas.tokens.get(id)).filter(Boolean)
                     : [];
 
                 clearEmHighlight(); // drop the target highlight so it doesn't clash with the canvas picker
+
                 const selected = await api.pickTokensCardless(caster, {
                     includeSelf: true,
                     single: single,
@@ -1355,6 +1550,7 @@ export async function executeEffectManager(options = {})
                     const firstTargetId = applyToStr.split(',')[0].trim();
                     targetToken = canvas.tokens.get(firstTargetId);
                 }
+
                 if (!targetToken)
                     targetToken = canvas.tokens.controlled[0];
 
@@ -1365,6 +1561,7 @@ export async function executeEffectManager(options = {})
                 }
 
                 const items = targetToken.actor.items.filter(item => !['skill', 'talent', 'core_bonus', 'integrated'].includes(item.type));
+
                 if (items.length === 0)
                 {
                     ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
@@ -1419,6 +1616,7 @@ export async function executeEffectManager(options = {})
                     width: 500,
                     classes: ["lancer-dialog-base", "lancer-item-browser-dialog", "lancer-no-title"]
                 });
+
                 itemPickerDialog.render(true);
             });
 
@@ -1434,19 +1632,25 @@ export async function executeEffectManager(options = {})
             {
                 const targetID = String(html.find('#bonus-target').val());
                 const resolvedTargets = _resolveEmTargets(targetID).filter(entry => entry.actor || entry.item);
+
                 if (!resolvedTargets.length)
                     return ui.notifications.error(localize('LA.notify.targetNotFound'));
+
                 const { bonusData, addOptions, duration } = gatherBonusFormData(html, type);
                 const durOrigin = html.find('#bonus-durOrigin').val();
+
                 if (bonusData.uses === undefined && (addOptions.consumption || bonusData.consumeOnUsage === true))
                     ui.notifications.warn(localizeFormat('LA.notify.noUsesSet', { name: bonusData.name }));
+
                 for (const entry of resolvedTargets)
                 {
                     const targetIsItem = !!entry.item;
                     const targetIsPrototype = !targetIsItem && !entry.token && entry.actor?.documentName === 'Actor';
+
                     const entryOptions = durOrigin === EACH_ORIGIN
                         ? { ...addOptions, origin: entry.token?.id ?? '' }
                         : addOptions;
+
                     if (targetIsItem)
                         await linkBonusToItem({ items: [entry.item], bonusData, addOptions: { ...entryOptions, addedViaUI: true } });
                     else if (targetIsPrototype)
@@ -1456,6 +1660,7 @@ export async function executeEffectManager(options = {})
                     else
                         await addGlobalBonus(entry.actor, bonusData, entryOptions);
                 }
+
                 setTimeout(updateBonusList, 200);
                 setTimeout(updateManageTabCount, 200);
             };
@@ -1465,35 +1670,45 @@ export async function executeEffectManager(options = {})
                 const $uses = html.find('#bonus-uses');
                 if (String($uses.val() ?? '').trim() !== '')
                     return;
+
                 const hasTrigger = html.find('#bonus-trigger input:checked').length > 0;
                 const usageOn = html.find('#bonus-consume-usage-row').is(':visible') && html.find('#bonus-consumeOnUsage').is(':checked');
+
                 if (hasTrigger || usageOn)
                     $uses.val(1);
             };
 
             let lastUsageUiType = null;
+
             const updateConsumeUsageRow = () =>
             {
                 const uiType = String(html.find('#bonus-type').val() ?? '');
                 const subtype = String(html.find('#bonus-immunity-subtype').val() ?? '');
+
                 const show = ['roll', 'damage', 'target_modifier', 'reroll', 'resistance', 'vulnerability'].includes(uiType)
-                    || (uiType === 'immunity' && supportsConsumeOnUsage('immunity', subtype));
+                    || (uiType === 'immunity' && supportsConsumeOnUsage('immunity', subtype))
+                    || (uiType === 'movement' && supportsConsumeOnUsage('movement', String(html.find('#bonus-movement-subtype').val() ?? '')));
+
                 const $row = html.find('#bonus-consume-usage-row');
+
                 if (uiType !== lastUsageUiType)
                 {
                     lastUsageUiType = uiType;
-                    html.find('#bonus-consumeOnUsage').prop('checked', !['immunity', 'resistance', 'vulnerability'].includes(uiType));
+                    html.find('#bonus-consumeOnUsage').prop('checked', !['immunity', 'resistance', 'vulnerability', 'movement'].includes(uiType));
                     html.find('#bonus-uses').val('');
                     html.find('#bonus-frequency').val('');
                     html.find('#bonus-frequency-count').val(1).css('display', 'none');
                 }
+
                 $row.css('display', show ? 'inline-flex' : 'none');
                 html.find('#bonus-frequency-row').css('display', show ? 'flex' : 'none');
+
                 if (!show)
                 {
                     html.find('#bonus-frequency').val('');
                     html.find('#bonus-frequency-count').val(1).css('display', 'none');
                 }
+
                 ensureUsesForConsumption();
             };
 
@@ -1502,12 +1717,15 @@ export async function executeEffectManager(options = {})
                 const uiType = String(html.find('#bonus-type').val() ?? '');
                 const isImmunity = uiType === 'immunity';
                 const isDefense = ['immunity', 'resistance', 'vulnerability'].includes(uiType);
+
                 const fields = isImmunity
                     ? (IMMUNITY_FILTER_FIELDS[String(html.find('#bonus-immunity-subtype').val() ?? '')] ?? {})
                     : (BONUS_FILTER_FIELDS[uiType] ?? null);
+
                 const showItems = fields
                     ? Object.keys(fields).length > 0
                     : ['roll', 'damage', 'tag', 'range', 'target_modifier'].includes(uiType);
+
                 html.find('#bonus-items-row').toggle(showItems);
                 if (!showItems)
                     return;
@@ -1521,6 +1739,7 @@ export async function executeEffectManager(options = {})
                 html.find('#bonus-condition-badge').attr('title', localize(isDefense ? 'LA.effectManager.tip.conditionImmunity' : 'LA.effectManager.tip.conditionRoll'));
                 html.find('#bonus-applyToCondition-badge').attr('title', localize(isDefense ? 'LA.effectManager.tip.applyToConditionImmunity' : 'LA.effectManager.tip.applyToConditionRoll'));
             };
+
             html.find('#bonus-consumeOnUsage').on('change', ensureUsesForConsumption);
             html.find('#bonus-trigger').on('change', 'input', ensureUsesForConsumption);
 
@@ -1534,7 +1753,7 @@ export async function executeEffectManager(options = {})
             html.find('#bonus-type').on('change', function ()
             {
                 const type = $(this).val();
-                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement_extra, #bonus-type-action_extra').hide();
+                html.find('#bonus-type-stat, #bonus-type-roll, #bonus-type-damage, #bonus-type-tag, #bonus-type-range, #bonus-type-immunity, #bonus-type-target_modifier, #bonus-type-reroll, #bonus-type-movement, #bonus-type-movement_extra, #bonus-type-action_extra').hide();
                 html.find(`#bonus-type-${type}`).show();
                 syncDamageTypesRow();
                 updateConsumeUsageRow();
@@ -1563,6 +1782,8 @@ export async function executeEffectManager(options = {})
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             });
 
+            html.find('#bonus-movement-subtype').on('change', updateConsumeUsageRow);
+
             html.find('.bonus-immunity-damage-option').on('click', function()
             {
                 const $option = $(this);
@@ -1585,6 +1806,7 @@ export async function executeEffectManager(options = {})
             {
                 const clip = this.querySelector('.la-hud-clip');
                 const pan = this.querySelector('.la-hud-pan');
+
                 if (clip && pan)
                 {
                     const overflow = pan.scrollWidth - clip.clientWidth;
@@ -1620,6 +1842,7 @@ export async function executeEffectManager(options = {})
                 const idx = bonusDmgEntryCounter++;
                 const currentMode = html.find('#bonus-damageMode').val() || 'add';
                 const isChangeType = currentMode === 'change_type';
+
                 const newEntry = $(htmlToElement(`
                     <div class="bonus-damage-entry form-group" data-index="${idx}">
                         <select id="bonus-dmgFrom-${idx}" class="bonus-damage-from" style="flex:1; display:${isChangeType ? '' : 'none'};">
@@ -1632,6 +1855,7 @@ export async function executeEffectManager(options = {})
                         <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="${idx}" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
                     </div>
                 `));
+
                 html.find('#bonus-damage-list').append(newEntry);
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
@@ -1653,20 +1877,24 @@ export async function executeEffectManager(options = {})
                 if (dialog.position)
                     dialog.setPosition({ height: 'auto', left: dialog.position.left, top: dialog.position.top });
             };
+
             // warn if user set per-target while picking a base-mutating mode (applyTo is stripped on save)
             const updateDamageApplyToWarning = () =>
             {
                 const mode = html.find('#bonus-damageMode').val() || 'add';
                 const bonusType = html.find('#bonus-type').val();
+
                 if (bonusType !== 'damage')
                 {
                     html.find('#bonus-damageMode-warning').hide();
                     return;
                 }
+
                 const applyToStr = String(html.find('#bonus-applyTo').val() || '').trim();
                 const hasTargets = applyToStr.split(',').map(s => s.trim()).filter(Boolean).length > 0;
                 html.find('#bonus-damageMode-warning').toggle((mode !== 'add') && hasTargets);
             };
+
             html.find('#bonus-damageMode').on('change', applyDamageModeMarkup);
             html.find('#bonus-applyTo').on('input change', updateDamageApplyToWarning);
             html.find('#bonus-type').on('change', updateDamageApplyToWarning);
@@ -1674,6 +1902,7 @@ export async function executeEffectManager(options = {})
             html.on('click', '.bonus-remove-dmg', function ()
             {
                 const $list = html.find('#bonus-damage-list');
+
                 if ($list.find('.bonus-damage-entry').length > 1)
                 {
                     $(this).closest('.bonus-damage-entry').remove();
@@ -1686,24 +1915,45 @@ export async function executeEffectManager(options = {})
             {
                 const targetID = String(html.find('#bonus-target').val());
                 const { actor } = _resolveEmTarget(targetID);
+
                 if (!actor)
                     return;
-                await unsetLAFlag(actor,"global_bonuses");
+                await removeGlobalBonus(actor, () => true);
                 setTimeout(updateBonusList, 200);
                 setTimeout(updateManageTabCount, 200);
             });
 
-            if (options.initialTab)
+            const showTab = (tab) =>
             {
                 html.find('.te-tab').removeClass('active');
                 html.find('.te-content').removeClass('active');
-                html.find(`.te-tab[data-tab="${options.initialTab}"]`).addClass('active');
-                html.find(`#tab-${options.initialTab}`).addClass('active');
-                if (options.initialTab === 'bonus')
+                html.find(`.te-tab[data-tab="${tab}"]`).addClass('active');
+                html.find(`#tab-${tab}`).addClass('active');
+                if (tab === 'bonus')
                     updateBonusList();
-                if (options.initialTab === 'manage')
+                if (tab === 'manage')
                     updateManageList();
+            };
+
+            if (options.initialTab)
+                showTab(options.initialTab);
+
+            const preset = options.preset ? getStoredPresets()[options.preset.category]?.find(entry => entry.name === options.preset.name) : null;
+
+            if (preset)
+            {
+                const prefix = PRESET_PREFIX[options.preset.category];
+                showTab(options.preset.category);
+                html.find(`#${prefix}-preset-load`).val(preset.name);
+                applyPresetData(html, prefix, preset.data);
+
+                if (options.preset.apply)
+                {
+                    html.find(options.preset.category === 'bonus' ? '#bonus-add' : `.apply-btn[data-tab="${options.preset.category}"]`).trigger('click');
+                    setTimeout(() => dialog.close({ force: true }), 0);
+                }
             }
+
             updateManageTabCount();
         }
     }, /** @type {any} */ ({
@@ -1711,14 +1961,16 @@ export async function executeEffectManager(options = {})
         height: 'auto',
         left: 100,
         top: 60,
-        classes: ['lancer-effect-manager', 'lancer-dialog-base', 'lancer-no-title']
+        classes: ['lancer-effect-manager', 'lancer-dialog-base', 'lancer-no-title', ...(options.preset?.apply ? ['la-em-headless'] : [])]
     }));
 
     const _origClose = dialog.close.bind(dialog);
+
     dialog.close = (...args) =>
     {
         const dlg = /** @type {any} */ (dialog);
         clearEmHighlight();
+
         try
         {
             dlg._laResizeObserver?.disconnect();
@@ -1727,7 +1979,9 @@ export async function executeEffectManager(options = {})
         {
             /* noop */
         }
+
         dlg._laResizeObserver = null;
+
         if (dlg._laCombatHooks)
         {
             try
@@ -1740,8 +1994,10 @@ export async function executeEffectManager(options = {})
             {
                 /* noop */
             }
+
             dlg._laCombatHooks = null;
         }
+
         return _origClose(...args);
     };
 

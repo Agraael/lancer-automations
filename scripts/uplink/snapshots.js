@@ -151,6 +151,7 @@ function losActive(kind, state)
 {
     if (!usesLineOfSight(null, state.item ?? null, null))
         return false;
+
     const selector = kind === 'damage' ? '#damage-hud .la-tg-los' : 'form[id^="accdiff"] .la-tg-los';
     const losToggle = /** @type {HTMLInputElement|null} */ (document.querySelector(selector));
     return losToggle ? losToggle.checked : true;
@@ -185,21 +186,27 @@ function accDiffLaRows(raw)
     const form = document.querySelector('form[id^="accdiff"]');
     if (!form)
         return null;
+
     const global = { acc: [], diff: [] };
+
     for (const row of form.querySelectorAll('.csm-global-bonus-row'))
     {
         const info = rowInfo(row);
         global[info.tag?.tone === 'diff' ? 'diff' : 'acc'].push(info);
     }
+
     const targets = {};
+
     for (const card of form.querySelectorAll('.accdiff-target'))
     {
         const tokenId = (card.querySelector('label.target-name')?.getAttribute('for') || '').split('.').pop();
         const target = (raw.targets || []).find(entry => accDiffTargetToken(entry)?.id === tokenId);
         const rows = Array.from(card.querySelectorAll('.accdiff-target-body label[class*="csm-tgt-bonus-"], .accdiff-target-body .la-tmod-row')).map(rowInfo);
+
         if (target && rows.length)
             targets[target.targetUuid] = rows;
     }
+
     const flatInput = /** @type {HTMLInputElement|null} */ (form.querySelector('.la-stat-flat-mod input'));
     return {
         global,
@@ -215,6 +222,7 @@ function damageLaRows()
     const form = document.getElementById('damage-hud');
     if (!form)
         return null;
+
     const withDamage = row => ({ ...rowInfo(row), damage: rowDamage(row) });
     return {
         global: Array.from(form.querySelectorAll('.csm-bonus-container .csm-bonus-config-row')).map(withDamage),
@@ -228,18 +236,41 @@ function rollerTokenUuid(state)
     return state.actor?.token?.uuid ?? state.actor?.getActiveTokens?.()?.[0]?.document?.uuid ?? null;
 }
 
+function trackSnapshot(kind, state)
+{
+    const actor = state.actor;
+    const track = actor?.is_mech?.() || actor?.is_npc?.() ? actor.system?.[kind === 'stress' ? 'stress' : 'structure'] : null;
+    const current = track ? Math.max((Number(track.value) || 0) - 1, 0) : 0;
+
+    return {
+        id: foundry.utils.randomID(),
+        ts: Date.now(),
+        kind,
+        user: game.user?.name || '',
+        actorName: actor?.name || '',
+        actorImg: actor?.img || '',
+        title: kind === 'stress' ? 'Stress Damage' : 'Structure Damage',
+        rollerTokenUuid: rollerTokenUuid(state),
+        track: track ? { current, damage: (Number(track.max) || 0) - current } : null
+    };
+}
+
 /**
  * Build a plain snapshot of the roll HUD state, or null when the flow has none.
  * Safe against a mid-teardown state, used both live and at resolve time.
- * @param {'attack'|'tech'|'damage'|'hase'} kind
+ * @param {'attack'|'tech'|'damage'|'hase'|'struct'|'stress'} kind
  * @param {any} state
  */
 export function captureSnapshot(kind, state)
 {
     try
     {
+        if (kind === 'struct' || kind === 'stress')
+            return trackSnapshot(kind, state);
+
         let raw = null;
         let totals = null;
+
         if (kind === 'damage')
         {
             const hud = state.data?.damage_hud_data;
@@ -262,10 +293,12 @@ export function captureSnapshot(kind, state)
         const targetUuids = (raw.targets || []).map(target => target.targetUuid);
         const contest = state.la_extraData?.contest;
         const targetTokenId = state.la_extraData?.targetTokenId;
+
         const check = kind === 'hase' && !contest ? {
             targetVal: state.la_extraData?.targetVal ?? null,
             targetName: targetTokenId ? (canvas.tokens?.get?.(targetTokenId)?.name || '') : ''
         } : null;
+
         return {
             id: foundry.utils.randomID(),
             ts: Date.now(),
@@ -294,6 +327,7 @@ export function captureSnapshot(kind, state)
             contest: contest ? {
                 stat: contest.stat || '',
                 actorUuid: contest.actorUuid || null,
+                winsTies: contest.winsTies === true,
                 name: contest.actorUuid ? tokenInfo(contest.actorUuid).name : '',
                 targetVal: state.la_extraData?.targetVal ?? null
             } : null

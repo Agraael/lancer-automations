@@ -7,6 +7,7 @@ let additionalStatusKeys = null;
 // LCP status items point at system icons the system never shipped; the module carries those
 const SYSTEM_ICON_DIR = 'systems/lancer/assets/icons/white/';
 const MODULE_ICON_DIR = 'modules/lancer-automations/icons/system/';
+
 const SHIPPED_SYSTEM_ICONS = new Set([
     'condition_dazed.svg',
     'condition_DeadRings_statuses_staggered.svg',
@@ -24,6 +25,7 @@ function remapShippedSystemIcons()
             const path = status[key];
             if (typeof path !== 'string' || !path.startsWith(SYSTEM_ICON_DIR))
                 continue;
+
             const file = path.slice(SYSTEM_ICON_DIR.length);
             if (SHIPPED_SYSTEM_ICONS.has(file))
                 status[key] = MODULE_ICON_DIR + file;
@@ -98,6 +100,7 @@ Hooks.on('lancer.statusesReady', () =>
             { id: "bolster", name: "Bolster", img: "systems/lancer/assets/icons/white/accuracy.svg" },
             { id: "mia", name: "M.I.A.", img: "modules/lancer-automations/icons/mia_lg.svg" }
         ];
+
         for (const eff of qolStatusEffects)
         {
             if (!CONFIG.statusEffects.find(s => s.id === eff.id))
@@ -111,9 +114,30 @@ Hooks.on('lancer.statusesReady', () =>
     else
         CONFIG.statusEffects.push(/** @type {any} */ ({ id: "cascading", name: "Cascading", img: "modules/lancer-automations/icons/eye-of-ra.svg" }));
 
+    if (!CONFIG.statusEffects.find(status => status.id === 'preparing'))
+    {
+        CONFIG.statusEffects.push(/** @type {any} */ ({
+            id: "preparing",
+            name: "Preparing",
+            img: "modules/lancer-automations/icons/light-bulb.svg",
+            description: localize('LA.status.preparing.description')
+        }));
+    }
+
+    if (!CONFIG.statusEffects.find(status => status.id === 'leaving'))
+    {
+        CONFIG.statusEffects.push(/** @type {any} */ ({
+            id: "leaving",
+            name: "Leaving",
+            img: "icons/svg/door-exit.svg",
+            description: localize('LA.status.leaving.description')
+        }));
+    }
+
     // stripped (Dead Rings LCP): no armor
     const stripped = CONFIG.statusEffects.find(effect => effect.id === 'DeadRings_statuses_stripped');
     const strippedChanges = /** @type {any[]} */ (stripped?.changes ?? []);
+
     if (stripped && !strippedChanges.some(change => change.key === 'system.armor'))
     {
         stripped.changes = /** @type {any} */ ([
@@ -125,6 +149,7 @@ Hooks.on('lancer.statusesReady', () =>
     // shredded: no armor, no resistances
     const shredded = CONFIG.statusEffects.find(effect => effect.id === 'shredded');
     const shreddedChanges = /** @type {any[]} */ (shredded?.changes ?? []);
+
     if (shredded && !shreddedChanges.some(change => change.key === 'system.armor'))
     {
         shredded.changes = /** @type {any} */ ([
@@ -150,6 +175,7 @@ Hooks.on('lancer.statusesReady', () =>
             { key: "system.resistances.explosive", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.heat", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.kinetic", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
+            { key: "system.resistances.variable", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" },
             { key: "system.resistances.infection", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" }
         ])
     }, {
@@ -210,6 +236,11 @@ Hooks.on('lancer.statusesReady', () =>
         name: "Hover",
         img: "modules/lancer-automations/icons/hover.svg",
         description: localize('LA.status.hover.description')
+    }, {
+        id: "straight_line",
+        name: "Straight Line",
+        img: "modules/lancer-automations/icons/rail-road.svg",
+        description: localize('LA.status.straight_line.description')
     }, {
         id: "terrain_immunity",
         name: "Terrain Immunity",

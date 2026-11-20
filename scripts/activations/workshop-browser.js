@@ -1,4 +1,4 @@
-import { ReactionManager, ReactionEditor, StartupScriptEditor, clearScriptCache } from "./reaction-manager.js";
+import { AutomationManager, AutomationEditor, StartupScriptEditor, clearScriptCache } from "./automation-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { escapeHtml as esc, localize, localizeFormat } from "../tools/string-utils.js";
 import { getSupabase } from "../setup/supabase-client.js";
@@ -13,7 +13,7 @@ const TREE_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/git/tr
 const RAW_BASE = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}/`;
 const PACK_TYPE = 'lancer-automations-pack';
 
-const REACTION_FIELDS = [
+const AUTOMATION_FIELDS = [
     'reactionPath', 'triggers', 'evaluate', 'comments', 'triggerDescription', 'effectDescription',
     'isReaction', 'actionType', 'frequency', 'checkReaction', 'requireCanProvoke', 'checkUsage',
     'autoActivate', 'awaitActivationCompletion', 'onlyOnSourceMatch', 'activationType', 'activationMode',
@@ -44,9 +44,11 @@ async function fetchTree(force = false)
 {
     if (state.tree && !force)
         return state.tree;
+
     const response = await fetch(TREE_URL, { cache: 'no-store' });
     if (!response.ok)
         throw new Error(`GitHub tree request failed (${response.status})`);
+
     const data = await response.json();
     state.tree = (data.tree || []).filter(entry => entry.type === 'blob');
     state.treeFetchedAt = Date.now();
@@ -57,10 +59,13 @@ async function fetchFile(path, force = false)
 {
     if (!force && state.files.has(path))
         return state.files.get(path);
+
     const url = RAW_BASE + path.split('/').map(encodeURIComponent).join('/');
     const response = await fetch(url, { cache: 'no-store' });
+
     if (!response.ok)
         throw new Error(`Fetch failed for ${path} (${response.status})`);
+
     const text = await response.text();
     state.files.set(path, text);
     state.terms.delete(path);
@@ -73,14 +78,17 @@ async function fetchStats(force = false)
 {
     if (state.statsFetchedAt && !force)
         return;
+
     try
     {
         const client = getSupabase();
         const installId = await getOrCreateInstallId();
+
         const [statsRes, likedRes] = await Promise.all([
             client.from(STATS_VIEW).select('workshop_id, likes, installs, downloads'),
             client.rpc('workshop_liked_ids', { p_install: installId })
         ]);
+
         if (statsRes.error)
             throw statsRes.error;
         if (likedRes.error)
@@ -102,6 +110,7 @@ async function setLike(workshopId, liked)
         p_install: await getOrCreateInstallId(),
         p_liked: liked
     });
+
     if (error)
         throw error;
 }
@@ -114,6 +123,7 @@ async function recordDownload(workshopId)
             p_id: workshopId,
             p_install: await getOrCreateInstallId()
         });
+
         if (error)
             throw error;
     }
@@ -128,14 +138,17 @@ async function recordDownload(workshopId)
 function getContributors()
 {
     const contributors = new Map();
+
     for (const entry of (state.tree || []))
     {
         const match = entry.path.match(/^contributors\/([^/]+)\/(.+)$/);
         if (!match || match[1] === '_template')
             continue;
+
         const [, author, rel] = match;
         if (!contributors.has(author))
             contributors.set(author, { author, listMd: null, automations: [], packs: [], startups: [] });
+
         const contributor = contributors.get(author);
         if (/^list\.md$/i.test(rel))
             contributor.listMd = entry.path;
@@ -146,6 +159,7 @@ function getContributors()
         else if (/^Startups\/[^/]+\.json$/i.test(rel))
             contributor.startups.push(entry.path);
     }
+
     return [...contributors.values()].sort((first, second) => first.author.localeCompare(second.author));
 }
 
@@ -179,49 +193,58 @@ function classifyPayload(json)
 
 function findLocalByWorkshopId(workshopId)
 {
-    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
+    const items = getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {};
+
     for (const [lid, group] of Object.entries(items))
     {
-        const reactions = group?.reactions || [];
-        for (let index = 0; index < reactions.length; index++)
+        const automations = group?.reactions || [];
+
+        for (let index = 0; index < automations.length; index++)
         {
-            if (reactions[index]?.workshopId === workshopId)
-                return { kind: 'item', lid, index, entry: reactions[index] };
+            if (automations[index]?.workshopId === workshopId)
+                return { kind: 'item', lid, index, entry: automations[index] };
         }
     }
-    const generals = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+
+    const generals = getModuleSetting(AutomationManager.SETTING_GENERAL_AUTOMATIONS) || {};
+
     for (const [name, entry] of Object.entries(generals))
     {
         if (entry?.workshopId === workshopId)
             return { kind: 'general', name, entry };
     }
-    const startups = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+
+    const startups = getModuleSetting(AutomationManager.SETTING_STARTUP_SCRIPTS) || [];
+
     for (const script of startups)
     {
         if (script?.workshopId === workshopId)
             return { kind: 'startup', id: script.id, entry: script };
     }
+
     return null;
 }
 
-function comparableReaction(reaction)
+function comparableAutomation(automation)
 {
     const result = {};
-    for (const field of REACTION_FIELDS)
+
+    for (const field of AUTOMATION_FIELDS)
     {
-        let value = reaction?.[field];
+        let value = automation?.[field];
         if (typeof value === 'function')
             value = value.toString();
         result[field] = value ?? null;
     }
+
     if (!Array.isArray(result.dispositionFilter) || result.dispositionFilter.length === 0)
         result.dispositionFilter = null;
     return result;
 }
 
-function reactionsEqual(remote, local)
+function automationsEqual(remote, local)
 {
-    return foundry.utils.objectsEqual(comparableReaction(remote), comparableReaction(local));
+    return foundry.utils.objectsEqual(comparableAutomation(remote), comparableAutomation(local));
 }
 
 /** @returns {'new'|'update'|'ok'|'broken'|null} null = content not fetched yet */
@@ -230,7 +253,9 @@ function fileStatus(path)
     const text = state.files.get(path);
     if (text === undefined)
         return null;
+
     let json;
+
     try
     {
         json = JSON.parse(text);
@@ -239,6 +264,7 @@ function fileStatus(path)
     {
         return 'broken';
     }
+
     const kind = classifyPayload(json);
     const workshopId = pathWorkshopId(path);
 
@@ -249,17 +275,20 @@ function fileStatus(path)
             return 'new';
         if (json.isGeneral && local.kind === 'general' && (json.name || json.lid) !== local.name)
             return 'update';
-        return reactionsEqual(json.reaction, local.entry) ? 'ok' : 'update';
+        return automationsEqual(json.reaction, local.entry) ? 'ok' : 'update';
     }
+
     if (kind === 'startup')
     {
         const local = findLocalByWorkshopId(workshopId);
         if (!local)
             return 'new';
+
         const sameCode = (local.entry.code || '') === (json.code || '');
         const sameDescription = (local.entry.description || '') === (json.description || '');
         return sameCode && sameDescription ? 'ok' : 'update';
     }
+
     if (kind === 'pack')
     {
         const statuses = packEntries(json, workshopId).map(entry => entry.status);
@@ -271,6 +300,7 @@ function fileStatus(path)
             return 'new';
         return 'update';
     }
+
     return 'broken';
 }
 
@@ -279,51 +309,59 @@ function fileStatus(path)
 function packEntries(json, packWorkshopId)
 {
     const entries = [];
+
     for (const [lid, group] of Object.entries(json.itemReactions || {}))
     {
         const workshopId = `${packWorkshopId}::item::${lid}`;
         entries.push({ section: 'item', key: lid, label: lid, workshopId, group, status: packItemStatus(workshopId, group) });
     }
-    for (const [name, reaction] of Object.entries(json.generalReactions || {}))
+
+    for (const [name, automation] of Object.entries(json.generalReactions || {}))
     {
         const workshopId = `${packWorkshopId}::general::${name}`;
         const local = findLocalByWorkshopId(workshopId);
         let status = 'new';
+
         if (local)
-            status = (local.name === name && reactionsEqual(reaction, local.entry)) ? 'ok' : 'update';
-        entries.push({ section: 'general', key: name, label: name, workshopId, reaction, status });
+            status = (local.name === name && automationsEqual(automation, local.entry)) ? 'ok' : 'update';
+        entries.push({ section: 'general', key: name, label: name, workshopId, reaction: automation, status });
     }
+
     for (const script of (json.startupScripts || []))
     {
         const key = script.id ?? script.name ?? '';
         const workshopId = `${packWorkshopId}::startup::${key}`;
         const local = findLocalByWorkshopId(workshopId);
         let status = 'new';
+
         if (local)
             status = ((local.entry.code || '') === (script.code || '')) ? 'ok' : 'update';
         entries.push({ section: 'startup', key, label: script.name || key, workshopId, script, status });
     }
+
     return entries;
 }
 
 function packItemStatus(workshopId, group)
 {
-    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
-    const localReactions = [];
+    const items = getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {};
+    const localAutomations = [];
+
     for (const localGroup of Object.values(items))
     {
-        for (const reaction of (localGroup?.reactions || []))
+        for (const automation of (localGroup?.reactions || []))
         {
-            if (reaction?.workshopId === workshopId)
-                localReactions.push(reaction);
+            if (automation?.workshopId === workshopId)
+                localAutomations.push(automation);
         }
     }
+
     const remote = group?.reactions || [];
-    if (!localReactions.length)
+    if (!localAutomations.length)
         return 'new';
-    if (localReactions.length !== remote.length)
+    if (localAutomations.length !== remote.length)
         return 'update';
-    return remote.every((reaction, index) => reactionsEqual(reaction, localReactions[index])) ? 'ok' : 'update';
+    return remote.every((automation, index) => automationsEqual(automation, localAutomations[index])) ? 'ok' : 'update';
 }
 
 // Import engine
@@ -331,62 +369,72 @@ function packItemStatus(workshopId, group)
 async function importAutomationPayload(json, workshopId)
 {
     const author = authorOfId(workshopId);
+
     if (json.isGeneral)
     {
         const name = json.name || json.lid;
         if (!name)
             throw new Error('General activation without a name.');
-        const generals = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+
+        const generals = getModuleSetting(AutomationManager.SETTING_GENERAL_AUTOMATIONS) || {};
+
         for (const [otherName, other] of Object.entries(generals))
         {
             if (other?.workshopId === workshopId && otherName !== name)
                 delete generals[otherName];
         }
+
         generals[name] = { ...json.reaction, workshopId };
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_GENERAL_REACTIONS, generals);
-        await ReactionManager.createFolder(author);
-        await ReactionManager.assignToFolder(author, `general::${name}`);
+        await game.settings.set(AutomationManager.ID, AutomationManager.SETTING_GENERAL_AUTOMATIONS, generals);
+        await AutomationManager.createFolder(author);
+        await AutomationManager.assignToFolder(author, `general::${name}`);
     }
     else
     {
         const lid = json.lid;
         if (!lid)
             throw new Error('Item activation without a LID.');
-        const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
-        const newReaction = { ...json.reaction, workshopId };
+
+        const items = getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {};
+        const newAutomation = { ...json.reaction, workshopId };
         let placed = false;
+
         for (const [otherLid, group] of Object.entries(items))
         {
-            const reactions = group?.reactions || [];
-            const index = reactions.findIndex(reaction => reaction?.workshopId === workshopId);
+            const automations = group?.reactions || [];
+            const index = automations.findIndex(automation => automation?.workshopId === workshopId);
+
             if (index < 0)
                 continue;
             if (otherLid === lid)
             {
-                reactions[index] = newReaction;
+                automations[index] = newAutomation;
                 placed = true;
             }
             else
-                reactions.splice(index, 1);
+                automations.splice(index, 1);
         }
+
         if (!placed)
         {
             if (!items[lid])
-                items[lid] = ReactionManager.newSavedItemEntry(lid);
-            items[lid].reactions.push(newReaction);
+                items[lid] = AutomationManager.newSavedItemEntry(lid);
+            items[lid].reactions.push(newAutomation);
         }
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, items);
-        await ReactionManager.createFolder(author);
-        await ReactionManager.assignToFolder(author, `item::${lid}`);
+
+        await game.settings.set(AutomationManager.ID, AutomationManager.SETTING_AUTOMATIONS, items);
+        await AutomationManager.createFolder(author);
+        await AutomationManager.assignToFolder(author, `item::${lid}`);
     }
 }
 
 async function importStartupPayload(json, workshopId, fileName)
 {
     const author = authorOfId(workshopId);
-    const scripts = getModuleSetting(ReactionManager.SETTING_STARTUP_SCRIPTS) || [];
+    const scripts = getModuleSetting(AutomationManager.SETTING_STARTUP_SCRIPTS) || [];
     const name = `${author} - ${String(fileName).replace(/\.json$/i, '')}`;
     const index = scripts.findIndex(script => script?.workshopId === workshopId);
+
     const entry = {
         id: index >= 0 ? scripts[index].id : foundry.utils.randomID(),
         name,
@@ -395,11 +443,12 @@ async function importStartupPayload(json, workshopId, fileName)
         code: json.code || '',
         workshopId
     };
+
     if (index >= 0)
         scripts[index] = entry;
     else
         scripts.push(entry);
-    await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_STARTUP_SCRIPTS, scripts);
+    await game.settings.set(AutomationManager.ID, AutomationManager.SETTING_STARTUP_SCRIPTS, scripts);
 }
 
 async function importPackEntry(entry)
@@ -407,23 +456,26 @@ async function importPackEntry(entry)
     const author = authorOfId(entry.workshopId);
     if (entry.section === 'item')
     {
-        const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
+        const items = getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {};
+
         for (const group of Object.values(items))
         {
-            const reactions = group?.reactions || [];
-            for (let index = reactions.length - 1; index >= 0; index--)
+            const automations = group?.reactions || [];
+
+            for (let index = automations.length - 1; index >= 0; index--)
             {
-                if (reactions[index]?.workshopId === entry.workshopId)
-                    reactions.splice(index, 1);
+                if (automations[index]?.workshopId === entry.workshopId)
+                    automations.splice(index, 1);
             }
         }
+
         if (!items[entry.key])
-            items[entry.key] = ReactionManager.newSavedItemEntry(entry.key, entry.group?.itemType || 'any');
-        for (const reaction of (entry.group?.reactions || []))
-            items[entry.key].reactions.push({ ...reaction, workshopId: entry.workshopId });
-        await game.settings.set(ReactionManager.ID, ReactionManager.SETTING_REACTIONS, items);
-        await ReactionManager.createFolder(author);
-        await ReactionManager.assignToFolder(author, `item::${entry.key}`);
+            items[entry.key] = AutomationManager.newSavedItemEntry(entry.key, entry.group?.itemType || 'any');
+        for (const automation of (entry.group?.reactions || []))
+            items[entry.key].reactions.push({ ...automation, workshopId: entry.workshopId });
+        await game.settings.set(AutomationManager.ID, AutomationManager.SETTING_AUTOMATIONS, items);
+        await AutomationManager.createFolder(author);
+        await AutomationManager.assignToFolder(author, `item::${entry.key}`);
     }
     else if (entry.section === 'general')
         await importAutomationPayload({ isGeneral: true, name: entry.key, reaction: entry.reaction }, entry.workshopId);
@@ -439,6 +491,7 @@ async function importPath(path)
     const kind = classifyPayload(json);
     const workshopId = pathWorkshopId(path);
     let count = 0;
+
     if (kind === 'automation')
     {
         await importAutomationPayload(json, workshopId);
@@ -474,6 +527,7 @@ async function afterImport()
 async function openWorkshopFile(path)
 {
     let json;
+
     try
     {
         json = JSON.parse(await fetchFile(path));
@@ -484,18 +538,20 @@ async function openWorkshopFile(path)
         renderCurrentView();
         return;
     }
+
     renderCurrentView();
 
     const kind = classifyPayload(json);
     const workshopId = pathWorkshopId(path);
+
     if (kind === 'automation')
     {
-        new ReactionEditor({
+        new AutomationEditor({
             isGeneral: json.isGeneral === true,
             lid: json.lid || '',
             name: json.name || (json.isGeneral ? json.lid : ''),
             reaction: { ...json.reaction, workshopId },
-            reactionIndex: undefined,
+            automationIndex: undefined,
             workshopPreview: true
         }).render(true);
     }
@@ -526,26 +582,26 @@ function openInnerPackEntryEditor(entry)
 {
     if (entry.section === 'item')
     {
-        const reaction = entry.group?.reactions?.[0];
-        if (!reaction)
+        const automation = entry.group?.reactions?.[0];
+        if (!automation)
             return;
-        new ReactionEditor({
+        new AutomationEditor({
             isGeneral: false,
             lid: entry.key,
             name: '',
-            reaction: { ...reaction, workshopId: entry.workshopId },
-            reactionIndex: undefined,
+            reaction: { ...automation, workshopId: entry.workshopId },
+            automationIndex: undefined,
             workshopPreview: true
         }).render(true);
     }
     else if (entry.section === 'general')
     {
-        new ReactionEditor({
+        new AutomationEditor({
             isGeneral: true,
             lid: entry.key,
             name: entry.key,
             reaction: { ...entry.reaction, workshopId: entry.workshopId },
-            reactionIndex: undefined,
+            automationIndex: undefined,
             workshopPreview: true
         }).render(true);
     }
@@ -578,9 +634,11 @@ function searchTerms(path)
 {
     if (state.terms.has(path))
         return state.terms.get(path);
+
     const terms = [pathWorkshopId(path)];
     const text = state.files.get(path);
     let json = null;
+
     try
     {
         json = text === undefined ? null : JSON.parse(text);
@@ -589,6 +647,7 @@ function searchTerms(path)
     {
         json = null;
     }
+
     const kind = classifyPayload(json);
     if (kind === 'automation')
         terms.push(json.name, json.lid);
@@ -599,6 +658,7 @@ function searchTerms(path)
     }
     else if (kind === 'startup')
         terms.push(json.name);
+
     const lowered = terms.filter(term => typeof term === 'string' && term).map(term => term.toLowerCase());
     state.terms.set(path, lowered);
     return lowered;
@@ -617,6 +677,7 @@ function statsHtml(workshopId)
 {
     if (!state.statsFetchedAt)
         return '';
+
     const row = state.stats.get(workshopId);
     const likes = row?.likes || 0;
     const installs = row?.installs || 0;
@@ -650,6 +711,7 @@ async function toggleLike(workshopId)
 {
     const liked = !state.liked.has(workshopId);
     const row = state.stats.get(workshopId) || { workshop_id: workshopId, likes: 0, installs: 0, downloads: 0 };
+
     const apply = (on) =>
     {
         if (on)
@@ -660,7 +722,9 @@ async function toggleLike(workshopId)
         state.stats.set(workshopId, row);
         refreshStats(workshopId);
     };
+
     apply(liked);
+
     try
     {
         await setLike(workshopId, liked);
@@ -680,8 +744,10 @@ function statusBadge(status)
         ok: ['OK', '#3c8c4a'],
         broken: ['BROKEN', '#a33']
     };
+
     if (!status || !badges[status])
         return '';
+
     const [label, color] = badges[status];
     return `<span style="font-size: 0.75em; font-weight: bold; color: ${color}; border: 1px solid ${color}; border-radius: 3px; padding: 0 5px; margin-left: 6px;">${label}</span>`;
 }
@@ -691,7 +757,9 @@ function renderMarkdown(markdown)
     const showdownLib = globalThis.showdown;
     if (!showdownLib)
         return `<pre style="white-space: pre-wrap;">${esc(markdown)}</pre>`;
+
     let html;
+
     try
     {
         const converter = new showdownLib.Converter({ tables: true, strikethrough: true, ghCodeBlocks: true, simplifiedAutoLink: true });
@@ -701,6 +769,7 @@ function renderMarkdown(markdown)
     {
         return `<pre style="white-space: pre-wrap;">${esc(markdown)}</pre>`;
     }
+
     if (globalThis.DOMPurify)
         html = globalThis.DOMPurify.sanitize(html);
     return html;
@@ -710,6 +779,7 @@ function lastSyncLabel()
 {
     if (!state.treeFetchedAt)
         return '';
+
     const minutes = Math.round((Date.now() - state.treeFetchedAt) / 60000);
     return minutes < 1 ? 'just now' : `${minutes} min ago`;
 }
@@ -743,11 +813,14 @@ function contributorBadgeSummary(contributor)
     const paths = [...contributor.automations, ...contributor.packs, ...contributor.startups];
     if (!paths.length || !paths.every(path => state.files.has(path)))
         return '';
+
     const statuses = paths.map(path => fileStatus(path));
     const news = statuses.filter(status => status === 'new').length;
     const updates = statuses.filter(status => status === 'update').length;
+
     if (!news && !updates)
         return '<span style="color: #3c8c4a; font-size: 0.85em;">all imported</span>';
+
     const parts = [];
     if (news)
         parts.push(`${news} new`);
@@ -760,15 +833,18 @@ function contributorStatsHtml(contributor)
 {
     if (!state.statsFetchedAt)
         return '';
+
     const paths = [...contributor.automations, ...contributor.packs, ...contributor.startups];
     let likes = 0;
     let installs = 0;
+
     for (const path of paths)
     {
         const row = state.stats.get(pathWorkshopId(path));
         likes += row?.likes || 0;
         installs += row?.installs || 0;
     }
+
     return `<span class="la-ws-stats">
         <span class="la-ws-dl" title="${likes} like${likes === 1 ? '' : 's'}"><i class="fas fa-heart"></i> ${likes}</span>
         <span class="la-ws-dl" title="${installs} import${installs === 1 ? '' : 's'}"><i class="fas fa-download"></i> ${installs}</span>
@@ -805,9 +881,11 @@ function searchRows()
 function renderListBody(root)
 {
     const searching = state.search.trim() !== '';
+
     const header = searching
         ? `<span class="col-name">File</span><span class="col-triggers">Contributor</span><span class="col-controls"></span>`
         : `<span class="col-enabled"></span><span class="col-type">Type</span><span class="col-name">Contributor</span><span class="col-triggers">Status</span><span class="col-controls"></span>`;
+
     const rows = searching ? searchRows() : contributorRows();
     const empty = searching ? 'No match.' : 'No contributors found.';
     root.querySelector('.la-ws-body').innerHTML = `
@@ -815,8 +893,10 @@ function renderListBody(root)
         <div class="scrollable">
             ${rows || `<p class="notes" style="text-align: center; padding: 16px;">${empty}</p>`}
         </div>`;
+
     const importBar = root.querySelector('.la-ws-import-bar');
     importBar.style.display = searching ? '' : 'none';
+
     if (searching)
         wireFileControls(root);
     else
@@ -831,8 +911,10 @@ async function importSelected()
     const paths = [...state.checked];
     if (!paths.length)
         return ui.notifications.warn(localize('LA.notify.nothingSelected'));
+
     let imported = 0;
     const failed = [];
+
     for (const path of paths)
     {
         try
@@ -845,6 +927,7 @@ async function importSelected()
             failed.push(`${fileNameOf(path)}: ${err.message}`);
         }
     }
+
     await afterImport();
     if (imported)
         ui.notifications.info(localizeFormat('LA.notify.importedWorkshopEntries', { count: imported, suffix: imported === 1 ? 'y' : 'ies' }));
@@ -881,6 +964,7 @@ function renderListView()
         {
             ui.notifications.error(localizeFormat('LA.notify.workshopRefreshFailed', { error: err.message }));
         }
+
         renderCurrentView();
     });
     root.querySelector('.la-ws-contribute')?.addEventListener('click', () => window.open(CONTRIBUTE_URL, '_blank'));
@@ -913,6 +997,7 @@ function renderListView()
                 renderListBody(root);
         });
     }
+
     renderListBody(root);
 }
 
@@ -958,6 +1043,7 @@ function buildEnhancedList(contributor, allPaths)
     container.innerHTML = listText ? renderMarkdown(listText) : '';
 
     const lookup = new Map();
+
     for (const path of allPaths)
     {
         const rel = path.replace(/^contributors\/[^/]+\//, '');
@@ -966,10 +1052,12 @@ function buildEnhancedList(contributor, allPaths)
     }
 
     const matched = new Set();
+
     for (const codeEl of [...container.querySelectorAll('code')])
     {
         const key = codeEl.textContent.trim().toLowerCase();
         const path = lookup.get(key);
+
         if (!path)
             continue;
         matched.add(path);
@@ -979,6 +1067,7 @@ function buildEnhancedList(contributor, allPaths)
         control.innerHTML = fileControlHtml(path);
         codeEl.replaceWith(control);
     }
+
     return { container, matched };
 }
 
@@ -1000,6 +1089,7 @@ function wireFileControls(root)
                 state.checked.delete(path);
             for (const twin of root.querySelectorAll(`.la-ws-file[data-path="${CSS.escape(path)}"] .la-ws-check`))
                 twin.checked = checked;
+
             const counter = root.querySelector('.la-ws-count');
             if (counter)
                 counter.textContent = String(state.checked.size);
@@ -1036,6 +1126,7 @@ function renderContributorView(author)
 
     const root = state.root;
     const scrollable = root.querySelector('.scrollable');
+
     if (container.innerHTML.trim())
         scrollable.prepend(container);
     else
@@ -1051,6 +1142,7 @@ function renderContributorView(author)
         const url = contributor.listMd
             ? `${REPO_URL}/blob/${REPO_BRANCH}/${contributor.listMd.split('/').map(encodeURIComponent).join('/')}`
             : `${REPO_URL}/tree/${REPO_BRANCH}/contributors/${encodeURIComponent(author)}`;
+
         window.open(url, '_blank');
     });
     for (const anchor of root.querySelectorAll('.la-ws-listmd a'))
@@ -1068,6 +1160,7 @@ function openWorkshopPackDialog(path, json)
     const workshopId = pathWorkshopId(path);
     const author = authorOfId(workshopId);
     const entries = packEntries(json, workshopId);
+
     const sections = [
         ['item', 'Item activations'],
         ['general', 'General activations'],
@@ -1082,6 +1175,7 @@ function openWorkshopPackDialog(path, json)
                 <a class="la-wsp-open" data-id="${esc(entry.workshopId)}" style="cursor: pointer; color: var(--primary-color);">${esc(entry.label)}</a>
                 ${statusBadge(entry.status)}
             </label>`);
+
         if (!rows.length)
             return '';
         return `<div style="font-weight: bold; margin-top: 8px;">${label}</div>${rows.join('')}`;
@@ -1119,9 +1213,11 @@ function openWorkshopPackDialog(path, json)
             {
                 const id = event.currentTarget.dataset.id;
                 const entry = entries.find(candidate => candidate.workshopId === id);
+
                 if (entry)
                     openInnerPackEntryEditor(entry);
             });
+
             const statsEl = html[0].querySelector('.la-ws-stats');
             if (statsEl)
                 bindLike(statsEl);
@@ -1135,9 +1231,11 @@ export async function renderWorkshopTab(manager, root)
 {
     state.manager = manager;
     state.root = root;
+
     if (!state.tree)
     {
         root.innerHTML = '<p class="notes" style="text-align: center; padding: 16px;"><i class="fas fa-spinner fa-spin"></i> Loading the workshop...</p>';
+
         try
         {
             await Promise.all([fetchTree(), fetchStats()]);
@@ -1151,5 +1249,6 @@ export async function renderWorkshopTab(manager, root)
             return;
         }
     }
+
     renderCurrentView();
 }

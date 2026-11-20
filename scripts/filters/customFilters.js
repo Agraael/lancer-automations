@@ -26,6 +26,27 @@ import { FilterColdSoak } from './effects/coldSoak.js';
 import { FilterRicochetLip } from './effects/ricochetLip.js';
 import { FilterConvectionChurn } from './effects/convectionChurn.js';
 import { FilterSliceTear } from './effects/sliceTear.js';
+import { FilterToonFlames } from './effects/toonFlames.js';
+import { FilterNaniteSwarm } from './effects/naniteSwarm.js';
+import { FilterFeverThrob } from './effects/feverThrob.js';
+import { FilterCodeRain } from './effects/codeRain.js';
+import { FilterDataBleed } from './effects/dataBleed.js';
+import { FilterFilmEcho } from './effects/filmEcho.js';
+import { FilterTeslaTremor } from './effects/teslaTremor.js';
+import { FilterSignalCut } from './effects/signalCut.js';
+import { FilterOutOfFocus } from './effects/outOfFocus.js';
+import { FilterChromaRotPlus } from './effects/chromaRotPlus.js';
+import { FilterChainSets } from './effects/chainSets.js';
+import { FilterRecoil } from './effects/recoil.js';
+import { FilterForgeSeams } from './effects/forgeSeams.js';
+import { FilterHeatPurge } from './effects/heatPurge.js';
+import { FilterThermalScan } from './effects/thermalScan.js';
+import { FilterShedPlates } from './effects/shedPlates.js';
+import { FilterPlatingDrip } from './effects/platingDrip.js';
+import { FilterWireFrame } from './effects/wireFrame.js';
+import { FilterGrindSparks } from './effects/grindSparks.js';
+import { FilterCutTorch } from './effects/cutTorch.js';
+import { FilterCrackShell } from './effects/crackShell.js';
 
 export {
     FilterFracture,
@@ -47,7 +68,28 @@ export {
     FilterColdSoak,
     FilterRicochetLip,
     FilterConvectionChurn,
-    FilterSliceTear
+    FilterSliceTear,
+    FilterToonFlames,
+    FilterNaniteSwarm,
+    FilterFeverThrob,
+    FilterCodeRain,
+    FilterDataBleed,
+    FilterFilmEcho,
+    FilterTeslaTremor,
+    FilterSignalCut,
+    FilterOutOfFocus,
+    FilterChromaRotPlus,
+    FilterChainSets,
+    FilterRecoil,
+    FilterForgeSeams,
+    FilterHeatPurge,
+    FilterThermalScan,
+    FilterShedPlates,
+    FilterPlatingDrip,
+    FilterWireFrame,
+    FilterGrindSparks,
+    FilterCutTorch,
+    FilterCrackShell
 };
 
 const LA_FILTERS = {
@@ -71,6 +113,27 @@ const LA_FILTERS = {
     ricochetLip: FilterRicochetLip,
     convectionChurn: FilterConvectionChurn,
     sliceTear: FilterSliceTear,
+    toonFlames: FilterToonFlames,
+    naniteSwarm: FilterNaniteSwarm,
+    feverThrob: FilterFeverThrob,
+    codeRain: FilterCodeRain,
+    dataBleed: FilterDataBleed,
+    filmEcho: FilterFilmEcho,
+    teslaTremor: FilterTeslaTremor,
+    signalCut: FilterSignalCut,
+    outOfFocus: FilterOutOfFocus,
+    chromaRotPlus: FilterChromaRotPlus,
+    chainSets: FilterChainSets,
+    recoil: FilterRecoil,
+    forgeSeams: FilterForgeSeams,
+    heatPurge: FilterHeatPurge,
+    thermalScan: FilterThermalScan,
+    shedPlates: FilterShedPlates,
+    platingDrip: FilterPlatingDrip,
+    wireFrame: FilterWireFrame,
+    grindSparks: FilterGrindSparks,
+    cutTorch: FilterCutTorch,
+    crackShell: FilterCrackShell,
 };
 
 let FilterType = null;
@@ -93,11 +156,13 @@ Hooks.once('init', async () =>
         console.warn('lancer-automations | TokenMagic source import failed; custom filters disabled.', e);
         return;
     }
+
     if (!FilterType)
     {
         console.warn('lancer-automations | TokenMagic FilterType export not found; custom filters disabled.');
         return;
     }
+
     Object.assign(FilterType, LA_FILTERS);
     console.log('lancer-automations | Registered custom filters on source FilterType');
 
@@ -107,6 +172,7 @@ Hooks.once('init', async () =>
         const chunkArr = /** @type {any} */ (self).webpackChunktokenmagic;
         if (!Array.isArray(chunkArr))
             return;
+
         /** @type {any} */
         let webpackRequire = null;
         chunkArr.push([['__la_capture_tmfx_filterType__'], {}, (r) =>
@@ -115,11 +181,14 @@ Hooks.once('init', async () =>
         }]);
         if (!webpackRequire?.m)
             return;
+
         const STOCK_KEYS = ['adjustment', 'glow', 'outline', 'blur'];
         let bundleFT = null;
+
         for (const id of Object.keys(webpackRequire.m))
         {
             let mod;
+
             try
             {
                 mod = webpackRequire(id);
@@ -128,8 +197,10 @@ Hooks.once('init', async () =>
             {
                 continue;
             }
+
             if (!mod)
                 continue;
+
             for (const key of Object.keys(mod))
             {
                 const exportVal = mod[key];
@@ -141,9 +212,11 @@ Hooks.once('init', async () =>
                 console.log('lancer-automations | Found bundle FilterType (module', id, ', export', key, ')');
                 break;
             }
+
             if (bundleFT)
                 break;
         }
+
         if (bundleFT && bundleFT !== FilterType)
         {
             Object.assign(bundleFT, LA_FILTERS);

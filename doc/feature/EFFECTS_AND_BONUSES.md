@@ -16,10 +16,10 @@ You can open it two ways: the **Effect Manager** button in the Token Action HUD 
 
 Its tabs:
 
-- **Standard** - apply built-in Lancer and Foundry status effects.
-- **Custom** - make your own named effects (only with Temporary Custom Statuses).
-- **Bonus** - build accuracy, damage, stat, and other bonuses.
-- **Manage** - see and edit what's already on the token.
+- **Standard**: apply built-in Lancer and Foundry status effects.
+- **Custom**: make your own named effects (only with Temporary Custom Statuses).
+- **Bonus**: build accuracy, damage, stat, and other bonuses.
+- **Manage**: see and edit what's already on the token.
 
 ---
 
@@ -29,8 +29,11 @@ Its tabs:
 
 Pick a status from the searchable grid and apply it with:
 
-- a **duration** - end of turn, start of turn, end of round, start of round, end of encounter, indefinite, or permanent (survives a Full Repair) - plus an **origin token** for turn tracking (turn-based durations only count down while combat is running). The **Turns** count is per-origin-turn, the **Rounds** count includes the current round.
-- **Turns** set to `0` means "next matching trigger": the end or start of the current turn if it is the origin's turn, otherwise the next one.
+- a **duration**: end of turn, start of turn, end of round, start of round, end of encounter, indefinite, or permanent (survives a Full Repair). Plus an **origin token** for turn tracking.
+    - Turn-based durations only count down while combat is running.
+    - The **Turns** count is per-origin-turn.
+    - **Turns** set to `0` means "next matching trigger": the end or start of the current turn if it is the origin's turn, otherwise the next one.
+    - The **Rounds** count includes the current round.
 - a **stack count**.
 - an optional **note** (e.g. "granted by X").
 - optional **consumption** (see below).
@@ -47,7 +50,7 @@ Hover a status for its description. Save common setups as **presets** from the b
 
 This tab appears only when the **Temporary Custom Statuses** module is active, as the front-end for its custom statuses. Make an effect with any name, icon, stack count, duration, and active-effect changes (a JSON array of stat changes).
 
-A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and saved statuses also show up in the Standard tab's grid.
+A **Save** button stores a custom status (name and icon) to a Saved dropdown you can reload in later sessions, and a delete button removes a saved one. Saved statuses also show up in the Standard tab's grid.
 
 <br clear="right"/>
 
@@ -59,7 +62,7 @@ An effect with charges can burn one on its own when something happens, from a si
 
 Most triggers offer **filters** so the charge only burns in the right situation (the available filters change with the trigger):
 
-- by **item** - a weapon's LID, or a specific weapon instance on the token (item ID, via an inventory picker),
+- by **item**: a weapon's LID, or a specific weapon instance on the token (item ID, via an inventory picker),
 - by **action name** or **check type** (HULL / AGI / SYS / ENG),
 - by **status** (a grid picker),
 - **boost only** and a **min distance**, for move triggers,
@@ -75,9 +78,9 @@ For anything the filters can't express, write a short **evaluate function** that
 
 Bonuses apply mechanical changes to Lancer's roll flows. They persist in one of three ways:
 
-- **General** - visible on the token. Give it a duration (end of turn, start of turn, end or start of round, end of encounter, indefinite, or permanent) and it shows an icon like a status, with optional charges.
-- **Constant** - invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [Automation Engine](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC Examples](./NPC_EXAMPLES.md)). It survives a reload.
-- **Flow** - injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from an activation.
+- **General**: visible on the token. Give it a duration (end of turn, start of turn, end or start of round, end of encounter, indefinite, or permanent) and it shows an icon like a status, with optional charges.
+- **Constant**: invisible and permanent. In the dialog this is the **Constant (no icon, always active)** duration. From code it's `addConstantBonus`, for baseline stats or immunities (see [Automation Engine](./AUTOMATION_ENGINE.md) and the Insulated example in [NPC Examples](./NPC_EXAMPLES.md)). It survives a reload.
+- **Flow**: injected into the current flow only, via `triggerData.flowState.injectBonus(...)` from an automation.
 
 Full API (every type, immunity queries, flow injection) is in [Effects API](../API_EFFECTS.md).
 
@@ -89,7 +92,7 @@ Full API (every type, immunity queries, flow injection) is in [Effects API](../A
 
 | Type | What it does |
 |------|--------------|
-| **Roll (Acc/Diff)** | Add accuracy or difficulty dice to matching rolls (attacks, checks, saves). |
+| **Roll (Acc/Diff)** | Add accuracy or difficulty dice, or a flat modifier, to matching rolls (attacks, checks, saves). |
 | **Damage** | Bonus (default): add extra rows in the Bonus Damage section, per-target or global. Add: append rows to the weapon's Base Damage. Replace: substitute the weapon's Base Damage with a new set. Change Type: remap damage types (per-type from -> to, or a catch-all "All -> X"). Add, Replace, and Change Type are actor-wide only. |
 | **Stat** | Change an actor stat: HP, Heat, Armor, Speed, Evasion, etc. Modes: Add (delta) or Replace (set to `val`). |
 | **Tag** | Add, increment, override, or remove a weapon tag (Accurate, Overkill, ...). |
@@ -100,6 +103,7 @@ Full API (every type, immunity queries, flow injection) is in [Effects API](../A
 | **Target Modifier** | Tactical changes to the target: cover, invisibility, armor-piercing, half-damage, paracausal, or force a hit / crit / miss. |
 | **Reroll** | Reroll a roll type (attack, tech attack, damage, skill, structure, stress). Modes: retry, highest, lowest, or choose. |
 | **Movement Extra** | Extra spaces added to each move. Applies to Boost or Standard Move. |
+| **Action Extra** | Extra actions: reaction, quick or full. The TAH, the stat hint and the stat bar show how many are left. |
 
 Accuracy and difficulty bonuses show up in the roll HUD before you confirm. Damage bonuses appear in the damage output.
 
@@ -107,16 +111,22 @@ Subtype lists per type are in [`addGlobalBonus`](../API_EFFECTS.md#addGlobalBonu
 
 ### Tuning a bonus
 
-- **Roll-type filters** - restrict to attacks (melee / ranged / tech), checks (HULL / AGI / SYS / ENG / grit), structure, overheat, or all flows.
-- **Item / token filters** - scope to a weapon by **LID** (a type), or to a specific weapon instance on the token (**item ID**, via an inventory picker), and to one or more **target tokens**.
-- **Targetter** - reverse it: the target applies the bonus to the attacker, for debuffs or reactive effects. Hidden for Range bonuses, which cannot use it. `applyToTargetter` in the [API fields](../API_EFFECTS.md#addGlobalBonus).
-- **Uses** - a charge count. The bonus is removed when it hits zero.
-- **Condition / Apply-to-condition functions** - short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
+- **Roll-type filters**: restrict to attacks (melee / ranged / tech), checks (HULL / AGI / SYS / ENG / grit), structure, overheat, or all flows.
+- **Item / token filters**: scope to a weapon by **LID** (a type), or to a specific weapon instance on the token (**item ID**, via an inventory picker), and to one or more **target tokens**.
+- **Targetter**: reverse it: the target applies the bonus to the attacker, for debuffs or reactive effects. Hidden for Range bonuses, which cannot use it. `applyToTargetter` in the [API fields](../API_EFFECTS.md#addGlobalBonus).
+- **Uses**: a charge count. The bonus is removed when it hits zero.
+- **Condition / Apply-to-condition functions**: short synchronous JS gates: whether the bonus applies at all, or whether it applies to one specific target.
+- **Consumption**: the same trigger system as effects above, to deplete charges on events.
 
-Immunity, resistance and vulnerability bonuses take these filters too, and the dialog shows a different set per immunity subtype. Resistance, vulnerability, and the damage, crit, hit and miss immunities get Roll Type, Items (LID) and both code fields. Effect and provoke get the code fields only. Terrain, obstacle and elevation get none. The roles are reversed: `reactorToken` is you, `target` is the other party.
+Immunity, resistance and vulnerability bonuses take these filters too, and the dialog shows a different set per immunity subtype:
+
+- Resistance, vulnerability, and the damage, crit, hit and miss immunities get Roll Type, Items (LID) and both code fields.
+- Effect and provoke get the code fields only.
+- Terrain, obstacle and elevation get none.
+
+The roles are reversed: `reactorToken` is you, `target` is the other party.
 
 Reroll bonuses get Items (LID), Item ID, Condition and the Limit dropdown. Tokens, Targetter and Apply-to Condition are hidden for them, a reroll has no per-target side.
-- **Consumption** - the same trigger system as effects above, to deplete charges on events.
 
 ---
 
@@ -136,7 +146,7 @@ When the owner is a tiered NPC, an entry can be **tier-gated** so it only applie
 
 ## Bonuses from v3 LCP data
 
-Items imported from a v3 LCP with [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) keep the LCP's effect data. LA reads part of it straight from the item. Nothing is stored on the token, so editing the item's data updates the bonus right away, on tokens already in the scene too.
+Items imported from a v3 LCP with [Lancer NPC Import](https://github.com/Agraael/Lancer-vtt-NPC-import-Macro) keep the LCP's effect data. Editing the item's data updates the bonus right away, on tokens already in the scene too.
 
 For now only passive resistances, vulnerabilities and immunities (`add_resist`) are read. An effect applies when:
 
@@ -173,7 +183,14 @@ When a token holds an immunity bonus and takes matching damage, a **choice card*
 
 <img align="right" src="../img/em-manage.png" width="55%"/>
 
-See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary - type and effect (e.g. "Damage [2d6 Kinetic]"), remaining uses, item filters, and which flows they apply to - Constant ones included. Each bonus also shows the item or actor it comes from.
+See every effect and bonus on the selected token, nudge stacks with the +/- buttons, or delete them. Bonuses show their full summary, Constant ones included:
+
+- type and effect (e.g. "Damage [2d6 Kinetic]")
+- remaining uses
+- item filters
+- which flows they apply to
+
+Each bonus also shows the item or actor it comes from.
 
 [v3 data bonuses](#bonuses-from-v3-lcp-data) are listed too, with an eye button instead of the trash to turn them off for this token.
 

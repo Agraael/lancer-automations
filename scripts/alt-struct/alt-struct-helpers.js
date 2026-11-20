@@ -7,6 +7,7 @@ export function altStructButton({ flowType, actorUuid, icon, label, attrs = {} }
     const extra = Object.entries(attrs)
         .map(([name, value]) => `data-${name}="${value}"`)
         .join(' ');
+
     return `<a class="alt-struct-flow-button lancer-button" data-flow-type="${flowType}" ${extra} data-actor-id="${actorUuid}">`
         + `<i class="${icon} i--sm"></i> ${localize(label)}</a>`;
 }

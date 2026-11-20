@@ -37,6 +37,7 @@ export function rollCard(options = {})
     {
         let cardEl;
         let originMark = null;
+
         const cleanup = () =>
         {
             originMark?.destroy();
@@ -64,15 +65,18 @@ export function rollCard(options = {})
 
         const input = cardEl.find('[data-role="roll-formula"]');
         cardEl.find('[data-role="item-chip"]').insertBefore(input);
+
         const doRoll = async () =>
         {
             const formula = String(input.val() ?? '').trim();
+
             if (!formula || !Roll.validate(formula))
             {
                 input.css('border-color', '#c33');
                 setTimeout(() => input.css('border-color', ''), 800);
                 return;
             }
+
             cardEl.find('[data-action="do-roll"]').prop('disabled', true);
             const rollObj = new Roll(formula, originToken?.actor?.getRollData?.() ?? {});
             await rollObj.evaluate();

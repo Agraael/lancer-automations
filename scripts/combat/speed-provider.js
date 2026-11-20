@@ -42,6 +42,7 @@ export function getSpeedRanges(token)
         'boost': () => getColor(COLOR_BOOST, '#ffc107'),
         'over-boost': () => getColor(COLOR_OVER_BOOST, '#d81b60')
     };
+
     return getMovementBands(token)
         .filter(band => band.size > 0)
         .map(band => ({ name: band.name, color: colors[band.name]?.() ?? getColor(COLOR_STANDARD, '#1e88e5'), max: band.max, granted: band.granted }));
@@ -82,6 +83,7 @@ Hooks.on('preCreateActiveEffect', (effect) =>
 {
     if (!isEnabled() || conflictModuleActive())
         return;
+
     const MODES = CONST.ACTIVE_EFFECT_MODES;
     const frameLid = effect?.parent?.system?.loadout?.frame?.value?.system?.lid ?? null;
 

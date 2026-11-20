@@ -19,6 +19,7 @@ const VALUE_STATUS_COLORS = { burn: '#d74242', overshield: '#60a5fa', infection:
  * @property {string} [valueColor]
  * @property {string} [core] - Name of the frame's core power.
  * @property {string} [duration]
+ * @property {{name: string, trigger?: string}|null} [prepared]
  * @property {string} [bonus]
  * @property {string} [frequency] - How often the bonus may apply, empty when unlimited.
  * @property {string[]} [conditional] - Gate lines of the linked bonus, non-empty means gated.
@@ -36,7 +37,9 @@ function bestTurnEntry(effect)
 {
     if (!getLAFlags(effect))
         return null;
+
     let best = null;
+
     for (const entry of durationEntries(effect))
     {
         if ((entry.label === 'end' || entry.label === 'start' || ANY_TURN_LABELS.has(entry.label)) && Number(entry.turns) > 0)
@@ -45,6 +48,7 @@ function bestTurnEntry(effect)
                 best = { label: entry.label, turns: Number(entry.turns) };
         }
     }
+
     return best;
 }
 
@@ -59,6 +63,7 @@ export function instanceCount(actor, effect)
 {
     if (!actor || !effect?.name)
         return 0;
+
     const group = iconGroupOf(actor, effect);
     if (group.some(isUsageEffect))
         return group.length;
@@ -74,6 +79,7 @@ function holderTokenIds(effect)
 {
     const actor = effect?.parent;
     const ids = new Set();
+
     if (actor?.token)
         ids.add(actor.token.id);
     for (const token of actor?.getActiveTokens?.(false, true) ?? [])
@@ -97,12 +103,14 @@ function durationLine(entry, holderIds)
         const own = !entry.originID || holderIds.has(entry.originID);
         return { text: `${entry.label === 'end' ? 'End' : 'Start'} of ${own ? 'own turn' : 'turn'}${count}`, whose: own ? null : tokenName(entry.originID), round: false };
     }
+
     if (ANY_TURN_LABELS.has(entry.label))
     {
         const turns = Number(entry.turns);
         const count = Number.isFinite(turns) ? ` (${plural(turns, 'turn')})` : '';
         return { text: `${entry.label === 'anyTurnEnd' ? 'End' : 'Start'} of any turn${count}`, whose: null, round: false };
     }
+
     if (entry.label === 'roundEnd' || entry.label === 'roundStart')
     {
         const left = roundsLeft(entry);
@@ -110,6 +118,7 @@ function durationLine(entry, holderIds)
         const count = left !== null ? ` (${plural(left, 'round')})` : '';
         return { text: `${entry.label === 'roundEnd' ? 'End' : 'Start'} of round${number}${count}`, whose: null, round: true };
     }
+
     if (entry.label === 'encounter')
         return { text: 'End of encounter', whose: null, round: false };
     if (entry.label === 'permanent')
@@ -121,18 +130,22 @@ export function durationLines(effect)
 {
     if (!getLAFlags(effect))
         return [];
+
     const holderIds = holderTokenIds(effect);
     const lines = [];
+
     for (const entry of durationEntries(effect))
     {
         const line = durationLine(entry, holderIds);
         const stack = Math.max(1, Number(entry.stack) || 1);
         const same = lines.find(other => other.text === line.text && other.whose === line.whose);
+
         if (same)
             same.stack += stack;
         else
             lines.push({ ...line, stack });
     }
+
     return lines;
 }
 
@@ -165,8 +178,10 @@ export function linkedBonusText(actor, effect)
     const linkedBonusId = getLAFlags(effect)?.linkedBonusId;
     if (!linkedBonusId || !actor)
         return '';
+
     const bonuses = getGlobalBonuses(actor);
     const bonus = bonuses.find(entry => entry.id === linkedBonusId);
+
     if (!bonus)
         return '';
     return bonusText(bonus, actor, _collapsedUses(actor, effect, bonus, bonuses));
@@ -177,8 +192,10 @@ function _collapsedUses(actor, effect, bonus, bonuses)
     const base = getBonusUsesInfo(actor, bonus);
     if (!base || effect.flags?.statuscounter?.value == null)
         return base;
+
     let remaining = 0;
     let max = 0;
+
     for (const entry of iconGroupOf(actor, effect))
     {
         const linked = bonuses.find(candidate => candidate.id === getLAFlags(entry)?.linkedBonusId);
@@ -187,6 +204,7 @@ function _collapsedUses(actor, effect, bonus, bonuses)
         remaining += effectStack(entry);
         max += Number(linked.uses) || 0;
     }
+
     return { label: `${remaining}/${max}`, onUse: base.onUse };
 }
 
@@ -195,9 +213,11 @@ export function bonusText(bonus, actor = null, uses = getBonusUsesInfo(actor, bo
 {
     if (!bonus)
         return '';
+
     const detail = bonus.type === 'multi' && Array.isArray(bonus.bonuses)
         ? bonus.bonuses.map(getBonusDetailString).join(' | ')
         : getBonusDetailString(bonus);
+
     if (!uses)
         return detail;
     return `${detail} <span class="la-status-tooltip-uses">[${uses.label}]</span>${uses.onUse ? ' [on-use]' : ''}`;
@@ -210,7 +230,9 @@ export function itemAttachmentChips(item)
 {
     if (item?.documentName !== 'Item')
         return [];
+
     const owner = ATTACHMENT_OWNERS[item.parent?.type] ?? 'actor';
+
     const bonuses = /** @type {any[]} */ (getLAFlags(item)?.bonusTemplates ?? []).map(template =>
     {
         const bonus = template.bonusData ?? {};
@@ -218,9 +240,11 @@ export function itemAttachmentChips(item)
         const text = bonusText(bonus, null, null);
         return { kind: 'bonus', origin: attachmentOrigin(template.addOptions?.addedViaUI), ...(String(icon).includes('/') ? { img: icon } : { icon }), title: bonus.name || text, text, tip: `${escapeHtml(text)}.` };
     });
+
     const statuses = /** @type {any[]} */ ([...(item.effects ?? [])])
         .filter(effect => getLAFlags(effect)?.isItemTemplate === true)
         .map(effect => ({ kind: 'status', origin: attachmentOrigin(getLAFlags(effect)?.addedViaUI), img: effect.img, title: effect.name, text: effect.name, tip: `On the ${owner} while this item is.` }));
+
     return [...bonuses, ...statuses];
 }
 
@@ -228,6 +252,7 @@ export function sourceName(record)
 {
     if (record?.dataSource?.name)
         return record.dataSource.name;
+
     const markers = record?.documentName ? getLAFlags(record) : record;
     const uuid = markers?.sourceItemUuid ?? markers?.sourceActorUuid;
     return uuid ? (/** @type {any} */ (fromUuidSync(uuid))?.name ?? '') : '';
@@ -238,6 +263,7 @@ function laStatusTextKey(id)
     const own = `LA.status.${id}.description`;
     if (game.i18n.has(own))
         return own;
+
     const short = `LA.statusShort.${id}`;
     return getModuleSetting('shortStatusTexts') && game.i18n.has(short) ? short : '';
 }
@@ -259,16 +285,19 @@ export function descriptionHtml(effect)
         if (key)
             return localize(key);
     }
+
     // Foundry copies the CONFIG description onto the effect when it is applied, so an
     // applied effect carries whatever CONFIG held, key included.
     if (effect?.description)
         return localize(effect.description);
+
     for (const id of effect?.statuses ?? [])
     {
         const config = CONFIG.statusEffects.find(entry => entry.id === id);
         if (config?.description)
             return localize(config.description);
     }
+
     return '';
 }
 
@@ -281,6 +310,7 @@ function corePowerName(actor, effect)
 {
     if (!effect?.statuses?.has('core_power_active'))
         return '';
+
     const core = actor?.system?.loadout?.frame?.value?.system?.core_system;
     return core?.active_name || core?.name || '';
 }
@@ -300,6 +330,7 @@ export function effectTooltipData(actor, effect)
         valueColor: valueId ? VALUE_STATUS_COLORS[valueId] : undefined,
         core: corePowerName(actor, effect),
         duration: durationHtml(effect),
+        prepared: getLAFlags(effect)?.prepared ?? null,
         bonus: linkedBonusText(actor, effect),
         frequency: linkedBonusFrequencyLabel(actor, effect),
         conditional: linkedBonusHasLambdaGate(actor, effect) ? linkedBonusConditionLines(actor, effect) : [],
@@ -321,10 +352,13 @@ export function showStatusTooltip(data)
     const count = data.count > 1 ? ` <span class="la-status-tooltip-count">&times;${data.count}</span>` : '';
     const value = data.value != null ? ` <span class="la-status-tooltip-value" style="color:${data.valueColor};">${data.value}</span>` : '';
     const parts = [`<div class="la-status-tooltip-name">${data.name ?? ''}${value}${count}</div>`];
+
     if (data.core)
         parts.push(`<div class="la-status-tooltip-core">${escapeHtml(data.core)}</div>`);
     if (data.duration)
         parts.push(`<div class="la-status-tooltip-duration">${data.duration}</div>`);
+    if (data.prepared)
+        parts.push(`<div class="la-status-tooltip-prepared"><b>${escapeHtml(data.prepared.name)}</b>${data.prepared.trigger ? `<br>${escapeHtml(data.prepared.trigger)}` : ''}</div>`);
     if (data.bonus)
         parts.push(`<div class="la-status-tooltip-bonus">${data.bonus}</div>`);
     if (data.source)
@@ -353,9 +387,11 @@ export function moveStatusTooltip(el, clientX, clientY, gap = 14)
 {
     if (!el)
         return;
+
     const rect = el.getBoundingClientRect();
     let left = clientX + gap;
     let top = clientY + gap;
+
     if (left + rect.width > window.innerWidth - 4)
         left = clientX - rect.width - gap;
     if (top + rect.height > window.innerHeight - 4)

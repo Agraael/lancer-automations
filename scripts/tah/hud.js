@@ -1,7 +1,8 @@
 /* global $, window, game, ui, Hooks */
 
 import { HudCategories, rankText } from './hud-categories.js';
-import { getTokenDispositionInfo, activationSpendKind } from '../tools/misc-tools.js';
+import { getTokenDispositionInfo } from '../tools/misc-tools.js';
+import { activationSpendKinds } from '../tools/action-economy.js';
 import { armFreeUse } from './tape-changes.js';
 import { isForceFreeMovement } from '../movement/keybindings.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
@@ -37,14 +38,17 @@ async function _toggleTokenInCombat(token)
     const tokenDoc = /** @type {any} */ (token?.document);
     if (!tokenDoc)
         return;
+
     try
     {
         const existing = tokenDoc.combatant;
+
         if (existing)
         {
             await existing.delete();
             return;
         }
+
         await tokenDoc.toggleCombatant({ active: true });
     }
     catch (e)
@@ -78,6 +82,7 @@ Hooks.on('updateItem', (item, changes) =>
 {
     if (!foundry.utils.hasProperty(changes, 'system.selected_profile_index'))
         return;
+
     const popup = $(document.querySelectorAll('.la-hud-weapon-popup'));
     if (popup.length && popup.data('weapon-id') === item.id)
         popup.data('laRebuild')?.();
@@ -182,11 +187,13 @@ export class LancerHUD
         // Pre-cache deployables for the primary token only
         const actor = this._token.actor;
         const lids = [];
+
         for (const item of actor.items)
         {
             for (const lid of getItemDeployables(item, actor))
                 lids.push(lid);
         }
+
         if (lids.length)
             await Promise.all(lids.map(lid => getDeployableInfo(lid, actor)));
         if (this._bindGen !== gen)
@@ -230,15 +237,18 @@ export class LancerHUD
     {
         if (!this._el)
             return false;
+
         if (this._statusPanelInstance?.isVisible)
         {
             this._statusPanelInstance.close();
             this._clearC1Active?.();
             return true;
         }
+
         const catIdx = (this._categories ?? []).findIndex(cat => cat.isStatusPanel);
         if (catIdx < 0)
             return false;
+
         const row = this._el.children().first().find('.la-hud-row').eq(catIdx);
         if (!row.length)
             return false;
@@ -252,7 +262,9 @@ export class LancerHUD
             return false;
         if (canvas.currentMouseManager || ui.menu?.rendered || ui.context?.element || foundry.nue?.Tour?.tourInProgress)
             return false;
+
         const popup = $(document.querySelectorAll('.la-hud-popup')).not(':animated');
+
         if (popup.length)
         {
             popup.animate({ opacity: 0 }, 120, function ()
@@ -261,6 +273,7 @@ export class LancerHUD
             });
             return true;
         }
+
         if (!this._el.find('.la-hud-kbfocus').length)
             return false;
         if (this._clickToOpen)
@@ -325,6 +338,7 @@ export class LancerHUD
         this._suppressRefreshDepth = Math.max(0, this._suppressRefreshDepth - 1);
         if (this._suppressRefreshDepth > 0 || !this._pendingRefresh)
             return;
+
         const force = this._pendingRefresh === 'force';
         this._pendingRefresh = null;
         clearTimeout(this._refreshTimer);
@@ -339,6 +353,7 @@ export class LancerHUD
             this._pendingRefresh = this._pendingRefresh ?? 'patch';
             return;
         }
+
         clearTimeout(this._refreshTimer);
         this._refreshTimer = setTimeout(() => this.refresh(), delay);
     }
@@ -362,11 +377,13 @@ export class LancerHUD
             return;
         this.syncValueCells();
         this._el.find('#la-hud-stats').replaceWith(buildStatsEl(this._actor, this._token));
+
         if (!this._narrativeMode)
         {
             this._updateCombatBar();
             this._updateActionTape();
         }
+
         this._updateEffectStrip();
     }
 
@@ -375,6 +392,7 @@ export class LancerHUD
         const actor = this._actor;
         if (this._narrativeMode || !actor || (this._tokens?.length ?? 0) > 1)
             return null;
+
         const entries = effectTileEntries(actor);
         if (!entries.length)
             return null;
@@ -412,6 +430,21 @@ export class LancerHUD
         this._effectTip = null;
     }
 
+    _choiceContext(row, onChosen)
+    {
+        return {
+            anchor: row[0],
+            onChosen,
+            ...(this._clickToOpen ? { dismissMs: null } : {}),
+            onEnter: () => this._cancelCollapse?.(),
+            onLeave: () =>
+            {
+                if (!this._clickToOpen && !this._el?.[0]?.matches(':hover'))
+                    this._scheduleCollapse?.();
+            }
+        };
+    }
+
     _paintSpendCue()
     {
         if (!this._el)
@@ -421,26 +454,32 @@ export class LancerHUD
         const hover = this._spendHover;
         if (!hover)
             return;
+
         if (hover.kind === PLAIN_ATTACK_CUE)
         {
             if (isForceFreeMovement())
                 hover.row.append(`<span class="la-free-mark la-attack-mark">${escapeHtml(localize('LA.tokenHud.attackMark'))}</span>`);
             return;
         }
+
         if (isForceFreeMovement() && FREE_USE_KINDS.has(hover.kind))
         {
             hover.row.append(`<span class="la-free-mark">${escapeHtml(localize('LA.tokenHud.freeMark'))}</span>`);
             return;
         }
-        this._el.find(`#la-combat-bar .la-action-icon[data-action="${hover.kind}"]`).addClass('la-action-glow');
+
+        for (const kind of hover.kinds)
+            this._el.find(`#la-combat-bar .la-action-icon[data-action="${kind}"]`).addClass('la-action-glow');
     }
 
     _updateActionTape()
     {
         if (!this._el)
             return;
+
         const existing = this._el.find('#la-action-tape');
         const newTape = this._token ? buildActionTape(this._token) : null;
+
         if (existing.length && newTape)
             existing.replaceWith(newTape);
         else if (existing.length)
@@ -457,8 +496,10 @@ export class LancerHUD
     {
         if (!this._actor || !this._token || !this._el)
             return;
+
         const existing = this._el.find('#la-combat-bar');
         const newBar = buildCombatBar(this._actor, this._token);
+
         if (existing.length && newBar)
             existing.replaceWith(newBar);
         else if (existing.length && !newBar)
@@ -471,6 +512,7 @@ export class LancerHUD
         else if (!existing.length && newBar)
         {
             const combatEl = this._el.find('.la-hud-combat');
+
             if (combatEl.length)
             {
                 const rowHeight = 30;
@@ -485,12 +527,15 @@ export class LancerHUD
     {
         if (!this._token && !this._narrativeMode)
             return;
+
         if (this._suppressRefreshDepth > 0)
         {
             this._pendingRefresh = force || this._pendingRefresh === 'force' ? 'force' : 'patch';
             return;
         }
+
         this._pendingRefresh = null;
+
         // Status panel open: sync rows in-place, never close + reopen.
         if (this._statusPanelInstance?.isVisible)
         {
@@ -498,6 +543,7 @@ export class LancerHUD
             this._statusPanelInstance.syncRows();
             return;
         }
+
         // Same categories and title, or a detail popup open: patch the open columns in place.
         if (!force && this._el && (document.querySelector('.la-hud-popup') || this._canPatch()))
         {
@@ -508,6 +554,7 @@ export class LancerHUD
             this._restoreHover(hover);
             return;
         }
+
         const openPath = this._saveOpenPath();
         const view = this._kbResultsKey();
         const viewScroll = this._c2?.scrollTop() ?? 0;
@@ -527,11 +574,13 @@ export class LancerHUD
         this._render(false);
         this._restoreOpenPath(openPath);
         this._restoreSearch(search);
+
         if (view === 'favorites')
         {
             this._relistFavorites?.({ animate: false });
             this._searchActive = false;
         }
+
         if (view === 'favorites' || view === 'results')
             this._c2?.scrollTop(viewScroll);
         this._restorePanel(panelState);
@@ -550,9 +599,11 @@ export class LancerHUD
     {
         if (!this._el?.is(':hover'))
             return null;
+
         const row = this._el.find('.la-hud-row:hover, .la-hud-cell:hover').last();
         if (!row.length)
             return null;
+
         const depth = this._hudCols().findIndex(col => !!col?.has(row[0]).length);
         return { el: row[0], key: row.attr('data-la-key'), depth, scroll: row.find('.la-hud-clip').scrollLeft() ?? 0 };
     }
@@ -561,6 +612,7 @@ export class LancerHUD
     {
         if (!hover?.key || hover.depth < 0 || hover.el.isConnected)
             return;
+
         const row = this._rowByKey(this._hudCols()[hover.depth], hover.key);
         if (!row)
             return;
@@ -586,14 +638,17 @@ export class LancerHUD
     {
         if (!kb?.key || kb.el.isConnected)
             return;
+
         const rows = this._kbRows(kb.depth);
         const row = rows.filter((_index, element) => element.dataset.laKey === kb.key).first();
+
         if (!row.length)
             return;
         this._kbCol = kb.depth;
         this._kbIdx = rows.index(row);
         row.addClass('la-hud-kbfocus');
         row.data('laHoverPaint')?.();
+
         if (kb.mode)
         {
             this._el.addClass('la-hud-kb');
@@ -606,6 +661,7 @@ export class LancerHUD
         const bar = this._searchBar;
         if (!bar?.is(':visible'))
             return null;
+
         const field = /** @type {HTMLInputElement} */ (bar[0]);
         return { value: String(bar.val()), start: field.selectionStart, end: field.selectionEnd, focused: document.activeElement === field };
     }
@@ -620,6 +676,7 @@ export class LancerHUD
             this._rerunSearch?.({ animate: false });
         if (!search.focused)
             return;
+
         const field = /** @type {HTMLInputElement} */ (this._searchBar[0]);
         field.focus();
         field.setSelectionRange(search.start ?? search.value.length, search.end ?? search.value.length);
@@ -629,8 +686,10 @@ export class LancerHUD
     {
         const kinds = { log: this._logPanelInstance, glossary: this._glossaryPanelInstance, bond: this._bondPanelInstance };
         const kind = Object.keys(kinds).find(name => kinds[name]?.isVisible);
+
         if (!kind)
             return null;
+
         const panel = kinds[kind];
         const anchor = panel._anchor;
         const search = panel._panel.find('.la-hud-panel-search input');
@@ -648,9 +707,11 @@ export class LancerHUD
     {
         if (!state?.key || state.depth < 0)
             return;
+
         const panel = { log: this._logPanelInstance, glossary: this._glossaryPanelInstance, bond: this._bondPanelInstance }[state.kind];
         const col = this._hudCols()[state.depth];
         const row = this._rowByKey(col, state.key);
+
         if (!panel || !row)
             return;
         if (this._clickToOpen)
@@ -671,6 +732,7 @@ export class LancerHUD
             const key = panel?.isVisible ? panel._anchor?.attr('data-la-key') : null;
             if (!key || panel._anchor[0]?.isConnected)
                 continue;
+
             const row = this._hudCols().map(col => this._rowByKey(col, key)).find(Boolean);
             if (row)
                 panel._anchor = row;
@@ -681,6 +743,7 @@ export class LancerHUD
     {
         const fresh = this._buildCategories().filter(cat => this._catHasContent(cat)).map(cat => cat.label);
         const current = (this._categories ?? []).map(cat => cat.label);
+
         if (fresh.length !== current.length || fresh.some((label, index) => label !== current[index]))
             return false;
         return this._titleSig() === this._renderedTitleSig;
@@ -710,6 +773,7 @@ export class LancerHUD
     {
         if (!cat.getItems || cat.isStatusPanel || cat.isLogPanel || cat.noCount)
             return 0;
+
         try
         {
             return this._usableCount(this._sectionView(cat.getItems() ?? []).rows);
@@ -724,13 +788,16 @@ export class LancerHUD
     {
         this.updateStatsInPlace();
         const c1 = this._el.children().first();
+
         for (const cat of this._categories ?? [])
         {
             const row = this._rowByKey(c1, cat.label);
             if (!row)
                 continue;
+
             const count = this._catCount(cat);
             const countEl = row.children('.la-hud-count');
+
             if (count > 0 && countEl.length)
                 countEl.text(count);
             else if (count > 0)
@@ -738,6 +805,7 @@ export class LancerHUD
             else
                 countEl.remove();
         }
+
         this._patchColumns();
     }
 
@@ -775,14 +843,17 @@ export class LancerHUD
         this._clickToOpen = clickToOpen;
 
         const actor = this._actor;
+
         const tokenName = this._narrativeMode
             ? (actor ? (actor.name ?? 'UNLINKED') : 'UNLINKED')
             : (this._tokens.length > 1
                 ? `${this._tokens.length} TOKENS`
                 : (this._token.name ?? actor.name ?? ''));
+
         // Resolve disposition / team (only if setting is on)
         let _dispColor = null;
         let _dispLabel = null;
+
         if (!this._narrativeMode && getModuleSetting('tah.showDisposition'))
         {
             const d = getTokenDispositionInfo(this._token) ?? { color: '#888', label: localize('LA.tokenHud.label.unknown') };
@@ -816,12 +887,14 @@ export class LancerHUD
             {
                 const targets = (this._tokens?.length ? this._tokens : [this._token]).filter(Boolean);
                 const wantActive = !this._token.inCombat;
+
                 for (const target of targets)
                 {
                     if (!!target.inCombat === wantActive)
                         continue;
                     await _toggleTokenInCombat(target);
                 }
+
                 const nowInCombat = this._token.inCombat;
                 combatToggle.toggleClass('la-combat-toggle--in', nowInCombat);
                 combatToggle.attr('title', nowInCombat ? 'Remove from combat' : 'Add to combat');
@@ -851,8 +924,10 @@ export class LancerHUD
         this._searchBar = searchBar;
         const actionTape = this._narrativeMode ? null : buildActionTape(this._token);
         const headEl = $(htmlToElement('<div class="la-hud-head"></div>')).append(titleEl);
+
         if (statsEl.is('#la-hud-stats'))
             headEl.append(statsEl);
+
         const combatEl = $(htmlToElement('<div class="la-hud-combat"></div>'));
         if (combatBar && combatBar.is('#la-combat-bar'))
             combatEl.append(combatBar);
@@ -868,15 +943,19 @@ export class LancerHUD
         // Saved and default tops place the name band, a portrait pushes the HUD down by its height so the art sits above.
         let defaultBase = HUD_TOP;
         let portraitOffset = 0;
+
         const onPortraitMeasured = (measured) =>
         {
             const next = Math.round(measured * uiScale);
             const current = parseInt(this._el?.css('top') ?? '');
+
             if (Number.isFinite(current))
                 this._el.css('top', `${current - portraitOffset + next}px`);
             portraitOffset = next;
         };
+
         const narrativeRoster = this._narrativeMode ? getNarrativeRoster() : [];
+
         const portrait = narrativeRoster.length > 1
             ? buildPortraitRail({
                 pilots: narrativeRoster,
@@ -885,15 +964,18 @@ export class LancerHUD
                 onPick: setNarrativeActor,
             })
             : buildPortrait(this._narrativeMode ? null : this._token, actor, onPortraitMeasured);
+
         if (portrait)
         {
             titleEl.append(portrait.el);
             portraitOffset = Math.round(portrait.height * uiScale);
         }
+
         this._closeEffectTip();
         const effectStrip = this._buildEffectStrip();
         if (effectStrip)
             titleEl.append(effectStrip);
+
         const startTop = (savedPos?.top ?? defaultBase) + portraitOffset;
 
         const hud = $(htmlToElement(`<div id="la-hud" style="left:${startLeft}px;top:${startTop}px;"></div>`));
@@ -904,6 +986,7 @@ export class LancerHUD
         hud.append(c1);
         hud.appendTo(document.body);
         this._el = hud;
+
         // With a portrait the default top is half the no-portrait one, so the art has room above.
         if (portrait)
         {
@@ -911,6 +994,7 @@ export class LancerHUD
             if (!savedPos)
                 hud.css('top', `${defaultBase + portraitOffset}px`);
         }
+
         if (animate)
             hud.animate({ opacity: 1, left: startLeft }, 350);
 
@@ -918,6 +1002,7 @@ export class LancerHUD
         const lockBtn = $(htmlToElement(`<span class="la-hud-lock" title="Unlock to drag"><i class="fas fa-fw fa-lock"></i></span>`));
         const resetBtn = $(htmlToElement(`<span class="la-hud-reset" title="Reset position"><i class="fas fa-fw fa-rotate-left"></i></span>`));
         titleEl.append($(htmlToElement('<span class="la-hud-lockslot"></span>')).append(lockBtn, resetBtn));
+
         const paintLock = (/** @type {boolean} */ hovered) =>
         {
             const unlocked = this._unlocked;
@@ -926,6 +1011,7 @@ export class LancerHUD
             resetBtn.css('opacity', unlocked ? 0.6 : 0);
             hud.toggleClass('la-hud-unlocked', unlocked);
         };
+
         paintLock(false);
 
         // Disposition / team stripe. Appended last to sit at the far right edge.
@@ -937,6 +1023,7 @@ export class LancerHUD
             titleEl.append(dispToggle);
             titleEl.append(dispDetail);
             let _dispExpanded = false;
+
             const openDisp = () =>
             {
                 if (_dispExpanded)
@@ -949,6 +1036,7 @@ export class LancerHUD
                     });
                 dispToggle.find('span').text('◀');
             };
+
             const closeDisp = () =>
             {
                 if (!_dispExpanded)
@@ -960,6 +1048,7 @@ export class LancerHUD
                 });
                 dispToggle.find('span').text('▶');
             };
+
             dispToggle.on('mouseenter', () =>
             {
                 playUiSound('statusHover'); openDisp();
@@ -985,6 +1074,7 @@ export class LancerHUD
             nameSpan.css({ color: 'var(--tah-red-glyph)', cursor: 'pointer' });
             const clip = nameSpan.find('.la-hud-clip')[0];
             const pan  = nameSpan.find('.la-hud-pan')[0];
+
             if (clip && pan)
             {
                 const overflow = pan.scrollWidth - clip.clientWidth;
@@ -1034,6 +1124,7 @@ export class LancerHUD
                 return;
             if ($(ev.target).closest('.la-hud-fav-icon, .la-hud-search-toggle, .la-hud-search-bar').length)
                 return;
+
             const onHandle = $(ev.target).closest('.la-hud-col-label, .la-hud-token-title, .la-hud-lock, .la-hud-reset').length > 0;
             if (!onHandle && $(ev.target).closest('.la-hud-col').length)
                 return; // rows stay clickable; drag only from the bars
@@ -1046,6 +1137,7 @@ export class LancerHUD
         {
             if (!dragStart)
                 return;
+
             const dx = ev.clientX - dragStart.x;
             const dy = ev.clientY - dragStart.y;
             hud.css({ left: dragStart.left + dx, top: dragStart.top + dy });
@@ -1054,11 +1146,13 @@ export class LancerHUD
         {
             if (!dragStart)
                 return;
+
             const moved = parseInt(hud.css('left')) !== dragStart.left || parseInt(hud.css('top')) !== dragStart.top;
             dragStart = null;
             hud.css('cursor', '');
             if (!moved)
                 return;
+
             const pos = { left: parseInt(hud.css('left')), top: parseInt(hud.css('top')) - portraitOffset };
             game.settings.set(MODULE_ID,'tah.position', pos);
         });
@@ -1082,12 +1176,14 @@ export class LancerHUD
         {
             const row = this._makeRow(cat.label, true, cat.icon ?? null, null, null, null, this._catCount(cat));
             row.attr('data-la-key', cat.label);
+
             const openCat = ({ silent = false } = {}) =>
             {
                 this._searchActive = false;
                 _cancelCollapse();
                 if (!silent)
                     playUiSound();
+
                 if (/** @type {any} */ (cat).isStatusPanel)
                 {
                     if (row.hasClass('la-hud-active') && this._statusPanelInstance?.isVisible)
@@ -1096,8 +1192,10 @@ export class LancerHUD
                         {
                             this._statusPanelInstance.close(); _clearC1Active();
                         }
+
                         return;
                     }
+
                     this._closePanels({ except: this._statusPanelInstance });
                     this._setActive(c1, row, true);
                     closeCol(c2, 80); closeCol(c3, 80); closeCol(c4, 80);
@@ -1107,31 +1205,38 @@ export class LancerHUD
                         this._statusPanelInstance.open(row);
                     return;
                 }
+
                 if (row.hasClass('la-hud-active') && c2.is(':visible'))
                 {
                     if (clickToOpen)
                     {
                         closeCol(c2); closeCol(c3); closeCol(c4); _clearC1Active();
                     }
+
                     return;
                 }
+
                 this._closePanels();
                 this._setActive(c1, row, true);
                 closeCol(c3, 80);
                 closeCol(c4, 80);
                 this._c2Category = cat; this._c2AnchorRow = row;
                 this._c3SourceItem = null; this._c4SourceItem = null;
+
                 {
                     const colLabel = /** @type {any} */ (cat).colLabel;
                     c2.find('.la-hud-col-label')
                         .attr('data-col', 'category')
                         .text(typeof colLabel === 'function' ? colLabel() : colLabel);
                 }
+
                 this._openCol(c2, /** @type {any} */ (cat).getItems(), row);
                 slideInCol(c2, { silent });
                 this._fitCol(c2);
             };
+
             row.data('laOpen', openCat);
+
             if (clickToOpen)
             {
                 row.on('mouseenter', () =>
@@ -1151,15 +1256,18 @@ export class LancerHUD
                 row.on('mouseenter', (ev) => this._withIntent(ev, c2, openCat));
                 row.on('mouseleave', () => this._cancelIntent());
             }
+
             c1.append(row);
         }
 
         // Safe-zone collapse: fires only when mouse leaves ALL visible columns
         let _leaveTimer = null;
+
         const _clearC1Active = () =>
         {
             c1.find('.la-hud-row').each((_index, element) => this._restRow($(element)));
         };
+
         const _collapseAll = () =>
         {
             closeCol(c2);
@@ -1172,6 +1280,7 @@ export class LancerHUD
                 $(this).remove();
             });
         };
+
         const _scheduleCollapse = () =>
         {
             clearTimeout(_leaveTimer);
@@ -1184,12 +1293,14 @@ export class LancerHUD
                 _collapseAll();
             }, collapseDelay);
         };
+
         const _cancelCollapse = () => clearTimeout(_leaveTimer);
         this._scheduleCollapse = _scheduleCollapse;
         this._cancelCollapse   = _cancelCollapse;
         this._clearC1Active    = _clearC1Active;
         this._collapseAll      = _collapseAll;
         this._closePanels();
+
         const panelOptions = {
             actor: this._actor,
             token: this._token,
@@ -1198,6 +1309,7 @@ export class LancerHUD
             scheduleCollapse: clickToOpen ? () =>
             {} : _scheduleCollapse,
         };
+
         this._statusPanelInstance = new StatusPanel({
             ...panelOptions,
             tokens: this._tokens,
@@ -1222,12 +1334,15 @@ export class LancerHUD
         {
             if (!this._quietEl)
                 return;
+
             const target = /** @type {HTMLElement} */ (ev.target).closest?.('.la-hud-row, .la-hud-cell');
+
             if (target === this._quietEl)
             {
                 ev.stopPropagation();
                 return;
             }
+
             this._quietEl = null;
         }, true);
         if (!this._kbBound)
@@ -1244,13 +1359,16 @@ export class LancerHUD
                 return;
             this._kbReset();
         });
+
         for (const col of [c2, c3, c4])
         {
             if (!clickToOpen)
                 col.on('mouseleave', _scheduleCollapse);
             col.on('mouseenter', _cancelCollapse);
         }
+
         $(document).off('mousedown.la-hud-cto');
+
         if (!clickToOpen)
         {
             // Leaving any c1 category row toward the header area schedules collapse
@@ -1267,6 +1385,7 @@ export class LancerHUD
                     _collapseAll();
             });
         }
+
         // Title / stats / menu-label area. Hovering it closes open columns.
         const onHeaderEnter = () =>
         {
@@ -1274,6 +1393,7 @@ export class LancerHUD
             if (!clickToOpen)
                 _scheduleCollapse();
         };
+
         c1.on('mouseenter', '.la-hud-token-title, #la-hud-stats', onHeaderEnter);
         menuCell.on('mouseenter', onHeaderEnter);
         searchIcon.on('mouseenter', onHeaderEnter);
@@ -1283,6 +1403,7 @@ export class LancerHUD
             menuLabel.toggleClass('la-hud-menu-band--search', open);
             searchIcon.css('opacity', open ? '1' : '0.55');
             searchBar.stop(true, true);
+
             if (open && animate)
                 searchBar.fadeIn(120, () => searchBar.trigger('focus'));
             else if (open)
@@ -1296,6 +1417,7 @@ export class LancerHUD
                     searchBar.hide();
             }
         };
+
         this._setSearchOpen = setSearchOpen;
         searchIcon.on('click', (ev) =>
         {
@@ -1311,15 +1433,18 @@ export class LancerHUD
             else
                 setSearchOpen(true);
         });
+
         const runSearch = ({ animate = true } = {}) =>
         {
             const q = String(searchBar.val()).trim().toLowerCase();
+
             if (!q)
             {
                 this._searchActive = false;
                 closeCol(c2);
                 return;
             }
+
             this._searchActive = true;
             _cancelCollapse();
             this._c2Category = null; this._c2AnchorRow = null;
@@ -1327,6 +1452,7 @@ export class LancerHUD
             openSearchResults(c2, collectSearchResults(q, this._categories, favKeyOf), { el: this._el, makeRow: (...rowArgs) => this._makeRow(...rowArgs), token: this._token, animate });
             this._fitCol(c2);
         };
+
         this._rerunSearch = runSearch;
         searchBar.on('input', () => runSearch());
         searchBar.on('mouseenter click', () =>
@@ -1341,26 +1467,32 @@ export class LancerHUD
                 searchIcon.trigger('click');
                 return;
             }
+
             if (ev.key === 'Enter')
             {
                 ev.preventDefault();
                 if (ev.originalEvent?.repeat || this._kbResultsKey() !== 'results')
                     return;
+
                 const resultRows = c2.find('.la-hud-row');
                 const focusedRow = resultRows.filter('.la-hud-kbfocus').first();
                 (focusedRow.length ? focusedRow : resultRows.first()).trigger('click');
                 return;
             }
+
             const bindings = /** @type {any[]} */ (game.keybindings.get(MODULE_ID,'tah.toggleSearch') ?? []);
+
             const match = bindings.some(b =>
             {
                 if (b.key !== ev.code)
                     return false;
+
                 const mods = b.modifiers ?? [];
                 return ev.altKey   === mods.includes('Alt')
                     && ev.ctrlKey  === mods.includes('Control')
                     && ev.shiftKey === mods.includes('Shift');
             });
+
             if (match)
             {
                 ev.preventDefault();
@@ -1387,7 +1519,9 @@ export class LancerHUD
             });
             this._fitCol(c2);
         };
+
         this._relistFavorites = listFavorites;
+
         const openFavorites = () =>
         {
             this._searchActive = false;
@@ -1400,8 +1534,10 @@ export class LancerHUD
             closeCol(c3, 80); closeCol(c4, 80);
             listFavorites();
         };
+
         this._openFavorites = openFavorites;
         const isFavoritesOpen = () => c2.is(':visible') && c2.find('.la-hud-col-label').attr('data-col') === 'favorites';
+
         this._toggleFavorites = () =>
         {
             if (isFavoritesOpen())
@@ -1411,9 +1547,12 @@ export class LancerHUD
                 this._c2AnchorRow = null;
                 return;
             }
+
             openFavorites();
         };
+
         let favHovering = false;
+
         const applyFavStyle = () =>
         {
             const open = isFavoritesOpen();
@@ -1421,6 +1560,7 @@ export class LancerHUD
                 .toggleClass('la-hud-fav-icon--open', open)
                 .toggleClass('la-hud-fav-icon--hover', favHovering && !open);
         };
+
         const favObserver = new MutationObserver(() => applyFavStyle());
         favObserver.observe(c2[0], { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
         favIcon.on('mouseenter', (ev) =>
@@ -1452,11 +1592,13 @@ export class LancerHUD
     {
         if (this._tokens.length <= 1)
             return items;
+
         const others = this._tokens.slice(1).map(t => t.actor);
         return items.filter(item =>
         {
             if (item.isSectionLabel || item.inputCell)
                 return true;
+
             const lid = item.hoverData?.item?.system?.lid;
             if (!lid)
                 return true; // universal action (Basic Attack, Stabilize, etc.)
@@ -1486,6 +1628,7 @@ export class LancerHUD
     {
         if (!cat.getItems || cat.keepPlace || cat.isStatusPanel || cat.isLogPanel)
             return true;
+
         try
         {
             return this._hasContent(cat.getItems() ?? []);
@@ -1500,14 +1643,17 @@ export class LancerHUD
     {
         const hudEl = this._el?.[0];
         const menuLabel = this._el?.children().first().children('.la-hud-col-label')[0];
+
         if (!hudEl || !menuLabel || !col?.is(':visible'))
             return;
+
         const scale = tahScale();
         const hudTop = hudEl.getBoundingClientRect().top;
         const menuTop = (menuLabel.getBoundingClientRect().top - hudTop) / scale;
         const bottom = (window.innerHeight - 8 - hudTop) / scale;
         const top = parseFloat(col.css('top')) || 0;
         const height = col.outerHeight();
+
         if (top + height <= bottom)
             return;
         col.css({ top: Math.max(menuTop, bottom - height) });
@@ -1519,24 +1665,29 @@ export class LancerHUD
     {
         const canOpen = col !== this._c4;
         const childrenOf = new Map();
+
         const pruned = this._filterIntersect(items).filter(item =>
         {
             if (!canOpen || !item.getChildren || item.keepPlace || this._panelFor(item))
                 return true;
+
             const children = item.getChildren();
             childrenOf.set(item, children);
             return children === null || this._hasContent(children);
         });
+
         const { header: headerItem, rows: filteredItems } = this._sectionView(pruned);
         if (headerItem)
             col.find('.la-hud-col-label').text(headerItem.text ?? headerItem.label);
         col.children(':not(.la-hud-col-label)').remove();
         this._el?.find('.la-hud-row--glow').removeClass('la-hud-row--glow');
+
         // Page-relative offset minus HUD offset so it's correct whichever column anchorRow lives in (c1 or c2).
         if (reposition && anchorRow && this._el)
         {
             const aOff = anchorRow.offset();
             const eOff = this._el.offset();
+
             if (aOff && eOff)
                 col.css({ top: (aOff.top - eOff.top) / tahScale() - 22 });
         }
@@ -1548,6 +1699,7 @@ export class LancerHUD
         }
 
         const keyCounts = new Map();
+
         for (const item of filteredItems)
         {
             if (item.isSectionLabel)
@@ -1556,6 +1708,7 @@ export class LancerHUD
                 col.append(`<div class="la-hud-section-label">${iconHtml}${item.labelHtml ?? escapeHtml(item.text ?? item.label)}</div>`);
                 continue;
             }
+
             if (item.inputCell)
             {
                 const cell = buildValueCell(item, this._depthCallbacks());
@@ -1571,6 +1724,7 @@ export class LancerHUD
                     cell.css({ background: BG_ACTIVE, color: TEXT_ACTIVE });
                     playUiSound('hover');
                     const clip = cell.find('.la-hud-clip')[0]; const pan = cell.find('.la-hud-pan')[0];
+
                     if (clip && pan)
                     {
                         const overflow = pan.scrollWidth - clip.clientWidth; if (overflow > 4)
@@ -1583,6 +1737,7 @@ export class LancerHUD
                     cell.css({ background: cell.data('restingBg') ?? BG_DEFAULT, color: '' });
                     cell.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
                 });
+
                 if (item.onRightClick)
                 {
                     markRightClick(cell);
@@ -1593,18 +1748,23 @@ export class LancerHUD
                         item.onRightClick(cell);
                     });
                 }
+
                 if (item.indent)
                     cell.addClass('la-hud-indent');
+
                 const cellKey = this._rowKey(item);
+
                 if (cellKey != null)
                 {
                     const seen = keyCounts.get(cellKey) ?? 0;
                     keyCounts.set(cellKey, seen + 1);
                     cell.attr('data-la-key', seen ? `${cellKey}#${seen + 1}` : cellKey);
                 }
+
                 col.append(cell);
                 continue;
             }
+
             if (item.muted)
             {
                 const slot = $(htmlToElement(`<div class="la-hud-muted la-hud-muted--empty la-hud-muted--slot">${escapeHtml(item.text ?? item.label)}</div>`));
@@ -1621,28 +1781,33 @@ export class LancerHUD
                 col.append(slot);
                 continue;
             }
+
             const panel = this._panelFor(item);
             const rawChildren = childrenOf.has(item) ? childrenOf.get(item) : (canOpen && item.getChildren ? item.getChildren() : null);
             const hasChildren = canOpen && (rawChildren !== null || !!panel);
             const childCount = item.childCount ?? (hasChildren && rawChildren ? this._usableCount(this._sectionView(rawChildren).rows) : 0);
             const row = this._makeRow(item.text ?? item.label, hasChildren, item.icon, item.activation ?? null, item.badge ?? null, item.badgeTone ?? null, childCount, item.sizeLevel ?? null, item.labelHtml ?? null);
             const baseKey = this._rowKey(item);
+
             if (baseKey != null)
             {
                 const seen = keyCounts.get(baseKey) ?? 0;
                 keyCounts.set(baseKey, seen + 1);
                 row.attr('data-la-key', seen ? `${baseKey}#${seen + 1}` : baseKey);
             }
+
             row.data('laItem', item);
             if (item.indent)
                 row.addClass('la-hud-indent');
             if (item.mountKey != null)
                 row.attr('data-la-mount', item.mountKey);
+
             if (item.glowMounts?.length)
             {
                 row.on('mouseenter', () => this._glowMounts(item.glowMounts, true));
                 row.on('mouseleave', () => this._glowMounts(item.glowMounts, false));
             }
+
             if (item.onBadgeClick)
             {
                 row.find('.la-hud-badge').css('cursor', 'pointer').on('click', (ev) =>
@@ -1651,8 +1816,10 @@ export class LancerHUD
                     item.onBadgeClick();
                 });
             }
+
             const isFavoritable = !item.isSectionLabel && !!item.onClick && !!favKeyOf(item);
             const itemWheel = isFavoritable ? favoriteWheelOf(item) : 0;
+
             if (itemWheel)
                 applyFavMark(row, itemWheel);
             row.on('contextmenu', async (ev) =>
@@ -1661,15 +1828,18 @@ export class LancerHUD
                     return;
                 ev.preventDefault();
                 ev.stopImmediatePropagation();
+
                 if (!isFavoritable)
                 {
                     this._showQuickTip(ev.clientX, ev.clientY, "Can't favorite this");
                     return;
                 }
+
                 await this._pickFavoriteWheel(item, row, ev.clientX, ev.clientY);
             });
 
             const _stripeStyle = laHudStripeStyle(item);
+
             if (_stripeStyle)
             {
                 applyStripeStyle(row, _stripeStyle);
@@ -1728,15 +1898,18 @@ export class LancerHUD
                     panel.open(row);
                 });
             }
+
             if (item.onClick)
             {
-                const spendKind = activationSpendKind(item.spendActivation ?? item.activation ?? item.hoverData?.action?.activation ?? null);
+                const spendKinds = activationSpendKinds(item.spendActivation ?? item.activation ?? item.hoverData?.action?.activation ?? null);
+                const spendKind = spendKinds.at(-1) ?? null;
                 const cueKind = spendKind ?? (item.noRowClick ? PLAIN_ATTACK_CUE : null);
+
                 if (cueKind)
                 {
                     row.on('mouseenter', () =>
                     {
-                        this._spendHover = { row, kind: cueKind };
+                        this._spendHover = { row, kind: cueKind, kinds: spendKinds };
                         this._paintSpendCue();
                     });
                     row.on('mouseleave', () =>
@@ -1746,27 +1919,38 @@ export class LancerHUD
                         this._paintSpendCue();
                     });
                 }
+
                 const runAction = async (_event, { free = isForceFreeMovement() } = {}) =>
                 {
                     if (spendKind)
                         armFreeUse(free && FREE_USE_KINDS.has(spendKind) ? this._actor : null);
                     playUiSound(item.clickSound ?? 'open');
-                    for (const t of this._tokens ?? [])
-                        deactivateRangePreview(t);
-                    if (!item.keepOpen)
+
+                    const closeRows = () =>
                     {
+                        for (const t of this._tokens ?? [])
+                            deactivateRangePreview(t);
+                        if (item.keepOpen)
+                            return;
                         row.trigger('mouseleave');
                         closeCol(this._c2);
                         closeCol(this._c3);
                         closeCol(this._c4);
                         this._closePanels();
                         this._clearC1Active();
-                    }
+                    };
+
+                    const context = item.choosesFirst ? this._choiceContext(row, closeRows) : undefined;
+                    if (!context)
+                        closeRows();
+
                     const multi = this._tokens.length > 1 && item.broadcastFn;
+
                     if (multi)
                     {
                         // Fire primary + every other token concurrently, none awaiting the others.
-                        Promise.resolve(item.onClick()).catch(e => console.error('lancer-automations | TAH primary |', e));
+                        Promise.resolve(item.onClick(context)).catch(error => console.error('lancer-automations | TAH primary |', error));
+
                         for (const t of this._tokens.slice(1))
                         {
                             Promise.resolve(item.broadcastFn(t, t.actor))
@@ -1777,9 +1961,10 @@ export class LancerHUD
                     {
                         if (item.keepOpen && item.refreshCol4)
                             this._suppressRefreshDepth++;
+
                         try
                         {
-                            await item.onClick();
+                            await item.onClick(context);
                         }
                         finally
                         {
@@ -1794,8 +1979,10 @@ export class LancerHUD
                         }
                     }
                 };
+
                 row.data('laRunAction', runAction);
                 row.data('laFreeUse', FREE_USE_KINDS.has(spendKind));
+
                 if (!item.noRowClick)
                     row.on('click', runAction);
                 else
@@ -1809,6 +1996,7 @@ export class LancerHUD
                     });
                 }
             }
+
             if (item.onRightClick)
             {
                 markRightClick(row);
@@ -1819,6 +2007,7 @@ export class LancerHUD
                     item.onRightClick(row);
                 });
             }
+
             if (item.hoverData)
             {
                 const hd = item.hoverData;
@@ -1826,6 +2015,7 @@ export class LancerHUD
                 row.on('mouseenter', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: true,  isLeaving: false }));
                 row.on('mouseleave', () => onHudRowHover({ ...hd, token, el: row[0], isEntering: false, isLeaving: true  }));
             }
+
             if (hasChildren && !panel)
             {
                 const openChild = ({ silent = false } = {}) =>
@@ -1842,6 +2032,7 @@ export class LancerHUD
                             this._cancelCollapse();
                         return;
                     }
+
                     if (col === this._c3 && row.hasClass('la-hud-active') && this._c4.is(':visible'))
                     {
                         if (this._clickToOpen)
@@ -1853,12 +2044,14 @@ export class LancerHUD
                             this._cancelCollapse();
                         return;
                     }
+
                     this._setActive(col, row);
                     if (!silent)
                         playUiSound();
                     // Close any panels (log / glossary / status / bond) before drilling into a new child column.
                     this._closePanels();
                     const freshChildren = item.getChildren ? item.getChildren() : rawChildren;
+
                     if (col === this._c2)
                     {
                         closeCol(this._c4, 80);
@@ -1870,7 +2063,9 @@ export class LancerHUD
                         this._openChildCol(this._c3, this._c4, item, freshChildren, row, { silent });
                     }
                 };
+
                 row.data('laOpen', openChild);
+
                 if (!this._clickToOpen)
                 {
                     row.on('mouseenter', () =>
@@ -1948,13 +2143,17 @@ export class LancerHUD
         const trail = this._pointerTrail;
         if (!target || trail.length < 2)
             return false;
+
         const point = trail[trail.length - 1];
         const prev = trail[0];
+
         if (performance.now() - point.time > 120)
             return false;
+
         const rect = target.getBoundingClientRect();
         if (prev.x >= rect.left || point.x >= rect.left)
             return false;
+
         const slope = (from, to) => (to.y - from.y) / (to.x - from.x);
         const top = { x: rect.left, y: rect.top };
         const bottom = { x: rect.left, y: rect.bottom };
@@ -1968,11 +2167,13 @@ export class LancerHUD
             open();
             return;
         }
+
         const timer = setTimeout(() =>
         {
             this._intentTimers.delete(timer);
             this._withIntent(ev, child, open);
         }, 180);
+
         this._intentTimers.add(timer);
     }
 
@@ -2021,12 +2222,15 @@ export class LancerHUD
         const c2Key = activeKey(this._c2);
         const c3Key = activeKey(this._c3);
         const scrolls = [this._c2, this._c3, this._c4].map(col => col?.scrollTop() ?? 0);
+
         const relink = (col, key, fallback) =>
         {
             if (key === undefined)
                 return { item: fallback?.getChildren ? fallback : null, row: null, gone: false };
+
             const row = this._rowByKey(col, key);
             const item = row?.data('laItem');
+
             if (!row || !item?.getChildren)
                 return { item: null, row: null, gone: true };
             this._setActive(col, row);
@@ -2039,11 +2243,13 @@ export class LancerHUD
             return;
 
         const c3Link = relink(this._c2, c2Key, this._c3SourceItem);
+
         if (c3Link.gone)
         {
             closeCol(this._c3, 80);
             closeCol(this._c4, 80);
         }
+
         if (!c3Link.item)
             return;
         this._c3SourceItem = c3Link.item;
@@ -2069,6 +2275,7 @@ export class LancerHUD
     async _writeInPlace(/** @type {() => Promise<any>} */ write)
     {
         this._suppressRefreshDepth++;
+
         try
         {
             await write();
@@ -2077,6 +2284,7 @@ export class LancerHUD
         {
             this._releaseDepth();
         }
+
         this.updateStatsInPlace();
         const hover = this._captureHover();
         const kb = this._captureKb();
@@ -2089,19 +2297,24 @@ export class LancerHUD
     {
         if (!this._el)
             return null;
+
         const getActiveKey = col => col.find('.la-hud-row.la-hud-active').first().attr('data-la-key') ?? null;
         const c1 = this._el.children().first();
+
         // Search active: don't save column state
         if (this._searchActive)
             return { searchActive: true };
+
         // Status panel open: c2 is hidden but c1 has an active row
         if (this._statusPanelInstance?.isVisible)
         {
             const c1Key = getActiveKey(c1);
             return c1Key !== null ? { c1Key, statusPanel: true } : null;
         }
+
         if (!this._c2?.is(':visible'))
             return null;
+
         const path = { c1Key: getActiveKey(c1), scrolls: [this._c2, this._c3, this._c4].map(col => col?.scrollTop() ?? 0) };
         if (path.c1Key === null)
             return null;
@@ -2116,9 +2329,11 @@ export class LancerHUD
     {
         if (!path || path.searchActive || path.c1Key == null)
             return;
+
         const reopen = (row) => row.data('laOpen')?.({ silent: true });
         const scrolls = path.scrolls ?? [];
         const c1Row = this._rowByKey(this._el.children().first(), path.c1Key);
+
         if (!c1Row)
             return;
         reopen(c1Row);
@@ -2141,6 +2356,7 @@ export class LancerHUD
     {
         if (key == null || !col)
             return null;
+
         const row = col.find('.la-hud-row, .la-hud-cell').filter((_index, element) => element.dataset.laKey === key).first();
         return row.length ? row : null;
     }
@@ -2183,7 +2399,9 @@ export class LancerHUD
         {
             if (!this._kbColVisible(depth))
                 continue;
+
             const index = this._kbRows(depth).index(row);
+
             if (index >= 0)
             {
                 this._kbCol = depth;
@@ -2191,6 +2409,7 @@ export class LancerHUD
                 return true;
             }
         }
+
         return false;
     }
     // Returns 'mark' for a live cursor, 'adopted' for the row under the pointer or the deepest open row, 'fresh' for c1/0.
@@ -2199,17 +2418,21 @@ export class LancerHUD
         const marked = this._el ? this._el.find('.la-hud-kbfocus').first() : $();
         if (marked.length && this._kbLocate(marked))
             return 'mark';
+
         const hovered = this._el ? this._el.find('.la-hud-row:hover, .la-hud-cell:hover').last() : $();
         if (hovered.length && this._kbLocate(hovered))
             return 'adopted';
+
         for (let depth = 4; depth >= 1; depth--)
         {
             if (!this._kbColVisible(depth))
                 continue;
+
             const active = this._kbRows(depth).filter('.la-hud-active').last();
             if (active.length && this._kbLocate(active))
                 return 'adopted';
         }
+
         this._kbCol = 1;
         this._kbIdx = 0;
         return 'fresh';
@@ -2234,25 +2457,31 @@ export class LancerHUD
     _kbJump(slot)
     {
         const marked = this._el.find('.la-hud-kbfocus').first();
+
         if (!(marked.length && this._kbLocate(marked)))
         {
             this._kbCol = 1;
             this._kbIdx = 0;
         }
+
         const depth = this._kbCol;
         const rows = this._kbRows(depth);
+
         if (slot > rows.length)
             return;
         this._kbFocusRow(depth, slot - 1);
         const row = rows.eq(slot - 1);
+
         if (this._clickToOpen)
         {
             if (row.find('.la-hud-arrow').length)
                 this._kbDeeper();
             return;
         }
+
         const childDepth = depth + 1;
         const panelOpen = this._el.children('.la-hud-panel, .la-hud-status-panel').filter(':visible').length > 0;
+
         if (childDepth <= 4 && row.hasClass('la-hud-active') && this._kbColVisible(childDepth) && !panelOpen)
             this._kbFocusRow(childDepth, 0);
     }
@@ -2261,8 +2490,10 @@ export class LancerHUD
         const rows = this._kbRows(depth);
         if (!rows.length)
             return;
+
         const clampedIdx = Math.max(0, Math.min(idx, rows.length - 1));
         const prevRow = this._kbRows(this._kbCol).eq(this._kbIdx);
+
         if (prevRow.length && !(this._kbCol === depth && this._kbIdx === clampedIdx))
             this._kbRestore(prevRow);
         this._kbClearFocusMark();
@@ -2280,11 +2511,13 @@ export class LancerHUD
         const box = row.closest('.la-hud-col')[0];
         if (!box || box.scrollHeight <= box.clientHeight)
             return;
+
         const scale = tahScale();
         const boxRect = box.getBoundingClientRect();
         const rowRect = row[0].getBoundingClientRect();
         const title = box.querySelector(':scope > .la-hud-col-label');
         const top = boxRect.top + (title ? title.getBoundingClientRect().height : 0);
+
         if (rowRect.top < top)
             box.scrollTop -= (top - rowRect.top) / scale;
         else if (rowRect.bottom > boxRect.bottom)
@@ -2297,6 +2530,7 @@ export class LancerHUD
             currentRow.find('.la-hud-arrow').trigger('click');
         else if (currentRow.length)
             currentRow.triggerHandler('mouseenter');
+
         const childDepth = this._kbCol + 1;
         if (childDepth > 4 || !this._kbRows(childDepth).length)
             return;
@@ -2306,10 +2540,13 @@ export class LancerHUD
     {
         if (this._kbCol <= 1)
             return;
+
         const parentDepth = this._kbCol - 1;
         const parentRows = this._kbRows(parentDepth);
+
         if (!parentRows.length)
             return;
+
         const currentRow = this._kbRows(this._kbCol).eq(this._kbIdx);
         const currentRect = currentRow.length ? currentRow[0].getBoundingClientRect() : null;
         const currentY = currentRect ? currentRect.top + currentRect.height / 2 : 0;
@@ -2321,6 +2558,7 @@ export class LancerHUD
         {
             const rect = element.getBoundingClientRect();
             const dist = Math.abs(rect.top + rect.height / 2 - currentY);
+
             if (dist < bestDist)
             {
                 bestDist = dist;
@@ -2349,7 +2587,9 @@ export class LancerHUD
             this._kbRestore(originRow);
             this._clearC1Active?.();
         };
+
         let col = this._kbResultsKey();
+
         if (col !== 'results' && this._searchBar && this._searchBar.is(':visible'))
         {
             if (!String(this._searchBar.val()).trim())
@@ -2359,21 +2599,26 @@ export class LancerHUD
                 this._searchBar.trigger('focus');
                 return true;
             }
+
             this._searchBar.trigger('input');
             col = this._kbResultsKey();
         }
+
         if (col !== 'favorites' && col !== 'results')
         {
             if (!this._toggleFavorites)
                 return false;
             this._toggleFavorites();
         }
+
         clearOrigin();
+
         if (!this._kbRows(2).length)
         {
             this._kbClearFocusMark();
             return true;
         }
+
         this._kbFocusRow(2, 0);
         return true;
     }
@@ -2389,11 +2634,15 @@ export class LancerHUD
     {
         if (this._kbCol <= 1)
             return false;
+
         const parentDepth = this._kbCol - 1;
         const parentRows = this._kbRows(parentDepth);
+
         if (!parentRows.length)
             return false;
+
         let originIdx = parentRows.index(parentRows.filter('.la-hud-active').first());
+
         if (originIdx < 0)
         {
             const currentRow = this._kbRows(this._kbCol).eq(this._kbIdx);
@@ -2404,6 +2653,7 @@ export class LancerHUD
             {
                 const rect = element.getBoundingClientRect();
                 const dist = Math.abs(rect.top + rect.height / 2 - currentY);
+
                 if (dist < bestDist)
                 {
                     bestDist = dist;
@@ -2411,6 +2661,7 @@ export class LancerHUD
                 }
             });
         }
+
         const targetIdx = originIdx + (down ? 1 : -1);
         if (targetIdx < 0 || targetIdx >= parentRows.length)
             return false;
@@ -2425,11 +2676,13 @@ export class LancerHUD
         const row = this._kbRows(this._kbCol).eq(this._kbIdx);
         if (!row.length)
             return;
+
         if (row.hasClass('la-hud-cell'))
         {
             activateValueCell(row, rightClick);
             return;
         }
+
         row.trigger(rightClick ? 'contextmenu' : 'click');
     }
     _kbReset()
@@ -2450,6 +2703,7 @@ export class LancerHUD
         clearTimeout(this._kbResetTimer);
         if (this._clickToOpen)
             return;
+
         const delay = (getModuleSetting('tah.keyboardNavResetDelay') ?? 5) * 1000;
         this._kbResetTimer = setTimeout(() =>
         {
@@ -2458,6 +2712,7 @@ export class LancerHUD
                 this._kbReset();
                 return;
             }
+
             this._kbRestore(this._el.find('.la-hud-kbfocus').first());
             this._kbClearFocusMark();
             this._kbExitMode();
@@ -2469,11 +2724,14 @@ export class LancerHUD
             return;
         if (!getModuleSetting('tah.keyboardNav'))
             return;
+
         const focused = document.activeElement;
         const inInput = !!(focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.isContentEditable));
         const inHudInput = inInput && !!(this._el[0] && $.contains(this._el[0], focused));
+
         if (inInput && !inHudInput)
             return;
+
         let action = null;
         if (eventMatchesKeybind(event, 'tahNavUp'))
             action = 'up';
@@ -2487,14 +2745,18 @@ export class LancerHUD
             action = 'click';
         else if (eventMatchesKeybind(event, 'tahNavContext'))
             action = 'context';
+
         let jump = 0;
+
         for (let slot = 1; slot <= 9 && !action && !jump; slot++)
         {
             if (eventMatchesKeybind(event, `tahNavRow${slot}`))
                 jump = slot;
         }
+
         if (jump)
             action = 'jump';
+
         if (!action)
         {
             if (event.key === 'Escape' || KB_MODIFIER_CODES.has(event.code) || event.repeat)
@@ -2503,6 +2765,7 @@ export class LancerHUD
                 this._kbReset();
             return;
         }
+
         if (action === 'jump' && (inInput || event.repeat))
             return;
         event.preventDefault();
@@ -2511,12 +2774,14 @@ export class LancerHUD
             return;
         this._cancelCollapse?.();
         this._el.addClass('la-hud-kb');
+
         if (action === 'jump')
         {
             this._kbJump(jump);
             this._kbArmInactivityReset();
             return;
         }
+
         if (this._kbEnsureFocus() === 'fresh')
         {
             // Fresh cursor with favorites or search results already open: enter that column first.
@@ -2528,6 +2793,7 @@ export class LancerHUD
             this._kbArmInactivityReset();
             return;
         }
+
         if (action === 'up')
         {
             if (this._kbIdx > 0)
@@ -2571,31 +2837,38 @@ export class LancerHUD
     {
         if (icon && labelHtml == null && typeof label === 'string')
             noteRowIcon(label, icon);
+
         const mark = laHudSizeMark(sizeLevel);
         let iconHtml = icon ? laHudRenderIcon(icon, sizeLevel == null ? HUD_ICON_SIZE : HUD_WEAPON_ICON_SIZE) : '';
+
         if (mark)
             iconHtml = `<span class="la-hud-glyph${icon ? '' : ' la-hud-glyph--bare'}">${mark}${iconHtml}</span>`;
+
         const countHtml = hasArrow && count > 0 ? `<span class="la-hud-count">${count}</span>` : '';
         const arrow = hasArrow ? `<span class="la-hud-arrow">▶</span>` : '';
         const actHtml = activation ? `<span class="la-hud-activation">[${escapeHtml(activation)}]</span>` : '';
         const badgeHtml = badge ? `<span class="la-hud-badge la-hud-badge--${badgeTone ?? 'ok'}">${badge}</span>` : '';
         const row = $(htmlToElement(`<div class="la-hud-row">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${labelHtml ?? escapeHtml(label)}${actHtml}</span></span>${badgeHtml}${countHtml}${arrow}</div>`));
+
         const paintHover = () =>
         {
             if (row.hasClass('la-hud-active'))
                 return;
+
             const specialBg = row.data('hoverBg');
             if (specialBg)
                 row.css({ background: specialBg, color: row.data('hoverColor') ?? TEXT_DEFAULT });
             else
                 row.css({ background: BG_ACTIVE, color: TEXT_ACTIVE });
         };
+
         row.data('laHoverPaint', paintHover);
         row.on('mouseenter', () =>
         {
             paintHover();
             const clip = row.find('.la-hud-clip')[0];
             const pan  = row.find('.la-hud-pan')[0];
+
             if (clip && pan)
             {
                 const overflow = pan.scrollWidth - clip.clientWidth;
@@ -2609,10 +2882,12 @@ export class LancerHUD
             {
                 const css = { background: row.data('restingBg') ?? BG_DEFAULT, color: row.data('restingColor') ?? TEXT_DEFAULT };
                 const rb  = row.data('restingBorder');
+
                 if (rb)
                     css.borderLeftColor = rb;
                 row.css(css);
             }
+
             row.find('.la-hud-clip').stop(true).animate({ scrollLeft: 0 }, { duration: 120, easing: 'swing' });
         });
         return row;
@@ -2645,20 +2920,24 @@ export class LancerHUD
                     this._scheduleCollapse?.();
             }
         });
+
         if (chosen === null)
             return null;
+
         const key = favKeyOf(item);
         const legacy = legacyFavKeyOf(item);
         await setFavoriteWheel(key, chosen);
         if (legacy && legacy !== key)
             await setFavoriteWheel(legacy, 0);
         playUiSound('toggle');
+
         if (row)
         {
             clearFavMark(row);
             if (chosen)
                 applyFavMark(row, chosen);
         }
+
         return chosen;
     }
 
@@ -2715,10 +2994,12 @@ export class LancerHUD
             const r = $(this);
             const css = { background: r.data('restingBg') ?? BG_DEFAULT, color: r.data('restingColor') ?? TEXT_DEFAULT };
             const rb  = r.data('restingBorder');
+
             if (rb)
                 css.borderLeftColor = rb;
             r.css(css).removeClass('la-hud-active');
         });
+
         const specialBg = activeRow.data('hoverBg');
         if (specialBg)
             activeRow.css({ background: specialBg, color: activeRow.data('hoverColor') ?? TEXT_DEFAULT }).addClass('la-hud-active');

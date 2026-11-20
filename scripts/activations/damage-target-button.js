@@ -20,12 +20,14 @@ function hitResultFor(state, token)
     const id = token?.document?.id ?? token?.id;
     if (!id)
         return null;
+
     for (const result of state.data?.hit_results ?? [])
     {
         const target = result?.target;
         if ((target?.document?.id ?? target?.id) === id)
             return result;
     }
+
     return null;
 }
 
@@ -41,30 +43,38 @@ function damageRangeLabelFor(state)
 {
     if (!targetInfoAllowed())
         return null;
+
     return (token) =>
     {
         // A resolved miss only ever deals Reliable, so never preview the rolled range on it.
         const result = hitResultFor(state, token);
+
         if (result && !result.hit)
         {
             const reliable = reliableValue(state);
             return reliable > 0 ? { label: `${reliable}`, fill: 0xb0763a } : null;
         }
+
         const hud = state.data?.damage_hud_data;
+
         const entries = hud
             ? [...(hud.base?.damage ?? []), ...(hud.base?.bonusDamage ?? []), ...(hud.weapon?.damage ?? []), ...(hud.weapon?.bonusDamage ?? [])]
             : [...(state.data?.damage ?? []), ...(state.data?.bonus_damage ?? [])];
+
         let min = 0;
         let max = 0;
+
         for (const entry of entries)
         {
             const formula = String(entry?.val ?? '').trim();
             if (!formula)
                 continue;
+
             const bounds = formulaBounds(formula);
             min += bounds.min;
             max += bounds.max;
         }
+
         if (max <= 0)
             return null;
         return { label: min === max ? `${max}` : `${min}-${max}`, fill: 0xff9a4d };
@@ -78,6 +88,7 @@ function seedTargetsFromHitResults(state)
     const tokens = (state.data?.hit_results ?? [])
         .map(result => result?.target?.object ?? result?.target)
         .filter(token => typeof token?.setTarget === 'function');
+
     for (const [index, token] of tokens.entries())
         token.setTarget(true, { releaseOthers: index === 0, groupSelection: true });
 }
@@ -98,17 +109,21 @@ async function injectButton(state, $form)
 
     const headerCls = $form.find('h4.damage-hud-section').first().attr('class')
         || 'damage-hud-section lancer-border-primary';
+
     const $section = $(htmlToElement(`<div class="accdiff-grid__section la-targeting-section la-damage-targeting" style="border-top:1px solid var(--primary-color,#991e2a);margin-top:6px;padding-top:2px;">
         <h4 class="${headerCls}" style="justify-content: center;">Targeting</h4>
         <div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>`));
+
     const $targets = $form.find('.damage-hud-targets').first();
     const $footer = $form.find('.lancer-hud-buttons').first();
+
     if ($targets.length)
         $targets.before($section);
     else if ($footer.length)
         $footer.before($section);
     else
         $form.append($section);
+
     const $row = $section.find('.accdiff-ranges');
 
     if (!$form.data('laDmgSightlines'))
@@ -127,6 +142,7 @@ async function injectButton(state, $form)
 
     const targeting = state.la_extraData?.laTargeting ?? null;
     const seedShape = targeting ?? state.la_extraData?.attackShape ?? null;
+
     if (seedShape && !state.__laAttackShape)
     {
         state.__laAttackShape = {
@@ -135,6 +151,7 @@ async function injectButton(state, $form)
             range: Math.max(0, Number(seedShape.range) || 0),
         };
     }
+
     // Targeting is an optional tool here: never auto-engage on weapon damage (targets come from
     // the attack); bare rolls with no target start with it on; API-requested targeting always starts.
     let autoStart = 'never';
@@ -167,8 +184,10 @@ export function registerDamageTargetButton()
             {
                 return getModuleSetting('enableDamageTargeting');
             })();
+
             let attackerMark = null;
             injectWhenReady(state, damageForm, laInstallRollCardHeader, 'roll card header');
+
             if (active)
             {
                 try
@@ -184,6 +203,7 @@ export function registerDamageTargetButton()
                     // ignore
                 }
             }
+
             try
             {
                 return await original(state, options);
@@ -193,6 +213,7 @@ export function registerDamageTargetButton()
                 if (active)
                 {
                     state.__laHudClosed = true;
+
                     try
                     {
                         attackerMark?.destroy();
@@ -200,6 +221,7 @@ export function registerDamageTargetButton()
                             cancelAreaPicker();
                         if (isSingleTargetPickerActive())
                             cancelSingleTargetPicker();
+
                         const blastCenters = getPlacedBlastCenters();
                         if (blastCenters.length)
                             state.__laKnockbackBlastCenters = blastCenters;
@@ -222,6 +244,7 @@ export function registerDamageTargetButton()
             for (const target of [...(game.user.targets ?? [])])
                 target.setTarget(false, { releaseOthers: false });
         };
+
         Hooks.on('lancer.postFlow.DamageRollFlow', clearTargetsAfterRoll);
     });
 }

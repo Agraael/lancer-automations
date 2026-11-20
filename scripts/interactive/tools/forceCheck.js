@@ -37,11 +37,13 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
     {
         const api = game.modules.get(MODULE_ID)?.api;
         const caster = tokenA ?? canvas.tokens?.controlled?.[0] ?? null;
+
         const state = {
             skill: skill ? String(skill).toUpperCase() : 'HULL',
             saveVs: normalizeToken(saveVs),
             sendToOwner: sendToOwner !== false,
         };
+
         const pickState = { actor: caster?.actor ?? null, data: { title: 'Force Check' } };
         if (Array.isArray(range))
             pickState.__laAttackShape = shapeSpecFromRanges(range) ?? { pattern: 'target', size: 1, range: 0 };
@@ -50,12 +52,14 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
 
         let saveMark = null;
         let saveTether = null;
+
         const clearSaveMark = () =>
         {
             saveMark?.destroy();
             saveMark = null;
             saveTether?.setPairs([]);
         };
+
         const drawSaveMark = () =>
         {
             clearSaveMark();
@@ -63,6 +67,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
                 saveMark = createTokenMark(state.saveVs, TG.reference);
             refreshSaveTether();
         };
+
         // One tether per roller back to the token they save against.
         const refreshSaveTether = () =>
         {
@@ -71,14 +76,17 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
                 saveTether?.setPairs([]);
                 return;
             }
+
             saveTether ??= createTokenTether();
             saveTether.setPairs(rollerTargets().map(roller => [roller, state.saveVs]));
         };
 
         let cardEl;
         let targetHookId = null;
+
         const rollerTargets = () => [...(game.user.targets ?? [])]
             .filter(token => token.id !== state.saveVs?.id && (!filter || filter(token)));
+
         const successChanceFor = () => targetInfoAllowed()
             ? (token) => targetInfoAllowedFor(token?.actor)
                 ? haseSuccessChance(token?.actor, state.skill, deriveSaveDc(state.saveVs?.actor))
@@ -98,14 +106,17 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             clearSaveMark();
             saveTether?.destroy();
             saveTether = null;
+
             if (targetHookId)
             {
                 Hooks.off('targetToken', targetHookId);
                 targetHookId = null;
             }
+
             for (const target of [...(game.user.targets ?? [])])
                 target.setTarget(false, { releaseOthers: false });
         };
+
         const cleanup = () =>
         {
             teardownCanvas();
@@ -119,7 +130,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             resolve(null);
         };
 
-        const unbindEscape = bindCardEscape(cancel, () => isSingleTargetPickerActive() || isAreaPickerActive());
+        const unbindEscape = bindCardEscape(cancel, () => isSingleTargetPickerActive() || isAreaPickerActive(), () => cardEl);
 
         cardEl = _createInfoCard("forceCheck", {
             title: localize('LA.dialogTitle.forceCheckCaps'),
@@ -136,6 +147,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             const token = state.saveVs;
             const label = cardEl.find('[data-role="savevs-label"]');
             const clearBtn = cardEl.find('[data-role="clear-savevs"]');
+
             if (token)
             {
                 const name = token.name ?? token.document?.name ?? '?';
@@ -155,28 +167,33 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             listEl.empty();
             const rollers = rollerTargets();
             refreshSaveTether();
+
             if (!rollers.length)
             {
                 listEl.html('<div class="la-empty-state">No targets</div>');
                 updateRun();
                 return;
             }
+
             for (const token of rollers)
             {
                 const name = token.name ?? token.document?.name ?? '?';
                 const src = token.document?.texture?.src ?? '';
+
                 const row = htmlToElement(`
                     <div class="la-selected-target" data-token-id="${token.id}">
                         <img src="${src}" alt="${name}">
                         <span class="la-selected-target-name">${name}</span>
                         <span class="la-selected-target-remove"><i class="fas fa-times"></i></span>
                     </div>`);
+
                 row.querySelector('.la-selected-target-remove').addEventListener('click', () =>
                 {
                     token.setTarget?.(false, { releaseOthers: false });
                 });
                 listEl.append(row);
             }
+
             updateRun();
         };
 
@@ -197,37 +214,46 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
         {
             ev.preventDefault();
             ev.stopPropagation();
+
             if (isSingleTargetPickerActive())
             {
                 cancelSingleTargetPicker();
                 return;
             }
+
             if (isAreaPickerActive())
             {
                 cancelAreaPicker();
                 return;
             }
+
             $saveBtn.addClass('la-targeting-active');
             const shapeRange = Number(pickState.__laAttackShape?.range) || 0;
             if (caster && shapeRange > 0)
                 rangePulse.setRange(SAVE_PULSE_OWNER, { token: caster, range: shapeRange, includeSelf: true, priority: RANGE_PULSE_PRIORITY.ATTACK_CARD });
+
             const beforeIds = new Set([...(game.user.targets ?? [])].map(token => token.id));
+
             try
             {
                 const picked = await pickSingleTargetToggle(caster, { single: false, includeSelf: true });
+
                 if (picked)
                 {
                     const wanted = new Set([...beforeIds].filter(id => id !== picked.id));
                     const currentIds = new Set([...(game.user.targets ?? [])].map(token => token.id));
+
                     for (const id of new Set([...wanted, ...currentIds]))
                     {
                         const token = canvas.tokens.get(id);
                         if (!token)
                             continue;
+
                         const shouldTarget = wanted.has(id);
                         if (shouldTarget !== currentIds.has(id))
                             token.setTarget(shouldTarget, { releaseOthers: false });
                     }
+
                     state.saveVs = picked;
                     drawSaveMark();
                     renderSaveVs();
@@ -254,20 +280,25 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             const rollers = rollerTargets();
             if (!state.skill)
                 return;
+
             // cleanup() drops every user target, so the picked set has to be captured first.
             const picked = [...(game.user.targets ?? [])];
+
             if (!rollers.length)
             {
                 cleanup();
                 resolve({ completed: false, results: [], targets: picked });
                 return;
             }
+
             const runSkill = state.skill;
             const runSaveVs = state.saveVs;
             const runSendToOwner = state.sendToOwner;
             cleanup();
+
             const result = await api?.executeForceCheck?.(runSkill, rollers,
                 { saveVs: runSaveVs, sendToOwner: runSendToOwner, accuracy, difficulty, flatModifier });
+
             resolve({ ...(result ?? { completed: false, results: [] }), targets: picked });
         });
 
@@ -276,6 +307,7 @@ export function openForceCheckCard({ tokenA = null, skill = null, range = null, 
             for (const preTarget of targets)
                 normalizeToken(preTarget)?.setTarget?.(true, { releaseOthers: false });
         }
+
         beginTargetSession(successChanceFor());
         targetHookId = Hooks.on('targetToken', (user) =>
         {

@@ -67,6 +67,7 @@ function _statusActions(statusId)
         macroUuid: '',
         effectName: statusId
     });
+
     return [
         action('laPresetCreated0', 'whenCreated', 'apply'),
         action('laPresetEntered0', 'whenEntered', 'apply'),
@@ -131,12 +132,15 @@ export async function importTemplateMacroPresets()
         ui.notifications.warn(localize('LA.notify.templateMacroIsNotActive'));
         return;
     }
+
     const library = /** @type {any[]} */ (foundry.utils.deepClone(game.settings.get(TMAC, 'templateLibrary') ?? []));
     let added = 0;
     let updated = 0;
+
     for (const preset of _presetEntries())
     {
         const idx = library.findIndex(entry => entry.id === preset.id);
+
         if (idx >= 0)
         {
             library[idx] = preset;
@@ -148,6 +152,7 @@ export async function importTemplateMacroPresets()
             added++;
         }
     }
+
     await game.settings.set(TMAC, 'templateLibrary', library);
     ui.notifications.info(localizeFormat('LA.notify.tmacPresetsImported', { added, updated }));
 }

@@ -1,25 +1,25 @@
 // Triggers whose payload carries targets, the only ones React as Target / consumption role can key on.
 export const TARGET_CAPABLE_TRIGGERS = new Set([
     'onInitAttack', 'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
-    'onInitTechAttack', 'onTechAttack', 'onTechHit', 'onTechMiss',
+    'onInitTechAttack', 'onTechAttack', 'onTechHit', 'onTechMiss', 'onInvadeHit',
     'onRoll', 'onCheck', 'onInitCheck'
 ]);
 
 // Triggers that report a source, the only ones Only On Source Match can key on.
 export const SOURCE_MATCH_TRIGGERS = new Set([
     'onAttack', 'onHit', 'onMiss', 'onPreDamage', 'onDamage',
-    'onTechAttack', 'onTechHit', 'onTechMiss', 'onActivation', 'onInitActivation',
+    'onTechAttack', 'onTechHit', 'onTechMiss', 'onInvadeHit', 'onActivation', 'onInitActivation',
     'onEndActivation', 'onInitEndActivation', 'onPostActivation', 'onPostEndActivation',
     'onInitAttack', 'onInitTechAttack', 'onPreInvoluntaryMove', 'onInvoluntaryMove', 'onDeploy', 'onRoll'
 ]);
 
 // Editor picker groups, also the complete built-in list: any other trigger name is a custom trigger.
 export const TRIGGER_GROUPS = [
-    { label: "LA.triggerGroup.combat", triggers: ["onEnterCombat", "onExitCombat", "onRoundStart", "onRoundEnd", "onTurnStart", "onTurnEnd"] },
+    { label: "LA.triggerGroup.combat", triggers: ["onCombatStart", "onCombatEnd", "onEnterCombat", "onExitCombat", "onRoundStart", "onRoundEnd", "onTurnStart", "onTurnEnd"] },
     { label: "LA.triggerGroup.movement", triggers: ["onPreMove", "onMove", "onPreInvoluntaryMove", "onInvoluntaryMove"] },
     { label: "LA.triggerGroup.rolls", triggers: ["onRoll"] },
     { label: "LA.triggerGroup.attack", triggers: ["onInitAttack", "onAttack", "onHit", "onMiss", "onPreDamage", "onDamage"] },
-    { label: "LA.triggerGroup.tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss"] },
+    { label: "LA.triggerGroup.tech", triggers: ["onInitTechAttack", "onTechAttack", "onTechHit", "onTechMiss", "onInvadeHit"] },
     { label: "LA.triggerGroup.activation", triggers: ["onInitActivation", "onActivation", "onInitEndActivation", "onEndActivation", "onPostActivation", "onPostEndActivation", "onInitCheck", "onCheck", "onDeploy"] },
     { label: "LA.triggerGroup.status", triggers: ["onPreStatusApplied", "onPreStatusRemoved", "onStatusApplied", "onStatusRemoved"] },
     { label: "LA.triggerGroup.hpHeat", triggers: ["onPreHpChange", "onHpGain", "onHpLoss", "onPreHeatChange", "onHeatGain", "onHeatLoss"] },

@@ -14,6 +14,7 @@ let _openToken = null;
 let _refreshTimer = null;
 let _page = 1;
 let _pageCount = 1;
+
 function plainTitle(label)
 {
     return String(label ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -24,10 +25,13 @@ function openFavoriteDetails(favorite, favoriteIndex)
 {
     if (!hud.openFavoritesColumn())
         return;
+
     const scrollWrap = document.querySelector('.la-hud-search-scroll');
+
     let rowEl = favorite.favKey
         ? scrollWrap?.querySelector(`[data-la-fav-key="${CSS.escape(favorite.favKey)}"]`)
         : null;
+
     if (!rowEl)
         rowEl = scrollWrap?.querySelectorAll('.la-hud-row')?.[favoriteIndex] ?? null;
     if (!rowEl)
@@ -45,6 +49,7 @@ function labelIconEl(label)
 {
     if (typeof label !== 'string' || !label.includes('<'))
         return null;
+
     const holder = document.createElement('div');
     holder.innerHTML = label;
     return holder.querySelector('img, i');
@@ -60,12 +65,14 @@ function buildWheelItem(favorite, favoriteIndex, token)
         {
             buttonEl.classList.add('lancer-aw-btn');
             const embedded = !favorite.icon ? labelIconEl(favorite.labelHtml) : null;
+
             if (embedded)
             {
                 embedded.style.cssText = 'width:24px;height:24px;font-size:24px;margin:0;';
                 buttonEl.replaceChildren(embedded);
                 return;
             }
+
             buttonEl.innerHTML = laHudRenderIcon(favorite.icon ?? 'fas fa-circle-dot', 24);
         },
         styleButton: (buttonEl) =>
@@ -73,6 +80,7 @@ function buildWheelItem(favorite, favoriteIndex, token)
             const stripe = laHudStripeStyle(favorite);
             if (!stripe)
                 return;
+
             const palette = { ...stripe, ...(stripe.onDark ?? {}) };
             buttonEl.classList.add('striped');
             buttonEl.classList.toggle('spent', !!stripe.light);
@@ -101,11 +109,13 @@ function wheelItems(page, token)
 function switchPage(page, token)
 {
     let items = wheelItems(page, token);
+
     for (let step = 1; !items.length && step < _pageCount; step++)
     {
         page = page % _pageCount + 1;
         items = wheelItems(page, token);
     }
+
     if (!items.length || page === _page)
         return;
     _page = page;
@@ -119,11 +129,13 @@ export async function toggleActionWheel()
     {
         closeRadialWheel(); return;
     }
+
     if (!getModuleSetting('tahEnabled'))
     {
         ui.notifications.info(localize('LA.notify.enableTheTokenActionHudToUse'));
         return;
     }
+
     const token = canvas.tokens?.controlled?.[0] ?? null;
     // No selection: the narrative HUD's favorites, centered on the cursor.
     if (!token && !getModuleSetting('tah.narrativeMode'))
@@ -135,17 +147,21 @@ export async function toggleActionWheel()
     }
     else if (!hud.getFavorites())
         await hud.bindNarrative();
+
     const filledPages = [];
+
     for (let wheel = 1; wheel <= WHEEL_COUNT; wheel++)
     {
         if ((hud.getFavorites(wheel) ?? []).length)
             filledPages.push(wheel);
     }
+
     if (!filledPages.length)
     {
         ui.notifications.info(localize('LA.notify.noFavoriteActionsYetMarkActionsWith'));
         return;
     }
+
     _pageCount = filledPages.at(-1);
     _page = filledPages[0];
     _openToken = token;
@@ -173,6 +189,7 @@ function scheduleWheelRefresh(changedDoc)
     const token = _openToken;
     if (!token)
         return;
+
     const actor = changedDoc?.documentName === 'Item' ? changedDoc.parent : changedDoc;
     if (!actor || actor !== token.actor)
         return;

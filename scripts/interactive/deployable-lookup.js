@@ -1,16 +1,37 @@
-import { getLAFlags } from "../tools/flag-utils.js";
+import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
+import { deployableArtChanges, deployableArtEnabled } from "../tools/deployable-art.js";
+import { buildDeployableData, buildDeployablePreview, findDeployableSpec, normalizeDeployableSpec } from "./deployable-specs.js";
 
 // Unlinked tokens share a base actor and the deployable stores the base uuid, so match the base too or a 2nd token of the same NPC makes a duplicate.
 function _deployableOwnerMatches(ownerRef, ownerActor)
 {
     if (!ownerActor)
         return false;
+
     const ownerId = typeof ownerRef === 'string' ? ownerRef : ownerRef?.id;
     if (!ownerId)
         return false;
+
     const base = ownerActor.token?.baseActor ?? ownerActor;
     return ownerId === ownerActor.uuid || ownerId === ownerActor.id ||
         ownerId === base.uuid || ownerId === base.id;
+}
+
+function _findOwnedWorldDeployable(lid, ownerActor)
+{
+    return /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ actor) =>
+    {
+        if (actor.type !== 'deployable' || actor.system?.lid !== lid)
+            return false;
+        return _deployableOwnerMatches(actor.system?.owner, ownerActor);
+    })) ?? null;
+}
+
+function _specInfo(spec)
+{
+    const data = buildDeployableData(spec);
+    const art = deployableArtEnabled() && !spec.img ? deployableArtChanges(data)?.img : null;
+    return { name: data.name, img: art ?? data.img, activation: data.system.activation, type: data.system.type };
 }
 
 /**
@@ -20,14 +41,25 @@ function _deployableOwnerMatches(ownerRef, ownerActor)
  * @param {Actor} ownerActor - The actor that owns the deployable (used for folder search)
  * @returns {Promise<{deployable: Actor|null, source: string|null}>} The deployable and its source ('actor', 'compendium', or null)
  */
-export async function resolveDeployable(deployableOrLid, ownerActor)
+export async function resolveDeployable(deployableOrLid, ownerActor, sourceItem = null)
 {
     if (typeof deployableOrLid !== 'string')
     {
+        if (deployableOrLid && !deployableOrLid.documentName)
+        {
+            const spec = normalizeDeployableSpec(deployableOrLid);
+            const owned = _findOwnedWorldDeployable(spec.lid, ownerActor);
+
+            if (owned)
+                return { deployable: owned, source: 'actor', spec };
+            return { deployable: buildDeployablePreview(spec), source: 'spec', spec };
+        }
+
         if (deployableOrLid)
             return { deployable: deployableOrLid, source: 'actor' };
         return { deployable: null, source: null };
     }
+
     const lid = deployableOrLid;
     if (!lid)
         return { deployable: null, source: null };
@@ -38,6 +70,7 @@ export async function resolveDeployable(deployableOrLid, ownerActor)
         try
         {
             const doc = /** @type {any} */ (await fromUuid(lid));
+
             if (doc?.documentName === 'Actor')
             {
                 return {
@@ -50,15 +83,14 @@ export async function resolveDeployable(deployableOrLid, ownerActor)
         { /* fall through to LID search */ }
     }
 
-    let deployable = /** @type {Actor} */(game.actors.contents.find((/** @type {any} */ actor) =>
-    {
-        if (actor.type !== 'deployable' || actor.system?.lid !== lid)
-            return false;
-        return _deployableOwnerMatches(actor.system?.owner, ownerActor);
-    }));
+    let deployable = _findOwnedWorldDeployable(lid, ownerActor);
 
     if (deployable)
         return { deployable, source: 'actor' };
+
+    const spec = findDeployableSpec(lid, { item: sourceItem, actor: ownerActor });
+    if (spec)
+        return { deployable: buildDeployablePreview(spec), source: 'spec', spec };
 
     for (const pack of game.packs.filter(pack => pack.documentName === 'Actor'))
     {
@@ -84,25 +116,31 @@ export async function resolveDeployable(deployableOrLid, ownerActor)
  * @returns {Promise<Actor|null>}
  */
 const _compendiumDeployableCache = new Map();
+
 export async function findDeployableInCompendium(lid)
 {
     if (!lid)
         return null;
     if (_compendiumDeployableCache.has(lid))
         return _compendiumDeployableCache.get(lid);
+
     for (const pack of game.packs.filter(pack => pack.documentName === 'Actor'))
     {
         const index = await pack.getIndex();
         const entry = index.find(indexEntry => indexEntry.system?.lid === lid);
+
         if (!entry)
             continue;
+
         const doc = await pack.getDocument(entry._id);
+
         if (doc?.type === 'deployable')
         {
             _compendiumDeployableCache.set(lid, doc);
             return doc;
         }
     }
+
     _compendiumDeployableCache.set(lid, null);
     return null;
 }
@@ -119,12 +157,15 @@ export async function stampDeployableSource(tokens, sourceItem)
     const uuid = sourceItem?.uuid;
     if (!uuid)
         return;
+
     const tokenList = Array.isArray(tokens) ? tokens : (tokens ? [tokens] : []);
+
     for (const token of tokenList)
     {
         const doc = token?.document ?? token;
         if (!doc?.update)
             continue;
+
         try
         {
             await doc.update({ 'flags.lancer-automations.sourceItemUuid': uuid });
@@ -146,10 +187,34 @@ export async function stampDeployableSource(tokens, sourceItem)
  * @returns {Promise<Item|null>}
  */
 const _sourceItemCache = new Map();
+
+export function itemHasDeployable(item, lid)
+{
+    if (!item || !lid)
+        return false;
+
+    const sys = item.system;
+    if (Array.isArray(sys?.deployables) && sys.deployables.includes(lid))
+        return true;
+    if ((getLAFlag(item, 'extraDeployables') ?? []).includes(lid))
+        return true;
+    if (Array.isArray(sys?.core_system?.deployables) && sys.core_system.deployables.includes(lid))
+        return true;
+
+    for (const tr of (sys?.traits ?? []))
+    {
+        if (Array.isArray(tr?.deployables) && tr.deployables.includes(lid))
+            return true;
+    }
+
+    return false;
+}
+
 export async function resolveDeployableSourceItem(deployableActor)
 {
     if (deployableActor?.type !== 'deployable')
         return null;
+
     const lid = deployableActor.system?.lid;
     if (!lid)
         return null;
@@ -158,9 +223,11 @@ export async function resolveDeployableSourceItem(deployableActor)
     try
     {
         const tokens = deployableActor.getActiveTokens?.() ?? [];
+
         for (const token of tokens)
         {
             const uuid = getLAFlags(token?.document)?.sourceItemUuid;
+
             if (uuid)
             {
                 const item = await fromUuid(uuid);
@@ -172,35 +239,20 @@ export async function resolveDeployableSourceItem(deployableActor)
     catch (error)
     { /* fall through */ }
 
-    const itemHasDeployable = (item) =>
-    {
-        if (!item)
-            return false;
-        const sys = item.system;
-        if (Array.isArray(sys?.deployables) && sys.deployables.includes(lid))
-            return true;
-        if (Array.isArray(sys?.core_system?.deployables) && sys.core_system.deployables.includes(lid))
-            return true;
-        for (const tr of (sys?.traits ?? []))
-        {
-            if (Array.isArray(tr?.deployables) && tr.deployables.includes(lid))
-                return true;
-        }
-        return false;
-    };
-
     try
     {
         const ownerVal = deployableActor.system?.owner;
         const ownerUuid = typeof ownerVal === 'string' ? ownerVal : ownerVal?.id ?? null;
+
         if (ownerUuid)
         {
             const ownerActor = /** @type {any} */ (await fromUuid(ownerUuid));
+
             if (ownerActor?.items)
             {
                 for (const item of ownerActor.items)
                 {
-                    if (itemHasDeployable(item))
+                    if (itemHasDeployable(item, lid))
                         return item;
                 }
             }
@@ -214,17 +266,21 @@ export async function resolveDeployableSourceItem(deployableActor)
 
     // Compendium fallback. Restrict to item types that can hold deployables.
     const interestingTypes = new Set(['npc_feature', 'mech_system', 'weapon_mod', 'frame']);
+
     for (const pack of game.packs.filter(pack => pack.documentName === 'Item'))
     {
         const idx = await pack.getIndex({ fields: ['type', 'system.deployables', 'system.core_system.deployables', 'system.traits'] });
+
         const entry = idx.find(indexEntry => interestingTypes.has(indexEntry.type) && (
             (Array.isArray(indexEntry.system?.deployables) && indexEntry.system.deployables.includes(lid))
             || (Array.isArray(indexEntry.system?.core_system?.deployables) && indexEntry.system.core_system.deployables.includes(lid))
             || (Array.isArray(indexEntry.system?.traits) && indexEntry.system.traits.some(tr => Array.isArray(tr?.deployables) && tr.deployables.includes(lid)))
         ));
+
         if (entry)
         {
             const doc = await pack.getDocument(entry._id);
+
             if (doc)
             {
                 _sourceItemCache.set(lid, doc);
@@ -232,6 +288,7 @@ export async function resolveDeployableSourceItem(deployableActor)
             }
         }
     }
+
     _sourceItemCache.set(lid, null);
     return null;
 }
@@ -253,14 +310,17 @@ function _findWorldDeployable(lid, ownerActor)
     const candidates = /** @type {any[]} */ (game.actors?.contents ?? []).filter(
         actor => actor.type === 'deployable' && actor.system?.lid === lid
     );
+
     if (!candidates.length)
         return null;
+
     if (ownerActor)
     {
         const owned = candidates.find(actor => _deployableOwnerMatches(actor.system?.owner, ownerActor));
         if (owned)
             return owned;
     }
+
     return candidates[0];
 }
 
@@ -274,6 +334,7 @@ export function getDeployableInfoSync(lid, ownerActor = null)
 {
     if (!lid)
         return null;
+
     if (typeof lid === 'string' && /^Actor\.[A-Za-z0-9]+$/.test(lid))
     {
         try
@@ -285,9 +346,14 @@ export function getDeployableInfoSync(lid, ownerActor = null)
         catch
         { /* fall through */ }
     }
+
     const worldActor = _findWorldDeployable(lid, ownerActor);
     if (worldActor)
         return { name: worldActor.name, img: worldActor.img, activation: worldActor.system?.activation ?? null, type: worldActor.system?.type ?? null };
+
+    const spec = findDeployableSpec(lid, { actor: ownerActor });
+    if (spec)
+        return _specInfo(spec);
     return _deployableInfoCache.get(lid) ?? null;
 }
 
@@ -304,16 +370,24 @@ export async function getDeployableInfo(lid, ownerActor = null)
 {
     if (!lid)
         return null;
+
     // World actor takes priority: most accurate, no cache needed
     const worldActor = _findWorldDeployable(lid, ownerActor);
     if (worldActor)
         return { name: worldActor.name, img: worldActor.img, activation: worldActor.system?.activation ?? null, type: worldActor.system?.type ?? null };
+
+    const spec = findDeployableSpec(lid, { actor: ownerActor });
+    if (spec)
+        return _specInfo(spec);
     if (_deployableInfoCache.has(lid))
         return _deployableInfoCache.get(lid);
+
     const resolved = await resolveDeployable(lid, ownerActor);
+
     const info = resolved.deployable
         ? { name: resolved.deployable.name, img: resolved.deployable.img, activation: resolved.deployable.system?.activation ?? null, type: resolved.deployable.system?.type ?? null }
         : null;
+
     _deployableInfoCache.set(lid, info);
     return info;
 }

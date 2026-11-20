@@ -13,6 +13,8 @@ import { hasExecutorGM, isExecutorGM } from '../tools/misc-tools.js';
 import { playStatusAddedFX } from '../fx/actionFX.js';
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
+import { gridScale } from '../tools/canvas-utils.js';
+
 function log(...args)
 {
     console.log("lancer-automations |", ...args);
@@ -32,6 +34,7 @@ export function isInOnInitTriggerContext()
 export async function runInOnInitTriggerContext(fn)
 {
     _onInitDepth++;
+
     try
     {
         return await fn();
@@ -66,11 +69,13 @@ const _statusCache = {
 function _getSavedStatuses()
 {
     const now = Date.now();
+
     if (!_statusCache.savedStatuses || (now - _statusCache.timestamp > _statusCache.ttl))
     {
         _statusCache.savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
         _statusCache.timestamp = now;
     }
+
     return _statusCache.savedStatuses;
 }
 
@@ -85,9 +90,11 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
 {
     if (!notifyOptions)
         return;
+
     const mode = getModuleSetting('effectNotificationMode', 'public');
     if (mode === 'off')
         return;
+
     const tokenObj = /** @type {any} */ (token).object || token;
     const hiddenToken = !!(tokenObj.document ?? tokenObj).hidden;
     notificationQueue.push({
@@ -104,23 +111,38 @@ function queueEffectNotification(token, effectName, notifyOptions, defaultPrefix
     notificationTimer = setTimeout(dispatchNotifications, 100);
 }
 
+/**
+ * @param {Token|TokenDocument} token
+ * @param {string} name
+ * @param {string} prefixText
+ * @param {string} icon
+ */
+export function notifyEffectLine(token, name, prefixText, icon)
+{
+    queueEffectNotification(token, name, { prefixText }, prefixText, icon);
+}
+
 // Users who should see whispered notifications for a token: GMs + token owners.
 function _whisperTargetsForToken(token)
 {
     const actor = token?.actor;
     const ids = new Set();
+
     for (const user of game.users)
     {
         if (!user.active)
             continue;
+
         if (user.isGM)
         {
             ids.add(user.id);
             continue;
         }
+
         if (actor && actor.testUserPermission(user, 'OWNER'))
             ids.add(user.id);
     }
+
     return [...ids];
 }
 
@@ -135,6 +157,7 @@ async function dispatchNotifications()
 
     // Split by (tokenId, whisper) so each output message is fully public OR fully whispered.
     const groups = new Map();
+
     for (const item of batch)
     {
         const key = `${item.token.id}::${item.whisper ? 'w' : 'p'}`;
@@ -148,12 +171,14 @@ async function dispatchNotifications()
         const iconHtml = update.icon ? `<img src="${update.icon}" width="20" height="20" style="border:none; vertical-align:middle; margin-right:4px;"> ` : "";
         const actionText = `${iconHtml}${update.prefix} <strong>${update.effectName}</strong>`;
         let sourceText = "";
+
         if (update.source)
         {
             const name = typeof update.source === 'object' ? update.source.name : update.source;
             if (name)
                 sourceText = ` with ${name}`;
         }
+
         return `<li>${actionText}${sourceText}</li>`;
     };
 
@@ -161,10 +186,12 @@ async function dispatchNotifications()
     {
         const lines = updates.map(renderLine).join("");
         const content = `<div class="lancer-automations-notification"><div><strong>${token.name}:</strong><ul>${lines}</ul></div></div>`;
+
         const messageData = {
             content,
             speaker: ChatMessage.getSpeaker({ token: token.document || token })
         };
+
         if (whisper)
         {
             const targets = _whisperTargetsForToken(token);
@@ -172,6 +199,7 @@ async function dispatchNotifications()
                 continue;
             messageData.whisper = targets;
         }
+
         await ChatMessage.create(messageData);
     }
 }
@@ -181,11 +209,13 @@ export async function pushEffect(targetID, effect, duration, note, originID)
 {
     const target = canvas.tokens.get(targetID);
     const canActDirectly = game.user.isGM || target?.document?.isOwner;
+
     if (!canActDirectly && !hasExecutorGM())
     {
         log('There is no active GM.');
         return ui.notifications.error(localize('LA.notify.thereMustBeAnActiveGmFor'));
     }
+
     if (canActDirectly)
     {
         log(`Local setFlaggedEffect ${effect}`);
@@ -194,12 +224,13 @@ export async function pushEffect(targetID, effect, duration, note, originID)
     else
     {
         log(`Pushing setFlaggedEffect ${effect}`);
-        await socketRequestWithAck('setEffect', { targetID, effect, duration, note, originID });
+        await socketRequestWithAck('setEffect', { targetID, effect, duration, note, originID, sceneId: canvas.scene?.id });
     }
+
     noteAppliedEffect(targetID, effect);
 }
 
-const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew', 'refresh', 'tapeId']);
+const META_KEYS = new Set(['allowStack', 'stack', 'changes', 'consumption', 'linkedBonusId', 'grouped', 'groupId', 'forceNew', 'refresh', 'tapeId', 'prepared', 'grantActions']);
 
 // True if all extraOptions identity keys match the existing effect's flags (mismatches = distinct effect, no stacking)
 function _sameIdentity(extraOptions, existingEffect)
@@ -207,6 +238,7 @@ function _sameIdentity(extraOptions, existingEffect)
     const identityKeys = Object.keys(extraOptions || {}).filter(key => !META_KEYS.has(key));
     if (identityKeys.length === 0)
         return true;
+
     const storedFlags = getLAFlags(existingEffect) || {};
     return identityKeys.every(key => storedFlags[key] === extraOptions[key]);
 }
@@ -225,18 +257,31 @@ async function _refreshEffectDuration(existingEffect, duration, note, originID, 
     }));
 }
 
+export function resolveEffectTarget(targetID, sceneId = null)
+{
+    const placed = canvas.tokens?.get(targetID);
+
+    if (placed)
+        return placed;
+
+    const tokenDoc = sceneId ? game.scenes.get(sceneId)?.tokens.get(targetID) : null;
+
+    return tokenDoc ? { actor: tokenDoc.actor, document: tokenDoc, name: tokenDoc.name } : null;
+}
+
 /** @returns {Promise<void>} */
-export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {})
+export async function setEffect(targetID, effectOrData, duration, note, originID, extraOptions = {}, sceneId = null)
 {
     log('**setEffect**');
-    const target = canvas.tokens.get(targetID);
-    if (!target)
+    const target = resolveEffectTarget(targetID, sceneId);
+    if (!target?.actor)
         return;
     duration = normalizeDuration(duration);
 
     if (extraOptions.refresh && extraOptions.linkedBonusId)
     {
         const linkedExisting = /** @type {any} */ (target.actor).effects.find(/** @param {any} effect */ effect => getLAFlags(effect)?.linkedBonusId === extraOptions.linkedBonusId);
+
         if (linkedExisting)
         {
             await _refreshEffectDuration(linkedExisting, duration, note, originID, target.document);
@@ -245,13 +290,16 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     }
 
     let resolvedEffectData = effectOrData;
+
     if (typeof effectOrData === 'string')
     {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
         if (customStatusApi)
         {
             const savedStatuses = _getSavedStatuses();
             const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
+
             if (customStatusMatch)
                 resolvedEffectData = { name: effectOrData, icon: customStatusMatch.icon || "icons/svg/mystery-man.svg", isCustom: true };
         }
@@ -259,10 +307,12 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
     else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom)
     {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
         if (customStatusApi)
         {
             const savedStatuses = _getSavedStatuses();
             const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effectOrData.name);
+
             if (customStatusMatch)
                 resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || customStatusMatch.icon || "icons/svg/mystery-man.svg" };
         }
@@ -288,6 +338,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                     await _refreshEffectDuration(existingEffect, duration, note, originID, target.document);
                     return;
                 }
+
                 const addStack = extraOptions.stack || resolvedEffectData.stack || 1;
                 const priorEntries = durationEntries(existingEffect);
                 await customStatusApi.modifyStack(target.actor, existingEffect.id, addStack);
@@ -315,6 +366,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             }
 
             const createEntry = buildEntry(duration, originID, extraOptions.stack || resolvedEffectData.stack || 1, target.document);
+
             /** @type {LancerEffectFlags} */
             const lancerFlags = {
                 targetID: targetID,
@@ -351,6 +403,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 const existingEffect = target.actor.effects.find(effect =>
                     (game.modules.get("temporary-custom-statuses")?.active && effect.getFlag("temporary-custom-statuses", "originalName") === resolvedEffectData.name)
                 );
+
                 if (existingEffect)
                 {
                     const updateData = { "flags.lancer-automations": lancerFlags };
@@ -420,6 +473,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
                 await _refreshEffectDuration(existingEffect, duration, note, originID, target.document);
                 return;
             }
+
             const currentStack = effectStack(existingEffect);
             const addStack = extraOptions.stack || 1;
             const newStack = currentStack + addStack;
@@ -444,6 +498,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
         }
 
         const createEntry = buildEntry(duration, originID, extraOptions.stack || 1, target.document);
+
         const flags = {
             /** @type {LancerEffectFlags} */
             [MODULE_ID]: {
@@ -461,6 +516,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 
         // Set statuscounter if stack is provided (used for both visual stacks and consumption charges)
         const stackCount = extraOptions.stack || 0;
+
         if (stackCount > 0)
         {
             flags['statuscounter'] = {
@@ -478,6 +534,7 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
             flags: flags,
             changes: extraOptions.changes || statusEffect.changes || []
         };
+
         log(statusEffect);
         log(effectData);
         await target.actor.createEmbeddedDocuments("ActiveEffect", [/** @type {any} */ (effectData)]);
@@ -485,11 +542,11 @@ export async function setEffect(targetID, effectOrData, duration, note, originID
 }
 
 /** @returns {Promise<void>} */
-export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null)
+export async function removeEffectsByName(targetID, effectName, originID = null, extraFlags = null, sceneId = null)
 {
     log('**removeEffectsByName**');
-    const target = canvas.tokens.get(targetID);
-    if (!target)
+    const target = resolveEffectTarget(targetID, sceneId);
+    if (!target?.actor)
         return;
 
     let effectNameStr = typeof effectName === 'object' ? effectName.name : effectName;
@@ -498,6 +555,9 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
 
     const effectsToDelete = target.actor.effects.filter(/** @param {any} effect */ effect =>
     {
+        if (getLAFlags(effect)?.isActorTemplate === true)
+            return false;
+
         // When a source is specified, skip effects from any other source.
         if (originID)
         {
@@ -510,6 +570,7 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
         if (extraFlags)
         {
             const storedFlags = getLAFlags(effect) ?? {};
+
             for (const [key, value] of Object.entries(extraFlags))
             {
                 if (storedFlags[key] !== value)
@@ -533,9 +594,13 @@ export async function removeEffectsByName(targetID, effectName, originID = null,
     if (effectsToDelete.length > 0)
     {
         log(`Removing ${effectsToDelete.length} effects matching ${effectNameStr} from ${target.name}`);
-        await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(effect => effect.id));
+        if (game.user.isGM || target.actor.isOwner || !hasExecutorGM())
+            await target.actor.deleteEmbeddedDocuments("ActiveEffect", effectsToDelete.map(effect => effect.id));
+        else
+            await socketRequestWithAck('removeEffect', { targetID, effect: effectNameStr, originID, extraFlags, sceneId: canvas.scene?.id });
     }
 }
+
 /**
  * Apply flagged effect(s) to a list of tokens with combat tracking
  * @param {Object} [options={}] - Configuration options
@@ -566,9 +631,20 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
 
     if (refresh)
         extraOptions = { ...extraOptions, refresh: true };
+
     const tapeId = captureTapeId();
     if (tapeId)
         extraOptions = { ...extraOptions, tapeId };
+
+    if (Array.isArray(extraOptions?.grantActions))
+    {
+        extraOptions = {
+            ...extraOptions,
+            grantActions: extraOptions.grantActions.map(action => (typeof action?.condition === 'function'
+                ? { ...action, condition: '@@fn:' + action.condition.toString() }
+                : action))
+        };
+    }
 
     const duration = normalizeDuration(rawDuration);
 
@@ -602,13 +678,16 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
             let effectNameForLog = typeof effect === 'string' ? effect : effect.name;
 
             let resolvedEffectData = effect;
+
             if (typeof effect === 'string')
             {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
                 if (customStatusApi)
                 {
                     const savedStatuses = _getSavedStatuses();
                     const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effect);
+
                     if (customStatusMatch)
                         resolvedEffectData = { name: effect, icon: customStatusMatch.icon || "icons/svg/mystery-man.svg", isCustom: true };
                 }
@@ -616,10 +695,12 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
             else if (typeof effect === 'object' && effect.name && !effect.isCustom)
             {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
                 if (customStatusApi)
                 {
                     const savedStatuses = _getSavedStatuses();
                     const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
+
                     if (customStatusMatch)
                         resolvedEffectData = { ...effect, isCustom: true, icon: effect.icon || customStatusMatch.icon || "icons/svg/mystery-man.svg" };
                 }
@@ -656,6 +737,7 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
                         effect.statuses?.has(effectNameTail) ||
                         getLAFlags(effect)?.effect === effectNameToCheck ||
                         effect.flags?.['csm-lancer-qol']?.effect === effectNameToCheck;
+
                     if (!nameMatch)
                         return false;
                     return _sameIdentity(extraOptions, effect);
@@ -708,9 +790,11 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         const sourceID = duration?.overrideTurnOriginId ?? token.id;
         let originID = sourceID;
         let originSwapped = false;
+
         if (duration.label === 'start' || duration.label === 'end')
         {
             const resolved = resolveTurnOrigin(originID, token.document);
+
             if (resolved.originID !== originID)
             {
                 if (resolved.fallback)
@@ -726,12 +810,13 @@ export async function applyEffectsToTokens(options = {}, extraOptions = {})
         delete adjustedDuration._preAdjusted;
 
         const canApplyDirectly = game.user.isGM || token.document?.isOwner;
+
         for (const effect of effectsToApplyToToken)
         {
             if (canApplyDirectly)
                 await setEffect(tokenID, effect, adjustedDuration, note, originID, extraOptions);
             else
-                await socketRequestWithAck('setEffect', { targetID: tokenID, effect, duration: adjustedDuration, note, originID, extraOptions });
+                await socketRequestWithAck('setEffect', { targetID: tokenID, effect, duration: adjustedDuration, note, originID, extraOptions, sceneId: canvas.scene?.id });
             noteAppliedEffect(tokenID, effect);
 
             if (notify)
@@ -764,16 +849,20 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
 {
     if (!doc)
         return null;
+
     const isItem = doc.documentName === 'Item';
 
     let resolvedEffectData = effectOrData;
+
     if (typeof effectOrData === 'string')
     {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
         if (customStatusApi)
         {
             const savedStatuses = _getSavedStatuses();
             const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effectOrData);
+
             if (customStatusMatch)
                 resolvedEffectData = { name: effectOrData, icon: customStatusMatch.icon || "icons/svg/mystery-man.svg", isCustom: true };
         }
@@ -781,20 +870,24 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
     else if (typeof effectOrData === 'object' && effectOrData.name && !effectOrData.isCustom)
     {
         const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
         if (customStatusApi)
         {
             const savedStatuses = _getSavedStatuses();
             const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effectOrData.name);
+
             if (customStatusMatch)
                 resolvedEffectData = { ...effectOrData, isCustom: true, icon: effectOrData.icon || customStatusMatch.icon || "icons/svg/mystery-man.svg" };
         }
     }
+
     if (resolvedEffectData?.isCustom && !resolvedEffectData.icon)
         resolvedEffectData.icon = "icons/svg/mystery-man.svg";
 
     const stackCount = extraOptions.stack || (typeof resolvedEffectData === 'object' && resolvedEffectData.stack) || 0;
 
     let effectData;
+
     if (typeof resolvedEffectData === 'object' && resolvedEffectData.isCustom)
     {
         effectData = {
@@ -824,12 +917,14 @@ export async function setEffectOnDoc(doc, effectOrData, duration = {}, note = ""
     {
         const effectName = typeof resolvedEffectData === 'string' ? resolvedEffectData : resolvedEffectData.name;
         const statusEffect = CONFIG.statusEffects.find(candidate => candidate.name === effectName || candidate.id === effectName);
+
         if (!statusEffect)
         {
             if (!isAdditionalStatusUnavailable(effectName))
                 ui.notifications.error(localizeFormat('LA.notify.effectNotFound', { name: effectName }));
             return null;
         }
+
         effectData = {
             name: localize(statusEffect.name),
             img: statusEffect.img,
@@ -875,6 +970,7 @@ export function templateToEffectDescriptor(template)
     const isCustom = template?.flags?.['temporary-custom-statuses']?.isCustom === true;
     if (isCustom)
         return { name: template.name, icon: template.img, isCustom: true, changes: template.changes ?? [] };
+
     const statuses = template?.statuses ? Array.from(template.statuses) : [];
     if (statuses.length > 0)
         return String(statuses[0]);
@@ -885,33 +981,41 @@ async function _applyTemplatesToTokens(sourceDoc, templates, sourceKey, tokens)
 {
     if (!templates?.length || !tokens?.length)
         return;
+
     for (const template of templates)
     {
         const descriptor = templateToEffectDescriptor(template);
         const laFlags = getLAFlags(template) ?? {};
         const persistedStack = laFlags.lastRuntimeStack;
+
         const stack = Number.isFinite(persistedStack)
             ? persistedStack
             : (template.flags?.statuscounter?.value || 0);
+
         const duration = laFlags.duration ?? { label: 'permanent' };
+
         for (const token of tokens)
         {
             if (!token?.actor)
                 continue;
             if (!linkTierGate(laFlags, token.actor, sourceKey === 'sourceItemUuid' ? sourceDoc : null))
                 continue;
+
             const already = /** @type {any[]} */ (Array.from(token.actor.effects ?? [])).some(effect =>
             {
                 const flags = getLAFlags(effect);
                 return flags?.[sourceKey] === sourceDoc.uuid && flags?.sourceTemplateId === template.id;
             });
+
             if (already)
                 continue;
+
             const extraOptions = /** @type {any} */ ({
                 [sourceKey]: sourceDoc.uuid,
                 sourceTemplateId: template.id,
                 stack
             });
+
             try
             {
                 await applyEffectsToTokens({
@@ -941,8 +1045,10 @@ export async function applyItemTemplatesToTokens(item, tokens)
         return;
     if (item.system?.destroyed || item.system?.disabled)
         return;
+
     const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
         .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
+
     await _applyTemplatesToTokens(item, templates, 'sourceItemUuid', tokens);
 }
 
@@ -956,8 +1062,10 @@ export async function applyActorTemplatesToTokens(actor, tokens)
 {
     if (!actor || !tokens?.length)
         return;
+
     const templates = /** @type {any[]} */ (Array.from(actor.effects ?? []))
         .filter(effect => getLAFlags(effect)?.isActorTemplate === true);
+
     await _applyTemplatesToTokens(actor, templates, 'sourceActorUuid', tokens);
 }
 
@@ -978,10 +1086,12 @@ export async function linkEffectToItem(options = /** @type {any} */ ({}), extraO
     const { items = [], effectNames = [], note = "", duration = {} } = /** @type {any} */ (options);
     const effectsToStamp = Array.isArray(effectNames) ? effectNames : [effectNames];
     const stampOptions = { addedViaUI: false, ...extraOptions };
+
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
+
         for (const effect of effectsToStamp)
         {
             const canApplyDirectly = game.user.isGM || item.isOwner;
@@ -990,10 +1100,12 @@ export async function linkEffectToItem(options = /** @type {any} */ ({}), extraO
             else
                 await socketRequestWithAck('setEffectOnDoc', { docUuid: item.uuid, effect, duration, note, originID: extraOptions?.originID ?? null, extraOptions: stampOptions });
         }
+
         const actor = item.parent;
         if (actor?.documentName === 'Actor')
             await applyItemTemplatesToTokens(item, actor.getActiveTokens?.() ?? []);
     }
+
     return items;
 }
 
@@ -1010,12 +1122,15 @@ export async function ensureLinkedEffect(options = /** @type {any} */ ({}), extr
     const wanted = Array.isArray(effectNames) ? effectNames : [effectNames];
     const identity = Object.entries(extraOptions ?? {}).filter(([key]) => key !== 'originID');
     const linked = [];
+
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
+
         const templates = /** @type {any[]} */ (Array.from(item.effects ?? []))
             .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
+
         const missing = wanted.filter(effect =>
         {
             const name = typeof effect === 'string' ? effect : effect?.name;
@@ -1023,18 +1138,22 @@ export async function ensureLinkedEffect(options = /** @type {any} */ ({}), extr
             return !templates.some(template =>
             {
                 const laFlags = getLAFlags(template) ?? {};
+
                 const nameMatch = template.name?.toLowerCase() === nameLower
                     || template.statuses?.has?.(name)
                     || laFlags.effect === name;
+
                 return nameMatch && identity.every(([key, value]) => laFlags[key] === value);
             });
         });
+
         if (missing.length)
         {
             await linkEffectToItem({ ...options, items: [item], effectNames: missing }, extraOptions);
             linked.push({ item, effects: missing });
         }
     }
+
     return linked;
 }
 
@@ -1075,21 +1194,26 @@ export function findEffectsOnToken(token, effectName, options = /** @type {any} 
 {
     const { extraFlags = null, hasFlags = null, excludeId = null } = /** @type {any} */ (options);
     const actor = token?.actor;
+
     if (!actor || !effectName)
         return [];
+
     const tail = String(effectName).split('.').pop();
     const tailLower = tail.toLowerCase();
     return /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(effect =>
     {
         if (excludeId && effect.id === excludeId)
             return false;
+
         const laFlags = getLAFlags(effect) ?? {};
+
         const nameMatch = effect.name === effectName
             || effect.flags?.['temporary-custom-statuses']?.originalName === effectName
             || laFlags.effect === effectName
             || effect.flags?.['csm-lancer-qol']?.effect === effectName
             || effect.name?.toLowerCase().includes(tailLower)
             || effect.statuses?.has?.(tail);
+
         if (!nameMatch)
             return false;
         if (extraFlags && !Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value))
@@ -1140,6 +1264,7 @@ export async function clearMarks(sourceToken, effectName, options = /** @type {a
 {
     const { flagKey = 'markSourceId' } = /** @type {any} */ (options);
     const marked = findMarkedTokens(sourceToken, effectName, options);
+
     if (marked.length)
         await removeEffectsByNameFromTokens({ tokens: marked, effectNames: [effectName], extraFlags: { [flagKey]: sourceToken.id } });
     return marked;
@@ -1160,10 +1285,12 @@ export async function linkEffectToActor(options = /** @type {any} */ ({}), extra
 {
     const { actors = [], effectNames = [], note = "", duration = {} } = /** @type {any} */ (options);
     const effectsToStamp = Array.isArray(effectNames) ? effectNames : [effectNames];
+
     for (const actor of actors)
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
+
         for (const effect of effectsToStamp)
         {
             const canApplyDirectly = game.user.isGM || actor.isOwner;
@@ -1172,8 +1299,10 @@ export async function linkEffectToActor(options = /** @type {any} */ ({}), extra
             else
                 await socketRequestWithAck('setEffectOnDoc', { docUuid: actor.uuid, effect, duration, note, originID: extraOptions?.originID ?? null, extraOptions });
         }
+
         await applyActorTemplatesToTokens(actor, actor.getActiveTokens?.() ?? []);
     }
+
     return actors;
 }
 
@@ -1191,31 +1320,40 @@ export async function unlinkEffectFromItem(options = /** @type {any} */ ({}))
     const { items = [], effectName = "", extraFlags = null } = /** @type {any} */ (options);
     if (!effectName)
         return [];
+
     const removed = [];
+
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
+
         const nameLower = String(effectName).toLowerCase();
+
         const matches = /** @type {any[]} */ (Array.from(item.effects ?? [])).filter(effect =>
         {
             if (getLAFlags(effect)?.isItemTemplate !== true)
                 return false;
+
             const nameMatch = effect.name?.toLowerCase() === nameLower
                 || effect.statuses?.has?.(effectName)
                 || getLAFlags(effect)?.effect === effectName;
+
             if (!nameMatch)
                 return false;
             if (!extraFlags)
                 return true;
+
             const laFlags = getLAFlags(effect) ?? {};
             return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
         });
+
         if (!matches.length)
             continue;
         await item.deleteEmbeddedDocuments("ActiveEffect", matches.map(effect => effect.id));
         removed.push(...matches);
     }
+
     return removed;
 }
 
@@ -1232,31 +1370,40 @@ export async function unlinkEffectFromActor(options = /** @type {any} */ ({}))
     const { actors = [], effectName = "", extraFlags = null } = /** @type {any} */ (options);
     if (!effectName)
         return [];
+
     const removed = [];
+
     for (const actor of actors)
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
+
         const nameLower = String(effectName).toLowerCase();
+
         const matches = /** @type {any[]} */ (Array.from(actor.effects ?? [])).filter(effect =>
         {
             if (getLAFlags(effect)?.isActorTemplate !== true)
                 return false;
+
             const nameMatch = effect.name?.toLowerCase() === nameLower
                 || effect.statuses?.has?.(effectName)
                 || getLAFlags(effect)?.effect === effectName;
+
             if (!nameMatch)
                 return false;
             if (!extraFlags)
                 return true;
+
             const laFlags = getLAFlags(effect) ?? {};
             return Object.entries(extraFlags).every(([key, value]) => laFlags[key] === value);
         });
+
         if (!matches.length)
             continue;
         await actor.deleteEmbeddedDocuments("ActiveEffect", matches.map(effect => effect.id));
         removed.push(...matches);
     }
+
     return removed;
 }
 
@@ -1271,14 +1418,18 @@ export async function persistRuntimeStackToTemplate(runtime)
     const laFlags = getLAFlags(runtime);
     const sourceUuid = laFlags?.sourceItemUuid ?? laFlags?.sourceActorUuid;
     const sourceTemplateId = laFlags?.sourceTemplateId;
+
     if (!sourceUuid || !sourceTemplateId)
         return;
+
     try
     {
         const source = /** @type {any} */ (await fromUuid(sourceUuid));
         const template = source?.effects?.get?.(sourceTemplateId);
+
         if (!template)
             return;
+
         const currentStack = runtime.flags?.statuscounter?.value;
         if (Number.isFinite(currentStack))
             await setLAFlag(template,'lastRuntimeStack', currentStack);
@@ -1330,13 +1481,16 @@ export async function removeEffectsByNameFromTokens(options = {})
 
             let icon = "";
             let resolvedEffect = effect;
+
             if (typeof effect === 'string')
             {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
                 if (customStatusApi)
                 {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
                     const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effect);
+
                     if (customStatusMatch)
                     {
                         resolvedEffect = { name: effect, icon: customStatusMatch.icon || "icons/svg/mystery-man.svg", isCustom: true };
@@ -1347,10 +1501,12 @@ export async function removeEffectsByNameFromTokens(options = {})
             else if (typeof effect === 'object' && effect.name && !effect.isCustom)
             {
                 const customStatusApi = game.modules.get("temporary-custom-statuses")?.api;
+
                 if (customStatusApi)
                 {
                     const savedStatuses = game.settings.get("temporary-custom-statuses", "savedStatuses") || [];
                     const customStatusMatch = savedStatuses.find(savedStatus => savedStatus.name === effect.name);
+
                     if (customStatusMatch)
                     {
                         resolvedEffect = { ...effect, isCustom: true, icon: effect.icon || customStatusMatch.icon || "icons/svg/mystery-man.svg" };
@@ -1359,9 +1515,12 @@ export async function removeEffectsByNameFromTokens(options = {})
                 }
             }
 
+            let shownName = effectNameStr;
+
             if (notify)
             {
                 const existing = findEffectOnToken(token, effectNameStr);
+                shownName = existing?.name || effectNameStr;
                 icon = existing?.img || (existing && game.modules.get('temporary-custom-statuses')?.active ? existing.getFlag('temporary-custom-statuses', 'icon') : "") || (typeof resolvedEffect === 'object' ? resolvedEffect.icon : "");
             }
 
@@ -1369,12 +1528,13 @@ export async function removeEffectsByNameFromTokens(options = {})
             if (game.user.isGM || (/** @type {Token} */ (token)).document?.isOwner)
                 await removeEffectsByName(tokenID, effectNameStr, originId, extraFlags);
             else
-                await socketRequestWithAck('removeEffect', { targetID: tokenID, effect: effectNameStr, originID: originId, extraFlags });
+                await socketRequestWithAck('removeEffect', { targetID: tokenID, effect: effectNameStr, originID: originId, extraFlags, sceneId: canvas.scene?.id });
 
             if (notify)
-                queueEffectNotification(token, effectNameStr, notify, 'Loss', icon);
+                queueEffectNotification(token, shownName, notify, 'Loss', icon);
         }
     }
+
     return processedTokens;
 }
 
@@ -1396,9 +1556,10 @@ export function hasStatus(tokenOrActor, ...statusIds)
  * Find a flagged effect on a token
  * @param {Token|TokenDocument} token - The token to search on
  * @param {string|((e: ActiveEffect) => boolean)} identifier - Effect name (string) or predicate function (e => boolean)
+ * @param {{ extraFlags?: Object, hasFlags?: string[], excludeId?: string }} [options] - Name lookups only, same filters as findEffectsOnToken
  * @returns {ActiveEffect|undefined} The found effect or undefined
  */
-export function findEffectOnToken(token, identifier)
+export function findEffectOnToken(token, identifier, options = {})
 {
     const actor = /** @type {Actor} */(token?.actor);
     if (!actor)
@@ -1408,7 +1569,7 @@ export function findEffectOnToken(token, identifier)
         return actor.effects.find(identifier);
 
     if (typeof identifier === 'string')
-        return findEffectsOnToken(token, identifier)[0];
+        return findEffectsOnToken(token, identifier, options)[0];
 
     return undefined;
 }
@@ -1464,6 +1625,7 @@ export async function consumeEffectCharge(effect)
                 "flags.statuscounter.value": newStack,
                 "flags.statuscounter.visible": newStack > 1
             }));
+
             log(`Consuming charge for group ${groupId}: ${newStack} remaining`);
             await actor.updateEmbeddedDocuments("ActiveEffect", updates);
         }
@@ -1501,6 +1663,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId, co
         for (const effect of effects)
         {
             const flags = getLAFlags(effect);
+
             if (!flags)
             {
                 const legacyFlags = effect.flags?.['csm-lancer-qol'];
@@ -1509,11 +1672,13 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId, co
                 // QoL handles its own ticks; skip to avoid a double-delete race.
                 if (game.modules.get('csm-lancer-qol')?.active)
                     continue;
+
                 const dur = legacyFlags.duration;
                 if (!dur || dur.label === 'indefinite' || dur.turns === null || dur.turns === undefined)
                     continue;
                 if (dur.label !== triggerLabel)
                     continue;
+
                 const legacyOrigin = legacyFlags.originID;
                 if (legacyOrigin !== triggeringTokenId)
                     continue;
@@ -1533,6 +1698,7 @@ export async function processDurationEffects(triggerLabel, triggeringTokenId, co
         }
     }
 }
+
 /**
  * Remove matching effects from the token and notify of immunity.
  * @param {Token|TokenDocument} token - The token to check
@@ -1546,6 +1712,7 @@ export async function triggerEffectImmunity(token, effectNames, source = "", not
     const actor = token?.actor;
     if (!actor)
         return;
+
     const targets = Array.isArray(effectNames) ? effectNames : [effectNames];
     if (targets.length === 0)
         return;
@@ -1601,6 +1768,7 @@ export async function deleteAllEffects(tokens)
             continue;
 
         const ids = token.actor.effects.map(effect => effect.id.toString());
+
         if (ids.length > 0)
         {
             await token.actor.deleteEmbeddedDocuments("ActiveEffect", ids);
@@ -1632,7 +1800,9 @@ export function initCollapseHook()
             {
                 console.error('lancer-automations | effect collapse failed', err);
             }
+
             const result = wrapped(...args);
+
             try
             {
                 _clearBadges(this);
@@ -1646,6 +1816,7 @@ export function initCollapseHook()
             {
                 console.error('lancer-automations | effect refresh step failed', err);
             }
+
             return result;
         }, 'WRAPPER');
 
@@ -1654,6 +1825,7 @@ export function initCollapseHook()
         async function (wrapped, ...args)
         {
             this._laDrawingOverlay = true;
+
             try
             {
                 return await wrapped(...args);
@@ -1667,6 +1839,7 @@ export function initCollapseHook()
         async function (wrapped, ...args)
         {
             const icon = await wrapped(...args);
+
             // sized at add: perf-optim can bake the container before any refresh runs
             if (icon && !icon.destroyed && !this._laDrawingOverlay)
             {
@@ -1676,6 +1849,7 @@ export function initCollapseHook()
                 icon.scale.set(targetSize / textureWidth, targetSize / textureHeight);
                 this.renderFlags.set({ refreshEffects: true });
             }
+
             if (!icon || icon.destroyed || icon.mask || this._laDrawingOverlay || !_haloActive())
                 return icon;
             icon.anchor.set(0.5);
@@ -1683,6 +1857,11 @@ export function initCollapseHook()
             const mask = new PIXI.Graphics().beginFill(0xffffff).drawCircle(0, 0, radius).endFill();
             icon.addChild(mask);
             icon.mask = mask;
+            icon.once('destroyed', () =>
+            {
+                if (!mask.destroyed)
+                    mask.destroy();
+            });
             return icon;
         }, 'WRAPPER');
 
@@ -1712,13 +1891,16 @@ function _layoutHaloIcons(token)
 {
     if (!_haloActive())
         return;
+
     const sprites = _haloSprites(token);
     if (!sprites.length)
         return;
+
     const width = token.w ?? 0;
     const height = token.h ?? 0;
     let radiusFactor = 1.15;
     let startAngle = 135;
+
     try
     {
         radiusFactor = Number(getModuleSetting('statusHaloRadius')) || 1.15;
@@ -1728,11 +1910,13 @@ function _layoutHaloIcons(token)
     {
         // settings not registered yet
     }
+
     const radiusX = width / 2 * radiusFactor;
     const radiusY = height / 2 * radiusFactor;
     const perimeter = Math.PI * (radiusX + radiusY);
     const slots = Math.max(sprites.length, Math.min(Math.floor(perimeter / _effectIconTargetSize()), 40));
     const initial = (Number.isFinite(startAngle) ? startAngle : 135) * Math.PI / 180;
+
     for (let index = 0; index < sprites.length; index++)
     {
         const angle = initial + (index / slots) * 2 * Math.PI;
@@ -1752,18 +1936,22 @@ function _repaintHaloBg(token)
 {
     if (!_haloActive())
         return;
+
     const bg = token.effects?.bg;
     if (!bg)
         return;
+
     const sprites = _haloSprites(token);
     if (!sprites.length)
         return;
-    const gridScale = (canvas.dimensions?.size ?? 100) / 100;
+
+    const scale = gridScale();
     bg.clear();
+
     for (const sprite of sprites)
     {
-        const radius = Math.max(sprite.width, sprite.height) / 2 + gridScale;
-        bg.lineStyle(gridScale / 2, 0x000000, 1, 0);
+        const radius = Math.max(sprite.width, sprite.height) / 2 + scale;
+        bg.lineStyle(scale / 2, 0x000000, 1, 0);
         bg.drawCircle(sprite.position.x, sprite.position.y, radius);
         bg.beginFill(0x333333);
         bg.drawCircle(sprite.position.x, sprite.position.y, radius);
@@ -1777,6 +1965,7 @@ function _effectIconZoomBoost()
     const minZoom = Number(getModuleSetting('statusIconMinZoomScale')) || 0;
     if (minZoom <= 0)
         return 1;
+
     const zoom = canvas.stage?.scale?.x || 1;
     return Math.max(1, minZoom / zoom);
 }
@@ -1805,6 +1994,7 @@ Hooks.on('canvasPan', () =>
     if (boost === _lastZoomBoost)
         return;
     _lastZoomBoost = boost;
+
     for (const token of canvas.tokens?.placeables ?? [])
     {
         if (token.effects?.children?.length)
@@ -1819,6 +2009,7 @@ Hooks.on('updateCombat', (_combat, changed) =>
 {
     if (!('round' in changed))
         return;
+
     for (const token of canvas.tokens?.placeables ?? [])
     {
         if (token.effects?.children?.length)
@@ -1836,6 +2027,7 @@ function _shrinkEffectIcons(token)
 
     const overlay = token.effects.overlay;
     const sprites = /** @type {any[]} */ (token.effects.children.filter(child => child !== bg && child !== overlay && child instanceof PIXI.Sprite && !child.destroyed));
+
     if (sprites.length === 0)
         return;
 
@@ -1850,6 +2042,7 @@ function _shrinkEffectIcons(token)
             const textureHeight = sprite.texture?.orig?.height || sprite.texture?.height || targetSize;
             sprite.scale.set(targetSize / textureWidth, targetSize / textureHeight);
         }
+
         return;
     }
 
@@ -1887,6 +2080,7 @@ function _collapseRemoveDuplicates(token)
 {
     if (!token.actor || !token.effects?.children)
         return;
+
     const temporaryEffects = token.actor.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
@@ -1894,10 +2088,12 @@ function _collapseRemoveDuplicates(token)
     // Build a map from effect id to its current sprite using zIndex as the key.
     const bg = token.effects.bg;
     const spriteMap = new Map();
+
     for (const child of token.effects.children)
     {
         if (child === bg)
             continue;
+
         const zIdx = child.zIndex;
         if (zIdx >= 0 && zIdx < temporaryEffects.length)
             spriteMap.set(temporaryEffects[zIdx].id, child);
@@ -1906,16 +2102,19 @@ function _collapseRemoveDuplicates(token)
     // Walk effects in order, keep the first sprite of each icon group and destroy the rest.
     const groupKey = iconGroupKeys(token.actor);
     const seenPrimary = new Set();
+
     for (const effect of temporaryEffects)
     {
         if (!spriteMap.has(effect.id))
             continue;
+
         const key = groupKey(effect);
         if (key === null)
             continue;
         if (seenPrimary.has(key))
         {
             const sprite = spriteMap.get(effect.id);
+
             if (sprite.parent === token.effects && !sprite.destroyed)
             {
                 token.effects.removeChild(sprite);
@@ -1939,6 +2138,7 @@ function _drawStackBadges(token)
         return;
     if (!token.actor || !token.effects?.children)
         return;
+
     const temporaryEffects = token.actor.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
@@ -1946,10 +2146,12 @@ function _drawStackBadges(token)
     // Rebuild spriteMap with post-layout positions (sprites were repositioned by _refreshEffects).
     const bg = token.effects.bg;
     const spriteMap = new Map();
+
     for (const child of token.effects.children)
     {
         if (child === bg)
             continue;
+
         const zIdx = child.zIndex;
         if (zIdx >= 0 && zIdx < temporaryEffects.length)
             spriteMap.set(temporaryEffects[zIdx].id, child);
@@ -1957,6 +2159,7 @@ function _drawStackBadges(token)
 
     const effectsOffsetX = token.effects?.x ?? 0;
     const effectsOffsetY = token.effects?.y ?? 0;
+
     for (const { effect, instances, uses, usage } of statusIconEntries(token.actor))
     {
         const sprite = spriteMap.get(effect.id);
@@ -1964,12 +2167,14 @@ function _drawStackBadges(token)
             continue;
         if (instances <= 1 && uses <= 1)
             continue;
+
         const entry = {
             posX: sprite.x - (sprite.anchor?.x ?? 0) * sprite.width,
             posY: sprite.y - (sprite.anchor?.y ?? 0) * sprite.height,
             width: sprite.width,
             height: sprite.height
         };
+
         _addCounterBadge(token, entry, effectsOffsetX, effectsOffsetY, instances, uses, usage);
     }
 }
@@ -1988,17 +2193,22 @@ export function iconGroupKeys(actor)
     // Collect names managed by lancer-automations so we can include HUD effects with the same name.
     const managedNames = new Set(/** @type {any[]} */ (actor?.temporaryEffects ?? [])
         .filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name));
+
     const bonuses = new Map(/** @type {any[]} */ (getLAFlag(actor, 'global_bonuses') || []).map(bonus => [bonus.id, bonus]));
+
     return effect =>
     {
         if (!effect?.name || !managedNames.has(effect.name))
             return null;
+
         const bonusId = getLAFlags(effect)?.linkedBonusId;
         if (!bonusId)
             return effect.name;
+
         const bonus = bonuses.get(bonusId);
         if (!bonus)
             return `${effect.name}\u0000${bonusId}`;
+
         const content = { ...bonus };
         delete content.id;
         return `${effect.name}\u0000${stableJson(content)}`;
@@ -2026,10 +2236,12 @@ export function statusIconEntries(actor)
     const groupKey = iconGroupKeys(actor);
     const entries = [];
     const byKey = new Map();
+
     for (const effect of temporaryEffects)
     {
         const key = groupKey(effect);
         let entry = key === null ? null : byKey.get(key);
+
         if (!entry)
         {
             entry = { effect: null, instances: 0, uses: 0, usage: false };
@@ -2037,12 +2249,14 @@ export function statusIconEntries(actor)
             if (key !== null)
                 byKey.set(key, entry);
         }
+
         entry.instances += 1;
         entry.uses += effectStack(effect);
         entry.usage ||= isUsageEffect(effect);
         if (!entry.effect && effect.img)
             entry.effect = effect;
     }
+
     return entries.filter(entry => entry.effect);
 }
 
@@ -2090,6 +2304,7 @@ function _clearBadges(token)
     const container = token.effectCounters;
     if (!container || container.destroyed)
         return;
+
     for (const child of [...container.children])
     {
         if (child._laStack || child._laDuration)
@@ -2105,6 +2320,7 @@ function _syncCountersToEffects(token)
 {
     const effects = token.effects;
     const counters = token.effectCounters;
+
     if (!effects || effects.destroyed || !counters || counters.destroyed)
         return;
     counters.pivot.set(effects.pivot.x, effects.pivot.y);
@@ -2123,6 +2339,7 @@ function _ensureCounters(token)
         container.name = "effectCounters";
         token.effectCounters = token.addChild(container);
     }
+
     _syncCountersToEffects(token);
     return token.effectCounters;
 }
@@ -2137,6 +2354,7 @@ function _badgeText(text, fill, sizeRatio, scale = 1)
         strokeThickness: Math.max(1, Math.round(2 * sizeRatio * scale)),
         fontWeight: 'bold'
     });
+
     const badge = new PIXI.Text(text, style);
     badge.resolution = Math.max(1, 1 / (sizeRatio * scale) * 1.5);
     return badge;
@@ -2150,8 +2368,10 @@ function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses, usage
 {
     const counters = _ensureCounters(token);
     const badge = statusBadge({ instances, uses, usage });
+
     if (!badge)
         return;
+
     const sizeRatio = entry.height / BADGE_REFERENCE_ICON;
     const left = entry.posX + offsetX;
     const cornerX = left + entry.width * 1.3;
@@ -2163,6 +2383,7 @@ function _addCounterBadge(token, entry, offsetX, offsetY, instances, uses, usage
     counters.addChild(countBadge);
     if (badge.uses === null)
         return;
+
     const usesBadge = _badgeText(String(badge.uses), badge.usesColor, sizeRatio, 0.6);
     usesBadge.anchor.set(0, 1);
     // text boxes carry half their stroke on each side, so the boxes overlap to keep the glyphs close
@@ -2184,11 +2405,14 @@ export function durationBadge(effect)
 {
     if (!getLAFlags(effect))
         return null;
+
     const candidates = durationEntries(effect)
         .filter(entry => (entry.label === 'end' || entry.label === 'start' || ANY_TURN_LABELS.has(entry.label)) && Number(entry.turns) > 0)
         .map(entry => Number(entry.turns));
+
     if (candidates.length)
         return { text: String(Math.min(...candidates)), color: _badgeColor('statusDurationColor', '#ffd700') };
+
     const rounds = remainingRounds(effect);
     return rounds ? { text: String(rounds), color: roundBadgeColor() } : null;
 }
@@ -2206,6 +2430,7 @@ function _drawDurationBadges(token)
 
     const bg = token.effects?.bg;
     const spriteMap = new Map();
+
     for (const child of token.effects?.children ?? [])
     {
         if (child !== bg && child.zIndex >= 0 && child.zIndex < temporaryEffects.length)
@@ -2217,6 +2442,7 @@ function _drawDurationBadges(token)
         const badge = durationBadge(effect);
         if (!badge)
             continue;
+
         const sprite = spriteMap.get(index);
         if (!sprite)
             continue;
@@ -2257,13 +2483,14 @@ export async function deleteEffect(token, effect)
     const tokenID = /** @type {any} */ (token)?.id ?? token;
     const effectID = /** @type {any} */ (effect)?.id ?? effect;
     const target = canvas.tokens.get(tokenID);
+
     if (game.user.isGM || target?.document?.isOwner)
     {
         if (target?.actor)
             await target.actor.deleteEmbeddedDocuments("ActiveEffect", [effectID]);
     }
     else
-        await socketRequestWithAck('removeEffectById', { targetID: tokenID, effectID });
+        await socketRequestWithAck('removeEffectById', { targetID: tokenID, effectID, sceneId: canvas.scene?.id });
 }
 
 // Deprecation layer

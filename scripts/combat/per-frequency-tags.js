@@ -8,6 +8,7 @@ import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { getV3Data, isV3DataReplaced } from '../tools/v3-data.js';
 import { isExecutorGM } from '../utils/lancer-token.js';
+import { deployablesOf } from '../interactive/deployable-owner.js';
 const SETTING_KEY = 'enablePerRoundTurnTags';
 const TARGET_FLOWS = ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow', 'ActivationFlow', 'SystemFlow', 'CoreActiveFlow'];
 
@@ -15,6 +16,7 @@ function enabled()
 {
     return getSettingEnabled(SETTING_KEY);
 }
+
 export { enabled as isPerFrequencyEnabled };
 
 function inCombat()
@@ -25,13 +27,16 @@ function inCombat()
 function tagLimit(item, lid)
 {
     let best = 0;
+
     for (const tag of itemAllTags(item))
     {
         if (tag?.lid !== lid)
             continue;
+
         const rawLimit = Number(tag.val ?? 1);
         best = Math.max(best, Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 1);
     }
+
     return best;
 }
 
@@ -72,12 +77,15 @@ function talentActionKey(item, rankIdx, actionIdx)
 function v3Frequencies(item)
 {
     const frequencies = [];
+
     for (const entry of getV3Data(item))
     {
         const type = V3_SCOPES[entry.frequency?.per];
         const count = entry.frequency?.count;
+
         if (!type || !count || entry.condition || isV3DataReplaced(item, entry.path))
             continue;
+
         const [first, second, third, fourth] = entry.path.split('.');
         if (first === 'core_system')
             continue;
@@ -94,17 +102,20 @@ function v3Frequencies(item)
         else
             frequencies.push({ type, count, key: null, hit: V3_HOOKS.includes(first) || (first === 'profiles' && V3_HOOKS.includes(third)) });
     }
+
     return frequencies;
 }
 
 function v3Limit(item, type, key = null, { hitText = true } = {})
 {
     let best = 0;
+
     for (const frequency of v3Frequencies(item))
     {
         if (frequency.type === type && frequency.key === key && (hitText || !frequency.hit))
             best = Math.max(best, frequency.count);
     }
+
     return best;
 }
 
@@ -134,12 +145,15 @@ function scanFreqLimit(sys, rx, useSet, textRx = rx, { hitText = true } = {})
 {
     if (!sys)
         return 0;
+
     let best = 0;
+
     const bump = (value) =>
     {
         if (Number.isFinite(value) && value > best)
             best = value;
     };
+
     const fromFreq = (entries) =>
     {
         for (const entry of entries ?? [])
@@ -149,17 +163,20 @@ function scanFreqLimit(sys, rx, useSet, textRx = rx, { hitText = true } = {})
                 bump(parseInt(match[1]) || 0);
         }
     };
+
     const fromText = (str) =>
     {
         const match = textRx.exec(String(str ?? ''));
         if (match)
             bump(parseInt(match[1]) || 0);
     };
+
     const fromUse = (use) =>
     {
         if (use && useSet.has(String(use).toLowerCase()))
             bump(1);
     };
+
     fromFreq(sys.powers);
     fromUse(sys.use);
     fromText(sys.effect);
@@ -207,18 +224,22 @@ function scanFreqLimitFromSub(sub, rx, useSet, textRx = rx, withActions = true)
 {
     if (!sub || sub._coreActive)
         return 0;
+
     let best = 0;
+
     const bump = (value) =>
     {
         if (Number.isFinite(value) && value > best)
             best = value;
     };
+
     const scan = (str, regex) =>
     {
         const match = regex.exec(String(str ?? ''));
         if (match)
             bump(parseInt(match[1]) || 0);
     };
+
     scan(sub.frequency, rx);
     scan(sub.description, textRx);
     scan(sub.effect ?? sub.detail, textRx);
@@ -233,30 +254,37 @@ export function getPerRoundLimit(item)
 {
     return Math.max(tagLimit(item, 'tg_round'), scanFreqLimit(item?.system, _RX_ROUND, _USE_ROUND, _RX_ROUND_START), v3Limit(item, 'perRound'));
 }
+
 export function getPerTurnLimit(item)
 {
     return Math.max(tagLimit(item, 'tg_turn'), scanFreqLimit(item?.system, _RX_TURN, _USE_TURN, _RX_TURN_START), v3Limit(item, 'perTurn'));
 }
+
 export function getPerSceneLimit(item)
 {
     return Math.max(scanFreqLimit(item?.system, _RX_SCENE, _USE_SCENE, _RX_SCENE_START), v3Limit(item, 'perScene'));
 }
+
 export function getPerMissionLimit(item)
 {
     return Math.max(scanFreqLimit(item?.system, _RX_MISSION, _USE_MISSION, _RX_MISSION_START), v3Limit(item, 'perMission'));
 }
+
 export function getPerRoundLimitFromSub(sub, ctx = null)
 {
     return Math.max(scanFreqLimitFromSub(sub, _RX_ROUND, _USE_ROUND, _RX_ROUND_START, ctx?.item?.type !== 'talent'), v3SubLimit(ctx, 'perRound'));
 }
+
 export function getPerTurnLimitFromSub(sub, ctx = null)
 {
     return Math.max(scanFreqLimitFromSub(sub, _RX_TURN, _USE_TURN, _RX_TURN_START, ctx?.item?.type !== 'talent'), v3SubLimit(ctx, 'perTurn'));
 }
+
 export function getPerSceneLimitFromSub(sub, ctx = null)
 {
     return Math.max(scanFreqLimitFromSub(sub, _RX_SCENE, _USE_SCENE, _RX_SCENE_START, ctx?.item?.type !== 'talent'), v3SubLimit(ctx, 'perScene'));
 }
+
 export function getPerMissionLimitFromSub(sub, ctx = null)
 {
     return Math.max(scanFreqLimitFromSub(sub, _RX_MISSION, _USE_MISSION, _RX_MISSION_START, ctx?.item?.type !== 'talent'), v3SubLimit(ctx, 'perMission'));
@@ -281,14 +309,17 @@ export function rankSubKey(rankIdx)
 {
     return `r${rankIdx}`;
 }
+
 export function getSubUses(item, subKey)
 {
     return getLAFlag(item,SUB_FLAG)?.[subKey] ?? {};
 }
+
 export function getSubUsed(item, subKey, field)
 {
     return Number(getSubUses(item, subKey)?.[field]?.value ?? 0);
 }
+
 export async function patchSubUses(item, subKey, patch)
 {
     const all = foundry.utils.duplicate(getLAFlag(item,SUB_FLAG) ?? {});
@@ -307,8 +338,10 @@ export function itemActionSubs(item)
     const sys = item?.system;
     if (!sys)
         return [];
+
     const subs = [];
     const seen = new Set();
+
     const addSub = (key, action) =>
     {
         const identity = `${action?.name ?? ''}|${action?.activation ?? ''}`;
@@ -317,6 +350,7 @@ export function itemActionSubs(item)
         seen.add(identity);
         subs.push({ key, data: action, name: action?.name });
     };
+
     (sys.actions ?? []).forEach((action, idx) => addSub(`a${idx}`, action));
     const profIdx = sys.selected_profile_index ?? 0;
     (sys.profiles?.[profIdx]?.actions ?? []).forEach((action, idx) => addSub(`p${profIdx}a${idx}`, action));
@@ -327,8 +361,10 @@ export function actionSubKey(item, action)
 {
     if (!action)
         return null;
+
     const match = itemActionSubs(item).find(entry => entry.data === action
         || (entry.data?.name === action.name && entry.data?.activation === action.activation));
+
     return match?.key ?? null;
 }
 
@@ -358,10 +394,23 @@ export function actionWithFrequency(action)
     return frequency ? { ...action, frequency } : action;
 }
 
+/** @returns {{name: string, left: number, total: number}|null} The actor's own per-round Reaction action and its uses left, null without one. */
+export function ownReactionCounts(actor)
+{
+    const reaction = (actor?.system?.actions ?? []).map(action => actionWithFrequency(action)).find(action => action.activation === 'Reaction' && getPerRoundLimitFromSub(action) > 0);
+    if (!reaction)
+        return null;
+
+    const total = getPerRoundLimitFromSub(reaction);
+
+    return { name: reaction.name, left: Math.max(0, total - getSubUsed(actor, actorActionSubKey(reaction), 'uses_per_round')), total };
+}
+
 function actorActionSub(state)
 {
     const action = actionWithFrequency(state?.data?.action);
-    if (state?.item || !state?.actor || state.actor.type === 'deployable' || !action?.name || action._sourceItemId || !subHasLimits(action))
+    const deployable = state?.actor?.type === 'deployable';
+    if ((state?.item && !deployable) || !state?.actor || !action?.name || action._sourceItemId || !subHasLimits(action))
         return null;
     return { key: actorActionSubKey(action), data: action, name: action.name };
 }
@@ -371,11 +420,13 @@ export function actorActionSpent(actor, action)
     const counted = actionWithFrequency(action);
     if (!enabled() || !actor || !counted?.name)
         return false;
+
     const key = actorActionSubKey(counted);
     return SCOPES.some(scope =>
     {
         if (scope.combatOnly && !inCombat())
             return false;
+
         const limit = scope.subLimit(counted, null);
         return limit > 0 && getSubUsed(actor, key, scope.field) >= limit;
     });
@@ -391,27 +442,34 @@ function flowSub(state)
 {
     const item = state?.item;
     const traitIndex = flowTraitIndex(state);
+
     if (traitIndex !== null)
         return traitSub(item, traitIndex);
+
     if (item && state?.name === 'TalentFlow')
     {
         const flowRank = state.data?.rank;
         const rankIdx = (item.system?.ranks ?? []).findIndex(rank => rank === flowRank || (rank?.name && rank.name === flowRank?.name));
         return rankSub(item, rankIdx);
     }
+
     const path = String(state?.data?.action_path ?? '');
     if (!item || !path)
         return null;
+
     const rankMatch = /^system\.ranks\.(\d+)\.actions\.(\d+)/.exec(path);
+
     if (rankMatch)
     {
         const rankIdx = Number(rankMatch[1]);
         const key = actionSubKey(item, item.system?.ranks?.[rankIdx]?.actions?.[Number(rankMatch[2])]);
         return (key && itemActionSubs(item).find(entry => entry.key === key)) || rankSub(item, rankIdx);
     }
+
     const actionMatch = /^system\.(?:actions\.(\d+)|profiles\.(\d+)\.actions\.(\d+))$/.exec(path);
     if (!actionMatch)
         return null;
+
     const key = actionMatch[1] != null ? `a${actionMatch[1]}` : `p${actionMatch[2]}a${actionMatch[3]}`;
     return itemActionSubs(item).find(entry => entry.key === key) ?? null;
 }
@@ -420,31 +478,39 @@ export function getPerRoundUsed(item)
 {
     return Number(item?.system?.uses_per_round?.value ?? 0);
 }
+
 export function getPerTurnUsed(item)
 {
     return Number(item?.system?.uses_per_turn?.value ?? 0);
 }
+
 export function getPerSceneUsed(item)
 {
     return Number(item?.system?.uses_per_scene?.value ?? 0);
 }
+
 export function getPerMissionUsed(item)
 {
     return Number(item?.system?.uses_per_mission?.value ?? 0);
 }
+
 export function injectPerFrequencySchemaFields()
 {
     if (!enabled())
         return;
+
     const NumberField = foundry.data.fields.NumberField;
     const SchemaField = foundry.data.fields.SchemaField;
     const itemTypes = ['mech_weapon', 'mech_system', 'pilot_weapon', 'pilot_gear', 'pilot_armor', 'npc_feature', 'frame', 'talent', 'core_bonus'];
+
     for (const key of itemTypes)
     {
         const model = CONFIG.Item.dataModels?.[key];
         const fields = model?.schema?.fields;
+
         if (!fields)
             continue;
+
         if (!fields.uses_per_round)
         {
             try
@@ -456,6 +522,7 @@ export function injectPerFrequencySchemaFields()
                 console.warn(`${MODULE_ID} | uses_per_round inject failed on ${key}:`, e);
             }
         }
+
         if (!fields.uses_per_turn)
         {
             try
@@ -467,6 +534,7 @@ export function injectPerFrequencySchemaFields()
                 console.warn(`${MODULE_ID} | uses_per_turn inject failed on ${key}:`, e);
             }
         }
+
         if (!fields.uses_per_scene)
         {
             try
@@ -478,6 +546,7 @@ export function injectPerFrequencySchemaFields()
                 console.warn(`${MODULE_ID} | uses_per_scene inject failed on ${key}:`, e);
             }
         }
+
         if (!fields.uses_per_mission)
         {
             try
@@ -507,25 +576,32 @@ async function checkPerFrequencyStep(state)
 {
     if (!enabled())
         return true;
+
     const actorSub = actorActionSub(state);
     const item = actorSub ? state.actor : state.item;
+
     if (!item)
         return true;
+
     const sub = actorSub ?? flowSub(state);
     const label = sub ? `${item.name} (${sub.name})` : item.name;
     const hitGated = new Set(sub ? [] : hitGatedScopes(item));
+
     for (const scope of SCOPES)
     {
         if (scope.combatOnly && !inCombat())
             continue;
+
         const limit = scopeLimit(scope, item, sub);
         const used = scopeUsed(scope, item, sub);
+
         if (limit <= 0 || used < limit)
             continue;
         ui.notifications.warn(hitGated.has(scope.type)
             ? `${label}: on-hit effect already used this ${scope.label} (${used}/${limit}).`
             : `${label}: per-${scope.label} limit reached (${used}/${limit}).`);
     }
+
     return true;
 }
 
@@ -533,21 +609,26 @@ export async function consumePerFrequencyForItem(item, { skipTypes = null, sub =
 {
     if (!enabled() || !item)
         return;
+
     const skip = skipTypes ?? new Set();
     const patch = {};
+
     for (const scope of SCOPES)
     {
         if (skip.has(scope.type) || (scope.combatOnly && !inCombat()) || scopeLimit(scope, item, sub) <= 0)
             continue;
         patch[scope.field] = { value: scopeUsed(scope, item, sub) + 1 };
     }
+
     if (!Object.keys(patch).length)
         return;
+
     if (sub)
     {
         await patchSubUses(item, sub.key, patch);
         return;
     }
+
     const updates = {};
     for (const [field, entry] of Object.entries(patch))
         updates[`system.${field}.value`] = entry.value;
@@ -561,6 +642,7 @@ async function consumePerFrequencyStep(state)
     const sub = actorSub ?? flowSub(state);
     const skip = new Set(sub ? getSubAutoConsumeDisabled(item, sub.key) : getAutoConsumeDisabled(item));
     const missed = state.data?.type === 'weapon' && !(state.data?.hit_results ?? []).some(result => result?.hit);
+
     if (missed && !sub)
         hitGatedScopes(item).forEach(type => skip.add(type));
     await consumePerFrequencyForItem(item, { skipTypes: skip, sub });
@@ -571,32 +653,40 @@ async function resetPerFrequencyOnRepairStep(state)
 {
     if (!state.actor)
         return true;
+
     const updates = [];
+
     for (const item of state.actor.items)
     {
         const patch = { _id: item.id };
         let touched = false;
+
         if (Math.max(getPerRoundLimit(item), traitLimit(item, 'perRound')) > 0 && getPerRoundUsed(item) > 0)
         {
             patch['system.uses_per_round.value'] = 0;
             touched = true;
         }
+
         if (Math.max(getPerTurnLimit(item), traitLimit(item, 'perTurn')) > 0 && getPerTurnUsed(item) > 0)
         {
             patch['system.uses_per_turn.value'] = 0;
             touched = true;
         }
+
         if (Math.max(getPerSceneLimit(item), traitLimit(item, 'perScene')) > 0 && getPerSceneUsed(item) > 0)
         {
             patch['system.uses_per_scene.value'] = 0;
             touched = true;
         }
+
         if (Math.max(getPerMissionLimit(item), traitLimit(item, 'perMission')) > 0 && getPerMissionUsed(item) > 0)
         {
             patch['system.uses_per_mission.value'] = 0;
             touched = true;
         }
+
         const subMap = getLAFlag(item,'perFreqSub');
+
         for (const [subKey, entry] of Object.entries(subMap ?? {}))
         {
             for (const subField of ['uses_per_round', 'uses_per_turn', 'uses_per_scene', 'uses_per_mission'])
@@ -608,12 +698,16 @@ async function resetPerFrequencyOnRepairStep(state)
                 }
             }
         }
+
         if (touched)
             updates.push(patch);
     }
+
     if (updates.length)
         await state.actor.updateEmbeddedDocuments('Item', updates);
+
     const actorPatch = {};
+
     for (const [subKey, entry] of Object.entries(getLAFlag(state.actor,'perFreqSub') ?? {}))
     {
         for (const subField of ['uses_per_round', 'uses_per_turn', 'uses_per_scene', 'uses_per_mission'])
@@ -622,6 +716,7 @@ async function resetPerFrequencyOnRepairStep(state)
                 actorPatch[`flags.${MODULE_ID}.perFreqSub.${subKey}.${subField}.value`] = 0;
         }
     }
+
     if (Object.keys(actorPatch).length)
         await state.actor.update(actorPatch);
     return true;
@@ -637,11 +732,13 @@ export function registerPerFrequencyFlowSteps(flowSteps, flows)
     flowSteps.set('lancer-automations:checkTraitFrequency', state => ((flowTraitIndex(state) !== null && flowSub(state)) || actorActionSub(state) ? checkPerFrequencyStep(state) : true));
     flowSteps.set('lancer-automations:consumeTraitFrequency', state => ((flowTraitIndex(state) !== null && flowSub(state)) || actorActionSub(state) ? consumePerFrequencyStep(state) : true));
     const simpleFlow = flows.get('SimpleActivationFlow');
+
     for (const step of ['lancer-automations:checkTraitFrequency', 'lancer-automations:consumeTraitFrequency'])
     {
         if (simpleFlow?.steps?.includes('printActionUseCard') && !simpleFlow.steps.includes(step))
             simpleFlow.insertStepBefore('printActionUseCard', step);
     }
+
     for (const name of TARGET_FLOWS)
     {
         const flow = flows.get(name);
@@ -654,12 +751,15 @@ export function registerPerFrequencyFlowSteps(flowSteps, flows)
         else if (flow.steps.includes('printActionUseCard'))
             flow.insertStepBefore('printActionUseCard', 'lancer-automations:consumePerFrequency');
     }
+
     const talentFlow = flows.get('TalentFlow');
+
     if (talentFlow?.steps?.includes('printTalentCard'))
     {
         talentFlow.insertStepBefore('printTalentCard', 'lancer-automations:checkPerFrequency');
         talentFlow.insertStepBefore('printTalentCard', 'lancer-automations:consumePerFrequency');
     }
+
     try
     {
         flows.get('FullRepairFlow')?.insertStepAfter('executeFullRepair', 'lancer-automations:resetPerFrequencyOnRepair');
@@ -668,34 +768,50 @@ export function registerPerFrequencyFlowSteps(flowSteps, flows)
     {}
 }
 
+function withOwnedDeployables(combatants)
+{
+    const list = [...combatants];
+    const owned = deployablesOf(list.map(combatant => combatant.tokenId).filter(Boolean));
+    return [...list, ...owned.map(token => ({ actor: token.actor }))];
+}
+
 async function resetForCombatants(combatants, scope)
 {
     if (!isExecutorGM())
         return;
+
     const field = scope === 'round' ? 'uses_per_round'
         : scope === 'turn' ? 'uses_per_turn'
             : 'uses_per_scene';
+
     const limitFn = scope === 'round' ? getPerRoundLimit
         : scope === 'turn' ? getPerTurnLimit
             : getPerSceneLimit;
+
     const type = scope === 'round' ? 'perRound' : scope === 'turn' ? 'perTurn' : 'perScene';
+
     for (const cb of combatants)
     {
         for (const actor of [cb.actor, cb.actor?.system?.pilot?.value])
         {
             if (!actor?.items)
                 continue;
+
             const updates = [];
+
             for (const item of actor.items)
             {
                 const patch = { _id: item.id };
                 let touched = false;
+
                 if (Math.max(limitFn(item), traitLimit(item, type)) > 0 && Number(item.system?.[field]?.value ?? 0) > 0)
                 {
                     patch[`system.${field}.value`] = 0;
                     touched = true;
                 }
+
                 const subMap = getLAFlag(item,'perFreqSub');
+
                 for (const [subKey, entry] of Object.entries(subMap ?? {}))
                 {
                     if (Number(entry?.[field]?.value ?? 0) > 0)
@@ -704,17 +820,22 @@ async function resetForCombatants(combatants, scope)
                         touched = true;
                     }
                 }
+
                 if (touched)
                     updates.push(patch);
             }
+
             if (updates.length)
                 await actor.updateEmbeddedDocuments('Item', updates);
+
             const actorPatch = {};
+
             for (const [subKey, entry] of Object.entries(getLAFlag(actor,'perFreqSub') ?? {}))
             {
                 if (Number(entry?.[field]?.value ?? 0) > 0)
                     actorPatch[`flags.${MODULE_ID}.perFreqSub.${subKey}.${field}.value`] = 0;
             }
+
             if (Object.keys(actorPatch).length)
                 await actor.update(actorPatch);
         }
@@ -726,10 +847,10 @@ export async function resetPerFrequencyAtTurnStart(combat, combatantId)
 {
     if (!enabled())
         return;
-    await resetForCombatants(combat.combatants, 'turn');
+    await resetForCombatants(withOwnedDeployables(combat.combatants), 'turn');
     const combatant = combat.combatants.get(combatantId);
     if (combatant)
-        await resetForCombatants([combatant], 'round');
+        await resetForCombatants(withOwnedDeployables([combatant]), 'round');
 }
 
 export function initPerFrequencyHooks()
@@ -739,13 +860,14 @@ export function initPerFrequencyHooks()
     // Per-scene = per combat encounter.
     Hooks.on('combatStart', async (combat) =>
     {
-        await resetForCombatants(combat.combatants, 'scene');
+        await resetForCombatants(withOwnedDeployables(combat.combatants), 'scene');
     });
     Hooks.on('deleteCombat', async (combat) =>
     {
-        await resetForCombatants(combat.combatants, 'round');
-        await resetForCombatants(combat.combatants, 'turn');
-        await resetForCombatants(combat.combatants, 'scene');
+        const everyone = withOwnedDeployables(combat.combatants);
+        await resetForCombatants(everyone, 'round');
+        await resetForCombatants(everyone, 'turn');
+        await resetForCombatants(everyone, 'scene');
     });
 }
 
@@ -754,11 +876,13 @@ function pipsHtmlStandard(max, used, iconReady, iconConsumed, field)
     const ready = Math.max(0, max - Math.min(max, used));
     const dimStyle = !inCombat() ? 'opacity:0.5;' : '';
     const pips = [];
+
     for (let i = 0; i < max; i++)
     {
         const isReady = i < ready;
         pips.push(`<span class="la-pf-pip mdi ${isReady ? iconReady : iconConsumed}" data-field="${field}" data-index="${i + 1}" style="cursor:pointer;font-size:1.3em;color:#ffffff;${dimStyle}padding:0 1px;"></span>`);
     }
+
     return pips.join('');
 }
 
@@ -767,11 +891,13 @@ function pipsHtmlAlt(max, used, iconReady, iconConsumed, field)
     const ready = Math.max(0, max - Math.min(max, used));
     const dimStyle = !inCombat() ? 'opacity:0.5;' : '';
     const pips = [];
+
     for (let i = 0; i < max; i++)
     {
         const isReady = i < ready;
         pips.push(`<button type="button" class="la-pf-pip la-counterbox__button mdi ${isReady ? iconReady : iconConsumed} la-prmy-header -glow-prmy la-scdy-primary -glow-scdy-hover -fontsize7" data-field="${field}" data-index="${i + 1}" data-available="${isReady}" style="${dimStyle}"></button>`);
     }
+
     return pips.join('');
 }
 
@@ -781,8 +907,10 @@ function buildBadgeStandard(item)
     const turnLimit = getPerTurnLimit(item);
     const sceneLimit = getPerSceneLimit(item);
     const missionLimit = getPerMissionLimit(item);
+
     if (!roundLimit && !turnLimit && !sceneLimit && !missionLimit)
         return '';
+
     const blocks = [];
     if (roundLimit)
         blocks.push(`<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}"><span style="margin:4px;">PER ROUND</span>${pipsHtmlStandard(roundLimit, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')}</div>`);
@@ -801,10 +929,13 @@ function buildBadgeAlt(item)
     const turnLimit = getPerTurnLimit(item);
     const sceneLimit = getPerSceneLimit(item);
     const missionLimit = getPerMissionLimit(item);
+
     if (!roundLimit && !turnLimit && !sceneLimit && !missionLimit)
         return '';
+
     const blocks = [];
     const wrap = (label, pips) => `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr la-pf-card" data-item-id="${item.id}"><span class="la-counterbox__span -fontsizemedium">${label}</span>${pips}</div>`;
+
     if (roundLimit)
         blocks.push(wrap('PER ROUND', pipsHtmlAlt(roundLimit, getPerRoundUsed(item), 'mdi-restart', 'mdi-restart-off', 'uses_per_round')));
     if (turnLimit)
@@ -819,14 +950,17 @@ function buildBadgeAlt(item)
 function buildSubBadges(item, subs, alt)
 {
     const blocks = [];
+
     for (const sub of subs)
     {
         const ctx = { item, key: sub.key };
         const specs = FREQ_SPECS.map(spec => ({ ...spec, max: spec.limitFromSub(sub.data, ctx), label: localize(spec.labelKey) }));
+
         for (const spec of specs)
         {
             if (!spec.max)
                 continue;
+
             const used = getSubUsed(item, sub.key, spec.field);
             const label = `${sub.label} · ${spec.label}`;
             const pips = alt ? pipsHtmlAlt(spec.max, used, spec.ready, spec.off, spec.field) : pipsHtmlStandard(spec.max, used, spec.ready, spec.off, spec.field);
@@ -835,6 +969,7 @@ function buildSubBadges(item, subs, alt)
                 : `<div class="clipped card charged-box la-pf-card" data-item-id="${item.id}" data-sub-key="${sub.key}"><span style="margin:4px;">${label}</span>${pips}</div>`);
         }
     }
+
     return blocks.join('');
 }
 
@@ -870,11 +1005,14 @@ function bindPipClicks(root, actor)
             const card = pip.closest('.la-pf-card');
             const itemId = card?.getAttribute('data-item-id');
             const item = itemId && actor?.items?.get(itemId);
+
             if (!item)
                 return;
+
             const field = pip.getAttribute('data-field');
             const clickedPip = Number(pip.getAttribute('data-index'));
             const subKey = card?.getAttribute('data-sub-key');
+
             if (subKey)
             {
                 const currentUsed = getSubUsed(item, subKey, field);
@@ -882,6 +1020,7 @@ function bindPipClicks(root, actor)
                 await item.update({ [`flags.${MODULE_ID}.perFreqSub.${subKey}.${field}.value`]: Math.max(0, nextUsed) });
                 return;
             }
+
             const currentUsed = Number(item.system?.[field]?.value ?? 0);
             const nextUsed = clickedPip === currentUsed ? clickedPip - 1 : clickedPip;
             await item.update({ [`system.${field}.value`]: Math.max(0, nextUsed) });
@@ -893,52 +1032,68 @@ export function onRenderActorSheetPerFrequency(app, html)
 {
     if (!enabled())
         return;
+
     const root = html instanceof HTMLElement ? html : html?.[0];
     const actor = app.actor ?? app.document;
+
     if (!root || !actor?.items)
         return;
+
     const isAlt = !!(root.closest('.la-root, .la-common') ?? root.querySelector('.la-root, .la-common, .la-counterbox'));
     const cardSelector = '[data-item-id], .ref[data-uuid]';
+
     for (const el of root.querySelectorAll(cardSelector))
     {
         const uuidId = /Item\.([^.]+)$/.exec(/** @type {any} */ (el).dataset.uuid ?? '')?.[1];
         const item = actor.items.get(uuidId) ?? actor.items.get(/** @type {any} */ (el).dataset.itemId);
+
         if (!item)
             continue;
+
         const id = item.id;
         const ownedByCard = (/** @type {Element} */ node) => node.parentElement?.closest(cardSelector) === el;
+
         if ([...el.querySelectorAll(`.la-pf-card[data-item-id="${id}"], .la-pf-group`)].some(ownedByCard))
             continue;
+
         if (isAlt)
         {
             const rankIdx = Number(/** @type {any} */ (el.querySelector('[data-rank]'))?.dataset.rank);
             let badgeHtml;
+
             if (item.type !== 'talent')
                 badgeHtml = buildBadgeAlt(item) + buildActionBadges(item, true);
             else if (Number.isInteger(rankIdx) && item.system?.ranks?.[rankIdx])
                 badgeHtml = buildSubBadges(item, [{ key: rankSubKey(rankIdx), data: item.system.ranks[rankIdx], label: ['I', 'II', 'III'][rankIdx] ?? String(rankIdx + 1) }, ...rankActionSubs(item, rankIdx)], true);
             if (!badgeHtml)
                 continue;
+
             let band = [...el.querySelectorAll(':scope > div > .la-bckg-header-anti')].find(candidate => candidate.querySelector('.la-counterbox'));
+
             if (!band)
             {
                 const bandHtml = '<div class="-widthfull -padding2-l la-pf-band"><div class="la-flexrow clipped-bot-alt la-text-header la-bckg-header-anti -widthfull -fontface-stylized"></div></div>';
                 const summary = el.querySelector(':scope > .la-summary');
+
                 if (summary)
                     summary.insertAdjacentHTML('afterend', bandHtml);
                 else
                     el.insertAdjacentHTML('afterbegin', bandHtml);
                 band = el.querySelector(':scope > .la-pf-band > div');
             }
+
             band?.insertAdjacentHTML('beforeend', badgeHtml);
         }
         else
         {
             const badgeHtml = item.type === 'talent' ? buildTalentBadges(item, false) : buildBadgeStandard(item) + buildActionBadges(item, false);
+
             const counters = [...el.querySelectorAll('.limited-card, .charged-box')]
                 .filter(counter => !counter.classList.contains('la-pf-card') && ownedByCard(counter));
+
             if (!badgeHtml && !counters.length)
                 continue;
+
             const group = document.createElement('div');
             group.className = 'la-pf-group';
             group.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:2px 0;';
@@ -951,50 +1106,65 @@ export function onRenderActorSheetPerFrequency(app, html)
                 el.prepend(group);
         }
     }
+
     // Per-trait frequency injection.
     const seenTraitKeys = new Set();
+
     for (const traitBtn of root.querySelectorAll('[data-type="trait"][data-uuid][data-index]'))
     {
         const uuid = /** @type {any} */ (traitBtn).dataset.uuid;
         const traitIdx = Number(/** @type {any} */ (traitBtn).dataset.index);
         const key = `${uuid}::${traitIdx}`;
+
         if (seenTraitKeys.has(key))
             continue;
         seenTraitKeys.add(key);
         let frame = [...actor.items.values()].find(/** @type {any} */ frameItem => frameItem.uuid === uuid);
+
         if (!frame)
         {
             const tailId = /Item\.([^.]+)$/.exec(uuid)?.[1];
             if (tailId)
                 frame = actor.items.get(tailId);
         }
+
         const trait = /** @type {any} */ (frame)?.system?.traits?.[traitIdx];
         if (!frame || !trait)
             continue;
+
         const ctx = { item: frame, key: traitSubKey(traitIdx) };
         const specs = FREQ_SPECS.map(spec => ({ ...spec, max: spec.limitFromSub(trait, ctx), label: localize(spec.labelKey) })).filter(spec => spec.max);
+
         if (!specs.length)
             continue;
+
         let body = traitBtn.closest('.frame-trait')?.querySelector(':scope > .lancer-body') ?? null;
         const altBody = root.querySelector(`[data-la-collapse-id="${actor.uuid}_${frame.id}_trait_${traitIdx}"]`);
+
         if (!body)
             body = altBody;
         if (!body)
             continue;
+
         const useAlt = !!altBody && body === altBody;
         if (body.querySelector(`:scope > .la-pf-card[data-item-id="${frame.id}"][data-trait-idx="${traitIdx}"]`))
             continue;
+
         for (const spec of specs)
         {
             const used = getSubUsed(frame, ctx.key, spec.field);
+
             const pips = useAlt
                 ? pipsHtmlAlt(spec.max, used, spec.ready, spec.off, spec.field)
                 : pipsHtmlStandard(spec.max, used, spec.ready, spec.off, spec.field);
+
             const card = useAlt
                 ? `<div class="la-counterbox la-flexrow -aligncenter la-text-header -padding1-lr clipped-alt -widthfull la-bckg-header-anti la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}" data-sub-key="${ctx.key}"><span class="la-counterbox__span -fontsizemedium">${spec.label}</span>${pips}</div>`
                 : `<div class="clipped card charged-box la-pf-card" data-item-id="${frame.id}" data-trait-idx="${traitIdx}" data-sub-key="${ctx.key}"><span style="margin:4px;">${spec.label}</span>${pips}</div>`;
+
             body.insertAdjacentHTML('beforeend', card);
         }
     }
+
     bindPipClicks(root, actor);
 }

@@ -4,13 +4,16 @@ import { openItemBrowserDialog, attachEditorResizeObserver } from "../tools/misc
 import { installLancerHints } from "../setup/codemirror-hints.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 import { cancelButton } from "../tools/dialog-utils.js";
+import { LEGACY_MOVEMENT_IMMUNITIES } from "./genericBonuses.js";
 
 export function updateCodeFieldBadge(html, fieldId)
 {
     const value = String(html.find(`#${fieldId}-value`).val() || '').trim();
     const $badge = html.find(`#${fieldId}-badge`);
+
     if (!$badge.length)
         return;
+
     if (value)
     {
         $badge.addClass('has-value');
@@ -59,8 +62,10 @@ export function gatherPresetData(html, prefix)
         const id = this.id;
         if (!id || (skip.has(id) && $(this).val() !== ANY_TURN_ORIGIN))
             return;
+
         const $el = $(this);
         const type = ($el.attr('type') || '').toLowerCase();
+
         if (type === 'checkbox' || type === 'radio')
             presetFields[id] = $el.is(':checked');
         else
@@ -72,9 +77,11 @@ export function gatherPresetData(html, prefix)
         const panelId = this.id;
         if (!panelId)
             return;
+
         const checked = Array.from(document.querySelectorAll(`#${panelId} input[type=checkbox]:checked`), box => /** @type {HTMLInputElement} */ (box).value);
         presetFields[`__panel__${panelId}`] = checked;
     });
+
     if (prefix === 'bonus')
     {
         const dmg = [];
@@ -92,6 +99,7 @@ export function gatherPresetData(html, prefix)
         presetFields.__immunityEffects = $tab.find('.bonus-immunity-effect-option.selected').map((_, el) => $(el).data('effect')).get();
         presetFields.__immunityDamage = $tab.find('.bonus-immunity-damage-option.selected').map((_, el) => $(el).data('type')).get();
     }
+
     return presetFields;
 }
 
@@ -99,17 +107,23 @@ export function applyPresetData(html, prefix, data)
 {
     if (prefix === 'bonus' && data['bonus-type'] === 'immunity' && ['resistance', 'vulnerability'].includes(data['bonus-immunity-subtype']))
         data = { ...data, 'bonus-type': data['bonus-immunity-subtype'], 'bonus-immunity-subtype': 'effect' };
+    if (prefix === 'bonus' && data['bonus-type'] === 'immunity' && Object.hasOwn(LEGACY_MOVEMENT_IMMUNITIES, data['bonus-immunity-subtype'] ?? ''))
+        data = { ...data, 'bonus-type': 'movement', 'bonus-movement-subtype': LEGACY_MOVEMENT_IMMUNITIES[data['bonus-immunity-subtype']], 'bonus-immunity-subtype': 'effect' };
+
     const $tab = html.find(`#tab-${presetCategoryFor(prefix)}`);
     const skip = new Set(PRESET_SKIP_IDS[prefix] || []);
+
     for (const [id, value] of Object.entries(data))
     {
         if (id.startsWith('__'))
             continue;
         if (skip.has(id) && value !== ANY_TURN_ORIGIN)
             continue;
+
         const $el = $tab.find(`#${id}`);
         if (!$el.length)
             continue;
+
         const type = ($el.attr('type') || '').toLowerCase();
         if (type === 'checkbox' || type === 'radio')
             $el.prop('checked', !!value);
@@ -118,11 +132,13 @@ export function applyPresetData(html, prefix, data)
         if (id.endsWith('-duration'))
             $el.trigger('change');
     }
+
     // Restore multi-select panel checkboxes (find by panel id, even if moved to body).
     for (const [key, val] of Object.entries(data))
     {
         if (!key.startsWith('__panel__'))
             continue;
+
         const panelId = key.slice('__panel__'.length);
         document.querySelectorAll(`#${panelId} input[type=checkbox]`).forEach(box =>
         {
@@ -131,6 +147,7 @@ export function applyPresetData(html, prefix, data)
         // Trigger change so any dependent UI updates.
         $(document.querySelector(`#${panelId} input[type=checkbox]`)).trigger('change');
     }
+
     if (prefix === 'bonus' && Array.isArray(data.__damageEntries))
     {
         const $list = $tab.find('#bonus-damage-list');
@@ -146,9 +163,11 @@ export function applyPresetData(html, prefix, data)
                     <button type="button" class="bonus-remove-dmg te-delete-btn" data-index="${idx}" style="flex:0 0 22px;"><i class="fas fa-times"></i></button>
                 </div>
             `);
+
             // copy dmg type options from first entry (dmgTypeOptionsHtml not directly accessible here)
             const $firstTypeSelect = $tab.find('select[id^="bonus-dmgType-"]').first();
             const optionsHtml = $firstTypeSelect.html();
+
             if (optionsHtml)
             {
                 $tab.find(`#bonus-dmgType-${idx}`).html(optionsHtml).val(entry.type);
@@ -156,6 +175,7 @@ export function applyPresetData(html, prefix, data)
             }
         });
     }
+
     // Immunity selections.
     if (prefix === 'bonus' && Array.isArray(data.__immunityEffects))
     {
@@ -164,6 +184,7 @@ export function applyPresetData(html, prefix, data)
             $(this).toggleClass('selected', data.__immunityEffects.includes($(this).data('effect')));
         });
     }
+
     if (prefix === 'bonus' && Array.isArray(data.__immunityDamage))
     {
         $tab.find('.bonus-immunity-damage-option').each(function ()
@@ -171,18 +192,21 @@ export function applyPresetData(html, prefix, data)
             $(this).toggleClass('selected', data.__immunityDamage.includes($(this).data('type')));
         });
     }
+
     // Bonus-type-specific section visibility.
     $tab.find('#bonus-type').trigger('change');
     // Refresh damage bonus row markup for current mode after entries were rebuilt.
     $tab.find('#bonus-damageMode').trigger('change');
     // Sync icon previews if present.
     const $icon = $tab.find('#cust-icon, #bonus-icon');
+
     if ($icon.length)
     {
         $icon.each(function ()
         {
             const path = String($(this).val() || '');
             const $img = $tab.find(`#${this.id}-preview`);
+
             if ($img.length)
             {
                 $img.attr('src', path);
@@ -190,6 +214,7 @@ export function applyPresetData(html, prefix, data)
             }
         });
     }
+
     // Code-field badges.
     $tab.find('.code-field-badge').each(function ()
     {
@@ -199,8 +224,10 @@ export function applyPresetData(html, prefix, data)
     {
         const trigger = $(this).find('.la-multi-select-trigger');
         const panelId = $(this).find('.la-multi-select-panel').attr('id');
+
         if (!panelId)
             return;
+
         const checked = $(document.querySelectorAll(`#${panelId} input:checked`));
         if (checked.length === 0)
             trigger.text('— Select —');
@@ -302,9 +329,11 @@ export function openStatusPicker(targetInput)
     const statuses = [...(CONFIG.statusEffects || [])];
 
     const customApi = game.modules.get('temporary-custom-statuses')?.api;
+
     if (customApi && typeof customApi.getStatuses === 'function')
     {
         const customStatuses = customApi.getStatuses() || [];
+
         for (const customStatus of customStatuses)
         {
             if (!statuses.some(existing => existing.id === customStatus.id))
@@ -320,8 +349,10 @@ export function openStatusPicker(targetInput)
         const icon = status.img || status.icon || '';
         const id = status.id || status.name || '';
         let label = status.name || id;
+
         if (typeof status.name === 'string' && status.name.startsWith('lancer'))
             label = localize(status.name);
+
         const isSelected = alreadySelected.has(id);
         return `<div class="lancer-status-entry${isSelected ? ' selected' : ''}" data-id="${id}" title="${label}"
             style="display:inline-flex;flex-direction:column;align-items:center;width:56px;margin:3px;cursor:pointer;padding:4px;border-radius:4px;border:2px solid ${isSelected ? 'var(--primary-color)' : 'transparent'};">
@@ -352,6 +383,7 @@ export function openStatusPicker(targetInput)
                     {
                         return $(this).data('id');
                     }).get();
+
                     if (targetInput)
                         targetInput.val(selected.join(', '));
                 }
@@ -368,6 +400,7 @@ export function openStatusPicker(targetInput)
         },
         default: "confirm"
     }, { width: 420, classes: ["lancer-dialog-base", "lancer-no-title"] });
+
     dialog.render(true);
 }
 
@@ -381,6 +414,7 @@ export function initLaMultiSelect(html, containerId)
     const container = html.find(`#${containerId}`);
     const trigger = container.find('.la-multi-select-trigger');
     const panel = container.find('.la-multi-select-panel');
+
     const updateTriggerLabel = () =>
     {
         const checked = panel.find('input:checked');
@@ -389,7 +423,9 @@ export function initLaMultiSelect(html, containerId)
         else
             trigger.text(checked.map((_, el) => $(el).closest('label').text().trim()).get().join(', '));
     };
+
     const panelHome = panel.parent();
+
     const positionPanel = () =>
     {
         const rect = trigger[0].getBoundingClientRect();
@@ -403,6 +439,7 @@ export function initLaMultiSelect(html, containerId)
         panelStyle.setProperty('min-width', '0', 'important');
         panelStyle.setProperty('max-width', `${rect.width}px`, 'important');
     };
+
     const closePanel = () =>
     {
         panel.removeClass('open');
@@ -410,6 +447,7 @@ export function initLaMultiSelect(html, containerId)
         if (panel.parent().is('body'))
             panelHome.append(panel);
     };
+
     trigger.on('click', (ev) =>
     {
         ev.stopPropagation();
@@ -438,6 +476,7 @@ const CONSUMPTION_FILTER_MAP = {
     onDamage: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
     onTechAttack: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
     onTechHit: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
+    onInvadeHit: ['cfilter-itemLid', 'cfilter-itemId', 'cfilter-role'],
     onMove: [],
     onPreMove: [],
     onInitActivation: ['cfilter-actionName'],
@@ -476,6 +515,7 @@ export function setupTriggerUI(html, prefix)
             $fields.hide();
         html.closest('.dialog').css('height', 'auto');
     };
+
     $(document).on('change.la-em-trigger', `#${prefix}-trigger-panel input[type=checkbox]`, updateTriggerFilterFields);
 
     html.find(`#${prefix}-trigger-fields .find-lid-btn`).on('click', function (e)
@@ -492,11 +532,13 @@ export function setupTriggerUI(html, prefix)
         const tokenSourceId = $(this).data('token-source');
 
         let targetToken = null;
+
         if (tokenSourceId)
         {
             const tokenId = html.find(`#${tokenSourceId}`).val();
             targetToken = canvas.tokens.get(tokenId);
         }
+
         if (!targetToken)
             targetToken = canvas.tokens.controlled[0];
 
@@ -507,6 +549,7 @@ export function setupTriggerUI(html, prefix)
         }
 
         const items = targetToken.actor.items.filter(item => !['skill', 'talent', 'core_bonus', 'integrated'].includes(item.type));
+
         if (items.length === 0)
         {
             ui.notifications.warn(localizeFormat('LA.notify.noValidItems', { name: targetToken.name }));
@@ -558,6 +601,7 @@ export function setupTriggerUI(html, prefix)
             },
             default: "cancel"
         }, { width: 500, classes: ["lancer-dialog-base", "lancer-no-title"] });
+
         pickerDialog.render(true);
     });
 
@@ -574,12 +618,14 @@ export function getTriggerConfig(html, prefix)
 {
     const triggers = html.find(`#${prefix}-trigger input:checked`)
         .map((_, el) => /** @type {HTMLInputElement} */ (el).value).get();
+
     if (triggers.length === 0)
         return null;
 
     const consumption = {
         trigger: triggers.length === 1 ? triggers[0] : triggers
     };
+
     const origin = html.find(`#${prefix}-trigger-origin`).val();
     if (origin)
         consumption.originId = origin;
@@ -587,15 +633,19 @@ export function getTriggerConfig(html, prefix)
     const itemLid = html.find(`#${prefix}-filter-itemLid`).val()?.trim();
     if (itemLid)
         consumption.itemLid = itemLid;
+
     const itemId = html.find(`#${prefix}-filter-itemId`).val()?.trim();
     if (itemId)
         consumption.itemId = itemId;
+
     const actionName = html.find(`#${prefix}-filter-actionName`).val()?.trim();
     if (actionName)
         consumption.actionName = actionName;
+
     const checkType = html.find(`#${prefix}-filter-checkType`).val()?.trim();
     if (checkType)
         consumption.checkType = checkType;
+
     const statusId = html.find(`#${prefix}-filter-statusId`).val()?.trim();
     if (statusId)
         consumption.statusId = statusId;

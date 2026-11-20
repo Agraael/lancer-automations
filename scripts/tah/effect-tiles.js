@@ -95,15 +95,18 @@ export function effectTilesHtml(entries, { names = false, titles = true } = {})
         const effect = entry.effect;
         const duration = durationBadge(effect);
         const count = statusBadge(entry);
+
         const badges = [
             duration ? tileBadge(names ? '' : 'la-tl', duration.color, duration.text) : '',
             count ? tileBadge(names ? '' : 'la-br', count.color, count.count) : '',
             count && count.uses !== null ? tileBadge(names ? '' : 'la-tr', count.usesColor, count.uses) : '',
         ].join('');
+
         const icon = `<img src="${esc(effect.img)}" alt="">`;
         if (names)
             return `<span class="la-stat-plate-name">${icon}<span>${esc(effect.name)}</span>${badges}</span>`;
         return `<span class="la-stat-plate-tile"${titles ? ` title="${esc(effect.name)}"` : ''}>${icon}${badges}</span>`;
     });
+
     return `<div class="${names ? 'la-stat-plate-names' : 'la-stat-plate-tiles'}">${items.join('')}</div>`;
 }

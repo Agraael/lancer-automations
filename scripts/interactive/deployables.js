@@ -15,14 +15,19 @@ import { stripDeployOwner } from "./detail-renderers.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 import { cancelButton } from "../tools/dialog-utils.js";
 import { getOrCreateTemplateActor } from "../tools/template-actors.js";
-import { deployableArtEnabled } from "../tools/deployable-art.js";
+import { deployableArtEnabled, thrownWeaponArt, WEAPON_ART_ANCHOR_Y } from "../tools/deployable-art.js";
+import { socketRequestWithAck } from "../socket.js";
+import { buildDeployableData, createActorInDeployableFolder, findDeployableSpec } from "./deployable-specs.js";
+import { noteRemovedToken } from "../tah/tape-changes.js";
+import { deployableOwnerToken } from "./deployable-owner.js";
+import { getDeployableIcon } from "../tah/item-helpers.js";
 
 import {
     isHexGrid, getOccupiedOffsets, drawHexAt
 } from "../combat/grid-helpers.js";
 
 export {
-    isGrantStale, resolveGrant, findGrantedAction, resolveActionGate, gateActions, getItemActions,
+    isGrantStale, resolveGrant, findGrantedAction, resolveActionGate, gateActions, getItemActions, getEffectActions, getHeldActions,
     addExtraActions, getActorActions, removeExtraActions, sweepStaleGrants, consumeExtraAction, reloadExtraAction,
     isPrimaryActionHidden, setHidePrimaryAction,
     rechargeExtraActionsForActor, resetPerRoundExtraActionsForActor, resetPerTurnExtraActionsForActor,
@@ -35,13 +40,15 @@ export {
     destroyItem, disableItem, restoreItem, isActionLocked, getLockedActions,
 } from "./action-locks.js";
 import { resolvePilot } from "../utils/lancer-token.js";
-export { setItemAsActivated, getActivatedItems, endItemActivation, openEndActivationMenu } from "./item-activation.js";
+export { setItemAsActivated, getActivatedItems, isItemActivated, endItemActivation, openEndActivationMenu } from "./item-activation.js";
 import { getExtraDeployableOpts, getActorDeployables, getAllItemDeployables, getItemDeployables } from "./extra-deployables.js";
 export {
     getExtraDeployableOpts, setExtraDeployableOpts, resolveDeployRangeCount,
     addExtraDeploymentLids, addExtraDeploymentActor, removeExtraDeploymentActor,
     getActorDeployables, getLinkedDeployables, sliceDeployablesForTier, getAllItemDeployables, getItemDeployables,
+    addDeployableSpec, getDeployableSpecs, updateDeployableSpec, removeDeployableSpec,
 } from "./extra-deployables.js";
+export { buildDeployableData, registerDeployables, findDeployableSpec } from "./deployable-specs.js";
 import { resolveDeployable, stampDeployableSource, getDeployableInfoSync } from "./deployable-lookup.js";
 export { resolveDeployable, findDeployableInCompendium, resolveDeployableSourceItem, getDeployableInfoSync, getDeployableInfo } from "./deployable-lookup.js";
 export { openDeployablePicker, openDocumentPicker } from "./document-pickers.js";
@@ -89,9 +96,11 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     }
 
     const ownerName = ownerDisplayName(ownerActor);
+    const art = thrownWeaponArt(weapon);
 
     const extraData = {
         name: weapon.name,
+        ...(art ? { texture: { src: art, anchorY: WEAPON_ART_ANCHOR_Y } } : {}),
         actorData: { name: `${weapon.name} [${ownerName}]` },
         flags: {
             [MODULE_ID]: {
@@ -103,6 +112,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
             }
         }
     };
+
     const result = await placeToken({
         actor: /** @type {Actor} */(templateActor),
         range,
@@ -122,6 +132,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
     {
         await stampDeployableSource(result, weapon);
         const api = game.modules.get(MODULE_ID)?.api;
+
         if (api?.handleTrigger)
         {
             await api.handleTrigger('onDeploy', {
@@ -173,6 +184,7 @@ export async function spawnHardCover(originToken, options = {})
         await _templateActor.update({ "system.stats.hp": 10, "system.hp.value": 10, "system.hp.max": 10 });
 
     const hp = 10 * size;
+
     const extraData = /** @type {any} */ ({
         name,
         width: size,
@@ -183,6 +195,7 @@ export async function spawnHardCover(originToken, options = {})
             }
         }
     });
+
     // Override size and HP on the token's synthetic actor via delta
     if (size !== 1)
     {
@@ -204,6 +217,7 @@ export async function spawnHardCover(originToken, options = {})
         icon: "fas fa-cube",
         extraData
     });
+
     // provoke immunity is added by the createToken hook on Template Hard Cover tokens
     return result;
 }
@@ -223,6 +237,7 @@ export async function pickupWeaponToken(ownerToken)
     }
 
     const ownerActor = ownerToken.actor;
+
     const thrownTokens = canvas.tokens.placeables.filter(token =>
     {
         const flags = getLAFlags(token.document);
@@ -247,17 +262,24 @@ export async function pickupWeaponToken(ownerToken)
     if (!selected || selected.length === 0)
         return null;
 
-    const pickedToken = selected[0];
-    const flags = getLAFlags(pickedToken.document);
+    return pickUpThrownWeapon(selected[0]);
+}
+
+export async function pickUpThrownWeapon(thrownToken)
+{
+    const flags = getLAFlags(thrownToken.document);
     const weaponId = flags?.weaponId;
     const weaponName = flags?.weaponName || "Weapon";
+    const ownerForUndo = /** @type {any} */ (flags?.ownerActorUuid ? fromUuidSync(flags.ownerActorUuid) : null);
+    noteRemovedToken(thrownToken.document, { weaponUuid: (ownerForUndo?.actor ?? ownerForUndo)?.items?.get(weaponId)?.uuid ?? null });
 
     if (game.user.isGM)
     {
-        const weapon = ownerActor.items.get(weaponId);
+        const ownerActor = /** @type {any} */ (flags?.ownerActorUuid ? await fromUuid(flags.ownerActorUuid) : null);
+        const weapon = ownerActor?.items?.get(weaponId);
         if (weapon)
             await weapon.update(/** @type {any} */({ 'system.disabled': false }));
-        await pickedToken.document.delete();
+        await thrownToken.document.delete();
     }
     else
     {
@@ -265,9 +287,9 @@ export async function pickupWeaponToken(ownerToken)
             action: "pickupWeapon",
             payload: {
                 sceneId: canvas.scene.id,
-                tokenId: pickedToken.document?.id || pickedToken.id,
+                tokenId: thrownToken.document?.id || thrownToken.id,
                 weaponId,
-                ownerActorUuid: ownerActor.uuid,
+                ownerActorUuid: flags?.ownerActorUuid,
                 weaponName
             }
         });
@@ -281,16 +303,102 @@ function _applyDeployableTypeImage(actorData)
 {
     if (deployableArtEnabled())
         return;
+
     const type = String(actorData?.system?.type ?? '');
+
     const typeImg = /mine/i.test(type) ? 'systems/lancer/assets/icons/mine.svg'
         : /drone/i.test(type) ? 'systems/lancer/assets/icons/drone.svg'
             : null;
+
     if (!typeImg)
         return;
     actorData.img = typeImg;
     actorData.prototypeToken = actorData.prototypeToken || {};
     actorData.prototypeToken.texture = { ...(actorData.prototypeToken.texture ?? {}), src: typeImg };
     actorData.prototypeToken.img = typeImg;
+}
+
+function _ownedCopyData(source, ownerActor, ownerName, disposition, team)
+{
+    const actorData = /** @type {any} */(source.toObject());
+    const ownerBaseActor = /** @type {Actor} */(ownerActor.token?.baseActor ?? ownerActor);
+    actorData.system.owner = ownerBaseActor.uuid;
+    actorData.name = `${source.name} [${ownerName}]`;
+    actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
+
+    actorData.prototypeToken = actorData.prototypeToken || {};
+    actorData.prototypeToken.disposition = disposition;
+
+    if (team !== null)
+    {
+        actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
+        actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
+        actorData.prototypeToken.flags['token-factions'].team = team;
+    }
+
+    actorData.flags = actorData.flags || {};
+    _applyDeployableTypeImage(actorData);
+    return actorData;
+}
+
+async function _createActorRouted(actorData, ownerActor)
+{
+    const ownerFolderId = (ownerActor?.token?.baseActor ?? ownerActor)?.folder?.id ?? null;
+    const needsFolder = !!String(getModuleSetting('deployableFolderName') ?? '').trim();
+
+    if (game.user.can('ACTOR_CREATE') && (!needsFolder || game.user.hasRole('ASSISTANT')))
+        return createActorInDeployableFolder(actorData, ownerFolderId);
+
+    const uuid = await socketRequestWithAck('createDeployableActor', { actorData, ownerFolderId }, { timeoutMs: 15000 });
+    return uuid ? /** @type {any} */ (await fromUuid(uuid)) : null;
+}
+
+async function _syncFromSpec(actor, spec, ownerName)
+{
+    const stored = getLAFlag(actor, 'deployableSpec');
+    if (!spec || !stored || !actor?.isOwner)
+        return actor;
+
+    const data = /** @type {any} */ (buildDeployableData(spec));
+    const hash = getLAFlags(data).deployableSpec.hash;
+
+    if (stored.hash === hash)
+        return actor;
+
+    const update = {
+        name: `${data.name} [${ownerName}]`,
+        system: data.system,
+        [`flags.${MODULE_ID}.deployableSpec.hash`]: hash,
+        [`flags.${MODULE_ID}.extraActions`]: getLAFlags(data).extraActions ?? []
+    };
+
+    if (spec.img)
+        update.img = data.img;
+    if (spec.img || spec.tokenImg)
+        update['prototypeToken.texture.src'] = data.prototypeToken.texture.src;
+    await actor.update(update);
+    return actor;
+}
+
+export async function createDeployableActor(spec, { owner = null } = {})
+{
+    if (!spec || !owner)
+    {
+        console.warn('lancer-automations | createDeployableActor needs a spec and an owner actor');
+        return null;
+    }
+
+    const resolved = await resolveDeployable(spec, owner);
+    if (!resolved.deployable)
+        return null;
+
+    const ownerName = ownerDisplayName(owner);
+    if (resolved.source !== 'spec')
+        return _syncFromSpec(resolved.deployable, resolved.spec, ownerName);
+
+    const disposition = owner.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
+    const team = tfGetTeam(owner.token ?? owner) ?? null;
+    return _createActorRouted(_ownedCopyData(resolved.deployable, owner, ownerName, disposition, team), owner);
 }
 
 /**
@@ -348,6 +456,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
     const disposition = dispositionOpt ?? ownerActor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
     let team = teamOpt;
+
     if (team === null || team === undefined)
         team = tfGetTeam(ownerActor.token ?? ownerActor);
     team = team ?? null;
@@ -360,18 +469,21 @@ export async function placeDeployable(options = /** @type {any} */({}))
     {
         if (actor?.system?.type === 'Drone')
             return true;
+
         const tagHas = (tags) => Array.isArray(tags)
             && tags.some(tag => /drone/i.test(tag?.lid ?? '') || /drone/i.test(tag?.id ?? ''));
+
         return tagHas(actor?.system?.tags) || tagHas(item?.system?.tags);
     };
 
     const actorEntries = [];
     let anyDrone = false;
+
     for (const input of deployableInputs)
     {
-        const resolved = await resolveDeployable(input, ownerActor);
+        const resolved = await resolveDeployable(input, ownerActor, systemItem);
         let actualDeployable = resolved.deployable;
-        const isFromCompendium = fromCompendium || resolved.source === 'compendium';
+        const isFromCompendium = fromCompendium || resolved.source === 'compendium' || resolved.source === 'spec';
 
         if (!actualDeployable)
         {
@@ -381,31 +493,21 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
         if (isFromCompendium)
         {
-            const actorData = /** @type {any} */(actualDeployable.toObject());
-            const ownerBaseActor = /** @type {Actor} */(ownerActor.token?.baseActor ?? ownerActor);
-            actorData.system.owner = ownerBaseActor.uuid;
-            actorData.name = `${actualDeployable.name} [${ownerName}]`;
-            actorData.folder = ownerActor.folder?.id;
-            actorData.ownership = foundry.utils.duplicate(ownerActor.ownership);
+            const actorData = _ownedCopyData(actualDeployable, ownerActor, ownerName, disposition, team);
+            actualDeployable = await _createActorRouted(actorData, ownerActor);
 
-            actorData.prototypeToken = actorData.prototypeToken || {};
-            actorData.prototypeToken.disposition = disposition;
-            if (team !== null)
-            {
-                actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
-                actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
-                actorData.prototypeToken.flags['token-factions'].team = team;
-            }
-            actorData.flags = actorData.flags || {};
-            _applyDeployableTypeImage(actorData);
-            const LancerActor = game.lancer?.LancerActor || Actor;
-            actualDeployable = await LancerActor.create(actorData);
             if (!actualDeployable)
             {
                 ui.notifications.error(localizeFormat('LA.notify.deployableCreateFailed', { input }));
                 continue;
             }
+
             ui.notifications.info(localizeFormat('LA.notify.created', { name: actorData.name }));
+        }
+        else
+        {
+            const spec = resolved.spec ?? findDeployableSpec(actualDeployable.system?.lid, { item: systemItem, actor: ownerActor });
+            await _syncFromSpec(actualDeployable, spec, ownerName);
         }
 
         if (isDrone(actualDeployable, systemItem))
@@ -451,9 +553,11 @@ export async function placeDeployable(options = /** @type {any} */({}))
 
     const baseElevation = originToken?.document?.elevation ?? 0;
     const noExplicitRange = rangeOpt == null && itemFlags.deployRange == null;
+
     const finalRange = (noExplicitRange && anyDrone)
         ? (ownerActor.type === 'pilot' ? 5 : (game.modules.get(MODULE_ID)?.api?.getSensorRange_WithBonus?.(ownerActor) ?? ownerActor.system?.sensor_range ?? 10))
         : range;
+
     const result = await placeToken({
         actor: actorParam,
         range: finalRange,
@@ -476,6 +580,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
         if (consumeUse)
         {
             let disabled = new Set();
+
             try
             {
                 const { getAutoConsumeDisabled } = await import('./extra-config.js');
@@ -485,7 +590,9 @@ export async function placeDeployable(options = /** @type {any} */({}))
             {
                 console.warn('lancer-automations | consume opt-out check failed:', err);
             }
+
             const uses = systemItem.system?.uses;
+
             if (uses && typeof uses.value === 'number' && !disabled.has('uses'))
             {
                 // Match Lancer 3.1.2+ behaviour: deduct the deploy action's cost (defaults to 1).
@@ -495,6 +602,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
                 const minUses = uses.min ?? 0;
                 updates["system.uses.value"] = Math.max(uses.value - cost, minUses);
             }
+
             if (systemItem.system?.charged && !disabled.has('charged'))
                 updates["system.charged"] = false;
             if (Object.keys(updates).length > 0)
@@ -506,6 +614,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
     if (result && originToken)
     {
         const deployedTokens = Array.isArray(result) ? result : [result];
+
         for (const deployedToken of deployedTokens)
         {
             if (deployedToken)
@@ -517,6 +626,7 @@ export async function placeDeployable(options = /** @type {any} */({}))
     {
         await stampDeployableSource(result, systemItem);
         const api = game.modules.get(MODULE_ID)?.api;
+
         if (api?.handleTrigger)
         {
             await api.handleTrigger('onDeploy', {
@@ -545,6 +655,7 @@ export async function deployDeployable(actor, deployableLid, parentItem, consume
     const sceneId = canvas?.scene?.id;
     const tokens = actor.getActiveTokens?.() || [];
     const sourceToken = tokens.find(token => token?.scene?.id === sceneId) || tokens[0] || null;
+
     if (sourceToken && depInfo?.activation)
         playActionFxByActivation(depInfo.activation, sourceToken, stripDeployOwner(depInfo.name));
     await _printDeployableCard(parentItem);
@@ -572,9 +683,11 @@ async function _printDeployableCard(parentItem)
 {
     if (!parentItem)
         return;
+
     const begin = game.lancer?.beginItemChatFlow;
     if (typeof begin !== 'function')
         return;
+
     try
     {
         await begin(parentItem, {});
@@ -596,12 +709,15 @@ async function _printDeployableCard(parentItem)
 export async function promptLinkOrUnlinkActor(ownerToken)
 {
     const owner = ownerToken?.actor;
+
     if (!owner)
     {
         ui.notifications.warn(localize('LA.notify.promptLinkNoActor'));
         return;
     }
+
     const ownerUuid = owner.uuid;
+
     const isLinkedToOwner = (/** @type {any} */ token) =>
         getLAFlag(token?.document,'ownerActorUuid') === ownerUuid;
 
@@ -614,19 +730,23 @@ export async function promptLinkOrUnlinkActor(ownerToken)
         filter: (/** @type {any} */ token) => !isLinkedToOwner(token),
         filterWarning: 'Already linked, click to UNLINK',
     });
+
     const target = picked?.[0];
     if (!target?.document)
         return;
+
     if (isLinkedToOwner(target))
     {
         await unsetLAFlag(target.document,'ownerActorUuid');
         await unsetLAFlag(target.document,'ownerName');
+        await setLAFlag(target.document,'ownerUnlinked', true);
         ui.notifications.info(localizeFormat('LA.notify.unlinkedFrom', { target: target.actor?.name ?? target.name, owner: owner.name }));
     }
     else
     {
         await setLAFlag(target.document,'ownerActorUuid', ownerUuid);
         await setLAFlag(target.document,'ownerName', owner.name ?? '');
+        await unsetLAFlag(target.document,'ownerUnlinked');
         ui.notifications.info(localizeFormat('LA.notify.linkedTo', { target: target.actor?.name ?? target.name, owner: owner.name }));
     }
 }
@@ -671,6 +791,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
     {
         const uses = item.system?.uses;
         hasUses = uses && typeof uses.max === 'number' && uses.max > 0;
+
         if (hasUses && uses.value <= 0)
         {
             ui.notifications.warn(localizeFormat('LA.notify.noUsesRemaining', { name: item.name }));
@@ -679,6 +800,7 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
 
         hasRechargeTag = item.system?.tags?.some(tag => tag.lid === "tg_recharge");
         isUncharged = hasRechargeTag && item.system?.charged === false;
+
         if (isUncharged)
         {
             ui.notifications.warn(localizeFormat('LA.notify.unchargedDeploy', { name: item.name }));
@@ -692,12 +814,14 @@ export async function beginDeploymentCard(options = /** @type {any} */({}))
 
     // First range wins, counts sum. Per-deployable extra opts are the next fallback.
     let rangeOpt = null;
+
     for (let lidIdx = 0; lidIdx < deployablesArray.length; lidIdx++)
     {
         const lid = deployablesArray[lidIdx];
         const idxOpts = deployableOptions[lidIdx] || {};
         const extraOpts = getExtraDeployableOpts(item, lid) || {};
         const depCount = idxOpts.count ?? extraOpts.count;
+
         if (depCount !== undefined)
             hasCountOverride = true;
         totalCount += depCount ?? 1;
@@ -738,6 +862,7 @@ export async function openDeployableMenu(actor)
     const allSystemsWithDeployables = actor.items.filter(item =>
         getItemDeployables(item, actor).length > 0
     );
+
     const actorLevelDeployables = getActorDeployables(actor);
 
     if (allSystemsWithDeployables.length === 0 && actorLevelDeployables.length === 0)
@@ -754,6 +879,7 @@ export async function openDeployableMenu(actor)
         const deployablesArray = getItemDeployables(system, actor);
 
         let uses, hasUses, noUsesLeft, hasRechargeTag, needsRecharge;
+
         if (isFrameCore)
         {
             uses = null;
@@ -779,7 +905,7 @@ export async function openDeployableMenu(actor)
             {
                 const usesText = hasUses ? `${uses.value}/${uses.max}` : '';
                 const chargesText = hasRechargeTag ? (needsRecharge ? "Uncharged" : "Charged") : "";
-                const isFromCompendium = source === 'compendium';
+                const isFromCompendium = source === 'compendium' || source === 'spec';
                 const systemDisplayName = isFrameCore ? `${system.name} - Core System` : system.name;
                 items.push({
                     id: `${system.id}_${lid}`,
@@ -828,9 +954,10 @@ export async function openDeployableMenu(actor)
     for (const lid of actorLevelDeployables)
     {
         const { deployable, source } = await resolveDeployable(lid, actor);
+
         if (deployable)
         {
-            const isFromCompendium = source === 'compendium';
+            const isFromCompendium = source === 'compendium' || source === 'spec';
             items.push({
                 id: `__actor_${lid}`,
                 systemId: null,
@@ -881,6 +1008,7 @@ export async function openDeployableMenu(actor)
 
     let selectedId = items.find(item => !item.disabled)?.id;
     const isGM = game.user.isGM;
+
     const content = `
         <style>
             .lancer-items-grid {
@@ -1037,6 +1165,7 @@ export async function openDeployableMenu(actor)
                     const item = items.find(candidate => candidate.id === selectedId);
                     if (!item || item.disabled || !item.deployableId)
                         return;
+
                     const system = item.systemId ? actor.items.get(item.systemId) : null;
                     const holder = system ?? actor;
                     const extraOpts = getExtraDeployableOpts(holder, item.deployableLid) || {};
@@ -1090,22 +1219,23 @@ export async function openDeployableMenu(actor)
                 const ownerBaseActor = actor.token?.baseActor ?? actor;
                 actorData.system.owner = ownerBaseActor.uuid;
                 actorData.name = `${item.deployableName} [${ownerName}]`;
-                actorData.folder = actor.folder?.id;
                 actorData.ownership = foundry.utils.duplicate(actor.ownership);
 
                 actorData.prototypeToken = actorData.prototypeToken || {};
                 actorData.prototypeToken.disposition = actor.prototypeToken?.disposition ?? CONST.TOKEN_DISPOSITIONS.NEUTRAL;
                 const actorTeam = tfGetTeam(actor.token ?? actor);
+
                 if (actorTeam !== null)
                 {
                     actorData.prototypeToken.flags = actorData.prototypeToken.flags || {};
                     actorData.prototypeToken.flags['token-factions'] = actorData.prototypeToken.flags['token-factions'] || {};
                     actorData.prototypeToken.flags['token-factions'].team = actorTeam;
                 }
+
                 actorData.flags = actorData.flags || {};
                 _applyDeployableTypeImage(actorData);
-                const LancerActor = game.lancer?.LancerActor || Actor;
-                const newActor = await LancerActor.create(actorData);
+                const newActor = await createActorInDeployableFolder(actorData, ownerBaseActor.folder?.id ?? null);
+
                 if (newActor)
                 {
                     ui.notifications.info(localizeFormat('LA.notify.created', { name: actorData.name }));
@@ -1131,7 +1261,7 @@ export async function openDeployableMenu(actor)
 
 /**
  * Recall (pick up) a deployed deployable from the scene. Shows a chooseToken card
- * restricted to tokens deployed by the owner. Deployables WITHOUT system.recall are
+ * restricted to tokens linked to the owner (thrown weapons excluded). Tokens WITHOUT system.recall are
  * highlighted in red as a warning. Deletes the token on recall.
  * @param {Token} ownerToken - The token whose actor owns the deployables
  * @returns {Promise<Object|null>} { deployableName, deployableId } or null if cancelled/none found
@@ -1145,10 +1275,11 @@ export async function recallDeployable(ownerToken)
     }
 
     const ownerActor = ownerToken.actor;
+
     const deployedTokens = canvas.tokens.placeables.filter(token =>
     {
         const flags = getLAFlags(token.document);
-        return flags?.deployedItem && flags?.ownerActorUuid === ownerActor.uuid;
+        return flags?.ownerActorUuid === ownerActor.uuid && !flags?.thrownWeapon;
     });
 
     if (deployedTokens.length === 0)
@@ -1159,14 +1290,17 @@ export async function recallDeployable(ownerToken)
 
     // Highlight tokens that lack system.recall in red as a warning.
     const recallHighlights = [];
+
     for (const token of deployedTokens)
     {
         const tokenActor = token.actor;
+
         if (!tokenActor?.system?.recall)
         {
             const hl = new PIXI.Graphics();
             hl.lineStyle(gridLineWidth(2), 0xff4444, 0.8);
             hl.beginFill(0xff4444, 0.25);
+
             if (isHexGrid())
             {
                 const offsets = getOccupiedOffsets(token);
@@ -1179,6 +1313,7 @@ export async function recallDeployable(ownerToken)
                 hl.drawRect(token.document.x, token.document.y,
                     token.document.width * gridSize, token.document.height * gridSize);
             }
+
             hl.endFill();
             if (canvas.tokens?.parent)
                 canvas.tokens.parent.addChildAt(hl, canvas.tokens.parent.getChildIndex(canvas.tokens));
@@ -1208,23 +1343,54 @@ export async function recallDeployable(ownerToken)
     const deployableName = flags?.deployableName || "Deployable";
     const deployableId = flags?.deployableId;
 
+    await removeDeployableToken(pickedToken);
+
+    ui.notifications.info(localizeFormat('LA.notify.recalled', { name: deployableName }));
+    return { deployableName, deployableId };
+}
+
+export async function recallThroughOwner(token)
+{
+    const recall = token?.actor?.system?.recall;
+    const ownerToken = deployableOwnerToken(token);
+    const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
+
+    if (!recall || !ownerToken || !api?.executeSimpleActivation)
+        return removeDeployableToken(token);
+
+    const name = stripDeployOwner(token.actor.name);
+
+    return api.executeSimpleActivation(ownerToken.actor, {
+        title: 'Recall Deployable',
+        action: { name: 'Recall Deployable', activation: recall },
+        detail: localizeFormat('LA.tokenHud.detail.recallDeployable', { name, activation: recall }),
+    }, {
+        sourceTokenId: ownerToken.id,
+        recallTokenId: token.id,
+        tapeName: `${name}: ${localize('LA.tokenHud.label.recall')}`,
+        tapeIcon: getDeployableIcon({ type: token.actor.system?.type }),
+    });
+}
+
+export async function removeDeployableToken(token)
+{
+    const flags = getLAFlags(token.document);
+    noteRemovedToken(token.document);
+
     if (game.user.isGM)
-        await pickedToken.document.delete();
+        await token.document.delete();
     else
     {
         game.socket.emit('module.lancer-automations', {
             action: "recallDeployable",
             payload: {
                 sceneId: canvas.scene.id,
-                tokenId: pickedToken.document?.id || pickedToken.id,
-                ownerActorUuid: ownerActor.uuid,
-                deployableName
+                tokenId: token.document?.id || token.id,
+                ownerActorUuid: flags?.ownerActorUuid ?? null,
+                deployableName: flags?.deployableName || token.name
             }
         });
     }
-
-    ui.notifications.info(localizeFormat('LA.notify.recalled', { name: deployableName }));
-    return { deployableName, deployableId };
 }
 
 /**
@@ -1245,6 +1411,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
 
     const deployableActor = tokenDocument.actor;
     const deployableLid = deployableActor?.system?.lid;
+
     if (!deployableLid)
         return;
 
@@ -1254,14 +1421,18 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
 
     // Mech/pilot deployables carry their owner in system.owner.
     const ownerUuidRaw = deployableActor.system?.owner;
+
     const ownerUuid = typeof ownerUuidRaw === 'string'
         ? ownerUuidRaw
         : (ownerUuidRaw?.id ?? null);
+
     const directOwner = ownerUuid ? await fromUuid(ownerUuid) : null;
+
     if (directOwner && (directOwner.type === 'mech' || directOwner.type === 'pilot'))
     {
         ownerActor = directOwner;
         ownerToken = allTokens.find(token => token.actor?.uuid === directOwner.uuid) ?? null;
+
         if (!ownerToken)
         {
             // Owner has no token on this scene, don't link
@@ -1288,6 +1459,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
         else
         {
             const deployableToken = canvas.tokens.get(tokenDocument.id);
+
             const picked = await chooseToken(deployableToken ?? candidateTokens[0], {
                 count: 1,
                 includeSelf: false,
@@ -1296,10 +1468,12 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
                 description: localizeFormat('LA.deployables.whichTokenOwns', { name: deployableActor.name }),
                 icon: "cci cci-deployable"
             });
+
             if (!picked || picked.length === 0)
                 return;
             ownerToken = picked[0];
         }
+
         ownerActor = ownerToken.actor;
     }
 
@@ -1308,7 +1482,9 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
     const candidateItems = ownerActor.items.filter(item =>
         getAllItemDeployables(item).includes(deployableLid)
     );
+
     let systemItem = null;
+
     if (candidateItems.length === 1)
         systemItem = candidateItems[0];
     else if (candidateItems.length > 1)
@@ -1336,6 +1512,7 @@ export async function handleManualDeployLink(tokenDocument, { force = false } = 
     });
 
     const api = game.modules.get(MODULE_ID)?.api;
+
     if (api?.handleTrigger)
     {
         const deployableToken = canvas.tokens.get(tokenDocument.id);

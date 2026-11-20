@@ -10,6 +10,7 @@ export function getSupabase()
 {
     if (_client)
         return _client;
+
     const { createClient } = globalThis.supabase;
     _client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }

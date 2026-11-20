@@ -17,6 +17,8 @@ export const TG = {
     traceLine: 0xffffff,
     markAdd: 0x33ff66,
     markRemove: 0xff3b30,
+    cardOrigin: 0xff6400,
+    cardRelated: 0x4488ff,
 };
 
 // Range-pulse glow per range kind.
@@ -84,6 +86,7 @@ const RULER_COLOR_KEYS = [
 ];
 
 const _toHex = (value) => '#' + (value & 0xffffff).toString(16).padStart(6, '0');
+
 const _fromHex = (hex) =>
 {
     const parsed = Number.parseInt(String(hex).replace(/^#/, ''), 16);
@@ -109,10 +112,12 @@ function applyPaletteColorSettings()
 export async function resetPaletteColorSettings(extraKeys = [])
 {
     const keys = [...new Set([..._PALETTE_DEFS.map(([key]) => key), ...RULER_COLOR_KEYS, ...extraKeys])];
+
     for (const key of keys)
     {
         const registered = game.settings.settings.get(`lancer-automations.${key}`);
         const defaultValue = registered?.default;
+
         if (defaultValue == null)
             continue;
         await game.settings.set(MODULE_ID,key, defaultValue);

@@ -53,7 +53,7 @@ export const AWARDS = [
         icon: 'fa-shield-halved',
         description: 'LA.award.ANCHOR.description',
         secondDescription: 'LA.award.ANCHOR.second',
-        stat: p => p.destroyed ? 0 : (p.physicalDmgTaken ?? 0),
+        stat: player => player.destroyed || player.left ? 0 : (player.physicalDmgTaken ?? 0),
         minValue: 10,
         format: v => `${v} DMG TAKEN`,
     },
@@ -63,7 +63,7 @@ export const AWARDS = [
         label: 'LA.award.HEAT_SINK.label',
         icon: 'fa-temperature-arrow-down',
         description: 'LA.award.HEAT_SINK.description',
-        stat: p => p.destroyed ? 0 : (p.heatDmgTaken ?? 0),
+        stat: player => player.destroyed || player.left ? 0 : (player.heatDmgTaken ?? 0),
         minValue: 1,
         format: v => `${v} HEAT TAKEN`,
     },
@@ -98,6 +98,7 @@ export const AWARDS = [
         {
             const rangedShots = p.bd?.acc?.rangedShots ?? 0;
             const meleeShots = p.bd?.acc?.meleeShots ?? 0;
+
             if (rangedShots + meleeShots < 3)
                 return 0;
             return p.accuracy ?? 0;
@@ -318,6 +319,7 @@ export const AWARDS = [
             const types = player.bd?.dmgOut?.types ?? [];
             const burn = types.find(type => type.k === 'BURN')?.v ?? 0;
             const infection = types.find(type => type.k === 'INFECTION')?.v ?? 0;
+
             if (burn > 0 && infection > 0)
                 return `${value} BURN+INF`;
             return `${value} ${infection > 0 ? 'INFECTION' : 'BURN'}`;
@@ -419,7 +421,7 @@ export const AWARDS = [
         label: 'LA.award.SCRAPPER.label',
         icon: 'fa-gears',
         description: 'LA.award.SCRAPPER.description',
-        stat: player => player.destroyed ? 0
+        stat: player => player.destroyed || player.left ? 0
             : (player.gearLost?.weapons?.length ?? 0) + (player.gearLost?.systems?.length ?? 0) + (player.gearLost?.cascading?.length ?? 0),
         minValue: 2,
         format: value => `${value} GEAR LOST`,

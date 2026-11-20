@@ -17,6 +17,7 @@ export async function activateRangePreview(token, range, ownerEl = null, glowCol
 {
     if (!token || range == null)
         return;
+
     const radius = Math.max(1, range);
     rangePulse.setRange(hoverPulseOwner(token.id), { token, range: radius, includeSelf: false, priority: RANGE_PULSE_PRIORITY.HOVER, glowColor, los, freeRange });
     if (ownerEl)
@@ -73,6 +74,7 @@ function resolveHudRange(item, actor)
     const flag = getLAFlag(item, 'hudRange');
     if (flag === 'sensors')
         return getSensorRange(actor);
+
     const value = Number(flag);
     return value > 0 ? Math.max(1, value) : null;
 }
@@ -93,6 +95,7 @@ export async function getAttackRange(actionName, actor, item)
         return null;
     if (FIXED_MELEE_ACTIONS.has(name))
         return 1;
+
     if (name === 'skirmish' || name === 'barrage')
     {
         const input = item ?? actor;
@@ -100,6 +103,7 @@ export async function getAttackRange(actionName, actor, item)
             return 1;
         return Math.max(1, getActorMaxReach_WithBonus(input));
     }
+
     if (name === 'thrown' || name === 'throw')
     {
         const input = item ?? actor;
@@ -107,12 +111,14 @@ export async function getAttackRange(actionName, actor, item)
             return 1;
         return Math.max(1, await getMaxWeaponReach_WithBonus(input));
     }
+
     if (item)
     {
         const reach = await getMaxWeaponReach_WithBonus(item);
         if (reach > 0)
             return Math.max(1, reach);
     }
+
     return null;
 }
 
@@ -157,6 +163,7 @@ export function usesLineOfSight(category, item, profile)
 export function getPreviewLosInfo(category, action, actor, item, profile)
 {
     const name = (action?.name ?? '').toLowerCase().trim();
+
     // Bands for this one weapon. The actor-wide call would lend it every other weapon's Arcing.
     if (isWeaponItem(item) && !action?.activation)
     {
@@ -164,11 +171,13 @@ export function getPreviewLosInfo(category, action, actor, item, profile)
         const freeRange = weaponIgnoresLineOfSight(item) ? reach : 0;
         return { los: reach > freeRange, freeRange };
     }
+
     if (name === 'skirmish' || name === 'barrage')
     {
         const { max, freeMax } = getActorReachBands_WithBonus(item ?? actor);
         return { los: max > freeMax, freeRange: freeMax };
     }
+
     if (action?.ignoresLineOfSight)
         return { los: false, freeRange: 0 };
     return { los: usesLineOfSight(category, item, profile), freeRange: 0 };
@@ -202,34 +211,43 @@ function pulseRangeOf(rangeEntries, tags = [])
 async function computePreviewRangeBase(category, action, actor, item, profile, deployLid)
 {
     const actionName = action?.name;
+
     if (category === 'Deployables')
     {
         if (deployLid)
             return resolveDeployRangeCount(item ?? null, deployLid, actor).range;
+
         const deployRange = getLAFlag(item,'deployRange') ?? 1;
         return Math.max(1, deployRange);
     }
+
     if (action?.range?.length)
     {
         const ownRange = pulseRangeOf(action.range);
         if (ownRange != null)
             return ownRange;
     }
+
     if (profile?.range?.length)
         return pulseRangeOf(profile.range, profile.all_tags ?? profile.tags);
+
     const hudRange = resolveHudRange(item, actor);
     if (hudRange != null)
         return hudRange;
+
     // A weapon's nested action (real activation, not the attack rows) never inherits the weapon's reach.
     const nestedWeaponAction = !!action?.activation && isWeaponItem(item);
+
     if (item && !nestedWeaponAction)
     {
         const reach = await getItemMaxReach(item, actor);
         if (reach > 0)
             return Math.max(1, reach);
     }
+
     if (category === 'Tech')
         return getSensorRange(actor);
+
     if (category === 'Actions')
     {
         const name = (actionName ?? '').toLowerCase().trim();
@@ -243,6 +261,7 @@ async function computePreviewRangeBase(category, action, actor, item, profile, d
             return 6;
         return null;
     }
+
     if (category === 'Attacks')
         return getAttackRange(actionName, actor, null);
     return null;
@@ -258,10 +277,12 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
         return;
     if (!getModuleSetting('tah.rangePreview'))
         return;
+
     if (isEntering && weapons?.length)
     {
         let max = 0;
         let freeMax = 0;
+
         for (const weapon of weapons)
         {
             const reach = getWeaponReachRange(weapon, actor);
@@ -269,13 +290,16 @@ export async function onHudRowHover({ actor, item, action, category, profile, to
             if (weaponIgnoresLineOfSight(weapon))
                 freeMax = Math.max(freeMax, reach);
         }
+
         if (max > 0)
             await activateRangePreview(token, Math.max(1, max), el, RANGE_GLOW.reach, max > freeMax, freeMax);
         return;
     }
+
     if (isEntering)
     {
         const range = await computePreviewRange(category, action ?? null, actor, item ?? null, profile ?? null, deployLid);
+
         if (range != null)
         {
             const losInfo = getPreviewLosInfo(category, action ?? null, actor, item ?? null, profile ?? null);

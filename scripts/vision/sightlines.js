@@ -7,15 +7,16 @@ import { canShareTools, canSeeToolsFrom } from '../interactive/presence.js';
 import { thtApi } from '../movement/movement-utils.js';
 import { laTokenGameplayHeight } from '../tools/token-height.js';
 import { getTerrainTypeMap } from '../movement/cost-rules.js';
+import { stopTicker } from '../tools/canvas-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 const CHANNEL = 'module.lancer-automations';
 const REMOTE_PREFIX = 'remote:';
 const SETTING_ATTACK_HOVER = 'lancerLosAttackHover';
 
-const COLOR_CLEAR = 0x2f9c56;
-const COLOR_CLEAR_CORE = 0x8fe0ab;
-const COLOR_BLOCKED = 0xad3833;
+export const COLOR_CLEAR = 0x2f9c56;
+export const COLOR_CLEAR_CORE = 0x8fe0ab;
+export const COLOR_BLOCKED = 0xad3833;
 const COLOR_WITNESS = 0xbd9636;
 const COLOR_WITNESS_CORE = 0xe6cf90;
 
@@ -25,6 +26,7 @@ const CHIP_FILL = 0x141a20;
 // Chips crowd on spans shorter than this, notches alone carry those.
 const CHIP_MIN_SPAN = 20;
 const NOTCH_HALF = 5;
+
 // Vector glyphs stay sharp at any zoom where baked text blurs.
 function _drawChipGlyph(gfx, x, y, lane, color)
 {
@@ -36,6 +38,7 @@ function _drawChipGlyph(gfx, x, y, lane, color)
         gfx.endFill();
         return;
     }
+
     if (lane === 'token')
     {
         gfx.lineStyle(0);
@@ -45,6 +48,7 @@ function _drawChipGlyph(gfx, x, y, lane, color)
         gfx.endFill();
         return;
     }
+
     if (lane === 'aura')
     {
         gfx.lineStyle(1.5, color, 1);
@@ -55,7 +59,9 @@ function _drawChipGlyph(gfx, x, y, lane, color)
         gfx.endFill();
         return;
     }
+
     gfx.lineStyle(1.8, color, 1);
+
     for (const angle of [0, Math.PI / 3, (2 * Math.PI) / 3])
     {
         const dx = Math.cos(angle) * 4.5;
@@ -76,6 +82,7 @@ function _ensureLayer()
         _layer = new PIXI.Container();
         _layer.eventMode = 'none';
     }
+
     if (canvas?.stage && _layer.parent !== canvas.stage)
         canvas.stage.addChild(_layer);
     return _layer;
@@ -84,6 +91,7 @@ function _ensureLayer()
 function _groupFor(key)
 {
     let group = _groups.get(key);
+
     if (!group || group.destroyed)
     {
         group = new PIXI.Container();
@@ -95,6 +103,7 @@ function _groupFor(key)
         _ensureLayer().addChild(group);
         _groups.set(key, group);
     }
+
     return group;
 }
 
@@ -118,17 +127,20 @@ function _assignLaneSlots(zones)
 {
     const sorted = [...zones].sort((left, right) => left.t0 - right.t0);
     const placed = [];
+
     for (const zone of sorted)
     {
         const used = new Set(placed
             .filter(other => other.t0 < zone.t1 && other.t1 > zone.t0)
             .map(other => other.slot));
+
         let slot = 0;
         while (used.has(slot))
             slot++;
         zone.slot = slot;
         placed.push(zone);
     }
+
     return sorted;
 }
 
@@ -142,39 +154,39 @@ function _ensureTicker()
     canvas.app.ticker.add(_tickerFn);
 }
 
-function _stopTicker()
-{
-    if (_tickerFn && canvas?.app?.ticker)
-        canvas.app.ticker.remove(_tickerFn);
-    _tickerFn = null;
-}
-
 // Direction pulse: a gentle glow streak in the ray's own color drifting origin to end. Stops itself when no groups remain.
 function _drawPulses()
 {
     if (!_groups.size)
     {
-        _stopTicker();
+        _tickerFn = stopTicker(_tickerFn);
         return;
     }
+
     const now = performance.now() / 1000;
+
     for (const group of _groups.values())
     {
         const pulse = group._pulse;
         const segs = group._pulseSegs;
+
         if (!pulse || pulse.destroyed || !segs?.length)
             continue;
         pulse.clear();
+
         for (const seg of segs)
         {
             if (seg.len < 24)
                 continue;
+
             const shift = (now * PULSE_SPEED) % BEAD_SPACING;
+
             for (let dist = shift; dist < seg.len; dist += BEAD_SPACING)
             {
                 const fade = Math.min(1, dist / BEAD_FADE, (seg.len - dist) / BEAD_FADE);
                 if (fade <= 0)
                     continue;
+
                 const tPos = dist / seg.len;
                 pulse.beginFill(seg.color, 0.5 * fade);
                 pulse.drawCircle(seg.a.x + (seg.b.x - seg.a.x) * tPos, seg.a.y + (seg.b.y - seg.a.y) * tPos, 1.8);
@@ -188,6 +200,7 @@ function _drawPulses()
 export function clearSightlines(key)
 {
     const group = _groups.get(key);
+
     if (group)
     {
         group.destroy({ children: true });
@@ -205,6 +218,7 @@ function _rayT(pointA, pointB, point)
     const dx = pointB.x - pointA.x;
     const dy = pointB.y - pointA.y;
     const lenSq = dx * dx + dy * dy;
+
     if (lenSq <= 0)
         return 0;
     return Math.max(0, Math.min(1, ((point.x - pointA.x) * dx + (point.y - pointA.y) * dy) / lenSq));
@@ -241,6 +255,7 @@ function _refineEdge(pointA, pointB, tInside, tOutside, testFn)
         else
             tOutside = mid;
     }
+
     return (tInside + tOutside) / 2;
 }
 
@@ -249,19 +264,20 @@ function _sampleIntervals(pointA, pointB, count, testFn)
 {
     const intervals = [];
     let start = null;
+
     for (let index = 0; index <= count; index++)
     {
         const tPos = index / count;
+
         if (testFn(_lerp(pointA, pointB, tPos), tPos))
-        {
             start ??= (index === 0 ? 0 : _refineEdge(pointA, pointB, tPos, (index - 1) / count, testFn));
-        }
         else if (start !== null)
         {
             intervals.push([start, _refineEdge(pointA, pointB, (index - 1) / count, tPos, testFn)]);
             start = null;
         }
     }
+
     if (start !== null)
         intervals.push([start, 1]);
     return intervals;
@@ -272,7 +288,9 @@ function _terrainZones(pointA, pointB, heightA, heightB)
     const tht = thtApi();
     if (!tht?.calculateLineOfSight)
         return [];
+
     let regions;
+
     try
     {
         regions = tht.calculateLineOfSight({ x: pointA.x, y: pointA.y, h: heightA }, { x: pointB.x, y: pointB.y, h: heightB });
@@ -281,6 +299,7 @@ function _terrainZones(pointA, pointB, heightA, heightB)
     {
         return [];
     }
+
     const types = getTerrainTypeMap() ?? new Map();
     return (regions ?? []).map(region =>
     {
@@ -300,14 +319,18 @@ function _templateCellTest(template)
 {
     if (canvas.grid.type === CONST.GRID_TYPES.GRIDLESS)
         return null;
+
     let covered = null;
+
     try
     {
         covered = game.modules.get('templatemacro')?.api?.getTemplateOccupiedOffsets?.(template.document) ?? null;
+
         if (!covered?.size)
         {
             const positions = template._getGridHighlightPositions?.() ?? [];
             covered = new Set();
+
             for (const position of positions)
             {
                 const offset = canvas.grid.getOffset({ x: position.x + canvas.grid.sizeX / 2, y: position.y + canvas.grid.sizeY / 2 });
@@ -319,8 +342,10 @@ function _templateCellTest(template)
     {
         return null;
     }
+
     if (!covered?.size)
         return null;
+
     return (point) =>
     {
         const offset = canvas.grid.getOffset(point);
@@ -339,6 +364,7 @@ function _templateBand(doc)
     const flags = _templateFlags(doc);
     if (!flags.elevationGated)
         return null;
+
     const bottom = doc.elevation ?? 0;
     const range = Math.floor(Number(flags.elevationRangeManual ? (flags.elevationRange ?? 0) : (doc.distance ?? 0)) || 0);
     return { bottom, top: bottom + range };
@@ -348,17 +374,22 @@ function _templateZones(pointA, pointB, sampleCount, heightA, heightB)
 {
     const zones = [];
     const heightAt = (tPos) => heightA + (heightB - heightA) * tPos;
+
     for (const template of canvas?.templates?.placeables ?? [])
     {
         const shape = template.shape;
         const doc = template.document;
+
         if (!shape || !doc)
             continue;
         if (!_templateFlags(doc).laLineOfSight)
             continue;
+
         const cellTest = _templateCellTest(template)
             ?? ((point) => shape.contains(point.x - doc.x, point.y - doc.y));
+
         const band = _templateBand(doc);
+
         const testFn = (point, tPos) =>
         {
             if (band)
@@ -367,13 +398,16 @@ function _templateZones(pointA, pointB, sampleCount, heightA, heightB)
                 if (rayHeight < band.bottom || rayHeight > band.top)
                     return false;
             }
+
             return cellTest(point);
         };
+
         const intervals = _sampleIntervals(pointA, pointB, sampleCount, testFn);
         const color = _colorOf(doc.fillColor ?? doc.borderColor, 0xff8c3a);
         for (const [t0, t1] of intervals)
             zones.push({ lane: 'template', color, alpha: 0.5, t0, t1 });
     }
+
     return zones;
 }
 
@@ -382,21 +416,25 @@ function _auraZones(pointA, pointB, sampleCount, viewer, heightA, heightB)
     const api = game.modules.get('grid-aware-auras')?.api;
     if (typeof api?.getAurasContainingPoint !== 'function')
         return [];
+
     const viewerId = viewer?.document?.id;
     const heightAt = (tPos) => heightA + (heightB - heightA) * tPos;
     const keyOf = (hit) => `${hit.parent?.document?.id ?? '?'}:${hit.aura?.id ?? '?'}`;
     // Coarse pass discovers which auras the ray meets, then each gets refined intervals.
     const candidates = new Map();
+
     try
     {
         for (let index = 0; index <= sampleCount; index++)
         {
             const tPos = index / sampleCount;
             const point = _lerp(pointA, pointB, tPos);
+
             for (const hit of api.getAurasContainingPoint(point.x, point.y, { elevation: heightAt(tPos) }) ?? [])
             {
                 if (!hit.aura?.laLineOfSight)
                     continue;
+
                 if (hit.parent?.document?.id !== viewerId)
                 {
                     candidates.set(keyOf(hit), {
@@ -406,13 +444,16 @@ function _auraZones(pointA, pointB, sampleCount, viewer, heightA, heightB)
                 }
             }
         }
+
         const zones = [];
+
         for (const [key, style] of candidates)
         {
             const testFn = (point, tPos) => (api.getAurasContainingPoint(point.x, point.y, { elevation: heightAt(tPos) }) ?? []).some(hit => keyOf(hit) === key);
             for (const [t0, t1] of _sampleIntervals(pointA, pointB, sampleCount, testFn))
                 zones.push({ lane: 'aura', color: style.color, alpha: style.alpha, t0, t1 });
         }
+
         return zones;
     }
     catch
@@ -425,29 +466,37 @@ function _tokenZones(pointA, pointB, sampleCount, viewer, target, heightA, heigh
 {
     const zones = [];
     const heightAt = (tPos) => heightA + (heightB - heightA) * tPos;
+
     const endpointIds = new Set([viewer, target]
         .filter(ref => ref instanceof foundry.canvas.placeables.Token)
         .map(ref => ref.document.id));
+
     for (const token of canvas?.tokens?.placeables ?? [])
     {
         const doc = token.document;
         const shape = token.getShape?.();
+
         if (!doc || !shape?.contains || endpointIds.has(doc.id) || !token.visible)
             continue;
+
         const inside = (point) => shape.contains(point.x - doc.x, point.y - doc.y);
         if (inside(pointA) || inside(pointB))
             continue;
+
         const bottom = doc.elevation ?? 0;
         const top = bottom + laTokenGameplayHeight(doc);
         const color = _colorOf(/** @type {any} */ (token)._getBorderColor?.(), 0x999999);
+
         const testFn = (point, tPos) =>
         {
             const rayHeight = heightAt(tPos);
             return rayHeight >= bottom && rayHeight <= top && inside(point);
         };
+
         for (const [t0, t1] of _sampleIntervals(pointA, pointB, sampleCount, testFn))
             zones.push({ lane: 'token', color, alpha: 0.85, t0, t1 });
     }
+
     return zones;
 }
 
@@ -463,6 +512,7 @@ function _zoneSpan(pointA, pointB, zone, tMax)
 {
     const t0 = Math.min(zone.t0, tMax);
     const t1 = Math.min(zone.t1, tMax);
+
     if (t1 <= t0)
         return null;
     return {
@@ -477,6 +527,7 @@ function _zoneSpan(pointA, pointB, zone, tMax)
 function _drawZoneSegments(gfx, pointA, pointB, zones, tMax)
 {
     const perp = _perp(pointA, pointB);
+
     for (const zone of zones)
     {
         const span = _zoneSpan(pointA, pointB, zone, tMax);
@@ -494,24 +545,29 @@ function _drawZoneMarks(gfx, chipGfx, pointA, pointB, zones, tMax)
     const slotted = _assignLaneSlots(zones);
     _drawZoneSegments(gfx, pointA, pointB, slotted, tMax);
     const perp = _perp(pointA, pointB);
+
     for (const zone of slotted)
     {
         const span = _zoneSpan(pointA, pointB, zone, tMax);
         if (!span)
             continue;
+
         const { start, end, offset } = span;
         // Notch reaches from the far side of the trace line out past this zone's own lane.
         const side = offset >= 0 ? 1 : -1;
         const notchNear = -side * NOTCH_HALF;
         const notchFar = offset + side * (LANE_WIDTH / 2 + 2);
         gfx.lineStyle(1.5, zone.color, 0.9);
+
         for (const point of [start, end])
         {
             gfx.moveTo(point.x + perp.x * notchNear, point.y + perp.y * notchNear);
             gfx.lineTo(point.x + perp.x * notchFar, point.y + perp.y * notchFar);
         }
+
         if (Math.hypot(end.x - start.x, end.y - start.y) < CHIP_MIN_SPAN)
             continue;
+
         const mid = _lerp(pointA, pointB, (span.t0 + span.t1) / 2);
         const chipX = mid.x + perp.x * offset;
         const chipY = mid.y + perp.y * offset;
@@ -544,11 +600,13 @@ function _drawCutRay(gfx, pointA, pointB, blockPoint)
     gfx.lineTo(cut.x, cut.y);
     // Faint dashed continuation past the cut, purely to show where the ray was headed.
     const restLen = Math.hypot(pointB.x - cut.x, pointB.y - cut.y);
+
     if (restLen > 1)
     {
         gfx.lineStyle(1.5, COLOR_BLOCKED, 0.18);
         drawDashedEdges(gfx, [[cut, pointB]], 4, 7, 7);
     }
+
     gfx.lineStyle(2, COLOR_BLOCKED, 1);
     gfx.moveTo(cut.x - CUT_HALF, cut.y - CUT_HALF);
     gfx.lineTo(cut.x + CUT_HALF, cut.y + CUT_HALF);
@@ -569,12 +627,15 @@ function _drawPair(group, viewer, target)
     const result = computeSightlineRays(viewer, target);
     if (!result)
         return null;
+
     const gfx = group._gfx;
+
     const addSeg = (from, to, color) =>
     {
         const len = Math.hypot(to.x - from.x, to.y - from.y);
         group._pulseSegs.push({ a: from, b: to, len, color });
     };
+
     for (const ray of result.rays)
     {
         if (ray.clear)
@@ -588,29 +649,36 @@ function _drawPair(group, viewer, target)
             addSeg(ray.a, ray.blockPoint ?? _lerp(ray.a, ray.b, 0.5), COLOR_BLOCKED);
         }
     }
+
     if (result.witness)
     {
         _drawGlowRay(gfx, result.witness.a, result.witness.b, COLOR_WITNESS, COLOR_WITNESS_CORE);
         addSeg(result.witness.a, result.witness.b, COLOR_WITNESS);
     }
+
     const gridSize = canvas?.grid?.size ?? 100;
     const zoneHeightV = _zoneHeight(viewer, result.heightV);
     const zoneHeightT = _zoneHeight(target, result.heightT);
+
     const traversed = result.witness
         ? [...result.rays, { a: result.witness.a, b: result.witness.b, clear: true, blockPoint: null }]
         : result.rays;
+
     for (const ray of traversed)
     {
         const tMax = ray.clear ? 1 : _rayT(ray.a, ray.b, ray.blockPoint ?? _lerp(ray.a, ray.b, 0.5));
         const sampleCount = Math.max(4, Math.ceil(Math.hypot(ray.b.x - ray.a.x, ray.b.y - ray.a.y) / (gridSize / 4)));
+
         const zones = [
             ..._terrainZones(ray.a, ray.b, zoneHeightV, zoneHeightT),
             ..._auraZones(ray.a, ray.b, sampleCount, viewer, zoneHeightV, zoneHeightT),
             ..._templateZones(ray.a, ray.b, sampleCount, zoneHeightV, zoneHeightT),
             ..._tokenZones(ray.a, ray.b, sampleCount, viewer, target, zoneHeightV, zoneHeightT),
         ];
+
         _drawZoneMarks(gfx, group._chips, ray.a, ray.b, zones, tMax);
     }
+
     return result;
 }
 
@@ -626,8 +694,10 @@ export function drawSightlines(key, viewer, targets)
     clearSightlines(key);
     if (!viewer || !targets?.length || !canvas?.ready)
         return [];
+
     const group = _groupFor(key);
     const results = targets.map(target => _drawPair(group, viewer, target));
+
     if (group._pulseSegs.length)
         _ensureTicker();
     return results;
@@ -638,9 +708,11 @@ function _broadcastSightlines(viewer, targets)
 {
     if (!canShareTools() || !canvas.scene || viewer?.document?.hidden)
         return;
+
     const targetIds = targets
         .filter(target => target instanceof foundry.canvas.placeables.Token && !target.document?.hidden)
         .map(target => target.document.id);
+
     if (!targetIds.length)
         return;
     game.socket.emit(CHANNEL, {
@@ -680,13 +752,16 @@ export function onRemoteSightlines(payload)
         return;
     if (payload.sceneId !== canvas.scene?.id)
         return;
+
     const viewer = canvas.tokens.get(payload.viewerId);
     const targets = (payload.targetIds ?? []).map(id => canvas.tokens.get(id)).filter(Boolean);
+
     if (!viewer || !targets.length)
     {
         clearSightlines(REMOTE_PREFIX + payload.userId);
         return;
     }
+
     drawSightlines(REMOTE_PREFIX + payload.userId, viewer, targets);
 }
 
@@ -702,8 +777,10 @@ function _wrapThtHover()
     const tht = globalThis.terrainHeightTools;
     if (!tht?.drawLineOfSightRaysBetweenTokens || tht._laSightlinesWrapped)
         return;
+
     const originalDraw = tht.drawLineOfSightRaysBetweenTokens;
     const originalClear = tht.clearLineOfSightRays;
+
     tht.drawLineOfSightRaysBetweenTokens = function (token1, token2, options)
     {
         if (getSettingEnabled('lancerLos') && getSettingEnabled(SETTING_ATTACK_HOVER))
@@ -712,14 +789,17 @@ function _wrapThtHover()
             _broadcastSightlines(token1, [token2]);
             return;
         }
+
         return originalDraw.call(this, token1, token2, options);
     };
+
     tht.clearLineOfSightRays = function (options)
     {
         clearSightlines('attack-hover');
         _clearBroadcastSightlines();
         return originalClear.call(this, options);
     };
+
     tht._laSightlinesWrapped = true;
 }
 
@@ -736,8 +816,20 @@ export function initSightlines()
     Hooks.once('ready', _wrapThtHover);
     Hooks.on('canvasTearDown', () =>
     {
-        _stopTicker();
+        _tickerFn = stopTicker(_tickerFn);
         _groups.clear();
+
+        if (_layer && !_layer.destroyed)
+        {
+            _layer.parent?.removeChild(_layer);
+            _layer.destroy({ children: true });
+        }
+
         _layer = null;
+    });
+    Hooks.on('userConnected', (user, connected) =>
+    {
+        if (!connected)
+            onRemoteSightlinesClear({ userId: user.id });
     });
 }

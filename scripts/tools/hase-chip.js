@@ -33,8 +33,10 @@ export function ensureHaseChipStyle()
 export function statPipsHtml(cls, val, max, color)
 {
     const last = val === 1 && max > 1;
+
     const list = Array.from({ length: max }, (_unused, index) => index < max - val
         ? `<i class="cci ${cls} la-stats-pip la-stats-pip--lost"></i>`
         : `<i class="cci ${cls} la-stats-pip" style="color:${last ? '#f44336' : color};"></i>`);
+
     return `<span class="la-stats-pips">${list.join('')}</span>`;
 }

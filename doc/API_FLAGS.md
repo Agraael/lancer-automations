@@ -60,7 +60,7 @@ const armed = api.getTokenFlags(token, 'wasArmed');
 await api.removeTokenFlags(token, { wasArmed: true });
 ```
 
-`wasArmed` is the module-managed flag the `Mine Zone` arming reaction stamps to keep a mine from re-arming. Your own keys go in the same namespace.
+`wasArmed` is the module-managed flag that the `Mine Zone` arming reaction stamps to keep a mine from re-arming. Your own keys go in the same namespace.
 
 </details>
 
@@ -79,7 +79,7 @@ api.getActorFlags(actor, flagName?)            // read flags (specific key or al
 
 Routes through the GM via socket when the calling user does not own the actor.
 
-**Known flag keys** (deployable Mines, read by the `Mine Zone` general reaction). Same caveat as above: this is the writable subset, not the whole namespace.
+**Known flag keys** (deployable Mines, read by the `Mine Zone` general automation). Same caveat as above: this is the writable subset, not the whole namespace.
 
 | Key | Type | Default | Description |
 |:----|:-----|:--------|:------------|
@@ -111,7 +111,7 @@ api.getLAFlags(source)
 
 **Params:** <kbd>doc</kbd> `Document` · <kbd>key</kbd> `string` flag key, without the namespace · <kbd>fallback</kbd> `any` returned when the flag is unset · <kbd>value</kbd> `any` · <kbd>source</kbd> `Object` anything carrying a `flags` bag
 
-Raw access to the `lancer-automations` flag namespace, the same helpers the module uses internally. All four are safe on a missing document and return `undefined` instead of throwing. `getLAFlags` reads the whole bag off plain data, for hook payloads and source objects that have no `getFlag`.
+Raw access to the `lancer-automations` flag namespace, the same helpers the module uses internally. All four are safe on a missing document and return `undefined` instead of throwing. `setLAFlag` / `unsetLAFlag` write through the GM when you do not own the document. `getLAFlags` reads the whole bag off plain data, for hook payloads and source objects that have no `getFlag`.
 
 **Example:**
 ```js
@@ -181,6 +181,6 @@ api.setFlowFlag(triggerData, key, value?) // stamp it (once-per-flow gates)
 
 **Params:** <kbd>triggerData</kbd> the trigger's data object · <kbd>key</kbd> `string` · <kbd>value</kbd> `any` (default `true`)
 
-They replace the hand-written `flowState.la_extraData` stamp and its evaluate read.
+Use them instead of writing to `flowState.la_extraData` yourself and reading it back in `evaluate`.
 
 </details>

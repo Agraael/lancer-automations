@@ -29,11 +29,13 @@ function bakeAndSwap(container, gfx, tokenId, { addAt } = {})
         container.addChild(sprite);
     gfx.destroy();
     const entry = _overlayHubs.get(tokenId);
+
     if (entry)
     {
         entry.bakedTextures = entry.bakedTextures || [];
         entry.bakedTextures.push(sprite._laBakedTexture);
     }
+
     return true;
 }
 
@@ -44,6 +46,7 @@ function _addBreathingBox(container, gfx, x, periodMs, baseAlpha, swing)
     box.position.set(x, 0);
     box.addChild(gfx);
     container.addChild(box);
+
     const breathe = () =>
     {
         if (gfx.destroyed)
@@ -51,8 +54,10 @@ function _addBreathingBox(container, gfx, x, periodMs, baseAlpha, swing)
             canvas.app.ticker.remove(breathe);
             return;
         }
+
         gfx.alpha = baseAlpha + swing * _breath(periodMs);
     };
+
     canvas.app.ticker.add(breathe);
     breathe();
 }
@@ -72,17 +77,21 @@ function bakeGraphicsToTexture(gfx, resolution = BAKE_RESOLUTION)
 {
     if (!canvas?.app?.renderer || !gfx)
         return null;
+
     try
     {
         const bounds = gfx.getLocalBounds();
         if (bounds.width <= 0 || bounds.height <= 0)
             return null;
+
         const region = new PIXI.Rectangle(bounds.x, bounds.y, bounds.width, bounds.height);
+
         const tex = canvas.app.renderer.generateTexture(gfx, {
             resolution,
             region,
             multisample: PIXI.MSAA_QUALITY?.HIGH ?? 4,
         });
+
         // Mipmaps: GPU uses pre-filtered downsamples instead of 1-of-N nearest sampling (the moiré source).
         if (tex.baseTexture)
         {
@@ -91,6 +100,7 @@ function bakeGraphicsToTexture(gfx, resolution = BAKE_RESOLUTION)
             tex.baseTexture.scaleMode = PIXI.SCALE_MODES?.LINEAR ?? 1;
             tex.baseTexture.update();
         }
+
         const sprite = new PIXI.Sprite(tex);
         sprite.position.set(bounds.x, bounds.y);
         sprite._laBakedTexture = tex;
@@ -124,6 +134,7 @@ function drawSegment(gfx, x, y, w, h, def, barValue, chromeScale = 1)
         const inner = w - 2 * chromeScale;
         const segW = (inner - gap * (max - 1)) / max;
         const filledCount = Math.max(0, Math.min(max, value));
+
         for (let pipIdx = 0; pipIdx < max; pipIdx++)
         {
             const filled = def.pipsLTR ? (pipIdx < filledCount) : (pipIdx >= max - filledCount);
@@ -135,6 +146,7 @@ function drawSegment(gfx, x, y, w, h, def, barValue, chromeScale = 1)
     else
     {
         const fillW = Math.max(0, (w - 2 * chromeScale) * pct);
+
         if (fillW > 0)
         {
             gfx.beginFill(def.color, 1);
@@ -152,6 +164,7 @@ export function _removeOverlayHub(tokenId)
         return;
     if (!entry.wrapper.destroyed)
         entry.wrapper.destroy({ children: true });
+
     if (entry.bakedTextures)
     {
         for (const tex of entry.bakedTextures)
@@ -164,6 +177,7 @@ export function _removeOverlayHub(tokenId)
             { /* ignore */ }
         }
     }
+
     _overlayHubs.delete(tokenId);
 }
 
@@ -174,25 +188,31 @@ function _ensureSyncTicker(token)
 {
     if (_syncTickers.has(token.id))
         return;
+
     const tick = () =>
     {
         const entry = _overlayHubs.get(token.id);
+
         if (!entry || token.destroyed)
         {
             canvas.app.ticker.remove(tick);
             _syncTickers.delete(token.id);
             return;
         }
+
         const active = _activeForId(token.id) ?? token;
         const iso = _getIsoState(active);
+
         if (iso && active.mesh)
             entry.wrapper.position.set(active.mesh.position.x, active.mesh.position.y);
         else
             entry.wrapper.position.set(active.position.x, active.position.y);
+
         const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
         const floorW = REF_GRID_SIZE * Math.min(1, entry.width / (canvas.dimensions?.size || entry.width));
         let nameGrowth = 1;
         let boxScale = 1;
+
         if (minZoom > 0 && !iso)
         {
             const zoom = canvas.stage?.scale?.x || 1;
@@ -207,6 +227,7 @@ function _ensureSyncTicker(token)
                 (entry.tokenW / kx - entry.width) / 2,
                 entry.startY / ky
             );
+
             // Undo non-uniform stretch on labels.
             for (const child of entry.hub.children)
             {
@@ -224,15 +245,18 @@ function _ensureSyncTicker(token)
             boxScale = ky / kx;
             entry.wrapper.scale.set(iso.counterScale * kx, (1 / iso.counterScale) * ky);
             entry.hub.position.set(-entry.width / 2, ((entry.tokenH / 2) + 3 - entry.rowHeight) / ky);
+
             for (const child of entry.hub.children)
             {
                 if (child?.name === 'la-bar-label')
                     child.scale.set((ky / kx) / 8, 1 / 8);
             }
         }
+
         if (entry.boxScale !== boxScale)
         {
             entry.boxScale = boxScale;
+
             for (const child of entry.hub.children)
             {
                 if (child?.name === 'la-fixed-box')
@@ -241,11 +265,16 @@ function _ensureSyncTicker(token)
                     child.position.x = entry.labelBaseX + entry.sideExt * boxScale + 2;
             }
         }
+
         // Keep the name below the live-scaled hub (non-iso; iso is set on refresh).
         const nameplate = token.nameplate;
+
         if (nameplate?.visible && !iso)
         {
-            const bars = shouldShowBars(token);
+            if (entry.barsShown === undefined)
+                entry.barsShown = shouldShowBars(token);
+
+            const bars = entry.barsShown;
             const uiScale = canvas.dimensions?.uiScale ?? 1;
             const growth = bars ? nameGrowth : 1;
             nameplate.scale.set(uiScale * growth, uiScale * growth);
@@ -255,6 +284,7 @@ function _ensureSyncTicker(token)
                 : token.h + 2;
         }
     };
+
     _syncTickers.set(token.id, tick);
     canvas.app.ticker.add(tick);
 }
@@ -262,6 +292,7 @@ function _ensureSyncTicker(token)
 function _removeSyncTicker(tokenId)
 {
     const tick = _syncTickers.get(tokenId);
+
     if (tick)
     {
         canvas.app.ticker.remove(tick);
@@ -273,11 +304,13 @@ function _removeSyncTicker(tokenId)
 function _activeForId(tokenId)
 {
     const previews = canvas.tokens?.preview?.children ?? [];
+
     for (const preview of previews)
     {
         if (preview?.document?.id === tokenId && preview.mesh)
             return preview;
     }
+
     return canvas.tokens?.get?.(tokenId) ?? null;
 }
 
@@ -286,8 +319,10 @@ export function _syncHubPosition(token)
     const entry = _overlayHubs.get(token.id);
     if (!entry)
         return;
+
     const active = _activeForId(token.id) ?? token;
     const iso = _getIsoState(active);
+
     if (iso && active.mesh)
         entry.wrapper.position.set(active.mesh.position.x, active.mesh.position.y);
     else
@@ -310,6 +345,7 @@ export function drawStatHub()
     const oldEntry = _overlayHubs.get(token.id);
     const prevAlpha = oldEntry?.wrapper?.alpha;
     const savedFlashes = [];
+
     if (oldEntry?.hub)
     {
         for (const child of [...oldEntry.hub.children])
@@ -321,6 +357,7 @@ export function drawStatHub()
             }
         }
     }
+
     _removeOverlayHub(token.id);
 
     if (!isEnabled() || !isLancerCombatant(actor))
@@ -355,9 +392,11 @@ export function drawStatHub()
     const minBarW = followsTokenWidth(actor) ? token.w : (canvas.dimensions?.size ?? token.w);
     const width = Math.min(MAX_BAR_WIDTH, Math.max(token.w, minBarW));
     const rowHeightOverride = statBarRowHeight(token.document);
+
     const rowHeight = rowHeightOverride > 0
         ? rowHeightOverride
         : Math.max(3, Math.round(canvas.dimensions.size * 0.07));
+
     const chromeScale = Math.max(0.5, rowHeight / REF_ROW_HEIGHT);
     const rowGap = chromeScale;
     const startY = token.h + Math.max(2, Math.round(rowHeight * 0.4)) - rowHeight;
@@ -367,8 +406,10 @@ export function drawStatHub()
     const reactions = reactionEnabled ? reactionCounts(actor) : null;
     // Reaction extends left of the bar block.
     let indicatorW = reactionEnabled ? rowHeight : 0;
+
     if (reactions && reactions.total > 1)
         indicatorW = reactions.total * armorTickW + (reactions.total - 1) * armorTickGap + 2 * chromeScale;
+
     const indicatorGap = reactionEnabled ? chromeScale : 0;
     const reactionExtension = indicatorW + indicatorGap;
     const layoutOffsetX = 0;
@@ -377,6 +418,7 @@ export function drawStatHub()
     const colGap = mechStats ? chromeScale : 0;
     // Pip column shrinks with fewer pips, capped at 4 for sizing.
     let pipColW = 0;
+
     if (mechStats)
     {
         const baseColW = Math.floor(usableW * 0.32);
@@ -388,9 +430,11 @@ export function drawStatHub()
 
     // Armor ticks: right of HP bar, GM/owners only.
     const armorVal = _armorTicks(actor);
+
     const armorW = armorVal > 0
         ? armorVal * armorTickW + (armorVal - 1) * armorTickGap + 2 * chromeScale
         : 0;
+
     const armorGap = armorVal > 0 ? colGap : 0;
 
     const rightColX = layoutOffsetX + pipColW + colGap;
@@ -405,6 +449,7 @@ export function drawStatHub()
     wrapper.addChild(container);
 
     const iso = _getIsoState(token);
+
     if (iso && token.mesh)
     {
         wrapper.position.set(token.mesh.position.x, token.mesh.position.y);
@@ -426,12 +471,15 @@ export function drawStatHub()
 
     const mechDetail = actor.type === 'mech' && (game.user?.isGM || actor.isOwner);
     const ocSequence = actor.system?.overcharge_sequence;
+
     const ocSteps = mechDetail && typeof ocSequence === 'string' && visibleIds.has('heat')
         ? Math.max(0, ocSequence.split(',').length - 1)
         : 0;
+
     const ocW = ocSteps > 0
         ? ocSteps * armorTickW + (ocSteps - 1) * armorTickGap + 2 * chromeScale
         : 0;
+
     const armorExt = armorVal > 0 && visibleIds.has('hp') ? armorGap + armorW : 0;
     const sideExt = Math.max(armorExt, ocSteps > 0 ? colGap + ocW : 0);
     const repairsMax = mechDetail && reactionEnabled ? Math.max(0, actor.system?.repairs?.max ?? 0) : 0;
@@ -446,6 +494,7 @@ export function drawStatHub()
     container.addChild(gfx);
 
     gfx.lineStyle(0);
+
     // Reaction: hangs off the left edge. Skipped for deployables.
     if (reactions)
     {
@@ -454,6 +503,7 @@ export function drawStatHub()
         reactionGfx.beginFill(0x111111, 0.9);
         reactionGfx.drawRect(reactionX, 0, indicatorW, rowHeight);
         reactionGfx.endFill();
+
         if (reactions.total > 1)
         {
             for (let slot = 0; slot < reactions.total; slot++)
@@ -471,6 +521,7 @@ export function drawStatHub()
             reactionGfx.drawRect(reactionX + chromeScale, chromeScale, indicatorW - 2 * chromeScale, rowHeight - 2 * chromeScale);
             reactionGfx.endFill();
         }
+
         _addFixedBox(container, reactionGfx, 0, tokenId);
     }
 
@@ -481,6 +532,7 @@ export function drawStatHub()
         gaugeGfx.beginFill(0x111111, 0.9);
         gaugeGfx.drawRect(gaugeGeom.gaugeX, 0, gaugeW, gaugeGeom.gaugeH);
         gaugeGfx.endFill();
+
         for (let segIdx = 0; segIdx < repairsMax; segIdx++)
         {
             const seg = _gaugeSegment(gaugeGeom, segIdx);
@@ -489,11 +541,13 @@ export function drawStatHub()
             gaugeGfx.drawRect(seg.x, seg.y, seg.w, Math.max(0.3, seg.h));
             gaugeGfx.endFill();
         }
+
         _addFixedBox(container, gaugeGfx, 0, tokenId);
     }
 
     const coreCenterX = reactionLeft + indicatorW - rowHeight / 2;
     const coreCenterY = rowHeight + rowGap + rowHeight / 2;
+
     if (mechDetail && reactionEnabled && rows.length > 1)
     {
         const core = corePowerState(actor);
@@ -501,12 +555,14 @@ export function drawStatHub()
         const centerY = coreCenterY;
         const diamondPoints = size => [centerX, centerY - size, centerX + size, centerY, centerX, centerY + size, centerX - size, centerY];
         const coreGfx = new PIXI.Graphics();
+
         if (core.active)
         {
             coreGfx.beginFill(0xffffff, 0.25);
             coreGfx.drawPolygon(diamondPoints(rowHeight / 2 + chromeScale));
             coreGfx.endFill();
         }
+
         coreGfx.beginFill(0x111111, 0.9);
         coreGfx.drawPolygon(diamondPoints(rowHeight / 2));
         coreGfx.endFill();
@@ -515,6 +571,7 @@ export function drawStatHub()
         coreGfx.drawPolygon(diamondPoints(rowHeight / 2 - chromeScale * 1.1));
         coreGfx.endFill();
         _addFixedBox(container, coreGfx, 0, tokenId);
+
         if (core.active && !_reduceMotion())
         {
             const breathGfx = new PIXI.Graphics();
@@ -528,6 +585,7 @@ export function drawStatHub()
     {
         const rowY = rowIdx * (rowHeight + rowGap);
         const [leftDef, rightDef] = row;
+
         if (leftDef && visibleIds.has(leftDef.id))
             drawSegment(gfx, layoutOffsetX, rowY, pipColW, rowHeight, leftDef, leftDef.getValue(actor), chromeScale);
         if (rightDef && visibleIds.has(rightDef.id))
@@ -541,6 +599,7 @@ export function drawStatHub()
         let step = HP_TICK_STEP;
         while (hpMax > 0 && innerW * step / hpMax < 3 * chromeScale)
             step *= 2;
+
         const tickW = Math.max(0.5, chromeScale * 0.6);
         gfx.beginFill(0x000000, 0.55);
         for (let hpMark = step; hpMark < hpMax; hpMark += step)
@@ -556,6 +615,7 @@ export function drawStatHub()
         armorGfx.beginFill(0x111111, 0.9);
         armorGfx.drawRect(armorGap, 0, armorW, rowHeight);
         armorGfx.endFill();
+
         for (let tickIdx = 0; tickIdx < armorVal; tickIdx++)
         {
             const tx = armorGap + chromeScale + tickIdx * (armorTickW + armorTickGap);
@@ -563,6 +623,7 @@ export function drawStatHub()
             armorGfx.drawRect(tx, chromeScale, armorTickW, innerH);
             armorGfx.endFill();
         }
+
         _addFixedBox(container, armorGfx, rightColX + rightColW, tokenId);
     }
 
@@ -575,6 +636,7 @@ export function drawStatHub()
         ocGfx.beginFill(0x111111, 0.9);
         ocGfx.drawRect(colGap, heatRowY, ocW, rowHeight);
         ocGfx.endFill();
+
         for (let tickIdx = 0; tickIdx < ocSteps; tickIdx++)
         {
             const lit = tickIdx < ocStage;
@@ -583,7 +645,9 @@ export function drawStatHub()
             ocGfx.drawRect(tx, heatRowY + chromeScale, armorTickW, innerH);
             ocGfx.endFill();
         }
+
         _addFixedBox(container, ocGfx, rightColX + rightColW, tokenId);
+
         if (ocStage >= ocSteps && !_reduceMotion())
         {
             const pulseGfx = new PIXI.Graphics();
@@ -601,6 +665,7 @@ export function drawStatHub()
     // Overshield overlay on HP row.
     const osVal = actor.system?.overshield?.value ?? 0;
     const hpMax = getEffectiveMax(actor, 'hp');
+
     if (osVal > 0 && hpMax > 0 && visibleIds.has('hp'))
     {
         const osPct = Math.min(1, osVal / hpMax);
@@ -626,12 +691,15 @@ export function drawStatHub()
                 canvas.app.ticker.remove(tick);
                 return;
             }
+
             osGfx.clear();
             const phase = (performance.now() % periodMs) / periodMs;
+
             for (let pixelIdx = 0; pixelIdx < osW; pixelIdx++)
             {
                 const base = osW > 1 ? pixelIdx / (osW - 1) : 0;
                 let mix = (base + phase) % 1;
+
                 if (mix > 0.5)
                     mix = 1 - mix;
                 mix *= 2;
@@ -642,11 +710,13 @@ export function drawStatHub()
                 osGfx.drawRect(osX + pixelIdx, osY, 1, osH);
                 osGfx.endFill();
             }
+
             // Right-edge terminator
             osGfx.beginFill(0x000000, 1);
             osGfx.drawRect(osX + osW - chromeScale, osY, chromeScale, osH);
             osGfx.endFill();
         };
+
         canvas.app.ticker.add(tick);
         tick();
     }
@@ -656,13 +726,17 @@ export function drawStatHub()
     {
         if (!visibleIds.has(hostId))
             return;
+
         const counterV = def.getValue(actor);
         if ((counterV.value ?? 0) <= 0)
             return;
+
         const hostV = find(hostId).getValue(actor);
         const hostMax = hostV.max ?? 0;
+
         if (hostMax <= 0)
             return;
+
         const barX = rightColX + 1;
         const barW = rightColW - 2;
         const stripeY = rowIdx * (rowHeight + rowGap) + 1;
@@ -673,6 +747,7 @@ export function drawStatHub()
 
         let stripeX;
         let stripeW;
+
         if (direction === 'left')
         {
             stripeX = barX + Math.max(0, fillPx - counterPx);
@@ -683,6 +758,7 @@ export function drawStatHub()
             stripeX = barX + fillPx;
             stripeW = Math.min(counterPx, barW - fillPx);
         }
+
         if (stripeW <= 0)
             return;
 
@@ -704,6 +780,7 @@ export function drawStatHub()
             stripeGfx.alpha = 0.85;
             return;
         }
+
         const pulse = () =>
         {
             if (!stripeGfx || stripeGfx.destroyed)
@@ -711,10 +788,13 @@ export function drawStatHub()
                 canvas.app.ticker.remove(pulse);
                 return;
             }
+
             stripeGfx.alpha = 0.6 + 0.4 * _breath(AMBIENT_BREATH_MS);
         };
+
         canvas.app.ticker.add(pulse);
     };
+
     drawCounterStripe(0, find('burn'), 'hp', 'left');
     drawCounterStripe(1, find('infection'), 'heat', 'right');
 
@@ -726,6 +806,7 @@ export function drawStatHub()
         const heatRowY = rowHeight + rowGap;
         const heatV = find('heat').getValue(actor);
         const heatMax = heatV.max ?? 0;
+
         if (heatMax > 0)
         {
             const heatGfx = new PIXI.Graphics();
@@ -734,12 +815,14 @@ export function drawStatHub()
 
             const heatPct = Math.max(0, Math.min(1, (heatV.value ?? 0) / heatMax));
             const fillW = heatBarW * heatPct;
+
             if (fillW > 0)
             {
                 heatGfx.beginFill(0x000000, 1);
                 heatGfx.drawRect(heatBarX + fillW - chromeScale, heatRowY + chromeScale, chromeScale, rowHeight - 2 * chromeScale);
                 heatGfx.endFill();
             }
+
             // Danger Zone tick at 50%.
             const dangerX = heatBarX + heatBarW * 0.5 - Math.floor(chromeScale / 2);
             heatGfx.beginFill(0x882222, 0.8);
@@ -753,9 +836,11 @@ export function drawStatHub()
     // Extra bars (user-defined via Resources tab): drawn live post-bake so value redraws don't invalidate the baked chrome.
     const extraLines = _hubExtraLines(actor, token.document);
     const extrasGeom = [];
+
     const extrasSeparator = extraLines.length > 0 && rows.length > 0
         ? Math.max(1, Math.round(chromeScale))
         : 0;
+
     if (extraLines.length > 0)
     {
         const extraGfx = new PIXI.Graphics();
@@ -764,17 +849,20 @@ export function drawStatHub()
         const extrasStartY = rows.length * (rowHeight + rowGap) + extrasSeparator;
         const lineGap = Math.floor(chromeScale);
         const interGap = chromeScale;
+
         for (let li = 0; li < extraLines.length; li++)
         {
             const line = extraLines[li];
             const lineY = extrasStartY + li * (rowHeight + lineGap);
             let runningX = 0;
             const entryGeoms = [];
+
             for (let ei = 0; ei < line.length; ei++)
             {
                 const { entry, width, value, max, segments, color } = line[ei];
                 const slot = Math.floor(usableW * (width / 100));
                 const entryWidth = Math.max(2, slot - (ei < line.length - 1 ? interGap : 0));
+
                 if (entry?.segmented)
                 {
                     drawSegment(
@@ -793,6 +881,7 @@ export function drawStatHub()
                         chromeScale
                     );
                 }
+
                 entryGeoms.push({
                     entryId: entry.id,
                     x: runningX,
@@ -804,8 +893,10 @@ export function drawStatHub()
                 });
                 runningX += slot;
             }
+
             extrasGeom.push({ y: lineY, entries: entryGeoms });
         }
+
         // Bake to match the chrome (raw Graphics look noticeably sharper).
         bakeAndSwap(container, extraGfx, token.id);
     }
@@ -846,6 +937,7 @@ export function drawStatHub()
     const extraLinesHeight = extraLines.length > 0
         ? extraLines.length * rowHeight + (extraLines.length - 1) * Math.floor(chromeScale) + Math.floor(chromeScale)
         : 0;
+
     const totalHeight = rows.length * (rowHeight + rowGap) - rowGap + extrasSeparator + extraLinesHeight;
     token.bars.visible = true;
     token.bars.height = totalHeight;
@@ -881,6 +973,7 @@ export function drawStatHub()
     {
         if (tok.destroyed || !tok.bars)
             return;
+
         const undoCache = (node) =>
         {
             if (node instanceof PIXI.Graphics && node.cacheAsBitmap)
@@ -888,6 +981,7 @@ export function drawStatHub()
             if (node.children)
                 node.children.forEach(undoCache);
         };
+
         undoCache(tok.bars);
     }, 0);
 }
@@ -900,6 +994,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         return;
     if (getWorldSetting(SETTING_SHOW_VALUES, true) === false)
         return;
+
     const innerH = rowHeight - 2;
     const renderScale = 8;
     const renderFontSize = Math.max(8, (innerH + 2) * renderScale);
@@ -915,6 +1010,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         strokeThickness: renderStroke,
         align: 'left',
     });
+
     const whiteStyle = makeStyle(0xffffff);
 
     rows.forEach((row, rowIdx) =>
@@ -934,6 +1030,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         {
             const os = actor.system?.overshield?.value ?? 0;
             const burn = actor.system?.burn ?? 0;
+
             if (os > 0)
                 segments.push({ text: ` ${os}`, style: makeStyle(0x4488ff) });
             if (burn > 0)
@@ -958,6 +1055,7 @@ function _drawBarValueLabels(actor, rows, visibleIds, container, hpLabelX, heatL
         labelContainer.eventMode = 'none';
 
         let cursorX = 0;
+
         for (const seg of segments)
         {
             const txt = new PIXI.Text(seg.text, seg.style);
@@ -978,15 +1076,19 @@ function _countLabelUp(labelContainer, tokenId, barId, toVal)
     const countFrom = tokenId ? _countFrom.get(tokenId) : null;
     if (!countFrom)
         return;
+
     if (performance.now() - countFrom.at >= COUNT_MS)
     {
         _countFrom.delete(tokenId);
         return;
     }
+
     const fromVal = countFrom[barId];
     if (fromVal === undefined || fromVal === toVal || _reduceMotion())
         return;
+
     const texts = labelContainer.children;
+
     const count = () =>
     {
         if (labelContainer.destroyed)
@@ -994,17 +1096,21 @@ function _countLabelUp(labelContainer, tokenId, barId, toVal)
             canvas.app.ticker.remove(count);
             return;
         }
+
         const progress = Math.min(1, (performance.now() - countFrom.at) / COUNT_MS);
         texts[0].text = `${Math.round(fromVal + (toVal - fromVal) * _easeOut(progress))}`;
         let cursorX = 0;
+
         for (const child of texts)
         {
             child.position.x = cursorX;
             cursorX += child.width;
         }
+
         if (progress >= 1)
             canvas.app.ticker.remove(count);
     };
+
     canvas.app.ticker.add(count);
     count();
 }

@@ -102,10 +102,12 @@ interface TriggerDataBase {
     targetEntry?: { target?: Token; token?: Token; roll?: Roll; crit?: boolean; [key: string]: any } | null;
     /** Whether the trigger's attack is ranged. Item-less basic attacks report Melee, past 1 hex from every target they count as ranged. */
     isRangedAttack(): boolean;
-    /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape) on the current client. */
+    /** Launch the item's default activation flow (WeaponAttackFlow / ActivationFlow / SystemFlow depending on shape). Local when you own the reactor, else on its owner's client, awaited. */
     startRelatedFlow(): Promise<void>;
     /** Same as startRelatedFlow but routed to a user's client. `wait: true` awaits the remote flow. */
     startRelatedFlowToReactor(userId?: string | null, extraData?: Record<string, any> | null, options?: { wait?: boolean }): Promise<void>;
+    /** Yes/no card to the reactor's owner, then the reaction's own flow on the responder's client. Card options override the defaults (title, item, reactor as owner and origin, triggering token as related). `wait` (default true) awaits the remote flow, `background` starts it without waiting at all. */
+    askToActivate(card?: Record<string, any>, options?: { extraData?: Record<string, any>; wait?: boolean; background?: boolean }): Promise<{ confirmed: boolean; responderIds: string[] }>;
     /** Sends a message to the reactor token's owner client. Calls onMessage on the matching reaction there. Token, TokenDocument and Actor values in data are sent by id and resolved on the receiver, the rest must be JSON-serializable. If userId is omitted, falls back to the token's owner (with a warning). `wait: true` awaits the remote handler and resolves with whatever it returned. */
     sendMessageToReactor(data: any, userId?: string | null, options?: { wait?: boolean; waitTitle?: string | null; waitDescription?: string | null; waitItem?: Item | null; waitOriginToken?: Token | null; waitRelatedToken?: Token | null }): Promise<any>;
     /** Dumps triggerType/triggerData/reactorToken/item/activationName to the console and returns a summary. */
@@ -224,6 +226,8 @@ interface TriggerDataOnPreMove extends TriggerDataBase {
     endPos: { x: number; y: number };
     isDrag: boolean;
     moveInfo: MoveInfo;
+    /** Waypoints of the move as dragged. Empty when the move carries none. */
+    originalPath: Array<{ x: number; y: number; elevation?: number; action?: string }>;
     cancel: () => void;
     cancelTriggeredMove: (reason?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
     changeTriggeredMove: (position: { x: number; y: number; elevation?: number }, extraData?: object, reason?: string, allowConfirm?: boolean, userIdControl?: string | string[] | null, preConfirm?: (() => Promise<boolean>) | null, postChoice?: ((chose: boolean) => any) | null, opts?: { item?: any; originToken?: Token | null; relatedToken?: Token | null }) => Promise<void>;
@@ -349,6 +353,18 @@ interface TriggerDataOnTechMiss extends TriggerDataBase {
     triggeringToken: Token;
     techItem: any;
     targets: AttackMissEntry[];
+    actionName: string;
+    isInvade: boolean;
+    tags: Array<{ lid: string;[key: string]: any }>;
+    actionData: ActionData;
+    distanceToTrigger: number | null;
+    canTriggerReaction?: boolean;
+}
+
+interface TriggerDataOnInvadeHit extends TriggerDataBase {
+    triggeringToken: Token;
+    techItem: any;
+    targets: AttackHitEntry[];
     actionName: string;
     isInvade: boolean;
     tags: Array<{ lid: string;[key: string]: any }>;
@@ -569,6 +585,8 @@ interface TriggerDataOnTurnEnd extends TriggerDataBase { triggeringToken: Token;
 interface TriggerDataOnEnterCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 interface TriggerDataOnExitCombat extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
 interface TriggerDataOnFullRepair extends TriggerDataBase { triggeringToken: Token; distanceToTrigger: number | null; canTriggerReaction?: boolean; }
+interface TriggerDataOnCombatStart extends TriggerDataBase { combat: Combat; canTriggerReaction?: boolean; }
+interface TriggerDataOnCombatEnd extends TriggerDataBase { combat: Combat; canTriggerReaction?: boolean; }
 
 type TriggerData =
     | TriggerDataOnMove
@@ -583,6 +601,7 @@ type TriggerData =
     | TriggerDataOnTechAttack
     | TriggerDataOnTechHit
     | TriggerDataOnTechMiss
+    | TriggerDataOnInvadeHit
     | TriggerDataOnInitTechAttack
     | TriggerDataOnCheck
     | TriggerDataOnInitCheck
@@ -606,7 +625,9 @@ type TriggerData =
     | TriggerDataOnTurnEnd
     | TriggerDataOnEnterCombat
     | TriggerDataOnExitCombat
-    | TriggerDataOnFullRepair;
+    | TriggerDataOnFullRepair
+    | TriggerDataOnCombatStart
+    | TriggerDataOnCombatEnd;
 
 type TriggerType =
     | "onMove" | "onPreMove"
@@ -615,7 +636,7 @@ type TriggerType =
     | "onDamage"
     | "onHit" | "onMiss"
     | "onAttack"
-    | "onTechAttack" | "onTechHit" | "onTechMiss"
+    | "onTechAttack" | "onTechHit" | "onTechMiss" | "onInvadeHit"
     | "onCheck"
     | "onActivation" | "onInitActivation"
     | "onEndActivation" | "onInitEndActivation"
@@ -632,6 +653,7 @@ type TriggerType =
     | "onDeploy"
     | "onTurnStart" | "onTurnEnd"
     | "onRoundStart" | "onRoundEnd"
+    | "onCombatStart" | "onCombatEnd"
     | "onEnterCombat" | "onExitCombat"
     | "onFullRepair"
     | "onUpdate";
@@ -663,13 +685,16 @@ interface ConsumptionConfig {
 interface LancerAutomationsAPI {
     // OverwatchAPI
 
-    // ReactionsAPI
+    // AutomationsAPI
     executeSimpleActivation(actor: any, options: object, extraData?: object): Promise<{ completed: boolean; flow: any }>;  // scripts/tools/misc-tools.js
     playMineDetonationFX(mineToken: Token): Promise<void>;  // scripts/fx/actionFX.js
     /** Register item-based reactions keyed by item LID */
-    registerDefaultItemReactions(reactions: Record<string, ReactionGroup>): void;  // scripts/activations/reactions-registry.js
+    registerDefaultItemAutomations(reactions: Record<string, AutomationGroup>): void;  // scripts/activations/automation-registry.js
     /** Register general (non-item) reactions by name */
-    registerDefaultGeneralReactions(reactions: Record<string, ReactionConfig | ReactionGroup>): void;  // scripts/activations/reactions-registry.js
+    registerDefaultGeneralAutomations(reactions: Record<string, AutomationConfig | AutomationGroup>): void;  // scripts/activations/automation-registry.js
+    registerDefaultItemReactions(reactions: Record<string, AutomationGroup>): void;  // LEGACY NAME of registerDefaultItemAutomations
+    registerDefaultGeneralReactions(reactions: Record<string, AutomationConfig | AutomationGroup>): void;  // LEGACY NAME of registerDefaultGeneralAutomations
+    checkOnInitReactions(token: any, filterItem?: any): Promise<void>;  // LEGACY NAME of checkOnInitAutomations
     /** Register a named utility function retrievable across activation scripts */
     registerUserHelper(name: string, fn: Function): void;  // scripts/main.js
     /** Retrieve a registered user helper by name */
@@ -718,7 +743,7 @@ interface LancerAutomationsAPI {
     checkEffectImmunities: typeof import("../bonuses/genericBonuses.js").checkEffectImmunities;
     /** @deprecated Use applyEffectsToTokens */
     setEffect: typeof import("../bonuses/flagged-effects.js").setEffect;
-    processEffectConsumption(triggerType: TriggerType, triggerData: TriggerData): Promise<void>;  // scripts/activations/reactions-engine.js
+    processEffectConsumption(triggerType: TriggerType, triggerData: TriggerData): Promise<void>;  // scripts/activations/automation-engine.js
     executeEffectManager: typeof import("../bonuses/effectManager.js").executeEffectManager;
 
     // BonusesAPI
@@ -756,6 +781,7 @@ interface LancerAutomationsAPI {
     removeGlobalBonus: typeof import("../bonuses/genericBonuses.js").removeGlobalBonus;
     consumeBonusUse(actor: any, bonus: any, opts?: { removeWhenNoUses?: boolean }): Promise<string | false>;  // scripts/bonuses/genericBonuses.js
     consumeImmunityUse(actor: any, subtype: string, state?: any, options?: { damageTypes?: string[] | null; bonuses?: object[] | null; aoe?: boolean }): Promise<boolean>;  // scripts/bonuses/genericBonuses.js
+    consumeMovementUse(actor: any, subtype: string, state?: any, options?: { bonuses?: object[] | null }): Promise<boolean>;  // scripts/bonuses/genericBonuses.js
     supportsConsumeOnUsage: typeof import("../bonuses/genericBonuses.js").supportsConsumeOnUsage;
     getGlobalBonuses: typeof import("../bonuses/genericBonuses.js").getGlobalBonuses;
     addConstantBonus: typeof import("../bonuses/genericBonuses.js").addConstantBonus;
@@ -763,6 +789,7 @@ interface LancerAutomationsAPI {
     getConstantBonuses: typeof import("../bonuses/genericBonuses.js").getConstantBonuses;
     removeConstantBonus: typeof import("../bonuses/genericBonuses.js").removeConstantBonus;
     getImmunityBonuses: typeof import("../bonuses/genericBonuses.js").getImmunityBonuses;
+    getMovementBonuses: typeof import("../bonuses/genericBonuses.js").getMovementBonuses;
     applyDamageImmunities(actor: any, damages: Array<{ type: string; val: any }>, state?: any, bonuses?: object[] | null, aoe?: boolean): Array<{ type: string; val: any }>;  // scripts/bonuses/genericBonuses.js
     hasCritImmunity: typeof import("../bonuses/genericBonuses.js").hasCritImmunity;
     hasHitImmunity: typeof import("../bonuses/genericBonuses.js").hasHitImmunity;
@@ -820,6 +847,8 @@ interface LancerAutomationsAPI {
         attachToToken?: TokenDocument | string;
         rangeOrigin?: { x: number; y: number } | null;
         expires?: { on: "ownerTurnStart" | "ownerTurnEnd"; originToken?: Token | string; turns?: number };
+        key?: string;
+        replace?: boolean;
         /** Extra templatemacro graphics flags (fill/line/texture), merged onto the template */
         tmacGraphics?: Record<string, any>;
         /** Template Macro library preset, by name or id */
@@ -836,13 +865,13 @@ interface LancerAutomationsAPI {
         title?: string;
         noCard?: boolean;
     }): Promise<any>;
-    moveTokenRuler(tokenOrTokens: Token | Token[], options?: { range?: number; free?: boolean; action?: string; title?: string; description?: string; icon?: string; headerClass?: string; cost?: number; urgent?: boolean; planOnly?: boolean; awayFrom?: Token | TokenDocument | { x: number; y: number } }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
-    knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any; awayFrom?: Token | TokenDocument | { x: number; y: number } }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
+    moveTokenRuler(tokenOrTokens: Token | Token[], options?: { range?: number; free?: boolean; action?: string; title?: string; description?: string; icon?: string; headerClass?: string; cost?: number; urgent?: boolean; planOnly?: boolean; awayFrom?: Token | TokenDocument | { x: number; y: number }; presets?: Record<string, { x: number; y: number }>; stayAdjacentTo?: Token }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
+    knockBackToken(tokens: Token | Token[], distance: number, options?: { title?: string; description?: string; icon?: string; headerClass?: string; triggeringToken?: Token; actionName?: string; item?: any; awayFrom?: Token | TokenDocument | { x: number; y: number }; presets?: Record<string, { x: number; y: number }>; stayAdjacentTo?: Token }): Promise<any>;  // scripts/interactive/tools/moveTokenRuler.js
     applyKnockbackMoves(moveList: Array<{ tokenId: string; updateData: { x: number; y: number } }>, triggeringToken: Token | null, distance: number, actionName?: string, item?: any, options?: { asVoluntary?: boolean }): Promise<void>;  // scripts/interactive/canvas-helpers.js
     startChoiceCard: typeof import("../interactive/network.js").startChoiceCard;
-    confirmCard(options?: { title?: string; description?: string; icon?: string; confirmText?: string; confirmIcon?: string; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<boolean>;  // scripts/interactive/network.js
+    confirmCard(options?: { title?: string; description?: string; icon?: string; confirmText?: string; confirmIcon?: string; owner?: Token; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<boolean>;  // scripts/interactive/network.js
     askCard(options?: { title?: string; description?: string; icon?: string; yesText?: string; yesIcon?: string; noText?: string; noIcon?: string; owner?: Token; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<{ confirmed: boolean; responderIds: string[] }>;  // scripts/interactive/network.js
-    pickCard(entries: any[], options?: { label?: string | ((entry: any) => string); entryIcon?: string | ((entry: any) => string); title?: string; description?: string; icon?: string; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<any | null>;  // scripts/interactive/network.js
+    pickCard(entries: any[], options?: { label?: string | ((entry: any) => string); entryIcon?: string | ((entry: any) => string); title?: string; description?: string; icon?: string; owner?: Token; userIdControl?: string | string[] | null; item?: Item; relatedToken?: Token | null; originToken?: Token | null }): Promise<any | null>;  // scripts/interactive/network.js
     openChoiceMenu: typeof import("../interactive/combat.js").openChoiceMenu;
     pickItem(items: any[], options?: {  // scripts/interactive/deployables.js
         title?: string;
@@ -874,6 +903,7 @@ interface LancerAutomationsAPI {
     isFriendly: typeof import("../combat/overwatch.js").isFriendly;
     getTokenCells: typeof import("../combat/terrain-utils.js").getTokenCells;
     getMaxGroundHeightUnderToken: typeof import("../combat/terrain-utils.js").getMaxGroundHeightUnderToken;
+    getRestingElevationUnderToken: typeof import("../combat/terrain-utils.js").getRestingElevationUnderToken;
     drawThreatDebug: typeof import("../combat/overwatch.js").drawThreatDebug;
     drawDistanceDebug(): void;  // scripts/combat/overwatch.js
     drawRangeHighlight(token: Token, range: number, color?: number, alpha?: number): any;  // scripts/interactive/canvas-helpers.js
@@ -951,6 +981,8 @@ interface LancerAutomationsAPI {
     openDeployableMenu: typeof import("../interactive/deployables.js").openDeployableMenu;
     recallDeployable: typeof import("../interactive/deployables.js").recallDeployable;
     pickupWeaponToken: typeof import("../interactive/deployables.js").pickupWeaponToken;
+    pickUpThrownWeapon: typeof import("../interactive/deployables.js").pickUpThrownWeapon;
+    removeDeployableToken: typeof import("../interactive/deployables.js").removeDeployableToken;
     openThrowMenu: typeof import("../interactive/combat.js").openThrowMenu;
     beginWeaponThrowFlow(weapon: any, options?: object, extraData?: object): Promise<{ completed: boolean; flow?: any }>;  // scripts/tools/misc-tools.js
     openItemBrowser: typeof import("../bonuses/effectManager.js").openItemBrowser;
@@ -970,8 +1002,8 @@ interface LancerAutomationsAPI {
     executeDowntime(): Promise<void>;  // scripts/tools/downtime.js
 
     // Main helpers
-    handleTrigger(triggerType: TriggerType | CustomTriggerType, data: object): Promise<void>;  // scripts/activations/reactions-engine.js
-    dispatchCustomTrigger(name: string, data?: object): Promise<void>;  // scripts/activations/reactions-engine.js
+    handleTrigger(triggerType: TriggerType | CustomTriggerType, data: object): Promise<void>;  // scripts/activations/automation-engine.js
+    dispatchCustomTrigger(name: string, data?: object): Promise<void>;  // scripts/activations/automation-engine.js
     getMovementHistory(token: Token | string): MovementHistoryResult | { exists: false };  // scripts/movement/move-tracking.js
     getCumulativeMoveData(tokenOrId: Token | string): MoveSummary;  // scripts/movement/move-tracking.js
     getIntentionalMoveData(tokenOrId: Token | string): MoveSummary;  // scripts/movement/move-tracking.js
@@ -1141,9 +1173,13 @@ interface LancerAutomationsAPI {
 
 
 
-// ReactionConfig
+// AutomationConfig
 
-type ReactionCallback = (
+/**
+ * LEGACY NAMES in these shapes: `reactorToken`, `reactions`, `reactionPath`. They mean "automation",
+ * not the Lancer Reaction action. See the note on AutomationManager (automation-manager.js).
+ */
+type AutomationCallback = (
     triggerType: TriggerType | CustomTriggerType,
     triggerData: TriggerData,
     reactorToken: Token,
@@ -1152,7 +1188,7 @@ type ReactionCallback = (
     api: LancerAutomationsAPI
 ) => any;
 
-interface ReactionConfig {
+interface AutomationConfig {
     category?: string;
     itemType?: string;
     triggers: (TriggerType | CustomTriggerType)[];
@@ -1179,20 +1215,20 @@ interface ReactionConfig {
     reactionPath?: string;
     dispositionFilter?: string[];
     onInit?: ((token: Token, item: any, api: LancerAutomationsAPI) => Promise<void>) | string;
-    onMessage?: ((triggerType: TriggerType, data: any, reactorToken: Token, item: any, activationName: string, api: LancerAutomationsAPI) => Promise<void>) | string;
-    evaluate?: ReactionCallback | string;
-    activationCode?: ReactionCallback | string;
+    onMessage?: ((triggerType: TriggerType, data: any, reactorToken: Token, item: any, activationName: string, api: LancerAutomationsAPI) => Promise<any>) | string;
+    evaluate?: AutomationCallback | string;
+    activationCode?: AutomationCallback | string;
     triggerDescription?: string;
     effectDescription?: string;
     comments?: string;
     [key: string]: any;
 }
 
-interface ReactionGroup {
+interface AutomationGroup {
     category?: string;
     itemType?: string;
     enabled?: boolean;
-    reactions: ReactionConfig[];
+    reactions: AutomationConfig[];
     [key: string]: any;
 }
 
@@ -1225,5 +1261,6 @@ interface LancerEffectFlags {
     suppressSourceId?: string;
     RemoteMachineGunID?: string;
     markerRifleSource?: string;
+    grantActions?: GrantedAction[];
     [key: string]: any;
 }

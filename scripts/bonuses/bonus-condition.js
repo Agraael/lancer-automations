@@ -23,6 +23,7 @@ function frequencyLabel(entry)
 {
     if (!FREQUENCY_PERIODS.has(entry?.frequency))
         return '';
+
     const count = Math.max(1, Number.parseInt(entry.frequencyCount) || 1);
     return count === 1 ? `Once per ${entry.frequency}` : `${count} times per ${entry.frequency}`;
 }
@@ -30,18 +31,22 @@ function frequencyLabel(entry)
 export function getBonusConditionLines(bonus)
 {
     const lines = [];
+
     const collect = (entry, prefix) =>
     {
         const frequency = frequencyLabel(entry);
         if (frequency)
             lines.push(`${prefix}${frequency}`);
+
         const own = lambdaSource(entry?.condition);
         if (own)
             lines.push(`${prefix}Condition: ${own}`);
+
         const perTarget = lambdaSource(entry?.applyToCondition);
         if (perTarget)
             lines.push(`${prefix}Per target: ${perTarget}`);
     };
+
     collect(bonus, '');
     if (bonus?.type === 'multi' && Array.isArray(bonus.bonuses))
         bonus.bonuses.forEach((sub, idx) => collect(sub, `#${idx + 1} `));

@@ -53,9 +53,11 @@ export function drawMovePath(graphic, points, { markerRadius = 0 } = {})
     if (points.length < 2)
         return;
     graphic.moveTo(points[0].x, points[0].y);
+
     for (let pointIdx = 1; pointIdx < points.length; pointIdx++)
     {
         graphic.lineTo(points[pointIdx].x, points[pointIdx].y);
+
         if (markerRadius > 0 && pointIdx < points.length - 1)
         {
             graphic.drawCircle(points[pointIdx].x, points[pointIdx].y, markerRadius);

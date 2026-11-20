@@ -4,7 +4,7 @@ import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag, setLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { executeEffectManager } from "./effectManager.js";
-import { stringToAsyncFunction } from "../activations/reaction-manager.js";
+import { stringToAsyncFunction } from "../activations/automation-manager.js";
 import { weaponClass, getWeaponType, checkGate, consumeGate, isItemAvailable, isExecutorGM } from "../tools/misc-tools.js";
 import { v3ActorRows, v3BonusDurationOptions, isV3DataReplaced } from "../tools/v3-data.js";
 import { v3ConditionMet } from "../tools/v3-condition.js";
@@ -36,11 +36,13 @@ const applyToConditionCache = new Map();
 function compileCachedLambda(src, cache, argNames, preamble)
 {
     let fn = cache.get(src);
+
     if (!fn)
     {
         fn = new Function(...argNames, `${preamble}return(${src})(${argNames.join(',')});`);
         cache.set(src, fn);
     }
+
     return fn;
 }
 
@@ -55,6 +57,7 @@ function serializeBonusLambdas(bonusData)
 {
     if (!bonusData)
         return bonusData;
+
     const serializeOne = (bonus) =>
     {
         let out = bonus;
@@ -64,6 +67,7 @@ function serializeBonusLambdas(bonusData)
             out = { ...out, applyToCondition: '@@fn:' + out.applyToCondition.toString() };
         return out;
     };
+
     let serialized = serializeOne(bonusData);
     if (serialized.type === 'multi' && Array.isArray(serialized.bonuses))
         serialized = { ...serialized, bonuses: serialized.bonuses.map(serializeOne) };
@@ -75,6 +79,7 @@ export function runApplyToCondition(mod, targetToken, state, reactorToken, entry
 {
     if (!mod.applyToCondition)
         return true;
+
     try
     {
         let fn;
@@ -91,12 +96,15 @@ export function runApplyToCondition(mod, targetToken, state, reactorToken, entry
         }
         else
             return true;
+
         const result = fn(targetToken, state, reactorToken, entry);
+
         if (result instanceof Promise)
         {
             console.error(`lancer-automations | applyToCondition for "${mod.name || mod.id}" is async. Must be synchronous.`);
             return false;
         }
+
         return !!result;
     }
     catch (e)
@@ -116,8 +124,10 @@ export function flattenBonuses(bonuses)
 {
     if (!bonuses)
         return [];
+
     const bonusArray = Array.isArray(bonuses) ? bonuses : [bonuses];
     const flattened = [];
+
     for (const bonus of bonusArray)
     {
         if (bonus.type === 'multi' && Array.isArray(bonus.bonuses))
@@ -149,20 +159,8 @@ export function flattenBonuses(bonuses)
         else
             flattened.push(normalizeBonusShape(bonus));
     }
-    return flattened;
-}
 
-async function delegateSetActorFlag(actor, ns, key, value)
-{
-    if (game.user.isGM || actor.isOwner)
-        await actor.setFlag(ns, key, value);
-    else
-    {
-        game.socket.emit('module.lancer-automations', {
-            action: "setActorFlag",
-            payload: { actorId: actor.id, ns, key, value }
-        });
-    }
+    return flattened;
 }
 
 
@@ -188,6 +186,7 @@ export function applyTagBonus(state, bonus)
 
     // Adding or Overriding
     const existingIdx = state.data.tags.findIndex(t => t.id === tagId || t.lid === tagId);
+
     if (existingIdx !== -1)
     {
         const tag = { ...state.data.tags[existingIdx] }; // Clone so we don't mutate the base definition
@@ -201,6 +200,7 @@ export function applyTagBonus(state, bonus)
             const currentVal = Number.parseInt(tag.val) || Number.parseInt(tag.num_val) || 0;
             tag.val = String(bonus.tagMode === 'at_least' ? Math.max(currentVal, val) : currentVal + val);
         }
+
         state.data.tags[existingIdx] = tag;
     }
     else
@@ -246,11 +246,13 @@ export function mutateRangeWithBonus(state, bonus)
     else
     {
         const existingIdx = state.data.range.findIndex(rangeEntry => rangeEntry.type === rangeType);
+
         if (existingIdx !== -1)
         {
             // Mutate in-place to preserve _Range prototype methods (icon getter, etc.)
             const entry = state.data.range[existingIdx];
             const current = Number.parseInt(entry.val) || 0;
+
             if (isOverride)
                 entry.val = val;
             else
@@ -260,6 +262,7 @@ export function mutateRangeWithBonus(state, bonus)
         {
             // Try to reuse the constructor from an existing range to preserve prototype methods
             const RangeClass = state.data.range[0]?.constructor;
+
             if (RangeClass && RangeClass !== Object)
                 state.data.range.push(new RangeClass({ type: rangeType, val }));
             else
@@ -305,6 +308,7 @@ export function mutatesBonusDamage(bonus)
 {
     if (bonus?.damageMode !== 'change_type')
         return false;
+
     const scope = damageBonusScope(bonus);
     return scope === 'bonus' || scope === 'all';
 }
@@ -326,6 +330,7 @@ export function mutateDamageWithBonus(state, bonus)
         return;
 
     const DamageClass = state.data.damage[0]?.constructor;
+
     const makeDamage = (val, type) =>
     {
         if (DamageClass && DamageClass !== Object)
@@ -337,6 +342,7 @@ export function mutateDamageWithBonus(state, bonus)
             catch (e)
             { /* fall through to plain object */ }
         }
+
         return { type, val: String(val) };
     };
 
@@ -360,10 +366,12 @@ export function mutateDamageWithBonus(state, bonus)
         // specific from-type wins over the 'all' fallback
         const specific = new Map();
         let allTarget = null;
+
         for (const dmgEntry of entries)
         {
             const from = dmgEntry.from || 'all';
             const to = dmgEntry.to || dmgEntry.type;
+
             if (!to)
                 continue;
             if (from === 'all')
@@ -374,6 +382,7 @@ export function mutateDamageWithBonus(state, bonus)
             else
                 specific.set(from, to);
         }
+
         for (const dmg of state.data.damage)
         {
             const target = specific.get(dmg.type) || allTarget;
@@ -383,12 +392,6 @@ export function mutateDamageWithBonus(state, bonus)
     }
 }
 
-/**
- * One-line display string for an LA bonus struct (Effect Manager, status panel).
- * Multi bonuses are the caller's job; this formats a single entry.
- * @param {any} bonus
- * @returns {string}
- */
 export const STAT_BONUS_GROUPS = [
     { label: 'Resources (Max)', stats: { 'system.hp.max': 'HP (Max)', 'system.heat.max': 'Heat Cap (Max)', 'system.repairs.max': 'Repair Cap (Max)', 'system.structure.max': 'Structure (Max)', 'system.stress.max': 'Stress (Max)' } },
     { label: 'Resources (Current)', stats: { 'system.hp.value': 'HP (Current)', 'system.heat.value': 'Heat (Current)', 'system.overshield.value': 'Overshield', 'system.burn': 'Burn', 'system.repairs.value': 'Repairs (Current)' } },
@@ -402,6 +405,7 @@ function statBonusLabel(stat)
         if (stat in group.stats)
             return group.stats[stat];
     }
+
     return stat?.split('.').pop() || stat;
 }
 
@@ -420,10 +424,17 @@ export function statBonusValueText(bonus)
         return `= ${bonus.val}`;
     if (mode === 'replace_base')
         return `base = ${bonus.val}`;
+
     const signed = signedValueText(bonus.val);
     return mode === 'overwrite' ? `${signed} (highest)` : signed;
 }
 
+/**
+ * One-line display string for an LA bonus struct (Effect Manager, status panel).
+ * Multi bonuses are the caller's job; this formats a single entry.
+ * @param {any} bonus
+ * @returns {string}
+ */
 export function getBonusDetailString(bonus)
 {
     if (bonus.type === 'accuracy')
@@ -434,10 +445,12 @@ export function getBonusDetailString(bonus)
         return `Flat ${signedValueText(bonus.val)}`;
     if (bonus.type === 'stat')
         return `${statBonusLabel(bonus.stat)} ${statBonusValueText(bonus)}`;
+
     if (bonus.type === 'damage')
     {
         const mode = bonus.damageMode || 'add';
         const entries = bonus.damage || [];
+
         if (mode === 'change_type')
         {
             const parts = entries.map(dmg =>
@@ -445,10 +458,12 @@ export function getBonusDetailString(bonus)
                 const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
                 return `${from} → ${dmg.to}`;
             });
+
             const scope = damageBonusScope(bonus);
             const scopeLabel = scope === 'base' ? '' : ` (${scope})`;
             return `Change Type${scopeLabel}: ${parts.join(', ')}`;
         }
+
         const body = entries.map(dmg => (dmg.type ? `${dmg.val} ${dmg.type}` : `${dmg.val}`)).join(' + ');
         if (mode === 'replace')
             return `Replace: ${body}`;
@@ -456,28 +471,37 @@ export function getBonusDetailString(bonus)
             return `Add: ${body}`;
         return bonus.critOnly ? `${body} on crit` : body;
     }
+
     if (bonus.type === 'tag')
     {
         if (bonus.removeTag)
             return `Remove Tag: ${bonus.tagName}`;
+
         const action = bonus.tagMode === 'override' ? 'Set' : bonus.tagMode === 'at_least' ? 'At least' : 'Add';
         return `${action} ${bonus.tagName} ${bonus.val}`;
     }
+
     if (bonus.type === 'range')
     {
         const rangeLabel = bonus.rangeMode === 'override' ? 'Set' : bonus.rangeMode === 'change' ? 'Change All →' : bonus.rangeMode === 'at_least' ? 'At least' : 'Add';
         return `${rangeLabel} ${bonus.rangeType} ${bonus.val}`;
     }
+
     if (bonus.type === 'action_extra')
         return `Extra ${ACTION_EXTRA_LABELS[bonus.subtype] ?? bonus.subtype} +${bonus.val ?? 1}`;
+
     if (bonus.type === 'movement_extra' || bonus.type === 'speed_boost_extra')
     {
         const leg = bonus.type === 'movement_extra' && bonus.subtype === 'standard' ? 'Standard Move' : 'Boost';
         return `${leg} ${signedValueText(bonus.val)} ${Math.abs(Number(bonus.val)) === 1 ? 'space' : 'spaces'}`;
     }
+
     const defense = normalizeBonusShape(bonus);
     if (defense.type === 'resistance' || defense.type === 'vulnerability')
         return `${defense.type === 'resistance' ? 'Resistance' : 'Vulnerability'}: ${(defense.damageTypes || []).join(', ')}`;
+    if (defense.type === 'movement')
+        return `Movement: ${MOVEMENT_TRAITS[defense.subtype]?.label ?? defense.subtype}`;
+
     if (bonus.type === 'immunity')
     {
         if (bonus.subtype === 'effect' && bonus.effects)
@@ -490,16 +514,11 @@ export function getBonusDetailString(bonus)
             return 'Immunity: Hit';
         if (bonus.subtype === 'miss')
             return 'Immunity: Miss';
-        if (bonus.subtype === 'elevation')
-            return 'Immunity: Elevation';
-        if (bonus.subtype === 'terrain')
-            return 'Immunity: Terrain';
-        if (bonus.subtype === 'obstacle')
-            return 'Immunity: Obstacle (Phasing)';
         if (bonus.subtype === 'provoke')
             return 'Immunity: Provoke (Engagement & Reactions)';
         return bonus.subtype;
     }
+
     if (bonus.type === 'target_modifier')
     {
         const labels = {
@@ -515,14 +534,17 @@ export function getBonusDetailString(bonus)
             hit: 'Force Hit',
             miss: 'Force Miss'
         };
+
         return `Target: ${labels[bonus.subtype] || bonus.subtype}`;
     }
+
     if (bonus.type === 'reroll')
     {
         const rerollTypes = Array.isArray(bonus.rollTypes) && bonus.rollTypes.length > 0 ? bonus.rollTypes.join(', ') : 'any';
         const subtype = String(bonus.subtype ?? 'retry');
         return `Reroll [${subtype}]: ${rerollTypes}`;
     }
+
     return bonus.type || 'Unknown';
 }
 
@@ -536,10 +558,11 @@ export function getBonusUsesInfo(actor, bonus)
 {
     if (bonus?.uses === undefined)
         return null;
+
     const linkedEffect = actor?.effects?.find(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id);
     const remaining = linkedEffect ? (linkedEffect.flags?.statuscounter?.value ?? null) : null;
     const label = remaining === null ? `uses: ${bonus.uses}` : `${remaining}/${bonus.uses}`;
-    const onUse = DEFENSE_TYPES.has(bonus.type) ? bonus.consumeOnUsage === true : bonus.consumeOnUsage !== false;
+    const onUse = CONSULTED_TYPES.has(bonus.type) ? bonus.consumeOnUsage === true : bonus.consumeOnUsage !== false;
     return { label, onUse: supportsConsumeOnUsage(bonus.type, bonus.subtype ?? null) && onUse };
 }
 
@@ -547,6 +570,14 @@ export function getBonusUsesInfo(actor, bonus)
 // so anything needing a real image goes through getBonusIconImage.
 const MOVEMENT_ICON = "mdi mdi-arrow-right-bold-hexagon-outline";
 const MOVEMENT_IMG = "modules/lancer-automations/icons/move-hexagon.svg";
+
+export const MOVEMENT_TRAITS = {
+    climber: { label: 'Climber', icon: 'modules/lancer-automations/icons/mountain-climbing.svg' },
+    terrain_immunity: { label: 'Terrain Immunity', icon: 'modules/lancer-automations/icons/metal-boot.svg' },
+    surefoot: { label: 'Surefoot', icon: 'modules/lancer-automations/icons/running-shoe.svg' },
+    phasing: { label: 'Phasing', icon: 'modules/lancer-automations/icons/back-forth.svg' },
+    straight_line: { label: 'Straight Line', icon: 'modules/lancer-automations/icons/rail-road.svg' },
+};
 
 /** Icon for an ActiveEffect img, which cannot be a font class. */
 export function getBonusIconImage(bonus, override = null)
@@ -574,6 +605,9 @@ export function getBonusIcon(bonus)
 
     if (bonus.type === 'movement_extra')
         return MOVEMENT_ICON;
+    const movement = normalizeBonusShape(bonus);
+    if (movement.type === 'movement')
+        return MOVEMENT_TRAITS[movement.subtype]?.icon ?? MOVEMENT_ICON;
     if (bonus.type === 'difficulty')
         return DIFF;
     if (bonus.type === 'range')
@@ -591,15 +625,18 @@ export function getBonusIcon(bonus)
     {
         const counts = {};
         let maxCount = 0, maxType = null;
+
         for (const sub of bonus.bonuses)
         {
             counts[sub.type] = (counts[sub.type] || 0) + 1;
+
             if (counts[sub.type] > maxCount)
             {
                 maxCount = counts[sub.type];
                 maxType = sub.type;
             }
         }
+
         return getBonusIcon({ type: maxType });
     }
 
@@ -614,6 +651,7 @@ export function getFlowTags(flowType, state)
     const tags = new Set(["all"]);
     for (const rollType of state.la_extraData?.rollTypes ?? [])
         tags.add(String(rollType).toLowerCase());
+
     const itemType = state.item?.system?.type?.toLowerCase();
 
     const addWeaponClassTags = () =>
@@ -657,6 +695,7 @@ export function getFlowTags(flowType, state)
     else if (["structure", "overheat", "damage"].includes(flowType))
     {
         tags.add(flowType);
+
         if (flowType === "damage")
         {
             if (itemType)
@@ -664,6 +703,7 @@ export function getFlowTags(flowType, state)
             addWeaponClassTags();
         }
     }
+
     return tags;
 }
 
@@ -685,6 +725,7 @@ export function isBonusApplicable(bonus, flowTags, state, { ignoreFrequency = fa
         {
             const context = bonus.context || {};
             let result;
+
             if (typeof bonus.condition === 'function')
                 result = bonus.condition(state, state.actor, state.data, context);
             else if (typeof bonus.condition === 'string' && bonus.condition.trim() !== '')
@@ -699,6 +740,7 @@ export function isBonusApplicable(bonus, flowTags, state, { ignoreFrequency = fa
                         `const ownerTokenId=context?.ownerTokenId;` +
                         `const reactorToken=ownerTokenId?canvas.tokens.get(ownerTokenId)??null:null;`
                     );
+
                     result = fn(state, state.actor, state.data, context);
                 }
                 else
@@ -707,11 +749,13 @@ export function isBonusApplicable(bonus, flowTags, state, { ignoreFrequency = fa
                     result = fn(state, state.actor, state.data, context);
                 }
             }
+
             if (result instanceof Promise)
             {
                 console.error(`lancer-automations | evaluate for "${bonus.name}" is async. Bonus condition must be synchronous.`);
                 return false;
             }
+
             if (!result)
                 return false;
         }
@@ -726,6 +770,7 @@ export function isBonusApplicable(bonus, flowTags, state, { ignoreFrequency = fa
     {
         if (!state.item)
             return false;
+
         const itemLid = state.item.system?.lid;
         if (!itemLid || !bonus.itemLids.includes(itemLid))
             return false;
@@ -775,9 +820,11 @@ function bonusMatchesWeapon(bonus, item, flowTags = null)
     const filters = WEAPON_FILTER_FIELDS.filter(field => Array.isArray(bonus[field]) && bonus[field].length);
     if (!filters.length)
         return true;
+
     const improvised = !item && !!flowTags?.has?.('improvised');
     if (!improvised && !getWeaponType(item))
         return false;
+
     const values = improvised ? IMPROVISED_FILTER_VALUES : weaponFilterValues(item);
     return filters.every(field => lowerList(bonus[field]).some(wanted => values[field].includes(wanted)));
 }
@@ -792,8 +839,10 @@ function _effectFlagsFrom(options)
     const flags = options?.effectFlags;
     if (!flags || typeof flags !== 'object')
         return {};
+
     /** @type {Record<string, any>} */
     const out = {};
+
     for (const [key, value] of Object.entries(flags))
     {
         if (EFFECT_FLAG_RESERVED.has(key))
@@ -801,8 +850,10 @@ function _effectFlagsFrom(options)
             console.warn(`lancer-automations | addGlobalBonus: effectFlags key '${key}' is reserved, skipped.`);
             continue;
         }
+
         out[key] = value;
     }
+
     return out;
 }
 
@@ -810,8 +861,10 @@ function _bonusDuration(options, originId)
 {
     const normalized = normalizeDuration({ label: options.duration || 'indefinite', rounds: options.durationRounds });
     const label = normalized.label;
+
     if (label === 'roundEnd' || label === 'roundStart')
         return { label, rounds: Math.max(1, Number(normalized.rounds) || 1), turns: null };
+
     if ((label === 'start' || label === 'end') && game.combat && originId)
     {
         const turnsVal = Number.isFinite(options.durationTurns) ? Math.max(0, options.durationTurns) : 1;
@@ -819,11 +872,13 @@ function _bonusDuration(options, originId)
         const turns = label === 'end' && isOriginTurn ? turnsVal + 1 : (turnsVal === 0 ? 1 : turnsVal);
         return { label, turns, rounds: 0, _preAdjusted: true };
     }
+
     if (ANY_TURN_LABELS.has(label) && game.combat)
     {
         const turnsVal = Number.isFinite(options.durationTurns) ? Math.max(0, options.durationTurns) : 1;
         return { label, turns: turnsVal === 0 ? 1 : turnsVal, rounds: 0, _preAdjusted: true };
     }
+
     if (label === 'encounter' || label === 'permanent')
         return { label, turns: null, rounds: null };
     return { label: 'indefinite', turns: null, rounds: null };
@@ -835,13 +890,16 @@ export async function addGlobalBonus(actor, bonusData, options = {})
     if (!actor)
         return;
     bonusData = _acceptBonusInput(bonusData);
+
     if (options.duration === 'constant')
     {
         await addConstantBonus(actor, bonusData);
         return bonusData.id;
     }
+
     if (options.effectFlags && bonusData.id && (getLAFlag(actor,"global_bonuses") || []).some(existing => existing.id === bonusData.id))
         await removeGlobalBonus(actor, bonusData.id);
+
     const bonuses = duplicate(getLAFlag(actor,"global_bonuses") || []);
 
     if (!bonusData.id)
@@ -857,9 +915,12 @@ export async function addGlobalBonus(actor, bonusData, options = {})
     else
         bonuses.push(bonusData);
 
-    await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
+    await setLAFlag(actor, "global_bonuses", bonuses);
 
     options.duration = options.duration || 'indefinite';
+
+    const startUses = options.usesLeft ?? bonusData.uses;
+
     if (options.duration)
     {
         const token = options.forcePrototype
@@ -877,6 +938,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             {
                 const statMode = bonusData.statMode || 'add';
                 const raw = Number.parseInt(bonusData.val) || 0;
+
                 if (CURRENT_RESOURCE_STATS.has(bonusData.stat))
                 {
                     const preBonusValue = foundry.utils.getProperty(actor, bonusData.stat) || 0;
@@ -894,7 +956,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             }
 
             // A filtered resistance is decided per attack, so it must not be baked on permanently.
-            if (bonusData.type === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData))
+            if (bonusData.type === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData) && bonusData.consumeOnUsage !== true)
             {
                 for (const lcType of expandDamageTypes(bonusData.damageTypes))
                     changes.push({ key: `system.resistances.${lcType}`, mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "true" });
@@ -902,10 +964,12 @@ export async function addGlobalBonus(actor, bonusData, options = {})
 
             const laFlags = /** @type {any} */ ({ linkedBonusId: bonusData.id, ..._effectFlagsFrom(options) });
             const protoDuration = _bonusDuration(options, null);
+
             if (protoDuration.label !== 'indefinite')
                 laFlags.duration = protoDuration;
             if (statDirect)
                 laFlags.statDirect = statDirect;
+
             if (options.consumption?.trigger)
             {
                 // No originId: reactions-engine falls back to each prototype-spawned token at trigger time, so each consumes independently.
@@ -923,12 +987,15 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                     checkBelow: options.consumption.checkBelow ?? null,
                 };
             }
+
             const effectData = { name: bonusData.name, img: icon, changes, flags: { [MODULE_ID]: laFlags } };
-            if (bonusData.uses && bonusData.uses > 0)
+
+            if (startUses && startUses > 0)
             {
-                foundry.utils.setProperty(effectData, 'flags.statuscounter.value', bonusData.uses);
-                foundry.utils.setProperty(effectData, 'flags.statuscounter.visible', bonusData.uses > 1);
+                foundry.utils.setProperty(effectData, 'flags.statuscounter.value', startUses);
+                foundry.utils.setProperty(effectData, 'flags.statuscounter.visible', startUses > 1);
             }
+
             if (options.refresh && actor.effects.some(effect => getLAFlags(effect)?.linkedBonusId === bonusData.id))
                 return;
             await actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
@@ -937,12 +1004,14 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             {
                 let newVal = Math.max(0, statDirect.preBonusValue + statDirect.value);
                 const maxPath = statDirect.key.replace('.value', '.max');
+
                 if (maxPath !== statDirect.key)
                 {
                     const maxVal = foundry.utils.getProperty(actor, maxPath);
                     if (maxVal !== undefined)
                         newVal = Math.min(newVal, maxVal);
                 }
+
                 await actor.update({ [statDirect.key]: newVal });
             }
         }
@@ -955,8 +1024,8 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             const extraOptions = /** @type {any} */ ({ linkedBonusId: bonusData.id, ..._effectFlagsFrom(options) });
 
             // Stack = uses count (statuscounter.value is the single counter)
-            if (bonusData.uses)
-                extraOptions.stack = bonusData.uses;
+            if (startUses)
+                extraOptions.stack = startUses;
 
             // If consumption trigger is configured, attach it (no 'uses'; stack handles that)
             if (options.consumption?.trigger)
@@ -981,6 +1050,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
             {
                 const statMode = bonusData.statMode || 'add';
                 const raw = Number.parseInt(bonusData.val) || 0;
+
                 if (CURRENT_RESOURCE_STATS.has(bonusData.stat))
                 {
                     const preBonusValue = foundry.utils.getProperty(token.actor, bonusData.stat) || 0;
@@ -998,10 +1068,11 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 }
             }
 
-            if (bonusData.type === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData))
+            if (bonusData.type === 'resistance' && bonusData.damageTypes && !hasBonusFilters(bonusData) && bonusData.consumeOnUsage !== true)
             {
                 if (!extraOptions.changes)
                     extraOptions.changes = [];
+
                 for (const lcType of expandDamageTypes(bonusData.damageTypes))
                 {
                     extraOptions.changes.push({
@@ -1019,7 +1090,7 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                         name: bonusData.name,
                         icon: icon,
                         isCustom: true,
-                        stack: bonusData.uses || 1
+                        stack: startUses || 1
                     }],
                     note: `Linked to Global Bonus: ${bonusData.name}`,
                     duration: { ...durationObj, overrideTurnOriginId: options.origin?.id || options.origin || token.id },
@@ -1035,19 +1106,24 @@ export async function addGlobalBonus(actor, bonusData, options = {})
                 newVal = Math.max(0, newVal);
                 // Clamp to max if applicable (e.g., hp.value can't exceed hp.max)
                 const maxPath = extraOptions.statDirect.key.replace('.value', '.max');
+
                 if (maxPath !== extraOptions.statDirect.key)
                 {
                     const maxVal = foundry.utils.getProperty(token.actor, maxPath);
                     if (maxVal !== undefined)
                         newVal = Math.min(newVal, maxVal);
                 }
+
                 await token.actor.update({ [extraOptions.statDirect.key]: newVal });
             }
+
             const originRaw = options.origin;
             const originId = originRaw?.id ?? originRaw;
+
             const originToken = typeof originId === 'string'
                 ? canvas.tokens?.get?.(originId) ?? null
                 : (originRaw && originRaw.document ? originRaw : null);
+
             playBonusAddedFX(token, originToken);
         }
     }
@@ -1093,6 +1169,7 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
 {
     if (!actor)
         return;
+
     const predicate = typeof bonusIdOrPredicate === 'function'
         ? bonusIdOrPredicate
         : bonus => bonus.id === bonusIdOrPredicate;
@@ -1103,6 +1180,7 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
     for (const id of pendingIds)
         pending.add(id);
     _pendingBonusRemovals.set(key, pending);
+
     try
     {
         return await _queueBonusFlagWrite(actor, async () =>
@@ -1114,17 +1192,20 @@ export async function removeGlobalBonus(actor, bonusIdOrPredicate, skipEffectRem
             if (bonuses.length === initialLength)
                 return false;
 
-            await delegateSetActorFlag(actor, MODULE_ID,"global_bonuses", bonuses);
+            await setLAFlag(actor, "global_bonuses", bonuses);
 
             if (!skipEffectRemoval && bonusesToRemove.length > 0)
             {
                 const removedIds = new Set(bonusesToRemove.map(bonus => bonus.id));
+
                 const linkedEffects = actor.effects.filter(linkedEffect =>
                     removedIds.has(getLAFlag(linkedEffect,'linkedBonusId'))
                 );
+
                 for (const linkedEffect of linkedEffects)
                     await linkedEffect.delete();
             }
+
             return true;
         });
     }
@@ -1152,14 +1233,18 @@ export function getGlobalBonus(actor, bonusId)
 {
     if (!actor)
         return null;
+
     const bonuses = actor ? (getLAFlag(actor,"global_bonuses") || []) : [];
     return bonuses.find(b => b.id === bonusId) || null;
 }
 
-Hooks.on("deleteActiveEffect", (effect) =>
+Hooks.on("deleteActiveEffect", (effect, _options, userId) =>
 {
+    if (userId !== game.userId)
+        return;
     if (getLAFlag(effect,'repairKeep'))
         return;
+
     // Item-source AEs: reversal runs when the transferred copy leaves the actor; removeGlobalBonus on an item no-ops via the flag branch.
     const isItemParent = effect.parent?.documentName === 'Item';
 
@@ -1171,6 +1256,7 @@ Hooks.on("deleteActiveEffect", (effect) =>
         return;
 
     const statDirect = getLAFlag(effect,'statDirect');
+
     if (statDirect && effect.parent)
     {
         setTimeout(async () =>
@@ -1178,6 +1264,7 @@ Hooks.on("deleteActiveEffect", (effect) =>
             const actor = effect.parent;
             if (!actor)
                 return;
+
             const currentVal = foundry.utils.getProperty(actor, statDirect.key) || 0;
             let newVal;
 
@@ -1196,12 +1283,14 @@ Hooks.on("deleteActiveEffect", (effect) =>
             newVal = Math.max(0, newVal);
             // Clamp to max if applicable (e.g., hp.value can't exceed hp.max)
             const maxPath = statDirect.key.replace('.value', '.max');
+
             if (maxPath !== statDirect.key)
             {
                 const maxVal = foundry.utils.getProperty(actor, maxPath);
                 if (maxVal !== undefined)
                     newVal = Math.min(newVal, maxVal);
             }
+
             await actor.update({ [statDirect.key]: newVal });
         }, 200);
     }
@@ -1210,6 +1299,7 @@ Hooks.on("deleteActiveEffect", (effect) =>
     const maxChanges = (/** @type {any[]} */ (effect.changes) || []).filter(entry =>
         entry.key?.endsWith('.max') && (entry.mode === CONST.ACTIVE_EFFECT_MODES.ADD || entry.mode === CONST.ACTIVE_EFFECT_MODES.OVERRIDE)
     );
+
     if (maxChanges.length > 0 && effect.parent)
     {
         setTimeout(async () =>
@@ -1217,15 +1307,19 @@ Hooks.on("deleteActiveEffect", (effect) =>
             const actor = effect.parent;
             if (!actor)
                 return;
+
             const updates = {};
+
             for (const change of maxChanges)
             {
                 const valuePath = change.key.replace('.max', '.value');
                 const newMax = foundry.utils.getProperty(actor, change.key);
                 const currentValue = foundry.utils.getProperty(actor, valuePath);
+
                 if (currentValue !== undefined && newMax !== undefined && currentValue > newMax)
                     updates[valuePath] = newMax;
             }
+
             if (Object.keys(updates).length > 0)
                 await actor.update(updates);
         }, 200);
@@ -1267,12 +1361,13 @@ export async function addConstantBonus(target, bonusData)
         console.warn('lancer-automations | addConstantBonus on Item is not supported - use linkBonusToItem instead.');
         return;
     }
+
     const existingIndex = bonuses.findIndex(bonus => bonus.id === bonusData.id);
     if (existingIndex >= 0)
         bonuses[existingIndex] = bonusData;
     else
         bonuses.push(bonusData);
-    await delegateSetActorFlag(target, MODULE_ID,"constant_bonuses", bonuses);
+    await setLAFlag(target, "constant_bonuses", bonuses);
 }
 
 /** @returns {object[]} */
@@ -1296,18 +1391,17 @@ export async function removeConstantBonus(target, bonusIdOrPredicate)
 {
     if (!target)
         return;
+
     const bonuses = duplicate(getLAFlag(target,"constant_bonuses") || []);
+
     const predicate = typeof bonusIdOrPredicate === 'function'
         ? bonusIdOrPredicate
         : bonus => bonus.id === bonusIdOrPredicate;
+
     const filtered = bonuses.filter(bonus => !predicate(bonus));
+
     if (filtered.length !== bonuses.length)
-    {
-        if (target.documentName === 'Item')
-            await setLAFlag(target,"constant_bonuses", filtered);
-        else
-            await delegateSetActorFlag(target, MODULE_ID,"constant_bonuses", filtered);
-    }
+        await setLAFlag(target, "constant_bonuses", filtered);
 }
 
 function _bonusTemplateRuntimeId(sourceDoc, templateId)
@@ -1319,21 +1413,26 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
 {
     if (!sourceDoc || !tokens?.length)
         return;
+
     const templates = getLAFlag(sourceDoc,'bonusTemplates') || [];
     if (!templates.length)
         return;
+
     for (const template of templates)
     {
         const runtimeId = _bonusTemplateRuntimeId(sourceDoc, template.id);
         const persistedUses = Number.isFinite(template.lastRuntimeUses) ? Number(template.lastRuntimeUses) : undefined;
         const templateUses = template.bonusData?.uses;
         const uses = persistedUses !== undefined ? persistedUses : templateUses;
+
         // Exhausted templates (persistedUses === 0) do not re-materialize until user resets uses.
         if (persistedUses === 0 && templateUses !== undefined)
             continue;
+
         const rawDuration = template.addOptions?.duration;
         const durationLabel = typeof rawDuration === 'string' ? rawDuration : rawDuration?.label;
         const isConstant = durationLabel === 'constant';
+
         for (const token of tokens)
         {
             const actor = token?.actor;
@@ -1341,32 +1440,45 @@ async function _materializeBonusTemplatesToTokens(sourceDoc, sourceKey, tokens)
                 continue;
             if (!linkTierGate(template.bonusData, actor, sourceKey === 'sourceItemUuid' ? sourceDoc : null))
                 continue;
+
             const markers = { [sourceKey]: sourceDoc.uuid, sourceTemplateId: template.id, sourceBonusId: template.bonusData?.id };
+
             if (isConstant)
             {
                 const existing = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
                 if (existing.some(bonus => bonus.id === runtimeId))
                     continue;
+
                 const bonusDataOut = { ...normalizeBonusShape(template.bonusData || {}), id: runtimeId, ...markers };
                 if (uses !== undefined)
                     bonusDataOut.uses = uses;
+
                 try
                 {
-                    await delegateSetActorFlag(actor, MODULE_ID,'constant_bonuses', [...existing, bonusDataOut]);
+                    await setLAFlag(actor, 'constant_bonuses', [...existing, bonusDataOut]);
                 }
                 catch (err)
                 {
                     console.warn('lancer-automations | bonus template constant write failed:', err);
                 }
+
                 continue;
             }
+
             const already = (getLAFlag(actor,'global_bonuses') || []).some(bonus => bonus.id === runtimeId);
             if (already)
                 continue;
+
+            const keepsMax = persistedUses !== undefined && typeof templateUses === 'number';
             const bonusDataOut = { ...normalizeBonusShape(template.bonusData || {}), id: runtimeId, ...markers };
+
             if (uses !== undefined)
-                bonusDataOut.uses = uses;
+                bonusDataOut.uses = keepsMax ? templateUses : uses;
+
             const optsOut = { ...(template.addOptions || {}), ...markers };
+            if (keepsMax)
+                optsOut.usesLeft = persistedUses;
+
             try
             {
                 await addGlobalBonus(actor, bonusDataOut, optsOut);
@@ -1408,20 +1520,26 @@ async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = u
 {
     const sourceUuid = runtimeBonus?.sourceItemUuid ?? runtimeBonus?.sourceActorUuid;
     const sourceTemplateId = runtimeBonus?.sourceTemplateId;
+
     if (!sourceUuid || !sourceTemplateId)
         return;
+
     try
     {
         const source = /** @type {any} */ (await fromUuid(sourceUuid));
         if (!source)
             return;
+
         const templates = getLAFlag(source,'bonusTemplates') || [];
         const template = templates.find(candidate => candidate.id === sourceTemplateId);
+
         if (!template)
             return;
+
         const rawDuration = template?.addOptions?.duration;
         const durationLabel = typeof rawDuration === 'string' ? rawDuration : rawDuration?.label;
         let currentUses;
+
         if (explicitUses !== undefined)
             currentUses = explicitUses;
         else
@@ -1429,13 +1547,16 @@ async function _persistBonusUsesToTemplate(actor, runtimeBonus, explicitUses = u
             // Constant templates have no linked AE and no statuscounter to persist; skip.
             if (durationLabel === 'constant')
                 return;
+
             const linkedAE = /** @type {any[]} */ (Array.from(actor?.effects ?? [])).find(effect =>
                 getLAFlags(effect)?.linkedBonusId === runtimeBonus.id);
+
             const rawUses = linkedAE?.flags?.statuscounter?.value;
             currentUses = Number.isFinite(Number(rawUses)) ? Number(rawUses) : (linkedAE ? undefined : 0);
             if (currentUses === undefined)
                 return;
         }
+
         const updated = templates.map(candidate => candidate.id === sourceTemplateId ? { ...candidate, lastRuntimeUses: currentUses } : candidate);
         await setLAFlag(source,'bonusTemplates', updated);
     }
@@ -1452,6 +1573,8 @@ export function supportsConsumeOnUsage(type, subtype = null)
         return true;
     if (type === 'immunity')
         return ['effect', 'crit', 'hit', 'miss', 'damage', 'provoke', 'terrain'].includes(subtype);
+    if (type === 'movement')
+        return subtype === 'terrain_immunity';
     return false;
 }
 
@@ -1466,45 +1589,76 @@ function _findStoredBonus(actor, bonusId)
             if (stored.type === 'multi' && typeof bonusId === 'string' && bonusId.startsWith(`${stored.id}_sub_`))
                 return { stored, source };
         }
+
         return null;
     };
+
     return search(getLAFlag(actor,'global_bonuses') || [], 'global')
         ?? search(getLAFlag(actor,'constant_bonuses') || [], 'constant');
 }
 
-// Burn one use of a bonus (dual-write uses + linked AE); removes it when exhausted. Auto-consume-triggered bonuses are skipped (their charges belong to the trigger engine).
+function _usesLeft(bonus, linkedEffect)
+{
+    if (typeof bonus?.uses !== 'number')
+        return null;
+
+    const counter = Number(linkedEffect?.flags?.statuscounter?.value);
+
+    return linkedEffect && Number.isFinite(counter) ? counter : bonus.uses;
+}
+
+function _linkedEffectOf(actor, bonusId)
+{
+    return /** @type {any} */ (Array.from(actor?.effects ?? []).find(effect =>
+    {
+        const linkedId = getLAFlags(effect)?.linkedBonusId;
+
+        return !!linkedId && (linkedId === bonusId || String(bonusId).startsWith(`${linkedId}_sub_`));
+    })) ?? null;
+}
+
+// Burn one use of a bonus (linked AE counter, else the stored uses); removes it when exhausted. Auto-consume-triggered bonuses are skipped (their charges belong to the trigger engine).
 /** @returns {Promise<string|false>} The consumed bonus id, or false if nothing was spent */
 export async function consumeBonusUse(actor, bonus, { removeWhenNoUses = false } = {})
 {
     if (!actor || !bonus?.id)
         return false;
+
     const found = _findStoredBonus(actor, bonus.id);
     if (!found)
         return false;
+
     const { stored, source } = found;
+
     const linkedEffect = /** @type {any} */ (Array.from(actor.effects ?? []).find(effect =>
         getLAFlags(effect)?.linkedBonusId === stored.id));
+
     if (getLAFlags(linkedEffect)?.consumption?.trigger)
         return false;
-    const currentUses = typeof stored.uses === 'number' ? stored.uses : null;
+
+    const currentUses = _usesLeft(stored, source === 'global' ? linkedEffect : null);
     if (currentUses === null && !removeWhenNoUses)
         return false;
+
     if (currentUses !== null && currentUses > 1)
     {
         const newUses = currentUses - 1;
+
         if (source === 'constant')
             await addConstantBonus(actor, { ...stored, uses: newUses });
+        else if (linkedEffect)
+            await linkedEffect.update({ 'flags.statuscounter.value': newUses });
         else
         {
             const bonuses = getLAFlag(actor,'global_bonuses') || [];
             const updated = bonuses.map(existing => existing.id === stored.id ? { ...existing, uses: newUses } : existing);
             await setLAFlag(actor,'global_bonuses', updated);
-            if (linkedEffect)
-                await linkedEffect.update({ 'flags.statuscounter.value': newUses });
         }
+
         await _persistBonusUsesToTemplate(actor, stored, newUses);
         return stored.id;
     }
+
     await _persistBonusUsesToTemplate(actor, stored, 0);
     if (source === 'global')
         await removeGlobalBonus(actor, stored.id, false);
@@ -1527,12 +1681,27 @@ export async function consumeImmunityUse(actor, subtype, state = null, { damageT
 {
     if (!actor)
         return false;
+
     if (DAMAGE_DEFENSE_TYPES.has(subtype))
     {
         warnDeprecated(_legacyDefenseMessage(subtype));
         return _consumeDefenseUse(actor, bonuses ?? _getTypedBonuses(actor, subtype, state), state, { damageTypes, aoe });
     }
+
+    if (Object.hasOwn(LEGACY_MOVEMENT_IMMUNITIES, subtype ?? ''))
+    {
+        warnDeprecated(_legacyMovementMessage(subtype));
+        return consumeMovementUse(actor, LEGACY_MOVEMENT_IMMUNITIES[subtype], state, { bonuses });
+    }
+
     return _consumeDefenseUse(actor, bonuses ?? getImmunityBonuses(actor, subtype, state), state, { damageTypes, aoe });
+}
+
+export async function consumeMovementUse(actor, subtype, state = null, { bonuses = null } = {})
+{
+    if (!actor)
+        return false;
+    return _consumeDefenseUse(actor, bonuses ?? getMovementBonuses(actor, subtype, state), state, { damageTypes: null, aoe: false });
 }
 
 export async function consumeResistanceUse(actor, state = null, { damageTypes = null, bonuses = null, aoe = false } = {})
@@ -1552,6 +1721,7 @@ export async function consumeVulnerabilityUse(actor, state = null, { damageTypes
 async function _consumeDefenseUse(actor, candidates, state, { damageTypes, aoe })
 {
     const wanted = damageTypes?.map(type => String(type).toLowerCase());
+
     const matchesType = (bonus) => !wanted || !bonus.damageTypes || bonus.damageTypes.some(type =>
     {
         const lower = String(type).toLowerCase();
@@ -1561,22 +1731,26 @@ async function _consumeDefenseUse(actor, candidates, state, { damageTypes, aoe }
     const pool = candidates.filter(matchesType);
     let spent = false;
     const burnedKeys = new Set();
+
     for (const bonus of pool)
     {
         const key = bonus.frequencyKey ?? bonus.id;
         if (burnedKeys.has(key) || bonusHasAutoConsume(actor, key))
             continue;
+
         if (await burnBonusFrequency(bonus, state))
         {
             spent = true;
             burnedKeys.add(key);
         }
     }
+
     for (const bonus of pool.filter(bonus => bonus.consumeOnUsage === true))
     {
         if (await consumeBonusUse(actor, bonus, { removeWhenNoUses: true }))
             return true;
     }
+
     return spent;
 }
 
@@ -1585,27 +1759,33 @@ export async function burnBonusUsageForFlow(state)
 {
     const usage = state?.la_extraData?.bonusUsage;
     const actor = state?.actor;
+
     if (!usage || !actor)
         return;
+
     const burnedFrequencyKeys = new Set();
+
     for (const candidate of Object.values(usage.candidates))
     {
         if (!supportsConsumeOnUsage(candidate.type, candidate.subtype))
             continue;
         // Immunities burn where they are consulted, not on the bearer's own roll.
-        if (DEFENSE_TYPES.has(candidate.type))
+        if (CONSULTED_TYPES.has(candidate.type))
             continue;
+
         const consumesUses = candidate.consumeOnUsage !== false;
         if (!candidate.frequency && (!consumesUses || typeof candidate.uses !== 'number'))
             continue;
         if ([...usage.burned].some(id => candidate.id === id || String(candidate.id).startsWith(`${id}_sub_`)))
             continue;
+
         let used = false;
         if (candidate.bucket === 'acc')
             used = usage.enabledById.get(candidate.id) !== false;
         else if (candidate.bucket === 'targeted')
         {
             const mode = usage.appliedMode?.get(candidate.id);
+
             if (mode === 'base')
                 used = usage.enabledById.get(candidate.id) !== false;
             else if (mode === 'target')
@@ -1625,14 +1805,18 @@ export async function burnBonusUsageForFlow(state)
             used = usage.dmgEnabled.get(candidate.id) !== false;
         if (!used)
             continue;
+
         const frequencyKey = candidate.frequencyKey ?? candidate.id;
+
         if (candidate.frequency && !burnedFrequencyKeys.has(frequencyKey) && !bonusHasAutoConsume(actor, frequencyKey))
         {
             burnedFrequencyKeys.add(frequencyKey);
             await burnBonusFrequency(candidate, state);
         }
+
         if (!consumesUses)
             continue;
+
         const storedId = await consumeBonusUse(actor, candidate, { removeWhenNoUses: candidate.consumeOnUsage === true });
         if (storedId)
             usage.burned.add(storedId);
@@ -1643,8 +1827,10 @@ async function _cleanupBonusRuntimes(actor, predicate)
 {
     if (!actor)
         return;
+
     const globals = /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || [])
         .filter(predicate);
+
     for (const runtime of globals)
     {
         try
@@ -1655,6 +1841,7 @@ async function _cleanupBonusRuntimes(actor, predicate)
         {
             console.warn('lancer-automations | bonus cleanup persist:', err);
         }
+
         try
         {
             await removeGlobalBonus(actor, runtime.id, false);
@@ -1664,13 +1851,16 @@ async function _cleanupBonusRuntimes(actor, predicate)
             console.warn('lancer-automations | bonus cleanup remove:', err);
         }
     }
+
     const constants = /** @type {any[]} */ (getLAFlag(actor,'constant_bonuses') || []);
+
     if (constants.some(predicate))
     {
         const remaining = constants.filter(bonus => !predicate(bonus));
+
         try
         {
-            await delegateSetActorFlag(actor, MODULE_ID,'constant_bonuses', remaining);
+            await setLAFlag(actor, 'constant_bonuses', remaining);
         }
         catch (err)
         {
@@ -1708,6 +1898,7 @@ export async function cleanupItemBonusesFromActor(item, actor)
 export async function cleanupActorBonusesFromTokens(actor)
 {
     const tokens = actor?.getActiveTokens?.() ?? [];
+
     for (const token of tokens)
     {
         if (token?.actor)
@@ -1719,6 +1910,7 @@ async function _cleanupItemBonusTemplateFromActor(item, actor, templateId)
 {
     if (!actor)
         return;
+
     const runtimeId = _bonusTemplateRuntimeId(item, templateId);
     await _cleanupBonusRuntimes(actor, bonus => bonus.id === runtimeId);
 }
@@ -1727,6 +1919,7 @@ async function _cleanupActorBonusTemplateFromTokens(actor, templateId)
 {
     const runtimeId = _bonusTemplateRuntimeId(actor, templateId);
     const tokens = actor?.getActiveTokens?.() ?? [];
+
     for (const token of tokens)
     {
         const target = token?.actor;
@@ -1750,12 +1943,15 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
     const { items = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
     if (!bonusData)
         return [];
+
     const serialized = serializeBonusLambdas(_acceptBonusInput(bonusData));
     const stamped = [];
+
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
+
         const templateId = foundry.utils.randomID();
         const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { addedViaUI: false, ...addOptions, ...extraOptions } };
         const existing = getLAFlag(item,'bonusTemplates') || [];
@@ -1765,6 +1961,7 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
         if (parent?.documentName === 'Actor')
             await applyItemBonusTemplatesToTokens(item, parent.getActiveTokens?.() ?? []);
     }
+
     return stamped;
 }
 
@@ -1778,13 +1975,16 @@ export async function linkBonusToItem(options = /** @type {any} */ ({}), extraOp
 export async function ensureLinkedBonus(options = /** @type {any} */ ({}), extraOptions = {})
 {
     const { items = [], bonusData } = /** @type {any} */ (options);
+
     if (!bonusData?.id)
     {
         console.warn("lancer-automations | ensureLinkedBonus: bonusData.id is required for dedupe.");
         return linkBonusToItem(options, extraOptions);
     }
+
     const missing = items.filter(item => item?.documentName === 'Item'
         && !(getLAFlag(item,'bonusTemplates') || []).some(template => template.bonusData?.id === bonusData.id));
+
     if (!missing.length)
         return [];
     return linkBonusToItem({ ...options, items: missing }, extraOptions);
@@ -1804,12 +2004,15 @@ export async function linkBonusToActor(options = /** @type {any} */ ({}), extraO
     const { actors = [], bonusData, addOptions = {} } = /** @type {any} */ (options);
     if (!bonusData)
         return [];
+
     const serialized = serializeBonusLambdas(_acceptBonusInput(bonusData));
     const stamped = [];
+
     for (const actor of actors)
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
+
         const templateId = foundry.utils.randomID();
         const template = { id: templateId, bonusData: /** @type {any} */ ({ ...serialized }), addOptions: { ...addOptions, ...extraOptions } };
         const existing = getLAFlag(actor,'bonusTemplates') || [];
@@ -1817,6 +2020,7 @@ export async function linkBonusToActor(options = /** @type {any} */ ({}), extraO
         stamped.push({ actor, templateId });
         await applyActorBonusTemplatesToTokens(actor, actor.getActiveTokens?.() ?? []);
     }
+
     return stamped;
 }
 
@@ -1832,13 +2036,17 @@ export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
     const { items = [], templateId } = /** @type {any} */ (options);
     if (!templateId)
         return [];
+
     const removed = [];
+
     for (const item of items)
     {
         if (!item || item.documentName !== 'Item')
             continue;
+
         const existing = getLAFlag(item,'bonusTemplates') || [];
         const filtered = existing.filter(template => template.id !== templateId);
+
         if (filtered.length === existing.length)
             continue;
         await setLAFlag(item,'bonusTemplates', filtered);
@@ -1847,6 +2055,7 @@ export async function unlinkBonusFromItem(options = /** @type {any} */ ({}))
             await _cleanupItemBonusTemplateFromActor(item, parent, templateId);
         removed.push({ item, templateId });
     }
+
     return removed;
 }
 
@@ -1862,19 +2071,24 @@ export async function unlinkBonusFromActor(options = /** @type {any} */ ({}))
     const { actors = [], templateId } = /** @type {any} */ (options);
     if (!templateId)
         return [];
+
     const removed = [];
+
     for (const actor of actors)
     {
         if (!actor || actor.documentName !== 'Actor')
             continue;
+
         const existing = getLAFlag(actor,'bonusTemplates') || [];
         const filtered = existing.filter(template => template.id !== templateId);
+
         if (filtered.length === existing.length)
             continue;
         await setLAFlag(actor,'bonusTemplates', filtered);
         await _cleanupActorBonusTemplateFromTokens(actor, templateId);
         removed.push({ actor, templateId });
     }
+
     return removed;
 }
 
@@ -1884,9 +2098,10 @@ export function executeGenericBonusMenu(actor = null)
     executeEffectManager({ initialTab: 'bonus', actor });
 }
 
-const IMMUNITY_SUBTYPES = new Set(['effect', 'damage', 'crit', 'hit', 'miss', 'elevation', 'terrain', 'obstacle', 'provoke']);
+const IMMUNITY_SUBTYPES = new Set(['effect', 'damage', 'crit', 'hit', 'miss', 'provoke']);
+export const LEGACY_MOVEMENT_IMMUNITIES = { elevation: 'climber', terrain: 'terrain_immunity', obstacle: 'phasing' };
 const DAMAGE_DEFENSE_TYPES = new Set(['resistance', 'vulnerability']);
-const DEFENSE_TYPES = new Set(['immunity', 'resistance', 'vulnerability']);
+const CONSULTED_TYPES = new Set(['immunity', 'resistance', 'vulnerability', 'movement']);
 let _deprecationNotified = false;
 
 function warnDeprecated(message)
@@ -1903,10 +2118,25 @@ function _isLegacyDefense(bonus)
     return bonus?.type === 'immunity' && DAMAGE_DEFENSE_TYPES.has(bonus.subtype);
 }
 
+function _isLegacyMovement(bonus)
+{
+    return bonus?.type === 'immunity' && Object.hasOwn(LEGACY_MOVEMENT_IMMUNITIES, bonus.subtype ?? '');
+}
+
+function _isLegacyShape(bonus)
+{
+    return _isLegacyDefense(bonus) || _isLegacyMovement(bonus);
+}
+
 function _legacyDefenseMessage(subtype)
 {
     const getter = subtype === 'resistance' ? 'getResistanceBonuses' : 'getVulnerabilityBonuses';
     return `Immunity subtype "${subtype}" is deprecated. Use the "${subtype}" bonus type ({ type: '${subtype}' }) and ${getter}.`;
+}
+
+function _legacyMovementMessage(subtype)
+{
+    return `Immunity subtype "${subtype}" is deprecated. Use the "movement" bonus type ({ type: 'movement', subtype: '${LEGACY_MOVEMENT_IMMUNITIES[subtype]}' }) and getMovementBonuses.`;
 }
 
 export function normalizeBonusShape(bonus)
@@ -1916,19 +2146,24 @@ export function normalizeBonusShape(bonus)
         const { subtype, ...rest } = bonus;
         return { ...rest, type: subtype };
     }
-    if (bonus?.type === 'multi' && Array.isArray(bonus.bonuses) && bonus.bonuses.some(_isLegacyDefense))
+
+    if (_isLegacyMovement(bonus))
+        return { ...bonus, type: 'movement', subtype: LEGACY_MOVEMENT_IMMUNITIES[bonus.subtype] };
+
+    if (bonus?.type === 'multi' && Array.isArray(bonus.bonuses) && bonus.bonuses.some(_isLegacyShape))
         return { ...bonus, bonuses: bonus.bonuses.map(normalizeBonusShape) };
     return bonus;
 }
 
 function _acceptBonusInput(bonusData)
 {
-    const legacy = _isLegacyDefense(bonusData)
+    const legacy = _isLegacyShape(bonusData)
         ? bonusData
-        : (bonusData?.type === 'multi' && Array.isArray(bonusData.bonuses) ? bonusData.bonuses.find(_isLegacyDefense) : null);
+        : (bonusData?.type === 'multi' && Array.isArray(bonusData.bonuses) ? bonusData.bonuses.find(_isLegacyShape) : null);
+
     if (!legacy)
         return bonusData;
-    warnDeprecated(_legacyDefenseMessage(legacy.subtype));
+    warnDeprecated(_isLegacyMovement(legacy) ? _legacyMovementMessage(legacy.subtype) : _legacyDefenseMessage(legacy.subtype));
     return normalizeBonusShape(bonusData);
 }
 
@@ -1972,8 +2207,10 @@ export function bonusFrequencyFree(bonus, state = null)
         const owner = bonusGateOwner(bonus, state);
         return !owner || bonusMissionUsed(owner, bonus) < bonusFrequencyCount(bonus);
     }
+
     if (!bonus?.frequency || !BONUS_FREQUENCY_GATES[bonus.frequency])
         return true;
+
     const owner = bonusGateOwner(bonus, state);
     return !owner || bonusFrequencySlots(bonus).some(slot => checkGate(owner, `bonus:${bonusFrequencyKey(bonus)}`, slot));
 }
@@ -1990,10 +2227,17 @@ const LIMIT_PERIOD_SHORT = { round: 'round', turn: 'turn', combat: 'encounter', 
 export function bonusUsageParts(bonus, state, limitReached = false)
 {
     const parts = [];
+
     if (bonus.uses !== undefined)
-        parts.push({ text: `${bonus.uses} left` });
+    {
+        const bearer = bonusGateOwner(bonus, state);
+
+        parts.push({ text: `${_usesLeft(bonus, _linkedEffectOf(bearer?.actor ?? bearer, bonus.id)) ?? bonus.uses} left` });
+    }
+
     const period = LIMIT_PERIOD_SHORT[bonus.frequency];
     const owner = period ? bonusGateOwner(bonus, state) : null;
+
     if (owner)
         parts.push({ text: `${Math.max(0, bonusFrequencyCount(bonus) - bonusFrequencyUsed(bonus, owner))}/${bonusFrequencyCount(bonus)} ${period}`, limit: limitReached });
     return parts;
@@ -2024,14 +2268,18 @@ export function itemAttachmentOrigin(record)
         const bonus = linkedBonusOf(record.parent, record);
         if (bonus)
             return itemAttachmentOrigin(bonus);
+
         const flags = getLAFlags(record);
         if (!flags?.sourceItemUuid)
             return null;
+
         const template = /** @type {any} */ (fromUuidSync(flags.sourceItemUuid))?.effects?.get?.(flags.sourceTemplateId);
         return attachmentOrigin(getLAFlags(template)?.addedViaUI);
     }
+
     if (!record?.sourceItemUuid)
         return null;
+
     const templates = getLAFlag(/** @type {any} */ (fromUuidSync(record.sourceItemUuid)), 'bonusTemplates') || [];
     return attachmentOrigin(templates.find((/** @type {any} */ template) => template.id === record.sourceTemplateId)?.addOptions?.addedViaUI);
 }
@@ -2042,19 +2290,23 @@ async function takeBonusFrequency(bonus, owner)
     {
         const actor = owner?.actor ?? owner;
         const used = bonusMissionUsed(actor, bonus);
+
         if (used >= bonusFrequencyCount(bonus))
             return false;
-        await delegateSetActorFlag(actor, MODULE_ID, BONUS_MISSION_FLAG, { ...(getLAFlag(actor, BONUS_MISSION_FLAG) ?? {}), [bonusFrequencyKey(bonus)]: used + 1 });
+        await setLAFlag(actor, BONUS_MISSION_FLAG, { ...(getLAFlag(actor, BONUS_MISSION_FLAG) ?? {}), [bonusFrequencyKey(bonus)]: used + 1 });
         return true;
     }
+
     const options = BONUS_FREQUENCY_GATES[bonus?.frequency];
     if (!options)
         return false;
+
     for (const slot of bonusFrequencySlots(bonus))
     {
         if (await consumeGate(owner, `bonus:${bonusFrequencyKey(bonus)}`, { ...options, subject: slot }))
             return true;
     }
+
     return false;
 }
 
@@ -2063,16 +2315,20 @@ export async function burnBonusFrequency(bonus, state = null)
 {
     if (bonus?.frequency !== 'mission' && !BONUS_FREQUENCY_GATES[bonus?.frequency])
         return false;
+
     const owner = bonusGateOwner(bonus, state);
     if (!owner)
         return false;
+
     const taken = await takeBonusFrequency(bonus, owner);
+
     if (taken && state)
     {
         state.la_extraData = state.la_extraData || {};
         const ids = [bonus.id, bonus.sourceBonusId].filter(Boolean);
         state.la_extraData.burnedFrequency = [...new Set([...(state.la_extraData.burnedFrequency ?? []), ...ids])];
     }
+
     return taken;
 }
 
@@ -2080,8 +2336,9 @@ async function resetBonusMissionUsesStep(state)
 {
     const actor = state?.actor;
     const used = actor ? getLAFlag(actor, BONUS_MISSION_FLAG) : null;
+
     if (used && Object.values(used).some(count => Number(count) > 0))
-        await delegateSetActorFlag(actor, MODULE_ID, BONUS_MISSION_FLAG, Object.fromEntries(Object.keys(used).map(key => [key, 0])));
+        await setLAFlag(actor, BONUS_MISSION_FLAG, Object.fromEntries(Object.keys(used).map(key => [key, 0])));
     return true;
 }
 
@@ -2101,20 +2358,24 @@ const CONCRETE_DAMAGE_TYPES = ['kinetic', 'energy', 'explosive', 'variable', 'bu
 function expandDamageTypes(damageTypes, aoe = false)
 {
     const out = new Set();
+
     for (const entry of damageTypes ?? [])
     {
         const lower = String(entry).toLowerCase().trim();
         if (!lower || (lower === 'aoe' && !aoe))
             continue;
+
         if (!DAMAGE_TYPE_WILDCARDS.has(lower) && lower !== 'aoe')
         {
             out.add(lower);
             continue;
         }
+
         CONCRETE_DAMAGE_TYPES.forEach(type => out.add(type));
         if (getModuleSetting('enableInfectionDamageIntegration'))
             out.add('infection');
     }
+
     return [...out];
 }
 
@@ -2130,6 +2391,13 @@ export function getImmunityBonuses(actor, subtype = null, state = null)
         warnDeprecated(_legacyDefenseMessage(subtype));
         return _getTypedBonuses(actor, subtype, state);
     }
+
+    if (Object.hasOwn(LEGACY_MOVEMENT_IMMUNITIES, subtype ?? ''))
+    {
+        warnDeprecated(_legacyMovementMessage(subtype));
+        return getMovementBonuses(actor, LEGACY_MOVEMENT_IMMUNITIES[subtype], state);
+    }
+
     actor = actor?.actor ?? actor;
     if (!actor?.getFlag)
         return [];
@@ -2138,6 +2406,23 @@ export function getImmunityBonuses(actor, subtype = null, state = null)
 
     return _bonusPool(actor, state, !subtype || subtype === 'damage' || subtype === 'effect')
         .filter(bonus => bonus.type === "immunity" && (!subtype || bonus.subtype === subtype) && linkTierGate(bonus, actor));
+}
+
+/**
+ * @param {any} actor Actor, Token or TokenDocument
+ * @param {string|null} [subtype] omit for every movement bonus
+ * @returns {object[]}
+ */
+export function getMovementBonuses(actor, subtype = null, state = null)
+{
+    actor = actor?.actor ?? actor;
+    if (!actor?.getFlag)
+        return [];
+    if (subtype && !Object.hasOwn(MOVEMENT_TRAITS, subtype))
+        console.warn(`lancer-automations | getMovementBonuses: unknown subtype "${subtype}"`);
+
+    return _bonusPool(actor, state)
+        .filter(bonus => bonus.type === "movement" && (!subtype || bonus.subtype === subtype) && linkTierGate(bonus, actor));
 }
 
 function _bonusPool(actor, state, withData = false)
@@ -2173,11 +2458,13 @@ function _v3DefenseRows(actor)
 {
     const off = itemBonusOffIds(actor);
     const rows = [];
+
     for (const { item, row: { bonus, path, reactionPath, condition, duration } } of v3ActorRows(actor))
     {
         if (!duration && isItemAvailable(item, reactionPath) && _v3SourceActive(item, path, actor))
             rows.push({ bonus, item, off: off.has(bonus.id), inactive: !v3ConditionMet(condition, actor), replaced: isV3DataReplaced(item, path) });
     }
+
     return rows;
 }
 
@@ -2186,6 +2473,7 @@ export function getV3DataBonuses(actor, types = null)
     actor = actor?.actor ?? actor;
     if (!actor?.items)
         return [];
+
     const wanted = types ? new Set(types) : null;
     return _v3DefenseRows(actor).filter(row => !row.off && !row.inactive && !row.replaced && (!wanted || wanted.has(row.bonus.type)));
 }
@@ -2194,12 +2482,14 @@ function grantedActionExtras(actor)
 {
     const totals = Object.fromEntries(EXTRA_ACTION_KINDS.map(kind => [kind, 0]));
     const dataBonuses = getV3DataBonuses(actor, ['action_extra']).map(row => row.bonus);
+
     for (const bonus of flattenBonuses([...getGlobalBonuses(actor), ...getConstantBonuses(actor), ...dataBonuses]))
     {
         if (bonus.type !== 'action_extra' || !EXTRA_ACTION_KINDS.includes(bonus.subtype) || (bonus.dataCondition && !v3ConditionMet(bonus.dataCondition, actor)))
             continue;
         totals[bonus.subtype] += Math.max(0, Number(bonus.val ?? 1) || 0);
     }
+
     return totals;
 }
 
@@ -2211,6 +2501,7 @@ async function _applyV3TimedDefenses(actor, token)
     {
         if (!duration || !isItemAvailable(item, reactionPath) || !_v3SourceActive(item, path, actor) || isV3DataReplaced(item, path))
             continue;
+
         const timedId = `${bonus.id}_timed`;
         if ((getLAFlag(actor, 'global_bonuses') || []).some((/** @type {any} */ existing) => existing.id === timedId))
             continue;
@@ -2265,12 +2556,13 @@ export async function setItemBonusOff(actor, bonusId, off)
     actor = actor?.actor ?? actor;
     if (!actor || !bonusId)
         return;
+
     const current = itemBonusOffIds(actor);
     if (off)
         current.add(bonusId);
     else
         current.delete(bonusId);
-    await delegateSetActorFlag(actor, MODULE_ID, ITEM_BONUS_OFF_FLAG, [...current]);
+    await setLAFlag(actor, ITEM_BONUS_OFF_FLAG, [...current]);
     const linked = /** @type {any[]} */ ([...(actor.effects ?? [])]).filter(effect => getLAFlag(effect, 'linkedBonusId') === bonusId && effect.disabled !== off);
     if (linked.length)
         await actor.updateEmbeddedDocuments('ActiveEffect', linked.map(effect => ({ _id: effect.id, disabled: off })));
@@ -2320,6 +2612,7 @@ function _applicableBonuses(bonuses, state, { flowType, ownerTokenId, otherToken
 {
     if (!state || bonuses.length === 0)
         return bonuses;
+
     const tags = getFlowTags(flowType, state);
     const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
     // No other party means nothing for applyToCondition to judge, so the immunity stands.
@@ -2334,8 +2627,10 @@ function passesGateFilters(bonus, state, ownerTokenId, otherToken)
 {
     const gateState = state ?? { actor: otherToken?.actor ?? null, data: {} };
     const gated = withOwnerContext({ ...bonus, rollTypes: null, itemLids: null, itemId: null }, ownerTokenId);
+
     if (!isBonusApplicable(gated, new Set(['all']), gateState))
         return false;
+
     const ownerToken = ownerTokenId ? canvas.tokens.get(ownerTokenId) ?? null : null;
     return !otherToken || runApplyToCondition(bonus, otherToken, gateState, ownerToken);
 }
@@ -2407,6 +2702,7 @@ export function getEffectImmunityBonuses(actor, effectIdOrName, effect = null, s
                     return true;
 
                 const flagName = getLAFlag(effect,'effect') || (game.modules.get('csm-lancer-qol')?.active ? effect.getFlag('csm-lancer-qol', 'effect') : null);
+
                 if (flagName)
                 {
                     const flagLower = flagName.toLowerCase();
@@ -2435,13 +2731,20 @@ export function checkEffectImmunities(actor, effectIdOrName, effect = null, stat
 /** @returns {boolean} true when the bonus is gated on something only a flow can answer */
 export function hasBonusFilters(bonus)
 {
-    return !!(bonus?.rollTypes?.length || bonus?.itemLids?.length || bonus?.itemId || bonus?.condition || bonus?.applyToCondition);
+    return !!(bonus?.rollTypes?.length || bonus?.itemLids?.length || bonus?.itemId || bonus?.condition || bonus?.applyToCondition || bonus?.frequency);
+}
+
+/** @returns {object[]} The bonuses a damage card judged for this target: all unfiltered ones, and filtered ones only when their id is in `ids`. */
+export function judgedBonuses(bonuses, ids)
+{
+    return bonuses.filter(bonus => !ids || !hasBonusFilters(bonus) || !bonus.id || ids.includes(bonus.id));
 }
 
 function _damageBonusesCovering(actor, type, damageType, allowedIds, aoe)
 {
     if (!actor || !damageType)
         return [];
+
     const incomingLower = damageType.toLowerCase();
     return _getTypedBonuses(actor, type, null)
         .filter(bonus => !allowedIds || !hasBonusFilters(bonus) || !bonus.id || allowedIds.includes(bonus.id))
@@ -2497,6 +2800,7 @@ export function applyDamageImmunities(actor, damages, state = null, bonuses = nu
                 cloned.amount = 0;
             return cloned;
         }
+
         return dmg;
     });
 }
@@ -2506,6 +2810,7 @@ export function convertHeatToEnergyIfHeatless(actor, damages)
 {
     if (!actor || !Array.isArray(damages))
         return damages;
+
     try
     {
         if (!getModuleSetting('convertHeatToEnergyOnHeatless'))
@@ -2515,8 +2820,10 @@ export function convertHeatToEnergyIfHeatless(actor, damages)
     {
         return damages;
     }
+
     const heatMax = actor.system?.heat?.max;
     const heatless = heatMax === undefined || heatMax === null || heatMax === 0;
+
     if (!heatless)
         return damages;
     return damages.map(dmg => (dmg?.type === 'Heat' ? { ...dmg, type: 'Energy' } : dmg));
@@ -2538,9 +2845,11 @@ export function getAttackImmunityBonuses(actor, subtype, attackerActor = null, s
 {
     if (!actor)
         return [];
+
     const raw = getImmunityBonuses(actor, subtype, state);
     if (raw.length === 0 || !attackerActor)
         return raw;
+
     const attackerState = state ? { ...state, actor: attackerActor } : { actor: attackerActor };
     return getApplicableImmunityBonuses(actor, subtype, attackerState, {
         flowType: 'attack',
@@ -2588,6 +2897,7 @@ export const BonusesAPI = {
     getGlobalBonus,
     consumeBonusUse,
     consumeImmunityUse,
+    consumeMovementUse,
     supportsConsumeOnUsage,
     addConstantBonus,
     removeConstantBonus,
@@ -2604,6 +2914,7 @@ export const BonusesAPI = {
     cleanupActorBonusesFromTokens,
     executeGenericBonusMenu,
     getImmunityBonuses,
+    getMovementBonuses,
     getResistanceBonuses,
     getVulnerabilityBonuses,
     consumeResistanceUse,

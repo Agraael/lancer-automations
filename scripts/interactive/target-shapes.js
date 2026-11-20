@@ -25,6 +25,7 @@ let _customPresenceStop = null;
 function presenceData()
 {
     const placedCells = [];
+
     for (const token of game.user?.targets ?? [])
     {
         if (!token || token.document?.hidden)
@@ -32,6 +33,7 @@ function presenceData()
         for (const offset of getOccupiedOffsets(token))
             placedCells.push(`${offset.col},${offset.row}`);
     }
+
     return { placedCells, placedColor: TG.placed };
 }
 
@@ -43,6 +45,7 @@ function ensureContainer()
     canvas.stage.addChild(_persistG).eventMode = 'none'; // above tokens
     _labelG = new PIXI.Container();
     canvas.stage.addChild(_labelG).eventMode = 'none';
+
     _persistPulse = () =>
     {
         // detach if torn down (scene change), don't write to a dead object
@@ -56,25 +59,31 @@ function ensureContainer()
             _persistLabels.clear();
             _customMarks.clear();
             _chanceLabels.clear();
+
             if (_customPresenceStop)
             {
                 _customPresenceStop();
                 _customPresenceStop = null;
             }
+
             return;
         }
+
         _persistG.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
+
         for (const [id, markGraphic] of _persistShapes)
         {
             const token = canvas.tokens.get(id);
             if (token)
                 paintShape(token, markGraphic);
         }
+
         for (const mark of _customMarks.values())
         {
             if (mark.graphic && !mark.graphic.destroyed)
                 paintShape(mark.token, mark.graphic, mark.color);
         }
+
         if (_hitChanceFor)
         {
             for (const [id, label] of _persistLabels)
@@ -84,12 +93,14 @@ function ensureContainer()
                     updateLabel(token, label);
             }
         }
+
         for (const entry of _chanceLabels.values())
         {
             if (entry.label && !entry.label.destroyed)
                 updateChanceLabel(entry);
         }
     };
+
     canvas.app.ticker.add(_persistPulse);
 }
 
@@ -99,6 +110,7 @@ function paintShape(token, markGraphic, color = TG.placed)
     markGraphic.clear();
     if (!token?.document || token.destroyed)
         return;
+
     const cells = getOccupiedOffsets(token).map(offset => [offset.col, offset.row]);
     paintDashedFootprint(markGraphic, cells, color, { halo: color === TG.reference });
 }
@@ -124,11 +136,13 @@ function applyIsoToLabel(label)
 function updateLabel(token, label)
 {
     const hitChance = _hitChanceFor?.(token);
+
     if (!hitChance)
     {
         label.visible = false;
         return;
     }
+
     applyTargetInfoLabel(label, hitChance);
     label.resolution = gridTextResolution();
     applyIsoToLabel(label);
@@ -141,6 +155,7 @@ function addLabel(token)
 {
     if (!_hitChanceFor)
         return;
+
     const label = makeHitLabel(_labelG);
     _persistLabels.set(token.id, label);
     updateLabel(token, label);
@@ -176,24 +191,30 @@ export function syncTargetShapes()
         clearSingleTargetShape();
         return;
     }
+
     const wantedShapes = new Set();
     const wantedLabels = new Set();
+
     for (const token of game.user?.targets ?? [])
     {
         if (!token)
             continue;
+
         // hit-% label: every target rolls to hit, whether or not an AoE shape covers it
         if (_hitChanceFor)
         {
             wantedLabels.add(token.id);
+
             if (!_persistLabels.has(token.id))
             {
                 ensureContainer();
                 addLabel(token);
             }
         }
+
         // gold per-token marker on every target, including tokens caught by a placed AoE shape
         wantedShapes.add(token.id);
+
         if (!_persistShapes.has(token.id))
         {
             ensureContainer();
@@ -202,16 +223,19 @@ export function syncTargetShapes()
             _persistShapes.set(token.id, shape);
         }
     }
+
     for (const id of [..._persistShapes.keys()])
     {
         if (!wantedShapes.has(id))
             removeShape(id);
     }
+
     for (const id of [..._persistLabels.keys()])
     {
         if (!wantedLabels.has(id))
             removeLabel(id);
     }
+
     broadcastToolPresence('targetShapes', presenceData());
 }
 
@@ -227,11 +251,13 @@ export function beginTargetSession(hitChanceFor = null, casterToken = null)
 {
     _sessionActive = true;
     _hitChanceFor = hitChanceFor;
+
     if (casterToken && !casterToken.destroyed)
     {
         _distanceRef = casterToken;
         setMeasureDistanceReference(casterToken);
     }
+
     if (!_presenceStop)
         _presenceStop = startToolHeartbeat('targetShapes', () => _sessionActive ? presenceData() : null);
     syncTargetShapes();
@@ -241,11 +267,13 @@ function _maybeTeardownContainers()
 {
     if (_persistShapes.size || _persistLabels.size || _customMarks.size || _chanceLabels.size)
         return;
+
     if (_persistPulse)
     {
         canvas.app.ticker.remove(_persistPulse);
         _persistPulse = null;
     }
+
     if (_persistG)
     {
         if (_persistG.parent)
@@ -253,6 +281,7 @@ function _maybeTeardownContainers()
         _persistG.destroy({ children: true });
         _persistG = null;
     }
+
     if (_labelG)
     {
         if (_labelG.parent)
@@ -267,16 +296,19 @@ export function clearSingleTargetShape()
 {
     _sessionActive = false;
     _hitChanceFor = null;
+
     if (_distanceRef)
     {
         setMeasureDistanceReference(null);
         _distanceRef = null;
     }
+
     if (_presenceStop)
     {
         _presenceStop();
         _presenceStop = null;
     }
+
     clearToolPresence('targetShapes');
     for (const id of [..._persistShapes.keys()])
         removeShape(id);
@@ -288,19 +320,26 @@ export function clearSingleTargetShape()
 function customMarkPresenceData()
 {
     const placedCells = [];
+
     for (const mark of _customMarks.values())
     {
         const token = mark.token;
-        if (!token?.document || token.destroyed || token.document.hidden)
+        if (!mark.broadcast || !token?.document || token.destroyed || token.document.hidden)
             continue;
         for (const offset of getOccupiedOffsets(token))
             placedCells.push(`${offset.col},${offset.row}`);
     }
+
     return { placedCells, placedColor: TG.target };
 }
 
+function hasBroadcastMarks()
+{
+    return [..._customMarks.values()].some(mark => mark.broadcast);
+}
+
 // Session-independent pulsing follow-mark on a token, broadcast as a ghost like the session shapes.
-export function createTokenMark(token, color = TG.reference)
+export function createTokenMark(token, color = TG.reference, { broadcast = true } = {})
 {
     if (!token || !canvas?.stage)
         return { destroy()
@@ -310,10 +349,15 @@ export function createTokenMark(token, color = TG.reference)
     paintShape(token, graphic, color);
     _persistG.addChild(graphic);
     const markId = _nextMarkId++;
-    _customMarks.set(markId, { token, graphic, color });
-    if (!_customPresenceStop)
-        _customPresenceStop = startToolHeartbeat('actingMark', () => _customMarks.size ? customMarkPresenceData() : null);
-    broadcastToolPresence('actingMark', customMarkPresenceData());
+    _customMarks.set(markId, { token, graphic, color, broadcast });
+
+    if (broadcast)
+    {
+        if (!_customPresenceStop)
+            _customPresenceStop = startToolHeartbeat('actingMark', () => (hasBroadcastMarks() ? customMarkPresenceData() : null));
+        broadcastToolPresence('actingMark', customMarkPresenceData());
+    }
+
     return {
         destroy()
         {
@@ -323,17 +367,20 @@ export function createTokenMark(token, color = TG.reference)
             _customMarks.delete(markId);
             if (mark.graphic && !mark.graphic.destroyed)
                 mark.graphic.destroy();
-            if (_customMarks.size)
+
+            if (mark.broadcast && hasBroadcastMarks())
                 broadcastToolPresence('actingMark', customMarkPresenceData());
-            else
+            else if (mark.broadcast)
             {
                 if (_customPresenceStop)
                 {
                     _customPresenceStop();
                     _customPresenceStop = null;
                 }
+
                 clearToolPresence('actingMark');
             }
+
             _maybeTeardownContainers();
         }
     };
@@ -342,17 +389,21 @@ export function createTokenMark(token, color = TG.reference)
 function updateChanceLabel(entry)
 {
     const token = entry.token;
+
     if (!token?.document || token.destroyed)
     {
         entry.label.visible = false;
         return;
     }
+
     const hitChance = entry.fn?.(token);
+
     if (!hitChance)
     {
         entry.label.visible = false;
         return;
     }
+
     applyTargetInfoLabel(entry.label, hitChance);
     entry.label.resolution = gridTextResolution();
     applyIsoToLabel(entry.label);
@@ -378,11 +429,13 @@ export function createChanceLabel(token, fn)
         {
             if (!_chanceLabels.delete(labelId))
                 return;
+
             if (label && !label.destroyed)
             {
                 label.parent?.removeChild(label);
                 label.destroy();
             }
+
             _maybeTeardownContainers();
         }
     };

@@ -30,6 +30,7 @@ export function hpColorCss(value, max)
 {
     if (max <= 0)
         return '#cccccc';
+
     const ratio = value / max;
     if (ratio > 1)
         return '#5ec0c5';
@@ -41,6 +42,7 @@ export function heatColorCss(value, max)
 {
     if (max <= 0)
         return '#888888';
+
     const ratio = value / max;
     if (ratio < 1 / 3)
         return cssHex(mixColor(0x888888, 0xffd700, ratio * 3));

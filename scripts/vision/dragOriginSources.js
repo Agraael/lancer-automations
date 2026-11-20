@@ -9,10 +9,12 @@ function _previewCarriesSources(token)
 {
     if (!game.settings.get('core', 'tokenDragPreview'))
         return false;
+
     const preview = token._preview;
     // clearPreviewContainer detaches before _onDragEnd, so a parentless preview means the drag ended.
     if (!preview || preview.destroyed || !preview.parent)
         return false;
+
     const context = token.layer?._draggedToken?.mouseInteractionManager?.interactionData?.contexts?.[token.document?.id];
     if (!context)
         return false;

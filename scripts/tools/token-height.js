@@ -10,11 +10,13 @@ export function getDesiredWallHeight(actor)
 {
     const size = Number(actor.system?.size ?? actor.prototypeToken?.width ?? 1) || 1;
     const vsEnabled = !!getModuleSetting('autoTokenHeightVehicleSquad');
+
     if (vsEnabled)
     {
         const items = Array.from(actor.items ?? []);
         if (items.some(item => item.system?.lid === 'npcc_squad'))
             return 0.5;
+
         if (items.some(item => /vehicle/i.test(item.system?.lid ?? '')))
         {
             if (size <= 1)
@@ -22,6 +24,7 @@ export function getDesiredWallHeight(actor)
             return Math.min(size - 1, 4) + 0.1;
         }
     }
+
     return size + 0.1;
 }
 

@@ -103,6 +103,203 @@ export function setDirVFromDegrees(uniforms, degrees)
 }
 
 const _tempRect = new PIXI.Rectangle();
+const _artFractions = new WeakMap();
+const STILL_SECONDS = 1;
+let _animationsOff = null;
+
+function animationsOff()
+{
+    if (_animationsOff === null)
+        _animationsOff = !!game.settings?.settings?.has(/** @type {any} */ ('tokenmagic.disableAnimations')) && /** @type {any} */ (game.settings).get('tokenmagic', 'disableAnimations') === true;
+    return _animationsOff;
+}
+
+function artFractions(texture)
+{
+    if (!texture?.valid)
+        return null;
+
+    if (_artFractions.has(texture))
+        return _artFractions.get(texture);
+
+    const alphaData = /** @type {any} */ (foundry.canvas.TextureLoader.getTextureAlphaData(texture, 0.25));
+    const fractions = alphaData?.width && alphaData.maxX > alphaData.minX && alphaData.maxY > alphaData.minY
+        ? {
+            left: alphaData.minX / alphaData.width,
+            top: alphaData.minY / alphaData.height,
+            right: alphaData.maxX / alphaData.width,
+            bottom: alphaData.maxY / alphaData.height,
+        }
+        : null;
+    _artFractions.set(texture, fractions);
+    return fractions;
+}
+
+function fitArtBounds(target, bounds)
+{
+    const fractions = artFractions(target.texture);
+    if (!fractions)
+        return;
+
+    const left = bounds.x + bounds.width * fractions.left;
+    const top = bounds.y + bounds.height * fractions.top;
+    const artWidth = bounds.width * (fractions.right - fractions.left);
+    const artHeight = bounds.height * (fractions.bottom - fractions.top);
+    const side = Math.max(artWidth, artHeight);
+
+    bounds.x = left + (artWidth - side) / 2;
+    bounds.y = top + (artHeight - side) / 2;
+    bounds.width = side;
+    bounds.height = side;
+}
+
+const EDGE_ANGLES = 360;
+const _edgeTables = new WeakMap();
+const _localBounds = new PIXI.Rectangle();
+
+function solidRamp(alpha)
+{
+    const ramp = Math.min(1, Math.max(0, (alpha / 255 - 0.86) / 0.1));
+    return ramp * ramp * (3 - 2 * ramp);
+}
+
+function buildEdgeTable(alphaData, bounds)
+{
+    const { width, height, minX, minY, maxX, maxY, data } = alphaData;
+    const trimWidth = maxX - minX;
+    const artWidth = bounds.width * trimWidth / width;
+    const artHeight = bounds.height * (maxY - minY) / height;
+    const side = Math.max(artWidth, artHeight);
+    const squareX = bounds.width * minX / width + (artWidth - side) / 2;
+    const squareY = bounds.height * minY / height + (artHeight - side) / 2;
+    const cell = Math.min(bounds.width / width, bounds.height / height) / side;
+
+    const solidAt = (spriteX, spriteY) =>
+    {
+        const gridX = Math.floor((squareX + spriteX * side) / bounds.width * width);
+        const gridY = Math.floor((squareY + spriteY * side) / bounds.height * height);
+        if (gridX < minX || gridX >= maxX || gridY < minY || gridY >= maxY)
+            return 0;
+        return solidRamp(data[(gridY - minY) * trimWidth + (gridX - minX)]);
+    };
+
+    const table = [];
+    for (let index = 0; index < EDGE_ANGLES; index++)
+    {
+        const angle = (index / EDGE_ANGLES) * Math.PI * 2;
+        const dirX = Math.cos(angle);
+        const dirY = Math.sin(angle);
+        let hit = -1;
+        for (let radius = 0.72; radius >= 0; radius -= cell * 0.5)
+        {
+            if (solidAt(0.5 + dirX * radius, 0.5 + dirY * radius) > 0.5)
+            {
+                hit = radius;
+                break;
+            }
+        }
+        if (hit < 0)
+        {
+            table.push(null);
+            continue;
+        }
+
+        const edgeX = 0.5 + dirX * hit;
+        const edgeY = 0.5 + dirY * hit;
+        let gradX = 0;
+        let gradY = 0;
+        for (let offY = -2; offY <= 2; offY++)
+        {
+            for (let offX = -2; offX <= 2; offX++)
+            {
+                const value = solidAt(edgeX + offX * cell, edgeY + offY * cell);
+                gradX += offX * value;
+                gradY += offY * value;
+            }
+        }
+        const gradLength = Math.hypot(gradX, gradY);
+        const normX = (gradLength > 1e-3 ? -gradX / gradLength : dirX) * 0.75 + dirX * 0.25;
+        const normY = (gradLength > 1e-3 ? -gradY / gradLength : dirY) * 0.75 + dirY * 0.25;
+        const normLength = Math.hypot(normX, normY);
+        table.push([edgeX, edgeY, normX / normLength, normY / normLength]);
+    }
+    return table;
+}
+
+function edgeTableFor(target)
+{
+    const texture = target?.texture;
+    if (!texture?.valid)
+        return null;
+
+    const bounds = target.getLocalBounds(_localBounds);
+    const key = `${bounds.width.toFixed(1)}x${bounds.height.toFixed(1)}`;
+    const cached = _edgeTables.get(texture);
+    if (cached?.key === key)
+        return cached.table;
+
+    const alphaData = /** @type {any} */ (foundry.canvas.TextureLoader.getTextureAlphaData(texture, 0.25));
+    const table = alphaData?.data?.length && alphaData.maxX > alphaData.minX && alphaData.maxY > alphaData.minY
+        ? buildEdgeTable(alphaData, bounds)
+        : null;
+    _edgeTables.set(texture, { key, table });
+    return table;
+}
+
+function edgeAtTurn(table, turn)
+{
+    const position = (((turn % 1) + 1) % 1) * EDGE_ANGLES;
+    const low = Math.floor(position) % EDGE_ANGLES;
+    const high = (low + 1) % EDGE_ANGLES;
+    const blend = position - Math.floor(position);
+    const lowEdge = table[low];
+    const highEdge = table[high];
+    let edge = lowEdge || highEdge;
+    if (lowEdge && highEdge && Math.hypot(lowEdge[0] - highEdge[0], lowEdge[1] - highEdge[1]) < 0.03)
+        edge = lowEdge.map((value, slot) => value + (highEdge[slot] - value) * blend);
+    return edge;
+}
+
+export function fillEdgeAnchors(anchors, target, count, now, drift)
+{
+    anchors.fill(-9);
+    const table = edgeTableFor(target);
+    if (!table)
+        return;
+
+    const capped = Math.min(anchors.length / 4, Math.round(count));
+    for (let index = 0; index < capped; index++)
+    {
+        const turn = (index + 0.5 + 0.4 * Math.sin(now * drift * 1.3 + index * 2.1) + 0.25 * Math.sin(now * drift * 0.7 + index * 5.3)) / Math.max(capped, 1);
+        const edge = edgeAtTurn(table, turn);
+        if (edge)
+            anchors.set(edge, index * 4);
+    }
+}
+
+export function fillEdgeTrail(anchors, target, heads, samples, now, speed, spacing)
+{
+    anchors.fill(-9);
+    const table = edgeTableFor(target);
+    if (!table)
+        return;
+
+    const cap = anchors.length / 4;
+    const headCount = Math.max(1, Math.round(heads));
+    const sampleCount = Math.max(1, Math.round(samples));
+    for (let head = 0; head < headCount; head++)
+    {
+        for (let sample = 0; sample < sampleCount; sample++)
+        {
+            const index = head * sampleCount + sample;
+            if (index >= cap)
+                return;
+            const edge = edgeAtTurn(table, now * speed + head / headCount - sample * spacing);
+            if (edge)
+                anchors.set(edge, index * 4);
+        }
+    }
+}
 
 // Inlined from TokenMagic's CustomFilter.apply() for stable vFilterCoord + self-driven time.
 export function applyCustomFilter(filter, filterManager, input, output, clear)
@@ -110,7 +307,7 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
     const now = performance.now();
     const dt = (now - filter._lastTime) / 1000;
     filter._lastTime = now;
-    filter.uniforms.time += dt * filter._timeSpeed;
+    filter.uniforms.time = animationsOff() ? STILL_SECONDS * filter._timeSpeed : filter.uniforms.time + dt * filter._timeSpeed;
 
     const filterMatrix = filter.uniforms.filterMatrix;
 
@@ -125,6 +322,9 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
 
         const worldTransform = PIXI.Matrix.TEMP_MATRIX;
         const localBounds = target.getLocalBounds(_tempRect);
+        const padFactor = filter.spriteCoords ? 0 : 1;
+        if (filter.spriteCoords)
+            fitArtBounds(target, localBounds);
 
         if (filter.sticky)
         {
@@ -134,16 +334,18 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
             const rotation = target.transform.rotation;
             const sin = Math.sin(rotation);
             const cos = Math.cos(rotation);
+
             const scaleX = Math.hypot(
                 cos * worldTransform.a + sin * worldTransform.c,
                 cos * worldTransform.b + sin * worldTransform.d
             );
+
             const scaleY = Math.hypot(
                 -sin * worldTransform.a + cos * worldTransform.c,
                 -sin * worldTransform.b + cos * worldTransform.d
             );
 
-            localBounds.pad(scaleX * filter.boundsPadding.x, scaleY * filter.boundsPadding.y);
+            localBounds.pad(scaleX * filter.boundsPadding.x * padFactor, scaleY * filter.boundsPadding.y * padFactor);
         }
         else
         {
@@ -160,7 +362,7 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
             const scaleX = Math.hypot(worldTransform.a, worldTransform.b);
             const scaleY = Math.hypot(worldTransform.c, worldTransform.d);
 
-            localBounds.pad(scaleX * filter.boundsPadding.x, scaleY * filter.boundsPadding.y);
+            localBounds.pad(scaleX * filter.boundsPadding.x * padFactor, scaleY * filter.boundsPadding.y * padFactor);
         }
 
         filterMatrix.prepend(worldTransform);
@@ -168,6 +370,7 @@ export function applyCustomFilter(filter, filterManager, input, output, clear)
         filterMatrix.scale(1.0 / localBounds.width, 1.0 / localBounds.height);
 
         const filterMatrixInverse = filter.uniforms.filterMatrixInverse;
+
         if (filterMatrixInverse)
         {
             filterMatrixInverse.copyFrom(filterMatrix);

@@ -47,6 +47,7 @@ declare module "fvtt-types/configuration"
             createSequencerEffect: (...args: any[]) => any;
             preCreateSequencerEffect: (...args: any[]) => any;
             endedSequencerEffect: (...args: any[]) => any;
+            diceSoNiceMessageProcessed: (...args: any[]) => any;
         }
     }
 
@@ -92,7 +93,7 @@ declare module "fvtt-types/configuration"
         };
         Combat: {
             "lancer-automations": {
-                delayedAppearances?: any[];
+                reinforcements?: any[];
                 [key: string]: any;
             };
             [key: string]: any;
@@ -164,6 +165,7 @@ declare module "fvtt-types/configuration"
         [key: `templatemacro.${string}`]: any;
         [key: `isometric-perspective.${string}`]: any;
         [key: `terrain-height-tools.${string}`]: any;
+        [key: `lancer-weapon-fx.${string}`]: any;
     }
 
     // Everything in this module runs at or after ready, so the pre-ready game unions

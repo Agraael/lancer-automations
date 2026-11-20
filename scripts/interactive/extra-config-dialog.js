@@ -15,6 +15,9 @@ import { itemActionSubs, detectHitGatedScopes } from '../combat/per-frequency-ta
 import { localize, escapeHtml } from '../tools/string-utils.js';
 import { getExtraDeployableOpts, setExtraDeployableOpts, getDeployableInfoSync, isPrimaryActionHidden, setHidePrimaryAction } from './deployables.js';
 import { tierGateControl, bindTierGate, tierGateApplies } from './tier-gate.js';
+import { ownEconomyControls, bindOwnEconomy } from './deployable-settings.js';
+import { getLinkedDeployables } from './extra-deployables.js';
+import { getLAFlag } from '../tools/flag-utils.js';
 import { isWeaponItem } from '../utils/lancer-token.js';
 
 const TYPE_DESCRIPTIONS = {
@@ -27,6 +30,7 @@ const TYPE_DESCRIPTIONS = {
     perMission:  'Per-mission limit - increment used-this-mission counter, reset on full repair.',
     reserveUsed: 'Reserve - mark used on activation.',
 };
+
 const CONSUME_ON_LABELS = { auto: 'Auto', activation: 'On attack', hit: 'On hit' };
 const PER_X_TYPES = new Set(['perTurn', 'perRound', 'perScene', 'perMission']);
 
@@ -51,18 +55,23 @@ export function openExtraConfigDialog(item)
         {
             if (!isWeapon || !PER_X_TYPES.has(type))
                 return '';
+
             const mode = getConsumeOn(item, type);
             const autoLabel = `Auto (${detectedHit.has(type) ? 'on hit' : 'on attack'})`;
+
             const options = CONSUME_ON_MODES.map(candidate =>
                 `<option value="${candidate}" ${candidate === mode ? 'selected' : ''}>${candidate === 'auto' ? autoLabel : CONSUME_ON_LABELS[candidate]}</option>`).join('');
+
             return `<select class="la-ec-consume-on" data-type="${type}" title="When the attack spends this counter" style="height:22px;font-size:0.8em;">${options}</select>`;
         };
 
         let autoConsumeHtml = '';
+
         if (present.length || subs.length)
         {
             const allDisabled = present.every(type => disabled.has(type))
                 && subs.every(sub => sub.types.every(type => getSubAutoConsumeDisabled(item, sub.key).has(type)));
+
             const rows = present.map(type =>
             {
                 const isOff = disabled.has(type);
@@ -76,9 +85,11 @@ export function openExtraConfigDialog(item)
                     ${consumeOnSelect(type)}
                 </div>`;
             }).join('');
+
             const subBlocks = subs.map(sub =>
             {
                 const subDisabled = getSubAutoConsumeDisabled(item, sub.key);
+
                 const subRows = sub.types.map(type => `
                 <div class="la-ec-row" style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--la-edge);">
                     <input type="checkbox" class="la-ec-sub-toggle" data-sub-key="${sub.key}" data-type="${type}" ${subDisabled.has(type) ? '' : 'checked'} style="margin:0;">
@@ -87,10 +98,12 @@ export function openExtraConfigDialog(item)
                         <div style="font-size:0.78em;color:var(--la-ink-dim);">${TYPE_DESCRIPTIONS[type] ?? ''}</div>
                     </div>
                 </div>`).join('');
+
                 return `
                 <div style="margin-top:8px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Action: ${sub.name ?? sub.key}</div>
                 <div style="margin-top:4px;border:1px solid var(--la-edge);background:var(--la-plate);">${subRows}</div>`;
             }).join('');
+
             autoConsumeHtml = `
             <div style="margin-top:10px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Auto-Consume</div>
             <div style="margin-top:4px;display:flex;align-items:center;gap:8px;padding:5px 8px;background:color-mix(in srgb, var(--la-plate), var(--la-ink) 8%);border:1px solid var(--la-edge);">
@@ -102,24 +115,32 @@ export function openExtraConfigDialog(item)
         }
 
         const nativeLids = item.type === 'frame'
-            ? (item.system?.core_system?.deployables || [])
+            ? [...(item.system?.core_system?.deployables || []), ...(item.system?.traits ?? []).flatMap(trait => trait?.deployables ?? [])]
             : (item.system?.deployables || []);
-        const depRows = [...new Set(nativeLids)].map(lid =>
+
+        const actorKeys = new Set(getLAFlag(item, 'extraDeployableActors') || []);
+
+        const depRows = [...new Set([...nativeLids, ...getLinkedDeployables(item)])].map(lid =>
         {
-            const info = getDeployableInfoSync(lid, item.actor) || {};
-            const name = info.name || lid;
+            const linkedActor = actorKeys.has(lid) ? /** @type {any} */ (fromUuidSync(lid)) : null;
+            const info = linkedActor ? { name: linkedActor.name, img: linkedActor.img } : (getDeployableInfoSync(lid, item.actor) || {});
+            const name = escapeHtml(info.name || lid);
             const safeImg = escapeHtml(info.img || 'icons/svg/hazard.svg');
             const safeLid = escapeHtml(lid);
             const opts = getExtraDeployableOpts(item, lid) || {};
             return `
-                <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--la-edge);" title="${safeLid}">
-                    <img src="${safeImg}" onerror="this.onerror=null;this.src='icons/svg/hazard.svg';" style="width:22px;height:22px;flex-shrink:0;border:none;">
-                    <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</span>
-                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Range override">R<input type="number" class="la-ec-dep-range" data-lid="${safeLid}" value="${opts.range ?? ''}" min="0" max="99" style="width:42px;height:22px;font-size:0.85em;"></label>
-                    <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Count override">C<input type="number" class="la-ec-dep-count" data-lid="${safeLid}" value="${opts.count ?? ''}" min="1" max="20" style="width:42px;height:22px;font-size:0.85em;"></label>
-                    ${tierGateApplies(item) ? tierGateControl(opts.tier, `data-lid="${safeLid}"`) : ''}
+                <div style="border-bottom:1px solid var(--la-edge);" title="${safeLid}">
+                    <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;">
+                        <img src="${safeImg}" onerror="this.onerror=null;this.src='icons/svg/hazard.svg';" style="width:22px;height:22px;flex-shrink:0;border:none;">
+                        <span style="flex:1;font-size:0.9em;color:var(--la-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</span>
+                        <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Range override">R<input type="number" class="la-ec-dep-range" data-lid="${safeLid}" value="${opts.range ?? ''}" min="0" max="99" style="width:42px;height:22px;font-size:0.85em;"></label>
+                        <label style="font-size:0.78em;color:var(--la-ink-dim);display:flex;align-items:center;gap:2px;" title="Count override">C<input type="number" class="la-ec-dep-count" data-lid="${safeLid}" value="${opts.count ?? ''}" min="1" max="20" style="width:42px;height:22px;font-size:0.85em;"></label>
+                        ${tierGateApplies(item) ? tierGateControl(opts.tier, `data-lid="${safeLid}"`) : ''}
+                    </div>
+                    ${ownEconomyControls(opts, `data-lid="${safeLid}"`)}
                 </div>`;
         }).join('');
+
         const deployHtml = depRows
             ? `<div style="margin-top:14px;font-size:0.78em;text-transform:uppercase;letter-spacing:1px;color:var(--la-ink-dim);font-weight:bold;">Deployable Range / Count</div>
                <div style="margin-top:4px;border:1px solid var(--la-edge);background:var(--la-plate);">${depRows}</div>`
@@ -137,6 +158,7 @@ export function openExtraConfigDialog(item)
 
         const body = (autoConsumeHtml + deployHtml + hidePrimaryHtml)
             || '<div style="padding:12px;color:var(--la-ink-dim);font-size:0.9em;font-style:italic;text-align:center;">Nothing to configure for this item.</div>';
+
         return `
             <div class="lancer-dialog-header">
                 <div class="lancer-dialog-title">EXTRA CONFIG</div>
@@ -161,6 +183,7 @@ export function openExtraConfigDialog(item)
                     const type = String($(ev.currentTarget).data('type') ?? '');
                     if (!CANONICAL_TYPES.includes(type))
                         return;
+
                     const checked = ev.currentTarget.checked === true;
                     await setItemAutoConsumeDisabled(item, type, !checked);
                     rerender();
@@ -169,6 +192,7 @@ export function openExtraConfigDialog(item)
                 {
                     const subKey = String($(ev.currentTarget).data('subKey') ?? '');
                     const type = String($(ev.currentTarget).data('type') ?? '');
+
                     if (!subKey || !PER_X_TYPES.has(type))
                         return;
                     await setSubAutoConsumeDisabled(item, subKey, type, ev.currentTarget.checked !== true);
@@ -178,6 +202,7 @@ export function openExtraConfigDialog(item)
                 {
                     const type = String($(ev.currentTarget).data('type') ?? '');
                     const mode = String($(ev.currentTarget).val() ?? 'auto');
+
                     if (!PER_X_TYPES.has(type) || !CONSUME_ON_MODES.includes(mode))
                         return;
                     await setConsumeOn(item, type, mode);
@@ -194,6 +219,7 @@ export function openExtraConfigDialog(item)
                     const lid = String($(ev.currentTarget).data('lid') ?? '');
                     if (!lid)
                         return;
+
                     const raw = String($(ev.currentTarget).val() ?? '').trim();
                     const range = raw === '' ? null : Number(raw);
                     await setExtraDeployableOpts(item, lid, { range });
@@ -203,6 +229,7 @@ export function openExtraConfigDialog(item)
                     const lid = String($(ev.currentTarget).data('lid') ?? '');
                     if (!lid)
                         return;
+
                     const raw = String($(ev.currentTarget).val() ?? '').trim();
                     const count = raw === '' ? null : Number(raw);
                     await setExtraDeployableOpts(item, lid, { count });
@@ -217,14 +244,23 @@ export function openExtraConfigDialog(item)
                     if (lid)
                         await setExtraDeployableOpts(item, lid, { tier });
                 });
+                bindOwnEconomy(html, async (opts, row) =>
+                {
+                    const lid = row.dataset.lid;
+                    if (lid)
+                        await setExtraDeployableOpts(item, lid, opts);
+                });
             };
+
             const rerender = () =>
             {
                 html.find('.la-ec-body').html(renderContent());
                 wire();
             };
+
             wire();
         },
     }, { width: 380, height: 'auto', classes: ['lancer-dialog-base', 'lancer-no-title'] });
+
     dlg.render(true);
 }

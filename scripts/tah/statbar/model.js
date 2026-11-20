@@ -4,6 +4,7 @@ import { showsPilotStress } from './rules.js';
 import { _resolveExtraBarValues, _groupExtrasIntoLines } from './extras.js';
 import { getLAFlag } from '../../tools/flag-utils.js';
 import { reactionCounts } from '../../combat/action-extras.js';
+import { cssHex } from '../../tools/color-utils.js';
 
 // Bar definitions
 
@@ -81,6 +82,7 @@ function getVisibleBars(actor, tokenDoc = null)
 {
     if (!actor)
         return [];
+
     const mechStats = hasMechStats(actor);
     const isPilot = actor.type === 'pilot';
     return BAR_DEFS.filter(def =>
@@ -94,11 +96,14 @@ function getVisibleBars(actor, tokenDoc = null)
         // pilotStress is pilot-only and gated on per-token / world setting.
         if (def.id === 'pilotStress' && (!isPilot || !showsPilotStress(tokenDoc)))
             return false;
+
         const barValue = def.getValue(actor);
         const value = barValue.value ?? 0;
         const max = barValue.max ?? 0;
+
         if (def.pips && max <= 0)
             return false;
+
         // No native heat track: show the heat bar only if heat or infection is non-zero.
         if (def.id === 'heat' && (actor.system?.heat?.max ?? 0) <= 0)
         {
@@ -106,6 +111,7 @@ function getVisibleBars(actor, tokenDoc = null)
             if (value <= 0 && infection <= 0)
                 return false;
         }
+
         if (def.hideWhenZero && value <= 0)
             return false;
         if (def.hideWhenFull && max > 0 && value >= max)
@@ -119,6 +125,7 @@ export function _hubRows(actor, tokenDoc)
     const visibleIds = new Set(getVisibleBars(actor, tokenDoc).map(def => def.id));
     const find = id => BAR_DEFS.find(def => def.id === id);
     const rows = [];
+
     if (hasMechStats(actor))
     {
         if (visibleIds.has('structure') || visibleIds.has('hp'))
@@ -137,6 +144,7 @@ export function _hubRows(actor, tokenDoc)
         else if (visibleIds.has('heat'))
             rows.push([null, find('heat')]);
     }
+
     return { visibleIds, rows };
 }
 
@@ -167,10 +175,12 @@ export function getStatHubModel(token)
 {
     const actor = token?.actor;
     const tokenDoc = token?.document;
+
     if (!actor || !tokenDoc)
         return null;
+
     const { visibleIds, rows } = _hubRows(actor, tokenDoc);
-    const read = def => def && visibleIds.has(def.id) ? { id: def.id, color: hex(def.color), ...def.getValue(actor) } : null;
+    const read = def => def && visibleIds.has(def.id) ? { id: def.id, color: cssHex(def.color), ...def.getValue(actor) } : null;
     return {
         pipSlots: hasMechStats(actor) ? _pipSlotCount(actor) : 0,
         rows: rows.map(([pips, bar]) => ({ pips: read(pips), bar: read(bar) })),
@@ -196,6 +206,7 @@ export function getEffectiveMax(actor, statKey)
     const sys = actor?.system;
     if (!sys)
         return 0;
+
     if (statKey === 'hp')
     {
         const max = sys.hp?.max ?? 0;
@@ -204,6 +215,7 @@ export function getEffectiveMax(actor, statKey)
         // Largest of max, HP, or overshield. OS doesn't stack on HP for sizing.
         return Math.max(max, value, os);
     }
+
     if (statKey === 'heat')
     {
         const ownMax = sys.heat?.max ?? 0;
@@ -211,6 +223,7 @@ export function getEffectiveMax(actor, statKey)
         const fallbackMax = ownMax > 0 ? ownMax : (sys.hp?.max ?? 0);
         return Math.max(fallbackMax, value);
     }
+
     return 0;
 }
 
@@ -219,6 +232,7 @@ export function _parseHex(hex)
 {
     if (typeof hex !== 'string')
         return 0x888888;
+
     const stripped = hex.trim().replace(/^#/, '');
     const parsed = parseInt(stripped, 16);
     return Number.isFinite(parsed) ? (parsed & 0xffffff) : 0x888888;
@@ -229,7 +243,9 @@ function _clockSnapshot(actor)
     const state = actor?.system?.bond_state;
     if (!state)
         return null;
+
     const snap = {};
+
     for (const kind of ['clocks', 'burdens'])
     {
         for (const counter of state[kind] ?? [])
@@ -238,6 +254,7 @@ function _clockSnapshot(actor)
                 snap[counter.lid] = { name: counter.name ?? '', value: counter.value ?? 0, burden: kind === 'burdens' };
         }
     }
+
     return snap;
 }
 
@@ -245,12 +262,14 @@ export function snapshotValues(actor, tokenDoc = null)
 {
     const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     const extrasSnap = {};
+
     for (const extra of extras)
     {
         if (!extra?.id)
             continue;
         extrasSnap[extra.id] = _resolveExtraBarValues(actor, extra).value;
     }
+
     return {
         hp: actor.system?.hp?.value ?? 0,
         heat: actor.system?.heat?.value ?? 0,
@@ -270,9 +289,4 @@ export function snapshotValues(actor, tokenDoc = null)
         coreCharged: corePowerState(actor).charged,
         extras: extrasSnap,
     };
-}
-
-export function hex(colorInt)
-{
-    return '#' + colorInt.toString(16).padStart(6, '0');
 }

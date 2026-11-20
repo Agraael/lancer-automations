@@ -2,27 +2,27 @@
 
 [← Back to Home](../index.md) · Engine internals: [Automation System](../AUTOMATION_SYSTEM.md) · API: [API Reference](../API_REFERENCE.md)
 
-<img src="../img/feature-automation-engine.png" width="55%"/>
-
 Turns game events into automations: a trigger fires, filters decide who reacts, and your code, a flow, or a macro runs.
 
 Engine internals (full trigger list, evaluate / activation / onInit callbacks, cancel and modify, client and socket execution) are in **[Automation System](../AUTOMATION_SYSTEM.md)**.
+
+<img src="../img/feature-automation-engine.png" width="55%"/>
 
 ---
 
 ## What's automated by default
 
-Two things ship enabled, both listed on the **Defaults** tab of the Activation Manager.
+Two things ship enabled, both listed on the **Defaults** tab of the Automation Manager.
 
-**The base actions.** Overwatch, Brace, Engagement, Disengage, Ram, Boost, Overcharge, Lock On, Bolster, Stabilize, Eject, Reactor Meltdown, Hide, Scan, Mount and the rest of the general reactions.
+**The base actions.** Overwatch, Brace, Engagement, Disengage, Ram, Boost, Overcharge, Lock On, Bolster, Stabilize, Eject, Reactor Meltdown, Hide, Scan, Mount and the rest of the general automations.
 
 **A short list of LID-keyed item automations.** Custom Paint Job, Limitless, Treads or Hover, Limited Melee Attacks (ships and vehicles), No Manipulators, Limited Handling, and Veterancy, each keyed to the item's LID and firing for any actor that owns it.
 
-Beyond those, an item automation is yours to write, and the Activation Manager is where you do it. The larger [personal activation set](#the-personal-activation-set) is a separate opt-in.
+Beyond those, an item automation is yours to write, and the Automation Manager is where you do it. The larger [personal automation set](#the-personal-automation-set) is a separate opt-in.
 
 ---
 
-## The Activation Manager
+## The Automation Manager
 
 <img align="right" src="../img/ae-activation-manager.png" width="35%"/>
 
@@ -30,12 +30,12 @@ Register, modify, and copy automations. Open it from the Lancer Automations sett
 
 It has two kinds of entries:
 
-- **Item-based** automations are tied to a Lancer item by its LID. Only tokens that own that item can react. You can also bind one to a deployable LID, or to a specific Actor UUID, so it reacts only as that one exact actor instead of every actor with the item.
+- **Item-based** automations are tied to a Lancer item by its LID. Only tokens that own that item can react. You can also bind one to a deployable LID, or to a specific Actor UUID. An Actor UUID makes it react only as that one exact actor instead of every actor with the item.
 - **General** automations aren't tied to any item. Any token in the scene can react, filtered by the rules you set.
 
-Entries can be sorted into named **folders**. The four tabs are **Activations**, **Defaults**, **Startup** and **Workshop**.
+Entries can be sorted into named **folders**. The four tabs are **Automations**, **Defaults**, **Startup** and **Workshop**.
 
-Each activation has an **enable / disable** toggle. It works per sub-reaction on a multi-reaction item, and on the built-in and personal-set automations too (the toggle is saved as your own override, so disabling a built-in one sticks).
+Each automation has an **enable / disable** toggle. It works per sub-automation on an item that has several, and on the built-in and personal-set automations too (the toggle is saved as your own override, so disabling a built-in one sticks).
 
 <br clear="right"/>
 
@@ -47,7 +47,7 @@ You can't edit a built-in directly. Three ways around it:
 |------|----|
 | Turn it off | The **enable toggle**. Saved, so updates don't undo it. |
 | Change it | **Edit** it. Your version is saved over the default. |
-| Make a variant | **Copy to Custom** (copy icon on the row, Defaults tab only). Opens the built-in in the editor. Saving writes an override under the same name that replaces the built-in until you delete it. For a separate variant, rename a general activation before saving. |
+| Make a variant | **Copy to Custom** (copy icon on the row, Defaults tab only). Opens the built-in in the editor. Saving writes an override under the same name that replaces the built-in until you delete it. For a separate variant, rename a general automation before saving. |
 
 To replace a built-in: Copy to Custom, edit, save. The enable toggle then acts on your override.
 
@@ -65,23 +65,23 @@ Item-based automations need the item's LID. Three finder buttons sit next to the
 
 ---
 
-## Configuring an activation
+## Configuring an automation
 
 <img src="../vid/ae-reaction-config.gif" width="65%"/>
 
-Each activation is a small form. The main fields:
+Each automation is a small form. The main fields:
 
 | Group | What you set |
 |-------|--------------|
 | **Triggers** | Which game events fire it (`onMove`, `onHit`, `onActivation`, `onDeploy`, and many more). Full list in [Automation System](../AUTOMATION_SYSTEM.md). Custom names go in the **Custom** field, fired with `api.dispatchCustomTrigger(name, data)`. |
-| **Mode** | How your code composes with the activation's **own** flow or card: **instead of** it, or **after** it. Never the flow that triggered you, which runs either way. Also whether it **auto-activates** silently (no popup). |
-| **Filters** | Disposition (Friendly / Hostile / Neutral / Secret, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the activation is limited to. |
+| **Mode** | Whether your code runs **instead of** the automation's **own** flow or card, or **after** it. Neither mode touches the flow that triggered you, which runs either way. Also whether it **auto-activates** silently (no [reminder](#reminders)). |
+| **Filters** | Disposition (Friendly / Hostile / Neutral / Secret, plus Token Factions teams), trigger-self / trigger-other, only-on-source-match, require-can-provoke, out-of-combat, scene reactor (evaluate once as the active scene, alongside or instead of the per-token passes), and an optional scene the automation is limited to. |
 | **Binding** | What the automation attaches to: an item LID, a deployable LID, or an Actor UUID, plus an action path to bind one sub-action, the action type (Automation / Reaction / Quick Action / Full Action / ...), and frequency. Note the long forms: it is `"Quick Action"` here, not the `"Quick"` short form the TAH extra actions use. |
-| **Text** | Override the trigger and effect descriptions shown in the popup. |
+| **Text** | Override the trigger and effect descriptions shown in the reminder. |
 
 ### Example: react to your own activation
 
-The smallest useful activation: run your own code when an item's action is used. Exported, a self-reacting `onActivation` looks like this, trimmed to the fields that matter (a real export carries every field in the form):
+The smallest useful automation: run your own code when an item's action is used. Exported, a self-reacting `onActivation` looks like this, trimmed to the fields that matter (a real export carries every field in the form):
 
 ```json
 {
@@ -108,19 +108,19 @@ The smallest useful activation: run your own code when an item's action is used.
 
 What makes it self-react on use:
 
-- **`triggers: ["onActivation"]`** - fires when the item's action runs.
+- **`triggers: ["onActivation"]`**: fires when the item's action runs.
 
-- **`triggerSelf: true`** (with `triggerOther: false`) - the acting token is the reactor, so it reacts to its own action. There is also `triggerTarget: true` - the reactor is one of the event's targets (the one being attacked), usable with both others off for target-only reactions.
+- **`triggerSelf: true`** (with `triggerOther: false`): the acting token is the reactor, so it reacts to its own action. There is also `triggerTarget: true`, where the reactor is one of the event's targets (the one being attacked). With both others off, it makes a target-only automation.
 
-- **`autoActivate: true`** - runs silently, no popup.
+- **`autoActivate: true`**: runs silently, with no reminder.
 
-- **`activationMode: "instead"`** - your code runs alone. `"after"` also fires the reaction's own flow/card alongside it. Neither touches the flow that triggered you.
+- **`activationMode: "instead"`**: your code runs alone. `"after"` also fires the automation's own flow/card alongside it. Neither touches the flow that triggered you.
 
-- **`reactionPath: "core_system.passive_actions[0]"`** - binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action. Drop `reactionPath` to bind the whole item.
+- **`reactionPath: "core_system.passive_actions[0]"`**: binds to one specific action (here a frame's first core passive). Swap the `lid` and `reactionPath` for your own item and action. Drop `reactionPath` to bind the whole item.
 
 ---
 
-## How an activation runs
+## How an automation runs
 
 <img src="../img/ae-example.png" width="60%"/>
 
@@ -158,7 +158,7 @@ It returns the same information as an object, and it's also on the api as `api.d
 
 ### Debug mode
 
-The **Debug: Automation System** toggle (module settings, Debug tab) logs the whole trigger pipeline: which trigger fires, which activations were candidates, why each one was skipped (out of combat, wrong disposition, no reaction left, evaluate returned false, ...), and which one ran. Turn it on when your automation doesn't fire at all and you want to know where it fell out.
+The **Debug: Automation System** toggle (module settings, Debug tab) logs the whole trigger pipeline: which trigger fires, which automations were candidates, why each one was skipped (out of combat, wrong disposition, no reaction left, evaluate returned false, ...), and which one ran. Turn it on when your automation doesn't fire at all and you want to know where it fell out.
 
 <img src="../img/ae-debug-settings.png" width="60%"/>
 
@@ -166,11 +166,11 @@ The **Debug: Automation System** toggle (module settings, Debug tab) logs the wh
 
 The most useful tool for understanding what is going on inside an automation.
 
-Your functions are compiled the first time they run, so they don't exist in the devtools until then. The **Load for Debug** button at the top of the activation editor compiles them immediately:
+Your functions are compiled the first time they run, so they don't exist in the devtools until then. The **Load for Debug** button at the top of the editor compiles them immediately:
 
 <img src="../img/ae-debug-load.png" width="60%"/>
 
-Then in devtools (F12), under **Sources**, your functions appear as files in `modules/lancer-automations/dynamic/`, one folder per activation with one file per function (`evaluate.js`, `activation.js`, `oninit.js`, `onmessage.js`). General activations are named by their activation name. Item activations nest two levels, `dynamic/<lid>/<index>/`, where the index is the sub-reaction's position, so a multi-reaction item gets one folder per reaction. Click a line number to set a breakpoint.
+Then in devtools (F12), under **Sources**, your functions appear as files in `modules/lancer-automations/dynamic/`, one folder per automation with one file per function (`evaluate.js`, `activation.js`, `oninit.js`, `onmessage.js`). General automations are named by their **Activation Name**. Item automations nest two levels, `dynamic/<lid>/<index>/`, where the index is the sub-automation's position, so an item with several gets one folder for each. Click a line number to set a breakpoint.
 
 <img src="../img/ae-debug-sources.png" width="60%"/>
 
@@ -180,15 +180,15 @@ You can also write `debugger;` directly in your code: with devtools open, execut
 
 ---
 
-## The activation popup
+## Reminders
 
 <img align="right" src="../img/ae-activation-popup.png" width="45%"/>
 
-When a trigger fires reactions that aren't set to auto-activate, they're collected into a popup, grouped by token. Click an entry to expand its detail panel (trigger text, effect, action type badge, frequency), then click **Activate** to run it.
+When an automation that isn't set to auto-activate fires, it posts a **reminder** in the reminder lane, in the corner. Any automation can post one, not only Lancer Reactions. Click a reminder to open its detail panel (trigger text, effect, action type badge, frequency), or its use button to run it. Click the portrait to pan to the token.
 
-- Who sees the popup depends on the **`reactionNotificationMode`** setting: the token's owner, the GM, or both.
-- **Right-click** a reaction to open its source item's sheet.
-- Only one popup exists at a time. If a second trigger raises its own, the first is closed and its unclicked entries are gone. There is no queue and no pending badge, so anything that must not be missed belongs on auto-activate.
+- Who gets the reminders depends on the **`reactionNotificationMode`** setting: the token's owner, the GM, or both.
+- **Right-click** a reminder to open its source item's sheet.
+- New reminders stack on top of the old ones. A reminder stays until it's used or dismissed (the ✕), or until the turn changes.
 
 <br clear="right"/>
 
@@ -196,7 +196,7 @@ When a trigger fires reactions that aren't set to auto-activate, they're collect
 
 ## Reaction economy
 
-If **`consumeReaction`** is on, the token's reaction for the round is spent when an action whose activation resolves to **Reaction** runs through a flow. That covers a `"flow"` activation and any action whose `actionType` is Reaction. An auto-activating code automation that never launches a flow does not touch the counter. The popup shows the reaction as unavailable once it's spent.
+If **`consumeReaction`** is on, the token's reaction for the round is spent when an action whose activation resolves to **Reaction** runs through a flow. That covers an automation of type `"flow"` and any action whose `actionType` is Reaction. An auto-activating code automation that never launches a flow does not touch the counter.
 
 ---
 
@@ -204,7 +204,7 @@ If **`consumeReaction`** is on, the token's reaction for the round is spent when
 
 <img align="right" src="../img/ae-startup-scripts.png" width="45%"/>
 
-The **Startup** tab in the Activation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any activation or macro.
+The **Startup** tab in the Automation Manager holds code that runs once when Foundry is ready, before play starts. The main use is registering helper functions with `api.registerUserHelper`, callable from any automation or macro.
 
 The registration patterns are in [API How-To](../API_HOWTO.md).
 
@@ -214,23 +214,21 @@ The registration patterns are in [API How-To](../API_HOWTO.md).
 
 ## Sharing automations
 
-**Copy** / **Paste** in the activation editor moves one activation. **Export Pack** / **Import Pack** in the Activation Manager moves a bundle of activations and startup scripts as `la-pack-<name>.json`, with a summary to pick what applies.
+**Copy** / **Paste** in the editor moves one automation. **Export Pack** / **Import Pack** in the Automation Manager moves a bundle of automations and startup scripts as `la-pack-<name>.json`, with a summary to pick what applies.
 
-The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share those files. The **Workshop** tab in the Activation Manager browses and imports it directly. Re-importing a file updates your copy instead of duplicating it.
+The [Workshop](https://github.com/Agraael/Lancer-automations-workshop) is where people share those files. The **Workshop** tab in the Automation Manager browses and imports it directly. Re-importing a file updates your copy instead of duplicating it.
 
 <img src="../vid/ae-workshop.gif" width="80%"/>
 
 ---
 
-## The personal activation set
+## The personal automation set
 
-Module Settings has a toggle for my personal activation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Activation Manager under the **default** section. The toggle stays locked until **Extra Lancer Statuses** (`additionalStatuses`) is on, since the set applies those statuses.
+Module Settings has a toggle for my personal automation set (**`enableLaSossisItems`**): 30+ of my own item automations, with examples like Dispersal Shield, Marker Rifle, and Defense Net. Once enabled, they show in the Automation Manager under the **default** section. The toggle stays locked until **Extra Lancer Statuses** (`additionalStatuses`) is on, since the set applies those statuses.
 
 > [!NOTE]
 > This is **my own stuff, not part of the core module**. It's literally the automations I built for my own games (my NPCs, my items), shared as-is. It isn't a complete or general library, and it won't automate your content. Treat it as a set of examples to learn from, not something to rely on.
 
 The worked examples are walked through in [NPC Examples](./NPC_EXAMPLES.md), and the patterns for registering your own automations from code are in [API How-To](../API_HOWTO.md).
-
-Some of these deployables aren't in any official LCP. If a personal activation spawns one that won't resolve, import the small companion pack that ships with the module: [`extra/LaSossis_Npc_Deployables.lcp`](../../extra/LaSossis_Npc_Deployables.lcp).
 
 <img src="../img/ae-personal-set.png" width="60%"/>

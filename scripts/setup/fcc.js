@@ -17,6 +17,7 @@ export function getFCCData()
 {
     if (!isFCCActive())
         return null;
+
     const FCC = fccClass();
     if (!(FCC.forced instanceof Map) || !(FCC.unlocked instanceof Map))
         return null;
@@ -43,6 +44,7 @@ export async function toggleFCCForce(event, action)
     const FCC = fccClass();
     if (typeof FCC?.clickToggleForceControls !== 'function')
         return;
+
     const noRender = { render: () => null };
     await FCC.clickToggleForceControls(event, action, noRender);
 }

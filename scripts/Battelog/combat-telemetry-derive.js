@@ -5,7 +5,7 @@
 
 import { AWARDS } from './awards.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { attributeKill, matchUndoneDamage } from './kill-attribution.js';
+import { attributeKill, matchUndoneDamage, liveDestroyed } from './kill-attribution.js';
 import { localize } from '../tools/string-utils.js';
 import { tfGetTeam, tfGetTeams } from '../tools/token-factions-utils.js';
 import { getRelativeDisposition } from '../combat/overwatch.js';
@@ -15,6 +15,7 @@ const ACCENT_PALETTE = [
     '#7bd3ff', '#a577ff', '#6be08a', '#ff7bb9', '#4dd0e1',
     '#9ccc65', '#90a4ae', '#f48fb1', '#b39ddb', '#80cbc4',
 ];
+
 const FALLBACK_IMG = 'icons/svg/mystery-man.svg';
 const TOP_ACTION_EXCLUDE = new Set(['SKIRMISH', 'BARRAGE', 'FIGHT']);
 const BIG_TEMPLATES = new Set(['ELITE', 'ULTRA', 'VETERAN']);
@@ -30,6 +31,7 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
 {
     const telemetry = _creditDotTicks(_dropUndoneDamage(_dropUndoneActions(_teamBuckets(recorded))));
     const turnAxis = _buildTurnAxis(telemetry);
+
     const players = telemetry.players.map((log, idx) =>
     {
         const player = _derivePlayer(log, idx, telemetry, turnAxis);
@@ -58,6 +60,7 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
         h.killedByPilot = attribution.killerIsPilot;
         h.pilotAssistedBy = attribution.pilotAssistIds;
     }
+
     for (const p of players)
     {
         p.killedList   = hostiles.filter(h => h.killedBy === p.tokenId).map(h => h.name);
@@ -66,16 +69,20 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
         p.pilotAssistedList = hostiles.filter(hostile => (hostile.pilotAssistedBy ?? []).includes(p.tokenId)).map(hostile => hostile.name);
         p.kills   = p.killedList.length;
         p.assists = p.assistedList.length;
+
         for (const h of hostiles)
         {
             const round = h.round;
             if (round == null || round < 1 || round > p.killLine.length)
                 continue;
+
             const slot = turnAxis.length ? _turnSlot(turnAxis, round, h.turnDied) : -1;
+
             if (h.killedBy === p.tokenId)
             {
                 p.killLine[round - 1]++;
                 p.killAssistLine[round - 1]++;
+
                 if (slot >= 0)
                 {
                     p.killLineTurns[slot]++;
@@ -86,6 +93,7 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
             {
                 p.assistLine[round - 1]++;
                 p.killAssistLine[round - 1]++;
+
                 if (slot >= 0)
                 {
                     p.assistLineTurns[slot]++;
@@ -96,17 +104,21 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
     }
 
     let firstKill = null;
+
     for (const h of hostiles)
     {
         if (!h.killed || h.round == null || !h.killedBy)
             continue;
-        if (!firstKill || h.round < firstKill.round)
+        if (!firstKill || h.round < firstKill.round || (h.round === firstKill.round && (h.diedSeq ?? Infinity) < (firstKill.diedSeq ?? Infinity)))
             firstKill = h;
     }
+
     const squadKillers = new Set(players.filter(player => player.destroyed && player.destroyedBy).map(player => player.destroyedBy));
+
     const bigTargets = new Set(hostiles
         .filter(hostile => hostile.size >= 3 || hostile.templates.some(name => BIG_TEMPLATES.has(name)))
         .map(hostile => hostile.tokenId));
+
     for (const p of players)
     {
         if (firstKill?.killedBy === p.tokenId)
@@ -119,9 +131,11 @@ export function deriveDisplayBattle(recorded, { outcome = 'VICTORY', mvpId = nul
     const mission = _buildMission(telemetry, outcome, players, hostiles);
     mission.turns = turnAxis.length || null;
     const disableAwards = !!getModuleSetting('tah.disableAwards');
+
     const { awards, mvpId: derivedMvpId } = disableAwards
         ? { awards: [], mvpId: mvpId ?? null }
         : _buildAwards(players, mvpId);
+
     return { mission, rounds, turnAxis, players, hostiles, friendlies, neutrals, secrets, awards, mvpId: derivedMvpId };
 }
 
@@ -143,27 +157,33 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const repairsMax = _asNum(sys.repairs?.max, 5);
     // Real logs: repair spend shows up in the captured ticks. SELF REPAIR events are mock-only.
     const repairTicks = statTicks.filter(ev => typeof ev.repairs === 'number');
+
     const repairsTickDrop = repairTicks.length
         ? Math.max(0, repairTicks[0].repairs - repairTicks[repairTicks.length - 1].repairs)
         : 0;
+
     const repairsUsed = Math.max(repairsTickDrop, events.filter(ev => ev.type === 'action' && ev.name === 'SELF REPAIR').length);
     // Positive tick deltas = healing, negative heat deltas = cooling; structure/stress resets excluded.
     const structRounds = new Set(events.filter(ev => ev.type === 'structure-loss').map(ev => ev.round));
     const stressRounds = new Set(events.filter(ev => ev.type === 'stress-loss').map(ev => ev.round));
     let hpRestored = 0;
     let heatCooled = 0;
+
     for (let tickIdx = 1; tickIdx < statTicks.length; tickIdx++)
     {
         const prevTick = statTicks[tickIdx - 1];
         const curTick = statTicks[tickIdx];
         const hpDelta = (curTick.hp ?? 0) - (prevTick.hp ?? 0);
+
         if (hpDelta > 0 && !structRounds.has(curTick.round) && !structRounds.has(prevTick.round))
             hpRestored += hpDelta;
+
         const heatDelta = (prevTick.heat ?? 0) - (curTick.heat ?? 0);
         if (heatDelta > 0 && !stressRounds.has(curTick.round) && !stressRounds.has(prevTick.round))
             heatCooled += heatDelta;
     }
-    hpRestored = Math.max(0, hpRestored - events.reduce((sum, ev) => sum + (ev.type === 'damage-undo' ? (ev.hpRestored ?? 0) : 0), 0));
+
+    hpRestored = Math.max(0, hpRestored - _allLogs(telemetry).flatMap(other => other.events).reduce((sum, ev) => sum + (ev.type === 'damage-undo' && ev.targetId === log.tokenId ? (ev.hpRestored ?? 0) : 0), 0));
     // corePower = true means "spent" (matches recap display "USED" vs "HELD").
     const corePower = events.some(ev => ev.type === 'action' && ev.name === 'CORE POWER');
 
@@ -171,11 +191,13 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const pilotName = sys.pilot?.value?.name ?? actor?.name ?? 'PILOT';
     const manufacturer = sys.loadout?.frame?.value?.system?.source ?? sys.frame?.source ?? 'GMS';
     const pilotLevel = _asNum(sys.pilot?.value?.system?.level ?? sys.pilot?.level, 2);
+
     const favWeapon = _attackNameCounts(
         events,
         ev => ev.type === 'attack' && ev.byId === log.tokenId && ev.category === 'weapon' && !ev.basic && ev.targets?.some(target => target.hit),
         ev => ev.weaponName,
     ).top ?? '-';
+
     const topAction = _actionCounts(
         events,
         ev => ev.type === 'action' && ev.byId === log.tokenId && ev.success
@@ -187,9 +209,11 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     // Per-round struct / stress, walking loss events cumulatively.
     const structAtRound = new Array(telemetry.roundCount).fill(0);
     const stressAtRound = new Array(telemetry.roundCount).fill(0);
+
     {
         let struct = startTick ? _asNum(startTick.structure, structMax) : structMax;
         let stress = startTick ? _asNum(startTick.stress, stressMax) : stressMax;
+
         for (let r = 1; r <= telemetry.roundCount; r++)
         {
             for (const ev of events)
@@ -200,11 +224,21 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
                     struct = Math.max(0, struct - 1);
                 if (ev.type === 'stress-loss')
                     stress = Math.max(0, stress - 1);
+
+                if (ev.type === 'revived')
+                {
+                    const tickAfter = events.find((next, nextIdx) => nextIdx > events.indexOf(ev) && next.type === 'stat-tick');
+
+                    struct = _asNum(tickAfter?.structure, struct);
+                    stress = _asNum(tickAfter?.stress, stress);
+                }
             }
+
             structAtRound[r - 1] = struct;
             stressAtRound[r - 1] = stress;
         }
     }
+
     // Effective pools: HP falls from hpMax*structMax → 0, heat rises 0 → heatMax*stressMax.
     const line = rawHp.map((hp, i) => Math.max(0, hp + (structAtRound[i] - 1) * hpMax));
     const heatLine = rawHeat.map((heat, i) => heat + (stressMax - stressAtRound[i]) * heatMax);
@@ -214,6 +248,7 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
             ? (ev.damages ?? []).reduce((n, d) => n + (d.amount ?? 0), 0)
             : 0
     );
+
     const dmgLine  = _perRoundSum(events, telemetry.roundCount, dmgValueFor);
     const killLine        = _perRoundSum(events, telemetry.roundCount, () => 0);
     const assistLine      = _perRoundSum(events, telemetry.roundCount, () => 0);
@@ -222,6 +257,7 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     let lineTurns = [];
     let heatLineTurns = [];
     let dmgLineTurns = [];
+
     if (turnAxis.length)
     {
         const hpTurns     = _tickLineTurns(events, 'hp', turnAxis, startTick ? _asNum(startTick.hp, hpMax) : hpMax);
@@ -232,11 +268,14 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         heatLineTurns = heatTurns.map((heat, idx) => heat + (stressMax - _asNum(stressTurns[idx], stressMax)) * heatMax);
         dmgLineTurns = _perTurnSum(events, turnAxis, dmgValueFor);
     }
+
     const hpEnd = rawHp.at(-1) ?? hpMax;
     const heatEnd = rawHeat.at(-1) ?? 0;
     const heatPeak = Math.max(0, ...rawHeat);
-    const destroyedEv = events.find(ev => ev.type === 'destroyed');
+    const destroyedEv = liveDestroyed(events);
     const destroyed = !!destroyedEv;
+    const leftEv = destroyed ? null : events.findLast(ev => ev.type === 'left') ?? null;
+    const left = !!leftEv;
 
     const breakdown = _buildBreakdown(events, telemetry, log.tokenId);
     const dmgDealt = breakdown.dmgOut.types.reduce((n, t) => n + t.v, 0);
@@ -244,46 +283,59 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const attacks = breakdown.weapons.reduce((n, w) => n + w.n, 0);
     const techAtk = breakdown.techActs.reduce((n, t) => n + t.n, 0);
     const skills  = breakdown.skills.reduce((n, s) => n + s.n, 0);
+
     const attackTargets = events
         .filter(ev => ev.type === 'attack' && ev.byId === log.tokenId && ev.category === 'weapon')
         .flatMap(ev => ev.targets ?? []);
+
     const shots = attackTargets.length;
     const hits  = attackTargets.filter(target => target.hit).length;
     const accuracy = shots > 0 ? Math.round(hits / shots * 100) : 0;
     const perRoundActions = new Map();
+
     for (const ev of events)
     {
         if (ev.type === 'action' && ev.byId === log.tokenId && ev.activation && ev.activation !== 'Reaction')
             perRoundActions.set(ev.round, (perRoundActions.get(ev.round) ?? 0) + 1);
     }
+
     const maxActionsInTurn = Math.max(0, ...perRoundActions.values());
 
     const reactionsUsed = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.activation === 'Reaction').length;
     const overcharges = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.name === 'OVERCHARGE').length;
     const statusesInflicted = events.filter(ev => ev.type === 'status' && ev.byId === log.tokenId && ev.targetId !== log.tokenId).length;
     const deploysPlaced = events.reduce((sum, ev) => sum + (ev.type === 'deploy' && ev.byId === log.tokenId ? (ev.count ?? 0) : 0), 0);
+
     const failedSavesForced = _allLogs(telemetry).reduce((sum, combatantLog) => sum + combatantLog.events
         .filter(ev => ev.type === 'action' && ev.category === 'save' && ev.forcedBy === log.tokenId && !ev.success).length, 0);
+
     const scans = events.filter(ev => ev.type === 'action' && ev.byId === log.tokenId && ev.success && ev.name === 'SCAN').length;
+
     const maxHit = Math.max(0, ...events
         .filter(ev => ev.type === 'damage' && ev.byId === log.tokenId && ev.targetId !== log.tokenId)
         .map(ev => (ev.hpLanded ?? 0) + (ev.overshieldAbsorbed ?? 0) + (ev.armorAbsorbed ?? 0)));
+
     const redlineRounds = stressRounds.size > 0 ? 0
         : new Set(statTicks.filter(ev => ev.round >= 1 && (ev.heat ?? 0) >= heatMax / 2).map(ev => ev.round)).size;
+
     const perRoundTargets = new Map();
+
     for (const ev of events)
     {
         if (ev.type !== 'attack' || ev.byId !== log.tokenId)
             continue;
+
         let hitSet = perRoundTargets.get(ev.round);
         if (!hitSet)
             perRoundTargets.set(ev.round, hitSet = new Set());
+
         for (const target of (ev.targets ?? []))
         {
             if (target.hit && target.targetId)
                 hitSet.add(target.targetId);
         }
     }
+
     const maxTargetsOneRound = Math.max(0, ...[...perRoundTargets.values()].map(hitSet => hitSet.size));
     // From events, not the actor: the actor is untouched during mock runs.
     const structEnd = structAtRound.at(-1) ?? structMax;
@@ -302,9 +354,11 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
     const marginStruct = (structEnd - 1) + (hpMax > 0 ? displayHpEnd / hpMax : 1);
     const marginStress = (stressEnd - 1) + (heatMax > 0 ? 1 - displayHeatEnd / heatMax : 1);
     const deathMargin = Math.min(marginStruct, marginStress);
-    const survivorScore = (!destroyed && (structEnd <= 1 || stressEnd <= 1))
+
+    const survivorScore = (!destroyed && !left && (structEnd <= 1 || stressEnd <= 1))
         ? Math.max(1, Math.round((8 - deathMargin) * 100))
         : 0;
+
     const survivorLabel = marginStruct <= marginStress
         ? `${structEnd} STRUCT · ${displayHpEnd} HP`
         : `${stressEnd} STRESS · ${displayHeatEnd}/${heatMax} HEAT`;
@@ -316,10 +370,13 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
 
     // Split damage: INFECTION counts as heat, like BURN counts as physical.
     const heatDmgDealt      = breakdown.dmgOut.types.filter(type => type.k === 'HEAT' || type.k === 'INFECTION').reduce((n, type) => n + type.v, 0);
+
     const physicalDmgDealt  = breakdown.dmgOut.types
         .filter(type => type.k !== 'HEAT' && type.k !== 'INFECTION')
         .reduce((n, type) => n + type.v, 0);
+
     const heatDmgTaken      = breakdown.dmgIn.types.filter(type => type.k === 'HEAT' || type.k === 'INFECTION').reduce((n, type) => n + type.v, 0);
+
     const physicalDmgTaken  = breakdown.dmgIn.types
         .filter(type => type.k !== 'HEAT' && type.k !== 'INFECTION')
         .reduce((n, type) => n + type.v, 0);
@@ -353,6 +410,8 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         heatConsumedEnd,
         corePower,
         destroyed,
+        left,
+        leftRound: leftEv?.round ?? null,
         repairs: repairsUsed,
         repairsMax,
         hpRestored,
@@ -406,7 +465,7 @@ function _derivePlayer(log, idx, telemetry, turnAxis)
         killLineTurns: new Array(turnAxis.length).fill(0),
         assistLineTurns: new Array(turnAxis.length).fill(0),
         killAssistLineTurns: new Array(turnAxis.length).fill(0),
-        gearLost: _gearLost(actor, events),
+        gearLost: _gearLost(events),
         bd: breakdown,
         pilotSide: _derivePilotSide(log, telemetry, sys.pilot?.value),
     };
@@ -417,6 +476,7 @@ function _pilotOnlyPlayer(player, log, telemetry, turnAxis)
     const side = _derivePilotSide(log, telemetry, _actor(log.actorId), true);
     if (!side)
         return player;
+
     const hpLine = _tickLine(log.events, 'hp', telemetry.roundCount, side.hpMax);
     return {
         ...player,
@@ -464,11 +524,13 @@ function _pilotOnlyPlayer(player, log, telemetry, turnAxis)
 function _pilotTokenIds(log)
 {
     const ids = new Set(log.pilotTokenIds ?? []);
+
     for (const ev of log.events ?? [])
     {
         if (ev.pilotTokenId)
             ids.add(ev.pilotTokenId);
     }
+
     return ids;
 }
 
@@ -476,11 +538,15 @@ function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
 {
     if (pilotActor?.type !== 'pilot')
         return null;
+
     const sys = /** @type {any} */ (pilotActor.system ?? {});
     const tokenIds = _pilotTokenIds(log);
+
     if (ownLog)
         tokenIds.add(log.tokenId);
+
     const defeated = CONFIG.specialStatusEffects?.DEFEATED ?? 'downandout';
+
     const side = {
         name: String(pilotActor.name ?? 'PILOT').toUpperCase(),
         callsign: String(sys.callsign || pilotActor.name || 'PILOT').toUpperCase(),
@@ -493,14 +559,17 @@ function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
         tokenIds: [...tokenIds],
         fielded: tokenIds.size > 0,
     };
+
     if (!side.fielded)
         return side;
 
     const key = `pilot:${log.tokenId}`;
+
     const rekey = (ev) =>
     {
         const own = tokenIds.has(ev.pilotTokenId) || tokenIds.has(ev.byId);
         const targeted = tokenIds.has(ev.targetId) || (ev.targets ?? []).some(target => tokenIds.has(target.targetId));
+
         if (!own && !targeted)
             return ev;
         return {
@@ -510,7 +579,9 @@ function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
             targets: ev.targets?.map(target => (tokenIds.has(target.targetId) ? { ...target, targetId: key } : target)),
         };
     };
+
     const rekeyLogs = logs => (logs ?? []).map(other => ({ ...other, events: other.events.map(rekey) }));
+
     const view = {
         ...telemetry,
         players: rekeyLogs(telemetry.players),
@@ -519,9 +590,11 @@ function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
         neutrals: rekeyLogs(telemetry.neutrals),
         secrets: rekeyLogs(telemetry.secrets),
     };
+
     const events = log.events.map(rekey);
     const breakdown = _buildBreakdown(events, view, key);
     const heatIn = breakdown.dmgIn.types.find(type => type.k === 'HEAT');
+
     if (heatIn)
     {
         const energyIn = breakdown.dmgIn.types.find(type => type.k === 'ENERGY');
@@ -531,6 +604,7 @@ function _derivePilotSide(log, telemetry, pilotActor, ownLog = false)
             breakdown.dmgIn.types.push({ k: 'ENERGY', v: heatIn.v });
         breakdown.dmgIn.types = breakdown.dmgIn.types.filter(type => type.k !== 'HEAT');
     }
+
     const sumTypes = (types, keep) => types.filter(keep).reduce((total, type) => total + type.v, 0);
     const gritRolls = events.filter(ev => ev.type === 'action' && ev.byId === key && /GRIT/i.test(ev.name ?? ''));
     const gritPasses = gritRolls.filter(ev => ev.success).length;
@@ -569,6 +643,7 @@ function _buildBreakdown(events, telemetry, byId)
         ...(telemetry.neutrals ?? []),
         ...(telemetry.secrets ?? []),
     ];
+
     const dmgOutByType = new Map();
     let mitigatedOutArmor = 0;
     let mitigatedOutOvershield = 0;
@@ -581,6 +656,7 @@ function _buildBreakdown(events, telemetry, byId)
     let techTaken = 0;
     let evasionRolledAgainst = 0;
     let edefRolledAgainst = 0;
+
     for (const combatantLog of allLogs)
     {
         for (const ev of combatantLog.events)
@@ -594,6 +670,7 @@ function _buildBreakdown(events, telemetry, byId)
                     mitigatedOutArmor      += ev.armorAbsorbed ?? 0;
                     mitigatedOutOvershield += ev.overshieldAbsorbed ?? 0;
                 }
+
                 if (ev.targetId === byId && !ev.dotCredit)
                 {
                     for (const d of (ev.damages ?? []))
@@ -616,6 +693,7 @@ function _buildBreakdown(events, telemetry, byId)
                         evasionRolledAgainst++;
                     if (t.defense === 'edef')
                         edefRolledAgainst++;
+
                     if (!t.hit)
                     {
                         if (t.defense === 'evasion')
@@ -639,6 +717,7 @@ function _buildBreakdown(events, telemetry, byId)
     let maxTurn = 0;
     let knockback = 0;
     const perRoundMove = new Map();
+
     for (const ev of events)
     {
         if (ev.type !== 'move' || ev.byId !== byId)
@@ -648,10 +727,13 @@ function _buildBreakdown(events, telemetry, byId)
         else
             perRoundMove.set(ev.round, (perRoundMove.get(ev.round) ?? 0) + (ev.distance ?? 0));
     }
+
     for (const total of perRoundMove.values())
         maxTurn = Math.max(maxTurn, total);
+
     // Knockback dealt: forced moves on anyone that this token caused.
     let knockbackDealt = 0;
+
     for (const other of allLogs)
     {
         for (const ev of other.events)
@@ -694,19 +776,23 @@ function _attackCountsByCategory(events, byId, category)
 {
     const counts = new Map();
     const countedRolls = new Set();
+
     for (const ev of events)
     {
         if (ev.type !== 'attack' || ev.byId !== byId || ev.category !== category)
             continue;
+
         if (ev.rollId)
         {
             if (countedRolls.has(ev.rollId))
                 continue;
             countedRolls.add(ev.rollId);
         }
+
         const name = ev.weaponName ?? '-';
         counts.set(name, (counts.get(name) ?? 0) + 1);
     }
+
     return [...counts.entries()].map(([k, n]) => ({ k, n }));
 }
 
@@ -724,6 +810,7 @@ function _allLogs(telemetry)
 function _damageTo(telemetry, byId, targetIds)
 {
     let total = 0;
+
     for (const combatantLog of _allLogs(telemetry))
     {
         for (const ev of combatantLog.events)
@@ -732,17 +819,20 @@ function _damageTo(telemetry, byId, targetIds)
                 total += (ev.damages ?? []).reduce((sum, instance) => sum + (instance.amount ?? 0), 0);
         }
     }
+
     return total;
 }
 
 function _mapLogs(telemetry, rewrite)
 {
     const out = { ...telemetry };
+
     for (const bucket of LOG_BUCKETS)
     {
         if (Array.isArray(telemetry[bucket]))
             out[bucket] = telemetry[bucket].map(rewrite);
     }
+
     return out;
 }
 
@@ -751,6 +841,7 @@ function _dropUndoneActions(telemetry)
     const undone = new Set(_allLogs(telemetry).flatMap(log => log.events)
         .filter(ev => ev.type === 'action-undo' && ev.tapeId)
         .map(ev => ev.tapeId));
+
     if (!undone.size)
         return telemetry;
     return _mapLogs(telemetry, log => ({
@@ -764,6 +855,7 @@ function _dropUndoneDamage(telemetry)
     const undone = matchUndoneDamage(_allLogs(telemetry).flatMap(log => log.events));
     if (!undone.size)
         return telemetry;
+
     const dropped = new Set(undone.values());
     return _mapLogs(telemetry, log => ({
         ...log,
@@ -783,16 +875,20 @@ function _creditDotTicks(telemetry)
 {
     const logs = _allLogs(telemetry);
     const events = logs.flatMap(log => log.events).sort((lhs, rhs) => (lhs.seq ?? 0) - (rhs.seq ?? 0));
+
     if (!events.some(ev => ev.type === 'damage' && ev.dotTick))
         return telemetry;
+
     const seqGap = (lhs, rhs) => Math.abs((lhs.seq ?? 0) - (rhs.seq ?? 0));
     const claims = new Map();
+
     const addClaim = (key, claim) =>
     {
         if (!claims.has(key))
             claims.set(key, []);
         claims.get(key).push(claim);
     };
+
     for (const ev of events)
     {
         if (ev.type === 'dot-added' && ev.amount > 0)
@@ -819,6 +915,7 @@ function _creditDotTicks(telemetry)
             }
         }
     }
+
     const nearbyClaims = (key, ev, amount) => (claims.get(key) ?? [])
         .filter(claim => claim.left > 0 && claim.ev.round === ev.round && seqGap(claim.ev, ev) <= DOT_PAIR_WINDOW)
         .sort((lhs, rhs) => Number(rhs.left === amount) - Number(lhs.left === amount) || seqGap(lhs.ev, ev) - seqGap(rhs.ev, ev));
@@ -826,25 +923,31 @@ function _creditDotTicks(telemetry)
     const ledgers = new Map();
     const shareKey = (byId, pilotTokenId) => `${byId ?? ''}|${pilotTokenId ?? ''}`;
     const totalOf = ledger => [...ledger.values()].reduce((sum, share) => sum + share.amount, 0);
+
     const observe = (targetId, kind, value, ev) =>
     {
         const key = `${targetId}|${kind}`;
         if (!ledgers.has(key))
             ledgers.set(key, new Map());
+
         const ledger = ledgers.get(key);
         const total = totalOf(ledger);
+
         if (value <= 0)
         {
             ledger.clear();
             return;
         }
+
         if (value > total)
         {
             let left = value - total;
+
             for (const claim of nearbyClaims(`${key}|add`, ev, left))
             {
                 const take = Math.min(left, claim.left);
                 const id = shareKey(claim.byId, claim.pilotTokenId);
+
                 if (!ledger.has(id))
                     ledger.set(id, { byId: claim.byId, pilotTokenId: claim.pilotTokenId, amount: 0 });
                 ledger.get(id).amount += take;
@@ -853,6 +956,7 @@ function _creditDotTicks(telemetry)
                 if (left <= 0)
                     break;
             }
+
             if (left > 0)
             {
                 const unknown = shareKey(null, null);
@@ -860,9 +964,12 @@ function _creditDotTicks(telemetry)
                     ledger.set(unknown, { byId: null, pilotTokenId: null, amount: 0 });
                 ledger.get(unknown).amount += left;
             }
+
             return;
         }
+
         let left = total - value;
+
         for (const claim of nearbyClaims(`${key}|remove`, ev, left))
         {
             const share = ledger.get(shareKey(claim.byId, claim.pilotTokenId));
@@ -874,6 +981,7 @@ function _creditDotTicks(telemetry)
             if (left <= 0)
                 break;
         }
+
         if (left > 0)
         {
             const factor = value / (value + left);
@@ -884,19 +992,25 @@ function _creditDotTicks(telemetry)
 
     const logIds = new Set(logs.map(log => log.tokenId));
     const extras = new Map();
+
     const credit = (ev) =>
     {
         const ledger = ledgers.get(`${ev.targetId}|${ev.dotTick}`);
         const tickAmount = (ev.damages ?? []).reduce((sum, damage) => sum + (damage.amount ?? 0), 0);
         const total = ledger ? totalOf(ledger) : 0;
+
         if (tickAmount <= 0 || total <= 0)
             return;
+
         const scale = tickAmount / Math.max(tickAmount, total);
+
         const portions = [...ledger.values()]
             .filter(share => share.amount > 0)
             .map(share => ({ share, exact: share.amount * scale, whole: Math.floor(share.amount * scale) }));
+
         let spare = Math.round(portions.reduce((sum, portion) => sum + portion.exact, 0))
             - portions.reduce((sum, portion) => sum + portion.whole, 0);
+
         for (const portion of [...portions].sort((lhs, rhs) => (rhs.exact - rhs.whole) - (lhs.exact - lhs.whole)))
         {
             if (spare <= 0)
@@ -904,9 +1018,11 @@ function _creditDotTicks(telemetry)
             portion.whole++;
             spare--;
         }
+
         const credited = portions
             .filter(portion => portion.share.byId && portion.whole > 0)
             .sort((lhs, rhs) => lhs.whole - rhs.whole || lhs.exact - rhs.exact);
+
         credited.forEach((portion, rank) =>
         {
             const hostId = logIds.has(portion.share.byId) ? portion.share.byId : ev.targetId;
@@ -941,6 +1057,7 @@ function _creditDotTicks(telemetry)
         else if (ev.type === 'damage' && ev.dotTick && !ev.dotCredit)
             credit(ev);
     }
+
     if (!extras.size)
         return telemetry;
     return _mapLogs(telemetry, log => (extras.has(log.tokenId)
@@ -951,15 +1068,19 @@ function _creditDotTicks(telemetry)
 function _attackNameCounts(events, filter, nameOf)
 {
     const counts = new Map();
+
     for (const ev of events)
     {
         if (!filter(ev))
             continue;
+
         const name = nameOf(ev) ?? '-';
         counts.set(name, (counts.get(name) ?? 0) + 1);
     }
+
     let top = null;
     let topCount = 0;
+
     for (const [name, count] of counts)
     {
         if (count > topCount)
@@ -968,18 +1089,21 @@ function _attackNameCounts(events, filter, nameOf)
             topCount = count;
         }
     }
+
     return { top, counts };
 }
 
 function _actionCountsByNames(events, byId)
 {
     const counts = new Map();
+
     for (const ev of events)
     {
         if (ev.type !== 'action' || ev.byId !== byId || !ev.activation)
             continue;
         counts.set(ev.name, (counts.get(ev.name) ?? 0) + 1);
     }
+
     return [...counts.entries()].map(([k, n]) => ({ k, n }));
 }
 
@@ -987,10 +1111,12 @@ function _haseAcc(events, byId)
 {
     const attempts = { hull: 0, agi: 0, sys: 0, eng: 0 };
     const passes   = { hull: 0, agi: 0, sys: 0, eng: 0 };
+
     for (const ev of events)
     {
         if (ev.type !== 'action' || ev.byId !== byId || (ev.category !== 'save' && ev.category !== 'check'))
             continue;
+
         const key = ev.name;
         if (attempts[key] === undefined)
             continue;
@@ -998,6 +1124,7 @@ function _haseAcc(events, byId)
         if (ev.success)
             passes[key]++;
     }
+
     const pct = statKey => attempts[statKey] > 0 ? Math.round(passes[statKey] / attempts[statKey] * 100) : null;
     const totalAttempts = attempts.hull + attempts.agi + attempts.sys + attempts.eng;
     const totalPasses = passes.hull + passes.agi + passes.sys + passes.eng;
@@ -1018,12 +1145,15 @@ function _accuracySplit(events, byId, haseAcc)
     let meleeShots  = 0, meleeHits  = 0;
     let techShots   = 0, techHits   = 0;
     let crits = 0;
+
     for (const ev of events)
     {
         if (ev.type !== 'attack' || ev.byId !== byId)
             continue;
+
         const isTech = ev.category === 'tech';
         const isMelee = ev.attackType === 'Melee';
+
         for (const t of (ev.targets ?? []))
         {
             if (isTech)
@@ -1052,6 +1182,7 @@ function _accuracySplit(events, byId, haseAcc)
             }
         }
     }
+
     const rangedAcc = rangedShots > 0 ? Math.round(rangedHits / rangedShots * 100) : null;
     const meleeAcc  = meleeShots  > 0 ? Math.round(meleeHits  / meleeShots  * 100) : null;
     const techAcc   = techShots   > 0 ? Math.round(techHits   / techShots   * 100) : null;
@@ -1079,14 +1210,17 @@ function _accuracySplit(events, byId, haseAcc)
 function _actionCounts(events, filter)
 {
     const counts = new Map();
+
     for (const ev of events)
     {
         if (!filter(ev))
             continue;
         counts.set(ev.name, (counts.get(ev.name) ?? 0) + 1);
     }
+
     let top = null;
     let topCount = 0;
+
     for (const [name, count] of counts)
     {
         if (count > topCount)
@@ -1095,6 +1229,7 @@ function _actionCounts(events, filter)
             topCount = count;
         }
     }
+
     return { top, counts };
 }
 
@@ -1103,6 +1238,7 @@ function _buildTurnAxis(telemetry)
 {
     const seen = new Map();
     const buckets = [telemetry.players, telemetry.hostiles, telemetry.friendlies, telemetry.neutrals, telemetry.secrets];
+
     for (const bucket of buckets)
     {
         for (const log of bucket ?? [])
@@ -1115,6 +1251,7 @@ function _buildTurnAxis(telemetry)
             }
         }
     }
+
     return [...seen.values()].sort((lhs, rhs) => lhs.round - rhs.round || lhs.turn - rhs.turn);
 }
 
@@ -1127,25 +1264,31 @@ function _turnSlot(turnAxis, round, turn)
         if (exact >= 0)
             return exact;
     }
+
     let last = -1;
+
     for (let idx = 0; idx < turnAxis.length; idx++)
     {
         if (turnAxis[idx].round === round)
             last = idx;
     }
+
     return last;
 }
 
 function _tickLineTurns(events, field, turnAxis, defaultValue)
 {
     const map = new Map();
+
     for (const ev of events)
     {
         if (ev.type === 'stat-tick' && ev.turn != null)
             map.set(`${ev.round}:${ev.turn}`, ev[field]);
     }
+
     const out = [];
     let cur = defaultValue;
+
     for (const slot of turnAxis)
     {
         const key = `${slot.round}:${slot.turn}`;
@@ -1153,52 +1296,62 @@ function _tickLineTurns(events, field, turnAxis, defaultValue)
             cur = map.get(key);
         out.push(cur);
     }
+
     return out;
 }
 
 function _perTurnSum(events, turnAxis, valueFor)
 {
     const out = new Array(turnAxis.length).fill(0);
+
     for (const ev of events)
     {
         const value = valueFor(ev);
         if (!value)
             continue;
+
         const slot = _turnSlot(turnAxis, ev.round, ev.turn ?? null);
         if (slot >= 0)
             out[slot] += value;
     }
+
     return out;
 }
 
 function _tickLine(events, field, roundCount, defaultValue)
 {
     const map = new Map();
+
     for (const ev of events)
     {
         if (ev.type === 'stat-tick')
             map.set(ev.round, ev[field]);
     }
+
     const out = [];
     let cur = defaultValue;
+
     for (let r = 1; r <= roundCount; r++)
     {
         if (map.has(r))
             cur = map.get(r);
         out.push(cur);
     }
+
     return out;
 }
 
 function _perRoundSum(events, roundCount, valueFor)
 {
     const out = new Array(roundCount).fill(0);
+
     for (const ev of events)
     {
         if (ev.round == null || ev.round < 1 || ev.round > roundCount)
             continue;
         out[ev.round - 1] += valueFor(ev);
     }
+
     return out;
 }
 
@@ -1213,14 +1366,17 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
     const actorItems = /** @type {any[]} */ ([...(actor?.items ?? [])]);
     const classItem = actorItems.find(i => i.type === 'npc_class');
     const cls = classItem?.name ?? sys.class?.name ?? 'GRUNT';
+
     const templateNames = actorItems
         .filter(i => i.type === 'npc_template')
         .map(i => String(i.name ?? '').toUpperCase());
+
     const tier = _asNum(sys.tier, 1);
     const size = _asNum(sys.size, 1);
     const actorType = actor?.type === 'mech' || actor?.type === 'pilot' ? actor.type : 'npc';
     let frameName = null;
     let ll = null;
+
     if (actorType === 'mech')
     {
         frameName = String(sys.loadout?.frame?.value?.name ?? sys.frame?.name ?? 'UNKNOWN FRAME').toUpperCase();
@@ -1231,8 +1387,11 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         frameName = 'PILOT';
         ll = _asNum(sys.level, 0);
     }
-    const destroyedEv = events.find(ev => ev.type === 'destroyed');
+
+    const destroyedEv = liveDestroyed(events);
     const killed = !!destroyedEv;
+    const leftEv = killed ? null : events.findLast(ev => ev.type === 'left') ?? null;
+
     const addToBucket = (bucket, type, amount) =>
     {
         if (type === 'heat' || type === 'infection')
@@ -1240,9 +1399,11 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         else
             bucket.physical += amount;
     };
+
     const matches = (id) => !counterpartyIds || counterpartyIds.has(id);
     const dealtBucket = { physical: 0, heat: 0 };
     const takenBucket = { physical: 0, heat: 0 };
+
     const allLogs = [
         ...telemetry.players,
         ...telemetry.hostiles,
@@ -1250,6 +1411,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         ...(telemetry.neutrals ?? []),
         ...(telemetry.secrets ?? []),
     ];
+
     for (const combatantLog of allLogs)
     {
         for (const ev of combatantLog.events)
@@ -1261,6 +1423,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
                     for (const d of (ev.damages ?? []))
                         addToBucket(dealtBucket, d.type, d.amount ?? 0);
                 }
+
                 if (ev.targetId === log.tokenId && matches(ev.byId) && !(ev.dotCredit && matches(log.tokenId)))
                 {
                     for (const d of (ev.damages ?? []))
@@ -1269,6 +1432,7 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
             }
         }
     }
+
     const dmgDealt = dealtBucket.physical + dealtBucket.heat;
     const dmgTaken = takenBucket.physical + takenBucket.heat;
 
@@ -1289,8 +1453,11 @@ function _deriveNonSquad(log, idx, telemetry, side, counterpartyIds)
         ll,
         scanned: true,
         killed,
+        left: !!leftEv,
+        leftRound: leftEv?.round ?? null,
         round: destroyedEv?.round ?? null,
         turnDied: destroyedEv?.turn ?? null,
+        diedSeq: destroyedEv?.seq ?? null,
         deathCause: destroyedEv?.cause ?? null,
         dmgDealt,
         dmgTaken,
@@ -1341,19 +1508,23 @@ function _buildAwards(players, mvpId)
 {
     const awards = [];
     const pointsByHolder = new Map();
+
     const addPoints = (playerId, points) =>
     {
         if (points > 0)
             pointsByHolder.set(playerId, (pointsByHolder.get(playerId) ?? 0) + points);
     };
+
     for (const award of AWARDS)
     {
         const ranked = players
             .map(player => ({ player, value: award.stat(player) }))
             .filter(entry => entry.value >= award.minValue)
             .sort((lhs, rhs) => rhs.value - lhs.value);
+
         if (!ranked.length)
             continue;
+
         const [top, runnerUp] = ranked;
         awards.push({
             key: award.key,
@@ -1363,8 +1534,10 @@ function _buildAwards(players, mvpId)
             stat: award.format(top.value, top.player),
             sub: localize(award.description),
         });
+
         const weight = award.weight ?? 1;
         addPoints(top.player.id, weight);
+
         if (award.secondDescription)
         {
             if (!runnerUp)
@@ -1381,6 +1554,7 @@ function _buildAwards(players, mvpId)
             addPoints(runnerUp.player.id, weight / 2);
             continue;
         }
+
         // Runners-up that cleared the bar still count toward MVP, one point below the holder.
         for (const entry of ranked.slice(1))
             addPoints(entry.player.id, weight - 1);
@@ -1391,11 +1565,13 @@ function _buildAwards(players, mvpId)
 
     // MVP: GM pick, else highest weight sum, tie-break damage dealt, else none.
     let finalMvpId = null;
+
     if (mvpId && players.some(player => player.id === mvpId))
         finalMvpId = mvpId;
     else
     {
         let best = null;
+
         for (const player of players)
         {
             const points = pointsByHolder.get(player.id) ?? 0;
@@ -1404,11 +1580,14 @@ function _buildAwards(players, mvpId)
             if (!best || points > best.points || (points === best.points && (player.dmgDealt ?? 0) > (best.player.dmgDealt ?? 0)))
                 best = { player, points };
         }
+
         finalMvpId = best?.player.id ?? null;
     }
+
     if (finalMvpId)
     {
         const mvp = players.find(player => player.id === finalMvpId);
+
         if (mvp)
         {
             const points = pointsByHolder.get(mvp.id) ?? 0;
@@ -1422,6 +1601,7 @@ function _buildAwards(players, mvpId)
             });
         }
     }
+
     // KIA is not a competitive award; every destroyed pilot gets one.
     for (const p of players)
     {
@@ -1436,6 +1616,7 @@ function _buildAwards(players, mvpId)
             sub: 'Mech destroyed in the line of duty',
         });
     }
+
     return { awards, mvpId: finalMvpId };
 }
 
@@ -1462,33 +1643,40 @@ function _teamBuckets(telemetry)
 {
     const players = telemetry.players ?? [];
     const isMech = log => _actor(log.actorId)?.type === 'mech';
+
     const holder = players.find(log => isMech(log) && isPlayerOwned(_actor(log.actorId)))
         ?? players.find(isMech)
         ?? (telemetry.friendlies ?? []).find(isMech)
         ?? players[0];
+
     const holderDoc = holder ? _tokenDocOf(holder.tokenId) ?? _actor(holder.actorId) : null;
     const { HOSTILE, SECRET, FRIENDLY, NEUTRAL } = CONST.TOKEN_DISPOSITIONS;
     const bucketOf = { [HOSTILE]: 'hostiles', [SECRET]: 'secrets', [FRIENDLY]: 'friendlies', [NEUTRAL]: 'neutrals' };
     const buckets = { hostiles: [], friendlies: [], neutrals: [], secrets: [] };
     const teamBucket = new Map();
+
     for (const recordedBucket of Object.keys(buckets))
     {
         for (const log of telemetry[recordedBucket] ?? [])
         {
             const doc = _tokenDocOf(log.tokenId) ?? _actor(log.actorId);
             const team = _teamOf(doc);
+
             if (!team)
             {
                 buckets[recordedBucket].push(log);
                 continue;
             }
+
             if (!teamBucket.has(team.id))
                 teamBucket.set(team.id, (holderDoc ? bucketOf[getRelativeDisposition(holderDoc, doc)] : null) ?? recordedBucket);
+
             const bucket = teamBucket.get(team.id);
             const side = bucket === 'hostiles' || bucket === 'secrets' ? 'enemy' : 'player';
             buckets[bucket].push(log.side === side ? log : { ...log, side });
         }
     }
+
     return { ...telemetry, ...buckets };
 }
 
@@ -1503,47 +1691,31 @@ function _slug(str)
     return String(str ?? '').toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/(^-|-$)/g, '') || 'unknown';
 }
 
-function _gearLost(actor, events = [])
+function _gearLost(events = [])
 {
     const weapons = [];
     const systems = [];
     const cascading = [];
-    // Real-usage source: the actor's destroyed and cascading items.
-    if (actor?.items)
-    {
-        for (const item of actor.items)
-        {
-            const itemType = item.type;
-            const isWeapon = itemType === 'mech_weapon' || itemType === 'pilot_weapon' || itemType === 'npc_weapon';
-            const isSystem = itemType === 'mech_system' || itemType === 'pilot_gear' || itemType === 'npc_system';
-            const name = String(item.name).toUpperCase();
-            if (item.system?.destroyed === true)
-            {
-                if (isWeapon)
-                    weapons.push(name);
-                else if (isSystem)
-                    systems.push(name);
-            }
-            else if (item.system?.cascading === true && (isWeapon || isSystem || itemType === 'weapon_mod'))
-                cascading.push(name);
-        }
-    }
-    // Mock source: gear-lost events on the combatant log.
+
     for (const ev of events)
     {
         if (ev.type !== 'gear-lost')
             continue;
+
         const name = String(ev.name ?? '').toUpperCase();
+
         if (ev.state === 'cascading')
         {
             if (!cascading.includes(name))
                 cascading.push(name);
             continue;
         }
+
         if (ev.kind === 'weapon' && !weapons.includes(name))
             weapons.push(name);
         if (ev.kind === 'system' && !systems.includes(name))
             systems.push(name);
     }
+
     return { weapons, systems, cascading };
 }

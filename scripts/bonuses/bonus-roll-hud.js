@@ -1,8 +1,8 @@
 import { getLAFlag } from "../tools/flag-utils.js";
 import { accDiffTargetToken } from "../combat/grid-helpers.js";
-import { localize, escapeHtml } from "../tools/string-utils.js";
+import { localize, escapeHtml, signedNumber } from "../tools/string-utils.js";
 import { htmlToElement } from "../tools/dom-utils.js";
-import { laSigned, laValueTag, laRowHtml, laGroupHtml, laCardSlot, laDamageChips, laInfoRowHtml, laSplitGroupHtml } from "./roll-card-rows.js";
+import { laValueTag, laRowHtml, laGroupHtml, laCardSlot, laDamageChips, laInfoRowHtml, laSplitGroupHtml } from "./roll-card-rows.js";
 import { runApplyToCondition, bonusUsageParts } from "./genericBonuses.js";
 
 // Re-inject our row when Svelte re-renders a roll HUD. formWasSeen stops it disconnecting on mutations that land before the HUD exists.
@@ -10,15 +10,18 @@ function observeHudReinject(formSelector, rowSelector, doInject, onStillPresent 
 {
     let reinjectPending = false;
     let formWasSeen = false;
+
     const observer = new MutationObserver(() =>
     {
         const $form = $(formSelector);
+
         if ($form.length === 0)
         {
             if (formWasSeen)
                 observer.disconnect();
             return;
         }
+
         formWasSeen = true;
         if ($form.find(rowSelector).length === 0 && !reinjectPending)
         {
@@ -89,9 +92,11 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
     {
         if (bonus.type !== 'accuracy' && bonus.type !== 'difficulty')
             return;
+
         let val = Number.parseInt(bonus.val) || 0;
         if (bonus.type === 'difficulty')
             val = -val;
+
         const base = state.data?.acc_diff?.base;
         if (base)
             base.accuracy += wasEnabled ? -val : val;
@@ -102,7 +107,7 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
         const isDifficulty = bonus.type === 'difficulty';
         const rawVal = Number.parseInt(bonus.val) || 0;
         const effectiveVal = isDifficulty ? -Math.abs(rawVal) : rawVal;
-        const valText = laSigned(effectiveVal);
+        const valText = signedNumber(effectiveVal);
         return laRowHtml({
             name: bonus.name,
             tag: laValueTag(valText, effectiveVal < 0 ? 'diff' : 'acc'),
@@ -124,8 +129,10 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
             const bonusId = $row.attr('data-bonus-id');
             const isChecked = $(this).is(':checked');
             const bonus = getCurrentBonusStates()[bonusIndex];
+
             if (!bonus)
                 return;
+
             const wasEnabled = enabledById.has(bonusId) ? enabledById.get(bonusId) : true;
             if (wasEnabled === isChecked)
                 return;
@@ -142,6 +149,7 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
 
         const $accContainer = $form.find('label:contains("Accurate")').first().closest('div');
         const $diffContainer = $form.find('label:contains("Inaccurate")').first().closest('div');
+
         if (!$accContainer.length || !$diffContainer.length)
             return false;
 
@@ -155,6 +163,7 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
             const val = Number.parseInt(bonus.val) || 0;
             if (val === 0 || (bonus.type !== 'accuracy' && bonus.type !== 'difficulty'))
                 return;
+
             const isDifficulty = bonus.type === 'difficulty' || val < 0;
             columns[isDifficulty ? 'diff' : 'acc'].push(renderBonusRow(bonus, index, scope));
         });
@@ -164,6 +173,7 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
             const groupHtml = laGroupHtml(rows.join(''), 'la-global-group');
             if (!groupHtml)
                 return;
+
             const $group = $(groupHtml);
             $column.append($group);
             $group.children('.csm-global-bonus-row').each(function()
@@ -171,6 +181,7 @@ export function showBonusNotification(getBonuses, state, getTargetedBonuses, dis
                 bindRow($(this));
             });
         };
+
         appendGroup($accContainer, columns.acc);
         appendGroup($diffContainer, columns.diff);
         return true;
@@ -221,7 +232,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
 
             const isDiff = bonus.type === 'difficulty';
             const effectiveVal = isDiff ? -Math.abs(val) : val;
-            const valText = laSigned(effectiveVal);
+            const valText = signedNumber(effectiveVal);
             const targetName = bonus._targetName || null;
 
             const matchingCards = [];
@@ -230,6 +241,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             {
                 const $card = $(this);
                 let matchedTokenId = null;
+
                 for (const tokenId of (bonus._matchedIds ?? bonus.applyTo ?? []))
                 {
                     if (accDiffCardTokenId($card) === tokenId)
@@ -237,12 +249,14 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                         matchedTokenId = tokenId;
                         break;
                     }
+
                     if (targetName)
                     {
                         const hasName = $card.find('label.target-name').filter(function()
                         {
                             return $(this).find('span').first().text().trim() === targetName;
                         }).length > 0;
+
                         if (hasName)
                         {
                             matchedTokenId = tokenId;
@@ -250,6 +264,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                         }
                     }
                 }
+
                 if (matchedTokenId !== null)
                     matchingCards.push({ $card, matchedTokenId });
                 else
@@ -274,6 +289,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                     continue; // already injected
 
                 const isDisabled = disabledByUser.has(`${bonus.id}:${matchedTokenId}`);
+
                 const $row = $(laRowHtml({
                     name: bonus.name,
                     tag: laValueTag(valText, effectiveVal < 0 ? 'diff' : 'acc'),
@@ -283,6 +299,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                     cls: `csm-bonus-row la2-card ${guardClass}`,
                     inputCls: 'csm-tgt-bonus-checkbox'
                 }));
+
                 laCardSlot($body, 'bonus').append($row);
                 injectedAny = true;
 
@@ -291,15 +308,18 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
                 {
                     const checked = $(this).is(':checked');
                     const key = `${bonus.id}:${capturedTokenId}`;
+
                     if (checked !== disabledByUser.has(key))
                         return;
                     if (checked)
                         disabledByUser.delete(key);
                     else
                         disabledByUser.add(key);
+
                     const entry = targetEntryFor(capturedTokenId);
                     if (!entry)
                         return;
+
                     const delta = checked ? val : -val;
                     if (isDiff)
                         entry.difficulty += delta;
@@ -317,6 +337,7 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
 
     const $form = $(document.querySelectorAll('form[id^="accdiff"]'));
     const observeTarget = $form.length > 0 ? $form[0] : document.body;
+
     const observer = new MutationObserver(() =>
     {
         if ($(document.querySelectorAll('form[id^="accdiff"]')).length === 0)
@@ -324,8 +345,10 @@ function injectTargetedAccuracyBonuses(getTargetedBonuses, state, disabledByUser
             observer.disconnect();
             return;
         }
+
         tryInjectTargeted();
     });
+
     observer.observe(observeTarget, { childList: true, subtree: true });
     // Safety disconnect after 10 minutes
     setTimeout(() => observer.disconnect(), 600000);
@@ -337,9 +360,11 @@ function hideNextBonusRow($section, inputSelector)
 {
     if (!$section[0])
         return () => {};
+
     const valueInputs = () => $section.find(inputSelector);
     const previousLast = valueInputs().last()[0] ?? null;
     let $hidden = null;
+
     const observer = new MutationObserver(() =>
     {
         const $last = valueInputs().last();
@@ -348,7 +373,9 @@ function hideNextBonusRow($section, inputSelector)
         $hidden = $last.closest('.flexrow, .damage-grid-item, div').css('display', 'none');
         observer.disconnect();
     });
+
     observer.observe($section[0], { childList: true, subtree: true });
+
     return (claimClass) =>
     {
         observer.disconnect();
@@ -384,26 +411,32 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
     const modLabels = { ap: 'Armor Piercing', half_damage: 'Half Damage', paracausal: 'Cannot be Reduced', crit: 'Force Crit', hit: 'Force Hit', miss: 'Force Miss' };
     const modTags = { ap: 'AP', half_damage: '1/2 Dmg', paracausal: 'No Reduce', crit: 'Crit', hit: 'Hit', miss: 'Miss' };
     const qualityNames = ['Miss', 'Hit', 'Crit'];
+
     const modReaches = (mod, targetEntry) =>
     {
         if (Array.isArray(mod.applyTo) && mod.applyTo.length > 0 && !mod.applyTo.includes(accDiffTargetToken(targetEntry)?.id))
             return false;
         return evaluateApplyToCondition(mod, targetEntry, state, resolveReactorToken(mod, state));
     };
+
     const modNote = (mod, targetEntry) =>
     {
         const hud = state.data?.damage_hud_data;
         const token = targetEntry ? accDiffTargetToken(targetEntry) : null;
+
         if (!token || !['crit', 'hit', 'miss'].includes(mod.subtype) || typeof hud?.getHitQuality !== 'function')
             return null;
+
         const natural = Number(hud.getHitQuality(token)) || 0;
         let forced = Math.max(natural, 1);
+
         if (mod.subtype === 'crit')
             forced = 2;
         else if (mod.subtype === 'miss')
             forced = 0;
         return natural !== forced ? `overrides ${qualityNames[natural]}` : null;
     };
+
     const modRowHtml = (mod, targetEntry, cls) =>
     {
         const label = modLabels[mod.subtype] || mod.subtype;
@@ -426,6 +459,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
             if ($existingRows.length === 0)
             {
                 const damages = bonusState.damage || [];
+
                 for (const damageEntry of damages)
                 {
                     const releaseRow = hideNextBonusRow($bonusSection, 'input[type="text"][placeholder="0"], input[type="number"]');
@@ -447,6 +481,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
                         $lastValInput[0].dispatchEvent(new Event('change', { bubbles: true }));
 
                         const $select = $rowContainer.find('select');
+
                         if ($select.length > 0)
                         {
                             $select.find('option').each(function()
@@ -461,6 +496,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
                             $select[0].dispatchEvent(new Event('change', { bubbles: true }));
                         }
                     }
+
                     releaseRow(bonusIdClass);
                 }
             }
@@ -485,6 +521,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
             return false;
 
         let perCardBonuses = [];
+
         if (resolvedTargeted.length > 0)
         {
             if (targetCount <= 1)
@@ -500,6 +537,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
         }
 
         let $myContainer = $configGrid.find('.csm-bonus-container');
+
         if ($myContainer.length === 0)
         {
             $myContainer = $(htmlToElement('<div class="csm-bonus-container la2-dmgsec"></div>'));
@@ -510,6 +548,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
                 // Must be serial; parallel calls race on .last() and leak default 1d6 Kin rows.
                 const $bonusSection = $form.find('.bonus-damage');
                 const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+
                 if (!$addBtn.length)
                     return;
                 for (const b of bonusStates)
@@ -525,10 +564,12 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
         const single = hudTargets.length === 1 ? hudTargets[0] : null;
         const scope = _detectSvelteScope($form, 'label.container');
         const headScope = _detectSvelteScope($form, '.damage-hud-section');
+
         const rows = [
             ...bonusStates.map((bonus, index) => renderBonusRow(bonus, index, scope)),
             ...sharedTMods.map(mod => modRowHtml(mod, single, 'csm-bonus-config-row la-tmod-dmg-row'))
         ];
+
         $myContainer.html(rows.length ? `<h4 class="damage-hud-section lancer-border-primary ${headScope}" style="justify-content: center;">Global Bonuses</h4>${laSplitGroupHtml(rows)}` : '');
         $myContainer.toggle(rows.length > 0);
 
@@ -536,6 +577,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
         {
             const index = Number.parseInt($(this).closest('.csm-bonus-config-row').attr('data-index'));
             const isChecked = $(this).is(':checked');
+
             if (!bonusStates[index])
                 return;
             bonusStates[index].enabled = isChecked;
@@ -544,6 +586,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
 
             const $bonusSection = $form.find('.bonus-damage');
             const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+
             if ($addBtn.length > 0)
                 syncBonusToForm(bonusStates[index], $bonusSection, $addBtn);
         });
@@ -556,6 +599,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
             const hudTarget = hudTargets[cardIndex];
             if (!hudTarget)
                 return;
+
             for (const mod of perTargetTMods)
             {
                 if (reach.get(mod).includes(hudTarget))
@@ -576,12 +620,14 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
     const observer = new MutationObserver(() =>
     {
         const $form = $(document.querySelector('#damage-hud'));
+
         if ($form.length === 0)
         {
             if (formWasSeen)
                 observer.disconnect();
             return;
         }
+
         formWasSeen = true;
 
         const hudData = state.data?.damage_hud_data;
@@ -608,6 +654,7 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
         setTimeout(() =>
         {
             const refreshedForm = $(document.querySelector('#damage-hud'));
+
             if (refreshedForm.length === 0)
             {
                 reinjectPending = false;
@@ -637,14 +684,17 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
                 {
                     if (!bonusStates[stateIdx]._fromTargeted)
                         continue;
+
                     const bonusState = bonusStates[stateIdx];
                     bonusState.enabled = false;
                     const $bonusSection = refreshedForm.find('.bonus-damage');
                     const $addBtn = $bonusSection.find('.add-damage-type, button[data-tooltip="Add a bonus damage type"]');
+
                     if ($addBtn.length > 0)
                         syncBonusToForm(bonusState, $bonusSection, $addBtn);
                     bonusStates.splice(stateIdx, 1);
                 }
+
                 bonusStates.forEach((bonusState, index) =>
                 {
                     bonusState.index = index;
@@ -676,10 +726,13 @@ export function showDamageBonusNotification(bonuses, state, targetedBonuses = []
         const $form = $(document.querySelector('#damage-hud'));
         if ($form.length === 0)
             return;
+
         const currentTargets = state.data?.damage_hud_data?.targets || [];
+
         const resolved = targetedBonuses
             .filter(bonus => currentTargets.some(candidate => (bonus.applyTo || []).includes(accDiffTargetToken(candidate)?.id)))
             .map(bonus => ({ ...bonus }));
+
         doInject($form, resolved, currentTargets.length);
     };
 }
@@ -694,12 +747,14 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets, s
     {
         document.head.append(htmlToElement('<style id="csm-bonus-styles">.target-bonus-damage-wrapper:not(:has(:not(.csm-hidden-bonus-row))){display:none!important}</style>'));
     }
+
     const scope = _detectSvelteScope($form, 'label.container');
 
     $form.find('.damage-hud-target-card').each(function(cardIndex)
     {
         const $card = $(this);
         const tokenId = accDiffTargetToken(hudTargets[cardIndex])?.id;
+
         if (!tokenId)
             return;
 
@@ -752,6 +807,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets, s
                         const $valInputs = $bonusSection.find('input[type="text"],input[type="number"]');
                         const $lastVal = $valInputs.last();
                         const $rowContainer = $lastVal.closest('.flexrow, .damage-grid-item, div');
+
                         if ($rowContainer.length && !$rowContainer.hasClass(bonusIdClass))
                         {
                             $rowContainer.addClass(bonusIdClass).addClass('csm-hidden-bonus-row').css('display', 'none');
@@ -759,6 +815,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets, s
                             $lastVal[0].dispatchEvent(new Event('input', { bubbles: true }));
                             $lastVal[0].dispatchEvent(new Event('change', { bubbles: true }));
                             const $select = $rowContainer.find('select');
+
                             if ($select.length)
                             {
                                 $select.find('option').each(function()
@@ -771,6 +828,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets, s
                                 $select[0].dispatchEvent(new Event('change', { bubbles: true }));
                             }
                         }
+
                         releaseRow(bonusIdClass);
                     }
                 }
@@ -812,6 +870,7 @@ async function injectTargetedDamageBonuses(targetedBonuses, $form, hudTargets, s
 export function _detectSvelteScope($form, selector)
 {
     const refs = $form.find(selector);
+
     for (let refIdx = 0; refIdx < refs.length; refIdx++)
     {
         for (const cls of refs[refIdx].classList)
@@ -820,6 +879,7 @@ export function _detectSvelteScope($form, selector)
                 return cls;
         }
     }
+
     return '';
 }
 
@@ -856,7 +916,9 @@ export function injectKnockbackCheckbox(state)
         // Don't double-inject
         if ($configGrid.find('.csm-knockback-row').length > 0)
             return true;
+
         const currentAreas = $configGrid.css('grid-template-areas');
+
         if (currentAreas && currentAreas.includes('empty'))
             $configGrid.css('grid-template-areas', currentAreas.replace('empty', 'knockback'));
         else
@@ -892,6 +954,7 @@ export function injectKnockbackCheckbox(state)
             const isChecked = $(this).is(':checked');
             state.data._csmKnockback.enabled = isChecked;
             const $targets = $row.find('.csm-knockback-value, .csm-knockback-icon');
+
             if (isChecked)
             {
                 $targets.stop(true, true).animate({ opacity: 1 }, { duration: 400,
@@ -1011,6 +1074,7 @@ export function injectThrottledCheckbox(state)
     state.la_extraData = state.la_extraData || {};
     if (!state.la_extraData._laThrottled)
         state.la_extraData._laThrottled = { enabled: !!state.actor?.statuses?.has?.('throttled') };
+
     const throttledState = state.la_extraData._laThrottled;
 
     const findHalfDamage = ($form) => $form.find('.damage-hud-options-grid > [style*="halfdamage"]').find('input[type="checkbox"]').first();
@@ -1020,6 +1084,7 @@ export function injectThrottledCheckbox(state)
         const $form = $(document.querySelector('#damage-hud'));
         if ($form.length === 0)
             return false;
+
         const $configGrid = $form.find('.damage-hud-options-grid');
         if ($configGrid.length === 0)
             return false;
@@ -1037,6 +1102,7 @@ export function injectThrottledCheckbox(state)
 
         const containerScope = _detectSvelteScope($form, 'label.container');
         const statusText = localize(CONFIG.statusEffects?.find(effect => effect.id === 'throttled')?.description ?? '');
+
         const $row = $(htmlToElement(`
             <div class="la-throttled-row" style="grid-area: throttled; display: flex; align-items: center; margin-top: 4px;">
                 <label class="container ${containerScope}" style="max-width: fit-content; padding-right: 0.5em; cursor: pointer;" data-tooltip="${escapeHtml(statusText)}">
@@ -1045,6 +1111,7 @@ export function injectThrottledCheckbox(state)
                 </label>
             </div>
         `));
+
         $configGrid.append($row);
 
         const syncHalfToThrottled = () =>
@@ -1066,6 +1133,7 @@ export function injectThrottledCheckbox(state)
             {
                 const $freshForm = $(document.querySelector('#damage-hud'));
                 const $box = findHalfDamage($freshForm);
+
                 if ($box.length && !$box.prop('checked') && throttledState.enabled)
                 {
                     throttledState.enabled = false;

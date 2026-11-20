@@ -21,8 +21,10 @@ export function initAutoStruct()
     {
         if (!pendingClick.delete(message.id))
             return;
+
         const root = htmlOrEl instanceof HTMLElement ? htmlOrEl : htmlOrEl?.[0];
         const buttons = root?.querySelectorAll(BUTTON_SELECTOR);
+
         if (!buttons?.length)
             return;
         // deferred so the system's and alt-struct's own render hooks have bound their handlers first

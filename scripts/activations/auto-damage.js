@@ -1,12 +1,15 @@
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlags } from '../tools/flag-utils.js';
+import { isExecutorGM } from '../utils/lancer-token.js';
 import { flattenBonuses, getGlobalBonuses, getConstantBonuses } from '../bonuses/genericBonuses.js';
 
 const RELIABLE_LID = 'tg_reliable';
 
 const pendingRoll = new Set();
+const heldRoll = new Set();
 const rollOnRender = new Set();
 const pendingApply = new Set();
+const autoRollByItem = new Map();
 
 function isFullMiss(attackData)
 {
@@ -19,9 +22,11 @@ function hasReliableDamage(message, attackData)
     const item = attackData.attackerItemUuid ? /** @type {any} */ (fromUuidSync(attackData.attackerItemUuid)) : null;
     if (item?.isReliable?.())
         return true;
+
     const injectedTags = getLAFlags(message)?.flowState?.injectedTags ?? [];
     if (injectedTags.some(tag => (tag.lid ?? tag.id) === RELIABLE_LID))
         return true;
+
     const actor = attackData.attackerUuid ? /** @type {any} */ (fromUuidSync(attackData.attackerUuid)) : null;
     const bonuses = flattenBonuses([...getGlobalBonuses(actor), ...getConstantBonuses(actor)]);
     return bonuses.some(bonus => bonus.type === 'tag' && bonus.tagId === RELIABLE_LID && !bonus.removeTag);
@@ -33,8 +38,9 @@ function shouldAutoRoll(message)
         return false;
     if (message.author?.id !== game.user.id)
         return false;
+
     const attackData = message.flags?.lancer?.attackData;
-    if (!attackData)
+    if (!attackData || getLAFlags(message)?.flowState?.noDamage)
         return false;
     return !isFullMiss(attackData) || hasReliableDamage(message, attackData);
 }
@@ -52,7 +58,7 @@ function isMyApplyDuty(message, targetActor)
     const author = message.author;
     if (author && targetActor.testUserPermission(author, 'OWNER'))
         return author.id === game.user.id;
-    return game.users.activeGM?.id === game.user.id;
+    return isExecutorGM();
 }
 
 function autoApplyTargets(message, root)
@@ -61,8 +67,10 @@ function autoApplyTargets(message, root)
     {
         const tokenDoc = group.dataset.target ? fromUuidSync(group.dataset.target) : null;
         const actor = /** @type {any} */ (tokenDoc)?.actor;
+
         if (!actor || !isMyApplyDuty(message, actor))
             continue;
+
         const button = group.querySelector('.lancer-damage-apply');
         if (button)
             setTimeout(() => button.click(), 0);
@@ -74,18 +82,41 @@ function clickDamageFlow(messageId, root)
 {
     const scope = root ?? document.querySelector(`.chat-message[data-message-id="${messageId}"]`);
     const button = /** @type {HTMLElement|null} */ (scope?.querySelector('.lancer-damage-flow'));
+
     if (!button)
         return false;
     setTimeout(() => button.click(), 0);
     return true;
 }
 
+export function takeAutoDamageDecision(itemUuid)
+{
+    const autoRoll = autoRollByItem.get(itemUuid) ?? false;
+    autoRollByItem.delete(itemUuid);
+    return autoRoll;
+}
+
+export function releaseHeldDamageRoll(messageId)
+{
+    if (!heldRoll.delete(messageId))
+        return;
+    if (!clickDamageFlow(messageId))
+        rollOnRender.add(messageId);
+}
+
 export function initAutoDamage()
 {
     Hooks.on('createChatMessage', message =>
     {
-        if (shouldAutoRoll(message))
+        const autoRoll = shouldAutoRoll(message);
+        const itemUuid = /** @type {any} */ (message.flags)?.lancer?.attackData?.attackerItemUuid;
+
+        if (autoRoll && getLAFlags(message)?.flowState?.invadeAfterHit)
+            heldRoll.add(message.id);
+        else if (autoRoll)
             pendingRoll.add(message.id);
+        if (itemUuid && message.author?.id === game.user.id)
+            autoRollByItem.set(itemUuid, autoRoll);
         if (shouldWatchApply(message))
             pendingApply.add(message.id);
     });
@@ -99,6 +130,7 @@ export function initAutoDamage()
                 if (!clickDamageFlow(messageId))
                     rollOnRender.add(messageId);
             }
+
             pendingRoll.clear();
         });
     }
